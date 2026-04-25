@@ -2,6 +2,7 @@ import gzip
 from pathlib import Path
 import pytest
 from audio_analysis.als.als_parser import ALSParser, ALSProject
+from audio_analysis.als.midi_analyzer import MIDIAnalyzer, MIDIAnalysisResult
 
 
 def make_minimal_als(tmp_path: Path) -> Path:
@@ -111,7 +112,7 @@ def test_parse_extracts_locators(tmp_path):
     parser = ALSParser()
     project = parser.parse(str(als))
     assert project.project_structure is not None
-    locator_names = [l.name for l in project.project_structure.locators]
+    locator_names = [loc.name for loc in project.project_structure.locators]
     assert "Intro" in locator_names
     assert "Drop" in locator_names
 
@@ -120,3 +121,34 @@ def test_parse_missing_file_raises():
     parser = ALSParser()
     with pytest.raises(FileNotFoundError):
         parser.parse("/nonexistent/path/test.als")
+
+
+def test_midi_analyzer_returns_result(tmp_path):
+    als = make_minimal_als(tmp_path)
+    parser = ALSParser()
+    project = parser.parse(str(als))
+    analyzer = MIDIAnalyzer()
+    result = analyzer.analyze(project)
+    assert isinstance(result, MIDIAnalysisResult)
+
+
+def test_midi_analyzer_counts_clips(tmp_path):
+    als = make_minimal_als(tmp_path)
+    parser = ALSParser()
+    project = parser.parse(str(als))
+    analyzer = MIDIAnalyzer()
+    result = analyzer.analyze(project)
+    assert result.total_midi_clips == 1
+    assert result.total_notes == 3
+    assert result.total_empty_clips == 0
+
+
+def test_midi_analyzer_detects_arrangement(tmp_path):
+    als = make_minimal_als(tmp_path)
+    parser = ALSParser()
+    project = parser.parse(str(als))
+    analyzer = MIDIAnalyzer()
+    result = analyzer.analyze(project)
+    assert result.arrangement is not None
+    assert result.arrangement.has_arrangement_markers is True
+    assert result.arrangement.total_sections == 4
