@@ -28,6 +28,14 @@ const config: Config = {
     'bg-studio-bg', 'bg-studio-surface', 'bg-studio-card', 'border-studio-border',
     'text-studio-amber', 'text-studio-sky', 'text-studio-muted',
     'font-display', 'font-metric',
+    // Verdict severity badges (SeverityBadge.tsx)
+    'bg-red-50', 'border-red-600', 'text-red-900',
+    'bg-orange-50', 'border-orange-600', 'text-orange-900',
+    'bg-yellow-50', 'border-yellow-600', 'text-yellow-900',
+    'bg-blue-50', 'border-blue-600', 'text-blue-900',
+    'bg-green-50', 'border-green-600', 'text-green-900',
+    // Verdict feedback button states
+    'bg-green-100', 'bg-red-100', 'bg-yellow-100',
   ],
   theme: {
     extend: {
