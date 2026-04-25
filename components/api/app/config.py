@@ -17,7 +17,16 @@ class Settings(BaseSettings):
     JWT_ACCESS_EXPIRE_MINUTES: int = 30
     JWT_REFRESH_EXPIRE_DAYS: int = 30
 
-    CORS_ALLOW_ORIGINS: list[str] = ["http://localhost:5173"]
+    CORS_ALLOW_ORIGINS: list[str] = [
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5175",
+        "http://localhost:5176",
+        "http://localhost:5177",
+        "http://localhost:5178",
+        "http://localhost:5179",
+        "http://localhost:5180",
+    ]
 
     UPLOAD_DIR: Path = Path("../../data/uploads")
     RESULTS_DIR: Path = Path("../../output/analysis_results")
@@ -27,6 +36,7 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str = ""          # set via ANTHROPIC_API_KEY env var
     output_dir: str = "output"           # relative to project root; override via OUTPUT_DIR
+    use_claude_cli: bool = False         # set USE_CLAUDE_CLI=true in dev to use subscription instead of API key
 
 
 settings = Settings()
