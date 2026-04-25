@@ -71,6 +71,19 @@ AIMusicAnalysisSite/
 - `analysis_results.share_token` — UUID string, unique, indexed (migration 002)
 - `upload_jobs.track_name` — nullable String(200), indexed (migration 003)
 
+**Routes added in v1.2 (verdict pipeline):**
+- `POST /api/reports/{job_id}/verdicts/generate` — start or return cached verdicts
+- `GET /api/reports/{job_id}/verdicts/stream` — SSE per-event verdict stream
+- `GET /api/reports/{job_id}/verdicts` — final ranked verdicts (with user state overlay)
+- `POST /api/verdicts/{id}/dismiss` and `POST /api/verdicts/{id}/feedback`
+- `GET /reports/share/{token}` — extended with `verdicts` field (user_state stripped)
+
+**DB columns added in v1.2 (verdict pipeline):**
+- `analysis_results.verdicts_payload` JSONB (immutable verdict cache, migration 006)
+- `analysis_results.verdicts_generated_at`, `verdicts_prompt_version_set`, `verdicts_model`
+- `verdict_validation_failures` table (ops/regression tracking, migration 006)
+- `verdict_user_state` table (per-user dismiss/feedback, migration 007)
+
 **Gotchas:**
 - **PyJWT not python-jose**: `python-jose` is abandoned and incompatible with Python 3.10+. Use `import jwt` from `PyJWT`. Never add python-jose to requirements.
 - **Two database URLs**: `DATABASE_URL=postgresql+asyncpg://` for SQLAlchemy 2.0 async runtime; `ALEMBIC_DATABASE_URL=postgresql+psycopg2://` for Alembic migrations (async driver fails in Alembic's sync runner).
@@ -82,6 +95,10 @@ AIMusicAnalysisSite/
 - **SSE requires specific `Access-Control-Allow-Origin` (not `*`) and `credentials: true`**: `EventSource` with cookies follows the same CORS rules as credentialed fetch.
 - **Authorization at query level**: all queries on user-owned resources must include `WHERE owner_id = current_user.id` — never fetch-all-then-filter in Python (IDOR vulnerability).
 - **Celery tasks must be `def`, not `async def`**: wrap async code with `asyncio.run()` inside sync task body.
+- **`USE_CLAUDE_CLI=true` required for verdict pipeline in v1**: the Anthropic API transport (`ApiClient`) is a stub. The CLI is wrapped via `subprocess.run` inside `asyncio.to_thread`; concurrent calls serialize on `asyncio.Semaphore(1)` because the CLI is not concurrency-safe.
+- **Specialist slugs are snake_case, prompt files are PascalCase**: mapping in `app/verdict_pipeline/prompt_loader.py::SLUG_TO_FILENAME`. Triage routing plans use slugs.
+- **Validator overwrites priority_score and may downgrade severity**: never trust LLM-supplied score. The Python formula in `aimusic_shared/verdicts/scoring.py` is authoritative. Severity downgrade uses a **moderate-severity baseline** to compute the band ceiling — without this, category weights (e.g. `low_end=1.3`) inflate any critical claim into the critical band, defeating the downgrade.
+- **Verdict cache key must include every prompt's frontmatter version**: bumping a single prompt version invalidates only that specialist's cache contribution. The full set is stored as `analysis_results.verdicts_prompt_version_set`.
 
 ### analysis (analysis.md)
 
@@ -158,6 +175,14 @@ AIMusicAnalysisSite/
 - `pages/TrackHistoryPage.tsx` — track version chart + table
 - `pages/SharedReportPage.tsx` — public report via share token
 
+**Components added in v1.2 (verdict pipeline):**
+- `features/verdicts/VerdictsPanel.tsx` — replaces ExpertsPanel on report pages
+- `features/verdicts/SummaryCard.tsx` — top-3 + release-readiness banner
+- `features/verdicts/VerdictCard.tsx`, `EvidenceChips.tsx`, `FixSummary.tsx`,
+  `SeverityBadge.tsx`, `VerdictSkeleton.tsx`, `VerdictList.tsx`
+- `features/verdicts/useVerdictStream.ts` — SSE hook for verdict events
+- `types/verdicts.ts` — hand-mirrored from Pydantic (`components/shared/aimusic_shared/verdicts/models.py`); regenerate via `npm run gen-types` (note: pydantic2ts CLI currently fails on Windows — hand-edit instead)
+
 **StreamingReadiness now accepts** `truePeakDb` and `clippingDetected` props and renders True Peak (<-1.0 dBTP) and No Clipping rows in addition to platform LUFS rows. Platforms: Spotify, Apple Music, YouTube, Tidal, Amazon Music, SoundCloud, Beatport.
 
 **Gotchas:**
@@ -184,6 +209,10 @@ pip install -e components/analysis
 
 # API tests
 pytest -q components/api/tests/
+
+# Verdict pipeline tests (subset of api + shared)
+pytest -q components/shared/tests/
+pytest -q components/api/tests/verdict_pipeline/
 
 # Analysis tests (mocks heavy models)
 pytest -q components/analysis/tests/
