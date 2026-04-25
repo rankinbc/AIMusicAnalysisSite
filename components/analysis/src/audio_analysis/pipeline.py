@@ -89,7 +89,12 @@ def run_pipeline(
                 elif phase_num == 7:
                     structure = phase_data.get(1, {}).get("structure", {})
                     genre = phase_data.get(2, {}).get("genre", "other")
-                    data = phase7_arrangement.advise(structure, genre, progress_cb)
+                    bpm = float(phase_data.get(1, {}).get("bpm", 128.0))
+                    duration_seconds = float(phase_data.get(1, {}).get("duration_seconds", 0.0))
+                    data = phase7_arrangement.advise(
+                        structure, genre, progress_cb,
+                        bpm=bpm, duration_seconds=duration_seconds,
+                    )
                 else:
                     data = {}
 
@@ -199,7 +204,8 @@ def _extract_fixes(phase_data: dict) -> list[str]:
 
     # Priority 1: arrangement fixes from phase 7
     arr = phase_data.get(7, {})
-    fixes.extend(arr.get("fixes", [])[:3])
+    # Prefer new ArrangementScore "suggestions" key; fall back to legacy "fixes".
+    fixes.extend(arr.get("suggestions", arr.get("fixes", []))[:3])
 
     # Priority 2: stem clash descriptions from phase 4
     if len(fixes) < 3 and phase_data.get(4, {}).get("clashes"):
