@@ -1,8 +1,11 @@
 # components/api/tests/verdict_pipeline/conftest.py
 from __future__ import annotations
 import json
+import re
 from pathlib import Path
 import pytest
+
+_TRACK_ID_RE = re.compile(r'"track_id"\s*:\s*"([^"]+)"')
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -50,12 +53,8 @@ class MockLLMClient:
 
     async def call(self, system: str, user: str, *, max_tokens: int = 4096,
                    timeout_s: int = 90) -> str:
-        track_id = "unknown"
-        for line in user.splitlines():
-            if "track_id" in line:
-                # crude — sufficient for fixture matching
-                track_id = line.split('"')[3] if line.count('"') >= 4 else "unknown"
-                break
+        match = _TRACK_ID_RE.search(user)
+        track_id = match.group(1) if match else "unknown"
         for excerpt, tid in self._responses:
             if excerpt in system and tid == track_id:
                 self.calls.append({"system_excerpt": excerpt, "track_id": track_id,
