@@ -1,0 +1,20 @@
+{
+  "track_id": "fixture-clean-trance",
+  "phase1": {
+    "duration_seconds": 360.0,
+    "integrated_lufs": -10.5,
+    "true_peak_db": -1.2,
+    "peak_dbfs": -0.5,
+    "clipping_detected": false,
+    "clipped_sample_count": 0,
+    "crest_factor": 9.0,
+    "mono_compatibility": 0.92,
+    "low_energy": 0.12,
+    "detected_key": "A",
+    "key_detection_confidence": 0.85,
+    "bpm": 138.0
+  },
+  "phase2": {"stereo_correlation": 0.55},
+  "phase3": {"low_mid_energy": 0.14},
+  "genre_hint": "trance"
+}

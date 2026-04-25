@@ -1,0 +1,20 @@
+{
+  "track_id": "fixture-tiny-dynamics-edm",
+  "phase1": {
+    "duration_seconds": 300.0,
+    "integrated_lufs": -7.5,
+    "true_peak_db": -0.8,
+    "peak_dbfs": -0.3,
+    "clipping_detected": false,
+    "clipped_sample_count": 0,
+    "crest_factor": 3.2,
+    "mono_compatibility": 0.9,
+    "low_energy": 0.18,
+    "detected_key": "G",
+    "key_detection_confidence": 0.82,
+    "bpm": 128.0
+  },
+  "phase2": {"stereo_correlation": 0.6},
+  "phase3": {"low_mid_energy": 0.18},
+  "genre_hint": "edm"
+}

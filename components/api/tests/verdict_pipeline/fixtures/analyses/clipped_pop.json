@@ -1,0 +1,20 @@
+{
+  "track_id": "fixture-clipped-pop",
+  "phase1": {
+    "duration_seconds": 200.0,
+    "integrated_lufs": -7.0,
+    "true_peak_db": 0.4,
+    "peak_dbfs": 0.0,
+    "clipping_detected": true,
+    "clipped_sample_count": 1842,
+    "crest_factor": 5.0,
+    "mono_compatibility": 0.88,
+    "low_energy": 0.15,
+    "detected_key": "C",
+    "key_detection_confidence": 0.8,
+    "bpm": 120.0
+  },
+  "phase2": {"stereo_correlation": 0.5},
+  "phase3": {"low_mid_energy": 0.18},
+  "genre_hint": "pop"
+}

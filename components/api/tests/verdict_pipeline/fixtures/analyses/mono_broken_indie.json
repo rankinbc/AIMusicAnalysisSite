@@ -1,0 +1,20 @@
+{
+  "track_id": "fixture-mono-broken-indie",
+  "phase1": {
+    "duration_seconds": 240.0,
+    "integrated_lufs": -14.0,
+    "true_peak_db": -2.0,
+    "peak_dbfs": -1.5,
+    "clipping_detected": false,
+    "clipped_sample_count": 0,
+    "crest_factor": 11.0,
+    "mono_compatibility": 0.45,
+    "low_energy": 0.13,
+    "detected_key": "E",
+    "key_detection_confidence": 0.75,
+    "bpm": 110.0
+  },
+  "phase2": {"stereo_correlation": -0.25},
+  "phase3": {"low_mid_energy": 0.16},
+  "genre_hint": "indie"
+}
