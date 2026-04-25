@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .routers import auth as auth_router
+from .routers import experts as experts_router
 from .routers import jobs as jobs_router
 from .routers import uploads as uploads_router
 
@@ -36,6 +37,7 @@ app.add_middleware(
 app.include_router(auth_router.router, prefix="/auth", tags=["auth"])
 app.include_router(uploads_router.router, prefix="/uploads", tags=["uploads"])
 app.include_router(jobs_router.router, prefix="/jobs", tags=["jobs"])
+app.include_router(experts_router.router, tags=["experts"])
 
 
 @app.get("/", tags=["health"])
