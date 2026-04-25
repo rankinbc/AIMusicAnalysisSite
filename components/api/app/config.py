@@ -25,5 +25,8 @@ class Settings(BaseSettings):
 
     STORAGE_BACKEND: str = "local"
 
+    anthropic_api_key: str = ""          # set via ANTHROPIC_API_KEY env var
+    output_dir: str = "output"           # relative to project root; override via OUTPUT_DIR
+
 
 settings = Settings()
