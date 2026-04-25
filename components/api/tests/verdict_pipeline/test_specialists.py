@@ -98,6 +98,48 @@ async def test_runner_retries_invalid_json(llm, muddy_hiphop, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_runner_injects_fix_id_when_llm_omits(llm, muddy_hiphop):
+    """LLMs don't know about server-side fix_id; the runner must inject one."""
+    plan = SpecialistRoutingPlan(
+        specialists_to_run=[{"name": "low_end", "priority": 1, "focus": "x"}],
+        skip=[], rationale="x", estimated_total_tokens=1,
+    )
+    canned = json.dumps({
+        "specialist": "low_end",
+        "verdicts": [{
+            "severity": "moderate",
+            "category": "low_end",
+            "confidence": 0.8,
+            "headline": "Mud at 250Hz",
+            "summary": "Cut some 250.",
+            "evidence": [{"metric": "phase3.low_mid_energy", "value": 0.31,
+                          "label": "+50%"}],
+            "fix": {
+                # NOTE: no fix_id — LLM omitted it
+                "target": {"type": "stem", "name": "bass"},
+                "section": None,
+                "dsp_chain": [{"type": "peaking_eq",
+                               "params": {"frequency_hz": 250, "gain_db": -3.0,
+                                          "q": 1.0}}],
+                "sidechain": None,
+                "expected_outcome": "Cleaner low-mid",
+                "ableton_hint": None,
+            },
+            "why_it_matters": "x",
+        }],
+    })
+    llm.register("Low End Specialist", muddy_hiphop["track_id"], canned)
+    out = []
+    async for slug, item in run_specialists(plan, muddy_hiphop, llm=llm):
+        out.append((slug, item))
+    assert len(out) == 1
+    slug, v = out[0]
+    assert isinstance(v, Verdict)
+    assert v.fix is not None
+    assert v.fix.fix_id.startswith("fix_")
+
+
+@pytest.mark.asyncio
 async def test_runner_skips_after_two_failures(llm, muddy_hiphop, monkeypatch):
     plan = SpecialistRoutingPlan(
         specialists_to_run=[{"name": "low_end", "priority": 1, "focus": "x"}],

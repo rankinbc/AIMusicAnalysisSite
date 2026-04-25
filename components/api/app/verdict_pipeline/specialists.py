@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, AsyncIterator
 
 from aimusic_shared.verdicts.models import SpecialistRoutingPlan, Verdict
-from aimusic_shared.verdicts.ulid_helpers import new_verdict_id
+from aimusic_shared.verdicts.ulid_helpers import new_fix_id, new_verdict_id
 from app.llm.client import LLMClient
 from app.verdict_pipeline.json_extraction import extract_json_object
 from app.verdict_pipeline.prompt_loader import load_prompt
@@ -42,6 +42,13 @@ def _hydrate_verdict(
     """
     body = dict(raw)
     body.setdefault("verdict_id", new_verdict_id())
+    # `fix_id` is server-controlled; LLMs don't know to invent one. Inject it
+    # if the LLM emitted a `fix` without one.
+    fix = body.get("fix")
+    if isinstance(fix, dict) and not fix.get("fix_id"):
+        fix = dict(fix)
+        fix["fix_id"] = new_fix_id()
+        body["fix"] = fix
     body["track_id"] = track_id
     body["specialist"] = specialist_slug
     body["prompt_version"] = prompt_version

@@ -194,7 +194,7 @@ Respond ONLY with JSON matching this schema. No prose, no code fences, no commen
   "verdicts": [
     {
       "severity": "critical" | "severe" | "moderate" | "minor" | "win",
-      "category": "<category slug>",
+      "category": "<one of: low_end | frequency_balance | dynamics | stereo_phase | loudness | sections | trance_arrangement | stem_reference | harmonic | clarity | spatial | surround | playback | overall | gain_staging | stereo_field | frequency_collision | humanization | section_contrast | density | chord_harmony | device_chain | priority_summary | clipping | mono_compatibility>",
       "confidence": <float 0-1>,
       "headline": "<short, ≤80 chars>",
       "summary": "<≤300 chars>",
