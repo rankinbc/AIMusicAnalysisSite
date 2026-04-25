@@ -9,7 +9,7 @@ interface UploadState {
 }
 
 interface UseFileUploadReturn extends UploadState {
-  upload: (file: File, referenceFile?: File, trackName?: string, alsFile?: File) => Promise<string>
+  upload: (file: File, referenceFile?: File, trackName?: string, alsFile?: File, genreHint?: string) => Promise<string>
   cancel: () => void
 }
 
@@ -22,7 +22,7 @@ export function useFileUpload(): UseFileUploadReturn {
   })
   const xhrRef = useRef<XMLHttpRequest | null>(null)
 
-  const upload = useCallback((file: File, referenceFile?: File, trackName?: string, alsFile?: File): Promise<string> => {
+  const upload = useCallback((file: File, referenceFile?: File, trackName?: string, alsFile?: File, genreHint?: string): Promise<string> => {
     return new Promise<string>((resolve, reject) => {
       const xhr = new XMLHttpRequest()
       xhrRef.current = xhr
@@ -37,6 +37,9 @@ export function useFileUpload(): UseFileUploadReturn {
       }
       if (alsFile) {
         fd.append('als', alsFile)
+      }
+      if (genreHint?.trim()) {
+        fd.append('genre_hint', genreHint.trim())
       }
 
       // CRITICAL: register progress listener BEFORE xhr.open() —

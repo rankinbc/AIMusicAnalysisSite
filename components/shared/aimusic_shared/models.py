@@ -54,6 +54,7 @@ class UploadJob(Base):
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
     reference_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     als_file_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    genre_hint: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     task_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     track_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -1,5 +1,3 @@
-from pathlib import Path
-import json
 from fastapi import APIRouter, Depends, HTTPException
 from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,18 +13,14 @@ from ..services.expert_service import (
     stream_specialist,
     VALID_SPECIALISTS,
 )
-from ..config import settings
-
 router = APIRouter(prefix="/experts", tags=["experts"])
 
-RESULTS_DIR = Path(settings.output_dir) / "analysis_results"
 
-
-async def _fetch_job_and_result(
+async def _get_analysis(
     job_id: str,
     current_user: User,
     session: AsyncSession,
-) -> tuple[UploadJob, AnalysisResult]:
+) -> dict:
     job = await session.scalar(
         select(UploadJob).where(
             UploadJob.id == job_id,
@@ -39,19 +33,10 @@ async def _fetch_job_and_result(
     result = await session.scalar(
         select(AnalysisResult).where(AnalysisResult.job_id == job_id)
     )
-    if result is None:
+    if result is None or not result.final_json:
         raise HTTPException(status_code=404, detail="Analysis not complete yet")
 
-    return job, result
-
-
-def _load_analysis(job_id: str) -> dict:
-    path = (RESULTS_DIR / f"{job_id}.json").resolve()
-    if not path.is_relative_to(RESULTS_DIR.resolve()):
-        raise HTTPException(status_code=400, detail="Invalid job ID")
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="Analysis file not found on disk")
-    return json.loads(path.read_text(encoding="utf-8"))
+    return result.final_json
 
 
 @router.post("/{job_id}/triage")
@@ -60,8 +45,7 @@ async def triage(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    await _fetch_job_and_result(job_id, current_user, session)
-    analysis = _load_analysis(job_id)
+    analysis = await _get_analysis(job_id, current_user, session)
     return await run_triage(analysis)
 
 
@@ -75,8 +59,7 @@ async def specialist_stream(
     if specialist_name not in VALID_SPECIALISTS:
         raise HTTPException(status_code=400, detail=f"Unknown specialist: {specialist_name!r}")
 
-    await _fetch_job_and_result(job_id, current_user, session)
-    analysis = _load_analysis(job_id)
+    analysis = await _get_analysis(job_id, current_user, session)
 
     async def generate():
         async for event in stream_specialist(specialist_name, analysis):

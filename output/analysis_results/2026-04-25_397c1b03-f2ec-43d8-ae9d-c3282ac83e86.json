@@ -1,0 +1,185 @@
+{
+  "file_path": "..\\..\\data\\uploads\\8f4af2d9-06b6-4ede-817d-d0dae8e4f6d5_38b_6.mp3",
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Universal Mix Analysis",
+      "status": "ok",
+      "data": {
+        "lufs": -10.761995746588166,
+        "rms": 0.23822228610515594,
+        "bpm": 92.28515625,
+        "duration_seconds": 417.41061224489795,
+        "bands": {
+          "sub_bass": -22.556232452392578,
+          "bass": -31.129074096679688,
+          "low_mid": -37.7425422668457,
+          "mid": -41.13996505737305,
+          "upper_mid": -44.081905364990234,
+          "presence": -46.62067794799805,
+          "air": -58.77070999145508
+        },
+        "stereo_correlation": 0.6725931200688366,
+        "stereo_width": 0.19272468984127045,
+        "true_peak_db": -0.6331515658933906,
+        "peak_dbfs": 8.685890352395823e-09,
+        "clipping_detected": true,
+        "clipped_sample_count": 17,
+        "detected_key": "C",
+        "mono_compatibility": 0.9145215581945997,
+        "low_energy": 57.518402099609375,
+        "structure": {
+          "sections": [],
+          "beats": []
+        }
+      },
+      "error": null
+    },
+    {
+      "phase": 2,
+      "name": "Genre Detection",
+      "status": "ok",
+      "data": {
+        "genre": "other",
+        "confidence": 0.5,
+        "bpm": 92.28515625
+      },
+      "error": null
+    },
+    {
+      "phase": 3,
+      "name": "Genre-Specific Scoring",
+      "status": "ok",
+      "data": {
+        "genre": "other",
+        "total_score": 48.65536820888519,
+        "sub_scores": {
+          "frequency_balance": 81.89276123046875,
+          "stereo_width": 15.417975187301636
+        },
+        "notes": []
+      },
+      "error": null
+    },
+    {
+      "phase": 4,
+      "name": "Stem Separation & Clash",
+      "status": "ok",
+      "data": {
+        "stems": {},
+        "band_energy": {
+          "sub_bass": 37.71264788830011,
+          "bass": 38.635087856173094,
+          "low_mid": 26.439884021199855,
+          "mid": 18.555151767566695,
+          "high_mid": 9.751620362021665,
+          "presence": 7.727601737372332,
+          "air": 2.1913726207453497
+        },
+        "clashes": [
+          {
+            "stems": "low-end buildup",
+            "frequency_range": "sub-bass / bass (20\u2013200 Hz)",
+            "severity": "high"
+          },
+          {
+            "stems": "low-mid congestion",
+            "frequency_range": "low-mid (200\u2013500 Hz)",
+            "severity": "high"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "phase": 5,
+      "name": "Reference Comparison",
+      "status": "ok",
+      "data": {
+        "status": "skipped",
+        "deltas": {},
+        "genre_context": {
+          "genre": "other",
+          "preset_name": "other",
+          "checks": {}
+        }
+      },
+      "error": null
+    },
+    {
+      "phase": 6,
+      "name": "Gap Analysis",
+      "status": "ok",
+      "data": {
+        "genre": "other",
+        "percentile": 50.0,
+        "gaps": {}
+      },
+      "error": null
+    },
+    {
+      "phase": 7,
+      "name": "Arrangement Advice",
+      "status": "ok",
+      "data": {
+        "overall_score": 0,
+        "grade": "F",
+        "total_duration": 0.0,
+        "component_scores": {},
+        "structure_score": 0,
+        "length_score": 0,
+        "eight_bar_score": 0,
+        "energy_contrast_score": 0,
+        "flow_score": 0,
+        "section_scores": [],
+        "issues": [
+          {
+            "severity": "CRITICAL",
+            "message": "Structure detection failed or no sections found",
+            "section": null,
+            "fix_suggestion": "Ensure audio file is valid and long enough for structure detection"
+          }
+        ],
+        "suggestions": [],
+        "metadata": {
+          "total_bars": 0,
+          "section_count": 0,
+          "detected_tempo": null,
+          "has_intro": false,
+          "has_buildup": false,
+          "has_drop": false,
+          "has_breakdown": false,
+          "has_outro": false,
+          "energy_contrast_db": null
+        },
+        "fixes": [],
+        "violations": [
+          "Structure detection failed or no sections found"
+        ],
+        "section_count": 0
+      },
+      "error": null
+    },
+    {
+      "phase": 8,
+      "name": "ALS Analysis",
+      "status": "skipped",
+      "data": {},
+      "error": null
+    }
+  ],
+  "overall_score": 48.65536820888519,
+  "grade": "F",
+  "top_fixes": [
+    "EQ clash between low-end buildup: reduce sub-bass / bass (20\u2013200 Hz)",
+    "EQ clash between low-mid congestion: reduce low-mid (200\u2013500 Hz)",
+    "Optimize mix levels for streaming targets"
+  ],
+  "danceability_score": 20,
+  "coach_name": "Coach",
+  "coach_intro": "Here's what I'd focus on to push this mix forward:",
+  "coached_fixes": [
+    "I found 17 hard-clipped samples at the master output. Pull the limiter ceiling back 1\u20132 dB \u2014 clipping at master is an immediate red flag for any distributor.",
+    "True peak is hitting -0.6 dBTP. Streaming platforms reject above 0 dBTP; keep it below \u22121.0 dBTP for safety. Back off the ceiling."
+  ]
+}

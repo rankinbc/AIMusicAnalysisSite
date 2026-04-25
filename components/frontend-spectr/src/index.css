@@ -1,0 +1,91 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:         #070a12;
+  --surface:    #0d1525;
+  --card:       #0f1828;
+  --card-hover: #141f34;
+  --border:     rgba(255,255,255,0.07);
+  --cyan:       #00e5b0;
+  --cyan-dim:   rgba(0,229,176,0.1);
+  --cyan-glow:  rgba(0,229,176,0.25);
+  --violet:     #a78bfa;
+  --violet-dim: rgba(167,139,250,0.1);
+  --orange:     #fb923c;
+  --orange-dim: rgba(251,146,60,0.1);
+  --red:        #f43f5e;
+  --red-dim:    rgba(244,63,94,0.1);
+  --green:      #34d399;
+  --yellow:     #fbbf24;
+  --text:       #e2e8f4;
+  --muted:      #64748b;
+  --dim:        #1e293b;
+}
+
+html, body, #root {
+  min-height: 100vh;
+  font-family: 'Syne', sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  background-image:
+    radial-gradient(ellipse 90% 45% at 50% 0%, rgba(0,229,176,0.06) 0%, transparent 65%),
+    linear-gradient(rgba(255,255,255,0.013) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.013) 1px, transparent 1px);
+  background-size: 100% 100%, 48px 48px, 48px 48px;
+}
+
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+button { font-family: 'Syne', sans-serif; cursor: pointer; border: none; outline: none; }
+button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes fillW {
+  from { width: 0 !important; }
+}
+@keyframes fillH {
+  from { height: 0 !important; }
+}
+@keyframes eq {
+  0%, 100% { transform: scaleY(0.15); }
+  50%       { transform: scaleY(1); }
+}
+@keyframes borderBreath {
+  0%, 100% { border-color: rgba(0,229,176,0.2); }
+  50%       { border-color: rgba(0,229,176,0.5); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.fade-up   { animation: fadeUp   0.45s ease both; }
+.fade-in   { animation: fadeIn  0.3s  ease both; }
+.fill-w    { animation: fillW   0.85s cubic-bezier(.4,0,.2,1) both; }
+.fill-h    { animation: fillH   0.75s cubic-bezier(.4,0,.2,1) both; }
+.slide-down { animation: slideDown 0.2s ease both; }
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.97) translateY(10px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0); }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}

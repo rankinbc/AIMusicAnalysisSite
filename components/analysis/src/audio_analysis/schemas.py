@@ -15,3 +15,7 @@ class PipelineResult(TypedDict):
     overall_score: float
     grade: str
     top_fixes: list[str]
+    danceability_score: int
+    coach_name: str
+    coach_intro: str
+    coached_fixes: list[str]

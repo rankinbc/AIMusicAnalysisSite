@@ -1,0 +1,91 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Node / JavaScript / TypeScript
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-store/
+.parcel-cache/
+dist/
+out/
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Project artifacts
+*.log
+*.bak
+*.tmp
+
+# Audio uploads (staged files — never commit)
+data/uploads/*.mp3
+data/uploads/*.wav
+data/uploads/*.flac
+data/uploads/*.aiff
+data/uploads/*.m4a
+data/uploads/*.ogg
+
+# Reference library audio files (large binary assets — manage separately)
+data/reference_library/**/*.mp3
+data/reference_library/**/*.wav
+data/reference_library/**/*.flac
+data/reference_library/**/*.aiff
+
+# ML model weights (large — download at runtime)
+data/models/
+
+# Analysis output artifacts
+output/analysis_results/*/
+
+# Vite build output
+components/frontend/dist/
+
+# Frontend caches
+components/frontend/.cache/
+
+# PRPs staging (uncomment if you want generated PRPs kept out of git)
+# PRPs/*.md
+# !PRPs/README.md
+# !PRPs/templates/
+
+# Deployer backups
+.ce-backup-*/

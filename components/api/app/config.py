@@ -26,6 +26,12 @@ class Settings(BaseSettings):
         "http://localhost:5178",
         "http://localhost:5179",
         "http://localhost:5180",
+        "http://localhost:5181",
+        "http://localhost:5182",
+        "http://localhost:5183",
+        "http://localhost:5184",
+        "http://localhost:5185",
+        "http://localhost:5190",
     ]
 
     UPLOAD_DIR: Path = Path("../../data/uploads")

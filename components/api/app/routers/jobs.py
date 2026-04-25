@@ -1,8 +1,9 @@
 import asyncio
 import json
+from pathlib import Path
 from typing import AsyncGenerator
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,10 +11,54 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import settings
 from ..db import AsyncSessionLocal, get_session
 from ..models import AnalysisResult, JobStatus, UploadJob, User
-from ..schemas.jobs import JobStatus as JobStatusSchema
-from .auth import get_current_user
+from ..schemas.jobs import JobStatus as JobStatusSchema, JobSummary
+from .auth import get_current_user, get_current_user_sse
 
 router = APIRouter()
+
+
+@router.get("/", response_model=list[JobSummary])
+async def list_jobs(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[JobSummary]:
+    """Return the 50 most recent jobs for the current user."""
+    jobs_result = await session.execute(
+        select(UploadJob)
+        .where(UploadJob.user_id == current_user.id)
+        .order_by(UploadJob.created_at.desc())
+        .limit(50)
+    )
+    jobs = jobs_result.scalars().all()
+
+    if not jobs:
+        return []
+
+    job_ids = [j.id for j in jobs]
+    analyses_result = await session.execute(
+        select(AnalysisResult).where(AnalysisResult.job_id.in_(job_ids))
+    )
+    analyses = {str(a.job_id): a for a in analyses_result.scalars().all()}
+
+    summaries: list[JobSummary] = []
+    for job in jobs:
+        filename = Path(job.file_path).name if job.file_path else "unknown"
+        analysis = analyses.get(str(job.id))
+        score = grade = None
+        if analysis and analysis.final_json:
+            score = analysis.final_json.get("overall_score")
+            grade = analysis.final_json.get("grade")
+        summaries.append(
+            JobSummary(
+                job_id=str(job.id),
+                status=job.status.value,
+                filename=filename,
+                created_at=job.created_at.isoformat(),
+                score=float(score) if score is not None else None,
+                grade=str(grade) if grade is not None else None,
+            )
+        )
+    return summaries
 
 
 @router.get("/{job_id}/status", response_model=JobStatusSchema)
@@ -39,13 +84,15 @@ async def get_job_status(
         current_phase=job.current_phase,
         phase_name=job.phase_name,
         phase_pct=job.phase_pct,
+        has_als=job.als_file_path is not None,
     )
 
 
 @router.get("/{job_id}/stream")
 async def stream_job_progress(
     job_id: str,
-    current_user: User = Depends(get_current_user),
+    request: Request,
+    current_user: User = Depends(get_current_user_sse),
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
     """
@@ -86,6 +133,7 @@ async def stream_job_progress(
                         "phase": current_job.current_phase,
                         "phase_name": current_job.phase_name,
                         "pct": current_job.phase_pct,
+                        "has_als": current_job.als_file_path is not None,
                     }
                 )
                 yield f"data: {data}\n\n"
@@ -93,6 +141,7 @@ async def stream_job_progress(
                 if current_job.status == JobStatus.COMPLETE:
                     complete_data = json.dumps({"job_id": str(current_job.id)})
                     yield f"event: complete\ndata: {complete_data}\n\n"
+                    await asyncio.sleep(0.5)
                     return
                 if current_job.status == JobStatus.FAILED:
                     yield 'event: error\ndata: {"error": "Analysis failed"}\n\n'
@@ -100,11 +149,12 @@ async def stream_job_progress(
 
             await asyncio.sleep(1)
 
-    # SSE requires an explicit origin — never wildcard when credentials are involved.
+    # Reflect the actual request origin if it's in the allowed list.
+    req_origin = request.headers.get("origin", "")
     origin = (
-        settings.CORS_ALLOW_ORIGINS[0]
-        if settings.CORS_ALLOW_ORIGINS
-        else "http://localhost:5173"
+        req_origin
+        if req_origin in settings.CORS_ALLOW_ORIGINS
+        else (settings.CORS_ALLOW_ORIGINS[0] if settings.CORS_ALLOW_ORIGINS else "http://localhost:5173")
     )
     return StreamingResponse(
         event_generator(),
@@ -142,4 +192,8 @@ async def get_job_results(
     if not analysis:
         raise HTTPException(status_code=404, detail="Results not yet available")
 
-    return {"job_id": job_id, "result": analysis.final_json}
+    return {
+        "job_id": job_id,
+        "result": analysis.final_json,
+        "share_token": analysis.share_token,
+    }

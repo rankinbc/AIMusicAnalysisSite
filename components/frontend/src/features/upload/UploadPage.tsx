@@ -31,6 +31,7 @@ export default function UploadPage() {
   const [refFile, setRefFile] = useState<File | null>(null)
   const [alsFile, setAlsFile] = useState<File | null>(null)
   const [trackName, setTrackName] = useState('')
+  const [genreHint, setGenreHint] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const [fileError, setFileError] = useState('')
   const [alsFileError, setAlsFileError] = useState('')
@@ -78,7 +79,7 @@ export default function UploadPage() {
     e.preventDefault()
     if (!mainFile) return
     try {
-      const jobId = await upload(mainFile, refFile ?? undefined, trackName || undefined, alsFile ?? undefined)
+      const jobId = await upload(mainFile, refFile ?? undefined, trackName || undefined, alsFile ?? undefined, genreHint || undefined)
       navigate(`/jobs/${jobId}`)
     } catch {
       // error state already set in useFileUpload
@@ -170,6 +171,26 @@ export default function UploadPage() {
               maxLength={200}
               className="w-full rounded-lg bg-gray-800 border border-gray-600 px-3 py-2 text-white placeholder-gray-500 focus:border-purple-500 focus:outline-none"
             />
+          </div>
+
+          {/* Genre hint (optional — overrides auto-detection) */}
+          <div className="rounded-xl bg-gray-900 p-4">
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Genre{' '}
+              <span className="font-normal text-gray-500">(optional — overrides auto-detection)</span>
+            </label>
+            <select
+              value={genreHint}
+              onChange={(e) => setGenreHint(e.target.value)}
+              className="w-full rounded-lg bg-gray-800 border border-gray-600 px-3 py-2 text-white focus:border-purple-500 focus:outline-none"
+            >
+              <option value="">Auto-detect</option>
+              <option value="trance">Trance</option>
+              <option value="house">House</option>
+              <option value="techno">Techno</option>
+              <option value="dnb">Drum &amp; Bass</option>
+              <option value="progressive">Progressive</option>
+            </select>
           </div>
 
           {/* Optional reference track */}

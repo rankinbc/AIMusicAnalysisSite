@@ -1,0 +1,110 @@
+{
+  "file_path": "..\\..\\data\\uploads\\24132e47-0979-46cf-b15c-3ef747e596b0_22_6_recompose.flac",
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Universal Mix Analysis",
+      "status": "ok",
+      "data": {
+        "lufs": -11.926288614624303,
+        "rms": 0.20807471871376038,
+        "bpm": 93.96306818181819,
+        "duration_seconds": 558.2978911564626,
+        "bands": {
+          "sub_bass": -20.98548126220703,
+          "bass": -29.47247314453125,
+          "low_mid": -37.146484375,
+          "mid": -44.22825241088867,
+          "upper_mid": -45.43483352661133,
+          "presence": -49.68159866333008,
+          "air": -60.31114959716797
+        },
+        "stereo_correlation": 0.7135773864701794,
+        "stereo_width": 0.15747898817062378,
+        "true_peak_db": -0.7888172334130268,
+        "peak_dbfs": -0.7497970874356237,
+        "clipping_detected": false,
+        "clipped_sample_count": 0,
+        "detected_key": "B",
+        "mono_compatibility": 0.9256341667693195,
+        "low_energy": 47.765926361083984,
+        "structure": {
+          "sections": [],
+          "beats": []
+        }
+      },
+      "error": null
+    },
+    {
+      "phase": 2,
+      "name": "Genre Detection",
+      "status": "ok",
+      "data": {
+        "genre": "other",
+        "confidence": 0.5,
+        "bpm": 93.96306818181819
+      },
+      "error": null
+    },
+    {
+      "phase": 3,
+      "name": "Genre-Specific Scoring",
+      "status": "ok",
+      "data": {
+        "genre": "other",
+        "total_score": 46.46774244308472,
+        "sub_scores": {
+          "frequency_balance": 80.33716583251953,
+          "stereo_width": 12.598319053649902
+        },
+        "notes": []
+      },
+      "error": null
+    },
+    {
+      "phase": 4,
+      "name": "Stem Separation & Clash",
+      "status": "ok",
+      "data": {
+        "stems": {},
+        "clashes": [],
+        "error": "demucs not available"
+      },
+      "error": null
+    },
+    {
+      "phase": 5,
+      "name": "Reference Comparison",
+      "status": "ok",
+      "data": {
+        "status": "skipped",
+        "deltas": {}
+      },
+      "error": null
+    },
+    {
+      "phase": 6,
+      "name": "Gap Analysis",
+      "status": "ok",
+      "data": {
+        "genre": "other",
+        "percentile": 50.0,
+        "gaps": {}
+      },
+      "error": null
+    }
+  ],
+  "overall_score": 46.46774244308472,
+  "grade": "F",
+  "top_fixes": [
+    "Optimize mix levels for streaming targets",
+    "Optimize mix levels for streaming targets",
+    "Optimize mix levels for streaming targets"
+  ],
+  "danceability_score": 20,
+  "coach_name": "Coach",
+  "coach_intro": "Here's what I'd focus on to push this mix forward:",
+  "coached_fixes": [
+    "True peak is hitting -0.8 dBTP. Streaming platforms reject above 0 dBTP; keep it below \u22121.0 dBTP for safety. Back off the ceiling."
+  ]
+}

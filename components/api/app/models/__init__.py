@@ -1,5 +1,3 @@
-from .analysis_result import AnalysisResult
-from .upload_job import JobStatus, UploadJob
-from .user import User
+from aimusic_shared.models import AnalysisResult, JobStatus, UploadJob, User
 
 __all__ = ["User", "UploadJob", "JobStatus", "AnalysisResult"]

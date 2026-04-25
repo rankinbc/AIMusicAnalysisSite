@@ -1,7 +1,10 @@
 from pathlib import Path
 import asyncio
 import json
+import queue
 import re
+import subprocess
+import threading
 from anthropic import AsyncAnthropic
 from ..config import settings
 
@@ -46,36 +49,52 @@ def _user_message(analysis_json: dict, action: str) -> str:
 
 
 # ── CLI path (dev) ────────────────────────────────────────────────────────────
+# asyncio.create_subprocess_exec is not supported on Windows SelectorEventLoop,
+# so we run the claude CLI via subprocess in a thread instead.
 
 async def _cli_run(prompt_path: Path, user_message: str) -> str:
-    """Blocking Claude CLI call — returns full response text."""
-    proc = await asyncio.create_subprocess_exec(
-        "claude", "-p", user_message,
-        "--system-prompt-file", str(prompt_path),
-        "--output-format", "text",
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
+    """Blocking Claude CLI call — offloaded to a thread for Windows compat."""
+    result = await asyncio.to_thread(
+        subprocess.run,
+        ["claude", "-p", user_message,
+         "--system-prompt-file", str(prompt_path),
+         "--output-format", "text"],
+        capture_output=True,
     )
-    stdout, stderr = await proc.communicate()
-    if proc.returncode != 0:
-        raise RuntimeError(f"claude CLI exited {proc.returncode}: {stderr.decode().strip()}")
-    return stdout.decode()
+    if result.returncode != 0:
+        raise RuntimeError(f"claude CLI exited {result.returncode}: {result.stderr.decode().strip()}")
+    return result.stdout.decode()
 
 
 async def _cli_stream(prompt_path: Path, user_message: str):
-    """Async generator — yields SSE dicts by streaming claude CLI output."""
-    proc = await asyncio.create_subprocess_exec(
-        "claude", "-p", user_message,
-        "--system-prompt-file", str(prompt_path),
-        "--output-format", "stream-json",
-        "--include-partial-messages",
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
+    """Async generator — streams claude CLI output via a producer thread + queue."""
+    line_queue: queue.Queue = queue.Queue()
 
-    assert proc.stdout is not None
-    async for raw_line in proc.stdout:
-        line = raw_line.decode().strip()
+    def _producer() -> None:
+        try:
+            with subprocess.Popen(
+                ["claude", "-p", user_message,
+                 "--system-prompt-file", str(prompt_path),
+                 "--output-format", "stream-json",
+                 "--include-partial-messages",
+                 "--verbose"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+            ) as proc:
+                assert proc.stdout is not None
+                for raw in proc.stdout:
+                    line_queue.put(raw)
+        finally:
+            line_queue.put(None)  # sentinel
+
+    t = threading.Thread(target=_producer, daemon=True)
+    t.start()
+
+    while True:
+        raw = await asyncio.to_thread(line_queue.get)
+        if raw is None:
+            break
+        line = raw.decode().strip()
         if not line:
             continue
         try:
@@ -89,7 +108,7 @@ async def _cli_stream(prompt_path: Path, user_message: str):
             text = event["event"]["delta"]["text"]
             yield {"event": "chunk", "data": json.dumps({"text": text})}
 
-    await proc.wait()
+    t.join()
 
 
 # ── Anthropic API path (production) ──────────────────────────────────────────

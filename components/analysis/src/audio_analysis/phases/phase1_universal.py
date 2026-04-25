@@ -23,6 +23,8 @@ _BAND_DEFS = [
     ("air", 100, 128),
 ]
 
+_KEY_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+
 
 def analyze(wav_path: Path, progress_cb: Callable | None = None) -> dict:
     """Run phase-1 universal analysis on *wav_path*.
@@ -32,8 +34,9 @@ def analyze(wav_path: Path, progress_cb: Callable | None = None) -> dict:
         progress_cb: Optional ``(phase, name, pct)`` progress callback.
 
     Returns:
-        dict with keys: lufs, rms, bpm, bands, stereo_correlation,
-        stereo_width, structure.
+        dict with keys: lufs, rms, bpm, duration_seconds, bands, stereo_correlation,
+        stereo_width, true_peak_db, peak_dbfs, clipping_detected, clipped_sample_count,
+        detected_key, mono_compatibility, low_energy, structure.
     """
     # ------------------------------------------------------------------
     # Load audio — librosa returns (channels, samples) float32 when mono=False
@@ -56,14 +59,19 @@ def analyze(wav_path: Path, progress_cb: Callable | None = None) -> dict:
         lufs = -70.0
 
     # ------------------------------------------------------------------
-    # RMS
+    # RMS + duration
     # ------------------------------------------------------------------
     rms = float(np.sqrt(np.mean(y**2)))
+    duration_seconds = float(y.shape[1] / sr)
 
     # ------------------------------------------------------------------
-    # Frequency bands (7 bands via mel spectrogram on mono mix)
+    # Mono downmix — reused for most single-channel computations
     # ------------------------------------------------------------------
     mono = y.mean(axis=0) if y.ndim > 1 else y.squeeze()
+
+    # ------------------------------------------------------------------
+    # Frequency bands (7 bands via mel spectrogram)
+    # ------------------------------------------------------------------
     S = librosa.feature.melspectrogram(y=mono, sr=sr, n_mels=128)
     S_db = librosa.power_to_db(S, ref=np.max)
     bands: dict[str, float] = {
@@ -82,11 +90,60 @@ def analyze(wav_path: Path, progress_cb: Callable | None = None) -> dict:
         stereo_width = 0.0
 
     # ------------------------------------------------------------------
+    # True peak — 4x oversampling to detect inter-sample peaks (dBTP)
+    # Falls back to simple peak if scipy is unavailable.
+    # ------------------------------------------------------------------
+    try:
+        from scipy import signal as scipy_signal
+        oversampled = scipy_signal.resample_poly(mono, 4, 1)
+        true_peak_linear = float(np.max(np.abs(oversampled)))
+    except Exception:
+        true_peak_linear = float(np.max(np.abs(mono)))
+    true_peak_db = float(20.0 * np.log10(true_peak_linear + 1e-9))
+
+    # ------------------------------------------------------------------
+    # Peak dBFS + clipping detection
+    # Clipping threshold: |sample| >= 0.9999 (hard clip at digital full scale)
+    # ------------------------------------------------------------------
+    peak_linear = float(np.max(np.abs(y)))
+    peak_dbfs = float(20.0 * np.log10(peak_linear + 1e-9))
+    clipped_samples = int(np.sum(np.abs(y) >= 0.9999))
+    clipping_detected = clipped_samples > 0
+    clipped_sample_count = clipped_samples
+
+    # ------------------------------------------------------------------
     # BPM
     # ------------------------------------------------------------------
     tempo, _ = librosa.beat.beat_track(y=mono, sr=sr)
-    # librosa ≥0.10 returns a scalar ndarray; np.asarray().ravel() handles both scalar and array
+    # librosa ≥0.10 returns a scalar ndarray; .ravel() handles both scalar and array
     bpm = float(np.asarray(tempo).ravel()[0])
+
+    # ------------------------------------------------------------------
+    # Musical key detection via constant-Q chromagram
+    # ------------------------------------------------------------------
+    chroma = librosa.feature.chroma_cqt(y=mono, sr=sr)
+    chroma_mean = chroma.mean(axis=1)
+    detected_key = _KEY_NAMES[int(np.argmax(chroma_mean))]
+
+    # ------------------------------------------------------------------
+    # Mono compatibility — ratio of mono-sum RMS to stereo RMS
+    # A value close to 1.0 means the mix survives mono well.
+    # ------------------------------------------------------------------
+    if y.ndim > 1 and y.shape[0] >= 2:
+        mono_sum = y.mean(axis=0)
+        stereo_rms = float(np.sqrt(np.mean(y ** 2)))
+        mono_rms = float(np.sqrt(np.mean(mono_sum ** 2)))
+        mono_compatibility = float(np.clip(mono_rms / (stereo_rms + 1e-9), 0.0, 1.0))
+    else:
+        mono_compatibility = 1.0
+
+    # ------------------------------------------------------------------
+    # Low-frequency energy (20–200 Hz band) — input for danceability scorer
+    # ------------------------------------------------------------------
+    stft_mag = np.abs(librosa.stft(mono))
+    freqs = librosa.fft_frequencies(sr=sr)
+    low_band_mask = (freqs >= 20) & (freqs <= 200)
+    low_energy = float(np.sqrt(np.mean(stft_mag[low_band_mask, :] ** 2)))
 
     # ------------------------------------------------------------------
     # Structure via all-in-one-fix (optional; requires Docker/Linux)
@@ -102,8 +159,16 @@ def analyze(wav_path: Path, progress_cb: Callable | None = None) -> dict:
         "lufs": lufs,
         "rms": rms,
         "bpm": bpm,
+        "duration_seconds": duration_seconds,
         "bands": bands,
         "stereo_correlation": stereo_correlation,
         "stereo_width": stereo_width,
+        "true_peak_db": true_peak_db,
+        "peak_dbfs": peak_dbfs,
+        "clipping_detected": clipping_detected,
+        "clipped_sample_count": clipped_sample_count,
+        "detected_key": detected_key,
+        "mono_compatibility": mono_compatibility,
+        "low_energy": low_energy,
         "structure": structure,
     }

@@ -13,6 +13,7 @@ def classify(
     wav_path: Path,
     phase1_result: dict,
     progress_cb: Callable | None = None,
+    genre_hint: str | None = None,
 ) -> dict:
     """Classify genre from BPM and spectral features derived in Phase 1.
 
@@ -20,11 +21,18 @@ def classify(
         wav_path:      Path to the 44100 Hz WAV (available for future use).
         phase1_result: Output dict from :func:`phase1_universal.analyze`.
         progress_cb:   Optional ``(phase, name, pct)`` progress callback.
+        genre_hint:    User-supplied genre override; skips BPM classification.
 
     Returns:
         dict with keys: genre, confidence, bpm.
     """
     bpm: float = phase1_result.get("bpm", 120.0)
+
+    # When the user specifies a genre, trust it — skip BPM heuristics entirely.
+    if genre_hint:
+        logger.debug("Phase 2: user hint=%s bpm=%.1f (auto-detection skipped)", genre_hint, bpm)
+        return {"genre": genre_hint, "confidence": 1.0, "bpm": bpm}
+
     bands: dict = phase1_result.get("bands", {})
     presence_energy: float = bands.get("presence", -40.0)
 

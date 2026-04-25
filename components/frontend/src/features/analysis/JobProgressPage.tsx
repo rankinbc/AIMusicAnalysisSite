@@ -10,13 +10,16 @@ const PHASE_NAMES = [
   'Reference Comparison',
   'Gap Analysis',
   'Arrangement Advice',
+  'ALS Analysis',
 ]
+
+const ALS_PHASE = 8
 
 export default function JobProgressPage() {
   // Route uses :id to match the path /jobs/:id defined in App.tsx
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { phase, pct, done, error } = useJobStream(id)
+  const { phase, pct, done, error, hasAls } = useJobStream(id)
 
   // Auto-navigate to the report page once analysis is complete
   useEffect(() => {
@@ -31,7 +34,7 @@ export default function JobProgressPage() {
       <div className="mx-auto max-w-2xl">
         <h1 className="mb-2 text-3xl font-bold">Analyzing Your Track</h1>
         <p className="mb-10 text-gray-400">
-          Running 7-phase analysis pipeline — this may take a few minutes.
+          Running analysis pipeline — this may take a few minutes.
         </p>
 
         {error && (
@@ -43,8 +46,11 @@ export default function JobProgressPage() {
         <div className="space-y-4">
           {PHASE_NAMES.map((name, i) => {
             const phaseNum = i + 1
-            const isActive = phase === phaseNum
-            const isComplete = phase > phaseNum || (done && phase >= phaseNum)
+            const isAlsPhase = phaseNum === ALS_PHASE
+            // hasAls is null until first SSE event — treat as unknown (not skipped)
+            const isSkipped = isAlsPhase && hasAls === false
+            const isActive = !isSkipped && phase === phaseNum
+            const isComplete = !isSkipped && (phase > phaseNum || (done && phase >= phaseNum))
             const barWidth = isActive
               ? Math.round(pct * 100)
               : isComplete
@@ -55,7 +61,9 @@ export default function JobProgressPage() {
               <div
                 key={phaseNum}
                 className={`rounded-xl border p-4 transition-all ${
-                  isActive
+                  isSkipped
+                    ? 'border-gray-800/50 bg-gray-900/20 opacity-40'
+                    : isActive
                     ? 'border-purple-500 bg-purple-900/20'
                     : isComplete
                     ? 'border-green-700 bg-green-900/10'
@@ -66,7 +74,9 @@ export default function JobProgressPage() {
                   <div className="flex items-center gap-3">
                     <span
                       className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold ${
-                        isComplete
+                        isSkipped
+                          ? 'bg-gray-800 text-gray-600'
+                          : isComplete
                           ? 'bg-green-600'
                           : isActive
                           ? 'animate-pulse bg-purple-600'
@@ -77,7 +87,9 @@ export default function JobProgressPage() {
                     </span>
                     <span
                       className={`font-medium ${
-                        isActive
+                        isSkipped
+                          ? 'text-gray-600'
+                          : isActive
                           ? 'text-white'
                           : isComplete
                           ? 'text-green-400'
@@ -86,6 +98,9 @@ export default function JobProgressPage() {
                     >
                       {name}
                     </span>
+                    {isSkipped && (
+                      <span className="text-xs text-gray-600 italic">— no .als file</span>
+                    )}
                   </div>
                   {isActive && (
                     <span className="text-sm text-purple-400">

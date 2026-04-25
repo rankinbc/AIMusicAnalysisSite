@@ -1,0 +1,185 @@
+{
+  "file_path": "..\\..\\data\\uploads\\beab9107-cbf6-4540-b00f-cd14f8bd5922_46-1-14_47_16_12.mp3",
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Universal Mix Analysis",
+      "status": "ok",
+      "data": {
+        "lufs": -10.95114451164687,
+        "rms": 0.22762909531593323,
+        "bpm": 71.77734375,
+        "duration_seconds": 773.3289795918367,
+        "bands": {
+          "sub_bass": -23.609773635864258,
+          "bass": -28.399839401245117,
+          "low_mid": -40.50503158569336,
+          "mid": -45.411048889160156,
+          "upper_mid": -46.40085983276367,
+          "presence": -48.054176330566406,
+          "air": -67.1261215209961
+        },
+        "stereo_correlation": 0.6445417537646143,
+        "stereo_width": 0.19192352890968323,
+        "true_peak_db": -1.2766479751865916,
+        "peak_dbfs": -0.39589218714650426,
+        "clipping_detected": false,
+        "clipped_sample_count": 0,
+        "detected_key": "F#",
+        "mono_compatibility": 0.9067948032719468,
+        "low_energy": 52.0551643371582,
+        "structure": {
+          "sections": [],
+          "beats": []
+        }
+      },
+      "error": null
+    },
+    {
+      "phase": 2,
+      "name": "Genre Detection",
+      "status": "ok",
+      "data": {
+        "genre": "other",
+        "confidence": 0.5,
+        "bpm": 71.77734375
+      },
+      "error": null
+    },
+    {
+      "phase": 3,
+      "name": "Genre-Specific Scoring",
+      "status": "ok",
+      "data": {
+        "genre": "other",
+        "total_score": 46.79785418510437,
+        "sub_scores": {
+          "frequency_balance": 78.24182605743408,
+          "stereo_width": 15.353882312774658
+        },
+        "notes": []
+      },
+      "error": null
+    },
+    {
+      "phase": 4,
+      "name": "Stem Separation & Clash",
+      "status": "ok",
+      "data": {
+        "stems": {},
+        "band_energy": {
+          "sub_bass": 28.159048258598624,
+          "bass": 38.59138578478771,
+          "low_mid": 29.881190925449772,
+          "mid": 16.1051459752035,
+          "high_mid": 8.571914335245678,
+          "presence": 5.0051568654935625,
+          "air": -13.167884655221368
+        },
+        "clashes": [
+          {
+            "stems": "low-end buildup",
+            "frequency_range": "sub-bass / bass (20\u2013200 Hz)",
+            "severity": "high"
+          },
+          {
+            "stems": "low-mid congestion",
+            "frequency_range": "low-mid (200\u2013500 Hz)",
+            "severity": "high"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "phase": 5,
+      "name": "Reference Comparison",
+      "status": "ok",
+      "data": {
+        "status": "ok",
+        "deltas": {
+          "lufs": {
+            "value": 15.474472097520117,
+            "severity": "significant"
+          },
+          "rms": {
+            "value": 0.19346627593040466,
+            "severity": "moderate"
+          },
+          "stereo_correlation": {
+            "value": -0.1064579753031425,
+            "severity": "minor"
+          },
+          "band_sub_bass": {
+            "value": 4.148393630981445,
+            "severity": "moderate"
+          },
+          "band_bass": {
+            "value": -4.767629623413086,
+            "severity": "moderate"
+          },
+          "band_low_mid": {
+            "value": -8.510820388793945,
+            "severity": "significant"
+          },
+          "band_mid": {
+            "value": -9.08624267578125,
+            "severity": "significant"
+          },
+          "band_upper_mid": {
+            "value": -2.3262939453125,
+            "severity": "minor"
+          },
+          "band_presence": {
+            "value": 9.036033630371094,
+            "severity": "significant"
+          },
+          "band_air": {
+            "value": 7.1349639892578125,
+            "severity": "significant"
+          }
+        }
+      },
+      "error": null
+    },
+    {
+      "phase": 6,
+      "name": "Gap Analysis",
+      "status": "ok",
+      "data": {
+        "genre": "other",
+        "percentile": 50.0,
+        "gaps": {}
+      },
+      "error": null
+    },
+    {
+      "phase": 7,
+      "name": "Arrangement Advice",
+      "status": "ok",
+      "data": {
+        "violations": [],
+        "fixes": [
+          "Enable Docker for structure detection (Phase 1) to unlock arrangement advice"
+        ],
+        "section_count": 0
+      },
+      "error": null
+    }
+  ],
+  "overall_score": 46.79785418510437,
+  "grade": "F",
+  "top_fixes": [
+    "Enable Docker for structure detection (Phase 1) to unlock arrangement advice",
+    "EQ clash between low-end buildup: reduce sub-bass / bass (20\u2013200 Hz)",
+    "EQ clash between low-mid congestion: reduce low-mid (200\u2013500 Hz)"
+  ],
+  "danceability_score": 20,
+  "coach_name": "Coach",
+  "coach_intro": "Here's what I'd focus on to push this mix forward:",
+  "coached_fixes": [
+    "Enable Docker for structure detection (Phase 1) to unlock arrangement advice",
+    "EQ clash between low-end buildup: reduce sub-bass / bass (20\u2013200 Hz)",
+    "EQ clash between low-mid congestion: reduce low-mid (200\u2013500 Hz)"
+  ]
+}

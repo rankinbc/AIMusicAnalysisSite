@@ -1,0 +1,207 @@
+{
+  "file_path": "..\\..\\data\\uploads\\d339630c-500a-4d16-8f31-91fa04856cea_42-2-3ai.flac",
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Universal Mix Analysis",
+      "status": "ok",
+      "data": {
+        "lufs": -10.957176339186935,
+        "rms": 0.20126491785049438,
+        "bpm": 68.90625,
+        "duration_seconds": 252.17392290249433,
+        "bands": {
+          "sub_bass": -24.046031951904297,
+          "bass": -27.978923797607422,
+          "low_mid": -34.166099548339844,
+          "mid": -35.89922332763672,
+          "upper_mid": -37.69452667236328,
+          "presence": -42.10528564453125,
+          "air": -54.75107955932617
+        },
+        "stereo_correlation": 0.6360458483393532,
+        "stereo_width": 0.1718321591615677,
+        "true_peak_db": 0.07161620886659394,
+        "peak_dbfs": 8.685890352395823e-09,
+        "clipping_detected": true,
+        "clipped_sample_count": 377,
+        "detected_key": "E",
+        "mono_compatibility": 0.9043069078005215,
+        "low_energy": 39.90689468383789,
+        "structure": {
+          "sections": [],
+          "beats": []
+        }
+      },
+      "error": null
+    },
+    {
+      "phase": 2,
+      "name": "Genre Detection",
+      "status": "ok",
+      "data": {
+        "genre": "trance",
+        "confidence": 1.0,
+        "bpm": 68.90625
+      },
+      "error": null
+    },
+    {
+      "phase": 3,
+      "name": "Genre-Specific Scoring",
+      "status": "ok",
+      "data": {
+        "genre": "trance",
+        "total_score": 5.727738638718923,
+        "sub_scores": {
+          "air_energy": 0.0,
+          "stereo_width": 17.18321591615677,
+          "bpm_adherence": 0.0
+        },
+        "notes": [
+          "Increase high-frequency content (air band) for trance shimmer",
+          "Widen stereo field \u2014 trance benefits from wide supersaws/pads",
+          "BPM 68.9 is outside typical trance range (130-150)"
+        ]
+      },
+      "error": null
+    },
+    {
+      "phase": 4,
+      "name": "Stem Separation & Clash",
+      "status": "ok",
+      "data": {
+        "stems": {},
+        "band_energy": {
+          "sub_bass": 31.46332453729093,
+          "bass": 35.97558181299023,
+          "low_mid": 26.94089714585821,
+          "mid": 20.35539225366844,
+          "high_mid": 14.739989452021355,
+          "presence": 10.114702620218692,
+          "air": 2.065133330691927
+        },
+        "clashes": [
+          {
+            "stems": "low-end buildup",
+            "frequency_range": "sub-bass / bass (20\u2013200 Hz)",
+            "severity": "high"
+          },
+          {
+            "stems": "low-mid congestion",
+            "frequency_range": "low-mid (200\u2013500 Hz)",
+            "severity": "high"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "phase": 5,
+      "name": "Reference Comparison",
+      "status": "ok",
+      "data": {
+        "status": "skipped",
+        "deltas": {},
+        "genre_context": {
+          "genre": "trance",
+          "preset_name": "Trance",
+          "checks": {
+            "lufs": {
+              "status": "warning",
+              "message": "LUFS -11.0 \u2014 target -14 for Trance",
+              "value": -10.957176339186935,
+              "target": -14.0
+            },
+            "bpm": {
+              "status": "warning",
+              "message": "BPM 69 outside Trance range (136\u2013145)",
+              "value": 68.90625
+            },
+            "correlation": {
+              "status": "warning",
+              "message": "Correlation 0.64 too narrow for Trance (max 0.60)",
+              "value": 0.6360458483393532
+            }
+          }
+        }
+      },
+      "error": null
+    },
+    {
+      "phase": 6,
+      "name": "Gap Analysis",
+      "status": "ok",
+      "data": {
+        "genre": "trance",
+        "percentile": 50.0,
+        "gaps": {}
+      },
+      "error": null
+    },
+    {
+      "phase": 7,
+      "name": "Arrangement Advice",
+      "status": "ok",
+      "data": {
+        "overall_score": 0,
+        "grade": "F",
+        "total_duration": 0.0,
+        "component_scores": {},
+        "structure_score": 0,
+        "length_score": 0,
+        "eight_bar_score": 0,
+        "energy_contrast_score": 0,
+        "flow_score": 0,
+        "section_scores": [],
+        "issues": [
+          {
+            "severity": "CRITICAL",
+            "message": "Structure detection failed or no sections found",
+            "section": null,
+            "fix_suggestion": "Ensure audio file is valid and long enough for structure detection"
+          }
+        ],
+        "suggestions": [],
+        "metadata": {
+          "total_bars": 0,
+          "section_count": 0,
+          "detected_tempo": null,
+          "has_intro": false,
+          "has_buildup": false,
+          "has_drop": false,
+          "has_breakdown": false,
+          "has_outro": false,
+          "energy_contrast_db": null
+        },
+        "fixes": [],
+        "violations": [
+          "Structure detection failed or no sections found"
+        ],
+        "section_count": 0
+      },
+      "error": null
+    },
+    {
+      "phase": 8,
+      "name": "ALS Analysis",
+      "status": "skipped",
+      "data": {},
+      "error": null
+    }
+  ],
+  "overall_score": 5.727738638718923,
+  "grade": "F",
+  "top_fixes": [
+    "EQ clash between low-end buildup: reduce sub-bass / bass (20\u2013200 Hz)",
+    "EQ clash between low-mid congestion: reduce low-mid (200\u2013500 Hz)",
+    "Optimize mix levels for streaming targets"
+  ],
+  "danceability_score": 20,
+  "coach_name": "Coach",
+  "coach_intro": "Here's what I'd focus on to push this mix forward:",
+  "coached_fixes": [
+    "I found 377 hard-clipped samples at the master output. Pull the limiter ceiling back 1\u20132 dB \u2014 clipping at master is an immediate red flag for any distributor.",
+    "True peak is hitting 0.1 dBTP. Streaming platforms reject above 0 dBTP; keep it below \u22121.0 dBTP for safety. Back off the ceiling."
+  ]
+}

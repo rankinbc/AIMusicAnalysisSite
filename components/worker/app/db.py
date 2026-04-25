@@ -1,13 +1,13 @@
 import os
 import uuid
-import enum
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import create_engine, String, Float, Integer, DateTime, ForeignKey, Enum as SAEnum
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from celery import Task
+
+from aimusic_shared.models import AnalysisResult, JobStatus, UploadJob  # noqa: F401
 
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
@@ -15,46 +15,8 @@ DATABASE_URL = os.environ.get(
 )
 
 
-class Base(DeclarativeBase):
-    pass
-
-
-class JobStatus(str, enum.Enum):
-    PENDING = "PENDING"
-    PROCESSING = "PROCESSING"
-    COMPLETE = "COMPLETE"
-    FAILED = "FAILED"
-
-
-class UploadJob(Base):
-    __tablename__ = "upload_jobs"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    status: Mapped[JobStatus] = mapped_column(SAEnum(JobStatus), nullable=False)
-    current_phase: Mapped[int] = mapped_column(Integer, default=0)
-    phase_name: Mapped[str] = mapped_column(String(100), default="")
-    phase_pct: Mapped[float] = mapped_column(Float, default=0.0)
-    file_path: Mapped[str] = mapped_column(String(500), nullable=False)
-    reference_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    task_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-
-
-class AnalysisResult(Base):
-    __tablename__ = "analysis_results"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("upload_jobs.id"), unique=True, nullable=False)
-    phase_results: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
-    final_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-
-
 class CustomTask(Task):
-    """Base task class that creates a DB session per task execution (not at import time)."""
+    """Base task class — creates a DB session per task execution, not at import time."""
     _session = None
     _engine = None
 
@@ -72,8 +34,14 @@ class CustomTask(Task):
             self._engine = None
 
 
-def update_job_phase(session, job_id: str, phase: int, phase_name: str, pct: float, status: Optional[JobStatus] = None):
-    from datetime import timezone
+def update_job_phase(
+    session,
+    job_id: str,
+    phase: int,
+    phase_name: str,
+    pct: float,
+    status: Optional[JobStatus] = None,
+):
     job = session.get(UploadJob, uuid.UUID(job_id))
     if not job:
         return
@@ -95,7 +63,12 @@ def finalize_job(session, job_id: str, pipeline_result: dict):
         job_id=uuid.UUID(job_id),
         phase_results=pipeline_result.get("phases", []),
         final_json=pipeline_result,
-        created_at=datetime.now(),
+        share_token=str(uuid.uuid4()),
+        created_at=datetime.now(timezone.utc),
     )
     session.add(result)
+    # Explicit flush surfaces INSERT errors before update_job_phase runs its SELECT.
+    # Without this, a failed autoflush leaves the session in PendingRollback and the
+    # subsequent SELECT in update_job_phase also fails, leaving the job stuck in PROCESSING.
+    session.flush()
     update_job_phase(session, job_id, 7, "Complete", 1.0, status=JobStatus.COMPLETE)

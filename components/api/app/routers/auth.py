@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import settings
 from ..db import get_session
 from ..models import User
-from ..schemas.auth import LoginRequest, RegisterRequest, TokenResponse
+from ..schemas.auth import ChangePasswordRequest, LoginRequest, RegisterRequest, TokenResponse
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
@@ -67,6 +67,35 @@ async def get_current_user(
         detail="Invalid credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
+        if payload.get("type") != "access":
+            raise credentials_exception
+        user_id: str | None = payload.get("sub")
+        if not user_id:
+            raise credentials_exception
+    except jwt.PyJWTError:
+        raise credentials_exception
+
+    result = await session.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None or not user.is_active:
+        raise credentials_exception
+    return user
+
+
+async def get_current_user_sse(
+    token: str | None = Query(default=None),
+    session: AsyncSession = Depends(get_session),
+) -> User:
+    """Auth dependency for SSE endpoints — reads token from ?token= query param
+    because EventSource cannot set Authorization headers."""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid credentials",
+    )
+    if not token:
+        raise credentials_exception
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
         if payload.get("type") != "access":
@@ -172,3 +201,17 @@ async def refresh(
 async def logout(response: Response) -> dict:
     response.delete_cookie("refresh_token")
     return {"detail": "Logged out"}
+
+
+@router.post("/change-password")
+async def change_password(
+    request: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    if not verify_password(request.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    current_user.hashed_password = hash_password(request.new_password)
+    session.add(current_user)
+    await session.commit()
+    return {"detail": "Password changed"}

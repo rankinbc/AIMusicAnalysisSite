@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { getAccessToken } from '../../lib/apiClient'
 
 interface StreamState {
   phase: number
@@ -7,6 +8,7 @@ interface StreamState {
   status: string   // 'PENDING' | 'PROCESSING' | 'COMPLETE' | 'FAILED'
   done: boolean
   error: string | null
+  hasAls: boolean | null  // null = not yet known
 }
 
 const INITIAL_STATE: StreamState = {
@@ -16,6 +18,7 @@ const INITIAL_STATE: StreamState = {
   status: 'PENDING',
   done: false,
   error: null,
+  hasAls: null,
 }
 
 export function useJobStream(jobId: string | undefined): StreamState {
@@ -26,7 +29,9 @@ export function useJobStream(jobId: string | undefined): StreamState {
 
     // EventSource with withCredentials sends the httpOnly refresh cookie.
     // The API must respond with an explicit origin (not *) for credentialed requests.
-    const es = new EventSource(`/api/jobs/${jobId}/stream`, { withCredentials: true })
+    const token = getAccessToken()
+    const url = `/api/jobs/${jobId}/stream${token ? `?token=${encodeURIComponent(token)}` : ''}`
+    const es = new EventSource(url, { withCredentials: true })
 
     es.onmessage = (event: MessageEvent<string>) => {
       try {
@@ -35,14 +40,19 @@ export function useJobStream(jobId: string | undefined): StreamState {
           phase_name?: string
           pct?: number
           status?: string
+          has_als?: boolean
         }
+        const isComplete = data.status === 'COMPLETE'
         setState((prev) => ({
           ...prev,
           phase: data.phase ?? prev.phase,
           phaseName: data.phase_name ?? prev.phaseName,
           pct: data.pct ?? prev.pct,
           status: data.status ?? prev.status,
+          done: isComplete || prev.done,
+          hasAls: data.has_als ?? prev.hasAls,
         }))
+        if (isComplete) es.close()
       } catch {
         // Ignore malformed events
       }

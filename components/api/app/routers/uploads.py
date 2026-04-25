@@ -39,12 +39,16 @@ def validate_als_magic(header: bytes) -> bool:
     return header[:2] == _ALS_MAGIC
 
 
+_VALID_GENRES = {"trance", "house", "techno", "dnb", "progressive"}
+
+
 @router.post("/", response_model=UploadResponse)
 async def upload_audio(
     file: UploadFile = File(...),
     reference: UploadFile | None = File(None),
     track_name: str | None = Form(None),
     als: UploadFile | None = File(None),
+    genre_hint: str | None = Form(None),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> UploadResponse:
@@ -93,12 +97,20 @@ async def upload_audio(
         als_key = await storage.save(als, prefix="als_")
         als_file_path = str(storage.get_path(als_key))
 
+    # Normalise and validate genre hint
+    normalised_genre: str | None = None
+    if genre_hint:
+        normalised_genre = genre_hint.lower().strip()
+        if normalised_genre not in _VALID_GENRES:
+            normalised_genre = None
+
     # --- Create job record (state in PostgreSQL, NOT Celery) ---
     job = UploadJob(
         user_id=current_user.id,
         file_path=file_path,
         reference_path=reference_path,
         als_file_path=als_file_path,
+        genre_hint=normalised_genre,
         track_name=track_name.strip() if track_name else None,
     )
     session.add(job)
@@ -106,7 +118,8 @@ async def upload_audio(
 
     # --- Dispatch Celery task ---
     task_id = dispatch_analysis_job(
-        str(job.id), file_path, reference_path, str(current_user.id), als_file_path
+        str(job.id), file_path, reference_path, str(current_user.id),
+        als_file_path=als_file_path, genre_hint=normalised_genre,
     )
     job.task_id = task_id
     await session.commit()

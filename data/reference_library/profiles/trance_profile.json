@@ -1,0 +1,2795 @@
+{
+  "name": "trance_profile",
+  "version": "1.0",
+  "created_date": "2026-02-19T20:34:41.766064",
+  "track_count": 196,
+  "feature_statistics": {
+    "tempo": {
+      "mean": 136.27905982651708,
+      "std": 12.039084338528873,
+      "min": 100.44642857142857,
+      "max": 170.45454545454547,
+      "p10": 120.98172987974098,
+      "p25": 133.92857142857142,
+      "p50": 137.1951219512195,
+      "p75": 140.625,
+      "p90": 146.12854251012146,
+      "confidence_interval_95": [
+        134.59358801912305,
+        137.96453163391112
+      ],
+      "acceptable_range": [
+        120.98172987974098,
+        146.12854251012146
+      ]
+    },
+    "tempo_stability": {
+      "mean": 0.9886803850773062,
+      "std": 0.009033348727732725,
+      "min": 0.8832155471060397,
+      "max": 0.9967962015396351,
+      "p10": 0.9845357393151375,
+      "p25": 0.9876500670151626,
+      "p50": 0.9898787164300885,
+      "p75": 0.9920209097387289,
+      "p90": 0.9937298698115613,
+      "confidence_interval_95": [
+        0.9874157162554236,
+        0.9899450538991887
+      ],
+      "acceptable_range": [
+        0.9706136876218407,
+        1.0067470825327716
+      ]
+    },
+    "tempo_score": {
+      "mean": 0.7726434038785621,
+      "std": 0.2732081498096513,
+      "min": 0.3,
+      "max": 1.0,
+      "p10": 0.3,
+      "p25": 0.7534020353618424,
+      "p50": 0.8778571428571424,
+      "p75": 0.9758536585365851,
+      "p90": 0.98125,
+      "confidence_interval_95": [
+        0.7343942629052109,
+        0.8108925448519133
+      ],
+      "acceptable_range": [
+        0.4197246005997282,
+        1.0
+      ]
+    },
+    "four_on_floor_score": {
+      "mean": 0.6648812416063596,
+      "std": 0.1474182916033703,
+      "min": 0.29132479789805804,
+      "max": 0.8627826023380276,
+      "p10": 0.4097865568122579,
+      "p25": 0.5815313291859701,
+      "p50": 0.7159841345934854,
+      "p75": 0.7763907523062142,
+      "p90": 0.8091196114859325,
+      "confidence_interval_95": [
+        0.6442426807818878,
+        0.6855198024308314
+      ],
+      "acceptable_range": [
+        0.29132479789805804,
+        0.8627826023380276
+      ]
+    },
+    "four_on_floor_strength": {
+      "mean": 0.7204104168346251,
+      "std": 0.15640580620782643,
+      "min": 0.3318845183431281,
+      "max": 0.9135331863273572,
+      "p10": 0.4484667453201621,
+      "p25": 0.6350695936356884,
+      "p50": 0.7870867274819648,
+      "p75": 0.8428440935811046,
+      "p90": 0.8679986342697188,
+      "confidence_interval_95": [
+        0.6985136039655294,
+        0.7423072297037209
+      ],
+      "acceptable_range": [
+        0.3318845183431281,
+        0.9135331863273572
+      ]
+    },
+    "offbeat_hihat_score": {
+      "mean": 0.17362468662396338,
+      "std": 0.12871567056106453,
+      "min": 0.0,
+      "max": 0.6598590413469461,
+      "p10": 0.0,
+      "p25": 0.07119656041565683,
+      "p50": 0.167113122742504,
+      "p75": 0.25521407592859513,
+      "p90": 0.3458107566583113,
+      "confidence_interval_95": [
+        0.15560449274541435,
+        0.1916448805025124
+      ],
+      "acceptable_range": [
+        0.0,
+        0.5312403491980026
+      ]
+    },
+    "offbeat_hihat_strength": {
+      "mean": 0.5918802899787936,
+      "std": 0.17703708331633491,
+      "min": 0.06882504569816329,
+      "max": 0.9781962249069217,
+      "p10": 0.3649422234925944,
+      "p25": 0.49820453883338955,
+      "p50": 0.595366892937223,
+      "p75": 0.7265486772782848,
+      "p90": 0.7977050540357822,
+      "confidence_interval_95": [
+        0.5670950983145067,
+        0.6166654816430805
+      ],
+      "acceptable_range": [
+        0.15568833116604675,
+        0.9781962249069217
+      ]
+    },
+    "pumping_score": {
+      "mean": 0.4735745338219947,
+      "std": 0.1675415334233266,
+      "min": 0.0,
+      "max": 0.8158017349668326,
+      "p10": 0.27388462026913957,
+      "p25": 0.3673278748137682,
+      "p50": 0.4798958894344633,
+      "p75": 0.5920821895638724,
+      "p90": 0.7,
+      "confidence_interval_95": [
+        0.450118719142729,
+        0.49703034850126043
+      ],
+      "acceptable_range": [
+        0.030196402688611956,
+        0.8158017349668326
+      ]
+    },
+    "pumping_modulation_depth_db": {
+      "mean": 7.736218753213785,
+      "std": 2.8406681878124083,
+      "min": 0.0,
+      "max": 17.432226181030273,
+      "p10": 4.513876438140869,
+      "p25": 5.961731672286987,
+      "p50": 7.800445079803467,
+      "p75": 9.58258318901062,
+      "p90": 11.250287055969238,
+      "confidence_interval_95": [
+        7.338525206920048,
+        8.133912299507521
+      ],
+      "acceptable_range": [
+        0.5304543972015381,
+        15.01386046409607
+      ]
+    },
+    "pumping_modulation_depth_linear": {
+      "mean": 0.566005101009291,
+      "std": 0.15765113546603485,
+      "min": 0.0,
+      "max": 0.8656032681465149,
+      "p10": 0.4052063077688217,
+      "p25": 0.4965956285595894,
+      "p50": 0.5926401615142822,
+      "p75": 0.6682023704051971,
+      "p90": 0.7261631488800049,
+      "confidence_interval_95": [
+        0.5439339420440461,
+        0.5880762599745359
+      ],
+      "acceptable_range": [
+        0.23918551579117775,
+        0.8656032681465149
+      ]
+    },
+    "pumping_regularity": {
+      "mean": 0.2921339926740891,
+      "std": 0.05736708321194842,
+      "min": 0.16446160683747033,
+      "max": 0.6504499154815169,
+      "p10": 0.21919765375871203,
+      "p25": 0.25362020218860476,
+      "p50": 0.293539713455087,
+      "p75": 0.3365075613986941,
+      "p90": 0.35240683121164906,
+      "confidence_interval_95": [
+        0.28410260102441637,
+        0.3001653843237619
+      ],
+      "acceptable_range": [
+        0.16446160683747033,
+        0.46083860021382805
+      ]
+    },
+    "supersaw_score": {
+      "mean": 0.29655914705140285,
+      "std": 0.111898673913302,
+      "min": 1.1946043230598447e-05,
+      "max": 0.48733627796173096,
+      "p10": 0.13140880054161835,
+      "p25": 0.21929949212559718,
+      "p50": 0.3124995089062072,
+      "p75": 0.3913767859339714,
+      "p90": 0.42736972868442535,
+      "confidence_interval_95": [
+        0.28089333270354055,
+        0.31222496139926514
+      ],
+      "acceptable_range": [
+        0.13140880054161835,
+        0.42736972868442535
+      ]
+    },
+    "stereo_width": {
+      "mean": 0.23409633499137755,
+      "std": 0.08706435006386677,
+      "min": 2.3519778551417403e-05,
+      "max": 0.4746725559234619,
+      "p10": 0.1266518011689186,
+      "p25": 0.1772221401333809,
+      "p50": 0.23328328132629395,
+      "p75": 0.2827535718679428,
+      "p90": 0.3547394573688507,
+      "confidence_interval_95": [
+        0.2219073259824362,
+        0.2462853440003189
+      ],
+      "acceptable_range": [
+        0.1266518011689186,
+        0.3547394573688507
+      ]
+    },
+    "phase_correlation": {
+      "mean": 0.7519241518554689,
+      "std": 0.1336609639688849,
+      "min": 0.35667491520712497,
+      "max": 0.9999997766152541,
+      "p10": 0.5645600719481219,
+      "p25": 0.6780973788334085,
+      "p50": 0.7655473694383659,
+      "p75": 0.8442254473507973,
+      "p90": 0.9199336590060485,
+      "confidence_interval_95": [
+        0.7332116168998251,
+        0.7706366868111127
+      ],
+      "acceptable_range": [
+        0.42890527605732526,
+        0.9999997766152541
+      ]
+    },
+    "acid_303_score": {
+      "mean": 0.4998372723230719,
+      "std": 0.04684553898105601,
+      "min": 0.357870306275562,
+      "max": 0.5708342742350251,
+      "p10": 0.4381835024721695,
+      "p25": 0.47006742880699526,
+      "p50": 0.5110393083963141,
+      "p75": 0.5351083542515167,
+      "p90": 0.5525415799718647,
+      "confidence_interval_95": [
+        0.49327889686572407,
+        0.5063956477804198
+      ],
+      "acceptable_range": [
+        0.4381835024721695,
+        0.5525415799718647
+      ]
+    },
+    "acid_filter_sweep_score": {
+      "mean": 0.40903614876821504,
+      "std": 0.08340793853005249,
+      "min": 0.12499874747055097,
+      "max": 0.4659648477522691,
+      "p10": 0.229298869908992,
+      "p25": 0.43461717424793744,
+      "p50": 0.4399925692358155,
+      "p75": 0.44422735599791374,
+      "p90": 0.4481871956664708,
+      "confidence_interval_95": [
+        0.3973590373740077,
+        0.4207132601624224
+      ],
+      "acceptable_range": [
+        0.420201901622973,
+        0.4586426286228782
+      ]
+    },
+    "acid_resonance_score": {
+      "mean": 0.7046414412200097,
+      "std": 0.040738244019073507,
+      "min": 0.3,
+      "max": 0.7940933283965207,
+      "p10": 0.6677767672774286,
+      "p25": 0.6869481208284836,
+      "p50": 0.7086559014528666,
+      "p75": 0.7262457539875851,
+      "p90": 0.7423528417737468,
+      "confidence_interval_95": [
+        0.6989380870573394,
+        0.71034479538268
+      ],
+      "acceptable_range": [
+        0.6280016710898313,
+        0.7851922037262373
+      ]
+    },
+    "acid_glide_score": {
+      "mean": 0.80135307027703,
+      "std": 0.14341897910869367,
+      "min": 0.45725752508361206,
+      "max": 1.0,
+      "p10": 0.5816776617132142,
+      "p25": 0.6894134825335491,
+      "p50": 0.8292654522087808,
+      "p75": 0.9339723331328162,
+      "p90": 0.9711574521634164,
+      "confidence_interval_95": [
+        0.7812744132018128,
+        0.8214317273522471
+      ],
+      "acceptable_range": [
+        0.45725752508361206,
+        1.0
+      ]
+    },
+    "energy_progression": {
+      "mean": 0.7050807548211613,
+      "std": 0.12187566554896989,
+      "min": 0.4879249245387537,
+      "max": 1.0,
+      "p10": 0.5761872269168524,
+      "p25": 0.6253513043507077,
+      "p50": 0.6834526689252118,
+      "p75": 0.7491977818832299,
+      "p90": 0.9600236457459482,
+      "confidence_interval_95": [
+        0.6880181616443055,
+        0.722143347998017
+      ],
+      "acceptable_range": [
+        0.4879249245387537,
+        0.9349674981820133
+      ]
+    },
+    "energy_range": {
+      "mean": 0.7841919736544839,
+      "std": 0.07241952527555601,
+      "min": 0.5437557578519605,
+      "max": 0.921470979654569,
+      "p10": 0.6864648268232247,
+      "p25": 0.7341566010999169,
+      "p50": 0.7877964119600472,
+      "p75": 0.8356407358733458,
+      "p90": 0.8718691149991384,
+      "confidence_interval_95": [
+        0.774053240115906,
+        0.7943307071930618
+      ],
+      "acceptable_range": [
+        0.5819303989397735,
+        0.921470979654569
+      ]
+    },
+    "energy_std": {
+      "mean": 0.1600973892096408,
+      "std": 0.03681420587297742,
+      "min": 0.07180772930370109,
+      "max": 0.33971160639464243,
+      "p10": 0.11330599829100388,
+      "p25": 0.13681589897758034,
+      "p50": 0.16061878704623483,
+      "p75": 0.183491029578066,
+      "p90": 0.20568838664581948,
+      "confidence_interval_95": [
+        0.15494340038742396,
+        0.16525137803185766
+      ],
+      "acceptable_range": [
+        0.07180772930370109,
+        0.2535037254787945
+      ]
+    },
+    "avg_energy": {
+      "mean": 0.6550932600402013,
+      "std": 0.05382349905082868,
+      "min": 0.4210898467709442,
+      "max": 0.7828949457395755,
+      "p10": 0.5892849276808784,
+      "p25": 0.622626700795648,
+      "p50": 0.6575507274132404,
+      "p75": 0.6874649086238297,
+      "p90": 0.7239998758993045,
+      "confidence_interval_95": [
+        0.6475579701730853,
+        0.6626285499073173
+      ],
+      "acceptable_range": [
+        0.5253693890533754,
+        0.7828949457395755
+      ]
+    },
+    "spectral_brightness": {
+      "mean": 0.563646241505547,
+      "std": 0.1803295961144447,
+      "min": 0.09924563535431048,
+      "max": 0.9867324550949585,
+      "p10": 0.3475985384998237,
+      "p25": 0.44214910812802216,
+      "p50": 0.5583918911035739,
+      "p75": 0.6676979872754205,
+      "p90": 0.797113916503513,
+      "confidence_interval_95": [
+        0.5384000980495247,
+        0.5888923849615693
+      ],
+      "acceptable_range": [
+        0.20298704927665756,
+        0.9243054337344364
+      ]
+    },
+    "trance_score": {
+      "mean": 0.5835348506451057,
+      "std": 0.07178564844749223,
+      "min": 0.3750102197563996,
+      "max": 0.7425697995717222,
+      "p10": 0.47385470095102844,
+      "p25": 0.5424116886498243,
+      "p50": 0.6022139408145841,
+      "p75": 0.6324552165213446,
+      "p90": 0.6584546425289575,
+      "confidence_interval_95": [
+        0.5734848598624568,
+        0.5935848414277546
+      ],
+      "acceptable_range": [
+        0.4073463968425437,
+        0.7425697995717222
+      ]
+    }
+  },
+  "clusters": [
+    {
+      "cluster_id": 0,
+      "name": "Balanced",
+      "track_count": 172,
+      "track_indices": [
+        0,
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        19,
+        20,
+        21,
+        22,
+        23,
+        25,
+        27,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88,
+        90,
+        91,
+        92,
+        93,
+        94,
+        95,
+        96,
+        97,
+        98,
+        99,
+        100,
+        101,
+        102,
+        103,
+        104,
+        105,
+        106,
+        107,
+        108,
+        109,
+        111,
+        112,
+        113,
+        114,
+        115,
+        116,
+        117,
+        118,
+        119,
+        121,
+        122,
+        123,
+        124,
+        125,
+        127,
+        130,
+        131,
+        132,
+        133,
+        134,
+        135,
+        136,
+        137,
+        138,
+        139,
+        140,
+        142,
+        143,
+        144,
+        146,
+        147,
+        149,
+        150,
+        151,
+        152,
+        153,
+        154,
+        155,
+        156,
+        157,
+        158,
+        159,
+        160,
+        161,
+        162,
+        163,
+        164,
+        166,
+        167,
+        168,
+        169,
+        170,
+        171,
+        172,
+        173,
+        174,
+        175,
+        176,
+        178,
+        180,
+        181,
+        183,
+        185,
+        186,
+        187,
+        188,
+        189,
+        190,
+        191,
+        192,
+        193,
+        194,
+        195
+      ],
+      "centroid": {
+        "tempo": 136.71476126798305,
+        "tempo_stability": 0.9889698449617662,
+        "tempo_score": 0.7841858022487422,
+        "four_on_floor_score": 0.6708902693335405,
+        "four_on_floor_strength": 0.7269358573060262,
+        "offbeat_hihat_score": 0.17557374451998095,
+        "offbeat_hihat_strength": 0.5910319148439783,
+        "pumping_score": 0.4838290906946826,
+        "pumping_modulation_depth_db": 7.909138136478358,
+        "pumping_modulation_depth_linear": 0.5758927370919737,
+        "pumping_regularity": 0.2920798210539146,
+        "supersaw_score": 0.2948078067797781,
+        "stereo_width": 0.23398257368661118,
+        "phase_correlation": 0.751945537929431,
+        "acid_303_score": 0.5107108973736603,
+        "acid_filter_sweep_score": 0.43904517452943803,
+        "acid_resonance_score": 0.7045090511627564,
+        "acid_glide_score": 0.808618729724556,
+        "energy_progression": 0.6987362258269244,
+        "energy_range": 0.7868453502671898,
+        "energy_std": 0.15843154467025033,
+        "avg_energy": 0.657678049489249,
+        "spectral_brightness": 0.5647940905201972,
+        "trance_score": 0.5880964208619855
+      },
+      "variance": {
+        "tempo": 135.40075673917838,
+        "tempo_stability": 8.299647983601863e-05,
+        "tempo_score": 0.07268112635183986,
+        "four_on_floor_score": 0.02076617546002432,
+        "four_on_floor_strength": 0.023351141822478813,
+        "offbeat_hihat_score": 0.017044853354730386,
+        "offbeat_hihat_strength": 0.030178828898354867,
+        "pumping_score": 0.027006689783656564,
+        "pumping_modulation_depth_db": 7.59641793632249,
+        "pumping_modulation_depth_linear": 0.022542589546708566,
+        "pumping_regularity": 0.0033439012686099978,
+        "supersaw_score": 0.013335837251892453,
+        "stereo_width": 0.008078163977151833,
+        "phase_correlation": 0.01904839125858719,
+        "acid_303_score": 0.0012752301181245095,
+        "acid_filter_sweep_score": 0.00028555196256292817,
+        "acid_resonance_score": 0.0018146226501908023,
+        "acid_glide_score": 0.019365996935539444,
+        "energy_progression": 0.014006980062073687,
+        "energy_range": 0.004971547430334053,
+        "energy_std": 0.001345561148900464,
+        "avg_energy": 0.0028966465324614383,
+        "spectral_brightness": 0.032518959129397534,
+        "trance_score": 0.004777261378365941
+      },
+      "distinctive_features": [],
+      "exemplar_tracks": [
+        181,
+        167,
+        144
+      ]
+    },
+    {
+      "cluster_id": 1,
+      "name": "Clean",
+      "track_count": 24,
+      "track_indices": [
+        3,
+        7,
+        18,
+        24,
+        26,
+        28,
+        29,
+        38,
+        52,
+        75,
+        89,
+        110,
+        120,
+        126,
+        128,
+        129,
+        141,
+        145,
+        148,
+        165,
+        177,
+        179,
+        182,
+        184
+      ],
+      "centroid": {
+        "tempo": 133.1565328293443,
+        "tempo_stability": 0.9866059225720072,
+        "tempo_score": 0.6899228822256033,
+        "four_on_floor_score": 0.6218165428948969,
+        "four_on_floor_strength": 0.6736447601229184,
+        "offbeat_hihat_score": 0.15965643836917107,
+        "offbeat_hihat_strength": 0.5979603117783027,
+        "pumping_score": 0.40008354290106496,
+        "pumping_modulation_depth_db": 6.496963173151016,
+        "pumping_modulation_depth_linear": 0.49514370908339816,
+        "pumping_regularity": 0.29252222261867294,
+        "supersaw_score": 0.30911041899804736,
+        "stereo_width": 0.23491162434220314,
+        "phase_correlation": 0.7517708849920743,
+        "acid_303_score": 0.42190962612718935,
+        "acid_filter_sweep_score": 0.19397146414611713,
+        "acid_resonance_score": 0.705590236630325,
+        "acid_glide_score": 0.749282510903092,
+        "energy_progression": 0.7505498792798576,
+        "energy_range": 0.7651761079300915,
+        "energy_std": 0.17203594174193937,
+        "avg_energy": 0.6365689356553592,
+        "spectral_brightness": 0.5554199902338872,
+        "trance_score": 0.5508435974241327
+      },
+      "variance": {
+        "tempo": 202.19025130752183,
+        "tempo_stability": 6.669937157965618e-05,
+        "tempo_score": 0.0809031103946743,
+        "four_on_floor_score": 0.026541644336690068,
+        "four_on_floor_strength": 0.029937296208994397,
+        "offbeat_hihat_score": 0.01292595883244359,
+        "offbeat_hihat_strength": 0.039636987188825544,
+        "pumping_score": 0.02953719753624957,
+        "pumping_modulation_depth_db": 9.70902440456416,
+        "pumping_modulation_depth_linear": 0.0356961439227003,
+        "pumping_regularity": 0.00291155741744073,
+        "supersaw_score": 0.006504375044975062,
+        "stereo_width": 0.004010709310328213,
+        "phase_correlation": 0.0093860710725316,
+        "acid_303_score": 0.0018625637058108208,
+        "acid_filter_sweep_score": 0.002061398415845703,
+        "acid_resonance_score": 0.0005476154768434801,
+        "acid_glide_score": 0.02610088100020193,
+        "energy_progression": 0.018565757230496426,
+        "energy_range": 0.0067893164159256725,
+        "energy_std": 0.0012625619485761152,
+        "avg_energy": 0.002508248354166357,
+        "spectral_brightness": 0.03244024561910661,
+        "trance_score": 0.006629416442227754
+      },
+      "distinctive_features": [
+        "acid_filter_sweep_score",
+        "acid_303_score"
+      ],
+      "exemplar_tracks": [
+        75,
+        165,
+        24
+      ]
+    }
+  ],
+  "track_metadata": [
+    {
+      "index": 0,
+      "filename": "-HWjZP8-4B4.m4a",
+      "cluster": 0,
+      "trance_score": 0.589913145814623,
+      "tempo": 139.0
+    },
+    {
+      "index": 1,
+      "filename": "-IsTqAczZB8.m4a",
+      "cluster": 0,
+      "trance_score": 0.6735386565625713,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 2,
+      "filename": "-m2YKxI9AaU.m4a",
+      "cluster": 0,
+      "trance_score": 0.509957696895326,
+      "tempo": 152.02702702702703
+    },
+    {
+      "index": 3,
+      "filename": "-Xtlsvv9G7U.m4a",
+      "cluster": 1,
+      "trance_score": 0.6754248404464268,
+      "tempo": 144.23076923076923
+    },
+    {
+      "index": 4,
+      "filename": "-yumuHk2cN0.m4a",
+      "cluster": 0,
+      "trance_score": 0.6138580159838583,
+      "tempo": 140.625
+    },
+    {
+      "index": 5,
+      "filename": "0KjKQRv7BvE.m4a",
+      "cluster": 0,
+      "trance_score": 0.7079687208382187,
+      "tempo": 140.625
+    },
+    {
+      "index": 6,
+      "filename": "1FOq4CP8z3E.m4a",
+      "cluster": 0,
+      "trance_score": 0.5945120059024224,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 7,
+      "filename": "1JE-P61OWUc.m4a",
+      "cluster": 1,
+      "trance_score": 0.44721883958791675,
+      "tempo": 117.1875
+    },
+    {
+      "index": 8,
+      "filename": "1sMDagnLdJM.m4a",
+      "cluster": 0,
+      "trance_score": 0.6106211652124954,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 9,
+      "filename": "1swMG7UteDE.m4a",
+      "cluster": 0,
+      "trance_score": 0.4530621967626981,
+      "tempo": 119.68085106382979
+    },
+    {
+      "index": 10,
+      "filename": "2-Sr9cHWSNE.m4a",
+      "cluster": 0,
+      "trance_score": 0.6375097968623488,
+      "tempo": 140.625
+    },
+    {
+      "index": 11,
+      "filename": "2D-WVt2tZVg.m4a",
+      "cluster": 0,
+      "trance_score": 0.5603640026505615,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 12,
+      "filename": "2mzsuvrKJsE.m4a",
+      "cluster": 0,
+      "trance_score": 0.6515738744925625,
+      "tempo": 148.02631578947367
+    },
+    {
+      "index": 13,
+      "filename": "33di3WDB9bc.m4a",
+      "cluster": 0,
+      "trance_score": 0.5806299688686154,
+      "tempo": 130.8139534883721
+    },
+    {
+      "index": 14,
+      "filename": "3QHJgnRaaMw.m4a",
+      "cluster": 0,
+      "trance_score": 0.5504094448775898,
+      "tempo": 144.23076923076923
+    },
+    {
+      "index": 15,
+      "filename": "3T6cA7qWmgQ.m4a",
+      "cluster": 0,
+      "trance_score": 0.6396797474305473,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 16,
+      "filename": "3Ws6Z8TgfSo.m4a",
+      "cluster": 0,
+      "trance_score": 0.6552244134551654,
+      "tempo": 140.625
+    },
+    {
+      "index": 17,
+      "filename": "4Cn10UUrpII.m4a",
+      "cluster": 0,
+      "trance_score": 0.5806445390396265,
+      "tempo": 140.625
+    },
+    {
+      "index": 18,
+      "filename": "4FAsoO0QgB4.m4a",
+      "cluster": 1,
+      "trance_score": 0.552029267391739,
+      "tempo": 129.19921875
+    },
+    {
+      "index": 19,
+      "filename": "4TyEgWCg8XU.m4a",
+      "cluster": 0,
+      "trance_score": 0.4989290618954023,
+      "tempo": 160.71428571428572
+    },
+    {
+      "index": 20,
+      "filename": "6Hzv63OWaNc.m4a",
+      "cluster": 0,
+      "trance_score": 0.6450835051324583,
+      "tempo": 140.625
+    },
+    {
+      "index": 21,
+      "filename": "6OLq7ycCx_w.m4a",
+      "cluster": 0,
+      "trance_score": 0.620578153809345,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 22,
+      "filename": "6uq9UnMqWKM.m4a",
+      "cluster": 0,
+      "trance_score": 0.40207950680665056,
+      "tempo": 119.68085106382979
+    },
+    {
+      "index": 23,
+      "filename": "7-qQMeyatuc.m4a",
+      "cluster": 0,
+      "trance_score": 0.5652805346896661,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 24,
+      "filename": "78zrxsHYCL8.m4a",
+      "cluster": 1,
+      "trance_score": 0.5750839016706103,
+      "tempo": 148.02631578947367
+    },
+    {
+      "index": 25,
+      "filename": "7ykZA7CcmaQ.m4a",
+      "cluster": 0,
+      "trance_score": 0.6021451173467933,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 26,
+      "filename": "8RXv7dH1Yik.m4a",
+      "cluster": 1,
+      "trance_score": 0.4039278869539373,
+      "tempo": 125.0
+    },
+    {
+      "index": 27,
+      "filename": "90Dz0Zv34Qs.m4a",
+      "cluster": 0,
+      "trance_score": 0.608974095109566,
+      "tempo": 144.23076923076923
+    },
+    {
+      "index": 28,
+      "filename": "_0MEevUCJ5M.m4a",
+      "cluster": 1,
+      "trance_score": 0.6228990254810514,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 29,
+      "filename": "_b8FeBamjzU.m4a",
+      "cluster": 1,
+      "trance_score": 0.6418661982420664,
+      "tempo": 144.23076923076923
+    },
+    {
+      "index": 30,
+      "filename": "_fAomfUE0EY.m4a",
+      "cluster": 0,
+      "trance_score": 0.5940144610420866,
+      "tempo": 140.625
+    },
+    {
+      "index": 31,
+      "filename": "_mdL3OonsDM.m4a",
+      "cluster": 0,
+      "trance_score": 0.6387657205437618,
+      "tempo": 144.23076923076923
+    },
+    {
+      "index": 32,
+      "filename": "_MmQAGCm8cI.m4a",
+      "cluster": 0,
+      "trance_score": 0.6157668996510173,
+      "tempo": 140.625
+    },
+    {
+      "index": 33,
+      "filename": "_tnUvBRHyKk.m4a",
+      "cluster": 0,
+      "trance_score": 0.4600808318039983,
+      "tempo": 100.44642857142857
+    },
+    {
+      "index": 34,
+      "filename": "Ag5n0VKet9M.m4a",
+      "cluster": 0,
+      "trance_score": 0.6736630076876549,
+      "tempo": 140.625
+    },
+    {
+      "index": 35,
+      "filename": "aJInfsAs3DA.m4a",
+      "cluster": 0,
+      "trance_score": 0.4465101742067444,
+      "tempo": 110.29411764705883
+    },
+    {
+      "index": 36,
+      "filename": "B1ssw9z63SU.m4a",
+      "cluster": 0,
+      "trance_score": 0.5933784119897687,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 37,
+      "filename": "B4A9AQnHbzw.m4a",
+      "cluster": 0,
+      "trance_score": 0.6201699540892979,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 38,
+      "filename": "BfihBClWr_A.m4a",
+      "cluster": 1,
+      "trance_score": 0.3750102197563996,
+      "tempo": 112.5
+    },
+    {
+      "index": 39,
+      "filename": "bhBAwB3xe3A.m4a",
+      "cluster": 0,
+      "trance_score": 0.7425697995717222,
+      "tempo": 140.625
+    },
+    {
+      "index": 40,
+      "filename": "boyHmpdlu8A.m4a",
+      "cluster": 0,
+      "trance_score": 0.6578325862917501,
+      "tempo": 148.02631578947367
+    },
+    {
+      "index": 41,
+      "filename": "Bw1J10Ym7PM.m4a",
+      "cluster": 0,
+      "trance_score": 0.6165095514218345,
+      "tempo": 144.23076923076923
+    },
+    {
+      "index": 42,
+      "filename": "BwENePWSWEs.m4a",
+      "cluster": 0,
+      "trance_score": 0.657979507393318,
+      "tempo": 140.625
+    },
+    {
+      "index": 43,
+      "filename": "bWx1geMFG60.m4a",
+      "cluster": 0,
+      "trance_score": 0.6434294654643999,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 44,
+      "filename": "C-CLQSqifhI.m4a",
+      "cluster": 0,
+      "trance_score": 0.6967244346413476,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 45,
+      "filename": "cbA8xeWXMJ8.m4a",
+      "cluster": 0,
+      "trance_score": 0.6082730692133318,
+      "tempo": 130.8139534883721
+    },
+    {
+      "index": 46,
+      "filename": "cEWZB8CIpdI.m4a",
+      "cluster": 0,
+      "trance_score": 0.6022827642823749,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 47,
+      "filename": "CGNboRujcgg.m4a",
+      "cluster": 0,
+      "trance_score": 0.5553090662222226,
+      "tempo": 156.25
+    },
+    {
+      "index": 48,
+      "filename": "cIE1ilJEL4U.m4a",
+      "cluster": 0,
+      "trance_score": 0.7206809091970406,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 49,
+      "filename": "cKRVHaD_JNc.m4a",
+      "cluster": 0,
+      "trance_score": 0.5302882894963307,
+      "tempo": 129.19921875
+    },
+    {
+      "index": 50,
+      "filename": "coaPzHSwnL4.m4a",
+      "cluster": 0,
+      "trance_score": 0.5805125539627667,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 51,
+      "filename": "CsPekezuric.m4a",
+      "cluster": 0,
+      "trance_score": 0.6136529868411108,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 52,
+      "filename": "Cw32U5z6mHI.m4a",
+      "cluster": 1,
+      "trance_score": 0.5658035923969018,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 53,
+      "filename": "D222JfWEpJI.m4a",
+      "cluster": 0,
+      "trance_score": 0.5867051059133199,
+      "tempo": 130.8139534883721
+    },
+    {
+      "index": 54,
+      "filename": "d53LCcA0qrw.m4a",
+      "cluster": 0,
+      "trance_score": 0.5811910430197841,
+      "tempo": 140.625
+    },
+    {
+      "index": 55,
+      "filename": "DHNYkoORVeI.m4a",
+      "cluster": 0,
+      "trance_score": 0.455176816526307,
+      "tempo": 122.28260869565217
+    },
+    {
+      "index": 56,
+      "filename": "doyxHpTjRfU.m4a",
+      "cluster": 0,
+      "trance_score": 0.4854614585836179,
+      "tempo": 100.44642857142857
+    },
+    {
+      "index": 57,
+      "filename": "dpBvgvK8oZ0.m4a",
+      "cluster": 0,
+      "trance_score": 0.49122535011222884,
+      "tempo": 170.45454545454547
+    },
+    {
+      "index": 58,
+      "filename": "dq4mFGbO4cw.m4a",
+      "cluster": 0,
+      "trance_score": 0.6322429897169686,
+      "tempo": 140.625
+    },
+    {
+      "index": 59,
+      "filename": "DRyO8cTHZlM.m4a",
+      "cluster": 0,
+      "trance_score": 0.6917730155473416,
+      "tempo": 140.625
+    },
+    {
+      "index": 60,
+      "filename": "DWZfHuycAr8.m4a",
+      "cluster": 0,
+      "trance_score": 0.6007815075242163,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 61,
+      "filename": "dyxnS9OWCIU.m4a",
+      "cluster": 0,
+      "trance_score": 0.49465209302429175,
+      "tempo": 119.68085106382979
+    },
+    {
+      "index": 62,
+      "filename": "e2g_i33hWcs.m4a",
+      "cluster": 0,
+      "trance_score": 0.6706233137115052,
+      "tempo": 140.625
+    },
+    {
+      "index": 63,
+      "filename": "E6W6FOp09x8.m4a",
+      "cluster": 0,
+      "trance_score": 0.4467444721922161,
+      "tempo": 110.29411764705883
+    },
+    {
+      "index": 64,
+      "filename": "ee65rnZZiB8.m4a",
+      "cluster": 0,
+      "trance_score": 0.6206776759753421,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 65,
+      "filename": "EQDfP663tZk.m4a",
+      "cluster": 0,
+      "trance_score": 0.6637539538378254,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 66,
+      "filename": "EQpCLUKe-L4.m4a",
+      "cluster": 0,
+      "trance_score": 0.5352977907521181,
+      "tempo": 130.8139534883721
+    },
+    {
+      "index": 67,
+      "filename": "flV3pDJ9JSo.m4a",
+      "cluster": 0,
+      "trance_score": 0.6132570934820827,
+      "tempo": 144.23076923076923
+    },
+    {
+      "index": 68,
+      "filename": "fxQlw_d0424.m4a",
+      "cluster": 0,
+      "trance_score": 0.6254372707842166,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 69,
+      "filename": "g-UZoRpW-d0.m4a",
+      "cluster": 0,
+      "trance_score": 0.6727218720568474,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 70,
+      "filename": "GhDIASIgVus.m4a",
+      "cluster": 0,
+      "trance_score": 0.7186097592752221,
+      "tempo": 140.625
+    },
+    {
+      "index": 71,
+      "filename": "gloI0qqZWWY.m4a",
+      "cluster": 0,
+      "trance_score": 0.6077990362966516,
+      "tempo": 144.23076923076923
+    },
+    {
+      "index": 72,
+      "filename": "gtBlCRj7klw.m4a",
+      "cluster": 0,
+      "trance_score": 0.5985358103115808,
+      "tempo": 140.625
+    },
+    {
+      "index": 73,
+      "filename": "guO8VyVO_1o.m4a",
+      "cluster": 0,
+      "trance_score": 0.5856944446931004,
+      "tempo": 130.8139534883721
+    },
+    {
+      "index": 74,
+      "filename": "gW2txkivINU.m4a",
+      "cluster": 0,
+      "trance_score": 0.5798114079481514,
+      "tempo": 144.23076923076923
+    },
+    {
+      "index": 75,
+      "filename": "gwJOqdU7Z1M.m4a",
+      "cluster": 1,
+      "trance_score": 0.5929818681864201,
+      "tempo": 130.8139534883721
+    },
+    {
+      "index": 76,
+      "filename": "hIjqRhGpmok.m4a",
+      "cluster": 0,
+      "trance_score": 0.5487374100457221,
+      "tempo": 140.625
+    },
+    {
+      "index": 77,
+      "filename": "Hm_diB2hUkw.m4a",
+      "cluster": 0,
+      "trance_score": 0.6237323679725902,
+      "tempo": 140.625
+    },
+    {
+      "index": 78,
+      "filename": "HNyAWh3kR14.m4a",
+      "cluster": 0,
+      "trance_score": 0.47196533702918525,
+      "tempo": 127.8409090909091
+    },
+    {
+      "index": 79,
+      "filename": "HZCbLTwKjdU.m4a",
+      "cluster": 0,
+      "trance_score": 0.5721000921807127,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 80,
+      "filename": "ielaIe4NLvQ.m4a",
+      "cluster": 0,
+      "trance_score": 0.614209865874581,
+      "tempo": 140.625
+    },
+    {
+      "index": 81,
+      "filename": "IkN4rCNnQyg.m4a",
+      "cluster": 0,
+      "trance_score": 0.5681714315830005,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 82,
+      "filename": "imW7mmyqLSY.m4a",
+      "cluster": 0,
+      "trance_score": 0.6547962061615272,
+      "tempo": 140.625
+    },
+    {
+      "index": 83,
+      "filename": "It5OCH0Hcq4.m4a",
+      "cluster": 0,
+      "trance_score": 0.6510970562177916,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 84,
+      "filename": "IXJwYAOxFYo.m4a",
+      "cluster": 0,
+      "trance_score": 0.6186072386513947,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 85,
+      "filename": "JnzFU0AgsT4.m4a",
+      "cluster": 0,
+      "trance_score": 0.5635572824935493,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 86,
+      "filename": "JOXT-_mL274.m4a",
+      "cluster": 0,
+      "trance_score": 0.6458508560195735,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 87,
+      "filename": "JsRSp8nqt3g.m4a",
+      "cluster": 0,
+      "trance_score": 0.6515981297897769,
+      "tempo": 140.625
+    },
+    {
+      "index": 88,
+      "filename": "JuzADg28zHQ.m4a",
+      "cluster": 0,
+      "trance_score": 0.6398341942963124,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 89,
+      "filename": "KcVDDMUR_H0.m4a",
+      "cluster": 1,
+      "trance_score": 0.6421222184558235,
+      "tempo": 144.23076923076923
+    },
+    {
+      "index": 90,
+      "filename": "Ke0Xfu7HjZE.m4a",
+      "cluster": 0,
+      "trance_score": 0.48675287796123606,
+      "tempo": 156.25
+    },
+    {
+      "index": 91,
+      "filename": "KkLi7p8V2Uc.m4a",
+      "cluster": 0,
+      "trance_score": 0.608021862636368,
+      "tempo": 130.8139534883721
+    },
+    {
+      "index": 92,
+      "filename": "kMQukW_H57E.m4a",
+      "cluster": 0,
+      "trance_score": 0.6416294524643877,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 93,
+      "filename": "kMRDwAshFTQ.m4a",
+      "cluster": 0,
+      "trance_score": 0.4993870480096553,
+      "tempo": 127.8409090909091
+    },
+    {
+      "index": 94,
+      "filename": "l5jt0_Im0rc.m4a",
+      "cluster": 0,
+      "trance_score": 0.6250512261017132,
+      "tempo": 148.02631578947367
+    },
+    {
+      "index": 95,
+      "filename": "l9pKCMsVkAo.m4a",
+      "cluster": 0,
+      "trance_score": 0.5620646635554503,
+      "tempo": 130.8139534883721
+    },
+    {
+      "index": 96,
+      "filename": "LAccmfzw06Q.m4a",
+      "cluster": 0,
+      "trance_score": 0.4799541236562989,
+      "tempo": 106.13207547169812
+    },
+    {
+      "index": 97,
+      "filename": "lel3scVQw28.m4a",
+      "cluster": 0,
+      "trance_score": 0.647904608500698,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 98,
+      "filename": "lrEBoaiLlMY.m4a",
+      "cluster": 0,
+      "trance_score": 0.5978345797195369,
+      "tempo": 130.8139534883721
+    },
+    {
+      "index": 99,
+      "filename": "lVSsZmbCLGw.m4a",
+      "cluster": 0,
+      "trance_score": 0.6443290738623415,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 100,
+      "filename": "M6eiY3u3lL0.m4a",
+      "cluster": 0,
+      "trance_score": 0.6107363487661119,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 101,
+      "filename": "mAcPGTs2Bac.m4a",
+      "cluster": 0,
+      "trance_score": 0.46663899988141044,
+      "tempo": 103.359375
+    },
+    {
+      "index": 102,
+      "filename": "MeWvRXaHIVs.m4a",
+      "cluster": 0,
+      "trance_score": 0.5596192855989983,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 103,
+      "filename": "MfG0yAeYptU.m4a",
+      "cluster": 0,
+      "trance_score": 0.5918856262594269,
+      "tempo": 144.23076923076923
+    },
+    {
+      "index": 104,
+      "filename": "mH85EyIp1EY.m4a",
+      "cluster": 0,
+      "trance_score": 0.6288303250466334,
+      "tempo": 148.02631578947367
+    },
+    {
+      "index": 105,
+      "filename": "MJryjNgHQlw.m4a",
+      "cluster": 0,
+      "trance_score": 0.6083760509971643,
+      "tempo": 140.625
+    },
+    {
+      "index": 106,
+      "filename": "mkMbdVgEDMQ.m4a",
+      "cluster": 0,
+      "trance_score": 0.49399826355553106,
+      "tempo": 152.02702702702703
+    },
+    {
+      "index": 107,
+      "filename": "n5Ib6SCF_oc.m4a",
+      "cluster": 0,
+      "trance_score": 0.4735738163139319,
+      "tempo": 127.8409090909091
+    },
+    {
+      "index": 108,
+      "filename": "N_zrYTxfI6Y.m4a",
+      "cluster": 0,
+      "trance_score": 0.6113596183513728,
+      "tempo": 144.23076923076923
+    },
+    {
+      "index": 109,
+      "filename": "nFG36wtE3l4.m4a",
+      "cluster": 0,
+      "trance_score": 0.6198363381814104,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 110,
+      "filename": "nKkV-3wqwNY.m4a",
+      "cluster": 1,
+      "trance_score": 0.5066667598463199,
+      "tempo": 106.13207547169812
+    },
+    {
+      "index": 111,
+      "filename": "NL9DnFLxN3k.m4a",
+      "cluster": 0,
+      "trance_score": 0.6871876037084412,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 112,
+      "filename": "nM8g-btcXcI.m4a",
+      "cluster": 0,
+      "trance_score": 0.5862341766804939,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 113,
+      "filename": "NsnUsUxOrig.m4a",
+      "cluster": 0,
+      "trance_score": 0.5289938707856079,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 114,
+      "filename": "nvOR4Uj-zlw.m4a",
+      "cluster": 0,
+      "trance_score": 0.5710540593671943,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 115,
+      "filename": "NwLCEaiPfUw.m4a",
+      "cluster": 0,
+      "trance_score": 0.5949943132440056,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 116,
+      "filename": "Nx1qs-qiGvY.m4a",
+      "cluster": 0,
+      "trance_score": 0.6157138127970053,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 117,
+      "filename": "nzjB589445M.m4a",
+      "cluster": 0,
+      "trance_score": 0.5393424664001378,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 118,
+      "filename": "OA1lRF4Vwrs.m4a",
+      "cluster": 0,
+      "trance_score": 0.6367489393940675,
+      "tempo": 140.625
+    },
+    {
+      "index": 119,
+      "filename": "oESpVZ0YIUg.m4a",
+      "cluster": 0,
+      "trance_score": 0.48779798801381424,
+      "tempo": 160.71428571428572
+    },
+    {
+      "index": 120,
+      "filename": "ohFrt0hNV6A.m4a",
+      "cluster": 1,
+      "trance_score": 0.4444690701771698,
+      "tempo": 117.1875
+    },
+    {
+      "index": 121,
+      "filename": "OjClWZ5wxn8.m4a",
+      "cluster": 0,
+      "trance_score": 0.49910950647064956,
+      "tempo": 125.0
+    },
+    {
+      "index": 122,
+      "filename": "oL3LcpI_qRQ.m4a",
+      "cluster": 0,
+      "trance_score": 0.5903092887044276,
+      "tempo": 144.23076923076923
+    },
+    {
+      "index": 123,
+      "filename": "ov_y4ScYZoE.m4a",
+      "cluster": 0,
+      "trance_score": 0.6418740192104271,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 124,
+      "filename": "P-8-snirBbw.m4a",
+      "cluster": 0,
+      "trance_score": 0.603133753968748,
+      "tempo": 144.23076923076923
+    },
+    {
+      "index": 125,
+      "filename": "Pkq2BIRYJbA.m4a",
+      "cluster": 0,
+      "trance_score": 0.571237016666958,
+      "tempo": 144.23076923076923
+    },
+    {
+      "index": 126,
+      "filename": "pMfzx4Zftto.m4a",
+      "cluster": 1,
+      "trance_score": 0.4863336157589151,
+      "tempo": 160.71428571428572
+    },
+    {
+      "index": 127,
+      "filename": "Q9ZBUtANFNQ.m4a",
+      "cluster": 0,
+      "trance_score": 0.5688489257959751,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 128,
+      "filename": "qexm4g3JCTc.m4a",
+      "cluster": 1,
+      "trance_score": 0.5680498647320285,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 129,
+      "filename": "qHS0LAvCVZs.m4a",
+      "cluster": 1,
+      "trance_score": 0.6256747572337192,
+      "tempo": 144.23076923076923
+    },
+    {
+      "index": 130,
+      "filename": "quTc4BPyrU4.m4a",
+      "cluster": 0,
+      "trance_score": 0.5338932215214884,
+      "tempo": 170.45454545454547
+    },
+    {
+      "index": 131,
+      "filename": "rKC-oxvtfaE.m4a",
+      "cluster": 0,
+      "trance_score": 0.658929777664597,
+      "tempo": 144.23076923076923
+    },
+    {
+      "index": 132,
+      "filename": "RQNST0xJSiI.m4a",
+      "cluster": 0,
+      "trance_score": 0.6046550380697455,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 133,
+      "filename": "RsAiitRjEOs.m4a",
+      "cluster": 0,
+      "trance_score": 0.6744689102544503,
+      "tempo": 140.625
+    },
+    {
+      "index": 134,
+      "filename": "rZRtqP3Vcxg.m4a",
+      "cluster": 0,
+      "trance_score": 0.5140987831460322,
+      "tempo": 127.8409090909091
+    },
+    {
+      "index": 135,
+      "filename": "S-3yqa7vGak.m4a",
+      "cluster": 0,
+      "trance_score": 0.6208795856302818,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 136,
+      "filename": "s-giYnOkhz0.m4a",
+      "cluster": 0,
+      "trance_score": 0.5544273272669183,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 137,
+      "filename": "s-x9EwgmJF0.m4a",
+      "cluster": 0,
+      "trance_score": 0.6064031792944553,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 138,
+      "filename": "S0uFSoyCTl8.m4a",
+      "cluster": 0,
+      "trance_score": 0.6115002237536635,
+      "tempo": 140.625
+    },
+    {
+      "index": 139,
+      "filename": "S3MzL72vfDs.m4a",
+      "cluster": 0,
+      "trance_score": 0.7003948107451202,
+      "tempo": 140.625
+    },
+    {
+      "index": 140,
+      "filename": "sH-vpHR7wSA.m4a",
+      "cluster": 0,
+      "trance_score": 0.6308020246407455,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 141,
+      "filename": "soSRv_NbiOQ.m4a",
+      "cluster": 1,
+      "trance_score": 0.6383466454202303,
+      "tempo": 140.625
+    },
+    {
+      "index": 142,
+      "filename": "sQLaRVda01Y.m4a",
+      "cluster": 0,
+      "trance_score": 0.6210728031099404,
+      "tempo": 140.625
+    },
+    {
+      "index": 143,
+      "filename": "ssvb9GrVaQ8.m4a",
+      "cluster": 0,
+      "trance_score": 0.5337285596446494,
+      "tempo": 156.25
+    },
+    {
+      "index": 144,
+      "filename": "sW2vga3XKL4.m4a",
+      "cluster": 0,
+      "trance_score": 0.6088165739446801,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 145,
+      "filename": "t-qqSDhBZ5I.m4a",
+      "cluster": 1,
+      "trance_score": 0.5434347627330531,
+      "tempo": 140.625
+    },
+    {
+      "index": 146,
+      "filename": "T9xQeeBPkXk.m4a",
+      "cluster": 0,
+      "trance_score": 0.5907546863116216,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 147,
+      "filename": "TA0MYqTJASI.m4a",
+      "cluster": 0,
+      "trance_score": 0.6868032092333811,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 148,
+      "filename": "tFCtLqYjl9E.m4a",
+      "cluster": 1,
+      "trance_score": 0.572921939945194,
+      "tempo": 140.625
+    },
+    {
+      "index": 149,
+      "filename": "tFSJzI5_UYU.m4a",
+      "cluster": 0,
+      "trance_score": 0.5444892349119574,
+      "tempo": 144.23076923076923
+    },
+    {
+      "index": 150,
+      "filename": "TjcTwD_26bk.m4a",
+      "cluster": 0,
+      "trance_score": 0.474135585588125,
+      "tempo": 100.44642857142857
+    },
+    {
+      "index": 151,
+      "filename": "TmrihppoB9I.m4a",
+      "cluster": 0,
+      "trance_score": 0.6330918969344725,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 152,
+      "filename": "ujrrA8NN9h8.m4a",
+      "cluster": 0,
+      "trance_score": 0.6310219273638072,
+      "tempo": 140.625
+    },
+    {
+      "index": 153,
+      "filename": "UM8q9kfFDws.m4a",
+      "cluster": 0,
+      "trance_score": 0.5083956674488411,
+      "tempo": 170.45454545454547
+    },
+    {
+      "index": 154,
+      "filename": "uodfUqF9nFQ.m4a",
+      "cluster": 0,
+      "trance_score": 0.5974489651940132,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 155,
+      "filename": "uu1PpuuD-VI.m4a",
+      "cluster": 0,
+      "trance_score": 0.5714213989800719,
+      "tempo": 156.25
+    },
+    {
+      "index": 156,
+      "filename": "UY4BMkKKIg4.m4a",
+      "cluster": 0,
+      "trance_score": 0.5357366159778517,
+      "tempo": 139.6748310810811
+    },
+    {
+      "index": 157,
+      "filename": "V2pteMgw0Nk.m4a",
+      "cluster": 0,
+      "trance_score": 0.4262488046200112,
+      "tempo": 112.5
+    },
+    {
+      "index": 158,
+      "filename": "VBljBKTIRVQ.m4a",
+      "cluster": 0,
+      "trance_score": 0.48476507711576505,
+      "tempo": 119.68085106382979
+    },
+    {
+      "index": 159,
+      "filename": "VhevEFulQ5Y.m4a",
+      "cluster": 0,
+      "trance_score": 0.6787416970672204,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 160,
+      "filename": "vjS09WFpOrE.m4a",
+      "cluster": 0,
+      "trance_score": 0.6544814487577453,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 161,
+      "filename": "vpk1H2snFH8.m4a",
+      "cluster": 0,
+      "trance_score": 0.6404937012205998,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 162,
+      "filename": "Vvsz8SLoLPc.m4a",
+      "cluster": 0,
+      "trance_score": 0.6298156782472164,
+      "tempo": 144.23076923076923
+    },
+    {
+      "index": 163,
+      "filename": "W7p-2VLwl9Q.m4a",
+      "cluster": 0,
+      "trance_score": 0.6187606837715461,
+      "tempo": 130.8139534883721
+    },
+    {
+      "index": 164,
+      "filename": "WbrMAXawWz8.m4a",
+      "cluster": 0,
+      "trance_score": 0.6252399376191897,
+      "tempo": 144.23076923076923
+    },
+    {
+      "index": 165,
+      "filename": "wdJ977Nav1s.m4a",
+      "cluster": 1,
+      "trance_score": 0.5661785507798047,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 166,
+      "filename": "WgCcTqc78KI.m4a",
+      "cluster": 0,
+      "trance_score": 0.5643779269932762,
+      "tempo": 110.29411764705883
+    },
+    {
+      "index": 167,
+      "filename": "wHL697oQ438.m4a",
+      "cluster": 0,
+      "trance_score": 0.6019951501590246,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 168,
+      "filename": "whOvFYqIhLs.m4a",
+      "cluster": 0,
+      "trance_score": 0.46405363771527475,
+      "tempo": 170.45454545454547
+    },
+    {
+      "index": 169,
+      "filename": "WkfvVQ50dXY.m4a",
+      "cluster": 0,
+      "trance_score": 0.6051062163663607,
+      "tempo": 140.625
+    },
+    {
+      "index": 170,
+      "filename": "wkQ8OrRD_Tg.m4a",
+      "cluster": 0,
+      "trance_score": 0.5475446699409005,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 171,
+      "filename": "wutVvEjd610.m4a",
+      "cluster": 0,
+      "trance_score": 0.5658626684943536,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 172,
+      "filename": "xasxXHKsrQk.m4a",
+      "cluster": 0,
+      "trance_score": 0.6596920067552764,
+      "tempo": 133.92857142857142
+    },
+    {
+      "index": 173,
+      "filename": "XBJrJwlOcvg.m4a",
+      "cluster": 0,
+      "trance_score": 0.5131516887082519,
+      "tempo": 100.44642857142857
+    },
+    {
+      "index": 174,
+      "filename": "xCuNljfUz_g.m4a",
+      "cluster": 0,
+      "trance_score": 0.4791117080809598,
+      "tempo": 125.0
+    },
+    {
+      "index": 175,
+      "filename": "XdXRLSc3VBA.m4a",
+      "cluster": 0,
+      "trance_score": 0.6028893980189735,
+      "tempo": 148.02631578947367
+    },
+    {
+      "index": 176,
+      "filename": "XRzUSh5bLNs.m4a",
+      "cluster": 0,
+      "trance_score": 0.4454950551159567,
+      "tempo": 127.8409090909091
+    },
+    {
+      "index": 177,
+      "filename": "xXegaftv560.m4a",
+      "cluster": 1,
+      "trance_score": 0.43988541738215897,
+      "tempo": 122.28260869565217
+    },
+    {
+      "index": 178,
+      "filename": "XXQX0-unCeA.m4a",
+      "cluster": 0,
+      "trance_score": 0.6153203219705197,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 179,
+      "filename": "xxZnQqfi4HM.m4a",
+      "cluster": 1,
+      "trance_score": 0.6193155057944354,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 180,
+      "filename": "YobryqA8X0Y.m4a",
+      "cluster": 0,
+      "trance_score": 0.44747479800253664,
+      "tempo": 127.8409090909091
+    },
+    {
+      "index": 181,
+      "filename": "Yt_dfJ2Mp_s.m4a",
+      "cluster": 0,
+      "trance_score": 0.622462461010003,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 182,
+      "filename": "Ythk3narnqE.m4a",
+      "cluster": 1,
+      "trance_score": 0.49769262094623024,
+      "tempo": 100.44642857142857
+    },
+    {
+      "index": 183,
+      "filename": "YTQ2XBCnznI.m4a",
+      "cluster": 0,
+      "trance_score": 0.5332428457415913,
+      "tempo": 127.8409090909091
+    },
+    {
+      "index": 184,
+      "filename": "yvYw3dA-t_g.m4a",
+      "cluster": 1,
+      "trance_score": 0.6169089688606326,
+      "tempo": 148.02631578947367
+    },
+    {
+      "index": 185,
+      "filename": "Z6ENKtqG_v8.m4a",
+      "cluster": 0,
+      "trance_score": 0.6228238428214216,
+      "tempo": 144.23076923076923
+    },
+    {
+      "index": 186,
+      "filename": "z6u0uhUfV3Y.m4a",
+      "cluster": 0,
+      "trance_score": 0.433823898701707,
+      "tempo": 127.8409090909091
+    },
+    {
+      "index": 187,
+      "filename": "ZArHRiMPTXg.m4a",
+      "cluster": 0,
+      "trance_score": 0.6393498384617229,
+      "tempo": 140.625
+    },
+    {
+      "index": 188,
+      "filename": "zGhLSkdW8mw.m4a",
+      "cluster": 0,
+      "trance_score": 0.43501347830271797,
+      "tempo": 114.79591836734694
+    },
+    {
+      "index": 189,
+      "filename": "zh5JfqDMuIY.m4a",
+      "cluster": 0,
+      "trance_score": 0.6544569112708499,
+      "tempo": 140.625
+    },
+    {
+      "index": 190,
+      "filename": "zjuDReY5XMw.m4a",
+      "cluster": 0,
+      "trance_score": 0.6780307966151582,
+      "tempo": 137.1951219512195
+    },
+    {
+      "index": 191,
+      "filename": "ZQUrBaZWbes.m4a",
+      "cluster": 0,
+      "trance_score": 0.6477445685623842,
+      "tempo": 140.625
+    },
+    {
+      "index": 192,
+      "filename": "zRIuMDjDCLM.m4a",
+      "cluster": 0,
+      "trance_score": 0.629553889548593,
+      "tempo": 140.625
+    },
+    {
+      "index": 193,
+      "filename": "ztN6hQCEDKU.m4a",
+      "cluster": 0,
+      "trance_score": 0.49431095576893325,
+      "tempo": 125.0
+    },
+    {
+      "index": 194,
+      "filename": "ZzMhml1tKAQ.m4a",
+      "cluster": 0,
+      "trance_score": 0.6221791853565113,
+      "tempo": 140.625
+    },
+    {
+      "index": 195,
+      "filename": "ZzQgAMY5qZM.m4a",
+      "cluster": 0,
+      "trance_score": 0.6378729430467847,
+      "tempo": 140.625
+    }
+  ],
+  "feature_correlations": [
+    [
+      1.0,
+      0.11089763630875211,
+      0.33687882518743817,
+      0.43182340402153074,
+      0.4408809443491406,
+      0.09500134984260085,
+      0.149725408806797,
+      0.004047660103517179,
+      -0.02105462567620272,
+      -0.025262685358236017,
+      -0.1358070423961221,
+      -0.07308175803718613,
+      -0.080602168276862,
+      0.07317479434427172,
+      0.19217569821518452,
+      0.06695605007821344,
+      0.107896216547975,
+      0.1774706534164451,
+      -0.022396793398025132,
+      0.0075963871782651505,
+      -0.0009144609876181259,
+      0.0193699692978844,
+      0.22463087505308038,
+      0.41101852911029074
+    ],
+    [
+      0.11089763630875213,
+      1.0,
+      0.09364637565459907,
+      0.17357619281860567,
+      0.18492383282419952,
+      0.2219625398475805,
+      0.3446117819489526,
+      0.0511299303102733,
+      0.0646091876490068,
+      0.04499014726784621,
+      0.012800888251124375,
+      -0.09368740161558876,
+      -0.06436294266120995,
+      0.05190563097155944,
+      0.11235322140474865,
+      0.09669425705878991,
+      -0.02100680442620653,
+      0.08929856750694232,
+      0.059530816689365974,
+      0.06608662305832157,
+      0.07124416665148384,
+      0.09564735490108386,
+      0.13870249399668683,
+      0.20089924735308942
+    ],
+    [
+      0.33687882518743817,
+      0.09364637565459907,
+      0.9999999999999998,
+      0.2802376270851757,
+      0.28231794228796303,
+      0.008081587743315431,
+      0.2766464413281483,
+      -0.061908125200979554,
+      -0.05122558931057413,
+      -0.074581901554315,
+      0.05676606601058141,
+      0.05528327735045319,
+      0.04317687766673535,
+      -0.034547161844191175,
+      0.23732741113987027,
+      0.12018006104546541,
+      -0.021733549228045174,
+      0.22783582326818755,
+      -0.12355089178859595,
+      -0.07680348574097567,
+      -0.1488831759165357,
+      0.01698627497671099,
+      0.18730256134441742,
+      0.8327913021450174
+    ],
+    [
+      0.43182340402153074,
+      0.17357619281860567,
+      0.28023762708517574,
+      1.0,
+      0.989590355271619,
+      -0.14667577312681715,
+      -0.0759922076734874,
+      0.0003291403577414759,
+      -0.007660581215393663,
+      0.0009679296621673477,
+      0.00936460783065497,
+      -0.11205950752678462,
+      -0.09393338454630476,
+      0.09462014778027751,
+      0.29100794901132543,
+      0.1244944782759983,
+      0.19769148857838537,
+      0.2598944401331429,
+      -0.08689209943532222,
+      -0.1579348369942226,
+      -0.17584649157808882,
+      0.030515463196521087,
+      0.2763163835229881,
+      0.4640937120426607
+    ],
+    [
+      0.4408809443491406,
+      0.18492383282419955,
+      0.28231794228796303,
+      0.989590355271619,
+      1.0,
+      -0.15435347502753335,
+      -0.0751241113465332,
+      0.0003919401092133402,
+      -0.004067500788227841,
+      0.0033329549895754493,
+      0.01801471365137097,
+      -0.10705266788887893,
+      -0.09249470309771869,
+      0.09004103477449067,
+      0.30564095683010695,
+      0.1266814851078877,
+      0.19864799344260617,
+      0.27271206237087603,
+      -0.058364909657484136,
+      -0.163693825567217,
+      -0.13756398789440247,
+      -0.023624147429616035,
+      0.2842624082494998,
+      0.4723105558074391
+    ],
+    [
+      0.09500134984260086,
+      0.22196253984758052,
+      0.008081587743315433,
+      -0.14667577312681712,
+      -0.15435347502753335,
+      1.0,
+      0.7448395670574539,
+      0.10042828798514937,
+      0.08043457813386798,
+      0.09459536648593041,
+      -0.026964441204291194,
+      -0.027397543659466415,
+      -0.008612409446530913,
+      0.030958563842587838,
+      -0.1054317268975833,
+      0.02188624542569275,
+      -0.12604781400821266,
+      -0.12001106803721222,
+      -0.049413744086678535,
+      0.09857944717468957,
+      -0.010390156879075784,
+      0.2322522395856741,
+      0.006390803504358224,
+      0.1287706925235273
+    ],
+    [
+      0.14972540880679702,
+      0.34461178194895253,
+      0.27664644132814836,
+      -0.0759922076734874,
+      -0.0751241113465332,
+      0.7448395670574539,
+      1.0,
+      -0.04733996928953064,
+      -0.041621339141267436,
+      -0.036578636593030206,
+      0.07586371599505361,
+      0.09478083843847751,
+      0.1011657603594643,
+      -0.08698040699243607,
+      -0.05591383198909965,
+      -0.039312189273620485,
+      -0.11598630170859606,
+      -0.017330287768047598,
+      0.06739392091653743,
+      -0.01039966917814041,
+      0.08724202870545278,
+      0.05363942869475066,
+      0.048083513938318834,
+      0.32176193474503667
+    ],
+    [
+      0.004047660103517179,
+      0.0511299303102733,
+      -0.061908125200979554,
+      0.0003291403577414759,
+      0.00039194010921334016,
+      0.10042828798514938,
+      -0.04733996928953064,
+      1.0,
+      0.970209971252034,
+      0.9513287932464539,
+      -0.3509142750448485,
+      -0.13750561133058742,
+      -0.08907070098488376,
+      0.09767292172119046,
+      0.09371035081370555,
+      0.17060154034686095,
+      0.0533055351028824,
+      0.0018036639543427195,
+      -0.0724276730469503,
+      0.013490291266607984,
+      -0.09952153197223967,
+      0.07592699070192858,
+      0.02072354121595914,
+      0.2864300029210846
+    ],
+    [
+      -0.021054625676202723,
+      0.0646091876490068,
+      -0.05122558931057413,
+      -0.007660581215393663,
+      -0.004067500788227841,
+      0.08043457813386799,
+      -0.041621339141267436,
+      0.9702099712520339,
+      0.9999999999999999,
+      0.9655229313787342,
+      -0.19171586023969894,
+      -0.16078816888834754,
+      -0.11295880009323828,
+      0.11695970910439649,
+      0.1092328620970509,
+      0.17832480618294244,
+      0.06231820026415959,
+      0.01215038919417179,
+      -0.09500599920070348,
+      0.007965221188319438,
+      -0.11819987353571364,
+      0.033223382239239437,
+      0.05069910059243692,
+      0.2760823172482935
+    ],
+    [
+      -0.025262685358236014,
+      0.04499014726784621,
+      -0.074581901554315,
+      0.0009679296621673476,
+      0.0033329549895754493,
+      0.09459536648593042,
+      -0.036578636593030206,
+      0.9513287932464539,
+      0.9655229313787342,
+      1.0,
+      -0.155559970885013,
+      -0.12904523545229976,
+      -0.0830985603049997,
+      0.0880501094386924,
+      0.09136619974488026,
+      0.18475294959292873,
+      0.05991743219675119,
+      -0.015738110020249694,
+      -0.07136535914105298,
+      0.003220591342807796,
+      -0.0971354110815106,
+      0.01596850872924343,
+      0.03489784215205157,
+      0.2629853473546525
+    ],
+    [
+      -0.1358070423961221,
+      0.012800888251124376,
+      0.05676606601058141,
+      0.00936460783065497,
+      0.01801471365137097,
+      -0.026964441204291197,
+      0.07586371599505361,
+      -0.3509142750448485,
+      -0.19171586023969892,
+      -0.155559970885013,
+      1.0,
+      0.04334658772392769,
+      0.025458285137378932,
+      -0.040499851327972035,
+      -0.016538134617215428,
+      0.015230687353180748,
+      0.04228648792646646,
+      -0.048051317371206284,
+      -0.02280868672085039,
+      -0.013894716644341807,
+      0.015016603459479473,
+      -0.16363152865885522,
+      0.0014354973333170565,
+      -0.08078387496716456
+    ],
+    [
+      -0.07308175803718614,
+      -0.09368740161558876,
+      0.05528327735045319,
+      -0.11205950752678462,
+      -0.10705266788887893,
+      -0.027397543659466415,
+      0.0947808384384775,
+      -0.13750561133058742,
+      -0.16078816888834754,
+      -0.12904523545229976,
+      0.04334658772392769,
+      1.0,
+      0.9585456715367561,
+      -0.9453240620754512,
+      -0.024170301415986226,
+      -0.06195118761714282,
+      0.09380988134961456,
+      -0.01276507618957751,
+      0.13061594474996913,
+      -0.03630622492866394,
+      0.22410143884674602,
+      -0.24736159221688092,
+      0.002266264717393767,
+      0.1500860221528459
+    ],
+    [
+      -0.080602168276862,
+      -0.06436294266120995,
+      0.04317687766673534,
+      -0.09393338454630476,
+      -0.09249470309771869,
+      -0.008612409446530911,
+      0.1011657603594643,
+      -0.08907070098488376,
+      -0.11295880009323829,
+      -0.08309856030499971,
+      0.025458285137378932,
+      0.958545671536756,
+      1.0,
+      -0.9870073981747316,
+      -0.038555781746152845,
+      -0.02534205423475655,
+      0.14472417433332246,
+      -0.06220868371231843,
+      0.09616033600941418,
+      -0.025178810028095595,
+      0.16572792671492326,
+      -0.20889077725863936,
+      -0.007779707772152781,
+      0.14741925168583242
+    ],
+    [
+      0.07317479434427172,
+      0.051905630971559445,
+      -0.03454716184419118,
+      0.09462014778027751,
+      0.09004103477449067,
+      0.030958563842587838,
+      -0.08698040699243606,
+      0.09767292172119045,
+      0.11695970910439651,
+      0.08805010943869239,
+      -0.040499851327972035,
+      -0.9453240620754512,
+      -0.9870073981747316,
+      1.0,
+      0.027956861870236317,
+      0.020459779978466756,
+      -0.09418511042789475,
+      0.047866495893379025,
+      -0.126190191378337,
+      0.003543850528199436,
+      -0.2110779436982882,
+      0.24034333693746596,
+      0.005090711983515014,
+      -0.14115546527553474
+    ],
+    [
+      0.19217569821518452,
+      0.11235322140474867,
+      0.23732741113987027,
+      0.29100794901132543,
+      0.30564095683010695,
+      -0.1054317268975833,
+      -0.05591383198909964,
+      0.09371035081370555,
+      0.1092328620970509,
+      0.09136619974488028,
+      -0.016538134617215428,
+      -0.024170301415986226,
+      -0.038555781746152845,
+      0.027956861870236313,
+      1.0,
+      0.6468957592880153,
+      0.08852486303710821,
+      0.8301449401319801,
+      -0.15678164598043068,
+      -0.015034602472023597,
+      -0.1476723393293674,
+      0.03441066301095063,
+      0.19390784917562714,
+      0.3133607216575569
+    ],
+    [
+      0.06695605007821344,
+      0.09669425705878991,
+      0.12018006104546541,
+      0.1244944782759983,
+      0.1266814851078877,
+      0.021886245425692754,
+      -0.03931218927362048,
+      0.17060154034686095,
+      0.1783248061829424,
+      0.1847529495929287,
+      0.015230687353180746,
+      -0.06195118761714282,
+      -0.02534205423475655,
+      0.020459779978466756,
+      0.6468957592880153,
+      1.0,
+      -0.00018452323158855958,
+      0.142352946751087,
+      -0.14170365621148026,
+      0.10804425162807443,
+      -0.14054003975635787,
+      0.13989479313886313,
+      0.010830825143674422,
+      0.17556332984972298
+    ],
+    [
+      0.107896216547975,
+      -0.02100680442620653,
+      -0.02173354922804517,
+      0.1976914885783854,
+      0.19864799344260614,
+      -0.1260478140082127,
+      -0.11598630170859607,
+      0.0533055351028824,
+      0.06231820026415958,
+      0.0599174321967512,
+      0.04228648792646645,
+      0.09380988134961454,
+      0.14472417433332246,
+      -0.09418511042789475,
+      0.08852486303710821,
+      -0.00018452323158855958,
+      1.0,
+      -0.0632974857138944,
+      0.016761366771228504,
+      -0.08702242275202358,
+      -0.10905864795949426,
+      -0.048958346637286286,
+      0.09951010882228567,
+      0.07363403660590014
+    ],
+    [
+      0.17747065341644508,
+      0.08929856750694232,
+      0.22783582326818755,
+      0.2598944401331429,
+      0.27271206237087603,
+      -0.12001106803721222,
+      -0.017330287768047598,
+      0.0018036639543427195,
+      0.012150389194171789,
+      -0.015738110020249694,
+      -0.048051317371206284,
+      -0.01276507618957751,
+      -0.06220868371231843,
+      0.047866495893379025,
+      0.8301449401319801,
+      0.14235294675108698,
+      -0.06329748571389439,
+      1.0,
+      -0.12719782320592357,
+      -0.08763845119696269,
+      -0.10201951909654029,
+      -0.0004243661084702319,
+      0.2441965998156054,
+      0.27334421837157047
+    ],
+    [
+      -0.022396793398025135,
+      0.05953081668936598,
+      -0.12355089178859595,
+      -0.08689209943532222,
+      -0.058364909657484136,
+      -0.04941374408667854,
+      0.06739392091653743,
+      -0.0724276730469503,
+      -0.09500599920070346,
+      -0.07136535914105298,
+      -0.02280868672085039,
+      0.13061594474996913,
+      0.09616033600941418,
+      -0.126190191378337,
+      -0.15678164598043068,
+      -0.1417036562114803,
+      0.016761366771228504,
+      -0.12719782320592357,
+      1.0,
+      0.15856342587276437,
+      0.8314574385123342,
+      -0.3665075919690839,
+      -0.10961590655247284,
+      0.10003920633689392
+    ],
+    [
+      0.00759638717826515,
+      0.06608662305832157,
+      -0.07680348574097567,
+      -0.1579348369942226,
+      -0.163693825567217,
+      0.09857944717468957,
+      -0.01039966917814041,
+      0.013490291266607985,
+      0.00796522118831944,
+      0.0032205913428077957,
+      -0.013894716644341809,
+      -0.036306224928663935,
+      -0.025178810028095595,
+      0.003543850528199436,
+      -0.015034602472023597,
+      0.1080442516280744,
+      -0.08702242275202358,
+      -0.08763845119696269,
+      0.15856342587276434,
+      1.0,
+      0.3713023952520623,
+      0.42691755893112,
+      -0.12247765606482912,
+      -0.06570238477422312
+    ],
+    [
+      -0.0009144609876181259,
+      0.07124416665148385,
+      -0.14888317591653571,
+      -0.17584649157808882,
+      -0.13756398789440247,
+      -0.010390156879075784,
+      0.08724202870545278,
+      -0.09952153197223966,
+      -0.11819987353571364,
+      -0.0971354110815106,
+      0.015016603459479472,
+      0.22410143884674605,
+      0.16572792671492326,
+      -0.2110779436982882,
+      -0.1476723393293674,
+      -0.14054003975635787,
+      -0.10905864795949424,
+      -0.10201951909654029,
+      0.8314574385123342,
+      0.3713023952520623,
+      1.0,
+      -0.3026294887661977,
+      -0.179611477974533,
+      0.014839593448759266
+    ],
+    [
+      0.0193699692978844,
+      0.09564735490108386,
+      0.016986274976710986,
+      0.030515463196521084,
+      -0.02362414742961604,
+      0.23225223958567412,
+      0.05363942869475067,
+      0.07592699070192858,
+      0.033223382239239437,
+      0.01596850872924343,
+      -0.16363152865885522,
+      -0.24736159221688092,
+      -0.20889077725863936,
+      0.24034333693746596,
+      0.03441066301095063,
+      0.13989479313886313,
+      -0.04895834663728628,
+      -0.0004243661084702319,
+      -0.3665075919690839,
+      0.42691755893112004,
+      -0.3026294887661977,
+      1.0,
+      0.09946490738239794,
+      -0.03166097255272227
+    ],
+    [
+      0.22463087505308038,
+      0.1387024939966868,
+      0.18730256134441745,
+      0.2763163835229881,
+      0.2842624082494998,
+      0.006390803504358224,
+      0.04808351393831883,
+      0.02072354121595914,
+      0.05069910059243692,
+      0.03489784215205157,
+      0.0014354973333170565,
+      0.002266264717393767,
+      -0.007779707772152781,
+      0.005090711983515014,
+      0.19390784917562712,
+      0.010830825143674422,
+      0.09951010882228567,
+      0.2441965998156054,
+      -0.10961590655247283,
+      -0.12247765606482912,
+      -0.179611477974533,
+      0.09946490738239794,
+      0.9999999999999999,
+      0.378112803268894
+    ],
+    [
+      0.4110185291102907,
+      0.20089924735308942,
+      0.8327913021450174,
+      0.4640937120426607,
+      0.472310555807439,
+      0.1287706925235273,
+      0.32176193474503667,
+      0.2864300029210846,
+      0.2760823172482935,
+      0.26298534735465245,
+      -0.08078387496716456,
+      0.15008602215284586,
+      0.14741925168583242,
+      -0.14115546527553474,
+      0.3133607216575569,
+      0.17556332984972298,
+      0.07363403660590014,
+      0.2733442183715705,
+      0.10003920633689393,
+      -0.06570238477422312,
+      0.014839593448759266,
+      -0.03166097255272227,
+      0.378112803268894,
+      1.0
+    ]
+  ]
+}

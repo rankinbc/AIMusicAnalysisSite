@@ -1,0 +1,125 @@
+{
+  "file_path": "..\\..\\data\\uploads\\64e79839-72f1-46ab-b28f-bd7c429921e2_46-1-14_47_16_12.flac",
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Universal Mix Analysis",
+      "status": "ok",
+      "data": {
+        "lufs": -10.950908638189,
+        "rms": 0.22763431072235107,
+        "bpm": 71.77734375,
+        "duration_seconds": 773.3333333333334,
+        "bands": {
+          "sub_bass": -23.841899871826172,
+          "bass": -28.63397216796875,
+          "low_mid": -40.73850631713867,
+          "mid": -45.64692306518555,
+          "upper_mid": -46.63581848144531,
+          "presence": -48.290504455566406,
+          "air": -67.23562622070312
+        },
+        "stereo_correlation": 0.6445925256882561,
+        "stereo_width": 0.19191405177116394,
+        "true_peak_db": -1.2861774774435393,
+        "peak_dbfs": -0.3845248530699773,
+        "clipping_detected": false,
+        "clipped_sample_count": 0,
+        "detected_key": "F#",
+        "mono_compatibility": 0.906808198013203,
+        "low_energy": 52.057674407958984,
+        "structure": {
+          "sections": [],
+          "beats": []
+        }
+      },
+      "error": null
+    },
+    {
+      "phase": 2,
+      "name": "Genre Detection",
+      "status": "ok",
+      "data": {
+        "genre": "other",
+        "confidence": 0.5,
+        "bpm": 71.77734375
+      },
+      "error": null
+    },
+    {
+      "phase": 3,
+      "name": "Genre-Specific Scoring",
+      "status": "ok",
+      "data": {
+        "genre": "other",
+        "total_score": 46.82813048362732,
+        "sub_scores": {
+          "frequency_balance": 78.30313682556152,
+          "stereo_width": 15.353124141693115
+        },
+        "notes": []
+      },
+      "error": null
+    },
+    {
+      "phase": 4,
+      "name": "Stem Separation & Clash",
+      "status": "ok",
+      "data": {
+        "stems": {},
+        "clashes": [],
+        "error": "demucs not available"
+      },
+      "error": null
+    },
+    {
+      "phase": 5,
+      "name": "Reference Comparison",
+      "status": "ok",
+      "data": {
+        "status": "skipped",
+        "deltas": {}
+      },
+      "error": null
+    },
+    {
+      "phase": 6,
+      "name": "Gap Analysis",
+      "status": "ok",
+      "data": {
+        "genre": "other",
+        "percentile": 50.0,
+        "gaps": {}
+      },
+      "error": null
+    },
+    {
+      "phase": 7,
+      "name": "Arrangement Advice",
+      "status": "ok",
+      "data": {
+        "violations": [],
+        "fixes": [
+          "Enable Docker for structure detection (Phase 1) to unlock arrangement advice"
+        ],
+        "section_count": 0
+      },
+      "error": null
+    }
+  ],
+  "overall_score": 46.82813048362732,
+  "grade": "F",
+  "top_fixes": [
+    "Enable Docker for structure detection (Phase 1) to unlock arrangement advice",
+    "Optimize mix levels for streaming targets",
+    "Optimize mix levels for streaming targets"
+  ],
+  "danceability_score": 20,
+  "coach_name": "Coach",
+  "coach_intro": "Here's what I'd focus on to push this mix forward:",
+  "coached_fixes": [
+    "Enable Docker for structure detection (Phase 1) to unlock arrangement advice",
+    "Optimize mix levels for streaming targets",
+    "Optimize mix levels for streaming targets"
+  ]
+}

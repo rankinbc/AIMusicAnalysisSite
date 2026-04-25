@@ -2,7 +2,6 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
-// TODO: /execute-prp may extend this config (e.g., chunk splitting, env-specific settings)
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -12,16 +11,13 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    strictPort: true,
     proxy: {
-      // All /api/* requests forwarded to FastAPI during development
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
-      },
-      // SSE endpoint forwarded separately (no buffering)
-      '/jobs': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+        autoRewrite: true,
       },
     },
   },

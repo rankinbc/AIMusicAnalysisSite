@@ -22,9 +22,31 @@ const config: Config = {
     // Misc dynamic states
     'border-purple-500', 'bg-purple-900/20',
     'border-green-700', 'bg-green-900/10',
+    // Fix card grade border colors
+    'border-green-500', 'border-lime-500', 'border-yellow-500', 'border-orange-500', 'border-red-500',
+    // Studio theme utilities
+    'bg-studio-bg', 'bg-studio-surface', 'bg-studio-card', 'border-studio-border',
+    'text-studio-amber', 'text-studio-sky', 'text-studio-muted',
+    'font-display', 'font-metric',
   ],
   theme: {
-    extend: {},
+    extend: {
+      fontFamily: {
+        display: ['Syne', 'system-ui', 'sans-serif'],
+        metric: ['"JetBrains Mono"', '"Fira Mono"', 'monospace'],
+      },
+      colors: {
+        studio: {
+          bg: '#07070f',
+          surface: '#0e0e1c',
+          card: '#111120',
+          border: '#1c1c38',
+          muted: '#6b6b9a',
+          amber: '#f59e0b',
+          sky: '#38bdf8',
+        },
+      },
+    },
   },
   plugins: [],
 }

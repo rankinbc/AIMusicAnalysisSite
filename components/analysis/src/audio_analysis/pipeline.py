@@ -38,6 +38,7 @@ def run_pipeline(
     file_path: str,
     reference_path: str | None = None,
     als_file_path: str | None = None,
+    genre_hint: str | None = None,
     progress_cb=None,
 ) -> PipelineResult:
     """Run all 7 analysis phases and return a structured result dict.
@@ -67,7 +68,7 @@ def run_pipeline(
                 if phase_num == 1:
                     data = phase1_universal.analyze(wav_path, progress_cb)
                 elif phase_num == 2:
-                    data = phase2_genre.classify(wav_path, phase_data.get(1, {}), progress_cb)
+                    data = phase2_genre.classify(wav_path, phase_data.get(1, {}), progress_cb, genre_hint=genre_hint)
                 elif phase_num == 3:
                     genre = phase_data.get(2, {}).get("genre", "other")
                     data = phase3_genre_specific.score(

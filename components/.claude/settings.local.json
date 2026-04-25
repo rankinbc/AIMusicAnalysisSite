@@ -3,7 +3,18 @@
     "allow": [
       "Bash(docker compose *)",
       "Bash(npm run *)",
-      "Bash(echo \"Frontend starting in background with PID $!\")"
+      "Bash(echo \"Frontend starting in background with PID $!\")",
+      "Bash(netstat -ano)",
+      "Bash(tasklist /FI \"PID eq 5068\" /FO LIST)",
+      "Bash(tasklist /FI \"PID eq 20684\" /FO LIST)",
+      "PowerShell(Stop-Process *)",
+      "PowerShell(Get-NetTCPConnection *)",
+      "Bash(uvicorn app.main:app --reload --port 8000)",
+      "Bash(python -m uvicorn app.main:app --reload --port 8000)",
+      "Bash(python -m celery -A app.celery_app worker --loglevel=info --concurrency=1 --pool=solo)",
+      "Bash(docker exec docker-postgres-1 *)",
+      "Bash(python *)",
+      "Bash(curl *)"
     ]
   }
 }

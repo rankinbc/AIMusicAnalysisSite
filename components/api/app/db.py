@@ -1,7 +1,8 @@
 from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase
+
+from aimusic_shared.models import Base  # re-exported so `from .db import Base` keeps working
 
 from .config import settings
 
@@ -16,10 +17,6 @@ AsyncSessionLocal = async_sessionmaker(
     expire_on_commit=False,  # REQUIRED — prevents MissingGreenlet errors after commit
     class_=AsyncSession,
 )
-
-
-class Base(DeclarativeBase):
-    pass
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

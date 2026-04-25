@@ -1,12 +1,17 @@
+import traceback
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .config import settings
 from .routers import auth as auth_router
 from .routers import experts as experts_router
+from .routers import genre_profiles as genre_profiles_router
 from .routers import jobs as jobs_router
+from .routers import reports as reports_router
+from .routers import tracks as tracks_router
 from .routers import uploads as uploads_router
 
 
@@ -37,7 +42,18 @@ app.add_middleware(
 app.include_router(auth_router.router, prefix="/auth", tags=["auth"])
 app.include_router(uploads_router.router, prefix="/uploads", tags=["uploads"])
 app.include_router(jobs_router.router, prefix="/jobs", tags=["jobs"])
+app.include_router(reports_router.router, prefix="/reports", tags=["reports"])
+app.include_router(tracks_router.router, prefix="/tracks", tags=["tracks"])
 app.include_router(experts_router.router, tags=["experts"])
+app.include_router(genre_profiles_router.router, prefix="/genre-profiles", tags=["genre-profiles"])
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "traceback": traceback.format_exc()},
+    )
 
 
 @app.get("/", tags=["health"])
