@@ -145,3 +145,214 @@ def mono_incompatible(analysis: dict[str, Any]) -> Verdict | None:
                        "Bluetooth earbuds can collapse a mix to mono. Parts "
                        "that disappear there sound thin and broken.",
     )
+
+
+@rule
+def loudness_too_high_for_streaming(analysis: dict[str, Any]) -> Verdict | None:
+    p1 = _phase(analysis, "phase1")
+    lufs = p1.get("integrated_lufs")
+    if lufs is None or lufs <= -8.0:
+        return None
+    return _make(
+        track_id=_track_id(analysis),
+        severity="moderate",
+        category="loudness",
+        headline=f"Master too loud for streaming ({lufs:.1f} LUFS)",
+        summary=f"Integrated loudness is {lufs:.1f} LUFS. Spotify normalises to "
+                "-14 LUFS; mastering hotter than -8 burns dynamics for no payoff.",
+        evidence=[Evidence(
+            metric="phase1.integrated_lufs",
+            value=float(lufs),
+            expected_range=(-16.0, -8.0),
+            label=f"{lufs:.1f} LUFS",
+        )],
+        why_it_matters="Streaming services normalise loud masters down to "
+                       "their target. A -7 LUFS master sounds the same volume "
+                       "as a -14 LUFS master on Spotify, but the loud one has "
+                       "less dynamic punch.",
+    )
+
+
+@rule
+def loudness_too_low_for_streaming(analysis: dict[str, Any]) -> Verdict | None:
+    p1 = _phase(analysis, "phase1")
+    lufs = p1.get("integrated_lufs")
+    if lufs is None or lufs >= -20.0:
+        return None
+    return _make(
+        track_id=_track_id(analysis),
+        severity="moderate",
+        category="loudness",
+        headline=f"Master too quiet ({lufs:.1f} LUFS)",
+        summary=f"Integrated loudness is {lufs:.1f} LUFS — Spotify will push "
+                "the gain up but headroom and noise floor become problems.",
+        evidence=[Evidence(
+            metric="phase1.integrated_lufs",
+            value=float(lufs),
+            expected_range=(-20.0, -8.0),
+            label=f"{lufs:.1f} LUFS",
+        )],
+        why_it_matters="Below -20 LUFS, streaming gain-up amplifies any noise "
+                       "or hiss; the track also feels weaker in playlist "
+                       "context next to normalised neighbours.",
+    )
+
+
+@rule
+def low_mid_mud_trance(analysis: dict[str, Any]) -> Verdict | None:
+    p3 = _phase(analysis, "phase3")
+    energy = p3.get("low_mid_energy")
+    genre = (analysis.get("genre_hint") or "").lower()
+    if energy is None or genre != "trance" or energy <= 0.20:
+        return None
+    return _make(
+        track_id=_track_id(analysis),
+        severity="moderate",
+        category="low_end",
+        headline=f"Low-mid mud high for trance ({energy:.2f})",
+        summary=f"Low-mid energy is {energy:.2f}; trance reference targets are "
+                "0.10–0.15. The kick-bass region is competing for clarity.",
+        evidence=[Evidence(
+            metric="phase3.low_mid_energy",
+            value=float(energy),
+            expected_range=(0.10, 0.15),
+            label=f"{energy:.2f} (trance target ≤0.20)",
+        )],
+        why_it_matters="Trance lives or dies on a clean kick-bass relationship. "
+                       "Excess low-mid energy buries the punch and makes "
+                       "drops feel cluttered on club systems.",
+    )
+
+
+@rule
+def low_mid_mud_generic(analysis: dict[str, Any]) -> Verdict | None:
+    # Skip if the trance-specific rule already fired (avoid duplicate; dedupe
+    # would merge anyway, but the messages would conflict).
+    p3 = _phase(analysis, "phase3")
+    energy = p3.get("low_mid_energy")
+    genre = (analysis.get("genre_hint") or "").lower()
+    if energy is None or energy <= 0.25 or genre == "trance":
+        return None
+    return _make(
+        track_id=_track_id(analysis),
+        severity="moderate",
+        category="low_end",
+        headline=f"Low-mid energy high ({energy:.2f})",
+        summary=f"Low-mid energy is {energy:.2f}; most genres target 0.15–0.20. "
+                "Mud is masking definition between elements.",
+        evidence=[Evidence(
+            metric="phase3.low_mid_energy",
+            value=float(energy),
+            expected_range=(0.15, 0.20),
+            label=f"{energy:.2f}",
+        )],
+        why_it_matters="The 200-500 Hz region builds up fast. Without a "
+                       "subtractive cut on bass, pad, or guitar, the mix loses "
+                       "headroom and clarity.",
+    )
+
+
+@rule
+def excessive_dynamic_range(analysis: dict[str, Any]) -> Verdict | None:
+    p1 = _phase(analysis, "phase1")
+    cf = p1.get("crest_factor")
+    if cf is None or cf <= 22.0:
+        return None
+    return _make(
+        track_id=_track_id(analysis),
+        severity="minor",
+        category="dynamics",
+        headline=f"Very wide dynamic range (crest {cf:.1f} dB)",
+        summary=f"Crest factor is {cf:.1f} dB. For most playback contexts, "
+                "extra-wide dynamics get squashed by listener volume control "
+                "or platform normalisation anyway.",
+        evidence=[Evidence(
+            metric="phase1.crest_factor",
+            value=float(cf),
+            expected_range=(8.0, 18.0),
+            label=f"{cf:.1f} dB",
+        )],
+        why_it_matters="Listeners turn down loud peaks and can't hear quiet "
+                       "passages. Some compression preserves intent better "
+                       "than relying on the listener to ride the volume knob.",
+    )
+
+
+@rule
+def tiny_dynamic_range(analysis: dict[str, Any]) -> Verdict | None:
+    p1 = _phase(analysis, "phase1")
+    cf = p1.get("crest_factor")
+    if cf is None or cf >= 4.0:
+        return None
+    return _make(
+        track_id=_track_id(analysis),
+        severity="severe",
+        category="dynamics",
+        headline=f"Severely squashed dynamics (crest {cf:.1f} dB)",
+        summary=f"Crest factor is only {cf:.1f} dB. The mix has been hammered "
+                "flat — transient detail is gone, the track will feel "
+                "fatiguing on full playback.",
+        evidence=[Evidence(
+            metric="phase1.crest_factor",
+            value=float(cf),
+            expected_range=(8.0, 14.0),
+            label=f"{cf:.1f} dB (target ≥6 dB)",
+        )],
+        why_it_matters="Below 4 dB crest, listener fatigue spikes within 30s "
+                       "and the mix loses anything that could be called "
+                       "a transient. Limiter is doing too much work.",
+    )
+
+
+@rule
+def stereo_correlation_negative(analysis: dict[str, Any]) -> Verdict | None:
+    p2 = _phase(analysis, "phase2")
+    corr = p2.get("stereo_correlation")
+    if corr is None or corr >= -0.1:
+        return None
+    return _make(
+        track_id=_track_id(analysis),
+        severity="severe",
+        category="stereo_phase",
+        headline=f"Negative stereo correlation ({corr:+.2f})",
+        summary=f"Stereo correlation is {corr:+.2f}. Channels are partially "
+                "out of phase — this collapses to a hollow mono and sounds "
+                "wrong on most playback chains.",
+        evidence=[Evidence(
+            metric="phase2.stereo_correlation",
+            value=float(corr),
+            expected_range=(0.2, 1.0),
+            label=f"{corr:+.2f} (target ≥0.2)",
+        )],
+        why_it_matters="Negative correlation is almost always a stereo widener "
+                       "or M/S processing gone wrong. Mono compatibility "
+                       "fails, sub-bass disappears, headphone listeners hear "
+                       "spatial weirdness.",
+    )
+
+
+@rule
+def key_detection_low_confidence(analysis: dict[str, Any]) -> Verdict | None:
+    p1 = _phase(analysis, "phase1")
+    conf = p1.get("key_detection_confidence")
+    if conf is None or conf >= 0.5:
+        return None
+    return _make(
+        track_id=_track_id(analysis),
+        severity="minor",
+        category="harmonic",
+        confidence=float(conf),
+        headline=f"Key detection unsure (confidence {conf:.2f})",
+        summary="The harmonic content is ambiguous — could be modal, "
+                "atonal, or simply unusual. Manual key labelling is more "
+                "reliable than the auto-detected value.",
+        evidence=[Evidence(
+            metric="phase1.key_detection_confidence",
+            value=float(conf),
+            expected_range=(0.5, 1.0),
+            label=f"{conf:.2f} confidence",
+        )],
+        why_it_matters="Auto-detected key drives genre comparison and "
+                       "harmonic-mixing recommendations downstream. A wrong "
+                       "key label produces nonsense suggestions.",
+    )
