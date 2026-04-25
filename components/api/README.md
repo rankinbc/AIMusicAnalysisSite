@@ -8,7 +8,7 @@
 
 **Pattern**: `api.md`
 
-**Stack**: Python 3.11+ / FastAPI / SQLAlchemy 2.0 async (asyncpg) / PostgreSQL / Alembic / Celery / Redis / PyJWT / aiofiles
+**Stack**: Python 3.11+ / FastAPI / SQLAlchemy 2.0 async (asyncpg) / PostgreSQL / Alembic / Celery / Redis / PyJWT / aiofiles / Anthropic SDK
 
 ## How to run
 
@@ -29,10 +29,11 @@ app/
   worker.py        Celery app instance (tasks are regular def, not async def)
   models/          SQLAlchemy ORM: User, UploadJob, AnalysisResult
   schemas/         Pydantic v2 request/response DTOs
-  routers/         auth.py, uploads.py, jobs.py
+  routers/         auth.py, uploads.py, jobs.py, experts.py
   services/
-    storage.py     AudioStorage protocol: LocalStorage (dev) / S3Storage (prod)
-    celery_client.py  Task dispatch helpers (routes never import worker directly)
+    storage.py          AudioStorage protocol: LocalStorage (dev) / S3Storage (prod)
+    celery_client.py    Task dispatch helpers (routes never import worker directly)
+    expert_service.py   Claude API wrapper — triage routing + specialist SSE streaming
 alembic/           Alembic migration environment (sync psycopg2 URL)
 alembic.ini        Alembic config — points at ALEMBIC_DATABASE_URL
 tests/             Pytest stubs — /execute-prp writes real tests here
@@ -45,7 +46,7 @@ Dockerfile         Container image — scaffolded stub
 
 ```bash
 pip install -r components/api/requirements.txt
-cp components/api/.env.example components/api/.env  # then fill in secrets
+cp components/api/.env.example components/api/.env  # fill in secrets, including ANTHROPIC_API_KEY
 # Run Alembic initial migration once DB is up:
 cd components/api && alembic upgrade head
 ```
