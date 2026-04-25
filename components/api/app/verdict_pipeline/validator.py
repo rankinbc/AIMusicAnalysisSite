@@ -1,7 +1,7 @@
 from __future__ import annotations
 import math
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from aimusic_shared.verdicts.models import Severity, Verdict
 from aimusic_shared.verdicts.scoring import (

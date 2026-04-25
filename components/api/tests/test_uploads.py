@@ -65,7 +65,7 @@ class TestUploadAuth:
     async def test_upload_invalid_magic_bytes(self, client):
         """Upload with a valid token but invalid magic bytes must return 415."""
         import uuid
-        from unittest.mock import AsyncMock, MagicMock
+        from unittest.mock import AsyncMock
 
         from app.db import get_session
         from app.main import app

@@ -11,7 +11,6 @@ from app.verdict_pipeline.rule_engine import evaluate_rules
 from app.verdict_pipeline.specialists import run_specialists
 from app.verdict_pipeline.triage import run_triage
 from app.verdict_pipeline.validator import (
-    ValidationFailure,
     validate_verdict,
 )
 

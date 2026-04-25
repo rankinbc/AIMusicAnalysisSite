@@ -17,7 +17,6 @@ def _primary_metric(v: Verdict) -> str:
 def _merge_pair(a: Verdict, b: Verdict) -> Verdict:
     """Merge b into a. Prefers rule-engine evidence; longer text; higher rank."""
     higher = a if _SEVERITY_RANK[a.severity] >= _SEVERITY_RANK[b.severity] else b
-    other = b if higher is a else a
 
     # Sources: union, preserving order with `a` first
     merged_sources: list[str] = []

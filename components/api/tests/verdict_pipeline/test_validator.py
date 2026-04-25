@@ -1,6 +1,5 @@
 from __future__ import annotations
 from datetime import datetime, timezone
-import pytest
 from aimusic_shared.verdicts.models import (
     DspOp, Evidence, Fix, UserState, Verdict,
 )

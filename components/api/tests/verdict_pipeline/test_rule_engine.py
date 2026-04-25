@@ -1,5 +1,4 @@
 from __future__ import annotations
-import pytest
 from app.verdict_pipeline.rule_engine import evaluate_rules
 
 
