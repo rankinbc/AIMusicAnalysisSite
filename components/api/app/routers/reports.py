@@ -20,4 +20,13 @@ async def get_shared_report(
     analysis = result.scalar_one_or_none()
     if not analysis:
         raise HTTPException(status_code=404, detail="Report not found")
-    return {"result": analysis.final_json}
+    payload: dict = {"result": analysis.final_json}
+    payload["verdicts"] = (
+        list((analysis.verdicts_payload or {}).get("verdicts", []))
+        if analysis.verdicts_payload else []
+    )
+    # NEVER include user_state on the public share endpoint
+    for v in payload["verdicts"]:
+        v["user_state"] = {"dismissed": False, "applied": False,
+                           "user_modified_fix": None, "feedback": None}
+    return payload
