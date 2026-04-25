@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -15,7 +16,7 @@ from aimusic_shared.models import AnalysisResult, UploadJob, User, VerdictUserSt
 from app.config import settings
 from app.db import AsyncSessionLocal, get_session
 from app.llm.client import CliClient, LLMClient
-from app.routers.auth import get_current_user
+from app.routers.auth import get_current_user, get_current_user_sse
 from app.verdict_pipeline import run_pipeline
 
 log = logging.getLogger(__name__)
@@ -192,6 +193,45 @@ async def feedback(
     )
     await db.execute(stmt)
     await db.commit()
+
+
+@router.get("/reports/{job_id}/verdicts/stream")
+async def stream_verdicts(
+    job_id: uuid.UUID,
+    user: User = Depends(get_current_user_sse),
+    db: AsyncSession = Depends(get_session),
+):
+    _, result = await _load_job_for_user(db, job_id=job_id, user_id=user.id)
+    analysis = result.final_json
+
+    async def event_generator():
+        import json as _json
+        llm = _get_llm_client()
+        try:
+            async for ev in run_pipeline(
+                analysis, llm=llm, timeout_s=settings.verdict_cli_timeout_s,
+            ):
+                yield (
+                    f"event: {ev.kind}\n"
+                    f"data: {_json.dumps(ev.payload)}\n\n"
+                )
+                if ev.kind == "complete":
+                    # Persist final payload synchronously so subsequent
+                    # GET /verdicts hits cache.
+                    expected = _expected_prompt_version_set()
+                    result.verdicts_payload = {"verdicts": ev.payload["verdicts"]}
+                    result.verdicts_generated_at = datetime.now(tz=timezone.utc)
+                    result.verdicts_prompt_version_set = expected
+                    result.verdicts_model = "claude-cli"
+                    await db.commit()
+        except Exception as e:
+            log.exception("SSE stream failed")
+            yield f"event: error\ndata: {_json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache",
+                                      "Connection": "keep-alive",
+                                      "X-Accel-Buffering": "no"})
 
 
 async def _job_id_for_verdict(
