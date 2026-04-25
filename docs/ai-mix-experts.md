@@ -19,10 +19,17 @@ An expert analysis panel on the report page that routes a completed mix analysis
 
 | Env var | Required | Description |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Yes | API key for the Claude API — set in `components/api/.env` |
+| `ANTHROPIC_API_KEY` | In production | API key for the Anthropic API |
+| `USE_CLAUDE_CLI` | No | Set to `true` in dev to use your Claude subscription instead of an API key |
 | `OUTPUT_DIR` | No | Where analysis JSON files are stored. Defaults to `output`. Must contain `analysis_results/{job_id}.json` |
 
-Add to `components/api/.env`:
+**Development** — use your Claude subscription (no API key needed):
+```
+USE_CLAUDE_CLI=true
+```
+Requires the `claude` CLI to be installed and logged in (`claude --version` to verify).
+
+**Production** — use Anthropic API key:
 ```
 ANTHROPIC_API_KEY=sk-ant-...
 ```
