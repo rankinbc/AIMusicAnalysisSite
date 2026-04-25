@@ -73,6 +73,41 @@ class AnalysisResult(Base):
     phase_results: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     final_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     share_token: Mapped[str] = mapped_column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()), index=True)
+    verdicts_payload: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    verdicts_generated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    verdicts_prompt_version_set: Mapped[Optional[str]] = mapped_column(
+        String(2000), nullable=True
+    )
+    verdicts_model: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     job: Mapped[UploadJob] = relationship("UploadJob", back_populates="result", lazy="noload")
+
+
+class VerdictUserState(Base):
+    __tablename__ = "verdict_user_state"
+
+    verdict_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("upload_jobs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    dismissed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    applied: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    user_modified_fix: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    feedback: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
