@@ -5,10 +5,13 @@ import MixScore from '../features/report/MixScore'
 import StreamingReadiness from '../features/report/StreamingReadiness'
 import FrequencyChart from '../features/report/FrequencyChart'
 import CoachPanel from '../features/report/CoachPanel'
+import { VerdictsPanel } from '../features/verdicts'
+import type { Verdict } from '../types/verdicts'
 
 export default function SharedReportPage() {
   const { token } = useParams<{ token: string }>()
   const [pipeline, setPipeline] = useState<PipelineResult | null>(null)
+  const [verdicts, setVerdicts] = useState<Verdict[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -19,7 +22,10 @@ export default function SharedReportPage() {
         if (!r.ok) throw new Error('Report not found')
         return r.json()
       })
-      .then((data) => setPipeline(data.result as PipelineResult))
+      .then((data) => {
+        setPipeline(data.result as PipelineResult)
+        setVerdicts((data.verdicts as Verdict[]) ?? [])
+      })
       .catch(() => setError('Report not found or has been removed.'))
       .finally(() => setLoading(false))
   }, [token])
@@ -91,6 +97,15 @@ export default function SharedReportPage() {
         />
 
         <FrequencyChart bands={bands} />
+
+        {verdicts.length > 0 && (
+          <VerdictsPanel
+            jobId="shared"
+            sseToken=""
+            trackName="Shared track"
+            preloadedVerdicts={verdicts}
+          />
+        )}
 
         <div className="rounded-2xl bg-gray-900 p-6 text-center">
           <p className="text-lg font-semibold text-white">Want a full analysis of your own track?</p>
