@@ -1,3 +1,7 @@
+---
+version: 1.0.0
+---
+
 # Mix Triage Router
 
 ## Your Task
@@ -514,3 +518,28 @@ Sections:    5 detected | Drop/Breakdown contrast: 4.2 dB ⚠️ LOW
 - Do NOT use generic statements like "some issues detected"
 - Do NOT skip the "What's Working" section
 - Do NOT forget to include specific values from the JSON
+
+---
+
+## Required Output
+
+Respond ONLY with JSON matching this schema. No prose, no code fences, no commentary outside the JSON object.
+
+```
+{
+  "specialists_to_run": [
+    { "name": "<specialist_slug>", "priority": <int 1-10>, "focus": "<short>" }
+  ],
+  "skip": ["<specialist_slug>", ...],
+  "rationale": "<one sentence>",
+  "estimated_total_tokens": <int>
+}
+```
+
+Valid `name` values (snake_case): low_end, frequency_balance, dynamics,
+stereo_phase, loudness, sections, trance_arrangement, stem_reference,
+harmonic, clarity, spatial, surround, playback, overall, gain_staging,
+stereo_field, frequency_collision, humanization, section_contrast, density,
+chord_harmony, device_chain, priority_summary.
+
+Lower `priority` numbers run first.

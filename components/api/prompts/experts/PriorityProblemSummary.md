@@ -1,3 +1,7 @@
+---
+version: 1.0.0
+---
+
 # Prompt 9: Priority Problem Summary
 
 ## Your Task
@@ -411,3 +415,59 @@ EXPECTED IMPROVEMENT: Clean headroom, clearer mix, punchier master.
 - Don't give 50 things to fix — give 5 that matter most
 - Don't skip the time estimates — users need to know effort required
 - Don't end without clear next steps — what should they do RIGHT NOW
+
+---
+
+## Required Output
+
+Respond ONLY with JSON matching this schema. No prose, no code fences, no commentary outside the JSON object.
+
+```
+{
+  "specialist": "<this specialist's slug, snake_case>",
+  "verdicts": [
+    {
+      "severity": "critical" | "severe" | "moderate" | "minor" | "win",
+      "category": "<category slug>",
+      "confidence": <float 0-1>,
+      "headline": "<short, ≤80 chars>",
+      "summary": "<≤300 chars>",
+      "evidence": [
+        {
+          "metric": "<dotted path in analysis.json — must resolve>",
+          "value": <number or null>,
+          "expected_range": [<lo>, <hi>] or null,
+          "label": "<≤60 chars>",
+          "frequency_range_hz": [<lo>, <hi>] or null,
+          "stems": [<stem names>] or null
+        }
+      ],
+      "fix": {
+        "target": { "type": "stem"|"master"|"bus", "name": "<name>" },
+        "section": { "start_seconds": <num>, "end_seconds": <num>,
+                     "section_type": "intro|build|drop|breakdown|outro|null" } or null,
+        "dsp_chain": [
+          { "type": "<allowed DSP type>", "params": { ... } }
+        ],
+        "sidechain": { "source_stem": "<stem>", "depth_db": <num>,
+                       "release_ms": <num> } or null,
+        "expected_outcome": "<one sentence>",
+        "ableton_hint": { "device": "<name>", "band": <int>,
+                          "preset_name": "<name>" } or null
+      } or null,
+      "why_it_matters": "<≤200 chars>"
+    }
+  ]
+}
+```
+
+Constraints (any violation → the verdict will be rejected):
+
+- `evidence[].metric` MUST be a dotted path that resolves in the analysis JSON. NEVER invent metric paths.
+- Allowed DSP types: peaking_eq, low_shelf, high_shelf, high_pass, low_pass,
+  compressor, multiband_compressor, limiter, gain, stereo_width, sidechain.
+- Param ranges: gain_db ∈ [-24, 24], frequency_hz ∈ [20, 22000], q ∈ [0.1, 18],
+  ratio ∈ [1, 20], threshold_db ∈ [-60, 0], attack_ms ∈ [0.1, 1000],
+  release_ms ∈ [1, 5000], ceiling_db ∈ [-6, 0], width_pct ∈ [0, 200].
+- `severity` must match the verdict's actual impact — over-claiming downgrades silently.
+- Omit `fix` (use `null`) for pure-observation verdicts (wins, key-detection notes, etc.).
