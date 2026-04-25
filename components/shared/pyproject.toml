@@ -9,6 +9,7 @@ description = "Shared SQLAlchemy ORM models for AI Music Analyzer — single sou
 dependencies = [
     "sqlalchemy>=2.0.0",
     "psycopg2-binary",
+    "python-ulid>=2.2",
 ]
 
 [tool.setuptools.packages.find]
