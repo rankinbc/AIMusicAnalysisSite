@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
@@ -23,6 +23,9 @@ _MAGIC: list[bytes] = [
     b"RIFF",      # WAV (RIFF container — 4-byte check; full WAV has 'WAVE' at offset 8)
 ]
 
+_ALS_MAGIC = b"\x1f\x8b"  # gzip magic bytes (.als files are gzip-compressed XML)
+ALS_MAX_BYTES = 50 * 1024 * 1024  # 50 MB
+
 
 def validate_audio_magic(header: bytes) -> bool:
     """Return True if the header starts with a known audio magic byte sequence."""
@@ -32,10 +35,16 @@ def validate_audio_magic(header: bytes) -> bool:
     return False
 
 
+def validate_als_magic(header: bytes) -> bool:
+    return header[:2] == _ALS_MAGIC
+
+
 @router.post("/", response_model=UploadResponse)
 async def upload_audio(
     file: UploadFile = File(...),
     reference: UploadFile | None = File(None),
+    track_name: str | None = Form(None),
+    als: UploadFile | None = File(None),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> UploadResponse:
@@ -69,18 +78,35 @@ async def upload_audio(
         ref_key = await storage.save(reference, prefix="ref_")
         reference_path = str(storage.get_path(ref_key))
 
+    # --- Optional ALS project file ---
+    als_file_path: str | None = None
+    if als and als.filename:
+        if als.size and als.size > ALS_MAX_BYTES:
+            raise HTTPException(status_code=413, detail="ALS file too large (max 50 MB)")
+        als_header = await als.read(4)
+        if not validate_als_magic(als_header):
+            raise HTTPException(
+                status_code=415,
+                detail="Invalid ALS file — must be a gzip-compressed Ableton Live Set",
+            )
+        await als.seek(0)
+        als_key = await storage.save(als, prefix="als_")
+        als_file_path = str(storage.get_path(als_key))
+
     # --- Create job record (state in PostgreSQL, NOT Celery) ---
     job = UploadJob(
         user_id=current_user.id,
         file_path=file_path,
         reference_path=reference_path,
+        als_file_path=als_file_path,
+        track_name=track_name.strip() if track_name else None,
     )
     session.add(job)
     await session.commit()
 
     # --- Dispatch Celery task ---
     task_id = dispatch_analysis_job(
-        str(job.id), file_path, reference_path, str(current_user.id)
+        str(job.id), file_path, reference_path, str(current_user.id), als_file_path
     )
     job.task_id = task_id
     await session.commit()
