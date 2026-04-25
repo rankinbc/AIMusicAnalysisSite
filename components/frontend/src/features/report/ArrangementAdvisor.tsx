@@ -99,7 +99,7 @@ export default function ArrangementAdvisor(props: Props) {
               <div
                 key={i}
                 className={`${SECTION_COLOR[s.section_type] ?? 'bg-gray-700'} flex items-center justify-center`}
-                style={{ flex: s.duration }}
+                style={{ flexGrow: s.duration, flexShrink: 1, flexBasis: 0, minWidth: 0 }}
                 title={`${s.section_type} — ${s.bars} bars (${s.time_range})`}
               >
                 <span className="text-white text-xs font-medium truncate px-1">{s.section_type.slice(0, 3)}</span>

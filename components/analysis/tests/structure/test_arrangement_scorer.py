@@ -55,10 +55,10 @@ def test_score_with_sections_returns_grade():
     ])
     scorer = ArrangementScorer()
     result = scorer.score(structure)
-    assert result.overall_score > 0
-    assert result.grade in ("A", "B", "C", "D", "F")
+    assert result.overall_score >= 70   # well-structured track with all required sections
     assert result.has_intro is True
     assert result.has_drop is True
+    assert result.has_buildup is True
 
 
 def test_phase1_adapter_maps_labels():

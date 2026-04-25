@@ -15,6 +15,8 @@ This adapter converts that into the dataclass form expected by
 """
 from __future__ import annotations
 
+import math
+
 from audio_analysis.structure.models import StructureResult, Section, SectionType
 
 
@@ -43,7 +45,7 @@ def adapt(structure_dict: dict, bpm: float, duration_seconds: float) -> Structur
         duration_seconds:  Track duration from Phase 1.
     """
     raw_sections = structure_dict.get("sections", [])
-    if not raw_sections or bpm <= 0:
+    if not raw_sections or not math.isfinite(bpm) or bpm <= 0:
         return StructureResult(
             success=False,
             detection_method="all_in_one_fix",

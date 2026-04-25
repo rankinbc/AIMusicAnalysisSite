@@ -251,7 +251,7 @@ class TestPipeline:
         wav = make_test_wav(tmp_path)
         with patch("audio_analysis.phases.phase4_stems.get_model", return_value=None):
             result = run_pipeline(str(wav))
-        assert len(result["phases"]) == 7
+        assert len(result["phases"]) == 8
         assert result["grade"] in ["A", "B", "C", "D", "F"]
 
     def test_phase_failure_does_not_abort_pipeline(self, tmp_path):
@@ -268,12 +268,12 @@ class TestPipeline:
                 result = run_pipeline(str(wav))
 
         phases = result["phases"]
-        assert len(phases) == 7
+        assert len(phases) == 8
         failed = [p for p in phases if p["status"] == "failed"]
         assert any(p["phase"] == 3 for p in failed)
-        # Phases 4-7 still ran regardless of phase 3 failure
+        # Phases 4-8 still ran regardless of phase 3 failure
         later = [p for p in phases if p["phase"] > 3]
-        assert len(later) == 4
+        assert len(later) == 5
 
     def test_pipeline_cleans_up_temp_wav(self, tmp_path):
         """Temporary WAV should be deleted after pipeline completes."""
