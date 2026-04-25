@@ -1,0 +1,1 @@
+export { VerdictsPanel } from "./VerdictsPanel";
