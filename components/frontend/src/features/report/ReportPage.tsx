@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import api from '../../lib/apiClient'
+import api, { getAccessToken } from '../../lib/apiClient'
 import type { JobResultResponse } from '../../types/api'
 import FixCard, { type FixChartType } from './FixCard'
 import StereoReadout from './StereoReadout'
@@ -10,7 +10,7 @@ import ReferenceComparison from './ReferenceComparison'
 import GenreRadar from './GenreRadar'
 import ArrangementAdvisor from './ArrangementAdvisor'
 import { ALSAnalysis } from './ALSAnalysis'
-import ExpertsPanel from '../experts/ExpertsPanel'
+import { VerdictsPanel } from '../verdicts'
 
 // ── Genre frequency profile targets (typical well-mixed examples) ─────────────
 const GENRE_FREQ_MEDIANS: Record<string, Record<string, number>> = {
@@ -423,8 +423,16 @@ export default function ReportPage() {
         {/* ── ALS Analysis ── */}
         {alsData && <ALSAnalysis data={alsData as any} />}
 
-        {/* ── AI Experts ── */}
-        <ExpertsPanel jobId={id!} />
+        {/* ── Verdicts (structured AI findings) ── */}
+        {id && getAccessToken() && (
+          <VerdictsPanel
+            jobId={id}
+            sseToken={getAccessToken()!}
+            trackName={(result as unknown as { track_name?: string; original_filename?: string })?.track_name
+              ?? (result as unknown as { original_filename?: string })?.original_filename
+              ?? 'Untitled'}
+          />
+        )}
 
       </main>
     </div>
