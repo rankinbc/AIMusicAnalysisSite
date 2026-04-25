@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker compose *)",
+      "Bash(npm run *)",
+      "Bash(echo \"Frontend starting in background with PID $!\")"
+    ]
+  }
+}
