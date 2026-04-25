@@ -29,11 +29,28 @@ export default function UploadPage() {
 
   const [mainFile, setMainFile] = useState<File | null>(null)
   const [refFile, setRefFile] = useState<File | null>(null)
+  const [alsFile, setAlsFile] = useState<File | null>(null)
+  const [trackName, setTrackName] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const [fileError, setFileError] = useState('')
+  const [alsFileError, setAlsFileError] = useState('')
 
   const mainInputRef = useRef<HTMLInputElement>(null)
   const refInputRef = useRef<HTMLInputElement>(null)
+  const alsInputRef = useRef<HTMLInputElement>(null)
+
+  function validateAlsFile(file: File): string | null {
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    if (ext !== 'als') return 'Must be an Ableton Live Set (.als) file'
+    if (file.size > 50 * 1024 * 1024) return 'ALS file is too large (max 50 MB)'
+    return null
+  }
+
+  function handleAlsChange(file: File | null) {
+    if (!file) { setAlsFile(null); setAlsFileError(''); return }
+    const err = validateAlsFile(file)
+    if (err) { setAlsFileError(err); setAlsFile(null) } else { setAlsFile(file); setAlsFileError('') }
+  }
 
   const handleFileSelect = useCallback((file: File) => {
     const err = validateFile(file)
@@ -61,7 +78,7 @@ export default function UploadPage() {
     e.preventDefault()
     if (!mainFile) return
     try {
-      const jobId = await upload(mainFile, refFile ?? undefined)
+      const jobId = await upload(mainFile, refFile ?? undefined, trackName || undefined, alsFile ?? undefined)
       navigate(`/jobs/${jobId}`)
     } catch {
       // error state already set in useFileUpload
@@ -76,9 +93,9 @@ export default function UploadPage() {
       <nav className="flex items-center justify-between border-b border-gray-800 px-8 py-4">
         <span className="font-bold text-purple-400">AI Music Analyzer</span>
         <div className="flex items-center gap-4">
-          <Link to="/upload" className="text-sm text-gray-400 hover:text-white">
-            Upload
-          </Link>
+          <Link to="/upload" className="text-sm text-white">Upload</Link>
+          <Link to="/history" className="text-sm text-gray-400 hover:text-white">History</Link>
+          <Link to="/tracks" className="text-sm text-gray-400 hover:text-white">Track History</Link>
           <button
             onClick={logout}
             className="text-sm text-gray-400 hover:text-white"
@@ -139,6 +156,22 @@ export default function UploadPage() {
 
           {fileError && <p className="text-sm text-red-400">{fileError}</p>}
 
+          {/* Track name (optional — for version tracking) */}
+          <div className="rounded-xl bg-gray-900 p-4">
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Track Name{' '}
+              <span className="font-normal text-gray-500">(optional — used to track versions)</span>
+            </label>
+            <input
+              type="text"
+              value={trackName}
+              onChange={(e) => setTrackName(e.target.value)}
+              placeholder="e.g. Deadlock, Summer Demo..."
+              maxLength={200}
+              className="w-full rounded-lg bg-gray-800 border border-gray-600 px-3 py-2 text-white placeholder-gray-500 focus:border-purple-500 focus:outline-none"
+            />
+          </div>
+
           {/* Optional reference track */}
           <div className="rounded-xl bg-gray-900 p-4">
             <p className="mb-2 text-sm font-medium text-gray-300">
@@ -174,6 +207,45 @@ export default function UploadPage() {
                 }}
               />
             </div>
+          </div>
+
+          {/* Optional Ableton project file */}
+          <div className="rounded-xl bg-gray-900 p-4">
+            <p className="mb-1 text-sm font-medium text-gray-300">
+              Ableton Project File{' '}
+              <span className="text-gray-500 font-normal">(optional)</span>
+            </p>
+            <p className="mb-2 text-xs text-gray-500">
+              Upload your .als file for project health scoring, MIDI analysis, and arrangement review
+            </p>
+            {alsFile ? (
+              <div className="flex items-center gap-2 text-sm text-zinc-300 bg-zinc-800 rounded px-3 py-2">
+                <span className="flex-1 truncate">{alsFile.name}</span>
+                <button
+                  type="button"
+                  onClick={() => handleAlsChange(null)}
+                  className="text-zinc-500 hover:text-zinc-300 text-xs"
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => alsInputRef.current?.click()}
+                className="text-sm text-gray-400 hover:text-white underline"
+              >
+                + Add .als file
+              </button>
+            )}
+            <input
+              ref={alsInputRef}
+              type="file"
+              accept=".als"
+              className="hidden"
+              onChange={(e) => handleAlsChange(e.target.files?.[0] ?? null)}
+            />
+            {alsFileError && <p className="text-red-400 text-xs mt-1">{alsFileError}</p>}
           </div>
 
           {/* Upload progress bar */}

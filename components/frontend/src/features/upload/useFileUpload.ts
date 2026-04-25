@@ -9,7 +9,7 @@ interface UploadState {
 }
 
 interface UseFileUploadReturn extends UploadState {
-  upload: (file: File, referenceFile?: File) => Promise<string>
+  upload: (file: File, referenceFile?: File, trackName?: string, alsFile?: File) => Promise<string>
   cancel: () => void
 }
 
@@ -22,7 +22,7 @@ export function useFileUpload(): UseFileUploadReturn {
   })
   const xhrRef = useRef<XMLHttpRequest | null>(null)
 
-  const upload = useCallback((file: File, referenceFile?: File): Promise<string> => {
+  const upload = useCallback((file: File, referenceFile?: File, trackName?: string, alsFile?: File): Promise<string> => {
     return new Promise<string>((resolve, reject) => {
       const xhr = new XMLHttpRequest()
       xhrRef.current = xhr
@@ -31,6 +31,12 @@ export function useFileUpload(): UseFileUploadReturn {
       fd.append('file', file)
       if (referenceFile) {
         fd.append('reference', referenceFile)
+      }
+      if (trackName?.trim()) {
+        fd.append('track_name', trackName.trim())
+      }
+      if (alsFile) {
+        fd.append('als', alsFile)
       }
 
       // CRITICAL: register progress listener BEFORE xhr.open() —
@@ -44,6 +50,9 @@ export function useFileUpload(): UseFileUploadReturn {
         }
       })
 
+      // Bypass Vite proxy for uploads — proxy buffers the body and stalls XHR progress.
+      // Bearer token handles auth; CORS is configured for all localhost dev ports.
+      // upload goes through Vite proxy
       xhr.open('POST', '/api/uploads/')
 
       // Attach Bearer token
@@ -52,8 +61,8 @@ export function useFileUpload(): UseFileUploadReturn {
         xhr.setRequestHeader('Authorization', `Bearer ${token}`)
       }
 
-      // Send the httpOnly refresh cookie alongside (needed for CORS credentialed requests)
       xhr.withCredentials = true
+      
 
       xhr.onload = () => {
         if (xhr.status === 200 || xhr.status === 201) {

@@ -6,8 +6,10 @@ import logging
 import os
 from pathlib import Path
 
+from .coach import generate_coached_fixes
 from .converters import to_wav
 from .schemas import PhaseResult, PipelineResult
+from .scorers.danceability import danceability_score
 from .phases import (
     phase1_universal,
     phase2_genre,
@@ -17,6 +19,7 @@ from .phases import (
     phase6_gap,
     phase7_arrangement,
 )
+from .phases.phase8_als import analyze_als
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +37,7 @@ PHASE_DEFS = [
 def run_pipeline(
     file_path: str,
     reference_path: str | None = None,
+    als_file_path: str | None = None,
     progress_cb=None,
 ) -> PipelineResult:
     """Run all 7 analysis phases and return a structured result dict.
@@ -72,8 +76,10 @@ def run_pipeline(
                 elif phase_num == 4:
                     data = phase4_stems.analyze(wav_path, progress_cb)
                 elif phase_num == 5:
+                    genre = phase_data.get(2, {}).get("genre", "other")
                     data = phase5_reference.compare(
-                        wav_path, reference_path, phase_data.get(1, {}), progress_cb
+                        wav_path, reference_path, phase_data.get(1, {}), progress_cb,
+                        genre=genre,
                     )
                 elif phase_num == 6:
                     genre = phase_data.get(2, {}).get("genre", "other")
@@ -112,6 +118,14 @@ def run_pipeline(
                 )
                 logger.exception("Phase %d (%s) failed", phase_num, phase_name)
 
+        # Phase 8: ALS analysis (skipped when als_file_path is None)
+        if progress_cb:
+            progress_cb(8, "ALS Analysis", 0.0)
+        phase8 = analyze_als(als_file_path)
+        phase_results.append(PhaseResult(**phase8))
+        if progress_cb:
+            progress_cb(8, "ALS Analysis", 1.0)
+
         # ------------------------------------------------------------------
         # Overall score and grade
         # ------------------------------------------------------------------
@@ -124,12 +138,41 @@ def run_pipeline(
         grade = _score_to_grade(overall_score)
         top_fixes = _extract_fixes(phase_data)
 
+        # ------------------------------------------------------------------
+        # Danceability score
+        # ------------------------------------------------------------------
+        p1 = phase_data.get(1, {})
+        p2 = phase_data.get(2, {})
+        genre = p2.get("genre", "other") or "other"
+
+        onset_density = p2.get("onset_density")
+        if onset_density is None:
+            dur = p1.get("duration_seconds", 0)
+            onset_count = p2.get("onset_count", 0)
+            onset_density = float(onset_count) / dur if dur > 0 else 4.0
+
+        dance_score = danceability_score(
+            bpm=float(p1.get("bpm", 128.0)),
+            onset_density=float(onset_density),
+            low_energy=float(p1.get("low_energy", 0.2)),
+            genre=str(genre),
+        )
+
+        # ------------------------------------------------------------------
+        # Coached fixes
+        # ------------------------------------------------------------------
+        coaching = generate_coached_fixes({**p1, "top_fixes": top_fixes})
+
         return PipelineResult(
             file_path=str(file_path),
             phases=phase_results,
             overall_score=overall_score,
             grade=grade,
             top_fixes=top_fixes,
+            danceability_score=dance_score,
+            coach_name=coaching["coach_name"],
+            coach_intro=coaching["coach_intro"],
+            coached_fixes=coaching["coached_fixes"],
         )
     finally:
         if wav_path is not None and os.path.exists(wav_path):

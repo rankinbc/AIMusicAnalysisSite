@@ -31,6 +31,7 @@ def run_analysis_pipeline(
     file_path: str,
     reference_path: str | None,
     user_id: str,
+    als_file_path: str | None = None,
 ) -> dict:
     session = self._session
     update_job_phase(session, job_id, 0, "Starting", 0.0, status=JobStatus.PROCESSING)
@@ -40,6 +41,7 @@ def run_analysis_pipeline(
         pipeline_result = run_pipeline(
             file_path=file_path,
             reference_path=reference_path,
+            als_file_path=als_file_path,
             progress_cb=progress_cb,
         )
 
@@ -54,6 +56,10 @@ def run_analysis_pipeline(
 
     except Exception as exc:
         logger.exception(f"Pipeline failed for job {job_id}: {exc}")
+        try:
+            session.rollback()  # Clear any failed transaction so the FAILED update can execute
+        except Exception:
+            pass
         update_job_phase(session, job_id, 0, "Failed", 0.0, status=JobStatus.FAILED)
         raise
 
