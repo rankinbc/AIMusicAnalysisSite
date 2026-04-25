@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 from audio_analysis.als.als_parser import ALSParser, ALSProject
 from audio_analysis.als.midi_analyzer import MIDIAnalyzer, MIDIAnalysisResult
+from audio_analysis.als.health_scorer import score_health, HealthResult
 
 
 def make_minimal_als(tmp_path: Path) -> Path:
@@ -152,3 +153,31 @@ def test_midi_analyzer_detects_arrangement(tmp_path):
     assert result.arrangement is not None
     assert result.arrangement.has_arrangement_markers is True
     assert result.arrangement.total_sections == 4
+
+
+def test_health_scorer_returns_result(tmp_path):
+    als = make_minimal_als(tmp_path)
+    parser = ALSParser()
+    project = parser.parse(str(als))
+    result = score_health(project)
+    assert isinstance(result, HealthResult)
+
+
+def test_health_scorer_clean_project_scores_high(tmp_path):
+    als = make_minimal_als(tmp_path)
+    parser = ALSParser()
+    project = parser.parse(str(als))
+    result = score_health(project)
+    assert result.score >= 80
+    assert result.grade in ("A", "B")
+
+
+def test_health_scorer_fields(tmp_path):
+    als = make_minimal_als(tmp_path)
+    parser = ALSParser()
+    project = parser.parse(str(als))
+    result = score_health(project)
+    assert result.total_devices >= 0
+    assert result.disabled_devices >= 0
+    assert 0.0 <= result.clutter_pct <= 100.0
+    assert isinstance(result.track_summaries, list)
