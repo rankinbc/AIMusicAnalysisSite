@@ -18,7 +18,7 @@ export default function TriageView({ triage, state, showAll, onShowAll }: Props)
 
   const specialistsToShow = showAll
     ? (Object.keys(SPECIALIST_LABELS) as SpecialistName[])
-    : (recommended_specialists as SpecialistName[])
+    : recommended_specialists.filter((s): s is SpecialistName => s in SPECIALIST_LABELS)
 
   return (
     <div className="space-y-4">
@@ -49,7 +49,7 @@ export default function TriageView({ triage, state, showAll, onShowAll }: Props)
               onClick={onShowAll}
               className="text-xs text-gray-400 hover:text-gray-200"
             >
-              Show all 23 →
+              Show all {Object.keys(SPECIALIST_LABELS).length} →
             </button>
           )}
         </div>

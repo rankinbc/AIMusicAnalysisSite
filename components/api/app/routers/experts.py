@@ -46,7 +46,9 @@ async def _fetch_job_and_result(
 
 
 def _load_analysis(job_id: str) -> dict:
-    path = RESULTS_DIR / f"{job_id}.json"
+    path = (RESULTS_DIR / f"{job_id}.json").resolve()
+    if not path.is_relative_to(RESULTS_DIR.resolve()):
+        raise HTTPException(status_code=400, detail="Invalid job ID")
     if not path.exists():
         raise HTTPException(status_code=404, detail="Analysis file not found on disk")
     return json.loads(path.read_text(encoding="utf-8"))

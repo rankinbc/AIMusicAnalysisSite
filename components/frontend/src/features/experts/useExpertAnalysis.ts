@@ -66,7 +66,8 @@ export function useExpertAnalysis(jobId: string): ExpertAnalysisState {
           throw new Error(body?.detail ?? `HTTP ${resp.status}`)
         }
 
-        const reader = resp.body!.getReader()
+        if (!resp.body) throw new Error('Streaming not supported in this browser')
+        const reader = resp.body.getReader()
         const decoder = new TextDecoder()
         let buffer = ''
 
@@ -83,12 +84,16 @@ export function useExpertAnalysis(jobId: string): ExpertAnalysisState {
           for (const part of parts) {
             const dataLine = part.split('\n').find(l => l.startsWith('data: '))
             if (!dataLine) continue
-            const payload = JSON.parse(dataLine.slice(6))
-            if ('text' in payload) {
-              setSpecialistOutputs(prev => ({
-                ...prev,
-                [name]: (prev[name] ?? '') + payload.text,
-              }))
+            try {
+              const payload = JSON.parse(dataLine.slice(6))
+              if ('text' in payload) {
+                setSpecialistOutputs(prev => ({
+                  ...prev,
+                  [name]: (prev[name] ?? '') + payload.text,
+                }))
+              }
+            } catch {
+              // ignore malformed SSE data lines
             }
           }
         }
