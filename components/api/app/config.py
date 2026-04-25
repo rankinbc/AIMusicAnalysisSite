@@ -44,5 +44,10 @@ class Settings(BaseSettings):
     output_dir: str = "output"           # relative to project root; override via OUTPUT_DIR
     use_claude_cli: bool = False         # set USE_CLAUDE_CLI=true in dev to use subscription instead of API key
 
+    verdict_pipeline_enabled: bool = True
+    verdict_cli_timeout_s: int = 90
+    verdict_max_concurrent_generations: int = 2
+    verdict_prompt_dir: str = "prompts/experts"
+
 
 settings = Settings()
