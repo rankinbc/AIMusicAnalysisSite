@@ -7,7 +7,7 @@ celery_app = Celery(
     "worker",
     broker=REDIS_URL,
     backend=REDIS_URL,
-    include=["app.tasks"],
+    include=["app.tasks", "app.tasks_cleanup"],
 )
 
 celery_app.conf.update(
@@ -19,4 +19,10 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
     timezone="UTC",
     enable_utc=True,
+    beat_schedule={
+        "expire-stale-stem-mappings": {
+            "task": "app.tasks_cleanup.expire_stale_stem_mappings_task",
+            "schedule": 3600.0,  # hourly
+        },
+    },
 )
