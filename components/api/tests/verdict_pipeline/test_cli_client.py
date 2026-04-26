@@ -17,6 +17,10 @@ async def test_cli_client_returns_stdout():
     args = mock_run.call_args[0][0]
     assert args[0] == "claude"
     assert "--system-prompt-file" in args
+    # user message must be piped via stdin, NOT passed as a positional arg
+    # (Windows caps any single command-line arg at ~8191 chars).
+    assert "usr" not in args
+    assert mock_run.call_args.kwargs["input"] == b"usr"
 
 
 @pytest.mark.asyncio

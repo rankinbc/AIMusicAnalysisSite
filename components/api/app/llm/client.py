@@ -54,8 +54,12 @@ class CliClient(LLMClient):
                 f.write(system)
                 system_path = Path(f.name)
             try:
+                # User message piped via stdin — `-p` with no positional arg
+                # makes claude read the prompt from stdin. Required because
+                # Windows caps a single command-line arg at ~8191 chars and
+                # analysis JSON for a real track easily exceeds that.
                 cmd = [
-                    "claude", "-p", user,
+                    "claude", "-p",
                     "--system-prompt-file", str(system_path),
                     "--output-format", "text",
                 ]
@@ -63,6 +67,7 @@ class CliClient(LLMClient):
                     completed = await asyncio.to_thread(
                         subprocess.run,
                         cmd,
+                        input=user.encode("utf-8"),
                         capture_output=True,
                         timeout=timeout_s,
                     )
