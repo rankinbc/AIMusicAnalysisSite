@@ -54,8 +54,20 @@ export function adaptResult(apiResponse, filename) {
   const p2 = getPhase(2);
   const p3 = getPhase(3);
   const p4 = getPhase(4);
+  const p5 = getPhase(5);
   const p6 = getPhase(6);
   const p7 = getPhase(7);
+
+  // ── Stem analysis (only present when user uploaded stems) ────────────────
+  const stemBlock = (p4 && p4.stems && p4.stems.status === 'ok') ? p4.stems : null;
+  const stems = stemBlock ? {
+    perStem: stemBlock.per_stem ?? {},
+    clashMatrix: stemBlock.clash_matrix ?? [],
+    balanceFlags: stemBlock.balance_flags ?? [],
+  } : null;
+  const stemReferenceDeltas = (p5 && p5.stem_reference_comparison === 'ok')
+    ? (p5.per_stem_reference_deltas ?? [])
+    : null;
 
   // ── Core metadata ─────────────────────────────────────────────────────────
   const lufs  = typeof p1.lufs === 'number' ? p1.lufs : -14.0;
@@ -259,5 +271,8 @@ export function adaptResult(apiResponse, filename) {
     arrangement,
     gap,
     profileSource: p6.profile_source ?? null,
+    // stems (null when user didn't upload stems)
+    stems,
+    stemReferenceDeltas,
   };
 }

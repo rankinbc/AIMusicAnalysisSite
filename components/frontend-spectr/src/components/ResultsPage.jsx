@@ -42,7 +42,9 @@ import {
   FixCard, StreamingTable, FrequencyBars,
   StereoCard, StemClashes, ArrangementSection, GapAnalysis,
 } from './ResultsSections';
+import { PerStemBalanceCard, StemClashMatrixCard, StemReferenceDeltasCard } from './StemSections';
 import AIAnalysisPanel from './AIAnalysisModal';
+import ALSProjectPanel from './ALSProjectPanel';
 
 function StatCell({ label, value, sub, color, last, bottom }) {
   return (
@@ -169,6 +171,11 @@ export default function ResultsPage({ data, jobId, onBack, onProfile }) {
           <AIAnalysisPanel jobId={jobId} />
         )}
 
+        {/* 1c. Ableton project browser — shown only when .als was uploaded */}
+        {jobId && (
+          <ALSProjectPanel jobId={jobId} />
+        )}
+
         {/* 2. Fix Queue — ranked actionable issues */}
         <div className="fade-up" style={{ animationDelay: '0.07s' }}>
           <Label>Fix Queue — ranked by impact</Label>
@@ -181,8 +188,25 @@ export default function ResultsPage({ data, jobId, onBack, onProfile }) {
         {/* 4. Stereo Health */}
         <div className="fade-up" style={{ animationDelay: '0.17s', marginBottom: 16 }}><StereoCard data={data} /></div>
 
-        {/* 5. Stem Clashes — element conflicts */}
+        {/* 5. Stem Clashes — element conflicts (mix-level spectral) */}
         <div className="fade-up" style={{ animationDelay: '0.20s' }}><StemClashes data={data} /></div>
+
+        {/* 5b. Per-stem analysis (only when user uploaded stems) */}
+        {data.stems && (
+          <>
+            <div className="fade-up" style={{ animationDelay: '0.21s' }}>
+              <PerStemBalanceCard perStem={data.stems.perStem} />
+            </div>
+            <div className="fade-up" style={{ animationDelay: '0.22s' }}>
+              <StemClashMatrixCard clashes={data.stems.clashMatrix} />
+            </div>
+          </>
+        )}
+        {data.stemReferenceDeltas && (
+          <div className="fade-up" style={{ animationDelay: '0.23s' }}>
+            <StemReferenceDeltasCard deltas={data.stemReferenceDeltas} />
+          </div>
+        )}
 
         {/* 6. Gap Analysis — reference comparison */}
         <div className="fade-up" style={{ animationDelay: '0.23s' }}><GapAnalysis data={data} /></div>

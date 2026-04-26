@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import LoginPage from './components/LoginPage';
 import UploadPage from './components/UploadPage';
+import StemMappingPage from './components/StemMappingPage';
 import ProcessingPage from './components/ProcessingPage';
 import ResultsPage from './components/ResultsPage';
 import ProfilePage from './components/ProfilePage';
@@ -16,6 +17,7 @@ export default function App() {
   const [jobId, setJobId]       = useState(null);
   const [resultData, setResult] = useState(null);
   const [streamError, setStreamError] = useState('');
+  const [stemMapping, setStemMapping] = useState(null);  // { proposed_mapping, als_track_names }
 
   const handleLogin = () => setPage('upload');
 
@@ -33,6 +35,22 @@ export default function App() {
   };
 
   const handleJobStarted = (id) => {
+    setJobId(id);
+    setStemMapping(null);
+    setPage('processing');
+  };
+
+  const handleAwaitingMapping = (resp) => {
+    setJobId(resp.job_id);
+    setStemMapping({
+      proposed_mapping: resp.proposed_mapping ?? [],
+      als_track_names: resp.als_track_names ?? [],
+    });
+    setPage('stemMapping');
+  };
+
+  const handleMappingConfirmed = (id) => {
+    setStemMapping(null);
     setJobId(id);
     setPage('processing');
   };
@@ -84,13 +102,24 @@ export default function App() {
         <UploadPage
           file={file} setFile={setFile}
           onJobStarted={handleJobStarted}
+          onAwaitingMapping={handleAwaitingMapping}
           onLogout={handleLogout}
           onProfile={handleProfile}
           onGenreProfiles={() => { setPrevPage('upload'); setPage('genreProfiles'); }}
+          onViewResult={(adapted, id) => { setJobId(id); setResult(adapted); setPage('results'); }}
         />
       )}
       {page === 'genreProfiles' && (
         <GenreProfilePage onBack={() => setPage(prevPage)} />
+      )}
+      {page === 'stemMapping' && stemMapping && (
+        <StemMappingPage
+          jobId={jobId}
+          proposals={stemMapping.proposed_mapping}
+          alsTrackNames={stemMapping.als_track_names}
+          onConfirmed={handleMappingConfirmed}
+          onLogout={handleLogout}
+        />
       )}
       {page === 'processing' && (
         <ProcessingPage

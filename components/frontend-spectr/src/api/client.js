@@ -74,14 +74,17 @@ export async function changePassword(currentPassword, newPassword) {
   });
 }
 
-export async function uploadTrack(file, refFile, alsFile, onProgress, genreHint) {
+export async function uploadTrack(file, refFile, alsFile, onProgress, genreHint, trackName, stems, referenceStems) {
   return new Promise((resolve, reject) => {
     const form = new FormData();
     form.append('file', file);
     if (refFile) form.append('reference', refFile);
     if (alsFile) form.append('als', alsFile);
-    form.append('track_name', file.name.replace(/\.[^/.]+$/, ''));
+    const name = (trackName || file.name.replace(/\.[^/.]+$/, '')).trim();
+    if (name) form.append('track_name', name);
     if (genreHint) form.append('genre_hint', genreHint);
+    (stems ?? []).forEach(s => form.append('stems', s));
+    (referenceStems ?? []).forEach(s => form.append('reference_stems', s));
 
     const xhr = new XMLHttpRequest();
     xhr.upload.addEventListener('progress', e => {
@@ -89,7 +92,15 @@ export async function uploadTrack(file, refFile, alsFile, onProgress, genreHint)
     });
     xhr.addEventListener('load', () => {
       if (xhr.status === 401) { setToken(null); reject(new Error('Unauthorized')); return; }
-      if (xhr.status >= 400) { reject(new Error(`Upload failed (${xhr.status})`)); return; }
+      if (xhr.status >= 400) {
+        let msg = `Upload failed (${xhr.status})`;
+        try {
+          const body = JSON.parse(xhr.responseText);
+          if (body?.detail) msg = typeof body.detail === 'string' ? body.detail : (body.detail.message ?? body.detail.code ?? msg);
+        } catch {}
+        reject(new Error(msg));
+        return;
+      }
       try { resolve(JSON.parse(xhr.responseText)); }
       catch { reject(new Error('Invalid response')); }
     });
@@ -98,6 +109,18 @@ export async function uploadTrack(file, refFile, alsFile, onProgress, genreHint)
     if (_token) xhr.setRequestHeader('Authorization', `Bearer ${_token}`);
     xhr.send(form);
   });
+}
+
+export async function confirmStemMapping(jobId, mappings) {
+  return request(`/uploads/${jobId}/stems/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mappings }),
+  });
+}
+
+export async function getJobStatus(jobId) {
+  return request(`/jobs/${jobId}/status`);
 }
 
 export async function getJobs() {

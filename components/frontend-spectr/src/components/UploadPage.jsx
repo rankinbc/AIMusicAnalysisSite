@@ -1,24 +1,70 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { WaveformSVG } from './primitives';
 import { useWaveform } from '../hooks/useWaveform';
 import { uploadTrack } from '../api/client';
+import SongLibrary from './SongLibrary';
 
 const GENRES = ['Trance', 'House', 'Techno', 'D&B', 'Progressive', 'Other'];
 const GENRE_API_KEY = { Trance: 'trance', House: 'house', Techno: 'techno', 'D&B': 'dnb', Progressive: 'progressive' };
 
-export default function UploadPage({ file, setFile, onJobStarted, onLogout, onGenreProfiles, onProfile }) {
+export default function UploadPage({ file, setFile, onJobStarted, onAwaitingMapping, onLogout, onGenreProfiles, onProfile, onViewResult }) {
   const [genre, setGenre] = useState('Trance');
+  const [trackName, setTrackName] = useState('');
   const [hasRef, setHasRef] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [refFile, setRefFile] = useState(null);
   const [alsFile, setAlsFile] = useState(null);
   const [alsError, setAlsError] = useState('');
+  const [stems, setStems] = useState([]);
+  const [stemError, setStemError] = useState('');
+  const [referenceStems, setReferenceStems] = useState([]);
+  const [refStemError, setRefStemError] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
   const [error, setError] = useState('');
   const inputRef = useRef();
   const refInputRef = useRef();
   const alsInputRef = useRef();
+  const stemsInputRef = useRef();
+  const refStemsInputRef = useRef();
+
+  // Auto-fill track name from filename when file is selected
+  useEffect(() => {
+    if (file && !trackName) {
+      setTrackName(file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' '));
+    }
+  }, [file]);
+
+  const STEM_EXT = ['.flac', '.wav'];
+  const STEM_MAX_PER_FILE = 100 * 1024 * 1024;
+  const STEM_MAX_TOTAL    = 1024 * 1024 * 1024;
+  const STEM_MAX_COUNT    = 16;
+
+  function validateStems(files) {
+    if (files.length === 0) return '';
+    if (files.length > STEM_MAX_COUNT) return `Maximum ${STEM_MAX_COUNT} stem files (you selected ${files.length})`;
+    let total = 0;
+    for (const f of files) {
+      const lower = f.name.toLowerCase();
+      if (!STEM_EXT.some(ext => lower.endsWith(ext))) return `${f.name}: only FLAC and WAV stems are supported`;
+      if (f.size > STEM_MAX_PER_FILE) return `${f.name}: exceeds 100 MB`;
+      total += f.size;
+    }
+    if (total > STEM_MAX_TOTAL) return 'Total stem size exceeds 1 GB';
+    return '';
+  }
+
+  function handleStemsChange(fileList, target) {
+    const files = Array.from(fileList ?? []);
+    const err = validateStems(files);
+    if (target === 'ref') {
+      setRefStemError(err);
+      setReferenceStems(err ? [] : files);
+    } else {
+      setStemError(err);
+      setStems(err ? [] : files);
+    }
+  }
 
   function handleAlsChange(f) {
     if (!f) { setAlsFile(null); setAlsError(''); return; }
@@ -52,8 +98,17 @@ export default function UploadPage({ file, setFile, onJobStarted, onLogout, onGe
     setUploadPct(0);
     try {
       const genreHint = GENRE_API_KEY[genre] ?? null;
-      const { job_id } = await uploadTrack(file, refFile, alsFile, pct => setUploadPct(Math.round(pct * 100)), genreHint);
-      onJobStarted(job_id);
+      const resp = await uploadTrack(
+        file, refFile, alsFile,
+        pct => setUploadPct(Math.round(pct * 100)),
+        genreHint, trackName,
+        stems, referenceStems,
+      );
+      if (resp.status === 'AWAITING_STEM_MAPPING') {
+        onAwaitingMapping?.(resp);
+      } else {
+        onJobStarted(resp.job_id);
+      }
     } catch (err) {
       setError(err.message ?? 'Upload failed');
       setUploading(false);
@@ -154,6 +209,22 @@ export default function UploadPage({ file, setFile, onJobStarted, onLogout, onGe
           )}
         </div>
 
+        {/* Track name input */}
+        <div className="fade-up" style={{ marginTop: 20, width: '100%', maxWidth: 560, animationDelay: '0.08s' }}>
+          <input
+            type="text"
+            placeholder="Track name (auto-filled from filename)"
+            value={trackName}
+            onChange={e => setTrackName(e.target.value)}
+            style={{
+              width: '100%', padding: '10px 14px', borderRadius: 8,
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              color: 'var(--text)', fontSize: 13, outline: 'none',
+              fontFamily: 'JetBrains Mono, monospace', boxSizing: 'border-box',
+            }}
+          />
+        </div>
+
         {/* Genre pills */}
         <div className="fade-up" style={{ marginTop: 24, display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', animationDelay: '0.1s' }}>
           {GENRES.map(g => (
@@ -213,6 +284,62 @@ export default function UploadPage({ file, setFile, onJobStarted, onLogout, onGe
           )}
         </div>
 
+        {/* Stems (optional) */}
+        <div className="fade-up" style={{ marginTop: 12, animationDelay: '0.22s', width: '100%', maxWidth: 560 }}>
+          <input ref={stemsInputRef} type="file" accept=".flac,.wav" multiple style={{ display: 'none' }}
+            onChange={e => handleStemsChange(e.target.files, 'mix')} />
+          {stems.length === 0 ? (
+            <button onClick={() => stemsInputRef.current.click()} style={{
+              background: 'none', color: 'var(--muted)', fontSize: 13,
+              borderBottom: '1px dashed var(--dim)', paddingBottom: 2,
+            }}>+ Add stems (optional, for per-stem analysis)</button>
+          ) : (
+            <div style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span className="mono" style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                  {stems.length} stem{stems.length === 1 ? '' : 's'} ·{' '}
+                  {(stems.reduce((s, f) => s + f.size, 0) / 1024 / 1024).toFixed(1)} MB
+                </span>
+                <button onClick={() => { setStems([]); setStemError(''); }}
+                  style={{ background: 'none', color: 'var(--muted)', fontSize: 12 }}>✕</button>
+              </div>
+              <div className="mono" style={{ fontSize: 11, color: 'var(--cyan)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {stems.map(s => s.name).join('  ·  ')}
+              </div>
+            </div>
+          )}
+          {stemError && (
+            <div className="mono" style={{ marginTop: 6, fontSize: 11, color: 'var(--red)' }}>{stemError}</div>
+          )}
+        </div>
+
+        {/* Reference stems (only if reference track is set) */}
+        {hasRef && refFile && (
+          <div className="fade-up" style={{ marginTop: 8, animationDelay: '0.24s', width: '100%', maxWidth: 560 }}>
+            <input ref={refStemsInputRef} type="file" accept=".flac,.wav" multiple style={{ display: 'none' }}
+              onChange={e => handleStemsChange(e.target.files, 'ref')} />
+            {referenceStems.length === 0 ? (
+              <button onClick={() => refStemsInputRef.current.click()} style={{
+                background: 'none', color: 'var(--muted)', fontSize: 12,
+                borderBottom: '1px dashed var(--dim)', paddingBottom: 2,
+              }}>+ Reference stems (optional, enables per-stem reference comparison)</button>
+            ) : (
+              <div style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>
+                    Ref: {referenceStems.length} stem{referenceStems.length === 1 ? '' : 's'}
+                  </span>
+                  <button onClick={() => { setReferenceStems([]); setRefStemError(''); }}
+                    style={{ background: 'none', color: 'var(--muted)', fontSize: 12 }}>✕</button>
+                </div>
+              </div>
+            )}
+            {refStemError && (
+              <div className="mono" style={{ marginTop: 6, fontSize: 11, color: 'var(--red)' }}>{refStemError}</div>
+            )}
+          </div>
+        )}
+
         {/* Upload progress */}
         {uploading && (
           <div className="fade-in" style={{ marginTop: 24, width: '100%', maxWidth: 400 }}>
@@ -241,7 +368,7 @@ export default function UploadPage({ file, setFile, onJobStarted, onLogout, onGe
           <button
             className="fade-up"
             onClick={handleAnalyze}
-            disabled={!file}
+            disabled={!file || !!stemError || !!refStemError}
             style={{
               marginTop: 32, padding: '16px 56px', borderRadius: 10,
               background: file ? 'var(--cyan)' : 'rgba(0,229,176,0.25)',
@@ -260,6 +387,12 @@ export default function UploadPage({ file, setFile, onJobStarted, onLogout, onGe
         <p className="mono fade-up" style={{ marginTop: 12, fontSize: 11, color: 'var(--muted)', animationDelay: '0.25s' }}>
           {file ? 'analysis typically takes 60–90 seconds' : 'drop or browse to get started'}
         </p>
+
+        <SongLibrary
+          onJobStarted={onJobStarted}
+          onViewResult={onViewResult}
+          onLogout={onLogout}
+        />
       </div>
     </div>
   );
