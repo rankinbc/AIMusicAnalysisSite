@@ -326,3 +326,38 @@ Language-agnostic defaults. Append your stack-specific section at the end.
 ### Task Completion
 
 - **PRP workflow**: validation gates passing = work is done.
+
+---
+
+## Stems integration (added 2026-04-26)
+
+Optional stems upload (1–16 FLAC/WAV files) unlocks per-stem analysis.
+The flow is asynchronous from the user's perspective: upload → server
+auto-matches stems to roles + .als track names → user confirms via
+`POST /uploads/{job_id}/stems/confirm` → Celery dispatches with
+`stem_paths` forwarded. Without stems the flow is bit-for-bit
+unchanged (immediate Celery dispatch).
+
+All stem logic lives in `audio_analysis.stems` (a single import
+boundary). Phases 4 and 5 call into it conditionally; existing fields
+in their results are unchanged. Three new verdict specialists
+(`stem_balance`, `stem_stereo_width`, `stem_reference_delta`) are
+gated by Triage so they only run when `phase4.stems.status == "ok"`.
+
+Curated reference library has pre-computed Demucs caches at
+`data/reference_library/_stems_cache/<track_id>.stems.json`. Build them
+offline:
+```
+python -m audio_analysis.reference_library.pre_demucs \
+    --library data/reference_library/ --out data/reference_library/_stems_cache/
+```
+We never run Demucs at request time on user-uploaded references.
+
+Stale `AWAITING_STEM_MAPPING` jobs (>24h) are auto-failed by an hourly
+beat task that also purges their upload directories.
+
+**Frontend integration is deferred** — the actual frontend in this
+branch (`components/frontend-spectr/`) is vanilla `.jsx` (no
+TypeScript / Tailwind / shadcn / vitest / Playwright). A separate
+follow-up plan will wire the upload + mapping + report UI to the
+backend changes that are now in place.

@@ -56,3 +56,46 @@ components/analysis/
 ---
 
 **To extend this component**: edit `PRPs/source/INITIAL.md` and run `/generate-prp`. Don't modify files here directly for new work — let the PRP drive it.
+
+---
+
+## stems/ module — per-stem analysis (added 2026-04-26)
+
+When the user uploads individual stems alongside the mix, all stem
+logic lives in `audio_analysis.stems`. Phases 4 and 5 call into it
+conditionally; the public package surface is small and stable:
+
+```python
+from audio_analysis.stems import (
+    detect_role,                  # filename + spectral role classification
+    propose_mapping,              # auto-mapping for the confirmation UI
+    validate_confirmed_mapping,   # server-side guard on confirmed mappings
+    analyze,                      # per-stem metrics + clash matrix
+    compare,                      # per-stem reference deltas
+)
+```
+
+Phases 4 and 5 keep their existing output schemas and add
+`phase4.stems` / `phase5.per_stem_reference_deltas` only when stems
+are present. Three verdict specialists (`stem_balance`,
+`stem_stereo_width`, `stem_reference_delta`) run only when stems exist;
+two existing specialists (`frequency_collision`, `frequency_balance`)
+gracefully use the richer data when available.
+
+## Pre-Demucs runbook (admin / one-off)
+
+Curated reference tracks in `data/reference_library/` are
+pre-processed offline so phase 5 can do per-stem reference comparison
+without paying Demucs cost per request:
+
+```bash
+python -m audio_analysis.reference_library.pre_demucs \
+    --library data/reference_library/ \
+    --out     data/reference_library/_stems_cache/ \
+    [--track <id>]
+```
+
+Idempotent — already-cached tracks (cache file newer than source) are
+skipped. Without the cache, phase 5 still works but falls back to
+full-mix comparison when the user provides stems against a curated
+reference. User-uploaded reference stems bypass the cache entirely.
