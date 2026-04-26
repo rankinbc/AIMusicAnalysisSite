@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Float, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Float, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -28,6 +28,7 @@ class JobStatus(str, enum.Enum):
     PROCESSING = "PROCESSING"
     COMPLETE = "COMPLETE"
     FAILED = "FAILED"
+    AWAITING_STEM_MAPPING = "AWAITING_STEM_MAPPING"
 
 
 class User(Base):
@@ -40,6 +41,24 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     jobs: Mapped[list[UploadJob]] = relationship("UploadJob", back_populates="user", lazy="noload")
+
+
+class Song(Base):
+    """One entry per track name per user — stores the latest uploaded file paths."""
+    __tablename__ = "songs"
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_songs_user_name"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    file_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    reference_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    als_file_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    genre_hint: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    jobs: Mapped[list["UploadJob"]] = relationship("UploadJob", back_populates="song", lazy="noload")
 
 
 class UploadJob(Base):
@@ -57,11 +76,15 @@ class UploadJob(Base):
     genre_hint: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     task_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     track_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True, index=True)
+    song_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("songs.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    stem_paths_raw: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    stem_paths: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
     user: Mapped[User] = relationship("User", back_populates="jobs", lazy="noload")
+    song: Mapped[Optional["Song"]] = relationship("Song", back_populates="jobs", lazy="noload")
     result: Mapped[Optional[AnalysisResult]] = relationship("AnalysisResult", back_populates="job", lazy="noload")
 
 
@@ -81,6 +104,7 @@ class AnalysisResult(Base):
         String(2000), nullable=True
     )
     verdicts_model: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    stem_metrics: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     job: Mapped[UploadJob] = relationship("UploadJob", back_populates="result", lazy="noload")
