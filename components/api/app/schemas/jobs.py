@@ -3,6 +3,13 @@ from typing import Any
 from pydantic import BaseModel
 
 
+class StemMappingProposalDTO(BaseModel):
+    file: str
+    proposed_role: str
+    proposed_als_track: str | None
+    confidence: float
+
+
 class JobStatus(BaseModel):
     job_id: str
     status: str
@@ -10,6 +17,8 @@ class JobStatus(BaseModel):
     phase_name: str
     phase_pct: float
     has_als: bool = False
+    proposed_mapping: list[StemMappingProposalDTO] | None = None
+    als_track_names: list[str] | None = None
 
 
 class JobResult(BaseModel):

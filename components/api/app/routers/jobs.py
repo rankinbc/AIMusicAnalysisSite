@@ -78,6 +78,31 @@ async def get_job_status(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    proposed_mapping = None
+    als_track_names = None
+    if job.status.value == "AWAITING_STEM_MAPPING" and job.stem_paths_raw:
+        from pathlib import Path
+        from audio_analysis.stems import propose_mapping
+        from ..schemas.jobs import StemMappingProposalDTO
+        from .uploads import _parse_als_track_names
+
+        als_track_names = (
+            _parse_als_track_names(job.als_file_path) if job.als_file_path else None
+        ) or []
+        proposals = propose_mapping(
+            [Path(p) for p in job.stem_paths_raw],
+            als_track_names or None,
+        )
+        proposed_mapping = [
+            StemMappingProposalDTO(
+                file=p.file.name,
+                proposed_role=p.proposed_role.value,
+                proposed_als_track=p.proposed_als_track,
+                confidence=p.confidence,
+            )
+            for p in proposals
+        ]
+
     return JobStatusSchema(
         job_id=str(job.id),
         status=job.status.value,
@@ -85,6 +110,8 @@ async def get_job_status(
         phase_name=job.phase_name,
         phase_pct=job.phase_pct,
         has_als=job.als_file_path is not None,
+        proposed_mapping=proposed_mapping,
+        als_track_names=als_track_names,
     )
 
 
