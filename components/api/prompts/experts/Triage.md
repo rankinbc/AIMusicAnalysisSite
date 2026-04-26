@@ -540,6 +540,20 @@ Valid `name` values (snake_case): low_end, frequency_balance, dynamics,
 stereo_phase, loudness, sections, trance_arrangement, stem_reference,
 harmonic, clarity, spatial, surround, playback, overall, gain_staging,
 stereo_field, frequency_collision, humanization, section_contrast, density,
-chord_harmony, device_chain, priority_summary.
+chord_harmony, device_chain, priority_summary, stem_balance,
+stem_stereo_width, stem_reference_delta.
+
+## Stem-aware specialists (route ONLY when stems are present)
+
+When `phase4.stems.status == "ok"` (the user provided individual stems):
+- Route `stem_balance` if `phase4.stems.balance_flags` is non-empty.
+- Route `stem_stereo_width` if `phase4.stems.per_stem` has any entries
+  with notably extreme stereo_width values for their role.
+- Route `stem_reference_delta` if `phase5.stem_reference_comparison ==
+  "ok"` AND `phase5.per_stem_reference_deltas` has warning/critical
+  entries.
+
+When stems are absent or `phase4.stems.status != "ok"`, do NOT route
+any of those three — they have nothing to operate on.
 
 Lower `priority` numbers run first.

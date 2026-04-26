@@ -28,6 +28,9 @@ SLUG_TO_FILENAME: dict[str, str] = {
     "chord_harmony": "ChordHarmonyAnalysis",
     "device_chain": "DeviceChainAnalysis",
     "priority_summary": "PriorityProblemSummary",
+    "stem_balance": "StemBalance",
+    "stem_stereo_width": "StemStereoWidth",
+    "stem_reference_delta": "StemReferenceDelta",
 }
 
 SPECIALIST_SLUGS: tuple[str, ...] = tuple(SLUG_TO_FILENAME.keys())
