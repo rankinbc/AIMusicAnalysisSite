@@ -38,10 +38,71 @@ _BANDS: dict[str, tuple[int, int]] = {
 }
 
 
-def analyze(wav_path: Path, progress_cb: Callable | None = None) -> dict:
+def analyze(
+    wav_path: Path,
+    progress_cb: Callable | None = None,
+    stem_paths: dict | None = None,
+) -> dict:
     if USE_DEMUCS:
-        return _demucs_analyze(wav_path, progress_cb)
-    return _spectral_analyze(wav_path, progress_cb)
+        result = _demucs_analyze(wav_path, progress_cb)
+    else:
+        result = _spectral_analyze(wav_path, progress_cb)
+
+    if stem_paths:
+        result["stems"] = _analyze_user_stems(stem_paths)
+    return result
+
+
+def _analyze_user_stems(stem_paths: dict) -> dict:
+    """Run the stems module on user-provided stems and serialize for JSON."""
+    from ..stems import analyze as analyze_stems
+    from ..stems.types import StemRole
+
+    typed_paths = {
+        StemRole(r) if isinstance(r, str) else r: Path(p) if isinstance(p, str) else p
+        for r, p in stem_paths.items()
+    }
+    try:
+        stem_result = analyze_stems(typed_paths)
+    except Exception as exc:
+        logger.exception("stem analysis failed")
+        return {"status": "failed", "error": str(exc)}
+
+    return {
+        "status": "ok",
+        "per_stem": {
+            role.value: {
+                "duration_s": m.duration_s,
+                "peak_db": m.peak_db,
+                "rms_db": m.rms_db,
+                "lufs_integrated": m.lufs_integrated,
+                "dynamic_range_db": m.dynamic_range_db,
+                "band_energy_db": {b.value: v for b, v in m.band_energy_db.items()},
+                "spectral_centroid_hz": m.spectral_centroid_hz,
+                "dominant_frequencies_hz": m.dominant_frequencies_hz,
+                "stereo_width": m.stereo_width,
+                "pan_estimate": m.pan_estimate,
+                "is_mono": m.is_mono,
+            }
+            for role, m in stem_result.per_stem.items()
+        },
+        "clash_matrix": [
+            {
+                "stem_a": c.stem_a.value, "stem_b": c.stem_b.value,
+                "band": c.band.value, "overlap_severity": c.overlap_severity,
+                "severity_tier": c.severity_tier,
+            }
+            for c in stem_result.clash_matrix
+        ],
+        "balance_flags": [
+            {
+                "role": b.role.value, "metric": b.metric, "observed": b.observed,
+                "expected_range": list(b.expected_range), "direction": b.direction,
+                "severity_tier": b.severity_tier,
+            }
+            for b in stem_result.balance_flags
+        ],
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from pathlib import Path
 
 from .coach import generate_coached_fixes
@@ -40,6 +41,8 @@ def run_pipeline(
     als_file_path: str | None = None,
     genre_hint: str | None = None,
     progress_cb=None,
+    stem_paths: dict | None = None,
+    reference_stem_paths: dict | None = None,
 ) -> PipelineResult:
     """Run all 7 analysis phases and return a structured result dict.
 
@@ -64,6 +67,8 @@ def run_pipeline(
         for phase_num, phase_name in PHASE_DEFS:
             if progress_cb:
                 progress_cb(phase_num, phase_name, 0.0)
+            logger.info("phase %d (%s) starting", phase_num, phase_name)
+            t0 = time.perf_counter()
             try:
                 if phase_num == 1:
                     data = phase1_universal.analyze(wav_path, progress_cb)
@@ -75,7 +80,7 @@ def run_pipeline(
                         wav_path, genre, phase_data.get(1, {}), progress_cb
                     )
                 elif phase_num == 4:
-                    data = phase4_stems.analyze(wav_path, progress_cb)
+                    data = phase4_stems.analyze(wav_path, progress_cb, stem_paths=stem_paths)
                 elif phase_num == 5:
                     genre = phase_data.get(2, {}).get("genre", "other")
                     data = phase5_reference.compare(
@@ -99,6 +104,8 @@ def run_pipeline(
                 else:
                     data = {}
 
+                elapsed = time.perf_counter() - t0
+                logger.info("phase %d (%s) done in %.1fs", phase_num, phase_name, elapsed)
                 phase_data[phase_num] = data
                 phase_results.append(
                     PhaseResult(
@@ -113,6 +120,8 @@ def run_pipeline(
                     progress_cb(phase_num, phase_name, 1.0)
 
             except Exception as exc:
+                elapsed = time.perf_counter() - t0
+                logger.exception("phase %d (%s) FAILED after %.1fs: %s", phase_num, phase_name, elapsed, exc)
                 phase_results.append(
                     PhaseResult(
                         phase=phase_num,
@@ -122,7 +131,6 @@ def run_pipeline(
                         error=str(exc),
                     )
                 )
-                logger.exception("Phase %d (%s) failed", phase_num, phase_name)
 
         # Phase 8: ALS analysis (skipped when als_file_path is None)
         if progress_cb:
