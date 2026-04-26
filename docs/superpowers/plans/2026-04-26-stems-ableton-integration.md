@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-04-26-stems-ableton-integration-design.md`
 
+> **Execution scope (2026-04-26):** Tasks 1–21, 30–33, 35 only. The frontend tasks (22–29) and the Playwright E2E (34) are deferred to a separate follow-up plan because the actual frontend (`components/frontend-spectr/`) uses vanilla `.jsx` with no TypeScript / Tailwind / shadcn / vitest / Playwright. See the banner above Task 22 for details.
+
 ---
 
 ## File Structure (decomposition lock-in)
@@ -73,7 +75,7 @@
 | File | Why |
 |---|---|
 | `components/shared/aimusic_shared/models.py` | Add `stem_paths_raw`, `stem_paths`, `stem_metrics` columns; extend status enum with `AWAITING_STEM_MAPPING` |
-| `migrations/versions/<new>.py` | Alembic migration for the above |
+| `components/api/alembic/versions/009_add_stem_columns.py` | Alembic migration for the above |
 | `components/api/app/routers/uploads.py` | Accept `stems[]` and `reference_stems[]`; validate; build proposed_mapping; set status |
 | `components/api/app/routers/__init__.py` | Register the new `stems` router |
 | `components/api/app/main.py` | Include the new router |
@@ -306,7 +308,7 @@ git commit -m "feat(stems): add type definitions for stems module"
 
 **Files:**
 - Modify: `components/shared/aimusic_shared/models.py`
-- Create: `migrations/versions/<timestamp>_add_stem_columns.py`
+- Create: `components/api/alembic/versions/009_add_stem_columns.py`
 - Test: `components/api/tests/test_models_stem_columns.py`
 
 - [ ] **Step 2.1: Write failing test**
@@ -364,7 +366,7 @@ stem_metrics: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
 Run: `cd components/api && alembic revision -m "add_stem_columns" --autogenerate`
 
-Edit the generated file in `migrations/versions/` to confirm it contains the column adds and the enum value extension. If autogenerate misses the enum value, add an explicit `op.execute("ALTER TYPE jobstatus ADD VALUE 'AWAITING_STEM_MAPPING'")` in `upgrade()` (PostgreSQL requires this for enum extensions; wrap in try/except for re-runs).
+Edit the generated file in `components/api/alembic/versions/` (numbered `009_*.py`) to confirm it contains the column adds and the enum value extension. If autogenerate misses the enum value, add an explicit `op.execute("ALTER TYPE jobstatus ADD VALUE 'AWAITING_STEM_MAPPING'")` in `upgrade()` (PostgreSQL requires this for enum extensions; wrap in try/except for re-runs).
 
 - [ ] **Step 2.5: Apply migration locally**
 
@@ -380,7 +382,7 @@ Expected: 3 passed.
 
 ```bash
 git add components/shared/aimusic_shared/models.py \
-        migrations/versions/*.py \
+        components/api/alembic/versions/*.py \
         components/api/tests/test_models_stem_columns.py
 git commit -m "feat(db): add stem_paths and stem_metrics columns + AWAITING_STEM_MAPPING status"
 ```
@@ -2642,6 +2644,22 @@ git commit -m "feat(verdicts): teach FrequencyBalance to attribute findings to s
 
 ---
 
+---
+
+## ⛔ Tasks 22–29 and 34: DEFERRED to a follow-up plan
+
+The actual frontend in this branch is `components/frontend-spectr/` — vanilla JavaScript (`.jsx`), React 18, **no TypeScript, no Tailwind, no shadcn/ui, no vitest, no Playwright**. The tasks below were drafted assuming a TS/Tailwind/shadcn/vitest/Playwright stack that doesn't exist here. They are kept for reference only and **must be rewritten** in a follow-up plan that:
+
+1. Targets `components/frontend-spectr/src/components/*.jsx` directly (flat layout, no subdirs)
+2. Drops TypeScript types — use `src/api/stems.js` matching the existing `src/api/<feature>.js` convention
+3. Either scaffolds vitest + @testing-library OR drops the component-test steps
+4. Either scaffolds Playwright OR replaces the E2E with a manual smoke checklist
+5. Uses the existing styling primitives (`primitives.jsx`) instead of Tailwind classes
+
+After backend tasks 1–21 + 30–33 + 35 land, write the follow-up plan as `docs/superpowers/plans/<date>-stems-frontend.md`.
+
+---
+
 ## Task 22: Frontend types & API client
 
 **Files:**
@@ -3446,6 +3464,12 @@ git commit -m "feat(frontend): render stem cards on ReportPage when data present
 
 ---
 
+---
+
+## ⛔ End of deferred frontend tasks. Backend execution resumes at Task 30.
+
+---
+
 ## Task 30: Pre-Demucs CLI for curated reference library
 
 **Files:**
@@ -3875,7 +3899,7 @@ git commit -m "test(integration): add perf regression guard for stem pipeline"
 
 ---
 
-## Task 34: Playwright E2E happy path
+## Task 34: Playwright E2E happy path  ⛔ DEFERRED — see banner above Task 22
 
 **Files:**
 - Create: `components/frontend/e2e/stems-upload.spec.ts`
