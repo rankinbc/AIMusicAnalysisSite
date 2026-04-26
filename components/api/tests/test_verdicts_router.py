@@ -102,7 +102,7 @@ async def test_get_verdicts_returns_payload_when_present(patched_app):
 
     async with AsyncClient(transport=ASGITransport(app=app),
                            base_url="http://test") as client:
-        r = await client.get(f"/api/reports/{job_id}/verdicts")
+        r = await client.get(f"/reports/{job_id}/verdicts")
     assert r.status_code == 200
     body = r.json()
     assert isinstance(body["verdicts"], list)
@@ -123,7 +123,7 @@ async def test_get_verdicts_404_when_not_generated(patched_app):
 
     async with AsyncClient(transport=ASGITransport(app=app),
                            base_url="http://test") as client:
-        r = await client.get(f"/api/reports/{job_id}/verdicts")
+        r = await client.get(f"/reports/{job_id}/verdicts")
     assert r.status_code == 404
 
 
@@ -151,7 +151,7 @@ async def test_generate_returns_cached_when_payload_exists_and_versions_match(
 
     async with AsyncClient(transport=ASGITransport(app=app),
                            base_url="http://test") as client:
-        r = await client.post(f"/api/reports/{job_id}/verdicts/generate")
+        r = await client.post(f"/reports/{job_id}/verdicts/generate")
     assert r.status_code == 200
     assert r.json() == cached
 
@@ -178,7 +178,7 @@ async def test_generate_returns_202_when_uncached(patched_app, monkeypatch):
 
     async with AsyncClient(transport=ASGITransport(app=app),
                            base_url="http://test") as client:
-        r = await client.post(f"/api/reports/{job_id}/verdicts/generate")
+        r = await client.post(f"/reports/{job_id}/verdicts/generate")
     assert r.status_code == 202
     assert "generation_id" in r.json()
 
@@ -212,11 +212,11 @@ async def test_feedback_validates_kind(patched_app):
     async with AsyncClient(transport=ASGITransport(app=app),
                            base_url="http://test") as client:
         bad = await client.post(
-            f"/api/verdicts/{verdict_id}/feedback", json={"feedback": "garbage"}
+            f"/verdicts/{verdict_id}/feedback", json={"feedback": "garbage"}
         )
         assert bad.status_code == 422
         good = await client.post(
-            f"/api/verdicts/{verdict_id}/feedback", json={"feedback": "helpful"}
+            f"/verdicts/{verdict_id}/feedback", json={"feedback": "helpful"}
         )
         assert good.status_code == 204
 
@@ -247,7 +247,7 @@ async def test_dismiss_writes_user_state(patched_app):
 
     async with AsyncClient(transport=ASGITransport(app=app),
                            base_url="http://test") as client:
-        r = await client.post(f"/api/verdicts/{verdict_id}/dismiss")
+        r = await client.post(f"/verdicts/{verdict_id}/dismiss")
     assert r.status_code == 204
 
 
@@ -275,5 +275,5 @@ async def test_other_users_verdicts_404(patched_app):
 
     async with AsyncClient(transport=ASGITransport(app=app),
                            base_url="http://test") as client:
-        r = await client.get(f"/api/reports/{job_id}/verdicts")
+        r = await client.get(f"/reports/{job_id}/verdicts")
     assert r.status_code == 404

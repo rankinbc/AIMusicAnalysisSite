@@ -20,7 +20,7 @@ from app.routers.auth import get_current_user, get_current_user_sse
 from app.verdict_pipeline import run_pipeline
 
 log = logging.getLogger(__name__)
-router = APIRouter(prefix="/api", tags=["verdicts"])
+router = APIRouter(tags=["verdicts"])
 
 # Per-process semaphore — limits concurrent pipeline runs
 _GEN_SEMA = asyncio.Semaphore(settings.verdict_max_concurrent_generations)

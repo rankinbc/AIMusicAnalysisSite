@@ -66,7 +66,7 @@ async def test_stream_emits_complete_event(patched_app, monkeypatch):
     async with AsyncClient(transport=ASGITransport(app=app),
                            base_url="http://test") as client:
         async with client.stream(
-            "GET", f"/api/reports/{job_id}/verdicts/stream",
+            "GET", f"/reports/{job_id}/verdicts/stream",
         ) as r:
             assert r.status_code == 200
             assert "text/event-stream" in r.headers["content-type"]
