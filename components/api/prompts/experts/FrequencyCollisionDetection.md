@@ -358,11 +358,21 @@ Respond ONLY with JSON matching this schema. No prose, no code fences, no commen
 Constraints (any violation → the verdict will be rejected):
 
 - `evidence[].metric` MUST be a dotted path that resolves in the analysis JSON. NEVER invent metric paths.
-- Allowed DSP types: peaking_eq, low_shelf, high_shelf, high_pass, low_pass,
-  compressor, multiband_compressor, limiter, gain, stereo_width, sidechain.
+- `summary` MUST be ≤300 characters. `why_it_matters` MUST be ≤200 characters. Verdicts longer than this are rejected outright.
+- Allowed DSP types and their EXACT params (any other key — including `label`, `comment`, `note`, `description` — causes rejection):
+  - `peaking_eq`, `low_shelf`, `high_shelf`: `frequency_hz`, `gain_db`, `q`
+  - `high_pass`, `low_pass`: `frequency_hz`, `slope_db`, `q`
+  - `compressor`: `threshold_db`, `ratio`, `attack_ms`, `release_ms`, `knee_db`, `makeup_gain_db` (NOT `gain_db`)
+  - `multiband_compressor`: `bands`, `frequency_hz`, `threshold_db`, `ratio`, `attack_ms`, `release_ms`
+  - `limiter`: `ceiling_db`, `threshold_db`, `release_ms`, `lookahead_ms` (NOT `attack_ms` — limiters have zero attack)
+  - `gain`: `gain_db`
+  - `stereo_width`: `width_pct`
+  - `sidechain`: `source_stem`, `depth_db` (NOT `gain_db`), `release_ms`, `ratio`, `threshold_db`, `attack_ms`
 - Param ranges: gain_db ∈ [-24, 24], frequency_hz ∈ [20, 22000], q ∈ [0.1, 18],
-  ratio ∈ [1, 20], threshold_db ∈ [-60, 0], attack_ms ∈ [0.1, 1000],
-  release_ms ∈ [1, 5000], ceiling_db ∈ [-6, 0], width_pct ∈ [0, 200].
+  slope_db ∈ [6, 96], ratio ∈ [1, 20], threshold_db ∈ [-60, 0], attack_ms ∈ [0.1, 1000],
+  release_ms ∈ [1, 5000], knee_db ∈ [0, 24], makeup_gain_db ∈ [0, 24],
+  ceiling_db ∈ [-6, 0], lookahead_ms ∈ [0, 10], depth_db ∈ [0, 24], width_pct ∈ [0, 200].
+- Put any human-readable rationale in `expected_outcome` or `why_it_matters` — NEVER as an extra param key in `dsp_chain[].params`.
 - `severity` must match the verdict's actual impact — over-claiming downgrades silently.
 - Omit `fix` (use `null`) for pure-observation verdicts (wins, key-detection notes, etc.).
 
