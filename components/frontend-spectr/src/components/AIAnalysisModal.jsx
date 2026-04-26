@@ -1,185 +1,401 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
-import { SPECIALISTS, SPECIALIST_LABELS, runTriage, streamSpecialist } from '../api/experts.js';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { EQLoader } from './primitives.jsx';
+import { getVerdicts, streamVerdicts, dismissVerdict, giveFeedback } from '../api/verdicts.js';
 
-// ── Inline markdown renderer ──────────────────────────────────────────────────
+// ── Severity helpers ──────────────────────────────────────────────────────────
 
-function parseInline(text) {
-  const parts = [];
-  let rem = text, k = 0;
-  while (rem.length > 0) {
-    const boldIdx = rem.search(/\*\*/);
-    const codeIdx = rem.search(/`[^`]/);
-    if (boldIdx === -1 && codeIdx === -1) { parts.push(rem); break; }
-    const boldFirst = boldIdx !== -1 && (codeIdx === -1 || boldIdx <= codeIdx);
-    if (boldFirst) {
-      if (boldIdx > 0) parts.push(rem.slice(0, boldIdx));
-      const end = rem.indexOf('**', boldIdx + 2);
-      if (end === -1) { parts.push(rem); break; }
-      parts.push(<strong key={k++} style={{ color: 'var(--text)' }}>{rem.slice(boldIdx + 2, end)}</strong>);
-      rem = rem.slice(end + 2);
-    } else {
-      if (codeIdx > 0) parts.push(rem.slice(0, codeIdx));
-      const end = rem.indexOf('`', codeIdx + 1);
-      if (end === -1) { parts.push(rem); break; }
-      parts.push(
-        <code key={k++} style={{
-          fontFamily: 'JetBrains Mono, monospace', fontSize: '0.82em',
-          background: 'rgba(0,229,176,0.08)', padding: '1px 5px',
-          borderRadius: 3, color: 'var(--cyan)',
-        }}>{rem.slice(codeIdx + 1, end)}</code>
-      );
-      rem = rem.slice(end + 1);
-    }
-  }
-  return parts.length === 1 && typeof parts[0] === 'string' ? parts[0] : parts;
-}
+const SEV_COLOR = {
+  critical: 'var(--red)',
+  severe:   'var(--orange)',
+  moderate: 'var(--yellow)',
+  minor:    'var(--cyan)',
+  win:      'var(--green)',
+};
 
-function MarkdownBlock({ text, streaming }) {
-  if (!text) return null;
-  const lines = text.split('\n');
-  const elements = [];
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i];
-    if (line.startsWith('```')) {
-      const codeLines = [];
-      i++;
-      while (i < lines.length && !lines[i].startsWith('```')) { codeLines.push(lines[i]); i++; }
-      elements.push(
-        <pre key={`code-${i}`} style={{
-          background: 'rgba(0,0,0,0.4)', border: '1px solid var(--border)',
-          borderRadius: 8, padding: '12px 16px',
-          fontFamily: 'JetBrains Mono, monospace', fontSize: 12,
-          color: 'var(--muted)', overflowX: 'auto', margin: '10px 0',
-        }}><code>{codeLines.join('\n')}</code></pre>
-      );
-    } else if (line.startsWith('### ')) {
-      elements.push(<h4 key={i} style={{ fontWeight: 700, fontSize: 13, margin: '14px 0 5px', color: 'var(--text)', letterSpacing: '0.02em' }}>{parseInline(line.slice(4))}</h4>);
-    } else if (line.startsWith('## ')) {
-      elements.push(<h3 key={i} style={{ fontWeight: 700, fontSize: 15, margin: '18px 0 7px', color: 'var(--cyan)' }}>{parseInline(line.slice(3))}</h3>);
-    } else if (line.startsWith('# ')) {
-      elements.push(<h2 key={i} style={{ fontWeight: 800, fontSize: 18, margin: '22px 0 9px', color: 'var(--cyan)' }}>{parseInline(line.slice(2))}</h2>);
-    } else if (line.match(/^[-*] /)) {
-      const items = [];
-      while (i < lines.length && lines[i].match(/^[-*] /)) { items.push(lines[i].slice(2)); i++; }
-      elements.push(
-        <ul key={`ul-${i}`} style={{ margin: '8px 0', paddingLeft: 20 }}>
-          {items.map((it, j) => (
-            <li key={j} style={{ marginBottom: 4, lineHeight: 1.65, color: 'var(--text)' }}>{parseInline(it)}</li>
-          ))}
-        </ul>
-      );
-      continue;
-    } else if (line.trim() !== '') {
-      elements.push(<p key={i} style={{ margin: '7px 0', lineHeight: 1.7, color: 'var(--text)' }}>{parseInline(line)}</p>);
-    }
-    i++;
-  }
+const SEV_BG = {
+  critical: 'rgba(244,63,94,0.08)',
+  severe:   'rgba(251,146,60,0.08)',
+  moderate: 'rgba(251,191,36,0.08)',
+  minor:    'rgba(0,229,176,0.06)',
+  win:      'rgba(52,211,153,0.08)',
+};
+
+// ── Verdict card ──────────────────────────────────────────────────────────────
+
+function VerdictCard({ verdict, isExpanded, onToggle, onDismiss, onFeedback, feedback }) {
+  const { verdict_id, severity, category, headline, summary, evidence, fix, why_it_matters } = verdict;
+  const color = SEV_COLOR[severity] ?? 'var(--muted)';
+  const bg    = SEV_BG[severity]    ?? 'transparent';
+
   return (
-    <div style={{ fontSize: 14 }}>
-      {elements}
-      {streaming && (
-        <span style={{
-          display: 'inline-block', width: 7, height: 13, marginLeft: 2,
-          background: 'var(--cyan)', verticalAlign: 'text-bottom',
-          animation: 'eq 0.55s ease-in-out infinite alternate',
+    <div style={{
+      background: 'var(--surface)',
+      border: `1px solid ${isExpanded ? 'rgba(255,255,255,0.12)' : 'var(--border)'}`,
+      borderLeft: `3px solid ${color}`,
+      borderRadius: 8,
+      overflow: 'hidden',
+      transition: 'border-color 0.15s',
+      flexShrink: 0,
+    }}>
+      {/* Card header — always visible */}
+      <div
+        onClick={onToggle}
+        style={{
+          display: 'flex', alignItems: 'flex-start', gap: 10,
+          padding: '10px 14px', cursor: 'pointer',
+          background: isExpanded ? bg : 'transparent',
+        }}
+      >
+        {/* Severity dot */}
+        <div style={{
+          width: 8, height: 8, borderRadius: '50%',
+          background: color, flexShrink: 0, marginTop: 5,
+          boxShadow: `0 0 6px ${color}`,
         }} />
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+            <span className="mono" style={{
+              fontSize: 9, fontWeight: 700, letterSpacing: '0.14em',
+              textTransform: 'uppercase', color,
+            }}>
+              {severity}
+            </span>
+            <span className="mono" style={{
+              fontSize: 9, color: 'var(--muted)', letterSpacing: '0.08em',
+            }}>
+              {category?.replace(/_/g, ' ')}
+            </span>
+          </div>
+          <div style={{
+            fontWeight: 600, fontSize: 13, lineHeight: 1.4,
+            color: 'var(--text)', overflow: 'hidden',
+            display: '-webkit-box', WebkitLineClamp: isExpanded ? 'unset' : 2,
+            WebkitBoxOrient: 'vertical',
+          }}>
+            {headline}
+          </div>
+        </div>
+
+        <div style={{
+          flexShrink: 0, color: 'var(--muted)', fontSize: 11,
+          marginTop: 2, userSelect: 'none',
+        }}>
+          {isExpanded ? '▲' : '▼'}
+        </div>
+      </div>
+
+      {/* Expanded detail */}
+      {isExpanded && (
+        <div style={{ padding: '0 14px 14px', borderTop: '1px solid var(--border)' }}>
+
+          {/* Summary */}
+          {summary && (
+            <p style={{ margin: '10px 0 8px', fontSize: 13, lineHeight: 1.65, color: 'var(--text)' }}>
+              {summary}
+            </p>
+          )}
+
+          {/* Evidence */}
+          {evidence?.length > 0 && (
+            <div style={{ marginBottom: 10 }}>
+              <div className="mono" style={{
+                fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase',
+                color: 'var(--muted)', marginBottom: 5,
+              }}>Evidence</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {evidence.map((ev, i) => (
+                  <div key={i} className="mono" style={{
+                    fontSize: 11, color: 'var(--muted)',
+                    background: 'rgba(0,0,0,0.25)', borderRadius: 4, padding: '4px 8px',
+                  }}>
+                    <span style={{ color: 'var(--text)' }}>{ev.label}</span>
+                    {ev.value != null && (
+                      <span> · <span style={{ color }}>{
+                        typeof ev.value === 'number' ? ev.value.toFixed(2) : ev.value
+                      }</span></span>
+                    )}
+                    {ev.expected_range != null && (
+                      <span style={{ color: 'var(--dim)' }}>
+                        {' '}(expected {ev.expected_range[0]}–{ev.expected_range[1]})
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Fix — full prescriptive recipe */}
+          {fix && (
+            <div style={{ marginBottom: 10 }}>
+              <div className="mono" style={{
+                fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase',
+                color: 'var(--muted)', marginBottom: 5,
+              }}>Do this</div>
+              <div style={{
+                background: 'rgba(0,229,176,0.05)', border: '1px solid rgba(0,229,176,0.15)',
+                borderRadius: 5, padding: '8px 10px',
+              }}>
+                {/* Where to apply */}
+                {(fix.target?.name || fix.target?.type || fix.section) && (
+                  <div className="mono" style={{
+                    fontSize: 10, color: 'var(--muted)', letterSpacing: '0.06em',
+                    marginBottom: 6,
+                  }}>
+                    {fix.target?.type && fix.target?.name &&
+                      <span style={{ color: 'var(--cyan)' }}>
+                        {fix.target.type}: {fix.target.name}
+                      </span>}
+                    {fix.target?.type && !fix.target?.name &&
+                      <span style={{ color: 'var(--cyan)' }}>{fix.target.type}</span>}
+                    {fix.section && (
+                      <span>
+                        {(fix.target?.name || fix.target?.type) ? '  ·  ' : ''}
+                        {fix.section.section_type ?? 'section'}{' '}
+                        ({Math.round(fix.section.start_seconds ?? 0)}s–
+                        {Math.round(fix.section.end_seconds ?? 0)}s)
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* DSP chain — full per-step params */}
+                {fix.dsp_chain?.length > 0 && (
+                  <ol style={{
+                    listStyle: 'none', padding: 0, margin: '0 0 6px 0',
+                    display: 'flex', flexDirection: 'column', gap: 4,
+                  }}>
+                    {fix.dsp_chain.map((op, idx) => (
+                      <li key={idx} style={{
+                        fontSize: 12, lineHeight: 1.45, color: 'var(--text)',
+                        display: 'flex', gap: 8,
+                      }}>
+                        <span className="mono" style={{
+                          color: 'var(--muted)', fontSize: 10,
+                          minWidth: 14, paddingTop: 2,
+                        }}>{idx + 1}.</span>
+                        <span>
+                          <span className="mono" style={{
+                            color: 'var(--cyan)', fontWeight: 700,
+                            textTransform: 'lowercase',
+                          }}>
+                            {op.type?.replace(/_/g, ' ')}
+                          </span>
+                          {Object.keys(op.params ?? {}).length > 0 && (
+                            <span className="mono" style={{ color: 'var(--text)', marginLeft: 6 }}>
+                              {Object.entries(op.params).map(([k, v]) => {
+                                const unit = k.endsWith('_hz') ? ' Hz'
+                                  : k.endsWith('_db') ? ' dB'
+                                  : k.endsWith('_ms') ? ' ms'
+                                  : k.endsWith('_pct') ? '%'
+                                  : '';
+                                const display = typeof v === 'number'
+                                  ? (Number.isInteger(v) ? v : v.toFixed(2))
+                                  : v;
+                                return (
+                                  <span key={k} style={{ marginRight: 10 }}>
+                                    <span style={{ color: 'var(--muted)' }}>{k.replace(/_/g, ' ')}</span>{' '}
+                                    <span style={{ color: 'var(--text)' }}>{display}{unit}</span>
+                                  </span>
+                                );
+                              })}
+                            </span>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+
+                {/* Sidechain config */}
+                {fix.sidechain && (
+                  <div className="mono" style={{
+                    fontSize: 11, color: 'var(--text)',
+                    padding: '4px 0', borderTop: '1px solid rgba(255,255,255,0.06)',
+                    marginTop: 4,
+                  }}>
+                    <span style={{ color: 'var(--muted)' }}>sidechain:</span>{' '}
+                    <span style={{ color: 'var(--cyan)' }}>{fix.sidechain.source_stem}</span>
+                    {' → '}
+                    <span>{fix.sidechain.depth_db} dB depth</span>
+                    {fix.sidechain.release_ms != null && <span>, {fix.sidechain.release_ms} ms release</span>}
+                  </div>
+                )}
+
+                {/* Ableton hint — load this preset */}
+                {fix.ableton_hint && (fix.ableton_hint.device || fix.ableton_hint.preset_name) && (
+                  <div className="mono" style={{
+                    fontSize: 11, color: 'var(--text)',
+                    padding: '4px 0', borderTop: '1px solid rgba(255,255,255,0.06)',
+                    marginTop: 4,
+                  }}>
+                    <span style={{ color: 'var(--muted)' }}>ableton:</span>{' '}
+                    {fix.ableton_hint.device && (
+                      <span style={{ color: 'var(--cyan)' }}>{fix.ableton_hint.device}</span>
+                    )}
+                    {fix.ableton_hint.preset_name && (
+                      <span>
+                        {fix.ableton_hint.device ? '  ·  ' : ''}
+                        preset “{fix.ableton_hint.preset_name}”
+                      </span>
+                    )}
+                    {fix.ableton_hint.band != null && (
+                      <span>  ·  band {fix.ableton_hint.band}</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Expected outcome */}
+                {fix.expected_outcome && (
+                  <div style={{
+                    fontSize: 12, fontStyle: 'italic', color: 'var(--muted)',
+                    marginTop: 8, paddingTop: 6,
+                    borderTop: '1px solid rgba(255,255,255,0.06)',
+                  }}>
+                    → {fix.expected_outcome}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Why it matters */}
+          {why_it_matters && (
+            <p style={{
+              margin: '0 0 12px', fontSize: 12, lineHeight: 1.6,
+              color: 'var(--muted)', fontStyle: 'italic',
+            }}>
+              {why_it_matters}
+            </p>
+          )}
+
+          {/* Actions */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            {(['helpful', 'wrong', 'unclear']).map(fb => (
+              <button
+                key={fb}
+                onClick={e => { e.stopPropagation(); onFeedback(verdict_id, fb); }}
+                style={{
+                  background: feedback === fb ? 'rgba(0,229,176,0.15)' : 'none',
+                  border: `1px solid ${feedback === fb ? 'rgba(0,229,176,0.4)' : 'var(--border)'}`,
+                  color: feedback === fb ? 'var(--cyan)' : 'var(--muted)',
+                  fontSize: 11, padding: '3px 10px', borderRadius: 5,
+                  cursor: 'pointer', fontFamily: 'Syne',
+                }}
+              >
+                {fb === 'helpful' ? '👍' : fb === 'wrong' ? '👎' : '?'} {fb}
+              </button>
+            ))}
+            <button
+              onClick={e => { e.stopPropagation(); onDismiss(verdict_id); }}
+              style={{
+                background: 'none', border: '1px solid var(--border)',
+                color: 'var(--dim)', fontSize: 11, padding: '3px 10px',
+                borderRadius: 5, cursor: 'pointer', fontFamily: 'Syne', marginLeft: 'auto',
+              }}
+            >
+              ✕ Dismiss
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
 }
 
-// ── State helpers ─────────────────────────────────────────────────────────────
-
-const initSpecState = () =>
-  Object.fromEntries(SPECIALISTS.map(n => [n, { state: 'idle', text: '', error: '' }]));
-
-// ── Inline panel (replaces full-screen modal) ─────────────────────────────────
+// ── Main panel ────────────────────────────────────────────────────────────────
 
 export default function AIAnalysisPanel({ jobId }) {
-  const [triageState,  setTriageState]  = useState('idle');
-  const [triageText,   setTriageText]   = useState('');
-  const [triageError,  setTriageError]  = useState('');
-  const [recommended,  setRecommended]  = useState([]);
-  const [specs,        setSpecs]        = useState(initSpecState);
-  const [showAll,      setShowAll]      = useState(false);
-  const [activeView,   setActiveView]   = useState('triage');
-  const [expanded,     setExpanded]     = useState(false);
-  const cancelRefs  = useRef({});
-  const outputRef   = useRef(null);
+  const [panelState,    setPanelState]    = useState('idle');
+  const [verdicts,      setVerdicts]      = useState([]);
+  const [routingPlan,   setRoutingPlan]   = useState(null);
+  const [error,         setError]         = useState('');
+  const [expanded,      setExpanded]      = useState(false);
+  const [dismissed,     setDismissed]     = useState(new Set());
+  const [feedbacks,     setFeedbacks]     = useState({});
+  const [expandedCards, setExpandedCards] = useState(new Set());
+  const stopStreamRef = useRef(null);
+  const listRef = useRef(null);
 
-  // Auto-scroll output as text streams in
+  // Auto-scroll list as new verdicts arrive
   useEffect(() => {
-    const el = outputRef.current;
+    const el = listRef.current;
     if (!el) return;
-    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-    if (isNearBottom) el.scrollTop = el.scrollHeight;
-  });
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
+    if (near) el.scrollTop = el.scrollHeight;
+  }, [verdicts.length]);
 
-  // ── Triage ──
-  const handleTriage = useCallback(async () => {
-    setTriageState('loading');
-    setTriageText('');
-    setTriageError('');
-    setRecommended([]);
-    setActiveView('triage');
-    setShowAll(false);
-    try {
-      const result = await runTriage(jobId);
-      setTriageText(result.text ?? '');
-      const recs = (result.recommended_specialists ?? []).filter(n => SPECIALIST_LABELS[n]);
-      setRecommended(recs);
-      setTriageState('done');
-    } catch (err) {
-      setTriageError(err.message ?? 'Triage failed');
-      setTriageState('error');
-    }
-  }, [jobId]);
-
-  // ── Specialist ──
-  const handleRun = useCallback((name) => {
-    setSpecs(prev => ({ ...prev, [name]: { state: 'loading', text: '', error: '' } }));
-    setActiveView(name);
-    cancelRefs.current[name] = streamSpecialist(
-      jobId, name,
-      (chunk) => setSpecs(prev => ({ ...prev, [name]: { ...prev[name], text: prev[name].text + chunk } })),
-      ()      => setSpecs(prev => ({ ...prev, [name]: { ...prev[name], state: 'done' } })),
-      (err)   => setSpecs(prev => ({ ...prev, [name]: { ...prev[name], state: 'error', error: err } })),
-    );
-  }, [jobId]);
-
-  const handleCancel = useCallback((name) => {
-    cancelRefs.current[name]?.();
-    delete cancelRefs.current[name];
-    setSpecs(prev => ({ ...prev, [name]: { state: 'idle', text: '', error: '' } }));
+  // On mount: check for cached verdicts
+  useEffect(() => {
+    getVerdicts(jobId).then(payload => {
+      if (payload?.verdicts?.length) {
+        setVerdicts(payload.verdicts);
+        // Restore user state from server
+        const fb = {};
+        const dis = new Set();
+        for (const v of payload.verdicts) {
+          if (v.user_state?.feedback) fb[v.verdict_id] = v.user_state.feedback;
+          if (v.user_state?.dismissed) dis.add(v.verdict_id);
+        }
+        setFeedbacks(fb);
+        setDismissed(dis);
+        setPanelState('done');
+        setExpanded(true);
+      }
+      // 404 (null) → stays idle
+    }).catch(() => {}); // ignore errors silently on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-run triage on first mount
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { handleTriage(); }, []);
+  const handleGenerate = useCallback(() => {
+    stopStreamRef.current?.();
+    setPanelState('loading');
+    setExpanded(true);
+    setVerdicts([]);
+    setRoutingPlan(null);
+    setError('');
 
-  // Expand to full height once triage finishes
-  useEffect(() => {
-    if (triageState === 'done' || triageState === 'error') setExpanded(true);
-  }, [triageState]);
+    stopStreamRef.current = streamVerdicts(jobId, {
+      onRoutingPlan: plan  => setRoutingPlan(plan),
+      onVerdict:     v     => setVerdicts(prev => [...prev, v]),
+      onComplete:    data  => {
+        setVerdicts(data.verdicts ?? []);
+        setPanelState('done');
+      },
+      onError:       msg   => {
+        setError(msg);
+        setPanelState('error');
+      },
+    });
+  }, [jobId]);
 
-  const triageDone = triageState === 'done';
-  const visibleSpecs = showAll
-    ? SPECIALISTS
-    : recommended.length > 0 ? recommended : SPECIALISTS;
+  const handleDismiss = useCallback((id) => {
+    setDismissed(prev => new Set([...prev, id]));
+    dismissVerdict(id).catch(() => {});
+  }, []);
 
-  const isTriage     = activeView === 'triage';
-  const activeSpec   = isTriage ? null : specs[activeView];
-  const outputText   = isTriage ? triageText   : activeSpec?.text   ?? '';
-  const outputState  = isTriage ? triageState  : activeSpec?.state  ?? 'idle';
-  const outputError  = isTriage ? triageError  : activeSpec?.error  ?? '';
-  const outputLabel  = isTriage ? 'TRIAGE REPORT' : (SPECIALIST_LABELS[activeView] ?? activeView).toUpperCase();
-  const outputLoading = outputState === 'loading';
+  const handleFeedback = useCallback((id, fb) => {
+    setFeedbacks(prev => ({ ...prev, [id]: fb }));
+    giveFeedback(id, fb).catch(() => {});
+  }, []);
+
+  const toggleCard = useCallback((id) => {
+    setExpandedCards(prev => {
+      const s = new Set(prev);
+      if (s.has(id)) s.delete(id); else s.add(id);
+      return s;
+    });
+  }, []);
+
+  const isLoading = panelState === 'loading';
+  const isDone    = panelState === 'done';
+  const visible   = verdicts.filter(v => !dismissed.has(v.verdict_id));
+  const dismissedCount = dismissed.size;
 
   return (
     <div style={{
-      height: expanded ? 430 : 152,
+      height: expanded ? 560 : 152,
       background: 'var(--card)',
       border: '1px solid var(--border)',
       borderRadius: 12,
@@ -190,209 +406,162 @@ export default function AIAnalysisPanel({ jobId }) {
       transition: 'height 0.38s cubic-bezier(0.16,1,0.3,1)',
     }}>
 
-      {/* ── Panel header ── */}
+      {/* ── Header ── */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '11px 18px', borderBottom: '1px solid var(--border)',
-        background: 'transparent',
         flexShrink: 0,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{
             width: 7, height: 7, borderRadius: '50%',
             background: 'var(--cyan)', boxShadow: '0 0 8px var(--cyan)',
-            animation: 'pulse 2s ease-in-out infinite',
           }} />
-          <span style={{
-            fontFamily: 'Syne', fontWeight: 800, fontSize: 12,
-            letterSpacing: '0.18em', color: 'var(--cyan)',
-          }}>AI ANALYSIS</span>
+          <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, letterSpacing: '0.18em', color: 'var(--cyan)' }}>
+            AI VERDICT ANALYSIS
+          </span>
+          {isLoading && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <EQLoader bars={4} height={10} color="var(--cyan)" />
+              <span className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>
+                {verdicts.length > 0 ? `${verdicts.length} found…` : 'running pipeline…'}
+              </span>
+            </div>
+          )}
+          {isDone && verdicts.length > 0 && (
+            <span className="mono" style={{
+              fontSize: 9, color: 'var(--cyan)', padding: '2px 8px',
+              borderRadius: 99, background: 'rgba(0,229,176,0.08)',
+              border: '1px solid rgba(0,229,176,0.2)',
+            }}>
+              {verdicts.length} verdict{verdicts.length !== 1 ? 's' : ''}
+            </span>
+          )}
         </div>
-        {triageState === 'loading' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{
-              width: 13, height: 13, borderRadius: '50%',
-              border: '2px solid var(--border)',
-              borderTopColor: 'var(--cyan)',
-              animation: 'spin 0.75s linear infinite',
-            }} />
-            <span className="mono" style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: '0.1em' }}>LOADING</span>
-          </div>
-        )}
+
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {(isDone || panelState === 'error') && (
+            <button onClick={handleGenerate} style={{
+              background: 'none', border: '1px solid var(--border)',
+              color: 'var(--muted)', fontSize: 11, padding: '4px 10px',
+              borderRadius: 6, cursor: 'pointer', fontFamily: 'Syne',
+            }}>↺ Regenerate</button>
+          )}
+          <button
+            onClick={() => setExpanded(e => !e)}
+            style={{
+              background: 'none', border: 'none',
+              color: 'var(--muted)', fontSize: 13, cursor: 'pointer', padding: '2px 4px',
+            }}
+          >{expanded ? '▲' : '▼'}</button>
+        </div>
       </div>
 
       {/* ── Body ── */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
 
-        {/* Left sidebar */}
-        <div style={{
-          width: 232, flexShrink: 0,
-          borderRight: '1px solid var(--border)',
-          background: 'var(--surface)',
-          display: 'flex', flexDirection: 'column',
-          overflow: 'hidden',
-        }}>
-          {/* Specialists list */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px 12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
-              <span className="mono" style={{
-                fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--muted)',
-              }}>
-                {showAll
-                  ? `All ${SPECIALISTS.length}`
-                  : triageDone
-                    ? `${recommended.length} Recommended`
-                    : 'Specialists'}
-              </span>
-              <button
-                onClick={() => { setShowAll(s => { if (s) setExpanded(false); else setExpanded(true); return !s; }); }}
-                style={{
-                  background: 'none', border: 'none',
-                  color: 'var(--muted)', fontSize: 10, cursor: 'pointer',
-                  fontFamily: 'JetBrains Mono, monospace', padding: '2px 0',
-                }}
-              >{showAll ? '← fewer' : `all ${SPECIALISTS.length} →`}</button>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {visibleSpecs.map(name => {
-                const sp    = specs[name];
-                const isRec  = recommended.includes(name);
-                const isAct  = activeView === name;
-                const isDone = sp.state === 'done';
-                const isLoad = sp.state === 'loading';
-
-                return (
-                  <button
-                    key={name}
-                    onClick={() => { setActiveView(name); setExpanded(true); }}
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '6px 9px', borderRadius: 6, width: '100%', textAlign: 'left',
-                      background: isAct
-                        ? 'rgba(0,229,176,0.08)'
-                        : isRec ? 'rgba(167,139,250,0.05)' : 'transparent',
-                      border: `1px solid ${isAct
-                        ? 'rgba(0,229,176,0.28)'
-                        : isRec ? 'rgba(167,139,250,0.22)' : 'rgba(255,255,255,0.05)'}`,
-                      cursor: 'pointer',
-                      transition: 'all 0.12s',
-                    }}
-                  >
-                    <span style={{
-                      fontFamily: 'JetBrains Mono, monospace', fontSize: 10,
-                      color: isAct ? 'var(--cyan)' : isRec ? 'var(--violet)' : 'var(--muted)',
-                      fontWeight: isAct || isRec ? 600 : 400,
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
-                      🤖 {SPECIALIST_LABELS[name]}
-                    </span>
-                    <span style={{ flexShrink: 0, marginLeft: 6, display: 'flex', alignItems: 'center' }}>
-                      {isLoad && <EQLoader bars={3} height={8} color="var(--cyan)" />}
-                      {isDone && !isLoad && <span style={{ color: 'var(--cyan)', fontSize: 11 }}>✓</span>}
-                      {isRec && !isDone && !isLoad && (
-                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--violet)', display: 'inline-block' }} />
-                      )}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Right: output pane */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-
-          {/* Output header */}
+        {/* Routing plan strip */}
+        {isLoading && routingPlan?.specialists_to_run?.length > 0 && (
           <div style={{
-            padding: '9px 18px', borderBottom: '1px solid var(--border)',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            background: 'transparent', flexShrink: 0,
+            padding: '7px 18px', borderBottom: '1px solid var(--border)',
+            background: 'rgba(0,229,176,0.03)', flexShrink: 0,
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-              <span className="mono" style={{
-                fontSize: 11, letterSpacing: '0.1em', color: 'var(--text)', fontWeight: 600,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>{outputLabel}</span>
-
-              {outputLoading && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                  <EQLoader bars={5} height={10} color="var(--cyan)" />
-                  <span className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>streaming…</span>
-                </div>
-              )}
-              {outputState === 'done' && (
-                <span className="mono" style={{
-                  fontSize: 9, color: 'var(--cyan)', padding: '2px 8px',
-                  borderRadius: 99, background: 'rgba(0,229,176,0.08)',
-                  border: '1px solid rgba(0,229,176,0.2)', flexShrink: 0,
-                }}>COMPLETE</span>
-              )}
-              {outputState === 'error' && (
-                <span className="mono" style={{
-                  fontSize: 9, color: 'var(--red)', padding: '2px 8px',
-                  borderRadius: 99, background: 'rgba(244,63,94,0.08)',
-                  border: '1px solid rgba(244,63,94,0.2)', flexShrink: 0,
-                }}>ERROR</span>
-              )}
-            </div>
-
-            {/* Action buttons */}
-            <div style={{ display: 'flex', gap: 8, flexShrink: 0, marginLeft: 12 }}>
-              {!isTriage && activeSpec?.state === 'loading' && (
-                <button onClick={() => handleCancel(activeView)} style={{
-                  background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.28)',
-                  color: 'var(--red)', fontSize: 11, padding: '4px 10px', borderRadius: 6,
-                  cursor: 'pointer', fontFamily: 'Syne', fontWeight: 600,
-                }}>Cancel</button>
-              )}
-              {!isTriage && (activeSpec?.state === 'idle' || activeSpec?.state === 'done') && (
-                <button onClick={() => handleRun(activeView)} style={{
-                  background: 'rgba(0,229,176,0.1)', border: '1px solid rgba(0,229,176,0.35)',
-                  color: 'var(--cyan)', fontSize: 11, padding: '4px 12px', borderRadius: 6,
-                  cursor: 'pointer', fontFamily: 'Syne', fontWeight: 700,
-                }}>{activeSpec?.state === 'done' ? 'Re-run' : 'Run'}</button>
-              )}
-            </div>
+            <span className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>
+              Running: {routingPlan.specialists_to_run.map(s => s.name).join(' · ')}
+            </span>
           </div>
+        )}
 
-          {/* Scrollable output */}
+        {/* Idle state */}
+        {panelState === 'idle' && (
+          <div style={{
+            flex: 1, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: 14,
+          }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: '50%',
+              border: '1px solid var(--border)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 16, color: 'var(--muted)', opacity: 0.5,
+            }}>✦</div>
+            <p className="mono" style={{
+              fontSize: 11, color: 'var(--muted)', textAlign: 'center',
+              lineHeight: 1.7, opacity: 0.7, margin: 0,
+            }}>
+              Run the full AI verdict pipeline<br />to get ranked, actionable mix fixes
+            </p>
+            <button onClick={handleGenerate} style={{
+              background: 'rgba(0,229,176,0.14)', border: '1px solid rgba(0,229,176,0.4)',
+              color: 'var(--cyan)', fontSize: 13, fontWeight: 700,
+              padding: '9px 24px', borderRadius: 8, cursor: 'pointer', fontFamily: 'Syne',
+            }}>
+              Generate AI Analysis
+            </button>
+          </div>
+        )}
+
+        {/* Error state */}
+        {panelState === 'error' && (
+          <div style={{
+            flex: 1, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: 10,
+          }}>
+            <span className="mono" style={{ fontSize: 12, color: 'var(--red)' }}>{error}</span>
+            <button onClick={handleGenerate} style={{
+              background: 'none', border: '1px solid rgba(244,63,94,0.35)',
+              color: 'var(--red)', fontSize: 12, padding: '6px 16px',
+              borderRadius: 6, cursor: 'pointer', fontFamily: 'Syne',
+            }}>Retry</button>
+          </div>
+        )}
+
+        {/* Verdict list */}
+        {(isLoading || isDone) && (
           <div
-            ref={outputRef}
-            style={{
-              flex: 1, overflowY: 'auto', padding: '18px 24px',
-              backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(0,0,0,0.025) 1px, rgba(0,0,0,0.025) 2px)',
-            }}
+            ref={listRef}
+            style={{ flex: 1, overflowY: 'auto', padding: '12px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}
           >
-            {!outputText && !outputLoading && outputState !== 'error' && (
-              <div style={{
-                height: '100%', display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center', gap: 12, opacity: 0.5,
+            {visible.length === 0 && isLoading && (
+              <div style={{ padding: '20px 0', textAlign: 'center', opacity: 0.5 }}>
+                <EQLoader bars={6} height={18} color="var(--cyan)" />
+              </div>
+            )}
+
+            {visible.map(verdict => (
+              <VerdictCard
+                key={verdict.verdict_id}
+                verdict={verdict}
+                isExpanded={expandedCards.has(verdict.verdict_id)}
+                onToggle={() => toggleCard(verdict.verdict_id)}
+                onDismiss={handleDismiss}
+                onFeedback={handleFeedback}
+                feedback={feedbacks[verdict.verdict_id]}
+              />
+            ))}
+
+            {dismissedCount > 0 && (
+              <div className="mono" style={{
+                fontSize: 10, color: 'var(--dim)', textAlign: 'center', padding: '4px 0',
               }}>
-                <div style={{
-                  width: 36, height: 36, borderRadius: '50%',
-                  border: '1px solid var(--border)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 16, color: 'var(--muted)',
-                }}>✦</div>
-                <p className="mono" style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', lineHeight: 1.7 }}>
-                  {isTriage
-                    ? 'Run Triage to get a ranked breakdown\nof your mix\'s biggest issues'
-                    : `Select Run to start the\n${SPECIALIST_LABELS[activeView] ?? ''} analysis`}
-                </p>
+                {dismissedCount} dismissed
+                <button
+                  onClick={() => setDismissed(new Set())}
+                  style={{
+                    background: 'none', border: 'none', color: 'var(--muted)',
+                    fontSize: 10, cursor: 'pointer', marginLeft: 8, fontFamily: 'inherit',
+                    textDecoration: 'underline',
+                  }}
+                >restore</button>
               </div>
             )}
 
-            {outputState === 'error' && (
-              <div className="mono" style={{ fontSize: 12, color: 'var(--red)', lineHeight: 1.6 }}>
-                Error: {outputError}
+            {isDone && visible.length === 0 && dismissedCount === 0 && (
+              <div className="mono" style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', padding: 20 }}>
+                No verdicts generated. Try regenerating.
               </div>
             )}
-
-            {outputText && <MarkdownBlock text={outputText} streaming={outputLoading} />}
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
