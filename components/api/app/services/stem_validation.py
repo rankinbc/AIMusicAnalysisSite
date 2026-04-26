@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 
-MAX_STEM_FILES = 16
+MAX_STEM_FILES = 30
 MAX_PER_FILE_BYTES = 100 * 1024 * 1024     # 100 MB
 MAX_TOTAL_BYTES = 1024 * 1024 * 1024       # 1 GB
 

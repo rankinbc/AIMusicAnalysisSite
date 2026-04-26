@@ -59,7 +59,7 @@ cd components/api && alembic upgrade head
 
 ## Stems upload (added 2026-04-26)
 
-`POST /uploads/` accepts an optional multipart `stems[]` field (1–16
+`POST /uploads/` accepts an optional multipart `stems[]` field (1–30
 FLAC or WAV files, ≤100 MB each, ≤1 GB total) plus optional
 `reference_stems[]` with the same constraints.
 

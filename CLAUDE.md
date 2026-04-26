@@ -331,7 +331,7 @@ Language-agnostic defaults. Append your stack-specific section at the end.
 
 ## Stems integration (added 2026-04-26)
 
-Optional stems upload (1–16 FLAC/WAV files) unlocks per-stem analysis.
+Optional stems upload (1–30 FLAC/WAV files) unlocks per-stem analysis.
 The flow is asynchronous from the user's perspective: upload → server
 auto-matches stems to roles + .als track names → user confirms via
 `POST /uploads/{job_id}/stems/confirm` → Celery dispatches with

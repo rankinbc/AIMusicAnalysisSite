@@ -38,11 +38,11 @@ export default function UploadPage({ file, setFile, onJobStarted, onAwaitingMapp
   const STEM_EXT = ['.flac', '.wav'];
   const STEM_MAX_PER_FILE = 100 * 1024 * 1024;
   const STEM_MAX_TOTAL    = 1024 * 1024 * 1024;
-  const STEM_MAX_COUNT    = 16;
+  const STEM_MAX_COUNT    = 30;
 
   function validateStems(files) {
     if (files.length === 0) return '';
-    if (files.length > STEM_MAX_COUNT) return `Maximum ${STEM_MAX_COUNT} stem files (you selected ${files.length})`;
+    if (files.length > STEM_MAX_COUNT) return `Maximum ${STEM_MAX_COUNT} stem files (you selected ${files.length}).`;
     let total = 0;
     for (const f of files) {
       const lower = f.name.toLowerCase();
@@ -292,7 +292,7 @@ export default function UploadPage({ file, setFile, onJobStarted, onAwaitingMapp
             <button onClick={() => stemsInputRef.current.click()} style={{
               background: 'none', color: 'var(--muted)', fontSize: 13,
               borderBottom: '1px dashed var(--dim)', paddingBottom: 2,
-            }}>+ Add stems (optional, for per-stem analysis)</button>
+            }}>+ Add stems (optional, up to 30, for per-stem analysis)</button>
           ) : (
             <div style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
