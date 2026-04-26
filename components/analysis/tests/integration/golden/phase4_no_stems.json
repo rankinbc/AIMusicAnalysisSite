@@ -1,0 +1,24 @@
+{
+  "band_energy": {
+    "air": -66.86,
+    "bass": 41.28,
+    "high_mid": -46.48,
+    "low_mid": -3.85,
+    "mid": -24.02,
+    "presence": -61.41,
+    "sub_bass": 38.47
+  },
+  "clashes": [
+    {
+      "frequency_range": "sub-bass / bass (20\u2013200 Hz)",
+      "severity": "high",
+      "stems": "low-end buildup"
+    },
+    {
+      "frequency_range": "low-mid (200\u2013500 Hz)",
+      "severity": "high",
+      "stems": "low-mid congestion"
+    }
+  ],
+  "stems": {}
+}
