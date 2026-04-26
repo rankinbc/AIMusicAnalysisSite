@@ -618,3 +618,30 @@ Constraints (any violation → the verdict will be rejected):
   release_ms ∈ [1, 5000], ceiling_db ∈ [-6, 0], width_pct ∈ [0, 200].
 - `severity` must match the verdict's actual impact — over-claiming downgrades silently.
 - Omit `fix` (use `null`) for pure-observation verdicts (wins, key-detection notes, etc.).
+
+
+# Stem-aware enhancement (when available)
+
+When the user provided individual stems (`phase4.stems.status == "ok"`),
+attribute imbalance findings to the specific stem responsible rather
+than the whole mix.
+
+Per-stem band energies (dB):
+```
+phase4.stems.per_stem[role].band_energy_db
+  .sub | .bass | .low_mid | .mid | .high_mid | .presence | .air
+```
+
+Per-stem RMS / LUFS:
+```
+phase4.stems.per_stem[role]
+  .rms_db, .lufs_integrated, .stereo_width
+```
+
+Examples:
+- "The kick is dominating the sub-bass" beats "low end is heavy"
+- "The pad is washing out the low-mid" beats "low-mid muddy"
+
+Prescriptions should name the stem to adjust ("cut the pad by 3 dB at
+350 Hz with a Q of 1.4") rather than the whole mix. Fall back to the
+mix-level analysis when stem data is absent or the status is not "ok".

@@ -365,3 +365,28 @@ Constraints (any violation → the verdict will be rejected):
   release_ms ∈ [1, 5000], ceiling_db ∈ [-6, 0], width_pct ∈ [0, 200].
 - `severity` must match the verdict's actual impact — over-claiming downgrades silently.
 - Omit `fix` (use `null`) for pure-observation verdicts (wins, key-detection notes, etc.).
+
+
+# Stem-aware enhancement (when available)
+
+When the user provided individual stems, prefer per-stem clash data over
+spectral-only inference — it identifies the exact pair of stems and band
+that collide.
+
+Read from:
+```
+phase4.stems.status                     → must be "ok" to use this data
+phase4.stems.clash_matrix[]
+  .stem_a, .stem_b                      → which two stems collide
+  .band                                 → which frequency band
+  .overlap_severity                     → 0.0 – 1.0
+  .severity_tier                        → "info" | "warning" | "critical"
+```
+
+When `phase4.stems.clash_matrix` has entries, name BOTH stems in the
+verdict prescription — e.g., "Sidechain the bass to the kick at 80 Hz"
+or "Notch the pad at 250 Hz to make room for the vocals." This beats
+generic "address low-end buildup."
+
+Fall back to the spectral analysis above when stem data is absent or
+`phase4.stems.status != "ok"`.
