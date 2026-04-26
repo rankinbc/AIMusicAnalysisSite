@@ -33,9 +33,22 @@ def run_analysis_pipeline(
     user_id: str,
     als_file_path: str | None = None,
     genre_hint: str | None = None,
+    stem_paths: dict | None = None,
+    reference_stem_paths: dict | None = None,
 ) -> dict:
+    import os
+    logger.info(
+        "task start: job=%s file=%s ref=%s als=%s genre=%s cwd=%s",
+        job_id, file_path, reference_path, als_file_path, genre_hint, os.getcwd(),
+    )
+    logger.info("task: file exists=%s", os.path.exists(file_path))
+
     session = self._session
+    if session is None:
+        logger.error("task: DB session is None — before_start may not have fired (job=%s)", job_id)
+
     update_job_phase(session, job_id, 0, "Starting", 0.0, status=JobStatus.PROCESSING)
+    logger.info("task: job=%s marked PROCESSING", job_id)
     progress_cb = make_progress_cb(self, job_id, session)
 
     try:
@@ -45,24 +58,31 @@ def run_analysis_pipeline(
             als_file_path=als_file_path,
             genre_hint=genre_hint,
             progress_cb=progress_cb,
+            stem_paths=stem_paths,
+            reference_stem_paths=reference_stem_paths,
         )
 
         # Convert TypedDict to plain dict for JSON serialization
         result_dict = dict(pipeline_result)
         result_dict["phases"] = [dict(p) for p in result_dict.get("phases", [])]
 
+        logger.info("task: pipeline complete for job=%s, finalizing", job_id)
         finalize_job(session, job_id, result_dict)
         _write_json_artifact(job_id, result_dict)
+        logger.info("task: job=%s complete", job_id)
 
         return result_dict
 
     except Exception as exc:
-        logger.exception(f"Pipeline failed for job {job_id}: {exc}")
+        logger.exception("task: pipeline FAILED for job=%s: %s", job_id, exc)
         try:
-            session.rollback()  # Clear any failed transaction so the FAILED update can execute
-        except Exception:
-            pass
-        update_job_phase(session, job_id, 0, "Failed", 0.0, status=JobStatus.FAILED)
+            session.rollback()
+        except Exception as rb_exc:
+            logger.warning("task: rollback failed for job=%s: %s", job_id, rb_exc)
+        try:
+            update_job_phase(session, job_id, 0, "Failed", 0.0, status=JobStatus.FAILED)
+        except Exception as upd_exc:
+            logger.error("task: could not mark job=%s FAILED: %s", job_id, upd_exc)
         raise
 
 
