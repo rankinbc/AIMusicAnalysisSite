@@ -105,6 +105,10 @@ def compare(
     phase1_result: dict,
     progress_cb: Callable | None = None,
     genre: str | None = None,
+    user_stem_paths: dict | None = None,
+    reference_stem_paths: dict | None = None,
+    reference_cache_dir: Path | None = None,
+    reference_id: str | None = None,
 ) -> dict:
     """Compare the uploaded track against a reference track.
 
@@ -124,6 +128,8 @@ def compare(
         result: dict = {"status": "skipped", "deltas": {}}
         if genre:
             result["genre_context"] = _build_genre_context(genre, phase1_result)
+        if user_stem_paths and not reference_stem_paths:
+            result["stem_reference_comparison"] = "unavailable"
         return result
 
     # Run Phase 1 on the reference track to get its features
@@ -177,4 +183,95 @@ def compare(
     if genre:
         result["genre_context"] = _build_genre_context(genre, phase1_result)
 
+    _attach_stem_reference_deltas(
+        result, user_stem_paths, reference_stem_paths,
+        reference_cache_dir, reference_id,
+    )
+
     return result
+
+
+def _attach_stem_reference_deltas(
+    result: dict,
+    user_stem_paths: dict | None,
+    reference_stem_paths: dict | None,
+    reference_cache_dir: Path | None,
+    reference_id: str | None,
+) -> None:
+    """Mutates *result* with per_stem_reference_deltas when stems are available."""
+    if not user_stem_paths:
+        return
+
+    from ..stems import analyze as analyze_stems, compare as compare_stems
+    from ..stems.types import StemRole
+
+    typed_user = {
+        StemRole(r) if isinstance(r, str) else r: Path(p) if isinstance(p, str) else p
+        for r, p in user_stem_paths.items()
+    }
+
+    reference = None
+    if reference_stem_paths:
+        try:
+            typed_ref = {
+                StemRole(r) if isinstance(r, str) else r: Path(p) if isinstance(p, str) else p
+                for r, p in reference_stem_paths.items()
+            }
+            reference = analyze_stems(typed_ref)
+        except Exception as exc:
+            logger.exception("reference-stem analysis failed")
+            result["stem_reference_comparison"] = "failed"
+            result["stem_reference_error"] = str(exc)
+            return
+    elif reference_cache_dir and reference_id:
+        cache_path = reference_cache_dir / f"{reference_id}.stems.json"
+        if cache_path.exists():
+            reference = _load_cached_reference(cache_path)
+
+    if reference is None:
+        result["stem_reference_comparison"] = "unavailable"
+        return
+
+    try:
+        user = analyze_stems(typed_user)
+        deltas = compare_stems(user, reference)
+    except Exception as exc:
+        logger.exception("user-stem analysis or comparison failed")
+        result["stem_reference_comparison"] = "failed"
+        result["stem_reference_error"] = str(exc)
+        return
+
+    result["per_stem_reference_deltas"] = [
+        {
+            "role": d.role.value, "metric": d.metric,
+            "user_value": d.user_value, "reference_value": d.reference_value,
+            "delta": d.delta, "interpretation": d.interpretation,
+            "severity_tier": d.severity_tier,
+        }
+        for d in deltas
+    ]
+    result["stem_reference_comparison"] = "ok"
+
+
+def _load_cached_reference(cache_path: Path):
+    """Load a pre-Demucs cache file into a StemAnalysisResult."""
+    import json
+    from ..stems.types import (
+        FreqBand, StemAnalysisResult, StemMetrics, StemRole,
+    )
+
+    cached = json.loads(cache_path.read_text())
+    per_stem: dict[StemRole, StemMetrics] = {}
+    for role_str, m in cached["per_stem"].items():
+        per_stem[StemRole(role_str)] = StemMetrics(
+            role=StemRole(role_str),
+            duration_s=m["duration_s"], peak_db=m["peak_db"], rms_db=m["rms_db"],
+            lufs_integrated=m["lufs_integrated"],
+            dynamic_range_db=m["dynamic_range_db"],
+            band_energy_db={FreqBand(b): v for b, v in m["band_energy_db"].items()},
+            spectral_centroid_hz=m["spectral_centroid_hz"],
+            dominant_frequencies_hz=m["dominant_frequencies_hz"],
+            stereo_width=m["stereo_width"], pan_estimate=m["pan_estimate"],
+            is_mono=m["is_mono"],
+        )
+    return StemAnalysisResult(per_stem=per_stem)

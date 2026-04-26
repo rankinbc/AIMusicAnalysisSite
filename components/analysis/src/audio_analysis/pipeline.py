@@ -86,6 +86,8 @@ def run_pipeline(
                     data = phase5_reference.compare(
                         wav_path, reference_path, phase_data.get(1, {}), progress_cb,
                         genre=genre,
+                        user_stem_paths=stem_paths,
+                        reference_stem_paths=reference_stem_paths,
                     )
                 elif phase_num == 6:
                     genre = phase_data.get(2, {}).get("genre", "other")
