@@ -48,18 +48,22 @@ _DSP_PARAM_RANGES: dict[str, dict[str, tuple[float, float] | None]] = {
     "low_shelf": {
         "frequency_hz": (20.0, 22000.0),
         "gain_db": (-24.0, 24.0),
+        "q": (0.1, 18.0),
     },
     "high_shelf": {
         "frequency_hz": (20.0, 22000.0),
         "gain_db": (-24.0, 24.0),
+        "q": (0.1, 18.0),
     },
     "high_pass": {
         "frequency_hz": (20.0, 22000.0),
         "slope_db": (6.0, 96.0),
+        "q": (0.1, 18.0),
     },
     "low_pass": {
         "frequency_hz": (20.0, 22000.0),
         "slope_db": (6.0, 96.0),
+        "q": (0.1, 18.0),
     },
     "compressor": {
         "threshold_db": (-60.0, 0.0),
@@ -67,13 +71,21 @@ _DSP_PARAM_RANGES: dict[str, dict[str, tuple[float, float] | None]] = {
         "attack_ms": (0.1, 1000.0),
         "release_ms": (1.0, 5000.0),
         "knee_db": (0.0, 24.0),
+        "makeup_gain_db": (0.0, 24.0),
     },
     "multiband_compressor": {
-        "bands": None,  # list of band dicts; not range-checked here
+        "bands": None,          # list of band dicts; not range-checked here
+        "frequency_hz": (20.0, 22000.0),
+        "threshold_db": (-60.0, 0.0),
+        "ratio": (1.0, 20.0),
+        "attack_ms": (0.1, 1000.0),
+        "release_ms": (1.0, 5000.0),
     },
     "limiter": {
         "ceiling_db": (-6.0, 0.0),
+        "threshold_db": (-60.0, 0.0),
         "release_ms": (1.0, 5000.0),
+        "lookahead_ms": (0.0, 10.0),
     },
     "gain": {
         "gain_db": (-24.0, 24.0),
@@ -82,9 +94,12 @@ _DSP_PARAM_RANGES: dict[str, dict[str, tuple[float, float] | None]] = {
         "width_pct": (0.0, 200.0),
     },
     "sidechain": {
-        "source_stem": None,  # string
+        "source_stem": None,    # string
         "depth_db": (0.0, 24.0),
         "release_ms": (1.0, 5000.0),
+        "ratio": (1.0, 20.0),
+        "threshold_db": (-60.0, 0.0),
+        "attack_ms": (0.1, 1000.0),
     },
 }
 

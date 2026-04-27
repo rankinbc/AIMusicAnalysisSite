@@ -25,16 +25,31 @@ class ValidationResult:
     failure: ValidationFailure | None = None
 
 
+import re as _re
+
 def _resolve_path(obj: Any, path: str) -> Any:
-    """Resolve a dotted path against a dict tree.
+    """Resolve a dotted path against a dict/list tree.
+    Supports array-index notation: phases[0].data.rms
     Raises KeyError if any segment is missing."""
     cur = obj
+    # Split on dots, but keep bracket tokens attached to the preceding key
+    # e.g. "phases[0].data.rms" → ["phases[0]", "data", "rms"]
     for seg in path.split("."):
-        if not isinstance(cur, dict):
-            raise KeyError(f"path segment {seg!r}: parent is not a dict")
-        if seg not in cur:
-            raise KeyError(seg)
-        cur = cur[seg]
+        m = _re.fullmatch(r'(\w+)\[(\d+)\]', seg)
+        if m:
+            key, idx = m.group(1), int(m.group(2))
+            if not isinstance(cur, dict) or key not in cur:
+                raise KeyError(key)
+            lst = cur[key]
+            if not isinstance(lst, list) or idx >= len(lst):
+                raise KeyError(f"{key}[{idx}]")
+            cur = lst[idx]
+        else:
+            if not isinstance(cur, dict):
+                raise KeyError(f"path segment {seg!r}: parent is not a dict")
+            if seg not in cur:
+                raise KeyError(seg)
+            cur = cur[seg]
     return cur
 
 

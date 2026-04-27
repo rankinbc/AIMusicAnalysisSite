@@ -63,6 +63,7 @@ data/uploads/*.flac
 data/uploads/*.aiff
 data/uploads/*.m4a
 data/uploads/*.ogg
+data/uploads/*.als
 
 # Reference library audio files (large binary assets — manage separately)
 data/reference_library/**/*.mp3
@@ -75,12 +76,19 @@ data/models/
 
 # Analysis output artifacts
 output/analysis_results/*/
+output/analysis_results/*.json
 
 # Vite build output
 components/frontend/dist/
 
 # Frontend caches
 components/frontend/.cache/
+
+# API cache
+components/api/.cache/
+
+# Playwright MCP working dir
+.playwright-mcp/
 
 # PRPs staging (uncomment if you want generated PRPs kept out of git)
 # PRPs/*.md

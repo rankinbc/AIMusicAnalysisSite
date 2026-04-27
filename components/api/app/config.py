@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
 
     JWT_SECRET: str = "change-me-in-production"
-    JWT_ACCESS_EXPIRE_MINUTES: int = 30
+    JWT_ACCESS_EXPIRE_MINUTES: int = 1440  # 24 hours
     JWT_REFRESH_EXPIRE_DAYS: int = 30
 
     CORS_ALLOW_ORIGINS: list[str] = [

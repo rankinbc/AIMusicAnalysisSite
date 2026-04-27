@@ -15,6 +15,18 @@ export function getToken() { return _token; }
 export function getEmail() { return localStorage.getItem('spectr_email') ?? ''; }
 function saveEmail(e) { if (e) localStorage.setItem('spectr_email', e); }
 
+async function tryRefresh() {
+  try {
+    const res = await fetch(BASE + '/auth/refresh', { method: 'POST' });
+    if (!res.ok) return false;
+    const data = await res.json();
+    setToken(data.access_token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function request(path, opts = {}) {
   const headers = { ...(opts.headers ?? {}) };
   if (_token) headers['Authorization'] = `Bearer ${_token}`;
@@ -22,6 +34,20 @@ async function request(path, opts = {}) {
   const res = await fetch(BASE + path, { ...opts, headers });
 
   if (res.status === 401) {
+    const refreshed = await tryRefresh();
+    if (refreshed) {
+      const retryHeaders = { ...(opts.headers ?? {}), 'Authorization': `Bearer ${_token}` };
+      const retry = await fetch(BASE + path, { ...opts, headers: retryHeaders });
+      if (retry.status === 401) {
+        setToken(null);
+        throw Object.assign(new Error('Unauthorized'), { status: 401 });
+      }
+      if (!retry.ok) {
+        const body = await retry.text().catch(() => '');
+        throw new Error(`HTTP ${retry.status}: ${body}`);
+      }
+      return retry.json();
+    }
     setToken(null);
     throw Object.assign(new Error('Unauthorized'), { status: 401 });
   }

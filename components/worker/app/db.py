@@ -15,19 +15,33 @@ DATABASE_URL = os.environ.get(
 )
 
 
+import logging as _logging
+_task_log = _logging.getLogger(__name__)
+
+
 class CustomTask(Task):
     """Base task class — creates a DB session per task execution, not at import time."""
     _session = None
     _engine = None
 
     def before_start(self, task_id, args, kwargs):
-        self._engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=3600)
-        Session = sessionmaker(self._engine, expire_on_commit=False)
-        self._session = Session()
+        _task_log.info("before_start: task_id=%s db=%s", task_id, DATABASE_URL.split("@")[-1])
+        try:
+            self._engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=3600)
+            Session = sessionmaker(self._engine, expire_on_commit=False)
+            self._session = Session()
+            _task_log.info("before_start: DB session ready for task_id=%s", task_id)
+        except Exception as exc:
+            _task_log.exception("before_start: DB setup FAILED for task_id=%s: %s", task_id, exc)
+            raise
 
     def after_return(self, status, retval, task_id, args, kwargs, einfo):
+        _task_log.info("after_return: task_id=%s status=%s", task_id, status)
         if self._session:
-            self._session.close()
+            try:
+                self._session.close()
+            except Exception as exc:
+                _task_log.warning("after_return: session.close() failed: %s", exc)
             self._session = None
         if self._engine:
             self._engine.dispose()

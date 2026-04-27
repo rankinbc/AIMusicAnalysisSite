@@ -193,6 +193,7 @@ class ALSParser:
 
         # Parse XML
         root = ET.fromstring(xml_content)
+        self._root = root  # cached for downstream use (e.g. device detail extraction)
 
         # Extract project information
         ableton_version = self._get_version(root)
@@ -548,27 +549,113 @@ class ALSParser:
 
         return (volume_db, pan)
 
+    # Tags that are not device parameters
+    _SKIP_PARAM_TAGS = frozenset({
+        'LomId', 'UserName', 'Annotation', 'SourceContext', 'IsOn',
+        'ClipEnvelopeChooserViewState', 'LockedScripts', 'IsFolded',
+        'ShowModulationHint', 'ShowGlobalPresetSelector', 'LastSelectedPreset',
+        'OverwriteProtectionNumber', 'Devices', 'DeviceChain', 'SignalModulations',
+        'BranchSelectorRange', 'IsSoloed', 'TransitionTime', 'Color',
+    })
+
+    _NATIVE_DEVICE_NAMES: Dict[str, str] = {
+        'AutoFilter': 'Auto Filter', 'Compressor2': 'Compressor', 'Eq8': 'EQ Eight',
+        'Saturator': 'Saturator', 'Reverb': 'Reverb', 'FilterDelay': 'Filter Delay',
+        'StereoGain': 'Utility', 'Overdrive': 'Overdrive', 'Redux2': 'Redux',
+        'Gate': 'Gate', 'GlueCompressor': 'Glue Compressor',
+        'MultibandDynamics': 'Multiband Dynamics', 'Resonator': 'Resonator',
+        'AutoPan': 'Auto Pan', 'PitchShifter': 'Pitch', 'Limiter': 'Limiter',
+        'Spectrum': 'Spectrum', 'Tuner': 'Tuner', 'VinylDistortion': 'Vinyl Distortion',
+        'LoFiImplosion': 'Lofi Implosion', 'Delay': 'Delay', 'Echo': 'Echo',
+        'Corpus': 'Corpus', 'FrequencyShifter': 'Frequency Shifter',
+        'InstrumentRack': 'Instrument Rack', 'AudioEffectRack': 'Audio Effect Rack',
+        'MidiEffectRack': 'MIDI Effect Rack', 'DrumRack': 'Drum Rack',
+        'OriginalSimpler': 'Simpler', 'MultiSampler': 'Sampler',
+        'UltraAnalog': 'Analog', 'Operator': 'Operator', 'Wavetable': 'Wavetable',
+        'Drift': 'Drift', 'Meld': 'Meld', 'Collision': 'Collision',
+        'Arpeggiator': 'Arpeggiator', 'Chord': 'Chord', 'NoteLength': 'Note Length',
+        'Scale': 'Scale', 'Velocity': 'Velocity', 'Random': 'Random',
+        'MidiPitchShifter': 'MIDI Pitch Shifter', 'MidiMonitor': 'MIDI Monitor',
+    }
+
     def _get_track_devices(self, track_elem: ET.Element) -> List[str]:
-        """Extract list of devices/plugins on the track."""
-        devices = []
+        """Extract list of devices/plugins on the track (names only, backward-compat)."""
+        return [d['name'] for d in self._get_track_devices_detailed(track_elem)]
 
-        # Look for various device types
-        device_chain = track_elem.find(".//DeviceChain/DeviceChain/Devices")
+    def _get_track_devices_detailed(self, track_elem: ET.Element) -> List[dict]:
+        """Extract full device list with params for each device on the track."""
+        # Use direct (non-deep) paths to avoid descending into nested rack chains.
+        device_chain = track_elem.find("DeviceChain/DeviceChain/Devices")
         if device_chain is None:
-            device_chain = track_elem.find(".//DeviceChain/Devices")
+            device_chain = track_elem.find("DeviceChain/Devices")
+        if device_chain is None:
+            return []
 
-        if device_chain is not None:
-            for device in device_chain:
-                # Get device name
-                name = device.tag
-                if name not in ['Devices']:
-                    # Try to get a more specific name
-                    user_name = device.find(".//UserName")
-                    if user_name is not None and "Value" in user_name.attrib:
-                        name = user_name.attrib["Value"] or name
-                    devices.append(name)
-
+        devices = []
+        for device_elem in device_chain:
+            tag = device_elem.tag
+            if tag == 'Devices':
+                continue
+            try:
+                devices.append(self._parse_device_details(device_elem))
+            except Exception:
+                pass
         return devices
+
+    def _parse_device_details(self, device_elem: ET.Element) -> dict:
+        tag = device_elem.tag
+        user_name_elem = device_elem.find('UserName')
+        user_name = (user_name_elem.attrib.get('Value', '') if user_name_elem is not None else '')
+
+        is_on_elem = device_elem.find('IsOn/Manual')
+        enabled = True
+        if is_on_elem is not None:
+            enabled = is_on_elem.attrib.get('Value', 'true').lower() != 'false'
+
+        if tag == 'PluginDevice':
+            plug = device_elem.find('.//PluginDesc/VstPluginInfo/PlugName')
+            au = device_elem.find('.//PluginDesc/AuPluginInfo/Name')
+            raw = (plug or au)
+            raw_name = raw.attrib.get('Value', 'Unknown Plugin') if raw is not None else 'Unknown Plugin'
+            return {
+                'name': user_name or raw_name,
+                'type': tag, 'device_type': 'vst',
+                'enabled': enabled, 'params': {},
+            }
+
+        if tag in ('MxDeviceAudioEffect', 'MxDeviceMidi', 'MxDeviceInstrument'):
+            file_ref = device_elem.find('.//FileRef/Path')
+            if file_ref is not None:
+                import os as _os
+                raw_name = _os.path.basename(file_ref.attrib.get('Value', tag)).replace('.amxd', '')
+            else:
+                raw_name = tag
+            return {
+                'name': user_name or raw_name,
+                'type': tag, 'device_type': 'max_for_live',
+                'enabled': enabled, 'params': {},
+            }
+
+        # Native Ableton device
+        raw_name = self._NATIVE_DEVICE_NAMES.get(tag, tag)
+        params: dict = {}
+        for child in device_elem:
+            if child.tag in self._SKIP_PARAM_TAGS:
+                continue
+            manual = child.find('Manual')
+            if manual is None or 'Value' not in manual.attrib:
+                continue
+            raw = manual.attrib['Value']
+            try:
+                params[child.tag] = float(raw)
+            except ValueError:
+                low = raw.lower()
+                params[child.tag] = True if low == 'true' else (False if low == 'false' else raw)
+        return {
+            'name': user_name or raw_name,
+            'type': tag, 'device_type': 'native',
+            'enabled': enabled, 'params': params,
+        }
 
     def _parse_midi_clip(self, clip_elem: ET.Element) -> Optional[MIDIClip]:
         """Parse a MIDI clip and its notes."""
