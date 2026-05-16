@@ -8,12 +8,13 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from aimusic_shared.models import Song, SongVersion, UploadJob
+from aimusic_shared.models import JobStatus, Song, SongVersion, UploadJob
 
 from ..db import get_session
 from ..models import User
 from ..routers.uploads import validate_audio_magic, validate_als_magic, ALS_MAX_BYTES
 from ..schemas.versions import VersionDetail, AnalysisInVersionDetail, VersionPatch
+from ..services.celery_client import dispatch_analysis_job
 from ..services.storage import get_storage
 from .auth import get_current_user
 
@@ -222,3 +223,58 @@ async def delete_version(
     await db.delete(version)
     await db.commit()
     return None
+
+
+@router.post("/versions/{version_id}/analyze", status_code=202)
+async def analyze_version(
+    version_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    version, song = await _load_version_through_song(db, version_id, user.id)
+    # Guard against concurrent analyses on the same version
+    in_flight = (await db.execute(
+        select(UploadJob).where(
+            UploadJob.version_id == version.id,
+            UploadJob.status.in_([JobStatus.PENDING, JobStatus.PROCESSING, JobStatus.AWAITING_STEM_MAPPING]),
+        ).limit(1)
+    )).scalar_one_or_none()
+    if in_flight is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "analysis_in_progress", "job_id": str(in_flight.id)},
+        )
+
+    initial_status = JobStatus.AWAITING_STEM_MAPPING if version.stem_paths_raw else JobStatus.PENDING
+    stem_paths_arg = version.stem_paths if version.stem_paths else None
+
+    job = UploadJob(
+        user_id=user.id,
+        version_id=version.id,
+        file_path=version.file_path,
+        reference_path=version.reference_path,
+        als_file_path=version.als_file_path,
+        genre_hint=song.genre_hint,
+        status=initial_status,
+        stem_paths_raw=version.stem_paths_raw,
+        stem_paths=version.stem_paths,
+    )
+    db.add(job)
+    await db.commit()
+    await db.refresh(job)
+
+    # If no stems, dispatch Celery immediately.  Stems flow is handled via /versions/{id}/stems/confirm (Task 14).
+    if initial_status == JobStatus.PENDING:
+        try:
+            task_id = dispatch_analysis_job(
+                str(job.id), version.file_path, version.reference_path, str(user.id),
+                als_file_path=version.als_file_path, genre_hint=song.genre_hint,
+                stem_paths=stem_paths_arg,
+            )
+            job.task_id = task_id
+            await db.commit()
+        except Exception:
+            log.exception("analyze_version: dispatch failed for job=%s", job.id)
+            raise
+
+    return {"job_id": str(job.id), "status": initial_status.value}

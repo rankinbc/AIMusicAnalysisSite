@@ -157,3 +157,35 @@ class TestDeleteVersion:
         assert r.status_code == 204
         r2 = await authed_client.get(f"/versions/{vid}")
         assert r2.status_code == 404
+
+
+class TestAnalyzeVersion:
+    async def test_analyze_dispatches_celery(self, authed_client, song_id, monkeypatch):
+        sent = {}
+        def fake_dispatch(job_id, file_path, reference_path, user_id, **kw):
+            sent["called"] = True
+            sent["job_id"] = job_id
+            sent["file_path"] = file_path
+            return "task-123"
+        from app.routers import versions as v_mod
+        monkeypatch.setattr(v_mod, "dispatch_analysis_job", fake_dispatch)
+
+        files = {"file": ("a.wav", io.BytesIO(WAV_HEADER), "audio/wav")}
+        c = await authed_client.post(f"/songs/{song_id}/versions", files=files)
+        vid = c.json()["version_id"]
+        r = await authed_client.post(f"/versions/{vid}/analyze")
+        assert r.status_code == 202
+        assert r.json()["job_id"]
+        assert sent["called"]
+
+    async def test_analyze_blocks_when_in_flight(self, authed_client, song_id, monkeypatch):
+        from app.routers import versions as v_mod
+        monkeypatch.setattr(v_mod, "dispatch_analysis_job", lambda *a, **kw: "tid")
+
+        files = {"file": ("a.wav", io.BytesIO(WAV_HEADER), "audio/wav")}
+        c = await authed_client.post(f"/songs/{song_id}/versions", files=files)
+        vid = c.json()["version_id"]
+        await authed_client.post(f"/versions/{vid}/analyze")
+        r = await authed_client.post(f"/versions/{vid}/analyze")
+        assert r.status_code == 409
+        assert r.json()["detail"]["code"] == "analysis_in_progress"
