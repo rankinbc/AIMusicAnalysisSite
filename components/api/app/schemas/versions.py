@@ -4,6 +4,13 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
+class StemMappingProposalDTO(BaseModel):
+    file: str
+    proposed_role: str
+    proposed_als_track: Optional[str] = None
+    confidence: float
+
+
 class VersionPatch(BaseModel):
     version_number: Optional[int] = Field(default=None, ge=1)
     label: Optional[str] = Field(default=None, max_length=120)
@@ -31,3 +38,5 @@ class VersionDetail(BaseModel):
     has_stems: bool
     created_at: str
     analyses: list[AnalysisInVersionDetail] = []
+    proposed_mapping: Optional[list[StemMappingProposalDTO]] = None
+    als_track_names: list[str] = []

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import logging
 import uuid
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,9 +14,22 @@ from aimusic_shared.models import JobStatus, Song, SongVersion, UploadJob
 
 from ..db import get_session
 from ..models import User
-from ..routers.uploads import validate_audio_magic, validate_als_magic, ALS_MAX_BYTES
-from ..schemas.versions import VersionDetail, AnalysisInVersionDetail, VersionPatch
+from ..routers.uploads import (
+    ALS_MAX_BYTES,
+    _StemBuf,
+    _parse_als_track_names,
+    _validation_error_status,
+    validate_als_magic,
+    validate_audio_magic,
+)
+from ..schemas.versions import (
+    AnalysisInVersionDetail,
+    StemMappingProposalDTO,
+    VersionDetail,
+    VersionPatch,
+)
 from ..services.celery_client import dispatch_analysis_job
+from ..services.stem_validation import StemValidationError, validate_stem_uploads
 from ..services.storage import get_storage
 from .auth import get_current_user
 
@@ -49,6 +64,7 @@ async def create_version(
     file: UploadFile = File(...),
     reference: UploadFile | None = File(None),
     als: UploadFile | None = File(None),
+    stems: list[UploadFile] | None = File(None),
     label: Optional[str] = Form(None),
     notes: Optional[str] = Form(None),
     user: User = Depends(get_current_user),
@@ -85,6 +101,33 @@ async def create_version(
         als_key = await storage.save(als, prefix="als_")
         als_path = str(storage.get_path(als_key))
 
+    # --- Stems ---
+    async def _save_stem_group(uploads: list[UploadFile] | None, prefix: str) -> list[str]:
+        if not uploads:
+            return []
+        real = [u for u in uploads if u.filename]
+        if not real:
+            return []
+        bufs: list[_StemBuf] = []
+        for u in real:
+            payload = await u.read()
+            await u.seek(0)
+            bufs.append(_StemBuf(u.filename, payload))
+        try:
+            validate_stem_uploads(bufs)
+        except StemValidationError as e:
+            raise HTTPException(
+                status_code=_validation_error_status(e.code),
+                detail={"code": e.code, "message": e.message, "file": e.file},
+            )
+        saved: list[str] = []
+        for u in real:
+            key = await storage.save(u, prefix=prefix)
+            saved.append(str(storage.get_path(key)))
+        return saved
+
+    stem_paths_raw = await _save_stem_group(stems, "stem_")
+
     # Compute next version_number for this song
     max_n = (await db.execute(
         select(SongVersion.version_number)
@@ -99,11 +142,27 @@ async def create_version(
         label=(label.strip() if label else None),
         notes=(notes.strip() if notes else None),
         file_path=file_path, reference_path=reference_path, als_file_path=als_path,
+        stem_paths_raw=stem_paths_raw or None,
     )
     db.add(version)
     await db.commit()
     await db.refresh(version)
-    log.info("versions: created song=%s version=%s v_no=%s", song.id, version.id, next_n)
+    log.info("versions: created song=%s version=%s v_no=%s stems=%d", song.id, version.id, next_n, len(stem_paths_raw))
+
+    proposed_mapping = None
+    als_track_names: list[str] | None = None
+    if stem_paths_raw:
+        from audio_analysis.stems import propose_mapping
+        als_track_names = _parse_als_track_names(als_path) if als_path else None
+        proposals = propose_mapping([Path(p) for p in stem_paths_raw], als_track_names)
+        proposed_mapping = [
+            StemMappingProposalDTO(
+                file=p.file.name,
+                proposed_role=p.proposed_role.value,
+                proposed_als_track=p.proposed_als_track,
+                confidence=p.confidence,
+            ) for p in proposals
+        ]
 
     return VersionDetail(
         version_id=str(version.id), song_id=str(song.id),
@@ -112,9 +171,11 @@ async def create_version(
         file_path=version.file_path,
         has_reference=version.reference_path is not None,
         has_als=version.als_file_path is not None,
-        has_stems=False,
+        has_stems=bool(stem_paths_raw),
         created_at=version.created_at.isoformat(),
         analyses=[],
+        proposed_mapping=proposed_mapping,
+        als_track_names=als_track_names or [],
     )
 
 
@@ -278,3 +339,32 @@ async def analyze_version(
             raise
 
     return {"job_id": str(job.id), "status": initial_status.value}
+
+
+class _VersionStemMapping(BaseModel):
+    file: str
+    role: str
+
+
+@router.post("/versions/{version_id}/stems/confirm", status_code=200)
+async def confirm_version_stems(
+    version_id: uuid.UUID,
+    body: list[_VersionStemMapping],
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    version, _ = await _load_version_through_song(db, version_id, user.id)
+    if not version.stem_paths_raw:
+        raise HTTPException(status_code=409, detail="Version has no pending stem mapping")
+
+    by_name = {Path(p).name: p for p in version.stem_paths_raw}
+    confirmed: dict[str, str] = {}
+    for entry in body:
+        path = by_name.get(entry.file)
+        if path is None:
+            raise HTTPException(status_code=422, detail=f"Unknown stem file: {entry.file}")
+        confirmed[entry.role] = path
+
+    version.stem_paths = confirmed
+    await db.commit()
+    return {"version_id": str(version.id), "stem_paths": confirmed}

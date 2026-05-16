@@ -189,3 +189,23 @@ class TestAnalyzeVersion:
         r = await authed_client.post(f"/versions/{vid}/analyze")
         assert r.status_code == 409
         assert r.json()["detail"]["code"] == "analysis_in_progress"
+
+
+class TestVersionStems:
+    async def test_create_version_with_stems_returns_proposed_mapping(self, authed_client, song_id, monkeypatch):
+        # Bypass real stem validation by patching it to no-op
+        def _ok(_bufs): return None
+        monkeypatch.setattr("app.routers.versions.validate_stem_uploads", _ok)
+        # Patch propose_mapping to return an empty list (no real stem files present)
+        import audio_analysis.stems as stems_mod
+        monkeypatch.setattr(stems_mod, "propose_mapping", lambda paths, names=None: [])
+
+        files = [
+            ("file", ("a.wav", io.BytesIO(WAV_HEADER), "audio/wav")),
+            ("stems", ("kick.wav", io.BytesIO(WAV_HEADER), "audio/wav")),
+        ]
+        r = await authed_client.post(f"/songs/{song_id}/versions", files=files)
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert body.get("has_stems") is True
+        assert "proposed_mapping" in body
