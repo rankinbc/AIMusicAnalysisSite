@@ -24,5 +24,13 @@ celery_app.conf.update(
             "task": "app.tasks_cleanup.expire_stale_stem_mappings_task",
             "schedule": 3600.0,  # hourly
         },
+        "cleanup-orphan-uploads": {
+            "task": "app.tasks_cleanup.cleanup_orphan_uploads_task",
+            "schedule": 86400.0,  # daily
+        },
+        "purge-archived-songs": {
+            "task": "app.tasks_cleanup.purge_archived_songs_task",
+            "schedule": 86400.0,  # daily
+        },
     },
 )

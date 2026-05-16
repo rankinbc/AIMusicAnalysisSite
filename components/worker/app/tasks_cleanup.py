@@ -63,3 +63,82 @@ async def expire_stale_stem_mappings() -> None:
 @shared_task(name="app.tasks_cleanup.expire_stale_stem_mappings_task")
 def expire_stale_stem_mappings_task() -> None:
     asyncio.run(expire_stale_stem_mappings())
+
+
+ORPHAN_TTL_DAYS = 30
+
+
+async def cleanup_orphan_uploads() -> None:
+    """Purge files + delete standalone UploadJobs older than ORPHAN_TTL_DAYS.
+
+    Standalone = version_id IS NULL. Linked jobs are protected.
+    We delete the row outright because UploadJob.file_path is NOT NULL —
+    nullifying isn't an option without a schema change.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=ORPHAN_TTL_DAYS)
+    async with _async_session_factory() as session:
+        result = await session.execute(
+            select(UploadJob).where(
+                UploadJob.version_id.is_(None),
+                UploadJob.created_at < cutoff,
+            )
+        )
+        jobs = list(result.scalars().all())
+
+        for job in jobs:
+            for path_attr in ("file_path", "reference_path", "als_file_path"):
+                p = getattr(job, path_attr)
+                if p:
+                    try:
+                        Path(p).unlink(missing_ok=True)
+                    except OSError as exc:
+                        log.warning("cleanup_orphan_uploads: could not unlink %s: %s", p, exc)
+            await session.delete(job)
+            log.info("cleanup_orphan_uploads: purged job=%s", job.id)
+        await session.commit()
+
+
+@shared_task(name="app.tasks_cleanup.cleanup_orphan_uploads_task")
+def cleanup_orphan_uploads_task() -> None:
+    asyncio.run(cleanup_orphan_uploads())
+
+
+ARCHIVE_TTL_DAYS = 30
+
+
+async def purge_archived_songs() -> None:
+    """Hard-delete songs whose archived_at is older than ARCHIVE_TTL_DAYS.
+
+    Cascades through SongVersion -> UploadJob -> AnalysisResult via DB constraints.
+    Also unlinks audio files on disk.
+    """
+    from aimusic_shared.models import Song, SongVersion
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=ARCHIVE_TTL_DAYS)
+    async with _async_session_factory() as session:
+        songs = list((await session.execute(
+            select(Song).where(
+                Song.archived_at.isnot(None),
+                Song.archived_at < cutoff,
+            )
+        )).scalars().all())
+
+        for song in songs:
+            versions = list((await session.execute(
+                select(SongVersion).where(SongVersion.song_id == song.id)
+            )).scalars().all())
+            for v in versions:
+                for p in (v.file_path, v.reference_path, v.als_file_path):
+                    if p:
+                        try:
+                            Path(p).unlink(missing_ok=True)
+                        except OSError as exc:
+                            log.warning("purge_archived_songs: unlink %s failed: %s", p, exc)
+            await session.delete(song)
+            log.info("purge_archived_songs: hard-deleted song=%s", song.id)
+        await session.commit()
+
+
+@shared_task(name="app.tasks_cleanup.purge_archived_songs_task")
+def purge_archived_songs_task() -> None:
+    asyncio.run(purge_archived_songs())
