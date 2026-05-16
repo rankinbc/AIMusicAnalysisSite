@@ -7,6 +7,8 @@ import ResultsPage from './components/ResultsPage';
 import ProfilePage from './components/ProfilePage';
 import StickyPlayer from './components/StickyPlayer';
 import GenreProfilePage from './components/GenreProfilePage';
+import LibraryPage from './components/LibraryPage.jsx';
+import SongDetailPage from './components/SongDetailPage.jsx';
 import { getToken, setToken, getJobResults } from './api/client';
 import { adaptResult } from './api/adapter';
 
@@ -18,6 +20,8 @@ export default function App() {
   const [resultData, setResult] = useState(null);
   const [streamError, setStreamError] = useState('');
   const [stemMapping, setStemMapping] = useState(null);  // { proposed_mapping, als_track_names }
+  const [songId, setSongId]           = useState(null);
+  const [fromLibrary, setFromLibrary] = useState(false);
 
   const handleLogin = () => setPage('upload');
 
@@ -34,9 +38,10 @@ export default function App() {
     setPage('profile');
   };
 
-  const handleJobStarted = (id) => {
+  const handleJobStarted = (id, opts = {}) => {
     setJobId(id);
     setStemMapping(null);
+    setFromLibrary(Boolean(opts.fromLibrary));
     setPage('processing');
   };
 
@@ -83,17 +88,28 @@ export default function App() {
     setPage('upload');
   };
 
-  const handleViewJob = useCallback(async (id, filename) => {
+  const handleViewJob = useCallback(async (id, filename, opts = {}) => {
     try {
       const raw     = await getJobResults(id);
       const adapted = adaptResult(raw, filename);
       setJobId(id);
       setResult(adapted);
+      setFromLibrary(Boolean(opts.fromLibrary));
       setPage('results');
     } catch (err) {
       if (err.status === 401) handleLogout();
     }
   }, []);
+
+  const handleOpenSong = (id) => {
+    setSongId(id);
+    setPage('songDetail');
+  };
+
+  const handleSavedToLibrary = (newSongId) => {
+    setSongId(newSongId);
+    setPage('songDetail');
+  };
 
   return (
     <>
@@ -105,8 +121,25 @@ export default function App() {
           onAwaitingMapping={handleAwaitingMapping}
           onLogout={handleLogout}
           onProfile={handleProfile}
+          onLibrary={() => setPage('library')}
           onGenreProfiles={() => { setPrevPage('upload'); setPage('genreProfiles'); }}
-          onViewResult={(adapted, id) => { setJobId(id); setResult(adapted); setPage('results'); }}
+          onViewResult={(adapted, id) => { setJobId(id); setResult(adapted); setFromLibrary(false); setPage('results'); }}
+        />
+      )}
+      {page === 'library' && (
+        <LibraryPage
+          onOpenSong={handleOpenSong}
+          onBack={() => setPage('upload')}
+          onLogout={handleLogout}
+        />
+      )}
+      {page === 'songDetail' && songId && (
+        <SongDetailPage
+          songId={songId}
+          onBack={() => setPage('library')}
+          onJobStarted={(id) => handleJobStarted(id, { fromLibrary: true })}
+          onViewResult={(id, name) => handleViewJob(id, name, { fromLibrary: true })}
+          onLogout={handleLogout}
         />
       )}
       {page === 'genreProfiles' && (
@@ -135,6 +168,8 @@ export default function App() {
           jobId={jobId}
           onBack={handleBack}
           onProfile={handleProfile}
+          fromLibrary={fromLibrary}
+          onSavedToLibrary={handleSavedToLibrary}
         />
       )}
       {page === 'results' && file && <StickyPlayer file={file} />}

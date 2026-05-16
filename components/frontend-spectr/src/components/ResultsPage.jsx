@@ -45,6 +45,7 @@ import {
 import { PerStemBalanceCard, StemClashMatrixCard, StemReferenceDeltasCard } from './StemSections';
 import AIAnalysisPanel from './AIAnalysisModal';
 import ALSProjectPanel from './ALSProjectPanel';
+import SaveToLibraryModal from './SaveToLibraryModal.jsx';
 
 function StatCell({ label, value, sub, color, last, bottom }) {
   return (
@@ -128,7 +129,8 @@ function VerdictStrip({ data }) {
   );
 }
 
-export default function ResultsPage({ data, jobId, onBack, onProfile }) {
+export default function ResultsPage({ data, jobId, onBack, onProfile, fromLibrary, onSavedToLibrary }) {
+  const [showSave, setShowSave] = useState(false);
 
   return (
     <div>
@@ -151,6 +153,12 @@ export default function ResultsPage({ data, jobId, onBack, onProfile }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>{data.track.name}</div>
 
+          {!fromLibrary && jobId && (
+            <button onClick={() => setShowSave(true)} style={{
+              background: 'var(--cyan)', color: '#06151a', fontSize: 12, fontWeight: 700,
+              padding: '6px 14px', border: 'none', borderRadius: 6, cursor: 'pointer',
+            }}>+ Save to Library</button>
+          )}
           <button onClick={onProfile} style={{
             background: 'none', color: 'var(--muted)', fontSize: 12,
             padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 6,
@@ -222,6 +230,13 @@ export default function ResultsPage({ data, jobId, onBack, onProfile }) {
         </div>
       </div>
 
+      {showSave && jobId && (
+        <SaveToLibraryModal
+          jobId={jobId}
+          onCancel={() => setShowSave(false)}
+          onSaved={(r) => { setShowSave(false); onSavedToLibrary?.(r.song_id); }}
+        />
+      )}
     </div>
   );
 }

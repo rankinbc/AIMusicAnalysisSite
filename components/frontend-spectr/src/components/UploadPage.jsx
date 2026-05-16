@@ -2,12 +2,11 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { WaveformSVG } from './primitives';
 import { useWaveform } from '../hooks/useWaveform';
 import { uploadTrack } from '../api/client';
-import SongLibrary from './SongLibrary';
 
 const GENRES = ['Trance', 'House', 'Techno', 'D&B', 'Progressive', 'Other'];
 const GENRE_API_KEY = { Trance: 'trance', House: 'house', Techno: 'techno', 'D&B': 'dnb', Progressive: 'progressive' };
 
-export default function UploadPage({ file, setFile, onJobStarted, onAwaitingMapping, onLogout, onGenreProfiles, onProfile, onViewResult }) {
+export default function UploadPage({ file, setFile, onJobStarted, onAwaitingMapping, onLogout, onGenreProfiles, onProfile, onViewResult, onLibrary }) {
   const [genre, setGenre] = useState('Trance');
   const [trackName, setTrackName] = useState('');
   const [hasRef, setHasRef] = useState(false);
@@ -122,6 +121,9 @@ export default function UploadPage({ file, setFile, onJobStarted, onAwaitingMapp
           <div style={{ fontWeight: 800, fontSize: 22, letterSpacing: '0.22em', color: 'var(--cyan)' }}>SPECTR</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={onLibrary} style={{ background: 'none', color: 'var(--cyan)', fontSize: 12, padding: '5px 10px', border: '1px solid var(--cyan)', borderRadius: 6, cursor: 'pointer' }}>
+            Library
+          </button>
           <button onClick={onGenreProfiles} style={{ background: 'none', color: 'var(--muted)', fontSize: 12, padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}>
             Genre profiles
           </button>
@@ -387,12 +389,6 @@ export default function UploadPage({ file, setFile, onJobStarted, onAwaitingMapp
         <p className="mono fade-up" style={{ marginTop: 12, fontSize: 11, color: 'var(--muted)', animationDelay: '0.25s' }}>
           {file ? 'analysis typically takes 60–90 seconds' : 'drop or browse to get started'}
         </p>
-
-        <SongLibrary
-          onJobStarted={onJobStarted}
-          onViewResult={onViewResult}
-          onLogout={onLogout}
-        />
       </div>
     </div>
   );
