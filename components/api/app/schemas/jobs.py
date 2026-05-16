@@ -36,22 +36,6 @@ class JobSummary(BaseModel):
     grade: str | None = None
 
 
-class TrackVersionSummary(BaseModel):
-    job_id: str
-    filename: str
-    score: float | None = None
-    grade: str | None = None
-    created_at: str
-
-
-class TrackGroup(BaseModel):
-    track_name: str
-    version_count: int
-    latest_score: float | None = None
-    latest_grade: str | None = None
-    versions: list[TrackVersionSummary]
-
-
 class SaveAsNewSong(BaseModel):
     action: Literal["new_song"]
     name: str = Field(..., min_length=1, max_length=200)

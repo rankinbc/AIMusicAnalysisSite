@@ -10,7 +10,7 @@ from aimusic_shared.models import JobStatus
 
 from ..config import settings
 from ..db import get_session
-from ..models import Song, UploadJob, User
+from ..models import UploadJob, User
 from ..schemas.uploads import StemMappingProposalDTO, UploadResponse
 from ..services.celery_client import dispatch_analysis_job
 from ..services.stem_validation import (
@@ -73,7 +73,6 @@ def _validation_error_status(code: str) -> int:
 async def upload_audio(
     file: UploadFile = File(...),
     reference: UploadFile | None = File(None),
-    track_name: str | None = Form(None),
     als: UploadFile | None = File(None),
     genre_hint: str | None = Form(None),
     stems: list[UploadFile] | None = File(None),
@@ -174,47 +173,16 @@ async def upload_audio(
             log.warning("upload: unknown genre_hint %r ignored", genre_hint)
             normalised_genre = None
 
-    # --- Upsert Song record if a track name was provided ---
-    clean_name = track_name.strip() if track_name else None
-    song_id = None
-    if clean_name:
-        existing = (await session.execute(
-            select(Song).where(Song.user_id == current_user.id, Song.name == clean_name)
-        )).scalar_one_or_none()
-        if existing:
-            existing.file_path = file_path
-            existing.reference_path = reference_path
-            existing.als_file_path = als_file_path
-            existing.genre_hint = normalised_genre
-            await session.flush()
-            song_id = existing.id
-            log.info("upload: updated song=%s (%r)", song_id, clean_name)
-        else:
-            song = Song(
-                user_id=current_user.id,
-                name=clean_name,
-                file_path=file_path,
-                reference_path=reference_path,
-                als_file_path=als_file_path,
-                genre_hint=normalised_genre,
-            )
-            session.add(song)
-            await session.flush()
-            song_id = song.id
-            log.info("upload: created song=%s (%r)", song_id, clean_name)
-
     # --- Create job record (state in PostgreSQL, NOT Celery) ---
     initial_status = (
         JobStatus.AWAITING_STEM_MAPPING if stem_paths_raw else JobStatus.PENDING
     )
     job = UploadJob(
         user_id=current_user.id,
-        song_id=song_id,
         file_path=file_path,
         reference_path=reference_path,
         als_file_path=als_file_path,
         genre_hint=normalised_genre,
-        track_name=clean_name,
         status=initial_status,
         stem_paths_raw=(stem_paths_raw + reference_stem_paths_raw) or None,
     )
