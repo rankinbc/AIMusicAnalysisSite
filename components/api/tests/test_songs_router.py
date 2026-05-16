@@ -74,3 +74,57 @@ class TestCreateSong:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             r = await ac.post("/songs/", json={"name": "X"})
         assert r.status_code == 401
+
+
+class TestListSongs:
+    async def test_empty_list(self, authed_client):
+        r = await authed_client.get("/songs/")
+        assert r.status_code == 200
+        assert r.json() == []
+
+    async def test_lists_songs_newest_first(self, authed_client):
+        await authed_client.post("/songs/", json={"name": "A"})
+        await authed_client.post("/songs/", json={"name": "B"})
+        r = await authed_client.get("/songs/")
+        assert r.status_code == 200
+        names = [s["name"] for s in r.json()]
+        assert set(names) == {"A", "B"}
+        assert all(s["version_count"] == 0 for s in r.json())
+
+    async def test_excludes_archived(self, authed_client):
+        c = await authed_client.post("/songs/", json={"name": "Z"})
+        sid = c.json()["song_id"]
+        await authed_client.delete(f"/songs/{sid}")
+        r = await authed_client.get("/songs/")
+        assert r.json() == []
+
+
+class TestSongDetail:
+    async def test_detail_includes_empty_versions(self, authed_client):
+        c = await authed_client.post("/songs/", json={"name": "D"})
+        sid = c.json()["song_id"]
+        r = await authed_client.get(f"/songs/{sid}")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["name"] == "D"
+        assert body["versions"] == []
+
+    async def test_detail_404_when_not_found(self, authed_client):
+        r = await authed_client.get(f"/songs/{uuid.uuid4()}")
+        assert r.status_code == 404
+
+
+class TestPatchSong:
+    async def test_rename(self, authed_client):
+        c = await authed_client.post("/songs/", json={"name": "Old"})
+        sid = c.json()["song_id"]
+        r = await authed_client.patch(f"/songs/{sid}", json={"name": "New"})
+        assert r.status_code == 200
+        assert r.json()["name"] == "New"
+
+    async def test_patch_conflict(self, authed_client):
+        await authed_client.post("/songs/", json={"name": "Taken"})
+        c = await authed_client.post("/songs/", json={"name": "Other"})
+        sid = c.json()["song_id"]
+        r = await authed_client.patch(f"/songs/{sid}", json={"name": "Taken"})
+        assert r.status_code == 409
