@@ -95,3 +95,65 @@ class TestCreateVersion:
         files = {"file": ("a.wav", io.BytesIO(WAV_HEADER), "audio/wav")}
         r = await authed_client.post(f"/songs/{uuid.uuid4()}/versions", files=files)
         assert r.status_code == 404
+
+
+class TestGetVersion:
+    async def test_returns_detail(self, authed_client, song_id):
+        files = {"file": ("a.wav", io.BytesIO(WAV_HEADER), "audio/wav")}
+        c = await authed_client.post(f"/songs/{song_id}/versions", files=files)
+        vid = c.json()["version_id"]
+        r = await authed_client.get(f"/versions/{vid}")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["version_id"] == vid
+        assert body["analyses"] == []
+
+    async def test_404_other_user(self, authed_client, song_id, fake_user_factory):
+        from app.routers.auth import get_current_user
+        from app.main import app
+        files = {"file": ("a.wav", io.BytesIO(WAV_HEADER), "audio/wav")}
+        c = await authed_client.post(f"/songs/{song_id}/versions", files=files)
+        vid = c.json()["version_id"]
+        other = fake_user_factory()
+        Session = authed_client.session_factory
+        async with Session() as s:
+            s.add(other); await s.commit()
+        app.dependency_overrides[get_current_user] = lambda: other
+        try:
+            r = await authed_client.get(f"/versions/{vid}")
+            assert r.status_code == 404
+        finally:
+            app.dependency_overrides[get_current_user] = lambda: authed_client.user
+
+
+class TestPatchVersion:
+    async def test_edit_label_notes(self, authed_client, song_id):
+        files = {"file": ("a.wav", io.BytesIO(WAV_HEADER), "audio/wav")}
+        c = await authed_client.post(f"/songs/{song_id}/versions", files=files)
+        vid = c.json()["version_id"]
+        r = await authed_client.patch(f"/versions/{vid}", json={"label": "mastered", "notes": "boosted 2k"})
+        assert r.status_code == 200
+        assert r.json()["label"] == "mastered"
+
+    async def test_version_number_conflict_returns_409(self, authed_client, song_id):
+        # Create v1 and v2; try to rename v2 to v1.
+        files = {"file": ("a.wav", io.BytesIO(WAV_HEADER), "audio/wav")}
+        await authed_client.post(f"/songs/{song_id}/versions", files=files)
+        files2 = {"file": ("b.wav", io.BytesIO(WAV_HEADER), "audio/wav")}
+        c2 = await authed_client.post(f"/songs/{song_id}/versions", files=files2)
+        v2_id = c2.json()["version_id"]
+        r = await authed_client.patch(f"/versions/{v2_id}", json={"version_number": 1})
+        assert r.status_code == 409
+        assert r.json()["detail"]["code"] == "version_number_in_use"
+        assert r.json()["detail"]["proposed"] == 3
+
+
+class TestDeleteVersion:
+    async def test_delete_removes_version(self, authed_client, song_id):
+        files = {"file": ("a.wav", io.BytesIO(WAV_HEADER), "audio/wav")}
+        c = await authed_client.post(f"/songs/{song_id}/versions", files=files)
+        vid = c.json()["version_id"]
+        r = await authed_client.delete(f"/versions/{vid}")
+        assert r.status_code == 204
+        r2 = await authed_client.get(f"/versions/{vid}")
+        assert r2.status_code == 404

@@ -13,7 +13,7 @@ from aimusic_shared.models import Song, SongVersion, UploadJob
 from ..db import get_session
 from ..models import User
 from ..routers.uploads import validate_audio_magic, validate_als_magic, ALS_MAX_BYTES
-from ..schemas.versions import VersionDetail, AnalysisInVersionDetail
+from ..schemas.versions import VersionDetail, AnalysisInVersionDetail, VersionPatch
 from ..services.storage import get_storage
 from .auth import get_current_user
 
@@ -115,3 +115,110 @@ async def create_version(
         created_at=version.created_at.isoformat(),
         analyses=[],
     )
+
+
+@router.get("/versions/{version_id}", response_model=VersionDetail)
+async def get_version(
+    version_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> VersionDetail:
+    version, _ = await _load_version_through_song(db, version_id, user.id)
+    jobs = (await db.execute(
+        select(UploadJob).where(UploadJob.version_id == version.id)
+        .order_by(UploadJob.created_at.desc())
+    )).scalars().all()
+
+    from aimusic_shared.models import AnalysisResult
+    job_ids = [j.id for j in jobs]
+    analyses = {}
+    if job_ids:
+        rows = (await db.execute(
+            select(AnalysisResult).where(AnalysisResult.job_id.in_(job_ids))
+        )).scalars().all()
+        analyses = {a.job_id: a for a in rows}
+
+    analysis_dtos: list[AnalysisInVersionDetail] = []
+    for j in jobs:
+        a = analyses.get(j.id)
+        score = grade = None
+        if a and a.final_json:
+            raw = a.final_json.get("overall_score")
+            score = float(raw) if raw is not None else None
+            grade = a.final_json.get("grade")
+        analysis_dtos.append(AnalysisInVersionDetail(
+            job_id=str(j.id), status=j.status.value,
+            score=score, grade=grade,
+            created_at=j.created_at.isoformat(),
+            completed_at=j.completed_at.isoformat() if j.completed_at else None,
+        ))
+
+    return VersionDetail(
+        version_id=str(version.id), song_id=str(version.song_id),
+        version_number=version.version_number,
+        label=version.label, notes=version.notes,
+        file_path=version.file_path,
+        has_reference=version.reference_path is not None,
+        has_als=version.als_file_path is not None,
+        has_stems=bool(version.stem_paths),
+        created_at=version.created_at.isoformat(),
+        analyses=analysis_dtos,
+    )
+
+
+@router.patch("/versions/{version_id}", response_model=VersionDetail)
+async def patch_version(
+    version_id: uuid.UUID,
+    body: VersionPatch,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> VersionDetail:
+    from sqlalchemy.exc import IntegrityError
+    version, _ = await _load_version_through_song(db, version_id, user.id)
+    # Capture song_id before commit — after a rollback, ORM attribute access
+    # can hit MissingGreenlet because the instance is expired.
+    song_id_for_version = version.song_id
+    if body.version_number is not None:
+        version.version_number = body.version_number
+    if body.label is not None:
+        version.label = body.label.strip()
+    if body.notes is not None:
+        version.notes = body.notes
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        # Find the next free version_number for this song
+        max_n = (await db.execute(
+            select(SongVersion.version_number)
+            .where(SongVersion.song_id == song_id_for_version)
+            .order_by(SongVersion.version_number.desc())
+            .limit(1)
+        )).scalar()
+        proposed = (max_n or 0) + 1
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "version_number_in_use", "proposed": proposed},
+        )
+    await db.refresh(version)
+    return await get_version(version_id, user, db)
+
+
+@router.delete("/versions/{version_id}", status_code=204)
+async def delete_version(
+    version_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+):
+    import os
+    version, _ = await _load_version_through_song(db, version_id, user.id)
+    # Best-effort disk cleanup
+    for path in [version.file_path, version.reference_path, version.als_file_path]:
+        if path:
+            try:
+                os.unlink(path)
+            except OSError:
+                log.warning("delete_version: could not unlink %s", path)
+    await db.delete(version)
+    await db.commit()
+    return None
