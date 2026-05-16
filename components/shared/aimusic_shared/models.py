@@ -44,21 +44,41 @@ class User(Base):
 
 
 class Song(Base):
-    """One entry per track name per user — stores the latest uploaded file paths."""
+    """A user's library entry — owns 1+ SongVersion rows."""
     __tablename__ = "songs"
     __table_args__ = (UniqueConstraint("user_id", "name", name="uq_songs_user_name"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    file_path: Mapped[str] = mapped_column(String(500), nullable=False)
-    reference_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    als_file_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     genre_hint: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-    jobs: Mapped[list["UploadJob"]] = relationship("UploadJob", back_populates="song", lazy="noload")
+    versions: Mapped[list["SongVersion"]] = relationship("SongVersion", back_populates="song", lazy="noload", cascade="all, delete-orphan")
+
+
+class SongVersion(Base):
+    """An audio recording belonging to a Song — owns the audio file on disk."""
+    __tablename__ = "song_versions"
+    __table_args__ = (UniqueConstraint("song_id", "version_number", name="uq_song_versions_song_number"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    song_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("songs.id", ondelete="CASCADE"), nullable=False, index=True)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    label: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    file_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    reference_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    als_file_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    stem_paths_raw: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    stem_paths: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    song: Mapped[Song] = relationship("Song", back_populates="versions", lazy="noload")
+    jobs: Mapped[list["UploadJob"]] = relationship("UploadJob", back_populates="version", lazy="noload")
 
 
 class UploadJob(Base):
@@ -75,8 +95,7 @@ class UploadJob(Base):
     als_file_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     genre_hint: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     task_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    track_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True, index=True)
-    song_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("songs.id", ondelete="SET NULL"), nullable=True, index=True)
+    version_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("song_versions.id", ondelete="CASCADE"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -84,7 +103,7 @@ class UploadJob(Base):
     stem_paths: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
     user: Mapped[User] = relationship("User", back_populates="jobs", lazy="noload")
-    song: Mapped[Optional["Song"]] = relationship("Song", back_populates="jobs", lazy="noload")
+    version: Mapped[Optional["SongVersion"]] = relationship("SongVersion", back_populates="jobs", lazy="noload")
     result: Mapped[Optional[AnalysisResult]] = relationship("AnalysisResult", back_populates="job", lazy="noload")
 
 
