@@ -46,14 +46,17 @@ export default function ProfilePage({ onBack, onLogout, onViewJob }) {
 
   // Load upload history from API on mount
   useEffect(() => {
+    let alive = true;
     getJobs()
-      .then(jobs => setHistory(Array.isArray(jobs) ? jobs : []))
-      .catch(err => {
+      .then(jobs  => { if (alive) setHistory(Array.isArray(jobs) ? jobs : []); })
+      .catch(err  => {
+        if (!alive) return;
         if (err.status === 401) onLogout();
         else setHistError('Could not load history');
       })
-      .finally(() => setHistLoading(false));
-  }, [onLogout]);
+      .finally(() => { if (alive) setHistLoading(false); });
+    return () => { alive = false; };
+  }, []);
 
   const handleChangePassword = async (e) => {
     e.preventDefault();

@@ -165,6 +165,8 @@ export async function getGenreProfile(genre) {
   return request(`/genre-profiles/${genre}`);
 }
 
+export { request as apiRequest };
+
 export function streamJob(jobId, onPhase, onComplete, onError) {
   const url = `${BASE}/jobs/${jobId}/stream?token=${encodeURIComponent(_token ?? '')}`;
   const es = new EventSource(url);

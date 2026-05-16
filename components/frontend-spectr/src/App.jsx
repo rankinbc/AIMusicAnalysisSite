@@ -21,13 +21,13 @@ export default function App() {
 
   const handleLogin = () => setPage('upload');
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     setToken(null);
     setFile(null);
     setJobId(null);
     setResult(null);
     setPage('login');
-  };
+  }, []);
 
   const handleProfile = () => {
     setPrevPage(page);
