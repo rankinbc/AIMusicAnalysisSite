@@ -241,3 +241,28 @@ async def delete_song(
     song.archived_at = datetime.now(timezone.utc)
     await db.commit()
     return None
+
+
+RESTORE_WINDOW_DAYS = 30
+
+
+@router.post("/{song_id}/restore", response_model=SongSummary)
+async def restore_song(
+    song_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> SongSummary:
+    from datetime import datetime, timedelta, timezone
+    song = (await db.execute(
+        select(Song).where(Song.id == song_id, Song.user_id == user.id)
+    )).scalar_one_or_none()
+    if song is None or song.archived_at is None:
+        raise HTTPException(status_code=404, detail="Song not found")
+    cutoff = datetime.now(timezone.utc) - timedelta(days=RESTORE_WINDOW_DAYS)
+    archived_at = song.archived_at if song.archived_at.tzinfo else song.archived_at.replace(tzinfo=timezone.utc)
+    if archived_at < cutoff:
+        raise HTTPException(status_code=410, detail="Restore window expired")
+    song.archived_at = None
+    await db.commit()
+    await db.refresh(song)
+    return _build_song_summary(song, [], {}, {})

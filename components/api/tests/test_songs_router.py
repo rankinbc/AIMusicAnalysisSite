@@ -128,3 +128,51 @@ class TestPatchSong:
         sid = c.json()["song_id"]
         r = await authed_client.patch(f"/songs/{sid}", json={"name": "Taken"})
         assert r.status_code == 409
+
+
+class TestRestoreSong:
+    async def test_restore_archived_song(self, authed_client):
+        c = await authed_client.post("/songs/", json={"name": "R"})
+        sid = c.json()["song_id"]
+        await authed_client.delete(f"/songs/{sid}")
+        r = await authed_client.post(f"/songs/{sid}/restore")
+        assert r.status_code == 200
+        listing = await authed_client.get("/songs/")
+        assert any(s["song_id"] == sid for s in listing.json())
+
+    async def test_restore_outside_window_returns_410(self, authed_client):
+        from datetime import datetime, timedelta, timezone
+        from aimusic_shared.models import Song
+        c = await authed_client.post("/songs/", json={"name": "Old"})
+        sid = c.json()["song_id"]
+        await authed_client.delete(f"/songs/{sid}")
+        # Manually push archived_at past the 30d window
+        Session = authed_client.session_factory  # type: ignore[attr-defined]
+        async with Session() as s:
+            from sqlalchemy import select
+            song = (await s.execute(select(Song).where(Song.id == uuid.UUID(sid)))).scalar_one()
+            song.archived_at = datetime.now(timezone.utc) - timedelta(days=31)
+            await s.commit()
+        r = await authed_client.post(f"/songs/{sid}/restore")
+        assert r.status_code == 410
+
+
+class TestIDOR:
+    async def test_cannot_access_other_users_song(self, authed_client, fake_user_factory):
+        from app.routers.auth import get_current_user
+        from app.main import app
+        # Create a song as the current user
+        c = await authed_client.post("/songs/", json={"name": "Mine"})
+        sid = c.json()["song_id"]
+        # Now switch to a different user via the dependency override
+        other = fake_user_factory()
+        Session = authed_client.session_factory  # type: ignore[attr-defined]
+        async with Session() as s:
+            s.add(other)
+            await s.commit()
+        app.dependency_overrides[get_current_user] = lambda: other
+        try:
+            r = await authed_client.get(f"/songs/{sid}")
+            assert r.status_code == 404
+        finally:
+            app.dependency_overrides[get_current_user] = lambda: authed_client.user  # type: ignore[attr-defined]
