@@ -224,3 +224,90 @@ async def get_job_results(
         "result": analysis.final_json,
         "share_token": analysis.share_token,
     }
+
+
+import os
+import uuid as _uuid
+from sqlalchemy.exc import IntegrityError
+from aimusic_shared.models import Song, SongVersion
+from ..schemas.jobs import SaveToLibraryResult, SaveAsNewSong, AddToExistingSong
+
+
+@router.post("/{job_id}/save-to-library", response_model=SaveToLibraryResult)
+async def save_to_library(
+    job_id: _uuid.UUID,
+    body: dict,  # parse manually via discriminator
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> SaveToLibraryResult:
+    action = body.get("action")
+    if action == "new_song":
+        parsed = SaveAsNewSong(**body)
+    elif action == "add_to_song":
+        parsed = AddToExistingSong(**body)
+    else:
+        raise HTTPException(status_code=422, detail="Unknown action")
+
+    # 1. Load job + IDOR check
+    job = (await session.execute(
+        select(UploadJob).where(UploadJob.id == job_id, UploadJob.user_id == current_user.id)
+    )).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.version_id is not None:
+        raise HTTPException(status_code=409, detail={"code": "already_saved", "version_id": str(job.version_id)})
+
+    # 2. Verify the audio file still exists on disk
+    if not job.file_path or not os.path.exists(job.file_path):
+        raise HTTPException(
+            status_code=410,
+            detail={"code": "audio_expired", "message": "This recording has expired — please re-upload to save it."},
+        )
+
+    # 3. Get-or-create song
+    if isinstance(parsed, SaveAsNewSong):
+        song = Song(user_id=current_user.id, name=parsed.name.strip(), genre_hint=parsed.genre_hint)
+        session.add(song)
+        try:
+            await session.flush()
+        except IntegrityError:
+            await session.rollback()
+            raise HTTPException(status_code=409, detail={"code": "song_name_in_use"})
+        label = parsed.label
+        notes = parsed.notes
+    else:  # AddToExistingSong
+        song = (await session.execute(
+            select(Song).where(Song.id == parsed.song_id, Song.user_id == current_user.id, Song.archived_at.is_(None))
+        )).scalar_one_or_none()
+        if song is None:
+            raise HTTPException(status_code=404, detail="Song not found")
+        label = parsed.label
+        notes = parsed.notes
+
+    # 4. Server-assign next version_number for this song
+    max_n = (await session.execute(
+        select(SongVersion.version_number)
+        .where(SongVersion.song_id == song.id)
+        .order_by(SongVersion.version_number.desc())
+        .limit(1)
+    )).scalar()
+    next_n = (max_n or 0) + 1
+
+    # 5. Create SongVersion pointing at the same file_path
+    version = SongVersion(
+        song_id=song.id,
+        version_number=next_n,
+        label=label.strip() if label else None,
+        notes=notes,
+        file_path=job.file_path,
+        reference_path=job.reference_path,
+        als_file_path=job.als_file_path,
+    )
+    session.add(version)
+    await session.flush()
+
+    # 6. Link the job
+    job.version_id = version.id
+    await session.commit()
+
+    return SaveToLibraryResult(song_id=str(song.id), version_id=str(version.id))

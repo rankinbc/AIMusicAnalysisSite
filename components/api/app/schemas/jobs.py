@@ -1,6 +1,7 @@
-from typing import Any
+from typing import Any, Literal, Optional, Union
+from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class StemMappingProposalDTO(BaseModel):
@@ -49,3 +50,26 @@ class TrackGroup(BaseModel):
     latest_score: float | None = None
     latest_grade: str | None = None
     versions: list[TrackVersionSummary]
+
+
+class SaveAsNewSong(BaseModel):
+    action: Literal["new_song"]
+    name: str = Field(..., min_length=1, max_length=200)
+    genre_hint: Optional[str] = None
+    label: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class AddToExistingSong(BaseModel):
+    action: Literal["add_to_song"]
+    song_id: UUID
+    label: Optional[str] = None
+    notes: Optional[str] = None
+
+
+SaveToLibraryBody = Union[SaveAsNewSong, AddToExistingSong]
+
+
+class SaveToLibraryResult(BaseModel):
+    song_id: str
+    version_id: str
