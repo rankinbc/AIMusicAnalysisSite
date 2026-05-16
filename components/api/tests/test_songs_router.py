@@ -24,7 +24,7 @@ async def authed_client(fake_user_factory):
     from app.db import get_session
     from app.main import app
     from app.routers.auth import get_current_user
-    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
     from aimusic_shared.models import Base
 
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")

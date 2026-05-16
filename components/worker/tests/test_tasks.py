@@ -1,5 +1,5 @@
 import uuid
-from unittest.mock import MagicMock, patch, call, ANY
+from unittest.mock import MagicMock, patch, ANY
 import pytest
 
 

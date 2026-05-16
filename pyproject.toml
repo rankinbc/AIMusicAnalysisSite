@@ -1,0 +1,12 @@
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+# Defaults are fine; we only override the per-file exceptions below.
+
+[tool.ruff.lint.per-file-ignores]
+# Test files use compact multi-statement lines (e.g. `s.add(x); await s.commit()`)
+# in setup/seed paths; allow E702 there. Local imports inside tests are
+# intentional (fixture lazy-import), so E402 is fine too.
+"**/tests/**" = ["E702", "E402"]

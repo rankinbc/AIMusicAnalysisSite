@@ -2,7 +2,7 @@ from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from aimusic_shared.models import Base  # re-exported so `from .db import Base` keeps working
+from aimusic_shared.models import Base  # noqa: F401  re-exported for alembic env.py + legacy `from .db import Base`
 
 from .config import settings
 

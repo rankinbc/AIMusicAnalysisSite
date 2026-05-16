@@ -4,7 +4,6 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from sqlalchemy import select
 
 from aimusic_shared.models import JobStatus
 

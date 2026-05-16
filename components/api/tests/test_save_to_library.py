@@ -1,7 +1,6 @@
 """Tests for POST /jobs/{job_id}/save-to-library."""
 from __future__ import annotations
 
-import os
 import tempfile
 import uuid
 import pytest

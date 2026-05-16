@@ -1,17 +1,28 @@
 import asyncio
 import json
+import os
+import uuid as _uuid
 from pathlib import Path
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from aimusic_shared.models import Song, SongVersion
 
 from ..config import settings
 from ..db import AsyncSessionLocal, get_session
 from ..models import AnalysisResult, JobStatus, UploadJob, User
-from ..schemas.jobs import JobStatus as JobStatusSchema, JobSummary
+from ..schemas.jobs import (
+    AddToExistingSong,
+    JobStatus as JobStatusSchema,
+    JobSummary,
+    SaveAsNewSong,
+    SaveToLibraryResult,
+)
 from .auth import get_current_user, get_current_user_sse
 
 router = APIRouter()
@@ -224,13 +235,6 @@ async def get_job_results(
         "result": analysis.final_json,
         "share_token": analysis.share_token,
     }
-
-
-import os
-import uuid as _uuid
-from sqlalchemy.exc import IntegrityError
-from aimusic_shared.models import Song, SongVersion
-from ..schemas.jobs import SaveToLibraryResult, SaveAsNewSong, AddToExistingSong
 
 
 @router.post("/{job_id}/save-to-library", response_model=SaveToLibraryResult)

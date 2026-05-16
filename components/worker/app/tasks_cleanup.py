@@ -6,7 +6,6 @@ from pathlib import Path
 
 from celery import shared_task
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from aimusic_shared.models import JobStatus, UploadJob
 
