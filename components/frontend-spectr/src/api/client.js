@@ -167,6 +167,13 @@ export async function getGenreProfile(genre) {
 
 export { request as apiRequest };
 
+export const saveToLibrary = (jobId, body) =>
+  request(`/jobs/${jobId}/save-to-library`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' },
+  });
+
 export function streamJob(jobId, onPhase, onComplete, onError) {
   const url = `${BASE}/jobs/${jobId}/stream?token=${encodeURIComponent(_token ?? '')}`;
   const es = new EventSource(url);
