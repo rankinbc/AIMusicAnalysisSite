@@ -1,0 +1,76 @@
+"""Tests for /songs/ endpoints."""
+from __future__ import annotations
+
+import uuid
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+
+@pytest.fixture
+def fake_user_factory():
+    from app.models import User
+    def _make(**kwargs):
+        return User(
+            id=kwargs.get("id", uuid.uuid4()),
+            email=kwargs.get("email", f"u{uuid.uuid4()}@x.com"),
+            hashed_password="hash",
+        )
+    return _make
+
+
+@pytest.fixture
+async def authed_client(fake_user_factory):
+    """An async test client with auth + DB session faked. Use `.user` to get the user."""
+    from app.db import get_session
+    from app.main import app
+    from app.routers.auth import get_current_user
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+    from aimusic_shared.models import Base
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    user = fake_user_factory()
+
+    async def _override_session():
+        async with Session() as s:
+            yield s
+
+    app.dependency_overrides[get_session] = _override_session
+    app.dependency_overrides[get_current_user] = lambda: user
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.user = user  # type: ignore[attr-defined]
+        ac.session_factory = Session  # type: ignore[attr-defined]
+        # Seed the user row so FK constraints behave on backends that enforce them
+        async with Session() as s:
+            s.add(user)
+            await s.commit()
+        yield ac
+
+    app.dependency_overrides.clear()
+    await engine.dispose()
+
+
+class TestCreateSong:
+    async def test_creates_song_with_minimal_body(self, authed_client):
+        r = await authed_client.post("/songs/", json={"name": "Track One"})
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert body["name"] == "Track One"
+        assert body["version_count"] == 0
+        assert "song_id" in body
+
+    async def test_rejects_duplicate_name_for_same_user(self, authed_client):
+        await authed_client.post("/songs/", json={"name": "Dup"})
+        r = await authed_client.post("/songs/", json={"name": "Dup"})
+        assert r.status_code == 409
+        assert r.json()["detail"]["code"] == "song_name_in_use"
+
+    async def test_requires_auth(self):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            r = await ac.post("/songs/", json={"name": "X"})
+        assert r.status_code == 401
