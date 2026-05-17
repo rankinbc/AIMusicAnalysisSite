@@ -1,32 +1,75 @@
+import { useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 
+import { useVerdicts } from '../../api/hooks';
 import type { PhaseResult } from '../../api/types';
+import { CoachPanel } from './CoachPanel';
+import { SPECIALIST_CATALOG } from './helpers/specialists';
 import s from './AnalysisTab.module.css';
 
 interface AnalysisTabProps {
   phases: PhaseResult[] | undefined;
   songName: string;
+  jobId: string;
+  coachName: string | undefined;
+  coachIntro: string | undefined;
+  coachedFixes: string[] | undefined;
 }
 
-const STATUS_GLYPH: Record<string, string> = {
+type PipelineStatus = 'ok' | 'partial' | 'running' | 'missing' | 'failed' | 'skipped';
+
+interface PipelineRow {
+  id: string;
+  label: string;
+  status: PipelineStatus;
+  detail?: string;
+  unlocks?: number;
+  cta?: string;
+  ctaTone?: 'cyan' | 'violet';
+  progress?: number;
+}
+
+const STATUS_GLYPH: Record<PipelineStatus, string> = {
   ok: '✓',
+  partial: '·',
+  running: '·',
+  missing: '',
   skipped: '·',
   failed: '!',
 };
-const STATUS_LABEL: Record<string, string> = {
-  ok: 'OK',
-  skipped: 'SKIPPED',
-  failed: 'FAILED',
-};
 
-export function AnalysisTab({ phases, songName }: AnalysisTabProps) {
-  const sorted = (phases ?? []).slice().sort((a, b) => a.phase - b.phase);
-  const done = sorted.filter((p) => p.status === 'ok').length;
-  const total = sorted.length;
-  const failed = sorted.filter((p) => p.status === 'failed').length;
-  const skipped = sorted.filter((p) => p.status === 'skipped').length;
+export function AnalysisTab({
+  phases,
+  songName,
+  jobId,
+  coachName,
+  coachIntro,
+  coachedFixes,
+}: AnalysisTabProps) {
+  // Pull verdicts so we can populate the "AI specialists" row. The hook also
+  // owns its own polling; we only need a snapshot here.
+  const emptySet = useRef<ReadonlySet<string>>(new Set<string>());
+  const { data: verdictsData } = useVerdicts(jobId, {
+    enabled: Boolean(jobId),
+    optimisticRunning: emptySet.current,
+  });
 
-  const pct = total ? done / total : 0;
+  const pipeline = useMemo<PipelineRow[]>(
+    () => derivePipeline(phases ?? [], verdictsData?.specialists ?? []),
+    [phases, verdictsData],
+  );
+
+  const done = pipeline.filter((r) => r.status === 'ok').length;
+  const running = pipeline.filter((r) => r.status === 'running' || r.status === 'partial').length;
+  const missing = pipeline.filter((r) => r.status === 'missing' || r.status === 'failed').length;
+  const totalUnlocks = pipeline
+    .filter((r) => r.status === 'missing')
+    .reduce((acc, r) => acc + (r.unlocks ?? 0), 0);
+  const missingUploadable = pipeline.filter(
+    (r) => r.status === 'missing' && r.cta,
+  ).length;
+
+  const pct = pipeline.length ? done / pipeline.length : 0;
   const ringSize = 84;
   const stroke = 6;
   const r = (ringSize - stroke) / 2;
@@ -72,18 +115,36 @@ export function AnalysisTab({ phases, songName }: AnalysisTabProps) {
                 className="mono"
                 style={{ fontSize: 20, fontWeight: 700, color: 'var(--cyan)', lineHeight: 1 }}
               >
-                {done}/{total || '—'}
+                {done}/{pipeline.length || '—'}
               </div>
             </div>
           </div>
           <div className={s.summaryText}>
             <div className={s.summaryTitle}>
-              {done === total && total > 0
-                ? `All ${total} phases complete`
-                : `${done} of ${total} phases complete`}
+              {done === pipeline.length && pipeline.length > 0
+                ? `All ${pipeline.length} phases complete`
+                : `${done} of ${pipeline.length} phases complete`}
             </div>
             <div className={s.summarySub}>
-              Upload stems or a reference track to unlock more specialists
+              {missingUploadable > 0 ? (
+                <>
+                  Upload{' '}
+                  <span style={{ color: 'var(--violet)', fontWeight: 700 }}>
+                    {missingUploadable} more file{missingUploadable === 1 ? '' : 's'}
+                  </span>
+                  {totalUnlocks > 0 && (
+                    <>
+                      {' '}to unlock{' '}
+                      <span style={{ color: 'var(--cyan)', fontWeight: 700 }}>
+                        +{totalUnlocks} specialist{totalUnlocks === 1 ? '' : 's'}
+                      </span>
+                    </>
+                  )}{' '}
+                  and deepen the report.
+                </>
+              ) : (
+                'Everything analyzed.'
+              )}
             </div>
           </div>
           <div className={s.statBoxes}>
@@ -94,53 +155,35 @@ export function AnalysisTab({ phases, songName }: AnalysisTabProps) {
               </div>
             </div>
             <div className={s.statBox}>
-              <div className={s.statLabel}>Skipped</div>
+              <div className={s.statLabel}>Running</div>
               <div className={s.statValue} style={{ color: 'var(--orange)' }}>
-                {skipped}
+                {running}
               </div>
             </div>
             <div className={s.statBox}>
-              <div className={s.statLabel}>Failed</div>
-              <div className={s.statValue} style={{ color: 'var(--red)' }}>
-                {failed}
+              <div className={s.statLabel}>Missing</div>
+              <div className={s.statValue} style={{ color: 'var(--muted)' }}>
+                {missing}
               </div>
             </div>
           </div>
         </section>
 
+        {(coachName || coachIntro || (coachedFixes && coachedFixes.length > 0)) && (
+          <section className={`card ${s.coachCard}`}>
+            <div className={s.coachOverline}>Recommended fixes — from initial analysis</div>
+            <CoachPanel name={coachName} intro={coachIntro} fixes={coachedFixes} />
+          </section>
+        )}
+
         <section className={`card ${s.phasesCard}`}>
-          <h3 className={s.phasesTitle}>Pipeline phases</h3>
-          {sorted.length === 0 ? (
+          <h3 className={s.phasesTitle}>Phase-by-phase status</h3>
+          {pipeline.length === 0 ? (
             <p className={s.phaseDetail}>No phase data.</p>
           ) : (
             <ul className={s.phaseList}>
-              {sorted.map((p) => (
-                <li key={`${p.phase}-${p.name}`} className={s.phaseRow}>
-                  <span className={s.phaseIcon} data-status={p.status}>
-                    {STATUS_GLYPH[p.status] ?? '·'}
-                  </span>
-                  <div className={s.phaseMain}>
-                    <span className={s.phaseLabel}>
-                      Phase {p.phase} · {p.name}
-                    </span>
-                    {p.status === 'failed' && p.error && (
-                      <span className={s.phaseDetail}>{p.error}</span>
-                    )}
-                  </div>
-                  <span
-                    className={s.phaseStatus}
-                    style={{
-                      color:
-                        p.status === 'ok'
-                          ? 'var(--cyan)'
-                          : p.status === 'failed'
-                            ? 'var(--red)'
-                            : 'var(--muted)',
-                    }}
-                  >
-                    {STATUS_LABEL[p.status] ?? p.status.toUpperCase()}
-                  </span>
-                </li>
+              {pipeline.map((row) => (
+                <PipelineRowItem key={row.id} row={row} />
               ))}
             </ul>
           )}
@@ -237,6 +280,66 @@ export function AnalysisTab({ phases, songName }: AnalysisTabProps) {
   );
 }
 
+function PipelineRowItem({ row }: { row: PipelineRow }) {
+  const isMissing = row.status === 'missing';
+  const isRunning = row.status === 'running';
+  const isPartial = row.status === 'partial';
+  const isFailed = row.status === 'failed';
+
+  return (
+    <li className={s.phaseRow}>
+      <span className={s.phaseIcon} data-status={row.status}>
+        {STATUS_GLYPH[row.status]}
+      </span>
+      <div className={s.phaseMain}>
+        <div className={s.phaseHeader}>
+          <span
+            className={s.phaseLabel}
+            style={{ color: isMissing ? 'var(--muted)' : 'var(--text)' }}
+          >
+            {row.label}
+          </span>
+          {isRunning && <span className={s.runningPill}>RUNNING</span>}
+          {isPartial && <span className={s.runningPill}>PARTIAL</span>}
+          {row.unlocks != null && row.unlocks > 0 && (
+            <span className={s.unlockPill}>
+              +{row.unlocks} specialist{row.unlocks === 1 ? '' : 's'} pending
+            </span>
+          )}
+        </div>
+        {row.detail && (
+          <span
+            className={s.phaseDetail}
+            style={{ color: isFailed ? 'var(--red)' : undefined }}
+          >
+            {row.detail}
+          </span>
+        )}
+        {(isPartial || isRunning) && row.progress != null && (
+          <div className={s.progressTrack}>
+            <div
+              className={s.progressFill}
+              style={{ width: `${Math.round(row.progress * 100)}%` }}
+            />
+          </div>
+        )}
+      </div>
+      {row.cta && (
+        <button
+          type="button"
+          className={s.phaseCta}
+          data-tone={row.ctaTone ?? 'violet'}
+          onClick={() =>
+            toast.info(`${row.cta} — upload flow not wired yet`)
+          }
+        >
+          {row.cta}
+        </button>
+      )}
+    </li>
+  );
+}
+
 interface UnlockZoneProps {
   tone: 'cyan' | 'violet' | 'orange';
   label: string;
@@ -269,4 +372,216 @@ function UnlockZone({ tone, label, title, description, hint }: UnlockZoneProps) 
       <span className={s.unlockHint}>{hint}</span>
     </div>
   );
+}
+
+// ── Derivation ────────────────────────────────────────────────────────────
+// Build a curated pipeline view by combining worker PhaseResult[] with
+// "virtual" rows that depend on upload state and specialist progress.
+// Anything we can't source from the BFF (durations, file format, etc.) is
+// simply omitted rather than faked.
+
+const PHASE_LABEL_OVERRIDES: Record<number, string> = {
+  1: 'Mix analysis',
+  2: 'Genre detection',
+  3: 'Genre scoring',
+  4: 'Stem clash',
+  5: 'Reference comparison',
+  6: 'Gap analysis',
+  7: 'Arrangement advice',
+  // Phase 8 deliberately omitted — handled by the virtual ALS row below to
+  // avoid a duplicate stage.
+};
+
+function derivePipeline(
+  phases: PhaseResult[],
+  specialists: ReadonlyArray<{ slug: string; status: string }>,
+): PipelineRow[] {
+  const sorted = phases.slice().sort((a, b) => a.phase - b.phase);
+  const phase8 = sorted.find((p) => p.phase === 8);
+  const rows: PipelineRow[] = sorted
+    .filter((p) => p.phase !== 8)
+    .map((p) => {
+      const detail = deriveDetail(p);
+      const row: PipelineRow = {
+        id: `phase-${p.phase}`,
+        label: PHASE_LABEL_OVERRIDES[p.phase] ?? p.name,
+        status: phaseStatus(p.status),
+      };
+      if (detail) row.detail = detail;
+      return row;
+    });
+
+  // AI specialists row — count from verdict-pipeline state.
+  const total = SPECIALIST_CATALOG.length;
+  const run = specialists.filter(
+    (sp) => sp.status === 'cached' || sp.status === 'failed',
+  ).length;
+  const specialistsRow: PipelineRow = {
+    id: 'specialists',
+    label: 'AI specialists',
+    status: run === 0 ? 'missing' : run >= total ? 'ok' : 'partial',
+    detail: `${run} / ${total} run`,
+    progress: total > 0 ? run / total : 0,
+    ctaTone: 'cyan',
+  };
+  if (run < total) specialistsRow.cta = 'Run all';
+  rows.push(specialistsRow);
+
+  // Stem analysis row — slice 1 has no stem-upload state in the report DTO,
+  // so this is always "missing" for now. The +N count comes from the catalog.
+  const stemUnlocks = SPECIALIST_CATALOG.filter((s) => s.needsStems).length;
+  rows.push({
+    id: 'stems',
+    label: 'Stem analysis',
+    status: 'missing',
+    detail: 'No stems uploaded',
+    cta: '+ Stems',
+    ctaTone: 'violet',
+    unlocks: stemUnlocks,
+  });
+
+  // Reference comparison — currently no DTO field that tells us whether a
+  // reference was attached, so we render this as missing without an unlock
+  // count (we don't track which specialists are reference-gated).
+  rows.push({
+    id: 'reference',
+    label: 'Reference upload',
+    status: 'missing',
+    detail: 'No reference uploaded',
+    cta: '+ Reference',
+    ctaTone: 'violet',
+  });
+
+  // Ableton project — folds in worker phase 8. "skipped" / absent means the
+  // user never uploaded a .als (rendered as a drop target); "ok" means we
+  // parsed one and can surface health-score detail.
+  const alsRow: PipelineRow = (() => {
+    if (phase8?.status === 'ok') {
+      const detail = deriveDetail(phase8);
+      const r: PipelineRow = { id: 'als', label: 'Ableton project', status: 'ok' };
+      if (detail) r.detail = detail;
+      return r;
+    }
+    if (phase8?.status === 'failed') {
+      return {
+        id: 'als',
+        label: 'Ableton project',
+        status: 'failed',
+        detail: phase8.error ?? 'ALS parse failed',
+        cta: 'Retry',
+        ctaTone: 'violet',
+      };
+    }
+    return {
+      id: 'als',
+      label: 'Ableton project',
+      status: 'missing',
+      detail: 'No .als uploaded',
+      cta: '+ ALS',
+      ctaTone: 'violet',
+    };
+  })();
+  rows.push(alsRow);
+
+  return rows;
+}
+
+function phaseStatus(raw: string): PipelineStatus {
+  if (raw === 'ok') return 'ok';
+  if (raw === 'failed') return 'failed';
+  return 'skipped';
+}
+
+function deriveDetail(p: PhaseResult): string | undefined {
+  if (p.status === 'failed') return p.error ?? 'Phase failed';
+  if (p.status !== 'ok' || !p.data) return undefined;
+  const d = p.data as Record<string, unknown>;
+  switch (p.phase) {
+    case 1: {
+      const parts: string[] = [];
+      if (typeof d.duration_seconds === 'number') {
+        parts.push(formatDuration(d.duration_seconds));
+      }
+      if (typeof d.lufs === 'number') parts.push(`${d.lufs.toFixed(1)} LUFS`);
+      if (typeof d.bpm === 'number') parts.push(`${Math.round(d.bpm)} BPM`);
+      if (typeof d.detected_key === 'string') parts.push(d.detected_key);
+      return parts.length ? parts.join(' · ') : undefined;
+    }
+    case 2: {
+      if (typeof d.genre === 'string') {
+        const conf =
+          typeof d.confidence === 'number'
+            ? `${Math.round(d.confidence * 100)}% conf`
+            : null;
+        return [d.genre, conf].filter(Boolean).join(' · ');
+      }
+      return undefined;
+    }
+    case 3: {
+      const parts: string[] = [];
+      if (typeof d.genre === 'string') parts.push(`${d.genre}`);
+      if (typeof d.total_score === 'number')
+        parts.push(`score ${Math.round(d.total_score)}`);
+      return parts.length ? parts.join(' · ') : undefined;
+    }
+    case 4: {
+      const clashes = Array.isArray(d.clashes) ? d.clashes.length : null;
+      const stems =
+        d.per_stem && typeof d.per_stem === 'object'
+          ? Object.keys(d.per_stem as object).length
+          : null;
+      const parts: string[] = [];
+      if (stems) parts.push(`${stems} stems`);
+      if (clashes != null) parts.push(`${clashes} clash${clashes === 1 ? '' : 'es'}`);
+      return parts.length ? parts.join(' · ') : undefined;
+    }
+    case 5: {
+      const parts: string[] = [];
+      if (typeof d.preset_name === 'string') parts.push(`${d.preset_name} preset`);
+      const checks = d.checks as Record<string, { status?: string }> | undefined;
+      if (checks) {
+        const pass = Object.values(checks).filter((c) => c?.status === 'ok').length;
+        const total = Object.keys(checks).length;
+        if (total > 0) parts.push(`${pass}/${total} checks`);
+      }
+      return parts.length ? parts.join(' · ') : undefined;
+    }
+    case 6: {
+      if (typeof d.percentile === 'number') {
+        const genre = typeof d.genre === 'string' ? d.genre : null;
+        return [
+          `${Math.round(d.percentile)}th pct`,
+          genre,
+        ]
+          .filter(Boolean)
+          .join(' · ');
+      }
+      return undefined;
+    }
+    case 7: {
+      const parts: string[] = [];
+      if (typeof d.section_count === 'number') parts.push(`${d.section_count} sections`);
+      if (typeof d.overall_score === 'number')
+        parts.push(`score ${Math.round(d.overall_score)}`);
+      if (typeof d.grade === 'string') parts.push(`grade ${d.grade}`);
+      return parts.length ? parts.join(' · ') : undefined;
+    }
+    case 8: {
+      const parts: string[] = [];
+      if (typeof d.health_score === 'number')
+        parts.push(`health ${Math.round(d.health_score)}`);
+      if (typeof d.grade === 'string') parts.push(`grade ${d.grade}`);
+      if (typeof d.total_devices === 'number') parts.push(`${d.total_devices} devices`);
+      return parts.length ? parts.join(' · ') : undefined;
+    }
+    default:
+      return undefined;
+  }
+}
+
+function formatDuration(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds));
+  const m = Math.floor(total / 60);
+  const ss = total % 60;
+  return `${m}:${String(ss).padStart(2, '0')}`;
 }

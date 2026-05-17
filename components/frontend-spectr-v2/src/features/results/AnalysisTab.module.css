@@ -81,6 +81,19 @@
   line-height: 1;
 }
 
+.coachCard {
+  padding: 18px;
+}
+
+.coachOverline {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
 .phasesCard {
   padding: 18px;
 }
@@ -131,10 +144,26 @@
   border: 1px solid rgba(0, 229, 176, 0.5);
   color: var(--cyan);
 }
+.phaseIcon[data-status='partial'] {
+  background: rgba(251, 146, 60, 0.1);
+  border: 1.5px solid rgba(251, 146, 60, 0.5);
+  color: var(--orange);
+}
+.phaseIcon[data-status='running'] {
+  background: rgba(167, 139, 250, 0.1);
+  border: 1.5px solid rgba(167, 139, 250, 0.5);
+  color: var(--violet);
+  animation: phaseIconPulse 1.4s ease-in-out infinite;
+}
 .phaseIcon[data-status='skipped'] {
   background: rgba(251, 146, 60, 0.1);
   border: 1.5px solid rgba(251, 146, 60, 0.5);
   color: var(--orange);
+}
+.phaseIcon[data-status='missing'] {
+  background: transparent;
+  border: 1.5px dashed rgba(255, 255, 255, 0.18);
+  color: transparent;
 }
 .phaseIcon[data-status='failed'] {
   background: rgba(244, 63, 94, 0.1);
@@ -142,11 +171,28 @@
   color: var(--red);
 }
 
+@keyframes phaseIconPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(167, 139, 250, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(167, 139, 250, 0);
+  }
+}
+
 .phaseMain {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
+}
+
+.phaseHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .phaseLabel {
@@ -166,6 +212,77 @@
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
+}
+
+.unlockPill {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--violet);
+  background: rgba(167, 139, 250, 0.1);
+  border: 1px solid rgba(167, 139, 250, 0.32);
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+
+.runningPill {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--orange);
+  background: rgba(251, 146, 60, 0.1);
+  border: 1px solid rgba(251, 146, 60, 0.32);
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.08em;
+}
+
+.progressTrack {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 4px;
+  max-width: 320px;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--orange);
+  border-radius: 2px;
+  box-shadow: 0 0 4px rgba(251, 146, 60, 0.5);
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.phaseCta {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+  transition: background 0.15s, border-color 0.15s;
+}
+.phaseCta[data-tone='cyan'] {
+  color: var(--cyan);
+  background: rgba(0, 229, 176, 0.08);
+  border: 1px solid rgba(0, 229, 176, 0.32);
+}
+.phaseCta[data-tone='cyan']:hover {
+  background: rgba(0, 229, 176, 0.14);
+  border-color: rgba(0, 229, 176, 0.5);
+}
+.phaseCta[data-tone='violet'] {
+  color: var(--violet);
+  background: rgba(167, 139, 250, 0.08);
+  border: 1px solid rgba(167, 139, 250, 0.32);
+}
+.phaseCta[data-tone='violet']:hover {
+  background: rgba(167, 139, 250, 0.14);
+  border-color: rgba(167, 139, 250, 0.5);
 }
 
 .unlocks {

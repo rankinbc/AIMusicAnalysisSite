@@ -215,9 +215,28 @@ export interface SpecialistStatus {
   status: 'idle' | 'cached' | 'failed';
 }
 
+export interface RoutingPlanEntry {
+  name: string;
+  priority: number;
+  focus: string;
+}
+
+/** Mirrors `aimusic_shared.verdicts.models.SpecialistRoutingPlan`. The Triage
+ *  step produces this before any specialist runs. Cached alongside verdicts
+ *  on `analysis_results.verdicts_payload.routing_plan`. */
+export interface RoutingPlanDto {
+  specialists_to_run: RoutingPlanEntry[];
+  skip: string[];
+  rationale: string;
+  estimated_total_tokens: number;
+}
+
 export interface VerdictsListResponse {
   verdicts: VerdictDto[];
   specialists: SpecialistStatus[];
+  /** Present once a batch generation has run. Absent on jobs where only the
+   *  piecewise `/run/{slug}` flow has fired or where Triage failed. */
+  routing_plan?: RoutingPlanDto;
 }
 
 export interface RunSpecialistResponse {

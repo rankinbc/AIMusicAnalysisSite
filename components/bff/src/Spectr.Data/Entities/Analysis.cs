@@ -46,6 +46,12 @@ public sealed class Analysis
     [Column("stem_metrics", TypeName = "jsonb")]
     public string? StemMetrics { get; set; }
 
+    // Triage routing plan: `{specialists_to_run, skip, rationale,
+    // estimated_total_tokens}`. Written by the `run_triage` Python actor on
+    // first ListVerdicts call. Null until generated.
+    [Column("routing_plan", TypeName = "jsonb")]
+    public string? RoutingPlan { get; set; }
+
     // ── Sharing ────────────────────────────────────────────────────────────
     // Token is null until producer enables sharing. Generated lazily.
     [Column("share_token"), MaxLength(36)]

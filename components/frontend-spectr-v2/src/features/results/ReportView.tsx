@@ -12,12 +12,15 @@ import {
 import { AnalysisTab } from './AnalysisTab';
 import { ArrangementTab } from './ArrangementTab';
 import { CoachChat } from './CoachChat';
+import { SPECIALIST_CATALOG } from './helpers/specialists';
 import { ReferenceTab } from './ReferenceTab';
 import { ResultsTabs, type ResultsTabKey } from './ResultsTabs';
 import { SpectrumTab } from './SpectrumTab';
 import { VerdictHero } from './VerdictHero';
 import { VerdictsPanel } from './VerdictsPanel';
 import s from './ReportView.module.css';
+
+const SPECIALIST_CATALOG_SIZE = SPECIALIST_CATALOG.length;
 
 interface ReportViewProps {
   results: JobResultsDto;
@@ -48,8 +51,16 @@ export function ReportView({ results, songId }: ReportViewProps) {
     [verdictsData],
   );
 
-  const phasesDone = (fj.phases ?? []).filter((p) => p.status === 'ok').length;
-  const phasesTotal = (fj.phases ?? []).length;
+  // Tab denominator matches the curated Analysis-tab pipeline: worker phases
+  // + 4 virtual rows (AI specialists, stems, reference, .als).
+  const workerOk = (fj.phases ?? []).filter((p) => p.status === 'ok').length;
+  const specialistsCached = (verdictsData?.specialists ?? []).filter(
+    (sp) => sp.status === 'cached' || sp.status === 'failed',
+  ).length;
+  const allSpecialistsRun =
+    specialistsCached > 0 && specialistsCached >= SPECIALIST_CATALOG_SIZE;
+  const phasesDone = workerOk + (allSpecialistsRun ? 1 : 0);
+  const phasesTotal = (fj.phases ?? []).length + 4;
 
   return (
     <div className={s.report}>
@@ -89,7 +100,14 @@ export function ReportView({ results, songId }: ReportViewProps) {
           </div>
         )}
         {tab === 'analysis' && (
-          <AnalysisTab phases={fj.phases} songName={results.songName ?? 'master.wav'} />
+          <AnalysisTab
+            phases={fj.phases}
+            songName={results.songName ?? 'master.wav'}
+            jobId={results.jobId}
+            coachName={fj.coach_name}
+            coachIntro={fj.coach_intro}
+            coachedFixes={fj.coached_fixes}
+          />
         )}
         {tab === 'spectrum' && <SpectrumTab bands={phase1?.bands} />}
         {tab === 'reference' && (

@@ -105,11 +105,17 @@ async def _run_and_persist(
     """Run the pipeline (gated by semaphore) and persist final verdicts payload."""
     async with _GEN_SEMA:
         verdicts_final: list[dict] = []
+        routing_plan: dict | None = None
         try:
             llm = _get_llm_client()
             async for ev in run_pipeline(analysis, llm=llm,
                                          timeout_s=settings.verdict_cli_timeout_s):
-                if ev.kind == "complete":
+                if ev.kind == "routing-plan":
+                    # Captures the Triage output (specialists_to_run + rationale)
+                    # so the Analysis tab can show "suggested specialists" after
+                    # the pipeline has finished.
+                    routing_plan = ev.payload
+                elif ev.kind == "complete":
                     verdicts_final = ev.payload["verdicts"]
         except Exception:
             log.exception("verdict pipeline crashed for job %s", job_id)
@@ -121,7 +127,10 @@ async def _run_and_persist(
             )).scalar_one_or_none()
             if row is None:
                 return
-            row.verdicts_payload = {"verdicts": verdicts_final}
+            payload: dict = {"verdicts": verdicts_final}
+            if routing_plan is not None:
+                payload["routing_plan"] = routing_plan
+            row.verdicts_payload = payload
             row.verdicts_generated_at = datetime.now(tz=timezone.utc)
             row.verdicts_prompt_version_set = expected_version_set
             row.verdicts_model = "claude-cli"
@@ -323,13 +332,18 @@ async def run_specialist(
 
     # Merge into JSONB cache — replace any prior verdicts for this slug.
     # IMPORTANT: assign a NEW dict so SQLAlchemy marks the JSONB column dirty.
+    # Preserve `routing_plan` from a prior batch run; piecewise specialists
+    # don't recompute Triage.
     existing_payload = result.verdicts_payload or {"verdicts": []}
     kept = [
         v for v in existing_payload.get("verdicts", [])
         if v.get("specialist") != specialist_slug
     ]
     new_dumped = [v.model_dump(mode="json") for v in validated]
-    result.verdicts_payload = {"verdicts": kept + new_dumped}
+    merged: dict = {"verdicts": kept + new_dumped}
+    if "routing_plan" in existing_payload:
+        merged["routing_plan"] = existing_payload["routing_plan"]
+    result.verdicts_payload = merged
     result.verdicts_generated_at = datetime.now(tz=timezone.utc)
     # Piecewise update — the batch cache-validity key no longer applies.
     result.verdicts_prompt_version_set = None

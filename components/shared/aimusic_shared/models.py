@@ -230,6 +230,11 @@ class Analysis(Base):
     phase_durations: Mapped[Any] = mapped_column("phase_durations", JSONB, nullable=False, default=dict)
     waveform_peaks_path: Mapped[Optional[str]] = mapped_column("waveform_peaks_path", String(500), nullable=True)
     stem_metrics: Mapped[Optional[Any]] = mapped_column("stem_metrics", JSONB, nullable=True)
+    # Triage routing plan — `{specialists_to_run: [...], skip, rationale,
+    # estimated_total_tokens}`. Written by the `run_triage` actor when the
+    # BFF lazy-fires it on first ListVerdicts call. Null until generated;
+    # never recomputed once non-null.
+    routing_plan: Mapped[Optional[Any]] = mapped_column("routing_plan", JSONB, nullable=True)
     share_token: Mapped[Optional[str]] = mapped_column("share_token", String(36), nullable=True)
     share_show_verdicts: Mapped[bool] = mapped_column(
         "share_show_verdicts", Boolean, nullable=False, default=False
