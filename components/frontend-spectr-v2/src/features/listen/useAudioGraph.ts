@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 
 // Web Audio chain that wraps the page's single <audio> element:
 //   source → eq(8 biquads) → compressor → makeupGain → satWet/satDry mix →
@@ -205,7 +205,12 @@ const BAND_COUNT = 8;
 const BAND_EDGES_HZ = [20, 80, 250, 500, 1500, 4000, 8000, 12000, 20000];
 
 export function useAudioGraph(
-  audioEl: HTMLAudioElement | null,
+  // Accept a RefObject (not the resolved element) so the hook can read
+  // audioElRef.current lazily at ensureContext time. Ref identity is stable
+  // across renders even though .current updates when the <audio> mounts.
+  // Taking the element directly would close over `null` on first render and
+  // never recover (the returned handle is memoized with empty deps).
+  audioElRef: RefObject<HTMLAudioElement | null>,
 ): AudioGraphHandle {
   const nodesRef = useRef<Nodes | null>(null);
   const eqStateRef = useRef<EqBand[]>(EQ_BANDS_DEFAULT.map((b) => ({ ...b })));
@@ -485,10 +490,11 @@ export function useAudioGraph(
       }
       return nodesRef.current.ctx;
     }
-    if (!audioEl) {
+    const el = audioElRef.current;
+    if (!el) {
       throw new Error('ensureContext called before <audio> element mounted');
     }
-    const nodes = buildGraph(audioEl);
+    const nodes = buildGraph(el);
     nodesRef.current = nodes;
     setContextTick((t) => t + 1);
     return nodes.ctx;

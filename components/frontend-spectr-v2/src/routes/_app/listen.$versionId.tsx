@@ -30,7 +30,6 @@ import { PreviewTools } from '../../features/listen/PreviewTools';
 import { useAudioGraph } from '../../features/listen/useAudioGraph';
 import { fmtBpm, fmtGenre, fmtNumber } from '../../features/results/helpers/format';
 import { CoverArt } from '../../ui/CoverArt';
-import { GradePill } from '../../ui/GradePill';
 import { hueFromId } from '../../ui/hueFromId';
 import { Pill } from '../../ui/Pill';
 import s from './listen.module.css';
@@ -122,7 +121,7 @@ function ListenPage() {
   const phase7 = pickPhase<Phase7Data>(fj, 7);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const graph = useAudioGraph(audioRef.current);
+  const graph = useAudioGraph(audioRef);
 
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(0);
@@ -470,7 +469,6 @@ function ListenPage() {
   }
 
   const trackName = song?.name ?? `Version ${version.versionNumber}`;
-  const grade = song?.latestResult?.grade;
   const hue = song?.id ? hueFromId(song.id) : 168;
   const positionPct = duration > 0 ? position / duration : 0;
   const currentSection =
@@ -499,7 +497,6 @@ function ListenPage() {
           </div>
         </div>
         <div className={s.headerRight}>
-          {grade && <GradePill grade={grade} size="sm" />}
           {song && latestJobId && (
             <Link
               to="/songs/$songId/results/$jobId"
