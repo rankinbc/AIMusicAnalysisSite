@@ -78,7 +78,13 @@
       "PowerShell(wsl -d docker-desktop -e sh -c \"netstat -tlnp 2>/dev/null | grep 8000 || cat /proc/net/tcp 2>/dev/null | grep '00001F90'\" 2>&1)",
       "PowerShell(wsl -d Ubuntu -e sh -c \"netstat -tlnp 2>/dev/null | grep 8000; ps aux 2>/dev/null | grep -v grep | grep -iE 'tmos|8000|uvicorn|python|flask|fastapi|node'\" 2>&1)",
       "PowerShell(wsl -d Ubuntu sh -c \"netstat -tlnp 2>/dev/null | grep 8000; echo '==='; ps aux 2>/dev/null | grep -v grep | grep -iE 'tmos|8000|uvicorn|python|flask|fastapi|node'\" 2>&1)",
-      "PowerShell(Get-Process -Id 36396 -ErrorAction SilentlyContinue | Select-Object Id, Name; Start-Sleep -Seconds 3; try { $r = Invoke-WebRequest -Uri \"http://localhost:8000/\" -UseBasicParsing -TimeoutSec 5; \"HTTP $\\($r.StatusCode\\): $\\($r.Content\\)\" } catch { \"Still not up: $_\" })"
+      "PowerShell(Get-Process -Id 36396 -ErrorAction SilentlyContinue | Select-Object Id, Name; Start-Sleep -Seconds 3; try { $r = Invoke-WebRequest -Uri \"http://localhost:8000/\" -UseBasicParsing -TimeoutSec 5; \"HTTP $\\($r.StatusCode\\): $\\($r.Content\\)\" } catch { \"Still not up: $_\" })",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(ALEMBIC_DATABASE_URL=\"postgresql+psycopg2://postgres:postgres@localhost:5432/aimusic_test\" python -m alembic -c alembic.ini upgrade head)",
+      "Bash(RUN_MIGRATION_TESTS=1 python -m pytest -q components/api/tests/test_migration_010.py -v)",
+      "Bash(ALEMBIC_DATABASE_URL=\"postgresql+psycopg2://postgres:postgres@localhost:5432/aimusic_test\" python -m alembic -c alembic.ini current)"
     ],
     "deny": []
   },

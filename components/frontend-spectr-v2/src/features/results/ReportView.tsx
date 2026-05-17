@@ -8,10 +8,16 @@ import {
   type JobResultsDto,
   type Phase1Data,
   type Phase2Data,
+  type Phase3Data,
+  type Phase4Data,
+  type Phase6Data,
+  type Phase7Data,
+  type Phase8Data,
 } from '../../api/types';
 import { AnalysisTab } from './AnalysisTab';
 import { ArrangementTab } from './ArrangementTab';
 import { CoachChat } from './CoachChat';
+import { GenreScorePanel } from './GenreScorePanel';
 import { SPECIALIST_CATALOG } from './helpers/specialists';
 import { ReferenceTab } from './ReferenceTab';
 import { ResultsTabs, type ResultsTabKey } from './ResultsTabs';
@@ -31,6 +37,11 @@ export function ReportView({ results, songId }: ReportViewProps) {
   const fj: FinalJson = isFinalJson(results.finalJson) ? results.finalJson : {};
   const phase1 = pickPhaseData<Phase1Data>(fj, 1);
   const phase2 = pickPhaseData<Phase2Data>(fj, 2);
+  const phase3 = pickPhaseData<Phase3Data>(fj, 3);
+  const phase4 = pickPhaseData<Phase4Data>(fj, 4);
+  const phase6 = pickPhaseData<Phase6Data>(fj, 6);
+  const phase7 = pickPhaseData<Phase7Data>(fj, 7);
+  const phase8 = pickPhaseData<Phase8Data>(fj, 8);
 
   const [tab, setTab] = useState<ResultsTabKey>('coach');
 
@@ -82,14 +93,20 @@ export function ReportView({ results, songId }: ReportViewProps) {
         phase2={phase2}
       />
 
+      <GenreScorePanel phase3={phase3} />
+
       <ResultsTabs
         current={tab}
         onChange={setTab}
         coachCount={coachCount}
         phasesDone={phasesDone}
         phasesTotal={phasesTotal}
-        referenceOutOfRange={1}
-        arrangementFlag
+        referenceOutOfRange={
+          phase6?.gaps
+            ? Object.values(phase6.gaps).filter((g) => !g.in_range).length
+            : 0
+        }
+        arrangementFlag={(phase7?.issues?.length ?? 0) > 0}
       />
 
       <div className={s.tabBody}>
@@ -107,13 +124,20 @@ export function ReportView({ results, songId }: ReportViewProps) {
             coachName={fj.coach_name}
             coachIntro={fj.coach_intro}
             coachedFixes={fj.coached_fixes}
+            phase8={phase8}
           />
         )}
-        {tab === 'spectrum' && <SpectrumTab bands={phase1?.bands} />}
-        {tab === 'reference' && (
-          <ReferenceTab genre={phase2?.genre} score={fj.overall_score} />
+        {tab === 'spectrum' && (
+          <SpectrumTab bands={phase1?.bands} phase4={phase4} />
         )}
-        {tab === 'arrangement' && <ArrangementTab />}
+        {tab === 'reference' && (
+          <ReferenceTab
+            genre={phase2?.genre}
+            score={fj.overall_score}
+            phase6={phase6}
+          />
+        )}
+        {tab === 'arrangement' && <ArrangementTab phase7={phase7} />}
       </div>
     </div>
   );

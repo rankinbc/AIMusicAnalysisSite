@@ -35,16 +35,40 @@ public static class VerdictEndpoints
         Guid jobId,
         ClaimsPrincipal user,
         AppDbContext db,
+        IJobQueue queue,
         CancellationToken ct)
     {
         var userId = user.UserId();
 
-        // Resolve analysis by job, enforcing ownership.
-        var analysisId = await db.Analyses.AsNoTracking()
+        // Resolve analysis by job, enforcing ownership. We also need the
+        // routing-plan JSONB so we can surface Triage suggestions in one
+        // round-trip; project it alongside the id.
+        var analysisRow = await db.Analyses.AsNoTracking()
             .Where(a => a.JobId == jobId && a.UserId == userId)
-            .Select(a => (Guid?)a.Id)
+            .Select(a => new { a.Id, a.RoutingPlan })
             .FirstOrDefaultAsync(ct);
-        if (analysisId is null) return Results.NotFound();
+        if (analysisRow is null) return Results.NotFound();
+        var analysisId = (Guid?)analysisRow.Id;
+
+        // Lazy-fire Triage: if no plan persisted yet, enqueue `run_triage`
+        // so the next ListVerdicts poll picks it up. Fire-and-forget — the
+        // actor itself is idempotent (writes only when column IS NULL), so
+        // concurrent polls double-enqueueing is harmless.
+        if (analysisRow.RoutingPlan is null)
+        {
+            try
+            {
+                await queue.EnqueueAsync(
+                    DramatiqTasks.RunTriage,
+                    new object[] { analysisRow.Id.ToString() },
+                    ct);
+            }
+            catch
+            {
+                // Don't block the response on queue health — verdicts still
+                // render without the plan.
+            }
+        }
 
         // LEFT JOIN verdict_user_state on (verdict_id, current_user_id).
         var rows = await (
@@ -78,7 +102,32 @@ public static class VerdictEndpoints
                     : "idle"))
             .ToList();
 
-        return Results.Ok(new VerdictsListResponse(verdictDtos, statuses));
+        var plan = ParseRoutingPlan(analysisRow.RoutingPlan);
+
+        return Results.Ok(new VerdictsListResponse(verdictDtos, statuses, plan));
+    }
+
+    // The Python actor writes `routing_plan` as snake_case JSONB matching
+    // `SpecialistRoutingPlan`. EF gives us the raw string; deserialize into
+    // our PascalCase record with a property-naming policy.
+    private static readonly JsonSerializerOptions RoutingPlanJsonOpts = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+    };
+
+    private static RoutingPlanDto? ParseRoutingPlan(string? raw)
+    {
+        if (string.IsNullOrEmpty(raw)) return null;
+        try
+        {
+            return JsonSerializer.Deserialize<RoutingPlanDto>(raw, RoutingPlanJsonOpts);
+        }
+        catch (JsonException)
+        {
+            // Corrupt JSONB — treat as "no plan yet" rather than 500'ing
+            // the whole endpoint.
+            return null;
+        }
     }
 
     // POST /api/reports/{jobId}/verdicts/run/{specialist}

@@ -129,6 +129,169 @@ export interface Phase2Data {
   confidence?: number;
 }
 
+/** Phase 3 — genre-specific scoring. `sub_scores` keys vary per genre. */
+export interface Phase3Data {
+  genre?: string;
+  total_score?: number;
+  sub_scores?: Record<string, number>;
+  notes?: string[];
+}
+
+/** Phase 4 — spectral fallback path (the active default). Demucs-based
+ *  outputs (`per_stem`, `clash_matrix`, `balance_flags`) only appear when
+ *  USE_DEMUCS is true; treat them as optional. */
+export interface Phase4Clash {
+  stems?: string;
+  frequency_range?: string;
+  severity?: 'high' | 'moderate' | 'low' | string;
+}
+
+export interface Phase4Data {
+  stems?: Record<string, unknown>;
+  band_energy?: Record<string, number>;
+  clashes?: Phase4Clash[];
+  per_stem?: Record<string, unknown>;
+  clash_matrix?: unknown[];
+  balance_flags?: unknown[];
+  error?: string;
+}
+
+/** Phase 5 — preset-based reference comparison. */
+export interface Phase5Check {
+  status: 'ok' | 'warn' | 'fail' | string;
+  message: string;
+  value?: number;
+}
+
+export interface Phase5Data {
+  genre?: string;
+  preset_name?: string;
+  checks?: Record<string, Phase5Check>;
+}
+
+/** Phase 6 — gap analysis vs. genre profile. */
+export interface Phase6Gap {
+  user_val: number;
+  genre_mean: number;
+  genre_std: number;
+  acceptable_range: [number, number];
+  delta: number;
+  percentile: number;
+  description: string;
+  in_range: boolean;
+}
+
+export interface Phase6Data {
+  genre?: string;
+  percentile?: number;
+  profile_source?: string;
+  gaps?: Record<string, Phase6Gap>;
+}
+
+/** Phase 7 — arrangement scoring. Mirrors `ArrangementScore.to_dict()`. */
+export interface Phase7SectionScore {
+  section_type: string;
+  start_time: number;
+  end_time: number;
+  duration: number;
+  bars: number;
+  score: number;
+  time_range: string;
+  eight_bar_compliant: boolean;
+  checks?: { name: string; passed: boolean }[];
+  issues?: string[];
+}
+
+export interface Phase7Issue {
+  severity: string;
+  message: string;
+  section: string | null;
+  fix_suggestion?: string;
+}
+
+export interface Phase7Metadata {
+  total_bars?: number;
+  section_count?: number;
+  detected_tempo?: number | null;
+  has_intro?: boolean;
+  has_buildup?: boolean;
+  has_drop?: boolean;
+  has_breakdown?: boolean;
+  has_outro?: boolean;
+  energy_contrast_db?: number | null;
+}
+
+export interface Phase7Data {
+  overall_score?: number;
+  grade?: string;
+  total_duration?: number;
+  component_scores?: Record<string, number>;
+  structure_score?: number;
+  length_score?: number;
+  eight_bar_score?: number;
+  energy_contrast_score?: number;
+  flow_score?: number;
+  section_scores?: Phase7SectionScore[];
+  issues?: Phase7Issue[];
+  suggestions?: string[];
+  fixes?: string[];
+  violations?: string[];
+  section_count?: number;
+  metadata?: Phase7Metadata;
+}
+
+/** Phase 8 — Ableton project parse. Only populated when user uploaded .als. */
+export interface Phase8Track {
+  name: string;
+  type: string;
+  device_count: number;
+  disabled_count: number;
+  muted: boolean;
+}
+
+export interface Phase8MidiIssue {
+  track: string;
+  clip: string | null;
+  type: string;
+  severity: string;
+  description: string;
+  fix?: string;
+}
+
+export interface Phase8Data {
+  health_score?: number;
+  grade?: string;
+  tempo?: number;
+  ableton_version?: string;
+  time_signature?: string;
+  total_devices?: number;
+  disabled_devices?: number;
+  clutter_pct?: number;
+  plugin_list?: string[];
+  has_humanized_midi?: boolean;
+  quantization_issues_count?: number;
+  total_chord_count?: number;
+  midi_note_count?: number;
+  audio_clip_count?: number;
+  total_duration_seconds?: number;
+  tracks?: Phase8Track[];
+  midi?: {
+    total_clips: number;
+    total_notes: number;
+    empty_clips: number;
+    short_clips: number;
+    duplicate_clips: number;
+    tracks_without_content: number;
+    issues: Phase8MidiIssue[];
+  };
+  arrangement?: {
+    has_markers: boolean;
+    total_sections: number;
+    pattern: string | null;
+    sections: { name: string; start_beat: number; end_beat: number; duration_bars: number }[];
+  };
+}
+
 export interface PhaseResult<TData = unknown> {
   phase: number;
   name: string;

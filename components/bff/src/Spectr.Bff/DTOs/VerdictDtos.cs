@@ -41,9 +41,26 @@ public sealed record VerdictDto(
 //  between click and the next successful poll.
 public sealed record SpecialistStatus(string Slug, string Status);
 
+// Triage-step output: which specialists the LLM thinks are worth running
+// against this mix, in priority order. Populated by the Python `run_triage`
+// dramatiq actor and persisted on `analyses.routing_plan` (jsonb).
+public sealed record RoutingPlanEntry(
+    string Name,
+    int Priority,
+    string Focus);
+
+public sealed record RoutingPlanDto(
+    IReadOnlyList<RoutingPlanEntry> SpecialistsToRun,
+    IReadOnlyList<string> Skip,
+    string Rationale,
+    int EstimatedTotalTokens);
+
 public sealed record VerdictsListResponse(
     IReadOnlyList<VerdictDto> Verdicts,
-    IReadOnlyList<SpecialistStatus> Specialists);
+    IReadOnlyList<SpecialistStatus> Specialists,
+    // Null until Triage has run for this analysis. The frontend treats
+    // absence as "Triage hasn't fired yet" — UI shows a loading state.
+    RoutingPlanDto? RoutingPlan);
 
 public sealed record RunSpecialistResponse(string Status);  // "queued" | "exists"
 

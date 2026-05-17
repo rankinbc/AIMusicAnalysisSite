@@ -1,10 +1,10 @@
 import { useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 
-import { useVerdicts } from '../../api/hooks';
-import type { PhaseResult } from '../../api/types';
+import { useRunSpecialist, useVerdicts } from '../../api/hooks';
+import type { Phase8Data, PhaseResult, RoutingPlanEntry } from '../../api/types';
 import { CoachPanel } from './CoachPanel';
-import { SPECIALIST_CATALOG } from './helpers/specialists';
+import { SPECIALIST_CATALOG, specialistLabel } from './helpers/specialists';
 import s from './AnalysisTab.module.css';
 
 interface AnalysisTabProps {
@@ -14,6 +14,7 @@ interface AnalysisTabProps {
   coachName: string | undefined;
   coachIntro: string | undefined;
   coachedFixes: string[] | undefined;
+  phase8: Phase8Data | undefined;
 }
 
 type PipelineStatus = 'ok' | 'partial' | 'running' | 'missing' | 'failed' | 'skipped';
@@ -45,6 +46,7 @@ export function AnalysisTab({
   coachName,
   coachIntro,
   coachedFixes,
+  phase8,
 }: AnalysisTabProps) {
   // Pull verdicts so we can populate the "AI specialists" row. The hook also
   // owns its own polling; we only need a snapshot here.
@@ -176,6 +178,8 @@ export function AnalysisTab({
           </section>
         )}
 
+        <AlsHealthCard phase8={phase8} />
+
         <section className={`card ${s.phasesCard}`}>
           <h3 className={s.phasesTitle}>Phase-by-phase status</h3>
           {pipeline.length === 0 ? (
@@ -188,6 +192,18 @@ export function AnalysisTab({
             </ul>
           )}
         </section>
+
+        <SuggestedSpecialists
+          jobId={jobId}
+          plan={verdictsData?.routing_plan}
+          cachedSlugs={
+            new Set(
+              (verdictsData?.specialists ?? [])
+                .filter((sp) => sp.status === 'cached' || sp.status === 'failed')
+                .map((sp) => sp.slug),
+            )
+          }
+        />
 
         <section className={`card ${s.unlocks}`}>
           <h3 className={s.phasesTitle}>Unlock more specialists</h3>
@@ -276,6 +292,276 @@ export function AnalysisTab({
           </ul>
         </section>
       </aside>
+    </div>
+  );
+}
+
+interface SuggestedSpecialistsProps {
+  jobId: string;
+  plan: import('../../api/types').RoutingPlanDto | undefined;
+  cachedSlugs: ReadonlySet<string>;
+}
+
+function SuggestedSpecialists({ jobId, plan, cachedSlugs }: SuggestedSpecialistsProps) {
+  const run = useRunSpecialist(jobId);
+  // Plan absent: Triage is either still enqueued (BFF lazy-fires on first
+  // ListVerdicts) or it failed silently. Show a thin "loading/idle" tile
+  // so the section doesn't pop in unexpectedly.
+  if (!plan) {
+    return (
+      <section className={`card ${s.suggestedCard}`}>
+        <h3 className={s.phasesTitle}>Suggested specialists</h3>
+        <p className={s.suggestedHint}>
+          Generating suggestions from your mix — refresh in a moment.
+        </p>
+      </section>
+    );
+  }
+
+  const ordered = [...plan.specialists_to_run].sort(
+    (a, b) => a.priority - b.priority,
+  );
+  const pending = ordered.filter((e) => !cachedSlugs.has(e.name));
+
+  const onRunAll = async () => {
+    for (const e of pending) {
+      try {
+        await run.mutateAsync(e.name);
+      } catch {
+        // Best-effort batch run; skip failures silently. Per-slug feedback
+        // is handled by the VerdictsPanel polling layer.
+      }
+    }
+  };
+
+  return (
+    <section className={`card ${s.suggestedCard}`}>
+      <div className={s.suggestedHeader}>
+        <h3 className={s.phasesTitle}>Suggested specialists</h3>
+        {pending.length > 0 && (
+          <button
+            type="button"
+            className={s.phaseCta}
+            data-tone="cyan"
+            onClick={onRunAll}
+            disabled={run.isPending}
+          >
+            Run {pending.length} suggested
+          </button>
+        )}
+      </div>
+      {plan.rationale && (
+        <p className={s.suggestedRationale}>{plan.rationale}</p>
+      )}
+      <ul className={s.suggestedList}>
+        {ordered.map((entry) => (
+          <SuggestedSpecialistRow
+            key={entry.name}
+            entry={entry}
+            cached={cachedSlugs.has(entry.name)}
+            disabled={run.isPending}
+            onRun={() => run.mutate(entry.name)}
+          />
+        ))}
+      </ul>
+      {plan.skip.length > 0 && (
+        <p className={s.suggestedSkip}>
+          Skipped:{' '}
+          {plan.skip
+            .map((slug) => specialistLabel(slug))
+            .join(' · ')}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function SuggestedSpecialistRow({
+  entry,
+  cached,
+  disabled,
+  onRun,
+}: {
+  entry: RoutingPlanEntry;
+  cached: boolean;
+  disabled: boolean;
+  onRun: () => void;
+}) {
+  return (
+    <li className={s.suggestedRow}>
+      <span className={s.suggestedPriority}>#{entry.priority}</span>
+      <div className={s.suggestedMain}>
+        <span className={s.suggestedLabel}>{specialistLabel(entry.name)}</span>
+        {entry.focus && (
+          <span className={s.suggestedFocus}>{entry.focus}</span>
+        )}
+      </div>
+      {cached ? (
+        <span className={s.suggestedDone}>✓ run</span>
+      ) : (
+        <button
+          type="button"
+          className={s.phaseCta}
+          data-tone="violet"
+          onClick={onRun}
+          disabled={disabled}
+        >
+          Run
+        </button>
+      )}
+    </li>
+  );
+}
+
+interface AlsHealthCardProps {
+  phase8: Phase8Data | undefined;
+}
+
+/** Ableton project (.als) health card. Renders only when phase 8 produced
+ *  meaningful data — for jobs without a .als upload the card is omitted
+ *  entirely (the missing-row "+ ALS" CTA already covers that case in the
+ *  pipeline list). */
+function AlsHealthCard({ phase8 }: AlsHealthCardProps) {
+  if (
+    !phase8 ||
+    (phase8.health_score == null &&
+      phase8.total_devices == null &&
+      !phase8.tracks?.length)
+  ) {
+    return null;
+  }
+
+  const health = phase8.health_score;
+  const grade = phase8.grade;
+  const healthTone =
+    health == null
+      ? 'var(--muted)'
+      : health >= 80
+        ? 'var(--cyan)'
+        : health >= 60
+          ? 'var(--yellow)'
+          : 'var(--orange)';
+
+  const enabled =
+    phase8.total_devices != null && phase8.disabled_devices != null
+      ? phase8.total_devices - phase8.disabled_devices
+      : null;
+  const trackCount = phase8.tracks?.length ?? 0;
+  const mutedTracks = phase8.tracks?.filter((t) => t.muted).length ?? 0;
+  const midi = phase8.midi;
+
+  return (
+    <section className={`card ${s.alsCard}`}>
+      <header className={s.alsHd}>
+        <div>
+          <div className={s.coachOverline}>Ableton project · phase 8</div>
+          <div className={s.alsTitle}>
+            {phase8.ableton_version ? `Live ${phase8.ableton_version}` : '.als project'}
+            {phase8.tempo != null && (
+              <span className={s.alsTitleSub}>
+                {' · '}
+                <span className="mono">{Math.round(phase8.tempo)}</span> BPM
+                {phase8.time_signature && (
+                  <>
+                    {' · '}
+                    <span className="mono">{phase8.time_signature}</span>
+                  </>
+                )}
+              </span>
+            )}
+          </div>
+        </div>
+        {health != null && (
+          <div className={s.alsHealthBlock}>
+            <span className={s.alsHealthValue} style={{ color: healthTone }}>
+              {Math.round(health)}
+            </span>
+            <span className={s.alsHealthUnit}>
+              /100{grade && <> · {grade}</>}
+            </span>
+          </div>
+        )}
+      </header>
+
+      <div className={s.alsStats}>
+        {phase8.total_devices != null && (
+          <Stat
+            label="Devices"
+            value={String(phase8.total_devices)}
+            sub={
+              enabled != null && phase8.disabled_devices && phase8.disabled_devices > 0
+                ? `${enabled} active · ${phase8.disabled_devices} off`
+                : 'all active'
+            }
+          />
+        )}
+        {trackCount > 0 && (
+          <Stat
+            label="Tracks"
+            value={String(trackCount)}
+            sub={mutedTracks > 0 ? `${mutedTracks} muted` : 'none muted'}
+          />
+        )}
+        {phase8.clutter_pct != null && (
+          <Stat
+            label="Clutter"
+            value={`${Math.round(phase8.clutter_pct)}%`}
+            sub={phase8.clutter_pct > 30 ? 'heavy' : 'clean'}
+            tone={phase8.clutter_pct > 30 ? 'var(--orange)' : 'var(--cyan)'}
+          />
+        )}
+        {midi && (
+          <Stat
+            label="MIDI clips"
+            value={String(midi.total_clips)}
+            sub={
+              midi.empty_clips + midi.short_clips + midi.duplicate_clips > 0
+                ? `${midi.empty_clips}∅ · ${midi.short_clips}◇ · ${midi.duplicate_clips}≡`
+                : 'clean'
+            }
+          />
+        )}
+      </div>
+
+      {phase8.plugin_list && phase8.plugin_list.length > 0 && (
+        <div className={s.alsPlugins}>
+          <div className={s.coachOverline}>Plugins · {phase8.plugin_list.length}</div>
+          <div className={s.alsPluginChips}>
+            {phase8.plugin_list.slice(0, 12).map((p) => (
+              <span key={p} className={s.alsPluginChip}>
+                {p}
+              </span>
+            ))}
+            {phase8.plugin_list.length > 12 && (
+              <span className={s.alsPluginChip} style={{ opacity: 0.6 }}>
+                +{phase8.plugin_list.length - 12} more
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone?: string;
+}) {
+  return (
+    <div className={s.alsStat}>
+      <div className={s.alsStatLabel}>{label}</div>
+      <div className={s.alsStatValue} style={tone ? { color: tone } : undefined}>
+        {value}
+      </div>
+      {sub && <div className={s.alsStatSub}>{sub}</div>}
     </div>
   );
 }

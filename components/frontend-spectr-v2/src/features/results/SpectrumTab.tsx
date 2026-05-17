@@ -1,5 +1,5 @@
 import { Pill } from '../../ui/Pill';
-import type { Phase1Bands } from '../../api/types';
+import type { Phase1Bands, Phase4Clash, Phase4Data } from '../../api/types';
 import s from './SpectrumTab.module.css';
 
 interface BandSpec {
@@ -24,9 +24,10 @@ const BANDS: BandSpec[] = [
 
 interface SpectrumTabProps {
   bands: Phase1Bands | undefined;
+  phase4: Phase4Data | undefined;
 }
 
-export function SpectrumTab({ bands }: SpectrumTabProps) {
+export function SpectrumTab({ bands, phase4 }: SpectrumTabProps) {
   // Normalize each band's value to a 0..1 ratio. Phase 1 emits dB values
   // typically in the -60..0 range; clamp + scale so the chart reads.
   const values = BANDS.map((b) => {
@@ -87,16 +88,83 @@ export function SpectrumTab({ bands }: SpectrumTabProps) {
         </div>
       </section>
 
+      <ClashCard phase4={phase4} />
+    </div>
+  );
+}
+
+interface ClashCardProps {
+  phase4: Phase4Data | undefined;
+}
+
+function ClashCard({ phase4 }: ClashCardProps) {
+  const clashes = phase4?.clashes ?? [];
+  // Phase 4 emits clashes from spectral analysis even without user stems —
+  // the labels just describe regions (e.g. "sub-bass / bass") rather than
+  // per-stem pairs. Treat any clash list as the primary view.
+  if (clashes.length === 0) {
+    return (
       <section className={`card ${s.clashes}`}>
         <div className={s.clashHd}>
-          <span className={s.title}>Stem clashes</span>
-          <Pill>per-stem analysis required</Pill>
+          <span className={s.title}>Frequency clashes</span>
+          <Pill tone="cyan">no clashes detected</Pill>
         </div>
         <p className={s.empty}>
-          Upload stems to surface frequency collisions between elements (e.g.
-          kick × bass overlap in 60–120 Hz).
+          Spectral analysis didn't find significant mid- or low-end
+          collisions. Upload stems to refine the diagnosis with per-element
+          (kick × bass, etc.) clash detection.
         </p>
       </section>
-    </div>
+    );
+  }
+
+  const high = clashes.filter((c) => c.severity === 'high').length;
+  return (
+    <section className={`card ${s.clashes}`}>
+      <div className={s.clashHd}>
+        <span className={s.title}>
+          Frequency clashes · {clashes.length}
+        </span>
+        <Pill tone={high > 0 ? 'red' : 'orange'}>
+          {high > 0
+            ? `${high} high · ${clashes.length - high} moderate`
+            : `${clashes.length} moderate`}
+        </Pill>
+      </div>
+      <table className={s.clashTable}>
+        <thead>
+          <tr>
+            <th>Region</th>
+            <th>Elements</th>
+            <th style={{ textAlign: 'right' }}>Severity</th>
+          </tr>
+        </thead>
+        <tbody>
+          {clashes.map((c, i) => (
+            <ClashRow key={i} clash={c} />
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+function ClashRow({ clash }: { clash: Phase4Clash }) {
+  const tone =
+    clash.severity === 'high'
+      ? 'var(--red)'
+      : clash.severity === 'moderate'
+        ? 'var(--orange)'
+        : 'var(--muted)';
+  return (
+    <tr className={s.clashRow}>
+      <td className={s.clashRegion}>{clash.frequency_range ?? '—'}</td>
+      <td className={s.clashStems}>{clash.stems ?? '—'}</td>
+      <td className={s.clashSeverity}>
+        <span className="mono" style={{ color: tone, textTransform: 'uppercase', fontWeight: 700 }}>
+          {clash.severity ?? '—'}
+        </span>
+      </td>
+    </tr>
   );
 }

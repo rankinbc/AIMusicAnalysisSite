@@ -85,6 +85,113 @@
   padding: 18px;
 }
 
+.alsCard {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.alsHd {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.alsTitle {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  margin-top: 4px;
+}
+
+.alsTitleSub {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.alsHealthBlock {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.alsHealthValue {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.alsHealthUnit {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.alsStats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.alsStat {
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.018);
+  border: 1px solid var(--border);
+}
+
+.alsStatLabel {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.alsStatValue {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: 4px;
+  line-height: 1;
+}
+
+.alsStatSub {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  color: var(--dim);
+  margin-top: 4px;
+}
+
+.alsPlugins {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.alsPluginChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.alsPluginChip {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--text-2);
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
 .coachOverline {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 10px;
@@ -96,6 +203,96 @@
 
 .phasesCard {
   padding: 18px;
+}
+
+.suggestedCard {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.suggestedHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.suggestedRationale {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+
+.suggestedHint {
+  margin: 0;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.suggestedList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.suggestedRow {
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.suggestedRow:last-child {
+  border-bottom: none;
+}
+
+.suggestedPriority {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--cyan);
+  letter-spacing: 0.04em;
+}
+
+.suggestedMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.suggestedLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.suggestedFocus {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.suggestedDone {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--cyan);
+}
+
+.suggestedSkip {
+  margin: 0;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--dim);
 }
 
 .phasesTitle {

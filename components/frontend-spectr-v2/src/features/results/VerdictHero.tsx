@@ -123,6 +123,7 @@ export function VerdictHero({
                 <span className="mono">{key}</span>
               </Pill>
             )}
+            <MixHealthPills phase1={phase1} />
           </div>
           <div className={s.metrics}>
             <HeroMetric
@@ -180,5 +181,77 @@ function HeroMetric({ label, value, unit, tone, sub }: HeroMetricProps) {
       </div>
       {sub && <div className={`mono ${s.metricSub}`}>{sub}</div>}
     </div>
+  );
+}
+
+interface MixHealthPillsProps {
+  phase1: Phase1Data | undefined;
+}
+
+/** Compact mix-health pills surfaced alongside genre/BPM/key. These are the
+ *  cheap-to-render diagnostics from phase 1 that mix engineers actually want
+ *  at a glance: mono compatibility, clipping, and a stereo-width number. */
+function MixHealthPills({ phase1 }: MixHealthPillsProps) {
+  if (!phase1) return null;
+
+  const mono = phase1.mono_compatibility;
+  const clipping = phase1.clipping_detected;
+  const clipCount = phase1.clipped_sample_count;
+  const width = phase1.stereo_width;
+  const corr = phase1.stereo_correlation;
+
+  // Mono pill: green ≥0.85, yellow 0.7–0.85, orange <0.7.
+  const monoPill =
+    mono != null ? (
+      <Pill
+        tone={mono >= 0.85 ? 'cyan' : mono >= 0.7 ? 'yellow' : 'orange'}
+        title="Mono playback compatibility (1.0 = perfect)"
+      >
+        mono <span className="mono">{mono.toFixed(2)}</span>
+      </Pill>
+    ) : null;
+
+  // Clipping pill: only render when actually detected; mute when clean to
+  // avoid clutter.
+  const clipPill =
+    clipping === true ? (
+      <Pill tone="red" title="True-peak clipping detected">
+        ⚠ clipping
+        {clipCount != null && clipCount > 0 && (
+          <>
+            {' '}
+            <span className="mono">{clipCount}</span>
+          </>
+        )}
+      </Pill>
+    ) : null;
+
+  // Stereo width / correlation: use width as primary, fall back to correlation.
+  // Width is 0..1 ratio (0 = mono, 1 = wide); correlation is -1..+1.
+  const widthPill =
+    width != null ? (
+      <Pill
+        tone={width >= 0.3 ? 'cyan' : 'yellow'}
+        title="Stereo width (0 = mono, 1 = wide)"
+      >
+        width <span className="mono">{width.toFixed(2)}</span>
+      </Pill>
+    ) : corr != null ? (
+      <Pill
+        tone={corr >= 0.3 ? 'cyan' : corr >= -0.1 ? 'yellow' : 'orange'}
+        title="L/R correlation (-1 = anti-phase, +1 = mono)"
+      >
+        corr <span className="mono">{corr.toFixed(2)}</span>
+      </Pill>
+    ) : null;
+
+  if (!monoPill && !clipPill && !widthPill) return null;
+
+  return (
+    <>
+      {monoPill}
+      {widthPill}
+      {clipPill}
+    </>
   );
 }

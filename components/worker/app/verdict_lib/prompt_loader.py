@@ -50,6 +50,8 @@ SLUG_TO_FILENAME: dict[str, str] = {
 
 SPECIALIST_SLUGS: tuple[str, ...] = tuple(SLUG_TO_FILENAME.keys())
 
+TRIAGE_FILENAME = "Triage"
+
 _FRONTMATTER_RE = re.compile(r"\A---\s*\n(?P<body>.*?)\n---\s*\n", re.DOTALL)
 _VERSION_RE = re.compile(r"^version:\s*(?P<v>\S+)\s*$", re.MULTILINE)
 
@@ -76,4 +78,12 @@ def load_prompt(slug: str) -> tuple[str, str]:
     path = PROMPTS_DIR / f"{SLUG_TO_FILENAME[slug]}.md"
     if not path.exists():
         raise FileNotFoundError(f"prompt file not found: {path}")
+    return parse_version_frontmatter(path.read_text(encoding="utf-8"))
+
+
+def load_triage() -> tuple[str, str]:
+    """Returns ``(version, body)`` for the Triage prompt."""
+    path = PROMPTS_DIR / f"{TRIAGE_FILENAME}.md"
+    if not path.exists():
+        raise FileNotFoundError(f"triage prompt file not found: {path}")
     return parse_version_frontmatter(path.read_text(encoding="utf-8"))
