@@ -1,9 +1,10 @@
-import { Link, Outlet, createFileRoute, useChildMatches, useNavigate } from '@tanstack/react-router';
+import { Link, Outlet, createFileRoute, useChildMatches } from '@tanstack/react-router';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
-import { useSong, useReanalyzeVersion } from '../../api/hooks';
+import { useSetCurrentVersion, useSong } from '../../api/hooks';
 import { CompareDialog } from '../../components/CompareDialog';
+import { SharePublishDialog } from '../../components/SharePublishDialog';
 import { UploadVersionDialog } from '../../components/UploadVersionDialog';
 import { CoverArt } from '../../ui/CoverArt';
 import { hueFromId } from '../../ui/hueFromId';
@@ -21,38 +22,16 @@ function SongDetailPage() {
   const { data: song, isLoading, error } = useSong(songId);
   const [uploadOpen, setUploadOpen] = useState(false);
   const childMatches = useChildMatches();
-  const navigate = useNavigate();
 
-  // Re-analyze targets the current version (or latest if none flagged).
-  // Hook is unconditionally bound to '' when song hasn't loaded — disabled
-  // until version is known.
-  const currentVersionId =
-    song?.versions.find((v) => v.isCurrent)?.id ??
-    song?.versions[song?.versions.length - 1]?.id ??
-    '';
-  const reanalyze = useReanalyzeVersion(currentVersionId);
   const [compareOpen, setCompareOpen] = useState(false);
   const [comparePreset, setComparePreset] = useState<{ a: string | null; b: string | null }>({
     a: null,
     b: null,
   });
+  const [publishOpen, setPublishOpen] = useState(false);
   const openCompare = (a: string | null, b: string | null) => {
     setComparePreset({ a, b });
     setCompareOpen(true);
-  };
-  const handleReanalyze = () => {
-    if (!currentVersionId) return;
-    reanalyze.mutate(undefined, {
-      onSuccess: (res) => {
-        toast.success('Re-analysis dispatched');
-        void navigate({
-          to: '/songs/$songId/results/$jobId',
-          params: { songId, jobId: res.jobId },
-        });
-      },
-      onError: (err) =>
-        toast.error(err instanceof Error ? err.message : 'Could not re-analyze'),
-    });
   };
 
   // When a nested route is active (e.g. /songs/:id/results/:jobId), render
@@ -131,20 +110,17 @@ function SongDetailPage() {
               </div>
             </div>
             <div className={s.actions}>
-              {song.latestResult && (
-                <button
-                  type="button"
-                  className="btn sm"
-                  onClick={handleReanalyze}
-                  disabled={!currentVersionId || reanalyze.isPending}
-                >
-                  ↺ {reanalyze.isPending ? 'Re-analyzing…' : 'Re-analyze'}
-                </button>
-              )}
               <button
                 type="button"
                 className="btn violet sm"
-                onClick={() => toast.info('Publish to Discover coming soon')}
+                onClick={() => {
+                  if (!song.latestResult) {
+                    toast.info('Analyze a version first — there’s nothing to share yet.');
+                    return;
+                  }
+                  setPublishOpen(true);
+                }}
+                disabled={!song.latestResult}
               >
                 ★ Publish
               </button>
@@ -231,6 +207,7 @@ function SongDetailPage() {
                       >
                         ▶ Listen
                       </Link>
+                      {!v.isCurrent && <MakeCurrentButton versionId={v.id} />}
                       {isLatest && song.latestResult && (
                         <Link
                           to="/songs/$songId/results/$jobId"
@@ -308,7 +285,36 @@ function SongDetailPage() {
         defaultVersionA={comparePreset.a}
         defaultVersionB={comparePreset.b}
       />
+      {song.latestResult && (
+        <SharePublishDialog
+          open={publishOpen}
+          onOpenChange={setPublishOpen}
+          analysisId={song.latestResult.id}
+          songName={song.name}
+        />
+      )}
       {latestVersion && null /* suppress unused-var: kept for future audio wiring */}
     </div>
+  );
+}
+
+function MakeCurrentButton({ versionId }: { versionId: string }) {
+  const setCurrent = useSetCurrentVersion(versionId);
+  return (
+    <button
+      type="button"
+      className={s.resultsLink}
+      disabled={setCurrent.isPending}
+      onClick={(e) => {
+        e.stopPropagation();
+        setCurrent.mutate(undefined, {
+          onSuccess: () => toast.success('Marked as current version'),
+          onError: (err) =>
+            toast.error(err instanceof Error ? err.message : 'Could not set current'),
+        });
+      }}
+    >
+      {setCurrent.isPending ? '…' : 'Make current'}
+    </button>
   );
 }
