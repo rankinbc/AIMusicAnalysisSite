@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState } from 'react';
-import { Link } from '@tanstack/react-router';
+import { useMemo, useRef, useState, useCallback } from 'react';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { toast } from 'sonner';
 
-import { useVerdicts } from '../../api/hooks';
+import { useReanalyzeVersion, useVerdicts } from '../../api/hooks';
 import {
   isFinalJson,
   type FinalJson,
@@ -72,6 +73,29 @@ export function ReportView({ results, songId }: ReportViewProps) {
   const phasesDone = workerOk + (allSpecialistsRun ? 1 : 0);
   const phasesTotal = (fj.phases ?? []).length + 4;
 
+  // Re-analyze: fire the same dramatiq actor as a fresh upload and navigate
+  // to the new job's results page. The current report stays mounted until
+  // navigation completes (no flash of stale data).
+  const navigate = useNavigate();
+  const reanalyze = useReanalyzeVersion(results.versionId ?? '');
+  const handleReanalyze = useCallback(() => {
+    if (!results.versionId) {
+      toast.error('This analysis is not tied to a version — cannot re-analyze.');
+      return;
+    }
+    reanalyze.mutate(undefined, {
+      onSuccess: (res) => {
+        toast.success('Re-analysis dispatched.');
+        void navigate({
+          to: '/songs/$songId/results/$jobId',
+          params: { songId, jobId: res.jobId },
+        });
+      },
+      onError: (err) =>
+        toast.error(err instanceof Error ? err.message : 'Could not re-analyze'),
+    });
+  }, [results.versionId, reanalyze, navigate, songId]);
+
   return (
     <div className={s.report}>
       <header className={s.header}>
@@ -104,6 +128,8 @@ export function ReportView({ results, songId }: ReportViewProps) {
             : 0
         }
         arrangementFlag={(phase7?.issues?.length ?? 0) > 0}
+        onReanalyze={handleReanalyze}
+        reanalyzing={reanalyze.isPending}
       />
 
       <div className={s.tabBody}>
@@ -122,6 +148,8 @@ export function ReportView({ results, songId }: ReportViewProps) {
             coachIntro={fj.coach_intro}
             coachedFixes={fj.coached_fixes}
             phase8={phase8}
+            onReanalyze={handleReanalyze}
+            reanalyzing={reanalyze.isPending}
           />
         )}
         {tab === 'spectrum' && (

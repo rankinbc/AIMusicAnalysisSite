@@ -4,13 +4,22 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { fetcher } from './fetcher';
 import type {
+  ActivityItemDto,
   AuthResponse,
   AuthedUser,
+  CreateNoteRequest,
   CreateSongRequest,
   FeedbackKind,
   JobResultsDto,
   JobStatusDto,
+  MeProfileDto,
+  MeStatsDto,
+  NoteDto,
+  PatchMeProfileRequest,
+  PatchNoteRequest,
   PatchSongRequest,
+  PatchVersionRequest,
+  ReanalyzeResponse,
   RunSpecialistResponse,
   SongDto,
   UploadResponse,
@@ -36,6 +45,40 @@ export function useRegisterMutation() {
 export function useLogoutMutation() {
   return useMutation({
     mutationFn: () => fetcher<void>({ url: '/auth/logout', method: 'POST' }),
+  });
+}
+
+// ── Me / profile ────────────────────────────────────────────────────────────
+export function useMeProfile() {
+  return useQuery<MeProfileDto>({
+    queryKey: ['me', 'profile'],
+    queryFn: () => fetcher<MeProfileDto>({ url: '/me/profile', method: 'GET' }),
+  });
+}
+
+export function usePatchMeProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: PatchMeProfileRequest) =>
+      fetcher<MeProfileDto>({ url: '/me/profile', method: 'PATCH', data: body }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['me'] });
+      qc.invalidateQueries({ queryKey: ['auth', 'me'] });
+    },
+  });
+}
+
+export function useMeStats() {
+  return useQuery<MeStatsDto>({
+    queryKey: ['me', 'stats'],
+    queryFn: () => fetcher<MeStatsDto>({ url: '/me/stats', method: 'GET' }),
+  });
+}
+
+export function useMeActivity() {
+  return useQuery<ActivityItemDto[]>({
+    queryKey: ['me', 'activity'],
+    queryFn: () => fetcher<ActivityItemDto[]>({ url: '/me/activity', method: 'GET' }),
   });
 }
 
@@ -116,6 +159,95 @@ export function useVersion(versionId: string) {
     queryKey: ['versions', versionId],
     queryFn: () => fetcher<VersionDto>({ url: `/versions/${versionId}`, method: 'GET' }),
     enabled: Boolean(versionId),
+  });
+}
+
+export function usePatchVersion(versionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: PatchVersionRequest) =>
+      fetcher<VersionDto>({ url: `/versions/${versionId}`, method: 'PATCH', data: body }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['versions', versionId] });
+      qc.invalidateQueries({ queryKey: ['songs'] });
+    },
+  });
+}
+
+/** Re-enqueue audio analysis for an existing version. Returns the new
+ *  jobId; navigate to `/songs/{songId}/results/{jobId}` to watch it. */
+export function useReanalyzeVersion(versionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      fetcher<ReanalyzeResponse>({
+        url: `/versions/${versionId}/analyze`,
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['versions', versionId] });
+      qc.invalidateQueries({ queryKey: ['songs'] });
+    },
+  });
+}
+
+export function useSetCurrentVersion(versionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      fetcher<void>({ url: `/versions/${versionId}/set-current`, method: 'POST' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['versions', versionId] });
+      qc.invalidateQueries({ queryKey: ['songs'] });
+    },
+  });
+}
+
+// ── Session notes ───────────────────────────────────────────────────────────
+export function useNotes(versionId: string) {
+  return useQuery<NoteDto[]>({
+    queryKey: ['notes', versionId],
+    queryFn: () =>
+      fetcher<NoteDto[]>({ url: `/versions/${versionId}/notes`, method: 'GET' }),
+    enabled: Boolean(versionId),
+  });
+}
+
+export function useCreateNote(versionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateNoteRequest) =>
+      fetcher<NoteDto>({
+        url: `/versions/${versionId}/notes`,
+        method: 'POST',
+        data: body,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notes', versionId] }),
+  });
+}
+
+export function usePatchNote(versionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ noteId, body }: { noteId: string; body: PatchNoteRequest }) =>
+      fetcher<NoteDto>({
+        url: `/versions/${versionId}/notes/${noteId}`,
+        method: 'PATCH',
+        data: body,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notes', versionId] }),
+  });
+}
+
+export function useDeleteNote(versionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (noteId: string) =>
+      fetcher<void>({
+        url: `/versions/${versionId}/notes/${noteId}`,
+        method: 'DELETE',
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notes', versionId] }),
   });
 }
 

@@ -15,6 +15,8 @@ interface AnalysisTabProps {
   coachIntro: string | undefined;
   coachedFixes: string[] | undefined;
   phase8: Phase8Data | undefined;
+  onReanalyze?: () => void;
+  reanalyzing?: boolean;
 }
 
 type PipelineStatus = 'ok' | 'partial' | 'running' | 'missing' | 'failed' | 'skipped';
@@ -47,6 +49,8 @@ export function AnalysisTab({
   coachIntro,
   coachedFixes,
   phase8,
+  onReanalyze,
+  reanalyzing,
 }: AnalysisTabProps) {
   // Pull verdicts so we can populate the "AI specialists" row. The hook also
   // owns its own polling; we only need a snapshot here.
@@ -274,9 +278,10 @@ export function AnalysisTab({
             type="button"
             className="btn primary sm"
             style={{ alignSelf: 'flex-start' }}
-            onClick={() => toast.info('Re-analyze not wired yet')}
+            onClick={() => onReanalyze?.()}
+            disabled={!onReanalyze || reanalyzing}
           >
-            ↺ Re-analyze
+            ↺ {reanalyzing ? 'Re-analyzing…' : 'Re-analyze'}
           </button>
         </section>
 

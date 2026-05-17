@@ -4,12 +4,21 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 
 import { getAccessToken } from '../../api/fetcher';
-import { useJobResults, useSong, useVersion } from '../../api/hooks';
+import {
+  useCreateNote,
+  useDeleteNote,
+  useJobResults,
+  useNotes,
+  usePatchNote,
+  useSong,
+  useVersion,
+} from '../../api/hooks';
 import {
   isFinalJson,
   type FinalJson,
   type Phase1Data,
   type Phase2Data,
+  type Phase7Data,
 } from '../../api/types';
 import {
   LOOP_DEFAULT,
@@ -42,18 +51,26 @@ const SECTION_COLORS: Record<string, string> = {
   intro: 'rgba(0, 229, 176, 0.32)',
   buildup: 'rgba(167, 139, 250, 0.42)',
   drop: 'rgba(251, 146, 60, 0.45)',
+  chorus: 'rgba(251, 146, 60, 0.45)',
+  verse: 'rgba(96, 165, 250, 0.32)',
+  bridge: 'rgba(96, 165, 250, 0.32)',
   breakdown: 'rgba(96, 165, 250, 0.35)',
   outro: 'rgba(255, 255, 255, 0.18)',
 };
 
-interface StubSection {
+interface Section {
   name: string;
-  type: keyof typeof SECTION_COLORS;
+  /** Lower-cased section-type key. Falls through to the neutral color when
+   *  not in SECTION_COLORS (e.g. unknown phase 7 labels). */
+  type: string;
   startPct: number;
   endPct: number;
 }
 
-const STUB_SECTIONS: StubSection[] = [
+// Fallback used when phase 7 didn't produce sections — e.g. ambient mixes
+// or skipped/failed phase. Keeps the scrubber visually meaningful instead
+// of showing one flat empty bar.
+const FALLBACK_SECTIONS: Section[] = [
   { name: 'Intro', type: 'intro', startPct: 0, endPct: 0.12 },
   { name: 'Buildup', type: 'buildup', startPct: 0.12, endPct: 0.36 },
   { name: 'Drop', type: 'drop', startPct: 0.36, endPct: 0.62 },
@@ -61,7 +78,30 @@ const STUB_SECTIONS: StubSection[] = [
   { name: 'Outro', type: 'outro', startPct: 0.84, endPct: 1 },
 ];
 
-interface StubNote {
+function sectionsFromPhase7(
+  phase7: Phase7Data | undefined,
+  fallbackDuration: number,
+): Section[] {
+  const scores = phase7?.section_scores;
+  if (!scores || scores.length === 0) return FALLBACK_SECTIONS;
+  const total =
+    phase7?.total_duration && phase7.total_duration > 0
+      ? phase7.total_duration
+      : fallbackDuration > 0
+        ? fallbackDuration
+        : scores[scores.length - 1]?.end_time ?? 0;
+  if (!total || total <= 0) return FALLBACK_SECTIONS;
+  return scores.map((sec) => ({
+    name: sec.section_type
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase()),
+    type: sec.section_type.toLowerCase(),
+    startPct: Math.max(0, Math.min(1, sec.start_time / total)),
+    endPct: Math.max(0, Math.min(1, sec.end_time / total)),
+  }));
+}
+
+interface UiNote {
   id: string;
   timePct: number;
   body: string;
@@ -79,6 +119,7 @@ function ListenPage() {
   const fj: FinalJson = isFinalJson(results?.finalJson) ? results.finalJson : {};
   const phase1 = pickPhase<Phase1Data>(fj, 1);
   const phase2 = pickPhase<Phase2Data>(fj, 2);
+  const phase7 = pickPhase<Phase7Data>(fj, 7);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const graph = useAudioGraph(audioRef.current);
@@ -333,32 +374,78 @@ function ListenPage() {
     return () => cancelAnimationFrame(raf);
   }, [playing, graph]);
 
+  // Real section layout from phase 7 (or fallback when phase 7 is missing).
+  const sections = useMemo(
+    () => sectionsFromPhase7(phase7, duration),
+    [phase7, duration],
+  );
+
   // Procedural waveform for the scrubber — visual scaffolding, NOT the real
-  // audio buffer. Building a real waveform requires either a server-side
-  // peaks file or client-side OfflineAudioContext decode (Listen-DSP slice).
+  // audio buffer. Real peaks require a server-side peaks file or client-side
+  // OfflineAudioContext decode (handled in a separate slice). We bias the
+  // amplitude by section type so drops/choruses read louder than intros.
   const waveform = useMemo(() => {
     return Array.from({ length: WAVEFORM_BARS }, (_, i) => {
-      const sectionIdx = STUB_SECTIONS.findIndex(
-        (sec) => i / WAVEFORM_BARS >= sec.startPct && i / WAVEFORM_BARS < sec.endPct,
-      );
-      const amp = sectionIdx === 2 ? 0.95 : sectionIdx === 1 ? 0.7 : sectionIdx === 3 ? 0.55 : 0.4;
+      const pct = i / WAVEFORM_BARS;
+      const sec = sections.find((s) => pct >= s.startPct && pct < s.endPct);
+      const amp =
+        sec?.type === 'drop' || sec?.type === 'chorus'
+          ? 0.95
+          : sec?.type === 'buildup'
+            ? 0.7
+            : sec?.type === 'breakdown'
+              ? 0.55
+              : 0.4;
       const noise = Math.sin(i * 0.7) * 0.3 + Math.sin(i * 2.3) * 0.18 + 0.5;
       return amp * (0.4 + noise * 0.6);
     });
-  }, []);
+  }, [sections]);
 
-  const [notes, setNotes] = useState<StubNote[]>([]);
+  const { data: serverNotes } = useNotes(versionId);
+  const createNote = useCreateNote(versionId);
+  const patchNote = usePatchNote(versionId);
+  const deleteNote = useDeleteNote(versionId);
   const [noteInput, setNoteInput] = useState('');
   const [activeNote, setActiveNote] = useState<string | null>(null);
 
-  const handleAddNote = () => {
-    if (!noteInput.trim() || !duration) return;
-    const pct = duration > 0 ? position / duration : 0;
-    setNotes((n) => [
-      ...n,
-      { id: `note-${Date.now()}`, timePct: pct, body: noteInput.trim(), pinned: false },
-    ]);
-    setNoteInput('');
+  // Project the server's absolute-time notes into the scrubber's pct-of-duration
+  // shape. Falls back to 0% when duration is still loading so newly created
+  // notes don't jump position once metadata resolves.
+  const notes: UiNote[] = useMemo(() => {
+    const d = duration > 0 ? duration : 1;
+    return (serverNotes ?? []).map((n) => ({
+      id: n.id,
+      timePct: Math.max(0, Math.min(1, n.tSeconds / d)),
+      body: n.text,
+      pinned: n.pinned,
+    }));
+  }, [serverNotes, duration]);
+
+  const handleAddNote = (text?: string) => {
+    const t = (text ?? noteInput).trim();
+    if (!t) return;
+    createNote.mutate(
+      { tSeconds: Math.max(0, position), text: t, pinned: false },
+      {
+        onSuccess: () => {
+          setNoteInput('');
+          toast.success('Note saved');
+        },
+        onError: (err) =>
+          toast.error(err instanceof Error ? err.message : 'Could not save note'),
+      },
+    );
+  };
+
+  const handleTogglePin = (id: string, currentlyPinned: boolean) => {
+    patchNote.mutate({ noteId: id, body: { pinned: !currentlyPinned } });
+  };
+
+  const handleDeleteNote = (id: string) => {
+    deleteNote.mutate(id, {
+      onError: (err) =>
+        toast.error(err instanceof Error ? err.message : 'Could not delete note'),
+    });
   };
 
   const [activeTool, setActiveTool] = useState<string | null>(null);
@@ -387,8 +474,8 @@ function ListenPage() {
   const hue = song?.id ? hueFromId(song.id) : 168;
   const positionPct = duration > 0 ? position / duration : 0;
   const currentSection =
-    STUB_SECTIONS.find((sec) => positionPct >= sec.startPct && positionPct < sec.endPct) ??
-    STUB_SECTIONS[0];
+    sections.find((sec) => positionPct >= sec.startPct && positionPct < sec.endPct) ??
+    sections[0];
 
   return (
     <div className={s.page}>
@@ -448,7 +535,7 @@ function ListenPage() {
 
         <div className={s.heroTransport}>
           <Scrubber
-            sections={STUB_SECTIONS}
+            sections={sections}
             waveform={waveform}
             positionPct={positionPct}
             duration={duration}
@@ -490,15 +577,8 @@ function ListenPage() {
             <button
               type="button"
               className="btn sm"
-              onClick={() => {
-                if (!duration) return;
-                setNotes((n) => [
-                  ...n,
-                  { id: `note-${Date.now()}`, timePct: position / duration, body: `Note @ ${formatTime(position)}`, pinned: false },
-                ]);
-                toast.success('Note added (local only)');
-              }}
-              disabled={!duration}
+              onClick={() => handleAddNote(`Note @ ${formatTime(position)}`)}
+              disabled={!duration || createNote.isPending}
             >
               + Note @ time
             </button>
@@ -533,12 +613,13 @@ function ListenPage() {
             ) : (
               <ul className={s.notesList}>
                 {notes.map((n) => (
-                  <li key={n.id}>
+                  <li key={n.id} style={{ display: 'flex', alignItems: 'stretch', gap: 4 }}>
                     <button
                       type="button"
                       className={s.noteRow}
                       data-active={activeNote === n.id}
                       onClick={() => { setActiveNote(n.id); seek(n.timePct); }}
+                      style={{ flex: 1 }}
                     >
                       <span className={s.noteIcon} data-pinned={n.pinned}>{n.pinned ? '★' : '·'}</span>
                       <div>
@@ -548,6 +629,24 @@ function ListenPage() {
                         </div>
                         <div className={s.noteBody}>{n.body}</div>
                       </div>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn ghost sm"
+                      onClick={(e) => { e.stopPropagation(); handleTogglePin(n.id, n.pinned); }}
+                      title={n.pinned ? 'Unpin' : 'Pin'}
+                      style={{ alignSelf: 'stretch' }}
+                    >
+                      {n.pinned ? '☆' : '★'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn ghost sm"
+                      onClick={(e) => { e.stopPropagation(); handleDeleteNote(n.id); }}
+                      title="Delete note"
+                      style={{ alignSelf: 'stretch', color: 'var(--red)' }}
+                    >
+                      ×
                     </button>
                   </li>
                 ))}
@@ -563,7 +662,12 @@ function ListenPage() {
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddNote(); } }}
               />
               <span className={s.newNoteTime}>@{formatTime(position)}</span>
-              <button type="button" className="btn primary sm" onClick={handleAddNote} disabled={!noteInput.trim()}>
+              <button
+                type="button"
+                className="btn primary sm"
+                onClick={() => handleAddNote()}
+                disabled={!noteInput.trim() || createNote.isPending}
+              >
                 Save
               </button>
             </div>
@@ -641,11 +745,11 @@ function ListenPage() {
 }
 
 interface ScrubberProps {
-  sections: StubSection[];
+  sections: Section[];
   waveform: number[];
   positionPct: number;
   duration: number;
-  notes: StubNote[];
+  notes: UiNote[];
   loop: LoopState;
   onSeek: (pct: number) => void;
   onNoteClick: (id: string) => void;

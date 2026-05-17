@@ -59,6 +59,76 @@ export interface UploadResponse {
   jobId: string;
 }
 
+export interface NoteDto {
+  id: string;
+  versionId: string;
+  tSeconds: number;
+  text: string;
+  pinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateNoteRequest {
+  tSeconds: number;
+  text: string;
+  pinned: boolean;
+}
+
+export interface PatchNoteRequest {
+  tSeconds?: number;
+  text?: string;
+  pinned?: boolean;
+}
+
+export interface PatchVersionRequest {
+  label?: string | null;
+}
+
+export interface ReanalyzeResponse {
+  jobId: string;
+}
+
+// /api/me/profile + /api/me/stats + /api/me/activity
+export interface MeProfileDto {
+  id: string;
+  email: string;
+  handle: string | null;
+  displayName: string | null;
+  bio: string | null;
+  avatarHue: number | null;
+  bannerHue: number | null;
+  accent: string | null;
+  publicLink: string | null;
+}
+
+export interface PatchMeProfileRequest {
+  displayName?: string | null;
+  handle?: string | null;
+  bio?: string | null;
+  avatarHue?: number | null;
+  bannerHue?: number | null;
+  accent?: string | null;
+  publicLink?: string | null;
+}
+
+export interface MeStatsDto {
+  songs: number;
+  versions: number;
+  analyses: number;
+  thisMonthAnalyses: number;
+  plays: number;
+}
+
+export interface ActivityItemDto {
+  kind: 'analysis' | 'song' | 'version' | string;
+  text: string;
+  occurredAt: string;
+  songId: string | null;
+  versionId: string | null;
+  jobId: string | null;
+}
+
 export type JobStatus =
   | 'pending'
   | 'processing'

@@ -1,8 +1,8 @@
-import { Link, Outlet, createFileRoute, useChildMatches } from '@tanstack/react-router';
+import { Link, Outlet, createFileRoute, useChildMatches, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
-import { useSong } from '../../api/hooks';
+import { useSong, useReanalyzeVersion } from '../../api/hooks';
 import { UploadVersionDialog } from '../../components/UploadVersionDialog';
 import { CoverArt } from '../../ui/CoverArt';
 import { hueFromId } from '../../ui/hueFromId';
@@ -20,6 +20,30 @@ function SongDetailPage() {
   const { data: song, isLoading, error } = useSong(songId);
   const [uploadOpen, setUploadOpen] = useState(false);
   const childMatches = useChildMatches();
+  const navigate = useNavigate();
+
+  // Re-analyze targets the current version (or latest if none flagged).
+  // Hook is unconditionally bound to '' when song hasn't loaded — disabled
+  // until version is known.
+  const currentVersionId =
+    song?.versions.find((v) => v.isCurrent)?.id ??
+    song?.versions[song?.versions.length - 1]?.id ??
+    '';
+  const reanalyze = useReanalyzeVersion(currentVersionId);
+  const handleReanalyze = () => {
+    if (!currentVersionId) return;
+    reanalyze.mutate(undefined, {
+      onSuccess: (res) => {
+        toast.success('Re-analysis dispatched');
+        void navigate({
+          to: '/songs/$songId/results/$jobId',
+          params: { songId, jobId: res.jobId },
+        });
+      },
+      onError: (err) =>
+        toast.error(err instanceof Error ? err.message : 'Could not re-analyze'),
+    });
+  };
 
   // When a nested route is active (e.g. /songs/:id/results/:jobId), render
   // only the child via <Outlet />. The song-detail UI is not a layout shell
@@ -101,9 +125,10 @@ function SongDetailPage() {
                 <button
                   type="button"
                   className="btn sm"
-                  onClick={() => toast.info('Re-analyze not wired yet')}
+                  onClick={handleReanalyze}
+                  disabled={!currentVersionId || reanalyze.isPending}
                 >
-                  ↺ Re-analyze
+                  ↺ {reanalyze.isPending ? 'Re-analyzing…' : 'Re-analyze'}
                 </button>
               )}
               <button

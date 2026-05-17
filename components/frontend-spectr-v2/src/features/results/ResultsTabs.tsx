@@ -20,6 +20,8 @@ interface ResultsTabsProps {
   phasesTotal: number;
   referenceOutOfRange: number;
   arrangementFlag: boolean;
+  onReanalyze?: () => void;
+  reanalyzing?: boolean;
 }
 
 export function ResultsTabs({
@@ -30,6 +32,8 @@ export function ResultsTabs({
   phasesTotal,
   referenceOutOfRange,
   arrangementFlag,
+  onReanalyze,
+  reanalyzing,
 }: ResultsTabsProps) {
   const tabs: TabDef[] = [
     {
@@ -99,9 +103,10 @@ export function ResultsTabs({
         <button
           type="button"
           className="btn sm primary"
-          onClick={() => toast.info('Re-analyze not wired yet')}
+          onClick={() => onReanalyze?.()}
+          disabled={!onReanalyze || reanalyzing}
         >
-          ↺ Re-analyze
+          ↺ {reanalyzing ? 'Re-analyzing…' : 'Re-analyze'}
         </button>
       </div>
     </div>
