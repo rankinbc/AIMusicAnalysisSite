@@ -13,6 +13,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aimusic_shared.models import AnalysisResult, UploadJob, User, VerdictUserState
+from aimusic_shared.verdicts.models import Verdict
 from app.config import settings
 from app.db import AsyncSessionLocal, get_session
 from app.llm.client import CliClient, LLMClient
@@ -250,3 +251,94 @@ async def _job_id_for_verdict(
             if v.get("verdict_id") == verdict_id:
                 return job_id
     raise HTTPException(status_code=404, detail="verdict not found")
+
+
+# ── Per-specialist on-demand run ──────────────────────────────────────────────
+
+class SpecialistRunResponse(BaseModel):
+    specialist: str
+    prompt_version: str
+    verdicts: list[dict]
+    validation_failures: list[dict]
+
+
+@router.post(
+    "/reports/{job_id}/verdicts/run/{specialist_slug}",
+    response_model=SpecialistRunResponse,
+)
+async def run_specialist(
+    job_id: uuid.UUID,
+    specialist_slug: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+    llm: LLMClient = Depends(_get_llm_client),
+) -> SpecialistRunResponse:
+    """Run exactly one specialist by slug, validate, and merge into the
+    cached verdicts payload (replacing any prior verdicts for that slug).
+
+    The route is lenient about specialist prerequisites: the UI gates tiles
+    that need stems / .als / a reference track, but a power-user can still
+    invoke any known slug directly. Unknown slugs → 404.
+    """
+    from app.verdict_pipeline.prompt_loader import SLUG_TO_FILENAME, load_prompt
+    from app.verdict_pipeline.specialists import run_one_specialist
+    from app.verdict_pipeline.validator import validate_verdict
+
+    if specialist_slug not in SLUG_TO_FILENAME:
+        raise HTTPException(status_code=404, detail="unknown specialist")
+
+    _, result = await _load_job_for_user(db, job_id=job_id, user_id=user.id)
+    if not result.final_json:
+        raise HTTPException(status_code=410, detail="analysis not complete")
+
+    version, _body = load_prompt(specialist_slug)
+    prompt_version = f"{specialist_slug}@{version}"
+
+    raw_verdicts, errors = await run_one_specialist(
+        specialist_slug, focus="", analysis=result.final_json,
+        llm=llm, timeout_s=settings.verdict_cli_timeout_s,
+    )
+
+    validated: list[Verdict] = []
+    failures: list[dict] = []
+    for v in raw_verdicts:
+        vr = validate_verdict(v, result.final_json)
+        if vr.ok and vr.verdict is not None:
+            validated.append(vr.verdict)
+        elif vr.failure is not None:
+            failures.append({
+                "specialist": vr.failure.specialist,
+                "prompt_version": vr.failure.prompt_version,
+                "reason": vr.failure.reason,
+                "raw_excerpt": vr.failure.raw_excerpt,
+            })
+
+    for e in errors:
+        failures.append({
+            "specialist": specialist_slug,
+            "prompt_version": prompt_version,
+            "reason": f"specialist call failed: {e}",
+            "raw_excerpt": "",
+        })
+
+    # Merge into JSONB cache — replace any prior verdicts for this slug.
+    # IMPORTANT: assign a NEW dict so SQLAlchemy marks the JSONB column dirty.
+    existing_payload = result.verdicts_payload or {"verdicts": []}
+    kept = [
+        v for v in existing_payload.get("verdicts", [])
+        if v.get("specialist") != specialist_slug
+    ]
+    new_dumped = [v.model_dump(mode="json") for v in validated]
+    result.verdicts_payload = {"verdicts": kept + new_dumped}
+    result.verdicts_generated_at = datetime.now(tz=timezone.utc)
+    # Piecewise update — the batch cache-validity key no longer applies.
+    result.verdicts_prompt_version_set = None
+    result.verdicts_model = "claude-cli"
+    await db.commit()
+
+    return SpecialistRunResponse(
+        specialist=specialist_slug,
+        prompt_version=prompt_version,
+        verdicts=new_dumped,
+        validation_failures=failures,
+    )

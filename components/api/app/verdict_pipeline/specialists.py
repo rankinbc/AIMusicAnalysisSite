@@ -61,6 +61,67 @@ def _hydrate_verdict(
     return Verdict(**body)
 
 
+async def run_one_specialist(
+    slug: str,
+    focus: str,
+    analysis: dict[str, Any],
+    *,
+    llm: LLMClient,
+    model_name: str = "claude-cli",
+    timeout_s: int = 90,
+) -> tuple[list[Verdict], list[Exception]]:
+    """Run one specialist by slug. Returns (verdicts, errors).
+
+    Verdicts are hydrated (server-controlled fields filled) but NOT yet
+    validated — the caller is responsible for invoking validate_verdict.
+    Errors include unknown-slug KeyError, JSON-parse failures after retry,
+    and per-verdict hydration exceptions.
+    """
+    track_id = analysis.get("track_id", "unknown-track")
+    try:
+        version, system_body = load_prompt(slug)
+    except KeyError as e:
+        log.warning("unknown specialist slug %r: %s", slug, e)
+        return [], [e]
+
+    user_msg = _build_user_message(analysis, focus)
+    parsed: dict[str, Any] | None = None
+    last_err: Exception | None = None
+
+    for attempt in (1, 2):
+        user = user_msg if attempt == 1 else user_msg + RETRY_SUFFIX
+        try:
+            raw_text = await llm.call(
+                system=system_body, user=user, timeout_s=timeout_s
+            )
+            parsed = extract_json_object(raw_text)
+            break
+        except Exception as e:
+            last_err = e
+            log.info("specialist %s attempt %d failed: %s", slug, attempt, e)
+            continue
+
+    if parsed is None:
+        return [], [last_err or RuntimeError("specialist failed without exception")]
+
+    verdicts: list[Verdict] = []
+    errors: list[Exception] = []
+    for raw_v in (parsed.get("verdicts") or []):
+        try:
+            v = _hydrate_verdict(
+                raw_v,
+                track_id=track_id,
+                specialist_slug=slug,
+                prompt_version=f"{slug}@{version}",
+                model=model_name,
+            )
+            verdicts.append(v)
+        except Exception as e:
+            log.info("specialist %s emitted invalid verdict: %s", slug, e)
+            errors.append(e)
+    return verdicts, errors
+
+
 async def run_specialists(
     plan: SpecialistRoutingPlan,
     analysis: dict[str, Any],
@@ -74,52 +135,15 @@ async def run_specialists(
     Yields (specialist_slug, verdict) per produced verdict, or
     (specialist_slug, exception) if the specialist failed after retry.
     """
-    track_id = analysis.get("track_id", "unknown-track")
     ordered = sorted(plan.specialists_to_run, key=lambda d: d.get("priority", 99))
     for entry in ordered:
         slug = entry["name"]
         focus = entry.get("focus", "")
-        try:
-            version, system_body = load_prompt(slug)
-        except KeyError as e:
-            log.warning("unknown specialist slug %r: %s", slug, e)
-            yield (slug, e)
-            continue
-
-        user_msg = _build_user_message(analysis, focus)
-        raw_text = ""
-        parsed: dict[str, Any] | None = None
-        last_err: Exception | None = None
-
-        for attempt in (1, 2):
-            user = user_msg if attempt == 1 else user_msg + RETRY_SUFFIX
-            try:
-                raw_text = await llm.call(
-                    system=system_body, user=user, timeout_s=timeout_s
-                )
-                parsed = extract_json_object(raw_text)
-                break
-            except Exception as e:
-                last_err = e
-                log.info("specialist %s attempt %d failed: %s", slug, attempt, e)
-                continue
-
-        if parsed is None:
-            yield (slug, last_err or RuntimeError("specialist failed without exception"))
-            continue
-
-        verdicts_raw = parsed.get("verdicts") or []
-        for raw_v in verdicts_raw:
-            try:
-                v = _hydrate_verdict(
-                    raw_v,
-                    track_id=track_id,
-                    specialist_slug=slug,
-                    prompt_version=f"{slug}@{version}",
-                    model=model_name,
-                )
-            except Exception as e:
-                log.info("specialist %s emitted invalid verdict: %s", slug, e)
-                yield (slug, e)
-                continue
+        verdicts, errors = await run_one_specialist(
+            slug, focus, analysis,
+            llm=llm, model_name=model_name, timeout_s=timeout_s,
+        )
+        for v in verdicts:
             yield (slug, v)
+        for e in errors:
+            yield (slug, e)

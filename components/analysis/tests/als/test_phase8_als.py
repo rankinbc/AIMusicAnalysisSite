@@ -74,6 +74,28 @@ def test_analyze_als_data_shape(tmp_path):
     assert "tracks" in data
     assert "midi" in data
     assert "arrangement" in data
+    # Aggregate signals surfaced for downstream verdicts/coach
+    assert "plugin_list" in data
+    assert "has_humanized_midi" in data
+    assert "quantization_issues_count" in data
+    assert "total_chord_count" in data
+    assert "midi_note_count" in data
+    assert "audio_clip_count" in data
+    assert "total_duration_seconds" in data
+
+
+def test_analyze_als_aggregate_signals_for_minimal_fixture(tmp_path):
+    """Fixture is 1 MIDI track, 1 clip, 1 note (velocity 100, on-grid), 0 plugins, 0 audio clips."""
+    als = make_minimal_als(tmp_path)
+    data = analyze_als(str(als))["data"]
+    assert data["plugin_list"] == []
+    assert data["has_humanized_midi"] is False  # single velocity → robotic
+    assert data["quantization_issues_count"] == 0  # note at beat 0 is on-grid
+    assert data["total_chord_count"] == 0  # need 3+ simultaneous notes
+    assert data["midi_note_count"] == 1
+    assert data["audio_clip_count"] == 0
+    # 8 beats at 140 BPM = 8/140*60 ≈ 3.43s
+    assert data["total_duration_seconds"] == pytest.approx(3.43, abs=0.01)
 
 
 def test_analyze_als_tempo(tmp_path):

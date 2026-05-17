@@ -14,40 +14,28 @@ export async function getVerdicts(jobId) {
 }
 
 /**
- * Opens an EventSource SSE stream and fires callbacks as events arrive.
- * Returns a cleanup function that closes the stream.
- *
- * Callbacks:
- *   onRoutingPlan(plan)   — triage decision, which specialists will run
- *   onVerdict(verdict)    — a single verdict (rule-engine or specialist)
- *   onComplete(payload)   — final deduped+ranked { verdicts } list
- *   onError(msg)          — connection error
+ * Run a single specialist on-demand. Returns:
+ *   { specialist, prompt_version, verdicts: [...], validation_failures: [...] }
+ * Throws Error with .status for 401/404/410/5xx.
  */
-export function streamVerdicts(jobId, { onRoutingPlan, onVerdict, onComplete, onError } = {}) {
-  const token = encodeURIComponent(getToken() ?? '');
-  const url = `${BASE}/reports/${jobId}/verdicts/stream?token=${token}`;
-  const es = new EventSource(url);
-
-  es.addEventListener('routing-plan', e => {
-    try { onRoutingPlan?.(JSON.parse(e.data)); } catch {}
+export async function runSpecialist(jobId, slug) {
+  const res = await fetch(`${BASE}/reports/${jobId}/verdicts/run/${slug}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${getToken()}` },
   });
-  es.addEventListener('rule-verdict', e => {
-    try { onVerdict?.(JSON.parse(e.data)); } catch {}
-  });
-  es.addEventListener('verdict', e => {
-    try { onVerdict?.(JSON.parse(e.data)); } catch {}
-  });
-  es.addEventListener('complete', e => {
-    es.close();
-    try { onComplete?.(JSON.parse(e.data)); } catch {}
-  });
-  // validation-failure and specialist-error are silently ignored
-  es.onerror = () => {
-    es.close();
-    onError?.('Connection lost');
-  };
-
-  return () => es.close();
+  if (res.status === 401) throw Object.assign(new Error('Unauthorized'), { status: 401 });
+  if (res.status === 404) {
+    const body = await res.json().catch(() => ({}));
+    throw Object.assign(new Error(body.detail || 'Not found'), { status: 404 });
+  }
+  if (res.status === 410) {
+    throw Object.assign(new Error('Analysis not complete'), { status: 410 });
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw Object.assign(new Error(`HTTP ${res.status}: ${body}`), { status: res.status });
+  }
+  return res.json();
 }
 
 /** Optimistic dismiss — 204, no body. */

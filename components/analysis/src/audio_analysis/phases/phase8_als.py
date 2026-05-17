@@ -77,6 +77,13 @@ def analyze_als(als_path: Optional[str]) -> dict:
             "total_devices": health.total_devices,
             "disabled_devices": health.disabled_devices,
             "clutter_pct": health.clutter_pct,
+            "plugin_list": project.plugin_list,
+            "has_humanized_midi": project.has_humanized_midi,
+            "quantization_issues_count": project.quantization_issues_count,
+            "total_chord_count": project.total_chord_count,
+            "midi_note_count": project.midi_note_count,
+            "audio_clip_count": project.audio_clip_count,
+            "total_duration_seconds": round(project.total_duration_seconds, 2),
             "tracks": tracks,
             "midi": {
                 "total_clips": midi_result.total_midi_clips,

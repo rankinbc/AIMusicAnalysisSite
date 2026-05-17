@@ -69,6 +69,14 @@ export function adaptResult(apiResponse, filename) {
     ? (p5.per_stem_reference_deltas ?? [])
     : null;
 
+  // ── Specialist input availability (drives per-tile gating) ───────────────
+  // phase8 is the ALS analysis; status === 'ok' (not 'skipped') means
+  // an .als project file was uploaded and parsed.
+  const p8 = getPhase(8);
+  const hasStems     = !!stemBlock;
+  const hasAls       = p8 && p8.status === 'ok';
+  const hasReference = !!(p5 && p5.reference_track);
+
   // ── Core metadata ─────────────────────────────────────────────────────────
   const lufs  = typeof p1.lufs === 'number' ? p1.lufs : -14.0;
   const bpm   = Math.round(p1.bpm ?? p2.bpm ?? 120);
@@ -274,5 +282,7 @@ export function adaptResult(apiResponse, filename) {
     // stems (null when user didn't upload stems)
     stems,
     stemReferenceDeltas,
+    // input availability — drives per-tile gating in SpecialistsPanel
+    inputs: { hasStems, hasAls: !!hasAls, hasReference },
   };
 }

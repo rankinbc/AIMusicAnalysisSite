@@ -43,7 +43,7 @@ import {
   StereoCard, StemClashes, ArrangementSection, GapAnalysis,
 } from './ResultsSections';
 import { PerStemBalanceCard, StemClashMatrixCard, StemReferenceDeltasCard } from './StemSections';
-import AIAnalysisPanel from './AIAnalysisModal';
+import SpecialistsPanel from './SpecialistsPanel.jsx';
 import ALSProjectPanel from './ALSProjectPanel';
 import SaveToLibraryModal from './SaveToLibraryModal.jsx';
 
@@ -176,7 +176,7 @@ export default function ResultsPage({ data, jobId, onBack, onProfile, fromLibrar
 
         {/* 1b. AI Analysis panel — always shown when jobId present */}
         {jobId && (
-          <AIAnalysisPanel jobId={jobId} />
+          <SpecialistsPanel jobId={jobId} inputs={data.inputs} />
         )}
 
         {/* 1c. Ableton project browser — shown only when .als was uploaded */}
