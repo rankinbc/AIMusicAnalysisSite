@@ -73,6 +73,10 @@ builder.Services.AddSingleton<IFileStorage, LocalDiskFileStorage>();
 // Job queue — dramatiq-compatible Redis client.
 builder.Services.AddSingleton<IJobQueue, DramatiqJobQueue>();
 
+// Coach chat — invokes claude CLI as a subprocess and streams stdout. Same
+// binary the Python worker uses for verdict pipeline.
+builder.Services.AddSingleton<CoachChatService>();
+
 // CORS for the frontend dev server.
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
     p.WithOrigins("http://localhost:5174")

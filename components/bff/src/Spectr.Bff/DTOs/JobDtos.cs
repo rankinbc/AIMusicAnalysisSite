@@ -23,3 +23,18 @@ public sealed record JobResultsDto(
     string? SongName,
     JsonElement FinalJson,
     string? ShareToken);
+
+// Lightweight summary used by the jobs-list endpoint. Excludes final_json
+// (potentially several MB) so the list query stays fast.
+public sealed record JobSummaryDto(
+    Guid Id,
+    string Status,
+    string CurrentPhase,
+    double PhasePct,
+    Guid? VersionId,
+    Guid? SongId,
+    string? SongName,
+    DateTimeOffset DispatchedAt,
+    DateTimeOffset? StartedAt,
+    DateTimeOffset? CompletedAt,
+    DateTimeOffset? FailedAt);

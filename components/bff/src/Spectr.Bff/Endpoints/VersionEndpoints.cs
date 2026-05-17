@@ -6,6 +6,7 @@ using Spectr.Bff.Services;
 using Spectr.Data;
 using Spectr.Data.Entities;
 using System.Security.Claims;
+using System.Text.Json;
 
 namespace Spectr.Bff.Endpoints;
 
@@ -31,6 +32,12 @@ public static class VersionEndpoints
         g.MapPatch("/{versionId:guid}/notes/{noteId:guid}", PatchNote);
         g.MapDelete("/{versionId:guid}/notes/{noteId:guid}", DeleteNote);
         g.MapGet("/{versionId:guid}/audio", StreamAudio);
+        g.MapPost("/{versionId:guid}/stems", UploadStems)
+            .DisableAntiforgery()
+            .WithMetadata(new RequestSizeLimitAttribute(MaxUploadBytes * 30));  // up to 30 stems
+        g.MapPost("/{versionId:guid}/als", UploadAls)
+            .DisableAntiforgery()
+            .WithMetadata(new RequestSizeLimitAttribute(50L * 1024 * 1024));    // .als files are small
 
         return app;
     }
@@ -392,5 +399,144 @@ public static class VersionEndpoints
         catch { /* best-effort — version row is gone, orphaned file is harmless */ }
 
         return Results.NoContent();
+    }
+
+    // ── POST /api/versions/{id}/stems ───────────────────────────────────────
+    //
+    // multipart/form-data with one file per role. The form field NAME is the
+    // role slug (kick, bass, drums, lead, vocals, …) and the field VALUE is
+    // the audio file. Stem-role names match `audio_analysis.stems.types.StemRole`.
+    //
+    // Persists the upload paths to `song_versions.stem_paths` (JSONB) and
+    // kicks off a re-analysis so phase 4 / verdict pipeline pick up the
+    // per-stem data.
+    private static readonly HashSet<string> ValidStemRoles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "drums", "kick", "snare", "hats", "bass", "vocals", "lead", "pad", "fx", "other",
+    };
+
+    private static async Task<IResult> UploadStems(
+        Guid versionId,
+        HttpRequest request,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        IFileStorage storage,
+        IJobQueue queue,
+        CancellationToken ct)
+    {
+        if (!request.HasFormContentType)
+            return Results.BadRequest(new { error = "multipart/form-data required." });
+
+        var userId = currentUser.UserId();
+        var version = await (
+            from v in db.SongVersions
+            join s in db.Songs.AsNoTracking() on v.SongId equals s.Id
+            where v.Id == versionId && s.UserId == userId
+            select v
+        ).FirstOrDefaultAsync(ct);
+        if (version is null) return Results.NotFound();
+
+        var form = await request.ReadFormAsync(ct);
+        if (form.Files.Count == 0)
+            return Results.BadRequest(new { error = "At least one stem file required." });
+        if (form.Files.Count > 30)
+            return Results.BadRequest(new { error = "Up to 30 stems per version." });
+
+        // Merge with any prior stem map so the user can incrementally add roles
+        // without losing earlier uploads (e.g. "add a lead stem to an existing
+        // kick/bass set"). The new role-to-path entries overwrite earlier ones
+        // with the same role, and orphaned files are left to be GCed later.
+        var stemPaths = string.IsNullOrEmpty(version.StemPaths)
+            ? new Dictionary<string, string>()
+            : JsonSerializer.Deserialize<Dictionary<string, string>>(version.StemPaths)
+                ?? new Dictionary<string, string>();
+
+        foreach (var file in form.Files)
+        {
+            if (file.Length == 0) continue;
+            var role = file.Name.ToLowerInvariant();
+            if (!ValidStemRoles.Contains(role))
+                return Results.BadRequest(new
+                {
+                    error = $"Unknown stem role '{file.Name}'. " +
+                            "Use one of: drums, kick, snare, hats, bass, vocals, lead, pad, fx, other.",
+                });
+            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (string.IsNullOrEmpty(ext)) ext = ".bin";
+            var key = $"audio/stems/{versionId}/{role}{ext}";
+            await using var src = file.OpenReadStream();
+            await storage.WriteAsync(key, src,
+                file.ContentType ?? "application/octet-stream", ct);
+            stemPaths[role] = key;
+        }
+
+        version.StemPaths = JsonSerializer.Serialize(stemPaths);
+        version.UpdatedAt = DateTimeOffset.UtcNow;
+
+        // Re-enqueue analysis so phase 4 picks up the new stem map.
+        var jobId = Guid.NewGuid();
+        db.AnalysisJobs.Add(new AnalysisJob
+        {
+            Id = jobId,
+            UserId = userId,
+            VersionId = versionId,
+            Status = "pending",
+        });
+        await db.SaveChangesAsync(ct);
+        await queue.EnqueueAsync(DramatiqTasks.AnalyzeAudioJob, new object[] { jobId.ToString() }, ct);
+
+        return Results.Ok(new StemUploadResponse(versionId, stemPaths, jobId));
+    }
+
+    // ── POST /api/versions/{id}/als ─────────────────────────────────────────
+    //
+    // Single .als file. Persists to `song_versions.als_file_path` and kicks
+    // off a re-analysis so phase 8 (ALS) populates project-health data.
+    private static async Task<IResult> UploadAls(
+        Guid versionId,
+        [FromForm] IFormFile file,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        IFileStorage storage,
+        IJobQueue queue,
+        CancellationToken ct)
+    {
+        if (file is null || file.Length == 0)
+            return Results.BadRequest(new { error = "Empty file." });
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (ext != ".als" && ext != ".gz")
+            return Results.BadRequest(new { error = ".als (or gzip-compressed) file required." });
+
+        var userId = currentUser.UserId();
+        var version = await (
+            from v in db.SongVersions
+            join s in db.Songs.AsNoTracking() on v.SongId equals s.Id
+            where v.Id == versionId && s.UserId == userId
+            select v
+        ).FirstOrDefaultAsync(ct);
+        if (version is null) return Results.NotFound();
+
+        var key = $"audio/als/{versionId}/project{ext}";
+        await using (var src = file.OpenReadStream())
+        {
+            await storage.WriteAsync(key, src,
+                file.ContentType ?? "application/octet-stream", ct);
+        }
+
+        version.AlsFilePath = key;
+        version.UpdatedAt = DateTimeOffset.UtcNow;
+
+        var jobId = Guid.NewGuid();
+        db.AnalysisJobs.Add(new AnalysisJob
+        {
+            Id = jobId,
+            UserId = userId,
+            VersionId = versionId,
+            Status = "pending",
+        });
+        await db.SaveChangesAsync(ct);
+        await queue.EnqueueAsync(DramatiqTasks.AnalyzeAudioJob, new object[] { jobId.ToString() }, ct);
+
+        return Results.Ok(new AlsUploadResponse(versionId, key, jobId));
     }
 }

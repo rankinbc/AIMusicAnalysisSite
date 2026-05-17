@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Spectr.Bff.Auth;
 using Spectr.Bff.DTOs;
-using Spectr.Bff.Infrastructure;
 using Spectr.Bff.Services;
 using Spectr.Data;
 using Spectr.Data.Entities;
@@ -18,7 +17,7 @@ public static class VerdictEndpoints
         var g = app.MapGroup("/reports/{jobId:guid}/verdicts").WithTags("verdicts").RequireAuthorization();
         g.MapGet("/", ListVerdicts);
         g.MapPost("/run/{specialist}", RunSpecialist);
-        g.MapGet("/stream", (Guid jobId) => NotImplementedResult.Stub());  // SSE — slice 2.6
+        g.MapGet("/stream", StreamVerdicts);
 
         var per = app.MapGroup("/verdicts/{verdictId}").WithTags("verdicts").RequireAuthorization();
         per.MapPost("/dismiss", (string verdictId, ClaimsPrincipal user, AppDbContext db, CancellationToken ct) =>
@@ -272,5 +271,82 @@ public static class VerdictEndpoints
         {
             return null;
         }
+    }
+
+    // GET /api/reports/{jobId}/verdicts/stream (SSE)
+    //
+    // Polls the verdicts table every 2s and emits one `event: verdict` per
+    // new row plus `event: complete` once polling stops. Same temporary
+    // poll-based shape as job-status streaming; swap for pubsub later.
+    private static async Task StreamVerdicts(
+        Guid jobId,
+        ClaimsPrincipal user,
+        AppDbContext db,
+        HttpContext httpCtx,
+        CancellationToken ct)
+    {
+        var userId = user.UserId();
+        var analysisId = await db.Analyses.AsNoTracking()
+            .Where(a => a.JobId == jobId && a.UserId == userId)
+            .Select(a => (Guid?)a.Id)
+            .FirstOrDefaultAsync(ct);
+        if (analysisId is null)
+        {
+            httpCtx.Response.StatusCode = 404;
+            return;
+        }
+
+        httpCtx.Response.Headers["Content-Type"] = "text/event-stream";
+        httpCtx.Response.Headers["Cache-Control"] = "no-cache";
+        httpCtx.Response.Headers["X-Accel-Buffering"] = "no";
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        // Stop after ~3 minutes of no new verdicts; specialists usually finish
+        // inside 60s so this is a generous safety net rather than a target.
+        var deadline = DateTime.UtcNow.AddMinutes(3);
+
+        while (!ct.IsCancellationRequested && DateTime.UtcNow < deadline)
+        {
+            var newRows = await db.Verdicts.AsNoTracking()
+                .Where(v => v.AnalysisId == analysisId.Value)
+                .OrderBy(v => v.CreatedAt)
+                .Select(v => new
+                {
+                    v.Id,
+                    v.Specialist,
+                    v.Severity,
+                    v.Category,
+                    v.Confidence,
+                    v.PriorityScore,
+                    v.Headline,
+                    v.Summary,
+                    v.MetricLine,
+                    v.CreatedAt,
+                })
+                .ToListAsync(ct);
+
+            foreach (var row in newRows)
+            {
+                if (!seen.Add(row.Id)) continue;
+                var payload = System.Text.Encoding.UTF8.GetBytes(
+                    $"event: verdict\ndata: {JsonSerializer.Serialize(row)}\n\n");
+                await httpCtx.Response.Body.WriteAsync(payload, ct);
+                await httpCtx.Response.Body.FlushAsync(ct);
+                // Push deadline forward each time a new verdict arrives so the
+                // stream stays alive as long as the pipeline is making progress.
+                deadline = DateTime.UtcNow.AddMinutes(3);
+            }
+
+            try { await Task.Delay(2000, ct); }
+            catch (TaskCanceledException) { break; }
+        }
+
+        var doneBytes = System.Text.Encoding.UTF8.GetBytes("event: complete\ndata: {}\n\n");
+        try
+        {
+            await httpCtx.Response.Body.WriteAsync(doneBytes, ct);
+            await httpCtx.Response.Body.FlushAsync(ct);
+        }
+        catch { /* client likely disconnected */ }
     }
 }

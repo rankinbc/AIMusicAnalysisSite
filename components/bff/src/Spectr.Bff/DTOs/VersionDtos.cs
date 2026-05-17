@@ -31,3 +31,11 @@ public sealed record NoteDto(
 public sealed record CreateNoteRequest(double TSeconds, string Text, bool Pinned);
 
 public sealed record PatchNoteRequest(double? TSeconds, string? Text, bool? Pinned);
+
+// Per-stem upload — role labels match `audio_analysis.stems.types.StemRole`.
+public sealed record StemUploadResponse(
+    Guid VersionId,
+    Dictionary<string, string> StemPaths,
+    Guid ReanalysisJobId);
+
+public sealed record AlsUploadResponse(Guid VersionId, string AlsPath, Guid ReanalysisJobId);
