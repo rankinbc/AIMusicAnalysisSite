@@ -1,0 +1,32 @@
+.panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--panel-radius);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--muted);
+}
+
+.chart {
+  /* Recharts ResponsiveContainer needs a parent with a stable width.
+     The chart height is controlled by ResponsiveContainer's `height` prop. */
+  width: 100%;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-4) 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}

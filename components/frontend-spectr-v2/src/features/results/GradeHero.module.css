@@ -1,0 +1,50 @@
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--panel-radius);
+}
+
+.letter {
+  font-size: 112px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  /* color is set inline (gradeColor) — dynamic per grade. */
+}
+
+.score {
+  font-size: 18px;
+  color: var(--text-2);
+  letter-spacing: 0.02em;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--cyan-dim);
+  color: var(--cyan);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.chipLabel {
+  font-weight: 700;
+}
+
+.chipDot {
+  opacity: 0.6;
+}
+
+.chipValue {
+  font-size: 11px;
+}

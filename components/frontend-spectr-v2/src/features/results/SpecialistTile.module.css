@@ -1,0 +1,165 @@
+.tile {
+  position: relative;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  border: 1px solid var(--border);
+  font-family: inherit;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 88px;
+  width: 100%;
+}
+
+.tile:hover:not(:disabled) {
+  background: var(--card-hover);
+  border-color: var(--border-2);
+}
+
+.tile:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.tile[data-status='cached'] {
+  border-color: rgba(0, 229, 176, 0.4);
+  background: linear-gradient(180deg, var(--card) 0%, rgba(0, 229, 176, 0.04) 100%);
+}
+.tile[data-status='running'] {
+  border-color: rgba(167, 139, 250, 0.5);
+  background: rgba(167, 139, 250, 0.04);
+}
+.tile[data-status='failed'] {
+  border-color: rgba(244, 63, 94, 0.4);
+  background: linear-gradient(180deg, var(--card) 0%, rgba(244, 63, 94, 0.04) 100%);
+}
+.tile[data-status='disabled'] {
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.3;
+  flex: 1;
+  min-width: 0;
+}
+
+.countPill {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(0, 229, 176, 0.1);
+  color: var(--cyan);
+  border: 1px solid rgba(0, 229, 176, 0.3);
+}
+
+.statusRow {
+  margin-top: auto;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.statusRow[data-status='cached-clean'] {
+  color: var(--cyan);
+}
+.statusRow[data-status='cached-issues'] {
+  color: var(--orange);
+}
+.statusRow[data-status='running'] {
+  color: var(--violet);
+}
+.statusRow[data-status='failed'] {
+  color: var(--red);
+}
+
+.runBtn {
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 5px;
+  background: rgba(0, 229, 176, 0.1);
+  border: 1px solid rgba(0, 229, 176, 0.32);
+  color: var(--cyan);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.runBtn:hover {
+  background: rgba(0, 229, 176, 0.2);
+}
+
+.rerunBtn {
+  font-family: inherit;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  margin-left: auto;
+}
+.rerunBtn:hover {
+  color: var(--text);
+  border-color: var(--border-2);
+}
+
+.eqDots {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 9px;
+}
+.eqDots > span {
+  width: 2px;
+  background: var(--violet);
+  border-radius: 1px;
+  transform-origin: bottom;
+  animation: eqBars 0.7s ease-in-out infinite;
+  height: 100%;
+}
+.eqDots > span:nth-child(2) {
+  animation-delay: 0.12s;
+}
+.eqDots > span:nth-child(3) {
+  animation-delay: 0.24s;
+}
+
+.disabledHint {
+  font-style: italic;
+  color: var(--muted);
+  font-size: 10px;
+}

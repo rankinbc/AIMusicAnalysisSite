@@ -1,0 +1,220 @@
+/* Authenticated layout: sticky topnav + main outlet container + MiniPlayer. */
+
+.shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topnav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(7, 10, 18, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+  height: 56px;
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  gap: 18px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  letter-spacing: 0.24em;
+  font-size: 15px;
+  color: var(--text);
+  user-select: none;
+  text-decoration: none;
+}
+
+.brandText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1;
+}
+
+.brandCaption {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.navTabs {
+  display: flex;
+  gap: 2px;
+  margin-left: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.navTab {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 6px 14px;
+  border-radius: 6px;
+  color: var(--muted);
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.navTab:hover {
+  color: var(--text-2);
+}
+.navTab[data-active='true'] {
+  background: var(--card-hover);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.navRight {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.navSearch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  border-radius: 7px;
+  min-width: 240px;
+}
+.navSearch svg {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.navSearch input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  width: 100%;
+}
+.navSearch input::placeholder {
+  color: var(--muted);
+}
+.navSearchKbd {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  color: var(--muted);
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+.navIconBtn {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--muted);
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.navIconBtn:hover {
+  color: var(--text);
+  border-color: var(--border-2);
+}
+
+.navAvatarWrap {
+  position: relative;
+}
+
+.navAvatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--cyan) 0%, var(--violet) 100%);
+  display: grid;
+  place-items: center;
+  color: #06151a;
+  font-weight: 800;
+  font-size: 12px;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px transparent;
+  transition: box-shadow 0.15s;
+}
+.navAvatar:hover {
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px rgba(0, 229, 176, 0.5);
+}
+
+.avatarMenu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 220px;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  padding: 6px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: 0 10px 32px -10px rgba(0, 0, 0, 0.7);
+}
+
+.avatarMenuHeader {
+  padding: 8px 10px 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.avatarMenuEmail {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--text-2);
+  word-break: break-all;
+}
+
+.avatarMenuItem {
+  text-align: left;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text-2);
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+.avatarMenuItem:hover {
+  background: var(--card-hover);
+  color: var(--text);
+}
+
+.main {
+  flex: 1;
+}
+
+.loading {
+  padding: var(--space-6);
+  color: var(--muted);
+}

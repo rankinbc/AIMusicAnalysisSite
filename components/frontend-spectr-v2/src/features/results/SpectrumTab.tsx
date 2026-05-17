@@ -1,0 +1,102 @@
+import { Pill } from '../../ui/Pill';
+import type { Phase1Bands } from '../../api/types';
+import s from './SpectrumTab.module.css';
+
+interface BandSpec {
+  key: keyof Phase1Bands;
+  name: string;
+  hz: string;
+  /** Genre-median placeholder (0..1). Per-band reference until the BFF
+   *  surfaces real genre profiles. */
+  median: number;
+}
+
+const BANDS: BandSpec[] = [
+  { key: 'sub_bass', name: 'Sub', hz: '20–60', median: 0.55 },
+  { key: 'bass', name: 'Bass', hz: '60–200', median: 0.62 },
+  { key: 'low_mid', name: 'L.Mid', hz: '200–500', median: 0.5 },
+  { key: 'mid', name: 'Mid', hz: '500–2k', median: 0.46 },
+  { key: 'upper_mid', name: 'H.Mid', hz: '2k–4k', median: 0.42 },
+  { key: 'presence', name: 'Pres', hz: '4k–8k', median: 0.34 },
+  { key: 'air', name: 'Bril', hz: '8k–12k', median: 0.28 },
+  { key: 'air', name: 'Air', hz: '12k–20k', median: 0.22 },
+];
+
+interface SpectrumTabProps {
+  bands: Phase1Bands | undefined;
+}
+
+export function SpectrumTab({ bands }: SpectrumTabProps) {
+  // Normalize each band's value to a 0..1 ratio. Phase 1 emits dB values
+  // typically in the -60..0 range; clamp + scale so the chart reads.
+  const values = BANDS.map((b) => {
+    const raw = bands?.[b.key];
+    if (raw == null) return { ...b, value: 0, warn: false };
+    const norm = Math.max(0, Math.min(1, (raw + 60) / 60));
+    const warn = norm > b.median + 0.15;
+    return { ...b, value: norm, warn };
+  });
+
+  const warnCount = values.filter((v) => v.warn).length;
+  const clarityScore = Math.max(
+    0,
+    100 - warnCount * 12 - values.reduce((acc, v) => (v.value < 0.18 ? acc + 6 : acc), 0),
+  );
+
+  return (
+    <div className={s.layout}>
+      <section className={`card ${s.spectrumCard}`}>
+        <div className={s.hd}>
+          <span className={s.title}>
+            Frequency balance · clarity{' '}
+            <span className="mono" style={{ color: 'var(--cyan)' }}>
+              {Math.round(clarityScore)}/100
+            </span>
+          </span>
+          <Pill tone={warnCount === 0 ? 'cyan' : 'orange'}>
+            {warnCount === 0 ? 'balanced' : `${warnCount} hot band${warnCount === 1 ? '' : 's'}`}
+          </Pill>
+        </div>
+
+        <div className={s.bars}>
+          {values.map((v) => (
+            <div key={`${v.name}-${v.hz}`} className={s.band}>
+              <span
+                className={s.bandValue}
+                style={{ color: v.warn ? 'var(--orange)' : 'var(--cyan)' }}
+              >
+                {v.warn && <span className={s.warnTri}>▲ </span>}
+                {Math.round(v.value * 100)}%
+              </span>
+              <div className={s.bar} aria-label={`${v.name} ${Math.round(v.value * 100)}%`}>
+                <div
+                  className={s.median}
+                  style={{ bottom: `${v.median * 100}%` }}
+                  title={`Genre median: ${Math.round(v.median * 100)}%`}
+                />
+                <div
+                  className={`${s.fill} fill-h`}
+                  data-warn={v.warn}
+                  style={{ height: `${v.value * 100}%` }}
+                />
+              </div>
+              <span className={s.bandName}>{v.name}</span>
+              <span className={s.bandHz}>{v.hz}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className={`card ${s.clashes}`}>
+        <div className={s.clashHd}>
+          <span className={s.title}>Stem clashes</span>
+          <Pill>per-stem analysis required</Pill>
+        </div>
+        <p className={s.empty}>
+          Upload stems to surface frequency collisions between elements (e.g.
+          kick × bass overlap in 60–120 Hz).
+        </p>
+      </section>
+    </div>
+  );
+}

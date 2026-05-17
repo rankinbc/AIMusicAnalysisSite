@@ -1,0 +1,21 @@
+node_modules/
+dist/
+.vite/
+*.local
+.DS_Store
+
+# TanStack Router generated
+src/routeTree.gen.ts
+
+# OpenAPI codegen output
+src/api/generated/
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# Editor
+.vscode/
+.idea/
+*.swp

@@ -1,0 +1,74 @@
+/* SPECTR design tokens.
+   Mirrors the dark-mode palette from frontend-spectr-v2/requirements/claude-design-ui-files/styles.css.
+   Light mode deferred. */
+
+:root {
+  /* Surfaces */
+  --bg:         #070a12;
+  --bg-2:       #0a0f1c;
+  --surface:    #0d1525;
+  --card:       #0f1828;
+  --card-2:     #11192a;
+  --card-hover: #141f34;
+  --border:     rgba(255, 255, 255, 0.07);
+  --border-2:   rgba(255, 255, 255, 0.12);
+
+  /* Accents */
+  --cyan:       #00e5b0;
+  --cyan-dim:   rgba(0, 229, 176, 0.10);
+  --cyan-glow:  rgba(0, 229, 176, 0.25);
+  --violet:     #a78bfa;
+  --violet-dim: rgba(167, 139, 250, 0.10);
+  --orange:     #fb923c;
+  --orange-dim: rgba(251, 146, 60, 0.10);
+  --red:        #f43f5e;
+  --red-dim:    rgba(244, 63, 94, 0.10);
+  --green:      #34d399;
+  --yellow:     #fbbf24;
+  --blue:       #60a5fa;
+
+  /* Text */
+  --text:       #e2e8f4;
+  --text-2:     #c0cad8;
+  --muted:      #64748b;
+  --dim:        #1e293b;
+
+  /* Radii */
+  --radius:     12px;
+  --radius-sm:  8px;
+  --radius-lg:  16px;
+
+  /* Spacing scale (use in modules: var(--space-3) etc.) */
+  --space-1:    4px;
+  --space-2:    8px;
+  --space-3:    12px;
+  --space-4:    16px;
+  --space-5:    20px;
+  --space-6:    24px;
+
+  /* Severity (for verdict cards) */
+  --sev-critical: var(--red);
+  --sev-severe:   var(--orange);
+  --sev-moderate: var(--yellow);
+  --sev-minor:    var(--cyan);
+  --sev-win:      var(--green);
+
+  /* Streaming readiness verdicts (used by Results page) */
+  --sev-ok:       var(--green);
+  --sev-warn:     var(--yellow);
+  --sev-fail:     var(--red);
+  --sev-unknown:  var(--muted);
+
+  /* Grade letter colors (A green → F red) */
+  --grade-a:      #34d399;
+  --grade-b:      #84cc16;
+  --grade-c:      #fbbf24;
+  --grade-d:      #fb923c;
+  --grade-f:      #f43f5e;
+  --grade-na:     var(--muted);
+
+  /* Panel surfaces — sit slightly above --surface for elevation. */
+  --panel-bg:     #0e1727;
+  --panel-border: rgba(255, 255, 255, 0.06);
+  --panel-radius: var(--radius);
+}

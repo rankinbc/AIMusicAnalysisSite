@@ -1,0 +1,96 @@
+/* Shared auth-page styles for /login and /register. Both pages import
+   from this single module so they're guaranteed to stay visually
+   identical. Inputs / buttons / errors are picked up from
+   src/styles/forms.module.css; this file only handles the surrounding
+   card, headings, and footer link. */
+
+.card {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--panel-radius);
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  box-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.015) inset;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin: 0;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.submit {
+  width: 100%;
+  margin-top: var(--space-1);
+}
+
+.footerLink {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.footerLink a {
+  color: var(--cyan);
+  text-decoration: none;
+  font-weight: 600;
+  margin-left: 4px;
+  transition: color 160ms ease;
+}
+
+.footerLink a:hover {
+  color: #1eedba;
+  text-decoration: underline;
+}
+
+/* ── Share-link reviewer placeholder ───────────────────────────────────── */
+
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--panel-radius);
+}
+
+.placeholderTitle {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin: 0;
+}
+
+.placeholderMeta {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+  word-break: break-all;
+}

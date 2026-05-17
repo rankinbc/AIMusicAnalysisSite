@@ -1,0 +1,105 @@
+.card {
+  padding: 22px 24px;
+}
+
+.hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  gap: 12px;
+}
+
+.title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+}
+
+.score {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.bar {
+  display: flex;
+  width: 100%;
+  height: 70px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.section {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--text);
+  background: var(--sec-bg, rgba(255, 255, 255, 0.04));
+  border-right: 1px solid var(--border);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.section:last-child {
+  border-right: none;
+}
+.section[data-flag='true'] {
+  background: rgba(251, 146, 60, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(251, 146, 60, 0.4);
+}
+.section[data-flag='true']::before {
+  content: '▲';
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: 9px;
+  color: var(--orange);
+}
+
+.sectionBars {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.issues {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.issuesTitle {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.issue {
+  padding: 10px 14px;
+  background: rgba(251, 146, 60, 0.04);
+  border: 1px solid rgba(251, 146, 60, 0.2);
+  border-radius: var(--radius-sm);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.issueGlyph {
+  color: var(--orange);
+  font-size: 12px;
+}
+
+.issueText {
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
