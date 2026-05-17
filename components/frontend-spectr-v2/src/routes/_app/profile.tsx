@@ -1,13 +1,13 @@
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 
-import { usePatchMe, useSongs } from '../../api/hooks';
+import { useMeActivity, useMeStats, usePatchMe, useSongs } from '../../api/hooks';
 import { useAuth } from '../../auth/AuthContext';
 import { normalizeGrade } from '../../features/results/helpers/grade';
 import { CoverArt } from '../../ui/CoverArt';
 import { GradePill } from '../../ui/GradePill';
 import { hueFromId } from '../../ui/hueFromId';
-import type { SongDto } from '../../api/types';
+import type { ActivityItemDto, MeStatsDto, SongDto } from '../../api/types';
 import s from './profile.module.css';
 
 export const Route = createFileRoute('/_app/profile')({
@@ -19,12 +19,17 @@ type TabId = 'overview' | 'activity' | 'settings';
 function ProfilePage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const { data: songs, isLoading, error } = useSongs();
+  const { data: songs, isLoading: songsLoading, error: songsError } = useSongs();
+  const { data: serverStats } = useMeStats();
+  const { data: serverActivity } = useMeActivity();
   const [tab, setTab] = useState<TabId>('overview');
 
   const songList = useMemo(() => songs ?? [], [songs]);
 
-  const stats = useMemo(() => {
+  // Prefer authoritative server counts. Falls back to client-side derivation
+  // until the first /me/stats response lands (avoids a flash of zeros).
+  const stats = useMemo<MeStatsDto>(() => {
+    if (serverStats) return serverStats;
     let versions = 0;
     let analyses = 0;
     for (const song of songList) {
@@ -35,10 +40,18 @@ function ProfilePage() {
       songs: songList.length,
       versions,
       analyses,
+      thisMonthAnalyses: analyses,
+      plays: 0,
     };
-  }, [songList]);
+  }, [serverStats, songList]);
 
-  const activity = useMemo(() => buildActivity(songList), [songList]);
+  const activity: ActivityItemDto[] = useMemo(
+    () => serverActivity ?? [],
+    [serverActivity],
+  );
+
+  const isLoading = songsLoading;
+  const error = songsError;
 
   const handleSignOut = async () => {
     await logout();
@@ -102,7 +115,7 @@ interface HeaderProps {
   displayName: string;
   handle: string;
   email: string;
-  stats: { songs: number; versions: number; analyses: number };
+  stats: MeStatsDto;
 }
 
 function Header({ initial, displayName, handle, email, stats }: HeaderProps) {
@@ -149,7 +162,7 @@ function StatBlock({ label, value, accent }: { label: string; value: number; acc
 interface TabStripProps {
   current: TabId;
   onChange: (id: TabId) => void;
-  stats: { songs: number; analyses: number };
+  stats: MeStatsDto;
   activityCount: number;
 }
 
@@ -182,7 +195,7 @@ function TabStrip({ current, onChange, stats, activityCount }: TabStripProps) {
 
 interface OverviewProps {
   songs: SongDto[];
-  activity: ActivityItem[];
+  activity: ActivityItemDto[];
 }
 
 function OverviewTab({ songs, activity }: OverviewProps) {
@@ -231,7 +244,7 @@ function OverviewTab({ songs, activity }: OverviewProps) {
           ) : (
             <div className={s.activityList}>
               {activity.slice(0, 5).map((a, i) => (
-                <ActivityRow key={`${a.kind}-${i}`} item={a} />
+                <ActivityRow key={`${a.kind}-${a.occurredAt}-${i}`} item={a} />
               ))}
             </div>
           )}
@@ -243,7 +256,7 @@ function OverviewTab({ songs, activity }: OverviewProps) {
 
 // ── Activity tab ──────────────────────────────────────────────────────────
 
-function ActivityTab({ activity }: { activity: ActivityItem[] }) {
+function ActivityTab({ activity }: { activity: ActivityItemDto[] }) {
   return (
     <div className="card card-body">
       <SectionTitle>Activity feed</SectionTitle>
@@ -252,7 +265,7 @@ function ActivityTab({ activity }: { activity: ActivityItem[] }) {
       ) : (
         <div className={s.activityList}>
           {activity.map((a, i) => (
-            <ActivityRow key={`${a.kind}-${i}`} item={a} />
+            <ActivityRow key={`${a.kind}-${a.occurredAt}-${i}`} item={a} />
           ))}
         </div>
       )}
@@ -539,71 +552,34 @@ function SongRow({ song }: { song: SongDto }) {
   );
 }
 
-// ── Activity derivation ───────────────────────────────────────────────────
+// ── Activity rendering ────────────────────────────────────────────────────
 
-type ActivityKind = 'analysis' | 'song' | 'upload';
+// Server returns kinds: 'analysis' | 'song' | 'version'. Map 'version' to
+// the existing 'upload' icon styling (same CSS data-kind selector) so we
+// don't need a new color slot.
+const KIND_GLYPH: Record<string, string> = {
+  analysis: '◐',
+  song: '✦',
+  version: '↑',
+};
 
-interface ActivityItem {
-  kind: ActivityKind;
-  body: React.ReactNode;
-  at: Date;
-}
+const KIND_CSS: Record<string, string> = {
+  analysis: 'analysis',
+  song: 'song',
+  version: 'upload',
+};
 
-function buildActivity(songs: SongDto[]): ActivityItem[] {
-  const items: ActivityItem[] = [];
-  for (const song of songs) {
-    const created = new Date(song.createdAt);
-    items.push({
-      kind: 'song',
-      body: (
-        <>
-          Created song <strong>{song.name}</strong>
-        </>
-      ),
-      at: created,
-    });
-    if (song.latestResult) {
-      const analyzed = new Date(song.latestResult.createdAt);
-      const grade = normalizeGrade(song.latestResult.grade);
-      items.push({
-        kind: 'analysis',
-        body: (
-          <>
-            Analyzed <strong>{song.name}</strong>
-            {grade ? <> — graded <strong>{grade}</strong></> : null}
-          </>
-        ),
-        at: analyzed,
-      });
-    }
-    for (const v of song.versions) {
-      const at = new Date(v.createdAt);
-      items.push({
-        kind: 'upload',
-        body: (
-          <>
-            Uploaded version <strong>v{v.versionNumber}</strong>
-            {v.label ? <> — {v.label}</> : null} of <strong>{song.name}</strong>
-          </>
-        ),
-        at,
-      });
-    }
-  }
-  items.sort((a, b) => b.at.getTime() - a.at.getTime());
-  return items;
-}
-
-function ActivityRow({ item }: { item: ActivityItem }) {
-  const glyph = item.kind === 'analysis' ? '◐' : item.kind === 'upload' ? '↑' : '✦';
+function ActivityRow({ item }: { item: ActivityItemDto }) {
+  const glyph = KIND_GLYPH[item.kind] ?? '·';
+  const cssKind = KIND_CSS[item.kind] ?? 'analysis';
   return (
     <div className={s.activityRow}>
-      <div className={s.activityIcon} data-kind={item.kind} aria-hidden="true">
+      <div className={s.activityIcon} data-kind={cssKind} aria-hidden="true">
         {glyph}
       </div>
       <div className={s.activityText}>
-        <div className={s.activityBody}>{item.body}</div>
-        <div className={s.activityTime}>{relativeTime(item.at)}</div>
+        <div className={s.activityBody}>{item.text}</div>
+        <div className={s.activityTime}>{relativeTime(new Date(item.occurredAt))}</div>
       </div>
     </div>
   );
