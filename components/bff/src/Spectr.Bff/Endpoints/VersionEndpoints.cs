@@ -1,6 +1,3 @@
-using Spectr.Bff.Infrastructure;
-
-using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Spectr.Bff.Auth;
@@ -26,20 +23,200 @@ public static class VersionEndpoints
 
         g.MapGet("/{versionId:guid}", GetById);
         g.MapDelete("/{versionId:guid}", Delete);
-
-        // Slice 1: not shipped. Patching, set-current, notes, audio streaming, re-analyze
-        // are deferred until later slices (Listen, Notes). Stubs bind their path params
-        // so OpenAPI describes them and orval codegen succeeds.
-        g.MapPatch("/{versionId:guid}", (Guid versionId) => NotImplementedResult.Stub());
-        g.MapPost("/{versionId:guid}/analyze", (Guid versionId) => NotImplementedResult.Stub());
-        g.MapPost("/{versionId:guid}/set-current", (Guid versionId) => NotImplementedResult.Stub());
-        g.MapGet("/{versionId:guid}/notes", (Guid versionId) => NotImplementedResult.Stub());
-        g.MapPost("/{versionId:guid}/notes", (Guid versionId) => NotImplementedResult.Stub());
-        g.MapPatch("/{versionId:guid}/notes/{noteId:guid}", (Guid versionId, Guid noteId) => NotImplementedResult.Stub());
-        g.MapDelete("/{versionId:guid}/notes/{noteId:guid}", (Guid versionId, Guid noteId) => NotImplementedResult.Stub());
+        g.MapPatch("/{versionId:guid}", PatchVersion);
+        g.MapPost("/{versionId:guid}/analyze", Reanalyze);
+        g.MapPost("/{versionId:guid}/set-current", SetCurrent);
+        g.MapGet("/{versionId:guid}/notes", ListNotes);
+        g.MapPost("/{versionId:guid}/notes", CreateNote);
+        g.MapPatch("/{versionId:guid}/notes/{noteId:guid}", PatchNote);
+        g.MapDelete("/{versionId:guid}/notes/{noteId:guid}", DeleteNote);
         g.MapGet("/{versionId:guid}/audio", StreamAudio);
 
         return app;
+    }
+
+    // ── Shared ownership probe ───────────────────────────────────────────────
+    // Returns true when the (versionId, userId) pair is valid. Used by every
+    // sub-endpoint below to reject IDOR.
+    private static Task<bool> UserOwnsVersion(
+        AppDbContext db, Guid versionId, Guid userId, CancellationToken ct) =>
+        (from v in db.SongVersions.AsNoTracking()
+         join s in db.Songs.AsNoTracking() on v.SongId equals s.Id
+         where v.Id == versionId && s.UserId == userId
+         select v.Id).AnyAsync(ct);
+
+    // ── PATCH /api/versions/{id} — rename label only (slice 1 scope) ────────
+    private static async Task<IResult> PatchVersion(
+        Guid versionId,
+        PatchVersionRequest body,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        var row = await (
+            from v in db.SongVersions
+            join s in db.Songs on v.SongId equals s.Id
+            where v.Id == versionId && s.UserId == userId
+            select v
+        ).FirstOrDefaultAsync(ct);
+        if (row is null) return Results.NotFound();
+
+        if (body.Label is not null)
+            row.Label = string.IsNullOrWhiteSpace(body.Label) ? null : body.Label.Trim();
+
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new VersionDto(
+            row.Id, row.SongId, row.VersionNumber, row.Label, row.IsCurrent, row.FilePath, row.CreatedAt));
+    }
+
+    // ── POST /api/versions/{id}/analyze — re-enqueue audio analysis ─────────
+    private static async Task<IResult> Reanalyze(
+        Guid versionId,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        IJobQueue queue,
+        CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        var version = await (
+            from v in db.SongVersions.AsNoTracking()
+            join s in db.Songs.AsNoTracking() on v.SongId equals s.Id
+            where v.Id == versionId && s.UserId == userId
+            select v
+        ).FirstOrDefaultAsync(ct);
+        if (version is null) return Results.NotFound();
+
+        var jobId = Guid.NewGuid();
+        db.AnalysisJobs.Add(new AnalysisJob
+        {
+            Id = jobId,
+            UserId = userId,
+            VersionId = versionId,
+            Status = "pending",
+        });
+        await db.SaveChangesAsync(ct);
+        await queue.EnqueueAsync(DramatiqTasks.AnalyzeAudioJob, new object[] { jobId.ToString() }, ct);
+        return Results.Accepted(value: new ReanalyzeResponse(jobId));
+    }
+
+    // ── POST /api/versions/{id}/set-current ─────────────────────────────────
+    private static async Task<IResult> SetCurrent(
+        Guid versionId,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        var version = await (
+            from v in db.SongVersions
+            join s in db.Songs on v.SongId equals s.Id
+            where v.Id == versionId && s.UserId == userId
+            select v
+        ).FirstOrDefaultAsync(ct);
+        if (version is null) return Results.NotFound();
+
+        // Demote any sibling currents, then promote this one. Single SQL pass
+        // would be slightly faster but two ExecuteUpdateAsync calls are clear
+        // and the songs-per-song row count is tiny.
+        await db.SongVersions
+            .Where(v => v.SongId == version.SongId && v.IsCurrent && v.Id != versionId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsCurrent, false), ct);
+        version.IsCurrent = true;
+        await db.SaveChangesAsync(ct);
+        return Results.NoContent();
+    }
+
+    // ── Notes CRUD ──────────────────────────────────────────────────────────
+    private static async Task<IResult> ListNotes(
+        Guid versionId,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        if (!await UserOwnsVersion(db, versionId, userId, ct)) return Results.NotFound();
+        var notes = await db.SessionNotes.AsNoTracking()
+            .Where(n => n.VersionId == versionId && n.UserId == userId)
+            .OrderBy(n => n.TSeconds)
+            .Select(n => new NoteDto(n.Id, n.VersionId, n.TSeconds, n.Text, n.Pinned, n.CreatedAt, n.UpdatedAt))
+            .ToListAsync(ct);
+        return Results.Ok(notes);
+    }
+
+    private static async Task<IResult> CreateNote(
+        Guid versionId,
+        CreateNoteRequest body,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        if (!await UserOwnsVersion(db, versionId, userId, ct)) return Results.NotFound();
+        var trimmed = (body.Text ?? "").Trim();
+        if (string.IsNullOrEmpty(trimmed))
+            return Results.BadRequest(new { error = "Text is required." });
+        if (trimmed.Length > 2000)
+            return Results.BadRequest(new { error = "Text exceeds 2000 chars." });
+
+        var row = new SessionNote
+        {
+            Id = Guid.NewGuid(),
+            VersionId = versionId,
+            UserId = userId,
+            TSeconds = Math.Max(0, body.TSeconds),
+            Text = trimmed,
+            Pinned = body.Pinned,
+        };
+        db.SessionNotes.Add(row);
+        await db.SaveChangesAsync(ct);
+        return Results.Created(
+            $"/api/versions/{versionId}/notes/{row.Id}",
+            new NoteDto(row.Id, row.VersionId, row.TSeconds, row.Text, row.Pinned, row.CreatedAt, row.UpdatedAt));
+    }
+
+    private static async Task<IResult> PatchNote(
+        Guid versionId,
+        Guid noteId,
+        PatchNoteRequest body,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        var row = await db.SessionNotes
+            .Where(n => n.Id == noteId && n.VersionId == versionId && n.UserId == userId)
+            .FirstOrDefaultAsync(ct);
+        if (row is null) return Results.NotFound();
+
+        if (body.TSeconds is not null) row.TSeconds = Math.Max(0, body.TSeconds.Value);
+        if (body.Text is not null)
+        {
+            var trimmed = body.Text.Trim();
+            if (string.IsNullOrEmpty(trimmed))
+                return Results.BadRequest(new { error = "Text cannot be empty." });
+            if (trimmed.Length > 2000)
+                return Results.BadRequest(new { error = "Text exceeds 2000 chars." });
+            row.Text = trimmed;
+        }
+        if (body.Pinned is not null) row.Pinned = body.Pinned.Value;
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new NoteDto(row.Id, row.VersionId, row.TSeconds, row.Text, row.Pinned, row.CreatedAt, row.UpdatedAt));
+    }
+
+    private static async Task<IResult> DeleteNote(
+        Guid versionId,
+        Guid noteId,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        var deleted = await db.SessionNotes
+            .Where(n => n.Id == noteId && n.VersionId == versionId && n.UserId == userId)
+            .ExecuteDeleteAsync(ct);
+        return deleted > 0 ? Results.NoContent() : Results.NotFound();
     }
 
     // GET /api/versions/{id}/audio
