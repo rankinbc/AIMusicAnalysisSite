@@ -1,35 +1,431 @@
-/* Profile placeholder page. */
+/* Profile page: header card, tab strip, and 3-tab bodies (Overview / Activity / Settings). */
 
 .page {
-  max-width: 1080px;
+  max-width: 1360px;
   margin: 0 auto;
-  padding: var(--space-6);
+  padding: var(--space-6) var(--space-6) 80px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.status {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.error {
+  color: var(--red);
+  font-size: 13px;
+}
+
+/* ── Header card ─────────────────────────────────────────────── */
+
+.header {
+  overflow: hidden;
+}
+
+.headerInner {
+  position: relative;
+  background: linear-gradient(
+    135deg,
+    rgba(0, 229, 176, 0.10) 0%,
+    rgba(167, 139, 250, 0.06) 60%,
+    transparent 100%
+  );
+  padding: 24px 28px;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.avatar {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--cyan) 0%, var(--violet) 100%);
+  display: grid;
+  place-items: center;
+  color: #06151a;
+  font-weight: 800;
+  font-size: 36px;
+  box-shadow:
+    0 0 0 4px rgba(7, 10, 18, 0.8),
+    0 0 24px -6px rgba(0, 229, 176, 0.5);
+  flex-shrink: 0;
+}
+
+.headerMain {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
 }
 
-.title {
-  margin: 0;
-  font-size: 32px;
+.nameRow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.displayName {
+  font-size: 26px;
   font-weight: 800;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   color: var(--text);
 }
 
-.subtitle {
-  margin: 0;
-  font-size: 13px;
+.handle {
+  font-size: 12px;
   color: var(--muted);
 }
 
-.placeholder {
-  margin-top: var(--space-5);
-  padding: var(--space-6);
-  border: 1px dashed var(--border-2);
-  border-radius: var(--radius);
-  text-align: center;
+.meta {
+  font-size: 11px;
   color: var(--muted);
+}
+
+.statsRow {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 60px;
+}
+
+.statValue {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.statValue[data-accent='violet'] {
+  color: var(--violet);
+}
+
+.statLabel {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.headerAside {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.privacyTag {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* ── Tab strip ───────────────────────────────────────────────── */
+
+.tabStrip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  padding: 0 2px;
+  margin-bottom: -2px;
+}
+
+.tab {
+  padding: 12px 16px;
   font-size: 13px;
-  background: rgba(255, 255, 255, 0.01);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: color 0.15s;
+  background: transparent;
+}
+
+.tab[data-active='true'] {
+  color: var(--text);
+  border-bottom-color: var(--cyan);
+}
+
+.tabBadge {
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  font-weight: 700;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.tab[data-active='true'] .tabBadge {
+  background: rgba(0, 229, 176, 0.1);
+  color: var(--cyan);
+  border-color: rgba(0, 229, 176, 0.32);
+}
+
+/* ── Two-column grid used by Overview + Settings ─────────────── */
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 20px;
+}
+
+@media (max-width: 960px) {
+  .split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ── Section title (cards) ───────────────────────────────────── */
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  margin-bottom: 14px;
+}
+
+.sectionTitle::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent, var(--cyan));
+  box-shadow: 0 0 8px var(--accent, var(--cyan));
+}
+
+/* ── Recent-songs list rows ──────────────────────────────────── */
+
+.songList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.songRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: transparent;
+  text-decoration: none;
+  color: inherit;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.songRow:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.songMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.songName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.songMeta {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 2px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.emptyHint {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 14px 10px;
+  text-align: center;
+}
+
+/* ── Plan card ───────────────────────────────────────────────── */
+
+.planCard {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(0, 229, 176, 0.04);
+  border: 1px solid rgba(0, 229, 176, 0.18);
+}
+
+.planName {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cyan);
+}
+
+.planDescription {
+  font-size: 11px;
+  color: var(--text-2);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+/* ── Activity feed ───────────────────────────────────────────── */
+
+.activityList {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.activityRow {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.activityIcon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  border: 1px solid;
+}
+
+.activityIcon[data-kind='analysis'],
+.activityIcon[data-kind='upload'] {
+  background: rgba(0, 229, 176, 0.08);
+  border-color: rgba(0, 229, 176, 0.4);
+  color: var(--cyan);
+}
+
+.activityIcon[data-kind='song'] {
+  background: rgba(52, 211, 153, 0.08);
+  border-color: rgba(52, 211, 153, 0.4);
+  color: var(--green);
+}
+
+.activityIcon[data-kind='ref'] {
+  background: rgba(167, 139, 250, 0.08);
+  border-color: rgba(167, 139, 250, 0.4);
+  color: var(--violet);
+}
+
+.activityText {
+  flex: 1;
+  min-width: 0;
+}
+
+.activityBody {
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+.activityTime {
+  font-size: 9px;
+  color: var(--muted);
+  margin-top: 2px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* ── Settings rows ───────────────────────────────────────────── */
+
+.settingsList {
+  display: flex;
+  flex-direction: column;
+}
+
+.settingRow {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.settingRow:last-child {
+  border-bottom: none;
+}
+
+.settingLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.settingValue {
+  font-size: 13px;
+  color: var(--text);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settingValueMuted {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.dangerNote {
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.dangerActions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.dangerBtn {
+  color: var(--red);
+  border-color: rgba(244, 63, 94, 0.32);
+  background: rgba(244, 63, 94, 0.06);
+}
+
+.dangerBtn:hover {
+  background: rgba(244, 63, 94, 0.1);
 }
