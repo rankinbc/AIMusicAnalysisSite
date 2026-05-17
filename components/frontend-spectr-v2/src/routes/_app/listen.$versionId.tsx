@@ -11,16 +11,21 @@ import {
   type Phase1Data,
   type Phase2Data,
 } from '../../api/types';
-import { CoverArt } from '../../ui/CoverArt';
-import { hueFromId } from '../../ui/hueFromId';
-import { GradePill } from '../../ui/GradePill';
-import { Pill } from '../../ui/Pill';
+import {
+  LOOP_DEFAULT,
+  PITCH_PANEL_DEFAULT,
+  type LoopState,
+  type PitchPanelState,
+} from '../../features/listen/loop';
+import { PreviewTools } from '../../features/listen/PreviewTools';
+import { useAudioGraph } from '../../features/listen/useAudioGraph';
 import { fmtBpm, fmtGenre, fmtNumber } from '../../features/results/helpers/format';
+import { CoverArt } from '../../ui/CoverArt';
+import { GradePill } from '../../ui/GradePill';
+import { hueFromId } from '../../ui/hueFromId';
+import { Pill } from '../../ui/Pill';
 import s from './listen.module.css';
 
-// /listen/$versionId?verdict_id=<id>
-// When verdict_id is present, Listen pre-applies that verdict's fix preset
-// to the ToolsRail. (Visual hook only — preset state lives client-side for v1.)
 const search = z.object({
   verdict_id: z.string().optional(),
 });
@@ -32,27 +37,6 @@ export const Route = createFileRoute('/_app/listen/$versionId')({
 
 const SPECTRUM_BARS = 56;
 const WAVEFORM_BARS = 240;
-
-interface PreviewTool {
-  id: string;
-  label: string;
-  glyph: string;
-  sub: string;
-  tier: 'v1' | 'v2';
-  accent: string;
-  description: string;
-}
-
-const PREVIEW_TOOLS: PreviewTool[] = [
-  { id: 'eq', label: 'EQ Preview', glyph: 'EQ', sub: '8-band parametric', tier: 'v1', accent: '#00e5b0', description: 'Sweep an inline 8-band parametric EQ over the playback bus.' },
-  { id: 'comp', label: 'Compressor', glyph: '◐', sub: 'Threshold · ratio', tier: 'v1', accent: '#fbbf24', description: 'Apply a single-band compressor to taste — no automation.' },
-  { id: 'sat', label: 'Saturation', glyph: '~', sub: 'Tanh drive', tier: 'v1', accent: '#fb923c', description: 'Soft-clipping waveshaper — drive the master without clipping the ceiling.' },
-  { id: 'ms', label: 'M/S Width', glyph: '◭', sub: 'Mid/Side balance', tier: 'v1', accent: '#60a5fa', description: 'Adjust the stereo width by splitting mid and side channels.' },
-  { id: 'lim', label: 'Limiter', glyph: '|', sub: 'Brickwall', tier: 'v2', accent: '#f43f5e', description: 'True-peak limiter — coming in v2.' },
-  { id: 'pitch', label: 'Pitch', glyph: '#', sub: 'Cents · semitones', tier: 'v2', accent: '#a78bfa', description: 'Real-time pitch shift — coming in v2.' },
-  { id: 'loop', label: 'Loop', glyph: '⟲', sub: 'Section loop', tier: 'v1', accent: '#a78bfa', description: 'Lock playback to a bar range for AB-testing fixes.' },
-  { id: 'scope', label: 'Scope', glyph: '◎', sub: 'Goniometer · phase', tier: 'v1', accent: '#34d399', description: 'Real-time correlation goniometer — visualize phase.' },
-];
 
 const SECTION_COLORS: Record<string, string> = {
   intro: 'rgba(0, 229, 176, 0.32)',
@@ -96,13 +80,20 @@ function ListenPage() {
   const phase1 = pickPhase<Phase1Data>(fj, 1);
   const phase2 = pickPhase<Phase2Data>(fj, 2);
 
-  // ── Audio element + state ────────────────────────────────────────────
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const graph = useAudioGraph(audioRef.current);
+
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState<number>(phase1?.duration_seconds ?? 0);
   const [volume, setVolume] = useState(0.8);
   const [rate, setRate] = useState(1);
+  const [loop, setLoop] = useState<LoopState>(LOOP_DEFAULT);
+  const [pitch, setPitch] = useState<PitchPanelState>(PITCH_PANEL_DEFAULT);
+  // True while the audio buffer source (pitch lane) is driving playback
+  // instead of the MediaElement. Owned by the page so transport ops know
+  // which lane to operate on.
+  const pitchModeRef = useRef(false);
 
   const audioUrl = useMemo(() => {
     if (!versionId) return null;
@@ -111,7 +102,6 @@ function ListenPage() {
     return `/api/versions/${versionId}/audio?t=${encodeURIComponent(token)}`;
   }, [versionId]);
 
-  // Attach event listeners when the audio element mounts.
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
@@ -140,89 +130,212 @@ function ListenPage() {
 
   useEffect(() => {
     const a = audioRef.current;
-    if (!a) return;
-    a.volume = volume;
+    if (a) a.volume = volume;
   }, [volume]);
 
   useEffect(() => {
     const a = audioRef.current;
-    if (!a) return;
-    a.playbackRate = rate;
+    if (a) a.playbackRate = rate;
   }, [rate]);
+
+  // ── Pitch lane wiring ──
+  // The audio graph owns a BufferSource lane; when pitch is enabled the page
+  // pauses the MediaElement and drives playback via the graph instead. The
+  // <audio> tag continues to own duration + the visible URL.
+
+  const handlePitchChange = (next: PitchPanelState) => {
+    setPitch(next);
+  };
+
+  // Apply detune to the live BufferSource whenever semitones/cents change.
+  useEffect(() => {
+    if (pitch.enabled) graph.setPitchDetune(pitch.semitones, pitch.cents);
+  }, [pitch.semitones, pitch.cents, pitch.enabled, graph]);
+
+  // Enter/exit pitch mode in response to the toggle. Decoding can take a few
+  // seconds on long FLACs — we surface a "DECODING…" state on the toggle.
+  useEffect(() => {
+    let cancelled = false;
+    const a = audioRef.current;
+    if (!a || !audioUrl) return undefined;
+
+    if (pitch.enabled && !pitchModeRef.current) {
+      const wasPlaying = !a.paused;
+      const startedAt = a.currentTime;
+      a.pause();
+      setPlaying(false);
+      try {
+        graph.ensureContext();
+      } catch (err) {
+        toast.error(`Audio engine failed: ${err instanceof Error ? err.message : err}`);
+        setPitch({ ...pitch, enabled: false });
+        return undefined;
+      }
+      setPitch((p) => ({ ...p, decoding: true, decodeError: null }));
+      graph
+        .enterPitchMode(audioUrl, startedAt)
+        .then(() => {
+          if (cancelled) return;
+          pitchModeRef.current = true;
+          setPitch((p) => ({ ...p, decoding: false }));
+          // Once decode is done, switch the page's duration display over to
+          // the BufferSource duration (sample-accurate, doesn't get reset
+          // by token rotations).
+          const bufDur = graph.pitchDuration();
+          if (bufDur > 0) setDuration(bufDur);
+          setPosition(startedAt);
+          graph.setPitchDetune(pitch.semitones, pitch.cents);
+          if (wasPlaying) {
+            graph.pitchResume();
+            setPlaying(true);
+          }
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          const message = err instanceof Error ? err.message : String(err);
+          setPitch((p) => ({ ...p, decoding: false, enabled: false, decodeError: message }));
+          toast.error(`Pitch decode failed: ${message}`);
+        });
+    } else if (!pitch.enabled && pitchModeRef.current) {
+      const wasPlaying = graph.pitchPlaying();
+      const pos = graph.exitPitchMode();
+      pitchModeRef.current = false;
+      a.currentTime = pos;
+      setPosition(pos);
+      if (wasPlaying) {
+        a.play()
+          .then(() => setPlaying(true))
+          .catch(() => setPlaying(false));
+      }
+    }
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pitch.enabled, audioUrl, graph]);
+
+  // Drive position updates while pitch mode is playing — BufferSource has no
+  // timeupdate event, so we tick on rAF using graph.pitchCurrentTime().
+  useEffect(() => {
+    if (!pitch.enabled || !pitchModeRef.current) return undefined;
+    let raf = 0;
+    const tick = () => {
+      // Always read the current playhead — even paused — so the timecode
+      // doesn't get stuck showing 0:00 when the MediaElement timeupdate
+      // handler stops firing.
+      setPosition(graph.pitchCurrentTime());
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [pitch.enabled, graph]);
 
   const togglePlay = () => {
     const a = audioRef.current;
     if (!a) return;
+    // Pitch-mode path uses the BufferSource lane.
+    if (pitch.enabled && pitchModeRef.current) {
+      if (graph.pitchPlaying()) {
+        graph.pitchPause();
+        setPlaying(false);
+      } else {
+        try {
+          graph.ensureContext();
+        } catch (err) {
+          toast.error(`Audio engine failed: ${err instanceof Error ? err.message : err}`);
+          return;
+        }
+        graph.pitchResume();
+        setPlaying(true);
+      }
+      return;
+    }
+    // Default path: MediaElement.
     if (playing) {
       a.pause();
       setPlaying(false);
-    } else {
-      a.play()
-        .then(() => setPlaying(true))
-        .catch((err) => {
-          toast.error(`Playback failed: ${err.message ?? err}`);
-          setPlaying(false);
-        });
+      return;
     }
+    try {
+      graph.ensureContext();
+    } catch (err) {
+      toast.error(`Audio engine failed: ${err instanceof Error ? err.message : err}`);
+      return;
+    }
+    a.play()
+      .then(() => setPlaying(true))
+      .catch((err) => {
+        toast.error(`Playback failed: ${err.message ?? err}`);
+        setPlaying(false);
+      });
   };
 
   const seek = (pct: number) => {
+    const dur = pitch.enabled && pitchModeRef.current
+      ? graph.pitchDuration()
+      : Number.isFinite(audioRef.current?.duration ?? NaN)
+        ? audioRef.current!.duration
+        : duration;
+    const t = Math.max(0, Math.min(1, pct)) * dur;
+    if (pitch.enabled && pitchModeRef.current) {
+      graph.pitchSeek(t);
+      setPosition(t);
+      return;
+    }
     const a = audioRef.current;
     if (!a) return;
-    const t = Math.max(0, Math.min(1, pct)) * (Number.isFinite(a.duration) ? a.duration : duration);
     a.currentTime = t;
     setPosition(t);
   };
 
-  // ── Procedural visualizer (rAF) — replace with AnalyserNode in v2 ──
+  // ── Real-audio reactive state (rAF loop reads from AudioGraph) ──
   const [spectrumValues, setSpectrumValues] = useState<number[]>(
-    () => Array.from({ length: SPECTRUM_BARS }, () => 0.2),
+    () => Array.from({ length: SPECTRUM_BARS }, () => 0),
   );
-  useEffect(() => {
-    if (!playing) {
-      setSpectrumValues((prev) => prev.map((v) => v * 0.7));
-      return;
-    }
-    let raf = 0;
-    const t0 = performance.now() / 1000;
-    function frame() {
-      const t = performance.now() / 1000 - t0;
-      setSpectrumValues(
-        Array.from({ length: SPECTRUM_BARS }, (_, i) => {
-          const base = 1 - i / SPECTRUM_BARS;
-          const wave = 0.5 + Math.sin(t * 4 + i * 0.5) * 0.25 + Math.sin(t * 1.3 + i * 0.15) * 0.15;
-          return Math.max(0.05, Math.min(1, base * wave * 1.1));
-        }),
-      );
-      raf = requestAnimationFrame(frame);
-    }
-    raf = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf);
-  }, [playing]);
+  const [meters, setMeters] = useState({
+    lufsShort: phase1?.lufs ?? -14,
+    truePeakDb: phase1?.true_peak_db ?? phase1?.peak_dbfs ?? -1,
+    correlation: phase1?.stereo_correlation ?? 0.6,
+  });
 
-  // ── Procedural meters (rAF wobble) ──
-  const [lufsShort, setLufsShort] = useState(phase1?.lufs ?? -14);
-  const [truePeak, setTruePeak] = useState(phase1?.true_peak_db ?? phase1?.peak_dbfs ?? -1);
-  const [correlation, setCorrelation] = useState(phase1?.stereo_correlation ?? 0.6);
   useEffect(() => {
     if (!playing) return;
     let raf = 0;
-    const t0 = performance.now() / 1000;
-    const baseLufs = phase1?.lufs ?? -14;
-    const basePeak = phase1?.true_peak_db ?? phase1?.peak_dbfs ?? -1;
-    const baseCorr = phase1?.stereo_correlation ?? 0.6;
-    function frame() {
-      const t = performance.now() / 1000 - t0;
-      setLufsShort(baseLufs + Math.sin(t * 1.7) * 0.7);
-      setTruePeak(basePeak + Math.sin(t * 2.3) * 0.15);
-      setCorrelation(Math.max(-1, Math.min(1, baseCorr + Math.sin(t * 0.8) * 0.05)));
-      raf = requestAnimationFrame(frame);
-    }
-    raf = requestAnimationFrame(frame);
+    const draw = () => {
+      const frame = graph.readFrame();
+      if (frame.fftBins.length > 0) {
+        const bins = frame.fftBins;
+        // Down-sample the FFT to SPECTRUM_BARS bars using log-spaced bins so
+        // bass doesn't dominate visually.
+        const next = new Array<number>(SPECTRUM_BARS);
+        const minLog = Math.log10(1);
+        const maxLog = Math.log10(bins.length);
+        for (let i = 0; i < SPECTRUM_BARS; i += 1) {
+          const lo = Math.floor(10 ** (minLog + (i / SPECTRUM_BARS) * (maxLog - minLog)));
+          const hi = Math.max(
+            lo + 1,
+            Math.floor(10 ** (minLog + ((i + 1) / SPECTRUM_BARS) * (maxLog - minLog))),
+          );
+          let sum = 0;
+          for (let j = lo; j < hi && j < bins.length; j += 1) sum += bins[j];
+          next[i] = Math.min(1, (sum / Math.max(1, hi - lo)) * 1.4);
+        }
+        setSpectrumValues(next);
+        setMeters({
+          lufsShort: frame.lufsShort,
+          truePeakDb: frame.truePeakDb,
+          correlation: frame.correlation,
+        });
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [playing, phase1]);
+  }, [playing, graph]);
 
-  // ── Procedural waveform (memoized per duration) ──
+  // Procedural waveform for the scrubber — visual scaffolding, NOT the real
+  // audio buffer. Building a real waveform requires either a server-side
+  // peaks file or client-side OfflineAudioContext decode (Listen-DSP slice).
   const waveform = useMemo(() => {
     return Array.from({ length: WAVEFORM_BARS }, (_, i) => {
       const sectionIdx = STUB_SECTIONS.findIndex(
@@ -234,7 +347,6 @@ function ListenPage() {
     });
   }, []);
 
-  // ── Notes (client-side stub until BFF /notes ships) ──
   const [notes, setNotes] = useState<StubNote[]>([]);
   const [noteInput, setNoteInput] = useState('');
   const [activeNote, setActiveNote] = useState<string | null>(null);
@@ -242,22 +354,16 @@ function ListenPage() {
   const handleAddNote = () => {
     if (!noteInput.trim() || !duration) return;
     const pct = duration > 0 ? position / duration : 0;
-    const newNote: StubNote = {
-      id: `note-${Date.now()}`,
-      timePct: pct,
-      body: noteInput.trim(),
-      pinned: false,
-    };
-    setNotes((n) => [...n, newNote]);
+    setNotes((n) => [
+      ...n,
+      { id: `note-${Date.now()}`, timePct: pct, body: noteInput.trim(), pinned: false },
+    ]);
     setNoteInput('');
   };
 
-  // ── Tools ──
   const [activeTool, setActiveTool] = useState<string | null>(null);
   useEffect(() => {
-    if (verdict_id) {
-      toast.info('Preset handoff from Coach not yet wired.');
-    }
+    if (verdict_id) toast.info('Preset handoff from Coach not yet wired.');
   }, [verdict_id]);
 
   if (versionLoading) {
@@ -270,9 +376,7 @@ function ListenPage() {
   if (versionError || !version) {
     return (
       <div className={s.page}>
-        <Link to="/library" className={s.backLink}>
-          ← Library
-        </Link>
+        <Link to="/library" className={s.backLink}>← Library</Link>
         <p className={s.error}>Version not found.</p>
       </div>
     );
@@ -288,9 +392,7 @@ function ListenPage() {
 
   return (
     <div className={s.page}>
-      <Link to="/library" className={s.backLink}>
-        ← Library
-      </Link>
+      <Link to="/library" className={s.backLink}>← Library</Link>
 
       <section className={`card ${s.trackHeader}`}>
         <CoverArt hue={hue} size="md" />
@@ -303,24 +405,10 @@ function ListenPage() {
           <div className={s.trackName}>{trackName}</div>
           <div className={s.pillRow}>
             {phase2?.genre && <Pill tone="cyan">{fmtGenre(phase2.genre)}</Pill>}
-            {phase1?.bpm != null && (
-              <Pill>
-                <span className="mono">{fmtBpm(phase1.bpm)}</span> BPM
-              </Pill>
-            )}
-            {phase1?.detected_key && (
-              <Pill>
-                <span className="mono">{phase1.detected_key}</span>
-              </Pill>
-            )}
-            {phase1?.lufs != null && (
-              <Pill>
-                <span className="mono">{fmtNumber(phase1.lufs, 1)}</span> LUFS
-              </Pill>
-            )}
-            <Pill>
-              <span className="mono">v{version.versionNumber}</span>
-            </Pill>
+            {phase1?.bpm != null && <Pill><span className="mono">{fmtBpm(phase1.bpm)}</span> BPM</Pill>}
+            {phase1?.detected_key && <Pill><span className="mono">{phase1.detected_key}</span></Pill>}
+            {phase1?.lufs != null && <Pill><span className="mono">{fmtNumber(phase1.lufs, 1)}</span> LUFS</Pill>}
+            <Pill><span className="mono">v{version.versionNumber}</span></Pill>
           </div>
         </div>
         <div className={s.headerRight}>
@@ -340,40 +428,21 @@ function ListenPage() {
       <section className={`card ${s.hero}`}>
         <div className={s.heroVisual}>
           <div className={s.sectionOverlay}>
-            <span
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: 3,
-                background: SECTION_COLORS[currentSection.type],
-              }}
-            />
+            <span style={{ width: 6, height: 6, borderRadius: 3, background: SECTION_COLORS[currentSection.type] }} />
             <span>{currentSection.name}</span>
           </div>
           <div className={s.liveStrip}>
-            <LivePill label="LUFS-S" value={fmtNumber(lufsShort, 1)} />
-            <LivePill label="Peak" value={fmtNumber(truePeak, 1)} />
-            <LivePill label="Corr" value={fmtNumber(correlation, 2)} />
+            <LivePill label="LUFS-S" value={fmtNumber(meters.lufsShort, 1)} />
+            <LivePill label="Peak" value={fmtNumber(meters.truePeakDb, 1)} />
+            <LivePill label="Corr" value={fmtNumber(meters.correlation, 2)} />
           </div>
           <div className={s.spectrumWrap} aria-hidden="true">
             {spectrumValues.map((v, i) => (
-              <div
-                key={i}
-                className={s.spectrumBar}
-                style={{ height: `${Math.round(v * 92)}%` }}
-              />
+              <div key={i} className={s.spectrumBar} style={{ height: `${Math.round(v * 92)}%` }} />
             ))}
           </div>
           <div className={s.freqGrid}>
-            <span>20</span>
-            <span>60</span>
-            <span>200</span>
-            <span>500</span>
-            <span>1k</span>
-            <span>2k</span>
-            <span>5k</span>
-            <span>10k</span>
-            <span>20k</span>
+            <span>20</span><span>60</span><span>200</span><span>500</span><span>1k</span><span>2k</span><span>5k</span><span>10k</span><span>20k</span>
           </div>
         </div>
 
@@ -384,6 +453,7 @@ function ListenPage() {
             positionPct={positionPct}
             duration={duration}
             notes={notes}
+            loop={loop}
             onSeek={seek}
             onNoteClick={(id) => setActiveNote(id)}
             activeNote={activeNote}
@@ -399,25 +469,9 @@ function ListenPage() {
             >
               {playing ? '⏸' : '▶'}
             </button>
-            <button
-              type="button"
-              className={s.transportBtn}
-              onClick={() => seek(Math.max(0, positionPct - 0.05))}
-              aria-label="Back 5%"
-            >
-              ⏮
-            </button>
-            <button
-              type="button"
-              className={s.transportBtn}
-              onClick={() => seek(Math.min(1, positionPct + 0.05))}
-              aria-label="Forward 5%"
-            >
-              ⏭
-            </button>
-            <span className={s.timecode}>
-              {formatTime(position)} / {formatTime(duration)}
-            </span>
+            <button type="button" className={s.transportBtn} onClick={() => seek(Math.max(0, positionPct - 0.05))} aria-label="Back 5%">⏮</button>
+            <button type="button" className={s.transportBtn} onClick={() => seek(Math.min(1, positionPct + 0.05))} aria-label="Forward 5%">⏭</button>
+            <span className={s.timecode}>{formatTime(position)} / {formatTime(duration)}</span>
             <SpeedDial value={rate} onChange={setRate} />
             <div className={s.volumeWrap}>
               <span className={s.volumeIcon}>VOL</span>
@@ -438,13 +492,10 @@ function ListenPage() {
               className="btn sm"
               onClick={() => {
                 if (!duration) return;
-                const note: StubNote = {
-                  id: `note-${Date.now()}`,
-                  timePct: position / duration,
-                  body: `Note @ ${formatTime(position)}`,
-                  pinned: false,
-                };
-                setNotes((n) => [...n, note]);
+                setNotes((n) => [
+                  ...n,
+                  { id: `note-${Date.now()}`, timePct: position / duration, body: `Note @ ${formatTime(position)}`, pinned: false },
+                ]);
                 toast.success('Note added (local only)');
               }}
               disabled={!duration}
@@ -455,33 +506,18 @@ function ListenPage() {
         </div>
       </section>
 
-      <section className={`card ${s.toolsRail}`}>
-        <header className={s.toolsRailHd}>
-          <div className={s.toolsTitle}>
-            <span className="dot" />
-            Preview adjustments
-          </div>
-          <span className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>
-            visual only · DSP slice ships separately
-          </span>
-        </header>
-        <div className={s.toolGrid}>
-          {PREVIEW_TOOLS.map((t) => (
-            <ToolTile
-              key={t.id}
-              tool={t}
-              active={activeTool === t.id}
-              onClick={() => setActiveTool((cur) => (cur === t.id ? null : t.id))}
-            />
-          ))}
-        </div>
-        {activeTool && (
-          <ToolPanel
-            tool={PREVIEW_TOOLS.find((t) => t.id === activeTool)!}
-            onClose={() => setActiveTool(null)}
-          />
-        )}
-      </section>
+      <PreviewTools
+        graph={graph}
+        activeTool={activeTool}
+        onActiveToolChange={setActiveTool}
+        loop={loop}
+        onLoopChange={setLoop}
+        audioRef={audioRef}
+        currentTime={position}
+        duration={duration}
+        pitch={pitch}
+        onPitchChange={handlePitchChange}
+      />
 
       <div className={s.belowGrid}>
         <div className={s.activityCol}>
@@ -502,20 +538,13 @@ function ListenPage() {
                       type="button"
                       className={s.noteRow}
                       data-active={activeNote === n.id}
-                      onClick={() => {
-                        setActiveNote(n.id);
-                        seek(n.timePct);
-                      }}
+                      onClick={() => { setActiveNote(n.id); seek(n.timePct); }}
                     >
-                      <span className={s.noteIcon} data-pinned={n.pinned}>
-                        {n.pinned ? '★' : '·'}
-                      </span>
+                      <span className={s.noteIcon} data-pinned={n.pinned}>{n.pinned ? '★' : '·'}</span>
                       <div>
                         <div className={s.noteMeta}>
                           <span>@{formatTime(n.timePct * duration)}</span>
-                          {n.pinned && (
-                            <span style={{ color: 'var(--cyan)' }}>PINNED</span>
-                          )}
+                          {n.pinned && <span style={{ color: 'var(--cyan)' }}>PINNED</span>}
                         </div>
                         <div className={s.noteBody}>{n.body}</div>
                       </div>
@@ -531,20 +560,10 @@ function ListenPage() {
                 placeholder="What did you hear?"
                 value={noteInput}
                 onChange={(e) => setNoteInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAddNote();
-                  }
-                }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddNote(); } }}
               />
               <span className={s.newNoteTime}>@{formatTime(position)}</span>
-              <button
-                type="button"
-                className="btn primary sm"
-                onClick={handleAddNote}
-                disabled={!noteInput.trim()}
-              >
+              <button type="button" className="btn primary sm" onClick={handleAddNote} disabled={!noteInput.trim()}>
                 Save
               </button>
             </div>
@@ -558,23 +577,10 @@ function ListenPage() {
             <div className={s.contextGrid}>
               <ContextStat label="Genre" value={phase2?.genre ? fmtGenre(phase2.genre) : '—'} />
               <ContextStat label="BPM" value={fmtBpm(phase1?.bpm)} />
-              <ContextStat
-                label="Duration"
-                value={duration > 0 ? formatTime(duration) : '—'}
-              />
+              <ContextStat label="Duration" value={duration > 0 ? formatTime(duration) : '—'} />
               <ContextStat label="Key" value={phase1?.detected_key ?? '—'} />
-              <ContextStat
-                label="LUFS"
-                value={phase1?.lufs != null ? fmtNumber(phase1.lufs, 1) : '—'}
-              />
-              <ContextStat
-                label="Mono"
-                value={
-                  phase1?.mono_compatibility != null
-                    ? `${Math.round(phase1.mono_compatibility * 100)}%`
-                    : '—'
-                }
-              />
+              <ContextStat label="LUFS" value={phase1?.lufs != null ? fmtNumber(phase1.lufs, 1) : '—'} />
+              <ContextStat label="Mono" value={phase1?.mono_compatibility != null ? `${Math.round(phase1.mono_compatibility * 100)}%` : '—'} />
             </div>
           </section>
         </div>
@@ -587,27 +593,25 @@ function ListenPage() {
             </header>
             <MeterRow
               label="Short LUFS"
-              value={fmtNumber(lufsShort, 1)}
-              fillPct={Math.max(0, Math.min(1, (lufsShort + 30) / 30))}
+              value={fmtNumber(meters.lufsShort, 1)}
+              fillPct={Math.max(0, Math.min(1, (meters.lufsShort + 30) / 30))}
               color="var(--cyan)"
             />
             <MeterRow
               label="True peak"
-              value={fmtNumber(truePeak, 1)}
-              fillPct={Math.max(0, Math.min(1, (truePeak + 12) / 12))}
-              color={truePeak > -1 ? 'var(--orange)' : 'var(--cyan)'}
+              value={fmtNumber(meters.truePeakDb, 1)}
+              fillPct={Math.max(0, Math.min(1, (meters.truePeakDb + 12) / 12))}
+              color={meters.truePeakDb > -1 ? 'var(--orange)' : 'var(--cyan)'}
             />
             <MeterRow
               label="Correlation"
-              value={fmtNumber(correlation, 2)}
-              fillPct={(correlation + 1) / 2}
-              color={correlation < 0 ? 'var(--red)' : correlation < 0.3 ? 'var(--yellow)' : 'var(--cyan)'}
+              value={fmtNumber(meters.correlation, 2)}
+              fillPct={(meters.correlation + 1) / 2}
+              color={meters.correlation < 0 ? 'var(--red)' : meters.correlation < 0.3 ? 'var(--yellow)' : 'var(--cyan)'}
             />
             <MeterRow
               label="Width"
-              value={
-                phase1?.stereo_width != null ? `${Math.round(phase1.stereo_width * 100)}%` : '—'
-              }
+              value={phase1?.stereo_width != null ? `${Math.round(phase1.stereo_width * 100)}%` : '—'}
               fillPct={phase1?.stereo_width ?? 0.5}
               color="var(--blue)"
             />
@@ -623,23 +627,14 @@ function ListenPage() {
               ))}
             </div>
             <div className={s.miniLabels}>
-              <span>20Hz</span>
-              <span>1kHz</span>
-              <span>20kHz</span>
+              <span>20Hz</span><span>1kHz</span><span>20kHz</span>
             </div>
           </section>
         </aside>
       </div>
 
       {audioUrl && (
-        // The <audio> element is invisible — playback is driven by the transport
-        // row above. preload="auto" makes Range requests for fast seek.
-        <audio
-          ref={audioRef}
-          src={audioUrl}
-          preload="auto"
-          crossOrigin="anonymous"
-        />
+        <audio ref={audioRef} src={audioUrl} preload="auto" crossOrigin="anonymous" />
       )}
     </div>
   );
@@ -651,6 +646,7 @@ interface ScrubberProps {
   positionPct: number;
   duration: number;
   notes: StubNote[];
+  loop: LoopState;
   onSeek: (pct: number) => void;
   onNoteClick: (id: string) => void;
   activeNote: string | null;
@@ -662,24 +658,26 @@ function Scrubber({
   positionPct,
   duration,
   notes,
+  loop,
   onSeek,
   onNoteClick,
   activeNote,
 }: ScrubberProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [hoverPct, setHoverPct] = useState<number | null>(null);
-
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = ref.current?.getBoundingClientRect();
     if (!rect) return;
     onSeek((e.clientX - rect.left) / rect.width);
   };
-
   const handleMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = ref.current?.getBoundingClientRect();
     if (!rect) return;
     setHoverPct((e.clientX - rect.left) / rect.width);
   };
+
+  const loopInPct = loop.inSec != null && duration > 0 ? loop.inSec / duration : null;
+  const loopOutPct = loop.outSec != null && duration > 0 ? loop.outSec / duration : null;
 
   return (
     <div className={s.scrubber}>
@@ -688,10 +686,7 @@ function Scrubber({
           <div
             key={sec.name}
             className={s.ribbonSection}
-            style={{
-              flex: sec.endPct - sec.startPct,
-              background: SECTION_COLORS[sec.type],
-            }}
+            style={{ flex: sec.endPct - sec.startPct, background: SECTION_COLORS[sec.type] }}
           >
             {sec.name}
           </div>
@@ -719,6 +714,21 @@ function Scrubber({
             style={{ height: `${v * 100}%` }}
           />
         ))}
+        {loopInPct != null && loopOutPct != null && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: `${loopInPct * 100}%`,
+              width: `${(loopOutPct - loopInPct) * 100}%`,
+              background: 'rgba(167, 139, 250, 0.18)',
+              border: '1px solid var(--violet)',
+              borderRadius: 4,
+              pointerEvents: 'none',
+            }}
+          />
+        )}
         {hoverPct != null && duration > 0 && (
           <div className={s.waveTooltip} style={{ left: `${hoverPct * 100}%` }}>
             {formatTime(hoverPct * duration)}
@@ -732,10 +742,7 @@ function Scrubber({
             type="button"
             className={s.noteMarker}
             data-pinned={n.pinned}
-            style={{
-              left: `${n.timePct * 100}%`,
-              opacity: activeNote === n.id ? 1 : 0.7,
-            }}
+            style={{ left: `${n.timePct * 100}%`, opacity: activeNote === n.id ? 1 : 0.7 }}
             onClick={() => onNoteClick(n.id)}
             title={n.body}
           >
@@ -752,12 +759,7 @@ function SpeedDial({ value, onChange }: { value: number; onChange: (v: number) =
   return (
     <div className={s.speedDial} role="group" aria-label="Playback speed">
       {options.map((o) => (
-        <button
-          key={o}
-          type="button"
-          data-active={value === o}
-          onClick={() => onChange(o)}
-        >
+        <button key={o} type="button" data-active={value === o} onClick={() => onChange(o)}>
           {o}×
         </button>
       ))}
@@ -801,64 +803,9 @@ function MeterRow({
       <div className={s.meterBar}>
         <div
           className={s.meterFill}
-          style={{
-            width: `${Math.max(0, Math.min(1, fillPct)) * 100}%`,
-            background: color,
-          }}
+          style={{ width: `${Math.max(0, Math.min(1, fillPct)) * 100}%`, background: color }}
         />
       </div>
-    </div>
-  );
-}
-
-interface ToolTileProps {
-  tool: PreviewTool;
-  active: boolean;
-  onClick: () => void;
-}
-
-function ToolTile({ tool, active, onClick }: ToolTileProps) {
-  return (
-    <button
-      type="button"
-      className={s.toolTile}
-      data-active={active}
-      data-tier={tool.tier}
-      style={
-        {
-          ['--tile-color' as string]: tool.accent,
-          ['--tile-bg' as string]: `${tool.accent}14`,
-          ['--tile-border' as string]: `${tool.accent}50`,
-        } as React.CSSProperties
-      }
-      onClick={onClick}
-    >
-      <div className={s.toolGlyphRow}>
-        <span className={s.toolGlyph}>{tool.glyph}</span>
-        <span className={s.toolLabel}>{tool.label}</span>
-        {tool.tier === 'v2' && <span className={s.toolTierBadge}>SOON</span>}
-      </div>
-      <div className={s.toolSub}>{tool.sub}</div>
-    </button>
-  );
-}
-
-function ToolPanel({ tool, onClose }: { tool: PreviewTool; onClose: () => void }) {
-  return (
-    <div
-      className={s.toolPanel}
-      style={{ ['--panel-accent' as string]: tool.accent } as React.CSSProperties}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span className={s.toolPanelTitle}>{tool.label}</span>
-        <button type="button" className="btn sm ghost" onClick={onClose}>
-          close
-        </button>
-      </div>
-      <p className={s.toolPanelSub}>{tool.description}</p>
-      <p className={s.toolPanelEmpty}>
-        DSP graph ships in the Listen-DSP slice. This panel is visual scaffolding only.
-      </p>
     </div>
   );
 }
