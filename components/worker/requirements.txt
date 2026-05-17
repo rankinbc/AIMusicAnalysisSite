@@ -1,4 +1,7 @@
 aimusic-shared>=0.1.0
+# Queue: dramatiq replaced celery in v2 (see app/dramatiq_app.py).
+# Celery files are still present for reference but are not loaded by the dramatiq entrypoint.
+dramatiq[redis]>=1.16
 celery>=5.3.0
 redis>=5.0.0
 sqlalchemy[asyncio]>=2.0.0

@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Spectr.Domain</RootNamespace>
+  </PropertyGroup>
+</Project>

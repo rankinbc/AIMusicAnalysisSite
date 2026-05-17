@@ -1,16 +1,16 @@
 services:
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     environment:
-      POSTGRES_DB: music_analyzer
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: spectr
+      POSTGRES_USER: spectr
+      POSTGRES_PASSWORD: spectr
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U spectr"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -24,6 +24,57 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  # C# BFF — owns auth, library, user state, queue dispatch, audio streaming.
+  bff:
+    build:
+      context: ../components/bff
+      dockerfile: src/Spectr.Bff/Dockerfile
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    environment:
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=spectr;Username=spectr;Password=spectr"
+      Redis__ConnectionString: "redis:6379"
+      Jwt__Key: "${JWT_KEY:?Set JWT_KEY in your shell or .env (32+ random bytes)}"
+      Jwt__Issuer: "spectr.bff"
+      Jwt__Audience: "spectr.web"
+      Storage__Provider: "local"
+      Storage__LocalRoot: "/data"
+      ASPNETCORE_ENVIRONMENT: "Development"
+    ports:
+      - "5000:5000"
+    volumes:
+      - ../data:/data
+
+  # Python analysis worker — dramatiq consumer; runs the 7-phase pipeline +
+  # the 26 specialists + waveform peaks pre-compute.
+  worker:
+    build:
+      context: ../components/worker
+      dockerfile: Dockerfile
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://spectr:spectr@postgres:5432/spectr"
+      REDIS_URL: "redis://redis:6379/0"
+      TORCH_HOME: "/data/models"
+      USE_CLAUDE_CLI: "true"
+    volumes:
+      - ../data:/data
+      - ../components/analysis:/app/analysis
+      - ../components/shared:/app/shared
+
+  # React frontend — served via nginx in prod; for dev, run `npm run dev` outside the compose.
+  frontend:
+    build:
+      context: ../components/frontend-spectr-v2
+      dockerfile: Dockerfile
+    depends_on:
+      bff: { condition: service_started }
+    ports:
+      - "5174:80"
 
 volumes:
   postgres_data:

@@ -1,5 +1,3 @@
-# Linux / Mac — use prefork pool
-# worker: celery -A app.celery_app worker --loglevel=info --concurrency=1 --pool=prefork
-
-# Windows — solo pool required (uncomment the line below instead)
-worker: celery -A app.celery_app worker --loglevel=info --concurrency=1 --pool=solo
+# v2 entrypoint — dramatiq replaces celery.
+# Pool selection (--processes/--threads) is per-platform; defaults are safe for slice 1.
+worker: python -m dramatiq app.dramatiq_app

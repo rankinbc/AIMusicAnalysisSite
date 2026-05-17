@@ -97,3 +97,15 @@ components/api/.cache/
 
 # Deployer backups
 .ce-backup-*/
+
+# User-uploaded audio + ML model caches — never commit
+data/audio/
+data/models/
+components/data/
+
+# Local Claude scaffold runtime artifacts
+.claude/scheduled_tasks.lock
+
+# Loose Playwright screenshots dropped at repo root by browser smoke tests
+/*.png
+!components/**/*.png

@@ -1,56 +1,59 @@
 # worker
 
-**Purpose**: Celery worker that orchestrates the 7-phase audio analysis pipeline. Picks up upload jobs from a Redis broker, calls analysis.run_pipeline() with a progress callback that writes per-phase state to PostgreSQL and updates Celery task state via self.update_state(). Implements partial-failure tolerance: each phase is wrapped in try/except — a failed phase records the error but the job continues with remaining phases. Writes final JSON result to output/analysis_results/ and PostgreSQL. Cleans up temp stem files after Phase 4. Pre-loads the Demucs model at worker startup (not per-task).
+**Purpose**: Dramatiq worker that orchestrates the 7-phase audio analysis pipeline.
+Pulls jobs from a Redis-backed `default` queue, calls `audio_analysis.run_pipeline()`,
+writes the result to the `analyses` table, and flips `analysis_jobs.status` to
+`complete` (or `failed` with `error_message` on exception). Pre-loads the Demucs
+model at worker startup, not per-task. Job state is the single source of truth
+in Postgres — Redis is only the queue medium.
 
-**Inputs**: data/uploads/ (audio files — path read from job payload)
+**Inputs**: file paths in `analysis_jobs.version_id → song_versions.file_path`, resolved against `$STORAGE_LOCAL_ROOT` (default `/data`).
 
-**Outputs**: output/analysis_results/ (final summary JSON), PostgreSQL analysis_results table
+**Outputs**: PostgreSQL `analyses` table (canonical) + optional JSON dump under `$RESULTS_DIR` (default `/data/output/analysis_results`).
 
-**Pattern**: `automation.md`
-
-**Stack**: Python 3.11+, Celery 5, Redis (broker + result backend), SQLAlchemy 2 (sync/psycopg2), Demucs
+**Stack**: Python 3.11+, dramatiq 1.16+ (replaces Celery in v2), Redis (broker), SQLAlchemy 2 (sync/psycopg2), Demucs.
 
 ## How to run
 
-Linux / Mac:
 ```
-celery -A app.celery_app worker --loglevel=info --concurrency=1 --pool=prefork
-```
-
-Windows (solo pool required — prefork does not work on Windows):
-```
-celery -A app.celery_app worker --loglevel=info --concurrency=1 --pool=solo
+python -m dramatiq app.dramatiq_app
 ```
 
-From the project root, run against the correct working directory:
-```
-cd components/worker && celery -A app.celery_app worker --loglevel=info --concurrency=1 --pool=solo
-```
+The Procfile is the canonical entrypoint and is wired into the docker-compose
+`worker` service.
 
-Or use the Procfile (Honcho / Heroku-style):
-```
-pip install honcho
-cd components/worker && honcho start
-```
+The legacy Celery files (`app/celery_app.py`, `app/tasks.py`, `app/signals.py`,
+`app/tasks_cleanup.py`) are still on disk but are **not loaded** by the dramatiq
+entrypoint. A later slice will delete them.
+
+## Environment
+
+| Env var               | Purpose                                                                                    |
+|-----------------------|--------------------------------------------------------------------------------------------|
+| `DATABASE_URL`        | Postgres URL — accepts `+asyncpg` (auto-converted to `+psycopg2`) or `+psycopg2` directly. |
+| `REDIS_URL`           | Dramatiq broker URL (matches BFF `Redis:ConnectionString`).                                |
+| `STORAGE_LOCAL_ROOT`  | Where audio files live on disk. Mounted from `data/` in docker-compose.                     |
+| `RESULTS_DIR`         | Optional artifact dump directory. Failure is non-fatal.                                     |
 
 ## Structure
 
 ```
 components/worker/
 ├── README.md          # This file
-├── Procfile           # Worker start command (honcho / heroku)
-├── requirements.txt   # Celery, Redis, SQLAlchemy, Demucs, etc.
-├── .env.example       # Secret template (REDIS_URL, DATABASE_URL)
+├── Procfile           # python -m dramatiq app.dramatiq_app
+├── requirements.txt   # dramatiq[redis], SQLAlchemy, psycopg2, etc.
 ├── app/
-│   ├── __init__.py    # Package marker
-│   ├── celery_app.py  # Celery instance + config (task_track_started, result_expires, etc.)
-│   ├── tasks.py       # run_analysis_pipeline — single bound task, 7-phase loop, per-phase try/except
-│   ├── progress.py    # Progress callback factory: writes phase state to DB + calls update_state
-│   ├── db.py          # Sync SQLAlchemy engine (psycopg2) safe for Celery fork model
-│   └── signals.py     # worker_ready signal — pre-loads Demucs model once at startup
+│   ├── __init__.py
+│   ├── dramatiq_app.py    # Broker wiring + actor module import
+│   ├── tasks_dramatiq.py  # analyze_audio_job actor (3-phase tx pattern)
+│   ├── db_sync.py         # Sync SQLAlchemy session factory (actors are sync)
+│   ├── celery_app.py      # LEGACY — not loaded; kept for reference
+│   ├── tasks.py           # LEGACY — port-source for tasks_dramatiq.py
+│   ├── progress.py        # LEGACY
+│   ├── db.py              # LEGACY async session (unused by dramatiq path)
+│   └── signals.py         # LEGACY worker_ready hooks
 └── tests/
-    ├── __init__.py
-    └── test_tasks.py  # Stub — mocks analysis package and DB
+    └── …                   # mocks analysis package and DB
 ```
 
 ---
