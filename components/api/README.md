@@ -1,4 +1,12 @@
-# api
+# api — LEGACY
+
+> ⚠️ **This component is in the deprecation path.** The primary backend
+> is now `components/bff/` (.NET 10). The FastAPI api here is kept
+> running only because it still hosts the **verdict pipeline + Anthropic
+> CLI client** that the BFF will eventually subsume via the worker's
+> `run_specialist` actor. Don't add new endpoints here — add them to the
+> BFF. Don't add new frontend dependencies on this api — point at the
+> BFF.
 
 **Purpose**: FastAPI REST API backend. Handles user registration and login with JWT auth (access token in Authorization Bearer header, refresh token in httpOnly cookie via PyJWT). Accepts multipart audio file uploads (MP3/FLAC/WAV up to 200 MB) using chunked XHR reads to disk via aiofiles. Dispatches Celery tasks to Redis broker after files are staged. Exposes an SSE endpoint for live job progress. Exposes job status and results endpoints. Stores all job state in PostgreSQL via SQLAlchemy 2.0 async (asyncpg driver). CORS configured for React dev server (localhost:5173). Manages upload history per user account.
 

@@ -1,8 +1,19 @@
-# Project: AI Music Analyzer
+# Project: AI Music Analyzer (SPECTR)
 
-A music producer web app where users register/log in, upload audio files (MP3, FLAC, WAV), and receive a comprehensive 7-phase analysis report. Built on top of an existing Python analysis pipeline wrapped as an installable package. React 19 SPA frontend, FastAPI backend, Celery worker for async processing, PostgreSQL for persistence, Redis for job queuing.
+A music producer web app where users register/log in, upload audio files (MP3, FLAC, WAV), and receive a comprehensive 7-phase analysis report plus on-demand AI specialist verdicts. Users can also "listen" to their track through a real-time Web Audio DSP chain (EQ, compressor, saturation, M/S width, pitch).
 
-**Stack**: Python 3.11+ (FastAPI, Celery, SQLAlchemy 2.0, asyncpg) + React 19 + Vite 8 + TypeScript + Tailwind CSS v3 + shadcn/ui + Recharts + PostgreSQL 15 + Redis 7
+**v2 stack (current — primary):**
+- **`bff/`** — ASP.NET Core .NET 10 minimal-API BFF (EF Core 10, Npgsql, PyJWT-style JWT bearer, IFileStorage, dramatiq job queue dispatcher)
+- **`frontend-spectr-v2/`** — React 19 + Vite 6 + TypeScript strict + TanStack Router + TanStack Query + CSS Modules + Radix UI + WaveSurfer + Recharts + Sonner. CSS Modules + `tokens.css`. No Tailwind, no shadcn.
+- **`worker/`** — Python dramatiq worker (replaces Celery). Actors: `analyze_audio_job` (7-phase pipeline), `run_specialist` (on-demand AI verdict)
+- **`shared/`** — `aimusic-shared` Python package: single-source SQLAlchemy ORM models for the worker (BFF has parallel EF Core entities that mirror this)
+- **`analysis/`** — `audio_analysis` Python package (7-phase pipeline, installable)
+
+**v1 stack (legacy — being phased out):**
+- **`api/`** — FastAPI REST API. Still hosts the verdict pipeline + Anthropic API client. Will fold into BFF/worker once dramatiq has the verdict actor pattern stabilized.
+- **`frontend-spectr/`** — vanilla JSX SPA. Used by older flows; v2 frontend is the new path forward.
+
+Postgres 16 + Redis 7 are shared. Both stacks talk to the same DB.
 
 ---
 
@@ -28,11 +39,13 @@ AIMusicAnalysisSite/
 │   ├── settings.local.json
 │   └── commands/
 ├── components/
-│   ├── api/                  (FastAPI backend)
-│   ├── analysis/             (Python audio analysis package)
-│   ├── worker/               (Celery worker)
-│   ├── shared/               (aimusic-shared: single-source ORM models for api + worker)
-│   └── frontend/             (React SPA)
+│   ├── bff/                  (PRIMARY — .NET 10 BFF: auth, songs, versions, jobs, results, verdicts, audio streaming)
+│   ├── frontend-spectr-v2/   (PRIMARY — React 19 + Vite 6 + TS strict SPA: full producer UI + Listen DSP page)
+│   ├── worker/               (dramatiq worker: analyze_audio_job + run_specialist actors)
+│   ├── analysis/             (Python audio analysis package — 7-phase pipeline)
+│   ├── shared/               (aimusic-shared: SQLAlchemy ORM models — worker side only; BFF has parallel EF Core entities)
+│   ├── api/                  (LEGACY — FastAPI; still hosts verdict pipeline + Anthropic CLI client until migration completes)
+│   └── frontend-spectr/      (LEGACY — vanilla JSX SPA)
 ├── data/
 │   ├── uploads/              (Staged audio uploads — dev local; S3 in prod)
 │   ├── reference_library/    (Curated pro reference tracks by genre)
@@ -53,7 +66,57 @@ AIMusicAnalysisSite/
 
 ## Components
 
-### api (api.md)
+### bff (NEW — PRIMARY backend)
+
+**Purpose**: ASP.NET Core .NET 10 minimal-API gateway. Owns auth (JWT bearer + refresh-token httpOnly cookie), songs/versions CRUD, audio upload (multipart, ≤250 MB), audio streaming for the Listen page (Range-enabled), analysis job dispatch via dramatiq, results retrieval, verdict listing + per-specialist on-demand `/run/{slug}` dispatch.
+**Inputs**: PostgreSQL (EF Core 10 + Npgsql) + Redis (dramatiq broker) + `IFileStorage` (LocalDisk dev / R2 prod)
+**Outputs**: HTTP/JSON to the frontend; dramatiq messages on the `default` queue
+**How to run**: `cd components/bff/src/Spectr.Bff && dotnet run` (listens on `http://localhost:5000`)
+
+**Key routes (v2):**
+- Auth: `POST /api/auth/{login,register,refresh,logout}`, `GET /api/auth/me`
+- Songs/versions: `GET/POST /api/songs`, `GET/POST/DELETE /api/versions/{id}` (chunked multipart upload)
+- Audio: `GET /api/versions/{id}/audio` — streams the original upload with `Accept-Ranges: bytes`. Accepts JWT via `Authorization` header OR `?t=<jwt>` query param (since `<audio>` / `EventSource` can't attach headers — whitelisted to paths matching `/audio`).
+- Jobs/results: `GET /api/jobs/{id}`, `GET /api/jobs/{id}/results`
+- Verdicts: `GET /api/reports/{job_id}/verdicts` (list + routing plan), `POST /api/reports/{job_id}/verdicts/run/{slug}` (on-demand specialist), `POST /api/verdicts/{id}/{dismiss,applied}`, `POST /api/verdicts/{id}/feedback`
+
+**Gotchas:**
+- **EF Core 10 migrations require a manual partial-index step**: `add Initial` can't fluently express `CREATE UNIQUE INDEX ... WHERE is_current`. Append the raw SQL to `Up()` / `Down()` after scaffolding. See `bff/README.md`. Without it the library can have two `is_current=true` rows per song.
+- **dramatiq wire format is HASH + LIST + per-message redis_message_id**: queue is `dramatiq:<queue>.msgs` HASH (message_id → JSON payload) + `dramatiq:<queue>` LIST (message_ids, RPUSH/LPOP). The payload's `message.options.redis_message_id` field is read by the Python broker — must match the LIST/HASH key. `IJobQueue.EnqueueAsync` uses `StackExchange.Redis` MULTI/EXEC to keep them in lockstep.
+- **Audio streaming uses query-param JWT** because HTMLMediaElement.src can't attach headers. The token still flows through the same `JwtBearer` pipeline (`OnMessageReceived` reads `?t=` when path contains `/audio`). Tokens in URLs leak into server logs — pre-public exposure, swap to a short-lived HMAC-signed audio URL.
+- **`Storage:LocalRoot` must resolve to repo-root `data/`, not `components/data/`**: previous off-by-one bug from `"../../../data"` resolution. Current config uses `"../../../../data"` from the BFF csproj directory.
+- **NuGet audit gating**: set `<NuGetAuditMode>direct</NuGetAuditMode>` in `Directory.Build.props` — without it, transitive CVEs in Serilog deps fail the build.
+- **CORS allowCredentials + explicit origins (not `*`)**: BFF allows only `http://localhost:5174` (Vite dev). Frontend uses `credentials: 'include'` for the refresh-cookie flow.
+- **Routing plan is persisted in both `analyses.routing_plan` AND `verdicts_payload.routing_plan`**: the parallel column is the lookup path; the embedded JSON copy survives cache reset.
+
+### frontend-spectr-v2 (NEW — PRIMARY frontend)
+
+**Purpose**: React 19 + Vite 6 + TypeScript strict SPA. Auth, library (grid card view + filter pills + VersionArc per song), song detail (cover hero + ProgressTimeline + VersionList + DeltaCard placeholder), results page (VerdictHero with grade pill + 4-metric grid + ResultsTabs 5-tab strip: AI Coach with CoachChat + TranceBot avatar + filter pills + FeaturedVerdictCard list + collapsible Specialist roster; Analysis tab with PipelineDial + phase-by-phase status + unlock zones; Spectrum, Reference, Arrangement tabs), Listen page (real Web Audio DSP chain + 8 preview tools).
+**Inputs**: BFF `/api/*` REST + a couple of SSE endpoints
+**Outputs**: browser
+**How to run**: `cd components/frontend-spectr-v2 && npm run dev` (Vite dev server on port 5174, proxies `/api/*` to BFF on `:5000`)
+
+**Stack rules:**
+- **TypeScript strict + `verbatimModuleSyntax`**: `import type` mandatory for type-only imports.
+- **CSS Modules + `src/styles/{tokens.css,global.css}`**. No Tailwind. Utility primitives `.card`, `.pill[.tone]`, `.dot[.tone]`, `.btn[.primary/.ghost/.sm]`, `.label`, `.mono` are global classes (ported from the mockup `styles.css`); component-specific styles live in `*.module.css`. Don't reach for inline styles unless the value is dynamic (color computed from grade, etc).
+- **TanStack Router file-based routes** under `src/routes/`. `_app/*` is auth-gated via `beforeLoad`; `_public/*` is anon. The `_app` route's `beforeLoad` short-circuits during the silent-refresh boot (`isLoading=true`) to avoid flash-of-redirect.
+- **`apiClient` via `src/api/fetcher.ts`**: single fetch wrapper with 401 → silent refresh + retry. Access token kept in module state ONLY (never localStorage); refresh token in httpOnly cookie. Don't reach for `localStorage` for auth.
+- **No new top-level layout state**: feature folders (`features/results/`, `features/listen/`, `features/player/`) own their pieces.
+
+**Listen page DSP chain (`features/listen/useAudioGraph.ts`)**: a Web Audio graph that wraps the page's single `<audio>` element:
+`MediaElementSource → 8× BiquadFilter (eq) → DynamicsCompressor → makeup gain → WaveShaper-parallel (sat dry+wet) → ChannelSplitter → 4-gain M/S matrix → ChannelMerger → master bypass lane → AnalyserNode (FFT) + ChannelSplitter → 2× AnalyserNode (L/R time-domain) → destination`. Tool toggles change params, not topology. Spectrum bars + meter rail read from `getByteFrequencyData` / `getFloatTimeDomainData` via a per-page rAF loop.
+
+**Pitch tool**: when enabled, the hook fetches the audio URL, decodes to `AudioBuffer` (cached), disconnects MediaElementSource, plays via `AudioBufferSourceNode.detune`. Note: Web Audio's detune scales playbackRate, so **pitch+tempo are coupled** for now; true tempo-safe pitch shift needs an AudioWorklet phase vocoder.
+
+**Gotchas:**
+- **`useAudioGraph` returns a memoized handle via `useMemo(() => ({...}), [])`**: returning a fresh object every render caused every `[graph]`-dep effect to re-fire, kicking off duplicate `enterPitchMode` decodes mid-flight. All hook methods close over refs, never React state, so freezing identity is safe.
+- **AudioContext must be created on a user gesture** (Chrome/Safari autoplay policy). Call `graph.ensureContext()` from the play button's click handler BEFORE `audio.play()`.
+- **TanStack Router child routes need `<Outlet />` in the parent**: `songs.$songId.tsx` was rendering its own detail UI even when `/songs/$id/results/$jobId` was active. Pattern: check `useChildMatches().length > 0` and return `<Outlet />` early when a child is active.
+- **Access token rotation can re-mount the `<audio>` element**: the `audioUrl` memo embeds the access token (`?t=`), so a silent refresh changes it, swapping the audio src and resetting `<audio>.currentTime`. Position state for the Listen page is therefore tracked off the audio graph's `pitchCurrentTime()` in pitch mode and the audio element's `timeupdate` event otherwise.
+- **`<audio>` requires `crossOrigin="anonymous"`** to feed `MediaElementSource`. BFF must set permissive CORS on the audio response (already configured for `localhost:5174`).
+- **`React.useState` initial value isn't recomputed after a token refresh**: derived state like `duration` is set by the MediaElement's `durationchange` event — initial value comes from `phase1?.duration_seconds`. Don't expect React state to track the live audio property without an explicit handler.
+
+### api (LEGACY — api.md)
 
 **Purpose**: FastAPI REST API. Handles user registration/login with JWT auth, audio file uploads (chunked multipart, up to 200 MB, optional `track_name` form field), Celery job dispatch, SSE job progress streaming, results retrieval (includes `share_token`), upload history per user, public share endpoint, track version grouping.
 **Inputs**: `data/uploads/` (writes staged audio files here before Celery dispatch)
@@ -125,26 +188,29 @@ AIMusicAnalysisSite/
 - **Singleton model loading**: load weights once per process via `models.get_model(name)`. Never load inside a per-call code path.
 - **TORCH_HOME env var**: set `TORCH_HOME=data/models` to cache demucs/torchopenl3 weights under the project instead of `~/.cache/torch`.
 
-### worker (automation.md)
+### worker (automation.md — NOW DRAMATIQ)
 
-**Purpose**: Celery worker. Picks up upload jobs from Redis, calls `analysis.run_pipeline()` with a progress callback, writes per-phase results to PostgreSQL, stores final JSON to `output/analysis_results/`. Partial-failure tolerant: failed phases are recorded and the job continues.
-**Inputs**: `data/uploads/` (reads file path from job payload)
-**Outputs**: `output/analysis_results/` (final JSON), PostgreSQL `analysis_results` table
-**How to run**:
-- Windows: `cd components/worker && celery -A app.celery_app worker --loglevel=info --concurrency=1 --pool=solo`
-- Linux: `cd components/worker && celery -A app.celery_app worker --loglevel=info --concurrency=1 --pool=prefork`
+**Purpose**: Dramatiq worker. Pulls actor invocations from a Redis `default` queue, runs them, writes results to Postgres. Two actors:
+- `analyze_audio_job(job_id)` — drives the 7-phase pipeline via `audio_analysis.run_pipeline()`, writes `analyses` row, flips `analysis_jobs.status` to `complete` / `failed`. Partial-failure tolerant (per-phase try/except).
+- `run_specialist(analysis_id, specialist_slug, focus)` — on-demand AI verdict generation. Wraps the Anthropic `claude` CLI via subprocess (gated by `asyncio.Semaphore(1)`; CLI is not concurrency-safe). Validates verdict JSON via Pydantic + the moderate-baseline severity downgrade in `aimusic_shared.verdicts.scoring`.
+
+**Inputs**: `analysis_jobs.version_id → song_versions.file_path` resolved against `$STORAGE_LOCAL_ROOT` (defaults to repo `data/`); specialist prompts at `components/worker/prompts/experts/*.md`.
+**Outputs**: PostgreSQL `analyses.final_json` + `analyses.verdicts_payload` (canonical); optional JSON dump under `$RESULTS_DIR`.
+**How to run**: `cd components/worker && python -m dramatiq app.dramatiq_app`. The Procfile is the canonical entrypoint and is wired into the docker-compose `worker` service.
 
 **Gotchas:**
-- **Single monolithic bound task, not a chain**: partial-failure tolerance requires one `@app.task(bind=True)` with internal per-phase `try/except`. A Celery chain aborts on first failure.
-- **SQLAlchemy engine must NOT be created at module import time**: engine creation is not fork-safe. Create inside `CustomTask.before_start`, close in `after_return`.
-- **concurrency=1 always**: Demucs is memory-heavy. `--pool=solo` on Windows; `--pool=prefork` on Linux. Never raise concurrency without profiling GPU/RAM headroom.
-- **Write canonical results to PostgreSQL, not Celery result backend**: Redis `result_expires` (default 1 day) purges blobs silently — `AsyncResult` returns `PENDING` even for completed jobs after expiry. PostgreSQL is source of truth.
-- **`task_track_started=True` required in Celery config**: without it, `PENDING` means both "queued" and "never dispatched".
-- **`update_state` PROGRESS is overwritten on completion**: after task returns `SUCCESS`, `info` becomes the return value. API must branch: `if state == 'SUCCESS'` read return value; else read `info` for phase progress.
-- **Demucs model pre-loaded in `worker_ready` signal**: not per-task. Model reference survives across tasks in same worker process.
-- **Temp stem files cleaned in `finally` block**: do not rely on OS cleanup. Phase 4 writes multi-GB temp files.
-- **`share_token` must be passed explicitly to `AnalysisResult()` constructor**: `mapped_column(default=…)` does NOT fire during SQLAlchemy autoflush — only on `session.add()` + explicit `session.flush()`. Always pass `share_token=str(uuid.uuid4())` in the constructor call.
-- **`session.rollback()` before the FAILED status update**: a failed INSERT poisons the session with `PendingRollbackError`. Without rollback, the subsequent `UPDATE upload_jobs SET status=FAILED` also fails silently and the job is stuck in PROCESSING forever.
+- **Dramatiq wire format**: messages are stored as `dramatiq:<queue>.msgs` HASH (message_id → JSON) + `dramatiq:<queue>` LIST (message_id only, RPUSH/LPOP). The payload's `message.options.redis_message_id` MUST match the LIST/HASH key. The BFF's `IJobQueue` writes both atomically via MULTI/EXEC.
+- **Sync session pattern**: dramatiq actors are sync `def`, so the worker uses SQLAlchemy 2.0 sync (psycopg2 driver) via `db_sync.py`. The async session pattern from the FastAPI api does NOT work here.
+- **3-phase tx pattern**: `analyze_audio_job` (1) loads the job + flips to `processing`, commits. (2) Runs the pipeline (no DB writes — slow phase). (3) New session, inserts `analyses`, flips `analysis_jobs` to `complete`. Without this, long-running phase 4 (Demucs) holds a transaction open and blocks other queries.
+- **`run_specialist` writes a fail-marker on exception**: a sentinel verdict with `headline='Specialist failed'` and the error reason is written so the frontend's `data-failed` UI state has something to render. The actor itself doesn't raise.
+- **Specialist slugs are snake_case, prompt files are PascalCase**: mapping in `components/worker/app/verdict_lib/prompt_loader.py::SLUG_TO_FILENAME`. Triage routing plans use slugs.
+- **Demucs pre-loaded at worker startup**, not per-task. Model reference survives across actor invocations.
+- **concurrency=1 always**: Demucs is memory-heavy. `--processes 1 --threads 1` for dramatiq.
+- **Legacy Celery files still on disk**: `app/celery_app.py`, `app/tasks.py`, `app/signals.py`, `app/tasks_cleanup.py` are not loaded by the dramatiq entrypoint but kept for reference. A later slice will delete them.
+
+**Old Celery-era gotchas (still relevant if the legacy Celery codepath gets resurrected for any reason):**
+- `share_token` must be passed explicitly to `AnalysisResult()` constructor — `mapped_column(default=…)` doesn't fire during autoflush, only on explicit `session.flush()`.
+- `session.rollback()` is required before the FAILED status update — a failed INSERT poisons the session with `PendingRollbackError`, and the subsequent UPDATE also fails silently, leaving the job stuck in `PROCESSING`.
 
 ### shared (aimusic-shared)
 
@@ -157,7 +223,11 @@ AIMusicAnalysisSite/
 - **Install before api and worker**: both `components/api/requirements.txt` and `components/worker/requirements.txt` list `aimusic-shared>=0.1.0`. Run `pip install -e components/shared` first in any fresh environment.
 - **api re-exports `Base` for backward compat**: `components/api/app/db.py` does `from aimusic_shared.models import Base` and re-exports it. Don't duplicate `Base` in api.
 
-### frontend (dashboard.md — React stack override)
+### frontend-spectr (LEGACY — vanilla JSX, kept for reference)
+
+The original vanilla-JSX SPA. The v2 frontend at `components/frontend-spectr-v2/` is the new path. Don't add new features here without flagging — the v2 frontend supersedes it. Some helpers and Anthropic-CLI verdict UI still live here pending migration.
+
+### frontend (placeholder — TS/Tailwind/shadcn stack — never built)
 
 **Purpose**: React 19 + Vite 8 SPA. Auth screens, upload page (drag-drop, progress bar, optional reference track, optional track name), job progress page (SSE-driven 7-phase display), interactive report page (mix score A-F with color-coded score, BPM+Key+Mono metadata bar, danceability score, coach panel, streaming readiness with technical checks, frequency chart, stereo gauges, stem clash table, reference delta, genre radar, arrangement advisor, Copy Link button). History page, track version history page with Recharts LineChart, public shared report page.
 **Inputs**: none (calls `api` via REST + SSE)
@@ -199,71 +269,92 @@ AIMusicAnalysisSite/
 ## Validation gates
 
 ```bash
-# Python lint + type check (all components)
-ruff check components/api/ components/analysis/src/ components/worker/ components/shared/
-mypy components/api/app/ components/worker/app/ --ignore-missing-imports
+# ── v2 stack — primary ──────────────────────────────────────────
+
+# BFF — .NET build + tests
+cd components/bff && dotnet build && dotnet test
+
+# v2 frontend — all four gates
+cd components/frontend-spectr-v2 && npx tsc --noEmit
+cd components/frontend-spectr-v2 && npm run lint    # --max-warnings 0
+cd components/frontend-spectr-v2 && npm run build
+cd components/frontend-spectr-v2 && npx vitest run
+
+# Worker tests (dramatiq actors)
+pytest -q components/worker/tests/
+
+# ── shared Python ───────────────────────────────────────────────
 
 # Install shared + analysis packages (one-time; shared must come first)
 pip install -e components/shared
 pip install -e components/analysis
 
-# API tests
-pytest -q components/api/tests/
-
-# Verdict pipeline tests (subset of api + shared)
-pytest -q components/shared/tests/
-pytest -q components/api/tests/verdict_pipeline/
+# Python lint + type check
+ruff check components/api/ components/analysis/src/ components/worker/ components/shared/
+mypy components/api/app/ components/worker/app/ --ignore-missing-imports
 
 # Analysis tests (mocks heavy models)
 pytest -q components/analysis/tests/
 
-# Worker tests (mocks analysis + DB)
-pytest -q components/worker/tests/
+# Shared model tests
+pytest -q components/shared/tests/
 
-# Frontend type-check + lint
-cd components/frontend && npm run type-check && npm run lint
+# ── legacy api (still runs the verdict pipeline) ────────────────
 
-# Frontend build smoke test
-cd components/frontend && npm run build
+pytest -q components/api/tests/
+pytest -q components/api/tests/verdict_pipeline/
 
-# DB migrations (requires PostgreSQL running)
+# ── DB migrations ───────────────────────────────────────────────
+# BFF owns the canonical schema via EF Core 10:
+cd components/bff && dotnet ef database update --project src/Spectr.Data --startup-project src/Spectr.Bff
+# Legacy Alembic migrations are frozen for the FastAPI api:
 alembic -c migrations/alembic.ini upgrade head
 
-# Integration: API + worker + frontend (requires Docker services up)
+# ── Integration: BFF + dramatiq + v2 frontend ───────────────────
 docker compose -f docker/docker-compose.yml up -d
-cd components/api && uvicorn app.main:app --port 8000 &
-cd components/worker && celery -A app.celery_app worker --pool=solo --concurrency=1 &
-cd components/frontend && npm run dev &
-curl -f http://localhost:5173 && echo "Frontend OK"
-curl -f http://localhost:8000/docs && echo "API OK"
+cd components/bff/src/Spectr.Bff && dotnet run &
+cd components/worker && python -m dramatiq app.dramatiq_app &
+cd components/frontend-spectr-v2 && npm run dev &
+curl -f http://localhost:5174 && echo "Frontend OK"
+curl -f http://localhost:5000/openapi/v1.json && echo "BFF OK"
 ```
 
 ---
 
 ## Stack-specific rules
 
-**Python (api, analysis, worker)**
+**C# / .NET (bff)**
+- .NET 10. Format with `dotnet format`. Build with `dotnet build`. Test with `dotnet test`.
+- EF Core 10 + Npgsql. Snake_case column mapping. Migrations live in `Spectr.Data/Migrations/`.
+- JWT bearer auth via `Microsoft.AspNetCore.Authentication.JwtBearer`. Refresh token in httpOnly cookie. NEVER store access tokens in localStorage on the frontend side.
+- Minimal-API endpoints under `Spectr.Bff/Endpoints/*Endpoints.cs`. Each file groups one resource.
+- DTOs in `Spectr.Bff/DTOs/` — record types preferred.
+- IFileStorage abstraction: `LocalDiskFileStorage` (dev) / R2 (prod via signed URLs). Don't bypass the interface.
+- `<NuGetAuditMode>direct</NuGetAuditMode>` in `Directory.Build.props` — without it transitive CVEs fail the build.
+
+**Python (analysis, worker, legacy api)**
 - Python 3.11+. Format with `ruff format`. Lint with `ruff check`. Type-check with `mypy`.
-- Pydantic v2 only. SQLAlchemy 2.0 only. Never use sync SQLAlchemy calls in async routes.
+- Pydantic v2 only. SQLAlchemy 2.0 only. Worker uses sync sessions (psycopg2); legacy api uses async (asyncpg).
 - No `python-jose` anywhere. JWT = PyJWT only.
 - Pin `numpy<2.0` in `components/analysis/pyproject.toml` — do not loosen.
-- `asyncio.run()` to call async code from within sync Celery tasks.
+- Dramatiq actors are sync `def`. To call async code, wrap with `asyncio.run()` inside the actor body.
 - All env vars via `pydantic_settings.BaseSettings`. No hardcoded secrets.
 - Tests with `pytest` + `pytest-asyncio` (asyncio_mode = "auto"). Never mock to pass — fix the underlying issue.
 
-**TypeScript / React (frontend)**
-- React 19 + Vite 8 + TypeScript strict mode.
+**TypeScript / React (frontend-spectr-v2)**
+- React 19 + Vite 6 + TypeScript strict + `verbatimModuleSyntax`.
 - Feature-based folder layout under `src/features/`. No type-based layout at root.
-- Tailwind CSS v3 for styling. shadcn/ui for primitive components. Recharts for all charts.
-- Axios for HTTP. `apiClient.ts` is the single Axios instance — never create another.
-- All file upload via XHR (`useFileUpload` hook). All job progress via SSE (`useJobStream` hook).
-- No inline styles unless absolutely required (Recharts customization).
-- `npm run type-check` must pass before committing frontend changes.
+- **CSS Modules + `src/styles/{tokens.css,global.css}` + global utility classes** (`.card`, `.pill[.tone]`, `.btn`, `.label`, `.mono`). NO Tailwind. NO styled-components. NO shadcn/MUI/Chakra.
+- Recharts for charts. WaveSurfer.js v7 for waveform UI. Sonner for toasts.
+- Custom `fetcher.ts` for HTTP — single instance, owns 401-retry-with-refresh. Don't introduce axios.
+- All file upload via XHR (`useFileUpload` hook). Job progress via SSE / TanStack Query polling.
+- No inline styles unless dynamic (color-from-grade, etc).
+- All four gates must pass before committing: `tsc --noEmit`, `npm run lint --max-warnings 0`, `npm run build`, `npx vitest run`.
 
 **Windows dev note**
 - allin1/all-in-one-fix structure detection (Phase 1) requires Docker on Windows. Run `docker compose -f docker/docker-compose.yml up -d` before starting the worker.
-- Celery worker on Windows must use `--pool=solo`.
-- **uvicorn `--reload` orphan processes**: `uvicorn --reload` spawns a child process via `multiprocessing.spawn`. Killing the parent leaves the child holding the port. It does NOT appear in `Get-Process -Name python` or `tasklist` with a recognizable command line. Use `netstat -ano | findstr :8000` to find the PID, then `Stop-Process -Id <PID> -Force`.
+- BFF on Windows: file locks on `bin/Debug/net10.0/Spectr.Bff.exe` block `dotnet build` if the BFF is running. Stop the running BFF process first (`Stop-Process -Id <PID> -Force`).
+- **uvicorn `--reload` orphan processes** (legacy api): `uvicorn --reload` spawns a child process via `multiprocessing.spawn`. Killing the parent leaves the child holding the port. Use `tasklist` + `wmic` (not `Get-Process` — it can't see spawn workers). See `memory/feedback_zombie_uvicorn_processes.md`.
 
 ---
 
