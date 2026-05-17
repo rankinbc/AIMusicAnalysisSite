@@ -89,3 +89,202 @@ button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.35; }
 }
+
+/* ─── Library + Song Detail + Modals (Plan 2026-05-16 library foundation) ─── */
+
+.library-page, .song-detail {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 28px 32px;
+  animation: fadeIn 0.3s ease both;
+}
+.library-page .header, .song-detail .header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; margin-bottom: 28px;
+  padding-bottom: 18px; border-bottom: 1px solid var(--border);
+}
+.library-page h1, .song-detail h1 {
+  font-size: 26px; font-weight: 700; letter-spacing: -0.01em;
+  color: var(--text); flex: 1;
+}
+.library-page button, .song-detail button {
+  background: var(--surface); color: var(--muted); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 500;
+  transition: all 0.15s ease;
+}
+.library-page button:hover, .song-detail button:hover {
+  background: var(--card-hover); color: var(--text); border-color: rgba(255,255,255,0.18);
+}
+.library-page button.primary, .song-detail button.primary,
+.modal button.primary, .modal button[type="submit"] {
+  background: var(--cyan); color: #06151a; border: none;
+  font-weight: 700; padding: 9px 18px;
+}
+.library-page button.primary:hover, .song-detail button.primary:hover {
+  background: #00f3bd; transform: translateY(-1px);
+}
+.library-page button.danger, .song-detail button.danger, .modal button.danger {
+  background: rgba(244,63,94,0.08); color: var(--red);
+  border: 1px solid rgba(244,63,94,0.3);
+}
+.library-page button.danger:hover, .song-detail button.danger:hover {
+  background: rgba(244,63,94,0.15);
+}
+
+.library-page .grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+.library-page .empty {
+  text-align: center; padding: 60px 0; color: var(--muted);
+  display: flex; flex-direction: column; align-items: center; gap: 18px;
+}
+
+.song-card {
+  display: flex; align-items: center; gap: 14px;
+  padding: 16px 18px; background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; text-align: left; cursor: pointer; width: 100%;
+  transition: all 0.15s ease;
+}
+.song-card:hover {
+  background: var(--card-hover); border-color: rgba(0,229,176,0.25);
+  transform: translateY(-1px);
+}
+.song-card .grade-pill {
+  width: 42px; height: 42px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 19px;
+  flex-shrink: 0;
+}
+.song-card .meta { flex: 1; min-width: 0; }
+.song-card .name {
+  font-size: 15px; font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.song-card .sub {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  color: var(--muted); margin-top: 4px;
+}
+
+.song-detail .genre {
+  font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  color: var(--muted); margin-bottom: 18px;
+}
+.song-detail .versions { margin-top: 12px; }
+.song-detail .versions-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px;
+}
+.song-detail .versions-header h2 {
+  font-size: 18px; font-weight: 600;
+}
+
+.version-row {
+  display: grid; grid-template-columns: 50px 1fr 36px auto;
+  align-items: center; gap: 14px;
+  padding: 14px 16px; background: var(--card); border: 1px solid var(--border);
+  border-radius: 9px; margin-bottom: 9px;
+}
+.version-row .vn {
+  font-family: 'JetBrains Mono', monospace; font-size: 14px;
+  font-weight: 700; color: var(--cyan);
+}
+.version-row .meta .label {
+  font-size: 14px; font-weight: 500; color: var(--text);
+}
+.version-row .meta .sub {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  color: var(--muted); margin-top: 3px;
+}
+.version-row .grade {
+  font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 18px;
+  text-align: center;
+}
+.version-row .actions {
+  display: flex; gap: 6px;
+}
+.version-row .actions button {
+  background: var(--surface); color: var(--muted); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 11px; font-size: 11px; font-weight: 500;
+  transition: all 0.15s ease;
+}
+.version-row .actions button:hover {
+  background: var(--card-hover); color: var(--text);
+}
+.version-row .actions button.danger {
+  background: rgba(244,63,94,0.06); color: var(--red);
+  border-color: rgba(244,63,94,0.25);
+}
+
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(7,10,18,0.78);
+  backdrop-filter: blur(6px); z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  animation: fadeIn 0.18s ease both; padding: 20px;
+}
+.modal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 26px 28px;
+  min-width: 360px; max-width: 520px; width: 100%;
+  display: flex; flex-direction: column; gap: 14px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  animation: modalIn 0.2s ease both;
+  max-height: calc(100vh - 40px); overflow-y: auto;
+}
+.modal h2 {
+  font-size: 19px; font-weight: 700; color: var(--text); margin-bottom: 4px;
+}
+.modal p { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.modal label {
+  display: flex; flex-direction: column; gap: 6px;
+  font-size: 12px; color: var(--muted); font-weight: 500;
+}
+.modal input, .modal select, .modal textarea {
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 7px;
+  padding: 9px 12px; font-size: 13px; font-family: inherit;
+  transition: border-color 0.15s ease;
+}
+.modal input:focus, .modal select:focus, .modal textarea:focus {
+  outline: none; border-color: var(--cyan);
+}
+.modal input[type="file"] {
+  background: transparent; border: 1px dashed var(--border); padding: 12px;
+  cursor: pointer;
+}
+.modal textarea { resize: vertical; min-height: 60px; }
+.modal progress {
+  width: 100%; height: 4px; background: var(--bg); border-radius: 2px; overflow: hidden;
+}
+.modal progress::-webkit-progress-bar { background: var(--bg); }
+.modal progress::-webkit-progress-value { background: var(--cyan); }
+.modal .error {
+  color: var(--red); font-size: 12px;
+  background: rgba(244,63,94,0.08); border: 1px solid rgba(244,63,94,0.25);
+  border-radius: 6px; padding: 8px 12px;
+}
+.modal .tabs {
+  display: flex; gap: 4px; padding: 3px; background: var(--bg);
+  border-radius: 8px; margin-bottom: 6px;
+}
+.modal .tabs button {
+  flex: 1; background: transparent; color: var(--muted);
+  border: none; padding: 7px 10px; border-radius: 6px;
+  font-size: 12px; font-weight: 500;
+}
+.modal .tabs button.active {
+  background: var(--card); color: var(--text);
+}
+.modal .actions {
+  display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px;
+}
+.modal .actions button {
+  background: var(--card); color: var(--muted); border: 1px solid var(--border);
+  border-radius: 7px; padding: 9px 16px; font-size: 13px; font-weight: 600;
+  transition: all 0.15s ease;
+}
+.modal .actions button:hover { background: var(--card-hover); color: var(--text); }
+.modal .actions button[type="submit"]:hover { background: #00f3bd; }
+.modal .actions button:disabled {
+  opacity: 0.4; cursor: not-allowed; transform: none;
+}

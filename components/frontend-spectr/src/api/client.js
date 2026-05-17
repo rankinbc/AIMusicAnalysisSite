@@ -150,7 +150,11 @@ export async function getJobStatus(jobId) {
 }
 
 export async function getJobs() {
-  return request('/jobs');
+  // Trailing slash matters: FastAPI route is /jobs/ and `/jobs` returns a 307
+  // with an absolute Location to localhost:8000. The browser follows that as a
+  // cross-origin redirect and strips the Authorization header, which lands as
+  // a 401 — and ProfilePage then calls onLogout(). See plan note 2026-05-16.
+  return request('/jobs/');
 }
 
 export async function getJobResults(jobId) {
