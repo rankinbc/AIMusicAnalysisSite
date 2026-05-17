@@ -19,6 +19,7 @@ public static class AuthEndpoints
         g.MapPost("/refresh", Refresh).AllowAnonymous();
         g.MapPost("/logout", Logout).RequireAuthorization();
         g.MapGet("/me", Me).RequireAuthorization();
+        g.MapPatch("/me", PatchMe).RequireAuthorization();
 
         return app;
     }
@@ -145,5 +146,81 @@ public static class AuthEndpoints
         var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
         if (user is null) return Results.Unauthorized();
         return Results.Ok(new AuthedUser(user.Id, user.Email, user.Handle, user.DisplayName));
+    }
+
+    // PATCH /api/auth/me — partial update of display_name + handle.
+    // Null fields are left unchanged. Handle is normalized (lowercase + same
+    // [a-z0-9_] sanitization as HandleSeeder) and checked for uniqueness
+    // case-insensitively; the column itself is citext so the equality check
+    // does case folding too.
+    private static async Task<IResult> PatchMe(
+        PatchMeRequest req,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null) return Results.Unauthorized();
+
+        var errors = new Dictionary<string, string[]>();
+
+        if (req.DisplayName is not null)
+        {
+            var trimmed = req.DisplayName.Trim();
+            if (trimmed.Length == 0)
+            {
+                errors["displayName"] = ["Display name cannot be empty."];
+            }
+            else if (trimmed.Length > 80)
+            {
+                errors["displayName"] = ["Display name must be 80 characters or fewer."];
+            }
+            else
+            {
+                user.DisplayName = trimmed;
+            }
+        }
+
+        if (req.Handle is not null)
+        {
+            var normalized = NormalizeHandle(req.Handle);
+            if (normalized.Length < 3 || normalized.Length > 32)
+            {
+                errors["handle"] = ["Handle must be 3–32 characters of [a-z0-9_]."];
+            }
+            else if (!string.Equals(normalized, user.Handle, StringComparison.OrdinalIgnoreCase))
+            {
+                var taken = await db.Users
+                    .AnyAsync(u => u.Id != userId && u.Handle == normalized, ct);
+                if (taken)
+                {
+                    errors["handle"] = ["Handle is already taken."];
+                }
+                else
+                {
+                    user.Handle = normalized;
+                }
+            }
+        }
+
+        if (errors.Count > 0) return Results.ValidationProblem(errors);
+
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new AuthedUser(user.Id, user.Email, user.Handle, user.DisplayName));
+    }
+
+    // Mirror of HandleSeeder.Sanitize — keeps PATCH consistent with seed.
+    private static string NormalizeHandle(string raw)
+    {
+        var sb = new System.Text.StringBuilder(raw.Length);
+        foreach (var c in raw.Trim().ToLowerInvariant())
+        {
+            if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_')
+                sb.Append(c);
+            else if (c == '.' || c == '-' || c == '+')
+                sb.Append('_');
+        }
+        return sb.ToString();
     }
 }

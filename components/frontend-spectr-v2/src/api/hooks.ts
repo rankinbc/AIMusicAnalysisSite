@@ -39,6 +39,18 @@ export function useLogoutMutation() {
   });
 }
 
+export interface PatchMeRequest {
+  displayName?: string | null;
+  handle?: string | null;
+}
+
+export function usePatchMe() {
+  return useMutation({
+    mutationFn: (body: PatchMeRequest) =>
+      fetcher<AuthedUser>({ url: '/auth/me', method: 'PATCH', data: body }),
+  });
+}
+
 export function useMe(enabled: boolean) {
   return useQuery({
     queryKey: ['auth', 'me'],

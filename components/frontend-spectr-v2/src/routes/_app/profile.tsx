@@ -1,7 +1,7 @@
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 
-import { useSongs } from '../../api/hooks';
+import { usePatchMe, useSongs } from '../../api/hooks';
 import { useAuth } from '../../auth/AuthContext';
 import { normalizeGrade } from '../../features/results/helpers/grade';
 import { CoverArt } from '../../ui/CoverArt';
@@ -270,17 +270,39 @@ interface SettingsProps {
 }
 
 function SettingsTab({ displayName, handle, email, onSignOut }: SettingsProps) {
+  const { updateUser } = useAuth();
+  const patchMe = usePatchMe();
+
+  const save = async (field: 'displayName' | 'handle', value: string): Promise<string | null> => {
+    try {
+      const next = await patchMe.mutateAsync({ [field]: value });
+      updateUser(next);
+      return null;
+    } catch (err) {
+      return extractValidationMessage(err, field) ?? 'Could not save change.';
+    }
+  };
+
   return (
     <div className={s.split}>
       <div className={s.column}>
         <div className="card card-body">
           <SectionTitle>Profile</SectionTitle>
           <div className={s.settingsList}>
-            <SettingRow label="Display name" value={displayName} />
-            <SettingRow
+            <EditableSettingRow
+              label="Display name"
+              value={displayName}
+              onSave={(v) => save('displayName', v)}
+              maxLength={80}
+            />
+            <EditableSettingRow
               label="Handle"
-              value={handle ?? 'Not set yet'}
-              muted={!handle}
+              value={handle ?? ''}
+              placeholder="Not set yet"
+              onSave={(v) => save('handle', v)}
+              maxLength={32}
+              normalize={normalizeHandleInput}
+              hint="3–32 chars, lowercase letters/digits/underscore"
             />
             <SettingRow label="Email" value={email} />
           </div>
@@ -338,6 +360,141 @@ function SettingRow({
       </button>
     </div>
   );
+}
+
+interface EditableSettingRowProps {
+  label: string;
+  value: string;
+  placeholder?: string;
+  maxLength?: number;
+  normalize?: (raw: string) => string;
+  hint?: string;
+  onSave: (value: string) => Promise<string | null>;
+}
+
+function EditableSettingRow({
+  label,
+  value,
+  placeholder,
+  maxLength,
+  normalize,
+  hint,
+  onSave,
+}: EditableSettingRowProps) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const beginEdit = () => {
+    setDraft(value);
+    setError(null);
+    setEditing(true);
+  };
+
+  const cancel = () => {
+    setEditing(false);
+    setError(null);
+  };
+
+  const commit = async () => {
+    const next = normalize ? normalize(draft) : draft.trim();
+    if (next === value) {
+      cancel();
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const errMsg = await onSave(next);
+    setSaving(false);
+    if (errMsg) {
+      setError(errMsg);
+      return;
+    }
+    setEditing(false);
+  };
+
+  if (!editing) {
+    const displayValue = value || placeholder || '';
+    const muted = !value;
+    return (
+      <div className={s.settingRow}>
+        <span className={s.settingLabel}>{label}</span>
+        <span className={`${s.settingValue} ${muted ? s.settingValueMuted : ''}`.trim()}>
+          {displayValue}
+        </span>
+        <button type="button" className="btn ghost sm" onClick={beginEdit}>
+          Edit
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className={s.settingRow}>
+      <span className={s.settingLabel}>{label}</span>
+      <div className={s.settingEditWrap}>
+        <input
+          autoFocus
+          className={s.settingInput}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void commit();
+            if (e.key === 'Escape') cancel();
+          }}
+          maxLength={maxLength}
+          disabled={saving}
+        />
+        {error ? (
+          <span className={s.settingError}>{error}</span>
+        ) : hint ? (
+          <span className={s.settingHint}>{hint}</span>
+        ) : null}
+      </div>
+      <div className={s.settingEditActions}>
+        <button
+          type="button"
+          className="btn primary sm"
+          onClick={() => void commit()}
+          disabled={saving}
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+        <button
+          type="button"
+          className="btn ghost sm"
+          onClick={cancel}
+          disabled={saving}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function normalizeHandleInput(raw: string): string {
+  let out = '';
+  for (const c of raw.trim().toLowerCase()) {
+    if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c === '_') out += c;
+    else if (c === '.' || c === '-' || c === '+') out += '_';
+  }
+  return out;
+}
+
+interface ValidationProblem {
+  errors?: Record<string, string[]>;
+}
+
+function extractValidationMessage(err: unknown, field: string): string | null {
+  if (!err || typeof err !== 'object') return null;
+  // fetcher wraps server validation problems as { message, body } — try both shapes.
+  const e = err as { body?: unknown; message?: string };
+  const body = (e.body ?? err) as ValidationProblem;
+  const list = body.errors?.[field];
+  if (list && list.length > 0) return list[0];
+  return typeof e.message === 'string' ? e.message : null;
 }
 
 function SectionTitle({

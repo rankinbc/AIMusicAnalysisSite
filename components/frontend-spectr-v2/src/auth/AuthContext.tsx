@@ -23,6 +23,7 @@ interface AuthContextValue extends AuthState {
   register: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<boolean>;
+  updateUser: (user: AuthedUser) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -120,9 +121,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [applyAuth]);
 
+  const updateUser = useCallback((user: AuthedUser) => {
+    setState((prev) => ({ ...prev, user }));
+  }, []);
+
   const value = useMemo<AuthContextValue>(
-    () => ({ ...state, login, register, logout, refresh }),
-    [state, login, register, logout, refresh],
+    () => ({ ...state, login, register, logout, refresh, updateUser }),
+    [state, login, register, logout, refresh, updateUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
