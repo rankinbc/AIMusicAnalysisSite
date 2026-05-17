@@ -4,6 +4,18 @@
   gap: 18px;
 }
 
+.diagnosticGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 18px;
+}
+
+@media (max-width: 980px) {
+  .diagnosticGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .spectrumCard {
   padding: 22px 24px;
 }

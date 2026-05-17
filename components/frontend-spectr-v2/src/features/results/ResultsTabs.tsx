@@ -45,7 +45,7 @@ export function ResultsTabs({
       badge: phasesTotal > 0 ? `${phasesDone}/${phasesTotal}` : null,
       badgeTone: 'violet',
     },
-    { id: 'spectrum', label: 'Spectrum' },
+    { id: 'spectrum', label: 'Mix' },
     {
       id: 'reference',
       label: 'Reference',

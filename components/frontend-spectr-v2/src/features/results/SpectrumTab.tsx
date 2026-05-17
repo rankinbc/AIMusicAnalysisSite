@@ -1,5 +1,14 @@
 import { Pill } from '../../ui/Pill';
-import type { Phase1Bands, Phase4Clash, Phase4Data } from '../../api/types';
+import type {
+  Phase1Bands,
+  Phase1Data,
+  Phase3Data,
+  Phase4Clash,
+  Phase4Data,
+} from '../../api/types';
+import { GenreScorePanel } from './GenreScorePanel';
+import { StereoCard } from './StereoCard';
+import { StreamingReadiness } from './StreamingReadiness';
 import s from './SpectrumTab.module.css';
 
 interface BandSpec {
@@ -24,10 +33,12 @@ const BANDS: BandSpec[] = [
 
 interface SpectrumTabProps {
   bands: Phase1Bands | undefined;
+  phase1: Phase1Data | undefined;
+  phase3: Phase3Data | undefined;
   phase4: Phase4Data | undefined;
 }
 
-export function SpectrumTab({ bands, phase4 }: SpectrumTabProps) {
+export function SpectrumTab({ bands, phase1, phase3, phase4 }: SpectrumTabProps) {
   // Normalize each band's value to a 0..1 ratio. Phase 1 emits dB values
   // typically in the -60..0 range; clamp + scale so the chart reads.
   const values = BANDS.map((b) => {
@@ -89,6 +100,21 @@ export function SpectrumTab({ bands, phase4 }: SpectrumTabProps) {
       </section>
 
       <ClashCard phase4={phase4} />
+
+      <GenreScorePanel phase3={phase3} />
+
+      <div className={s.diagnosticGrid}>
+        <StereoCard
+          width={phase1?.stereo_width}
+          correlation={phase1?.stereo_correlation}
+          monoCompat={phase1?.mono_compatibility}
+        />
+        <StreamingReadiness
+          lufs={phase1?.lufs}
+          truePeakDb={phase1?.true_peak_db ?? phase1?.peak_dbfs}
+          clippingDetected={phase1?.clipping_detected}
+        />
+      </div>
     </div>
   );
 }

@@ -17,7 +17,6 @@ import {
 import { AnalysisTab } from './AnalysisTab';
 import { ArrangementTab } from './ArrangementTab';
 import { CoachChat } from './CoachChat';
-import { GenreScorePanel } from './GenreScorePanel';
 import { SPECIALIST_CATALOG } from './helpers/specialists';
 import { ReferenceTab } from './ReferenceTab';
 import { ResultsTabs, type ResultsTabKey } from './ResultsTabs';
@@ -93,8 +92,6 @@ export function ReportView({ results, songId }: ReportViewProps) {
         phase2={phase2}
       />
 
-      <GenreScorePanel phase3={phase3} />
-
       <ResultsTabs
         current={tab}
         onChange={setTab}
@@ -128,7 +125,12 @@ export function ReportView({ results, songId }: ReportViewProps) {
           />
         )}
         {tab === 'spectrum' && (
-          <SpectrumTab bands={phase1?.bands} phase4={phase4} />
+          <SpectrumTab
+            bands={phase1?.bands}
+            phase1={phase1}
+            phase3={phase3}
+            phase4={phase4}
+          />
         )}
         {tab === 'reference' && (
           <ReferenceTab
