@@ -7,19 +7,35 @@ import type {
   ActivityItemDto,
   AuthResponse,
   AuthedUser,
+  BookmarkDto,
+  CoachViewDto,
+  CompareResponseDto,
+  CreateBookmarkRequest,
+  CreateShareResponse,
   CreateNoteRequest,
+  CreateReferenceSetRequest,
   CreateSongRequest,
   FeedbackKind,
   JobResultsDto,
   JobStatusDto,
+  JobSummaryDto,
   MeProfileDto,
   MeStatsDto,
   NoteDto,
   PatchMeProfileRequest,
   PatchNoteRequest,
+  PatchReferenceRequest,
+  PatchShareRequest,
   PatchSongRequest,
+  PostShareCommentRequest,
+  ShareCommentDto,
+  SharedAnalysisDto,
   PatchVersionRequest,
+  AlsUploadResponse,
   ReanalyzeResponse,
+  StemUploadResponse,
+  ReferenceDto,
+  ReferenceSetDto,
   RunSpecialistResponse,
   SongDto,
   UploadResponse,
@@ -191,6 +207,52 @@ export function useReanalyzeVersion(versionId: string) {
   });
 }
 
+/** Upload one or more stems for an existing version. Stems are POSTed as
+ *  multipart fields where the field NAME is the role slug (kick/bass/…) and
+ *  the field VALUE is the file. The server re-enqueues analysis on success;
+ *  navigate to the returned `reanalysisJobId` to watch progress. */
+export function useUploadStems(versionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (stems: Record<string, File>) => {
+      const fd = new FormData();
+      for (const [role, file] of Object.entries(stems)) {
+        fd.append(role, file, file.name);
+      }
+      return fetcher<StemUploadResponse>({
+        url: `/versions/${versionId}/stems`,
+        method: 'POST',
+        body: fd,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['versions', versionId] });
+      qc.invalidateQueries({ queryKey: ['songs'] });
+    },
+  });
+}
+
+/** Upload an Ableton .als project file for an existing version. Triggers
+ *  re-analysis so phase 8 (ALS) populates project-health data. */
+export function useUploadAls(versionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.append('file', file, file.name);
+      return fetcher<AlsUploadResponse>({
+        url: `/versions/${versionId}/als`,
+        method: 'POST',
+        body: fd,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['versions', versionId] });
+      qc.invalidateQueries({ queryKey: ['songs'] });
+    },
+  });
+}
+
 export function useSetCurrentVersion(versionId: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -263,6 +325,23 @@ export function useJob(jobId: string, opts?: { pollMs?: number }) {
       return opts?.pollMs ?? 2000;
     },
     retry: false,
+  });
+}
+
+/** List the user's recent jobs. `status` is a comma-separated filter
+ *  (e.g. "pending,processing") — omit to fetch all. */
+export function useJobs(opts?: { status?: string; limit?: number }) {
+  const query = new URLSearchParams();
+  if (opts?.status) query.set('status', opts.status);
+  if (opts?.limit != null) query.set('limit', String(opts.limit));
+  const qs = query.toString();
+  return useQuery<JobSummaryDto[]>({
+    queryKey: ['jobs', 'list', opts?.status ?? '', opts?.limit ?? 50],
+    queryFn: () =>
+      fetcher<JobSummaryDto[]>({
+        url: `/jobs/${qs ? `?${qs}` : ''}`,
+        method: 'GET',
+      }),
   });
 }
 
@@ -340,5 +419,245 @@ export function useFeedbackVerdict(jobId: string) {
         data: { feedback },
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['verdicts', jobId] }),
+  });
+}
+
+// ── References ──────────────────────────────────────────────────────────────
+export function useReferences() {
+  return useQuery<ReferenceDto[]>({
+    queryKey: ['references'],
+    queryFn: () => fetcher<ReferenceDto[]>({ url: '/references/', method: 'GET' }),
+  });
+}
+
+export function useReference(referenceId: string) {
+  return useQuery<ReferenceDto>({
+    queryKey: ['references', referenceId],
+    queryFn: () =>
+      fetcher<ReferenceDto>({ url: `/references/${referenceId}`, method: 'GET' }),
+    enabled: Boolean(referenceId),
+  });
+}
+
+/** Multipart upload (FormData required so the file streams). Returns the
+ *  freshly-created `ReferenceDto`; analysis is kicked off separately via
+ *  `useAnalyzeReference`. */
+export function useUploadReference() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      file: File;
+      title?: string;
+      artist?: string;
+      genre?: string;
+    }) => {
+      const fd = new FormData();
+      fd.append('file', input.file);
+      if (input.title) fd.append('title', input.title);
+      if (input.artist) fd.append('artist', input.artist);
+      if (input.genre) fd.append('genre', input.genre);
+      return fetcher<ReferenceDto>({
+        url: '/references/',
+        method: 'POST',
+        body: fd,
+      });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['references'] }),
+  });
+}
+
+export function usePatchReference(referenceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: PatchReferenceRequest) =>
+      fetcher<ReferenceDto>({
+        url: `/references/${referenceId}`,
+        method: 'PATCH',
+        data: body,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['references'] });
+      qc.invalidateQueries({ queryKey: ['references', referenceId] });
+    },
+  });
+}
+
+export function useDeleteReference() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (referenceId: string) =>
+      fetcher<void>({ url: `/references/${referenceId}`, method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['references'] }),
+  });
+}
+
+export function useAnalyzeReference() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (referenceId: string) =>
+      fetcher<ReferenceDto>({
+        url: `/references/${referenceId}/analyze`,
+        method: 'POST',
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['references'] }),
+  });
+}
+
+// Reference sets
+export function useReferenceSets() {
+  return useQuery<ReferenceSetDto[]>({
+    queryKey: ['reference-sets'],
+    queryFn: () => fetcher<ReferenceSetDto[]>({ url: '/reference-sets/', method: 'GET' }),
+  });
+}
+
+export function useCreateReferenceSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateReferenceSetRequest) =>
+      fetcher<ReferenceSetDto>({
+        url: '/reference-sets/',
+        method: 'POST',
+        data: body,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['reference-sets'] }),
+  });
+}
+
+export function useDeleteReferenceSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (setId: string) =>
+      fetcher<void>({ url: `/reference-sets/${setId}`, method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['reference-sets'] }),
+  });
+}
+
+export function useAddReferenceToSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ setId, referenceId }: { setId: string; referenceId: string }) =>
+      fetcher<void>({
+        url: `/reference-sets/${setId}/members`,
+        method: 'POST',
+        data: { referenceId },
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['reference-sets'] }),
+  });
+}
+
+// ── Bookmarks ───────────────────────────────────────────────────────────────
+export function useBookmarks() {
+  return useQuery<BookmarkDto[]>({
+    queryKey: ['bookmarks'],
+    queryFn: () => fetcher<BookmarkDto[]>({ url: '/me/bookmarks/', method: 'GET' }),
+  });
+}
+
+export function useCreateBookmark() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateBookmarkRequest) =>
+      fetcher<BookmarkDto>({ url: '/me/bookmarks/', method: 'POST', data: body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['bookmarks'] }),
+  });
+}
+
+export function useDeleteBookmark() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (bookmarkId: string) =>
+      fetcher<void>({ url: `/me/bookmarks/${bookmarkId}`, method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['bookmarks'] }),
+  });
+}
+
+// ── Share (owner-side) ──────────────────────────────────────────────────────
+export function useCreateShare(analysisId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      fetcher<CreateShareResponse>({
+        url: `/analyses/${analysisId}/share/`,
+        method: 'POST',
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['analyses', analysisId] }),
+  });
+}
+
+export function usePatchShare(analysisId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: PatchShareRequest) =>
+      fetcher<void>({
+        url: `/analyses/${analysisId}/share/`,
+        method: 'PATCH',
+        data: body,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['analyses', analysisId] }),
+  });
+}
+
+export function useRevokeShare(analysisId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      fetcher<void>({ url: `/analyses/${analysisId}/share/`, method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['analyses', analysisId] }),
+  });
+}
+
+// ── Share (public-side, no auth) ────────────────────────────────────────────
+export function useSharedAnalysis(token: string) {
+  return useQuery<SharedAnalysisDto>({
+    queryKey: ['share', token],
+    queryFn: () => fetcher<SharedAnalysisDto>({ url: `/share/${token}/`, method: 'GET' }),
+    enabled: Boolean(token),
+    retry: false,
+  });
+}
+
+export function useShareComments(token: string) {
+  return useQuery<ShareCommentDto[]>({
+    queryKey: ['share', token, 'comments'],
+    queryFn: () =>
+      fetcher<ShareCommentDto[]>({ url: `/share/${token}/comments`, method: 'GET' }),
+    enabled: Boolean(token),
+  });
+}
+
+export function usePostShareComment(token: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: PostShareCommentRequest) =>
+      fetcher<ShareCommentDto>({
+        url: `/share/${token}/comments`,
+        method: 'POST',
+        data: body,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['share', token, 'comments'] }),
+  });
+}
+
+// ── Coach ───────────────────────────────────────────────────────────────────
+export function useCoachView(jobId: string) {
+  return useQuery<CoachViewDto>({
+    queryKey: ['coach', jobId],
+    queryFn: () => fetcher<CoachViewDto>({ url: `/coach/${jobId}`, method: 'GET' }),
+    enabled: Boolean(jobId),
+  });
+}
+
+// ── Compare ─────────────────────────────────────────────────────────────────
+export function useCompare(versionA: string | null, versionB: string | null) {
+  return useQuery<CompareResponseDto>({
+    queryKey: ['compare', versionA, versionB],
+    queryFn: () =>
+      fetcher<CompareResponseDto>({
+        url: `/compare/?versionA=${versionA}&versionB=${versionB}`,
+        method: 'GET',
+      }),
+    enabled: Boolean(versionA && versionB && versionA !== versionB),
+    retry: false,
   });
 }

@@ -1,8 +1,13 @@
 import { useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 
+import { useState } from 'react';
+
 import { useRunSpecialist, useVerdicts } from '../../api/hooks';
 import type { Phase8Data, PhaseResult, RoutingPlanEntry } from '../../api/types';
+import { AlsUploadDialog } from '../../components/AlsUploadDialog';
+import { ReferenceUploadDialog } from '../../components/ReferenceUploadDialog';
+import { StemsUploadDialog } from '../../components/StemsUploadDialog';
 import { CoachPanel } from './CoachPanel';
 import { SPECIALIST_CATALOG, specialistLabel } from './helpers/specialists';
 import s from './AnalysisTab.module.css';
@@ -11,6 +16,8 @@ interface AnalysisTabProps {
   phases: PhaseResult[] | undefined;
   songName: string;
   jobId: string;
+  versionId: string | null;
+  songId: string;
   coachName: string | undefined;
   coachIntro: string | undefined;
   coachedFixes: string[] | undefined;
@@ -45,6 +52,8 @@ export function AnalysisTab({
   phases,
   songName,
   jobId,
+  versionId,
+  songId,
   coachName,
   coachIntro,
   coachedFixes,
@@ -52,6 +61,23 @@ export function AnalysisTab({
   onReanalyze,
   reanalyzing,
 }: AnalysisTabProps) {
+  const [referenceDialogOpen, setReferenceDialogOpen] = useState(false);
+  const [stemsDialogOpen, setStemsDialogOpen] = useState(false);
+  const [alsDialogOpen, setAlsDialogOpen] = useState(false);
+
+  // Each virtual pipeline row's CTA dispatches by row.id.
+  const handleRowCta = (rowId: string) => {
+    if (rowId === 'reference') setReferenceDialogOpen(true);
+    else if (rowId === 'stems') {
+      if (!versionId) toast.error('No version attached — cannot upload stems.');
+      else setStemsDialogOpen(true);
+    } else if (rowId === 'als') {
+      if (!versionId) toast.error('No version attached — cannot upload project.');
+      else setAlsDialogOpen(true);
+    } else if (rowId === 'specialists')
+      toast.info('Use the "Run suggested" button on the Coach tab.');
+  };
+
   // Pull verdicts so we can populate the "AI specialists" row. The hook also
   // owns its own polling; we only need a snapshot here.
   const emptySet = useRef<ReadonlySet<string>>(new Set<string>());
@@ -191,11 +217,36 @@ export function AnalysisTab({
           ) : (
             <ul className={s.phaseList}>
               {pipeline.map((row) => (
-                <PipelineRowItem key={row.id} row={row} />
+                <PipelineRowItem
+                  key={row.id}
+                  row={row}
+                  onCta={() => handleRowCta(row.id)}
+                />
               ))}
             </ul>
           )}
         </section>
+
+        <ReferenceUploadDialog
+          open={referenceDialogOpen}
+          onOpenChange={setReferenceDialogOpen}
+        />
+        {versionId && (
+          <>
+            <StemsUploadDialog
+              open={stemsDialogOpen}
+              onOpenChange={setStemsDialogOpen}
+              versionId={versionId}
+              songId={songId}
+            />
+            <AlsUploadDialog
+              open={alsDialogOpen}
+              onOpenChange={setAlsDialogOpen}
+              versionId={versionId}
+              songId={songId}
+            />
+          </>
+        )}
 
         <SuggestedSpecialists
           jobId={jobId}
@@ -571,7 +622,7 @@ function Stat({
   );
 }
 
-function PipelineRowItem({ row }: { row: PipelineRow }) {
+function PipelineRowItem({ row, onCta }: { row: PipelineRow; onCta: () => void }) {
   const isMissing = row.status === 'missing';
   const isRunning = row.status === 'running';
   const isPartial = row.status === 'partial';
@@ -620,9 +671,7 @@ function PipelineRowItem({ row }: { row: PipelineRow }) {
           type="button"
           className={s.phaseCta}
           data-tone={row.ctaTone ?? 'violet'}
-          onClick={() =>
-            toast.info(`${row.cta} — upload flow not wired yet`)
-          }
+          onClick={onCta}
         >
           {row.cta}
         </button>

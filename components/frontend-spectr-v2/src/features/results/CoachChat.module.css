@@ -191,3 +191,47 @@
   letter-spacing: 0.06em;
   line-height: 1.6;
 }
+
+.transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--border);
+}
+
+.turnUser,
+.turnAssistant {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+.turnUser {
+  background: rgba(167, 139, 250, 0.06);
+  border: 1px solid rgba(167, 139, 250, 0.22);
+}
+
+.turnAssistant {
+  background: rgba(0, 229, 176, 0.04);
+  border: 1px solid rgba(0, 229, 176, 0.2);
+}
+
+.turnLabel {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.turnText {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+}

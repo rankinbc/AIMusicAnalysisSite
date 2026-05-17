@@ -89,6 +89,43 @@ export interface ReanalyzeResponse {
   jobId: string;
 }
 
+export interface StemUploadResponse {
+  versionId: string;
+  stemPaths: Record<string, string>;
+  reanalysisJobId: string;
+}
+
+export interface AlsUploadResponse {
+  versionId: string;
+  alsPath: string;
+  reanalysisJobId: string;
+}
+
+export type StemRole =
+  | 'drums'
+  | 'kick'
+  | 'snare'
+  | 'hats'
+  | 'bass'
+  | 'vocals'
+  | 'lead'
+  | 'pad'
+  | 'fx'
+  | 'other';
+
+export const STEM_ROLES: readonly StemRole[] = [
+  'kick',
+  'snare',
+  'hats',
+  'drums',
+  'bass',
+  'vocals',
+  'lead',
+  'pad',
+  'fx',
+  'other',
+] as const;
+
 // /api/me/profile + /api/me/stats + /api/me/activity
 export interface MeProfileDto {
   id: string;
@@ -129,6 +166,140 @@ export interface ActivityItemDto {
   jobId: string | null;
 }
 
+// References — saved reference tracks for genre comparison.
+export interface ReferenceDto {
+  id: string;
+  title: string;
+  artist: string | null;
+  source: string;
+  filePath: string | null;
+  genre: string | null;
+  bpm: number | null;
+  detectedKey: string | null;
+  durationSeconds: number | null;
+  lufs: number | null;
+  truePeakDb: number | null;
+  dynamicRangeLu: number | null;
+  stereoWidth: number | null;
+  stereoCorrelation: number | null;
+  bandLevels: unknown;
+  tags: unknown;
+  analyzed: boolean;
+  usedCount: number;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface PatchReferenceRequest {
+  title?: string;
+  artist?: string | null;
+  genre?: string | null;
+  notes?: string | null;
+  tags?: unknown;
+}
+
+export interface ReferenceSetDto {
+  id: string;
+  name: string;
+  hue: number | null;
+  memberCount: number;
+  createdAt: string;
+}
+
+export interface CreateReferenceSetRequest {
+  name: string;
+  hue?: number | null;
+}
+
+// Bookmarks — saved pointers to share-links (and, future, Discover tracks).
+export interface BookmarkDto {
+  id: string;
+  targetShareToken: string | null;
+  targetPublishedTrack: string | null;
+  title: string | null;
+  artist: string | null;
+  createdAt: string;
+}
+
+export interface CreateBookmarkRequest {
+  targetShareToken?: string | null;
+  targetPublishedTrack?: string | null;
+}
+
+export interface CompareSideDto {
+  versionId: string;
+  versionNumber: number;
+  label: string | null;
+  createdAt: string;
+  grade: string | null;
+  score: number | null;
+  lufs: number | null;
+  truePeakDb: number | null;
+  rmsDb: number | null;
+  bpm: number | null;
+  detectedKey: string | null;
+  stereoWidth: number | null;
+  stereoCorrelation: number | null;
+  monoCompatibility: number | null;
+  bands: Record<string, number> | null;
+}
+
+export interface CompareResponseDto {
+  songId: string;
+  a: CompareSideDto;
+  b: CompareSideDto;
+  source: string;
+}
+
+// Share
+export interface CreateShareResponse {
+  shareToken: string;
+  shareShowVerdicts: boolean;
+  shareEnabledAt: string;
+  publicUrl: string;
+}
+
+export interface PatchShareRequest {
+  showVerdicts: boolean;
+}
+
+export interface SharedAnalysisDto {
+  token: string;
+  songName: string | null;
+  producerHandle: string | null;
+  producerDisplayName: string | null;
+  createdAt: string;
+  finalJson: unknown;
+  verdicts: unknown;
+}
+
+export interface ShareCommentDto {
+  id: string;
+  authorDisplayName: string | null;
+  timestampSeconds: number | null;
+  body: string;
+  createdAt: string;
+}
+
+export interface PostShareCommentRequest {
+  body: string;
+  timestampSeconds?: number | null;
+  authorDisplayName?: string | null;
+}
+
+// Coach combined-view (analysis + verdicts + counts). Chat-stream lands later.
+export interface CoachViewDto {
+  jobId: string;
+  songName: string | null;
+  finalJson: unknown;
+  specialistsRun: number;
+  specialistsTotal: number;
+  criticalCount: number;
+  warningCount: number;
+  infoCount: number;
+  verdicts: unknown;
+}
+
 export type JobStatus =
   | 'pending'
   | 'processing'
@@ -144,6 +315,20 @@ export interface JobStatusDto {
   versionId: string | null;
   songId: string | null;
   errorMessage: string | null;
+  dispatchedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  failedAt: string | null;
+}
+
+export interface JobSummaryDto {
+  id: string;
+  status: JobStatus;
+  currentPhase: string;
+  phasePct: number;
+  versionId: string | null;
+  songId: string | null;
+  songName: string | null;
   dispatchedAt: string;
   startedAt: string | null;
   completedAt: string | null;

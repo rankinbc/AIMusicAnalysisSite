@@ -135,7 +135,7 @@ export function ReportView({ results, songId }: ReportViewProps) {
       <div className={s.tabBody}>
         {tab === 'coach' && (
           <div className={s.coachStack}>
-            <CoachChat trackName={results.songName ?? ''} />
+            <CoachChat trackName={results.songName ?? ''} jobId={results.jobId} />
             <VerdictsPanel jobId={results.jobId} hasStems={false} />
           </div>
         )}
@@ -144,6 +144,8 @@ export function ReportView({ results, songId }: ReportViewProps) {
             phases={fj.phases}
             songName={results.songName ?? 'master.wav'}
             jobId={results.jobId}
+            versionId={results.versionId}
+            songId={songId}
             coachName={fj.coach_name}
             coachIntro={fj.coach_intro}
             coachedFixes={fj.coached_fixes}

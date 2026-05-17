@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { useSong, useReanalyzeVersion } from '../../api/hooks';
+import { CompareDialog } from '../../components/CompareDialog';
 import { UploadVersionDialog } from '../../components/UploadVersionDialog';
 import { CoverArt } from '../../ui/CoverArt';
 import { hueFromId } from '../../ui/hueFromId';
@@ -30,6 +31,15 @@ function SongDetailPage() {
     song?.versions[song?.versions.length - 1]?.id ??
     '';
   const reanalyze = useReanalyzeVersion(currentVersionId);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [comparePreset, setComparePreset] = useState<{ a: string | null; b: string | null }>({
+    a: null,
+    b: null,
+  });
+  const openCompare = (a: string | null, b: string | null) => {
+    setComparePreset({ a, b });
+    setCompareOpen(true);
+  };
   const handleReanalyze = () => {
     if (!currentVersionId) return;
     reanalyze.mutate(undefined, {
@@ -248,7 +258,11 @@ function SongDetailPage() {
             <button
               type="button"
               className={s.deltaSuggest}
-              onClick={() => toast.info('Compare mode not wired yet')}
+              onClick={() => {
+                const sorted = [...song.versions].sort((a, b) => a.versionNumber - b.versionNumber);
+                openCompare(sorted[0]?.id ?? null, sorted[sorted.length - 1]?.id ?? null);
+              }}
+              disabled={versionCount < 2}
             >
               <span>v1 → current</span>
               <span style={{ color: 'var(--muted)' }}>↗</span>
@@ -257,7 +271,13 @@ function SongDetailPage() {
               <button
                 type="button"
                 className={s.deltaSuggest}
-                onClick={() => toast.info('Compare mode not wired yet')}
+                onClick={() => {
+                  const sorted = [...song.versions].sort((a, b) => a.versionNumber - b.versionNumber);
+                  openCompare(
+                    sorted[sorted.length - 2]?.id ?? null,
+                    sorted[sorted.length - 1]?.id ?? null,
+                  );
+                }}
               >
                 <span>Last two</span>
                 <span style={{ color: 'var(--muted)' }}>↗</span>
@@ -266,7 +286,8 @@ function SongDetailPage() {
             <button
               type="button"
               className={s.deltaSuggest}
-              onClick={() => toast.info('Compare mode not wired yet')}
+              onClick={() => openCompare(null, null)}
+              disabled={versionCount < 2}
             >
               <span>Pick two…</span>
               <span style={{ color: 'var(--muted)' }}>↗</span>
@@ -279,6 +300,13 @@ function SongDetailPage() {
         open={uploadOpen}
         onOpenChange={setUploadOpen}
         songId={song.id}
+      />
+      <CompareDialog
+        open={compareOpen}
+        onOpenChange={setCompareOpen}
+        song={song}
+        defaultVersionA={comparePreset.a}
+        defaultVersionB={comparePreset.b}
       />
       {latestVersion && null /* suppress unused-var: kept for future audio wiring */}
     </div>
