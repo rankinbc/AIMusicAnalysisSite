@@ -206,11 +206,6 @@ AIMusicAnalysisSite/
 - **Specialist slugs are snake_case, prompt files are PascalCase**: mapping in `components/worker/app/verdict_lib/prompt_loader.py::SLUG_TO_FILENAME`. Triage routing plans use slugs.
 - **Demucs pre-loaded at worker startup**, not per-task. Model reference survives across actor invocations.
 - **concurrency=1 always**: Demucs is memory-heavy. `--processes 1 --threads 1` for dramatiq.
-- **Legacy Celery files still on disk**: `app/celery_app.py`, `app/tasks.py`, `app/signals.py`, `app/tasks_cleanup.py` are not loaded by the dramatiq entrypoint but kept for reference. A later slice will delete them.
-
-**Old Celery-era gotchas (still relevant if the legacy Celery codepath gets resurrected for any reason):**
-- `share_token` must be passed explicitly to `AnalysisResult()` constructor — `mapped_column(default=…)` doesn't fire during autoflush, only on explicit `session.flush()`.
-- `session.rollback()` is required before the FAILED status update — a failed INSERT poisons the session with `PendingRollbackError`, and the subsequent UPDATE also fails silently, leaving the job stuck in `PROCESSING`.
 
 ### shared (aimusic-shared)
 

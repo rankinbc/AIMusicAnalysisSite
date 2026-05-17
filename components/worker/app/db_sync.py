@@ -1,12 +1,12 @@
 """Sync SQLAlchemy session factory for dramatiq actors.
 
-Dramatiq actors are synchronous. The asyncpg-driven session in ``db.py`` is
-unusable from sync code. This module wraps a plain ``psycopg2``-backed engine
-and exposes a ``SessionFactory`` for the actor body.
+Dramatiq actors are synchronous, so async drivers (asyncpg) are unusable.
+This module wraps a plain ``psycopg2``-backed engine and exposes a
+``SessionFactory`` for actor bodies.
 
-``DATABASE_URL`` may carry the async ``+asyncpg`` driver tag (it's the same env
-var the API uses); we coerce it to ``+psycopg2`` here so a single env var
-works for both processes.
+``DATABASE_URL`` may carry the async ``+asyncpg`` driver tag (the legacy
+FastAPI api uses the same env var); we coerce it to ``+psycopg2`` here so a
+single env var works for both processes.
 """
 from __future__ import annotations
 

@@ -22,10 +22,6 @@ python -m dramatiq app.dramatiq_app
 The Procfile is the canonical entrypoint and is wired into the docker-compose
 `worker` service.
 
-The legacy Celery files (`app/celery_app.py`, `app/tasks.py`, `app/signals.py`,
-`app/tasks_cleanup.py`) are still on disk but are **not loaded** by the dramatiq
-entrypoint. A later slice will delete them.
-
 ## Environment
 
 | Env var               | Purpose                                                                                    |
@@ -78,18 +74,14 @@ components/worker/
 │   ├── dramatiq_app.py    # Broker wiring + actor module import
 │   ├── tasks_dramatiq.py  # analyze_audio_job actor (3-phase tx pattern)
 │   ├── verdict_actor.py   # run_specialist actor
+│   ├── triage_actor.py    # run_triage actor (Triage routing plan)
 │   ├── verdict_lib/
 │   │   ├── prompt_loader.py    # SLUG_TO_FILENAME mapping + frontmatter parse
 │   │   ├── llm_client_sync.py  # claude CLI subprocess wrapper
 │   │   ├── json_extraction.py  # tolerant JSON extraction from CLI stdout
 │   │   ├── validator.py        # Pydantic + severity downgrade
 │   │   └── flatten_analysis.py # final_json → prompt-ready context
-│   ├── db_sync.py         # Sync SQLAlchemy session factory (actors are sync)
-│   ├── celery_app.py      # LEGACY — not loaded; kept for reference
-│   ├── tasks.py           # LEGACY — port-source for tasks_dramatiq.py
-│   ├── progress.py        # LEGACY
-│   ├── db.py              # LEGACY async session (unused by dramatiq path)
-│   └── signals.py         # LEGACY worker_ready hooks
+│   └── db_sync.py         # Sync SQLAlchemy session factory (actors are sync)
 └── tests/
     └── …                   # mocks analysis package and DB
 ```
