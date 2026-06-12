@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "vite build && tsc -b",
     "preview": "vite preview --port 5174",
     "lint": "eslint . --max-warnings 0",
+    "lint:css": "node scripts/check-css-tokens.mjs",
+    "lint:prices": "node scripts/check-price-literals.mjs",
     "type-check": "tsc -b --noEmit",
     "test": "vitest",
     "test:e2e": "playwright test",

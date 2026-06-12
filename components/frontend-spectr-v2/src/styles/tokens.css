@@ -71,4 +71,13 @@
   --panel-bg:     #0e1727;
   --panel-border: rgba(255, 255, 255, 0.06);
   --panel-radius: var(--radius);
+
+  /* Bridge tokens (story 1.2): exact values lifted from raw hex that lived
+     in *.module.css files, moved here to satisfy the no-raw-hex lint.
+     Story 1.7 (Phase A token design, UX-DR3) may consolidate these into the
+     final accent ramp — keep the values byte-identical until then. */
+  --accent-bright:   #00f3bd;
+  --accent-bright-2: #1eedba;
+  --ink-on-accent:   #06151a;
+  --ink-on-accent-2: #04221b;
 }

@@ -45,4 +45,11 @@ export default [
       'react-refresh/only-export-components': 'off',
     },
   },
+  {
+    // Node lint/build scripts (AR39 enforcement lints live here).
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: { ...globals.node },
+    },
+  },
 ];

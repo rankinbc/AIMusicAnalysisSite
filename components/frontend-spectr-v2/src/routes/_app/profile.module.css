@@ -46,7 +46,7 @@
   background: linear-gradient(135deg, var(--cyan) 0%, var(--violet) 100%);
   display: grid;
   place-items: center;
-  color: #06151a;
+  color: var(--ink-on-accent);
   font-weight: 800;
   font-size: 36px;
   box-shadow:

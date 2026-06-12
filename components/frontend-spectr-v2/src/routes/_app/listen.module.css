@@ -318,7 +318,7 @@
   height: 48px;
   border-radius: 50%;
   background: var(--cyan);
-  color: #06151a;
+  color: var(--ink-on-accent);
   display: grid;
   place-items: center;
   border: none;
@@ -331,7 +331,7 @@
   box-shadow: 0 0 24px rgba(0, 229, 176, 0.45);
 }
 .playBig:hover {
-  background: #00f3bd;
+  background: var(--accent-bright);
 }
 
 .transportBtn {

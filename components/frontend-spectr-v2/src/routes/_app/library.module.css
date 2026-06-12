@@ -206,7 +206,7 @@
   height: 32px;
   border-radius: 50%;
   background: var(--cyan);
-  color: #06151a;
+  color: var(--ink-on-accent);
   display: grid;
   place-items: center;
   border: none;
@@ -215,7 +215,7 @@
   box-shadow: 0 4px 12px -2px rgba(0, 229, 176, 0.5);
 }
 .playRound:hover {
-  background: #00f3bd;
+  background: var(--accent-bright);
 }
 
 .versionPillCorner {

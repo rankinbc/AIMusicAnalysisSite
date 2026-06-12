@@ -71,13 +71,13 @@
 
 .buttonPrimary {
   background: var(--cyan);
-  color: #04221b;
+  color: var(--ink-on-accent-2);
   border-color: var(--cyan);
 }
 
 .buttonPrimary:hover:not(:disabled) {
-  background: #1eedba;
-  border-color: #1eedba;
+  background: var(--accent-bright-2);
+  border-color: var(--accent-bright-2);
 }
 
 .buttonPrimary:disabled {

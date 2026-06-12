@@ -64,7 +64,7 @@
 }
 
 .footerLink a:hover {
-  color: #1eedba;
+  color: var(--accent-bright-2);
   text-decoration: underline;
 }
 
