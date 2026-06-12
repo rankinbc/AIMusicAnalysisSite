@@ -13,19 +13,27 @@
 
 name: ci
 
+# paths-ignore covers PRPs/ planning docs ONLY — a global "**.md" ignore
+# would also skip CI for worker prompt files (functional .md with versioned
+# frontmatter, exercised by the worker test suite).
 on:
   push:
     paths-ignore:
       - "PRPs/**"
-      - "**.md"
   pull_request:
     paths-ignore:
       - "PRPs/**"
-      - "**.md"
+
+# One run per ref: an open PR makes every push fire push + pull_request
+# events; superseded runs are cancelled instead of stacking.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   bff:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: components/bff
@@ -41,6 +49,7 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: components/frontend-spectr-v2
@@ -70,6 +79,7 @@ jobs:
 
   python:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -78,7 +88,9 @@ jobs:
       - name: Install (shared editable first — aimusic-shared is not on PyPI)
         run: |
           pip install -e components/shared
-          pip install -r components/worker/requirements.txt ruff mypy
+          # ruff/mypy pinned to locally-verified versions — unpinned latest
+          # can redden CI with zero repo changes (new default rules).
+          pip install -r components/worker/requirements.txt "ruff~=0.15.11" "mypy~=1.20"
       - name: Ruff
         run: ruff check components/worker/ components/shared/
       - name: Worker tests (golden fixtures + boundary + enforcement lints)

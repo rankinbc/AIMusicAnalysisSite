@@ -1,25 +1,33 @@
 // AR39 enforcement lint: no price literals outside config. Prices live in
-// config (frontend src/config/, BFF appsettings / *Options.cs) and Stripe
-// price objects — never hardcoded in components or endpoints.
-// Pattern is deliberately narrow (N.99) — widen as real price points appear.
+// config (frontend src/config/, BFF *Options.cs) and Stripe price objects —
+// never hardcoded in components or endpoints.
+// Pattern is deliberately narrow (N.99 + optional C# numeric suffix) —
+// widen as real price points appear. Known accepted false-positive class:
+// a genuine 0.99 DSP/opacity constant would be flagged — move it to a
+// named constant in config or restructure; flagging is the safe direction.
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
+const FRONTEND_ROOT = join(HERE, "..", "src");
+const BFF_ROOT = join(HERE, "..", "..", "bff", "src");
 const TARGETS = [
   {
-    root: join(HERE, "..", "src"),
+    root: FRONTEND_ROOT,
     exts: [".ts", ".tsx"],
-    allow: (p) => p.split(sep).includes("config"),
+    // Exempt exactly src/config/** (relative to the scan root) — not any
+    // directory that happens to be named "config".
+    allow: (p) => relative(FRONTEND_ROOT, p).split(sep)[0] === "config",
   },
   {
-    root: join(HERE, "..", "..", "bff", "src"),
+    root: BFF_ROOT,
     exts: [".cs"],
-    allow: (p) => /Options\.cs$/.test(p) || /appsettings.*\.json$/.test(p),
+    allow: (p) => /Options\.cs$/.test(p),
   },
 ];
-const PRICE = /\b\d+\.99\b/;
+// N.99 with optional C# numeric-literal suffix (9.99m / 9.99M / f / d).
+const PRICE = /\b\d+\.99(?:[mMfFdD])?\b/g;
 
 function* walk(dir, exts) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -32,13 +40,19 @@ function* walk(dir, exts) {
 
 const offenders = [];
 for (const { root, exts, allow } of TARGETS) {
-  if (!existsSync(root)) continue;
+  if (!existsSync(root)) {
+    // Fail CLOSED: a vanished scan root means the lint is misconfigured,
+    // not that the code is clean.
+    console.error(`price literal lint: scan root missing: ${root}`);
+    process.exit(2);
+  }
   for (const file of walk(root, exts)) {
     if (allow(file)) continue;
     const lines = readFileSync(file, "utf-8").split(/\r?\n/);
     lines.forEach((line, i) => {
-      const m = line.match(PRICE);
-      if (m) offenders.push(`${relative(join(HERE, ".."), file)}:${i + 1}: ${m[0]}  (${line.trim()})`);
+      for (const m of line.matchAll(PRICE)) {
+        offenders.push(`${relative(join(HERE, ".."), file)}:${i + 1}: ${m[0]}  (${line.trim()})`);
+      }
     });
   }
 }

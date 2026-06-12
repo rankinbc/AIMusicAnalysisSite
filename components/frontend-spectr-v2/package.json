@@ -10,7 +10,6 @@
     "lint": "eslint . --max-warnings 0",
     "lint:css": "node scripts/check-css-tokens.mjs",
     "lint:prices": "node scripts/check-price-literals.mjs",
-    "type-check": "tsc -b --noEmit",
     "test": "vitest",
     "test:e2e": "playwright test",
     "gen-types": "orval --config orval.config.ts"

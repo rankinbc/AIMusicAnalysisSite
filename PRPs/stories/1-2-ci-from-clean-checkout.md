@@ -1,6 +1,6 @@
 # Story 1.2: CI from Clean Checkout
 
-Status: review
+Status: done
 
 ## Story
 
@@ -121,6 +121,36 @@ claude-fable-5 (Claude Code)
 ### Change Log
 
 - 2026-06-12: Implemented; CI green on GitHub (runs 27446884872, 27446956003). Status → review.
+- 2026-06-12: Code review (3 adversarial layers) — 12 patch findings resolved same-session; status → done.
+
+## Senior Developer Review (AI)
+
+- **Date:** 2026-06-12 · **Outcome:** Changes Requested → all action items resolved → **Approve**
+- **Layers:** Blind Hunter + Edge Case Hunter + Acceptance Auditor (parallel fresh-context subagents on 5540edd..2711c1f). Auditor independently reproduced the negative checks in a clean worktree, re-ran worker 79/79 + shared 18/18 DB-free, verified hex→token byte-identity, and confirmed runs green via gh (incl. a bonus check: `import anthropic` placed AT `llm/gateway.py` correctly passes the lint).
+- **AC verdicts:** AC1–AC4 all SATISFIED.
+- **Triage:** 0 intent_gap · 1 bad_spec note (css lint is hex-only — exactly what the AC specifies; rgba/named-color tightening belongs to story 1.7 token work) · 12 patch (resolved below) · 4 defer · ~10 rejected as noise.
+
+### Action Items
+
+- [x] [High→fixed] `tsconfig.app.tsbuildinfo` was a tracked, stale tsc incremental cache (could short-circuit CI type-check freshness; perpetual dirty-tree churn) — untracked + `*.tsbuildinfo` gitignored
+- [x] [Med→fixed] `**.md` paths-ignore would skip CI for worker prompt files (functional .md) — narrowed to `PRPs/**` only
+- [x] [Med→fixed] Duplicate runs root-caused: PR #1 (restructure→master) is open, so every push fires push + pull_request — added `concurrency` group with cancel-in-progress (Dev-Record "not investigated" note corrected)
+- [x] [Med→fixed] `type-check` script still had the broken fresh-clone ordering — removed (dead script; CI + build encode the correct ordering)
+- [x] [Med→fixed] Price regex missed C# numeric suffixes (`9.99m`) — covered; `config` allowlist tightened to exactly `src/config/**` relative to scan root; dead `appsettings` allow-branch removed
+- [x] [Med→fixed] Both lint scripts + enforcement test failed OPEN on missing scan roots — all three now fail closed (exit 2 / scanned-roots assertion)
+- [x] [Med→fixed] anthropic-lint allowlist used suffix matching (nested decoy path could smuggle imports) — exact `resolve()` comparison
+- [x] [Med→fixed] anthropic-lint missed `import os, anthropic` and quoted dynamic forms — both covered + negative-checked (comma-form exit 1, `__import__` form exit 1)
+- [x] [Low→fixed] Lint scripts reported only first match per line — `matchAll`
+- [x] [Low→fixed] css lint false-positive on `url(#fragment)` SVG refs — skipped; verified `rgb()` stays allowed (per-spec hex-only)
+- [x] [Low→fixed] Unpinned ruff/mypy in CI — pinned `ruff~=0.15.11`, `mypy~=1.20` (locally-verified versions)
+- [x] [Low→fixed] `pydantic>=2.7` unbounded — `<3` (Pydantic-v2-only rule); enforcement-test docstring claim corrected; venv-variant SKIP_DIRS added
+
+### Deferred
+
+- Required-status-check deadlock if branch protection is added while paths-ignore exists → revisit when protection is configured (Epic 10)
+- New `components/<x>/` Python components are not auto-scanned by the anthropic lint (whitelist of 3) → extend when a new component appears
+- BFF price lint runs inside the frontend job (ownership cosmetics) → fine for solo-operator CI
+- rgba/named-color token tightening → story 1.7 (UX-DR3)
 
 ### File List
 
@@ -137,5 +167,6 @@ Modified:
 - components/frontend-spectr-v2/src/routes/_app/{library,listen,profile,_appLayout}.module.css (hex → tokens)
 - components/frontend-spectr-v2/src/routes/_public/auth.module.css (hex → token)
 - components/frontend-spectr-v2/src/styles/forms.module.css (hex → tokens)
-- components/shared/pyproject.toml (declare pydantic>=2.7)
+- components/shared/pyproject.toml (declare pydantic>=2.7,<3)
+- components/frontend-spectr-v2/.gitignore (+*.tsbuildinfo; tsconfig.app.tsbuildinfo untracked)
 - PRPs/sprint-status.yaml (status transitions)
