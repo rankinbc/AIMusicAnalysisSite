@@ -115,19 +115,60 @@ def _fetch_pin_from_db(slug: str) -> str | None:
         return row.pinned_version if row is not None else None
 
 
+# Pinned versions must be plain version-ish tokens — they are interpolated
+# into a filesystem path, and this table becomes remotely writable when the
+# Epic 10 admin endpoints land.
+_SAFE_VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._\-]{0,31}$")
+
+
 def _resolve_pin(slug: str) -> str | None:
     """TTL-cached pinned version for a slug; fail-open (None) on any error."""
-    now = _now_monotonic()
     hit = _pin_cache.get(slug)
-    if hit is not None and now - hit[0] < PIN_TTL_S:
+    if hit is not None and _now_monotonic() - hit[0] < PIN_TTL_S:
         return hit[1]
     try:
         pinned = _fetch_pin_from_db(slug)
     except Exception as exc:
         logger.warning("prompt pin lookup failed for %r (fail-open): %s", slug, exc)
         pinned = None
-    _pin_cache[slug] = (now, pinned)
+    if pinned is not None and not _SAFE_VERSION_RE.match(pinned):
+        logger.warning(
+            "pinned version %r for %r is not a safe version token — ignoring pin",
+            pinned, slug,
+        )
+        pinned = None
+    _pin_cache[slug] = (_now_monotonic(), pinned)
     return pinned
+
+
+def _load_pinned_archive(name: str, slug: str, pinned: str) -> tuple[str, str] | None:
+    """Read ``versions/{name}@{pinned}.md``; None on any failure (fail-open)."""
+    archived = PROMPTS_DIR / "versions" / f"{name}@{pinned}.md"
+    try:
+        content = archived.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        logger.warning(
+            "pinned prompt version %s for %r has no archive file at %s "
+            "— serving live version",
+            pinned, slug, archived,
+        )
+        return None
+    except (OSError, UnicodeDecodeError) as exc:
+        # The pin mechanism must never fail a job — unreadable archive
+        # (permissions, TOCTOU delete, bad encoding) falls back to live.
+        logger.warning(
+            "pinned archive %s unreadable (%s) — serving live version",
+            archived, exc,
+        )
+        return None
+    version, body = parse_version_frontmatter(content)
+    if version != pinned:
+        logger.warning(
+            "archive %s frontmatter says version %s but the pin is %s — "
+            "serving the archive; fix the file's frontmatter or its name",
+            archived, version, pinned,
+        )
+    return version, body
 
 
 def load_prompt(slug: str) -> tuple[str, str]:
@@ -136,27 +177,32 @@ def load_prompt(slug: str) -> tuple[str, str]:
     Honors a ``prompt_versions`` pin: when the pinned version differs from
     the live file's frontmatter, the archived copy at
     ``versions/{PascalName}@{pinned}.md`` is served instead (fail-open to the
-    live file if the archive is missing).
+    live file if the archive is missing/unreadable). The pin is consulted
+    before the live file so a valid pinned archive can still serve when the
+    live file is absent.
     """
     if slug not in SLUG_TO_FILENAME:
         raise KeyError(f"unknown specialist slug: {slug!r}")
     name = SLUG_TO_FILENAME[slug]
     path = PROMPTS_DIR / f"{name}.md"
-    if not path.exists():
-        raise FileNotFoundError(f"prompt file not found: {path}")
-    version, body = parse_version_frontmatter(path.read_text(encoding="utf-8"))
 
     pinned = _resolve_pin(slug)
-    if pinned and pinned != version:
-        archived = PROMPTS_DIR / "versions" / f"{name}@{pinned}.md"
-        if archived.exists():
-            return parse_version_frontmatter(archived.read_text(encoding="utf-8"))
-        logger.warning(
-            "pinned prompt version %s for %r has no archive file at %s "
-            "— serving live version %s",
-            pinned, slug, archived, version,
-        )
-    return version, body
+    if pinned:
+        live_version: str | None = None
+        if path.exists():
+            live_version, live_body = parse_version_frontmatter(
+                path.read_text(encoding="utf-8")
+            )
+            if pinned == live_version:
+                return live_version, live_body
+        archive = _load_pinned_archive(name, slug, pinned)
+        if archive is not None:
+            return archive
+        # fall through to the live file (fail-open)
+
+    if not path.exists():
+        raise FileNotFoundError(f"prompt file not found: {path}")
+    return parse_version_frontmatter(path.read_text(encoding="utf-8"))
 
 
 def load_triage() -> tuple[str, str]:

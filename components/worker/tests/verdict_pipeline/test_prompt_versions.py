@@ -106,3 +106,44 @@ def test_unpinned_lookup_cached_within_ttl(prompt_dir, monkeypatch):
     load_prompt("low_end")
     load_prompt("low_end")
     assert calls["n"] == 1
+
+
+def test_path_traversal_pin_is_ignored(prompt_dir, monkeypatch, caplog):
+    # An evil .md OUTSIDE the versions dir that a traversal pin would reach.
+    evil = prompt_dir.parent / "evil.md"
+    evil.write_text("---\nversion: 6.6.6\n---\nevil body", encoding="utf-8")
+    monkeypatch.setattr(
+        prompt_loader, "_fetch_pin_from_db", lambda slug: "../../evil"
+    )
+    with caplog.at_level("WARNING"):
+        version, body = load_prompt("low_end")
+    assert version == "2.0.0"
+    assert "live body" in body
+    assert any("not a safe version token" in r.message for r in caplog.records)
+
+
+def test_pinned_archive_rescues_missing_live_file(prompt_dir, monkeypatch):
+    (prompt_dir / "LowEnd.md").unlink()
+    monkeypatch.setattr(prompt_loader, "_fetch_pin_from_db", lambda slug: "1.0.0")
+    version, body = load_prompt("low_end")
+    assert version == "1.0.0"
+    assert "archived body" in body
+
+
+def test_missing_live_file_without_pin_raises(prompt_dir, monkeypatch):
+    (prompt_dir / "LowEnd.md").unlink()
+    monkeypatch.setattr(prompt_loader, "_fetch_pin_from_db", lambda slug: None)
+    with pytest.raises(FileNotFoundError):
+        load_prompt("low_end")
+
+
+def test_archive_frontmatter_mismatch_warns_but_serves(prompt_dir, monkeypatch, caplog):
+    (prompt_dir / "versions" / "LowEnd@3.0.0.md").write_text(
+        "---\nversion: 2.9.9\n---\nmislabeled body", encoding="utf-8"
+    )
+    monkeypatch.setattr(prompt_loader, "_fetch_pin_from_db", lambda slug: "3.0.0")
+    with caplog.at_level("WARNING"):
+        version, body = load_prompt("low_end")
+    assert version == "2.9.9"  # what actually ran is what gets recorded
+    assert "mislabeled body" in body
+    assert any("frontmatter says version" in r.message for r in caplog.records)

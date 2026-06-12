@@ -1,6 +1,6 @@
 # Story 1.1: Relocate Verdict Pipeline into Worker Ownership
 
-Status: review
+Status: done
 
 ## Story
 
@@ -23,7 +23,7 @@ so that all new LLM work builds on actively owned code and the frozen-v1 boundar
   - [x] 1.2 Reconcile the three duplicates — worker copies win: diff api `validator.py` / `json_extraction.py` against existing worker copies (worker docstrings claim verbatim ports — verify); delete the api copies; keep worker `prompt_loader.py` (it adds `$VERDICT_PROMPTS_DIR` override + worker-relative default — api's variant has neither)
   - [x] 1.3 Replace `from app.llm.client import LLMClient` in moved `specialists.py`, `triage.py`, `orchestrator.py` with a structural Protocol defined once in `verdict_lib` (async `call(system, user, *, max_tokens=4096, timeout_s=90) -> str`). No runtime import of any api module may remain. The test `MockLLMClient` already satisfies this protocol unchanged.
   - [x] 1.4 Rewrite intra-package imports `app.verdict_pipeline.X` → relative `.X` inside verdict_lib; build `verdict_lib/__init__.py` public surface mirroring what api's `__init__.py` re-exported (orchestrator entry points, `evaluate_rules`, `dedupe_verdicts`, `rank_verdicts`, validator API, prompt loader API)
-  - [x] 1.5 Delete the now-empty `components/api/app/verdict_pipeline/` and the duplicate `components/api/prompts/experts/` tree AFTER verifying worker `prompts/experts/` has all 27 specialist prompts + `Triage.md` and contents are identical (or newer in worker)
+  - [x] 1.5 Delete the now-empty `components/api/app/verdict_pipeline/` and the duplicate `components/api/prompts/experts/` tree AFTER verifying worker `prompts/experts/` has all 26 specialist prompts + `Triage.md` and contents are identical (or newer in worker)
   - [x] 1.6 Confirm `verdict_actor.py`, `triage_actor.py`, `reference_analyzer_actor.py` still import only `app.verdict_lib.*` / `aimusic_shared.*` and behave identically (no actor signature, queue name, or wire-format change)
 - [x] Task 2: Move golden-fixture test suite (AC: 2)
   - [x] 2.1 `git mv components/api/tests/verdict_pipeline/` → `components/worker/tests/verdict_pipeline/` — all tests EXCEPT `test_cli_client.py` + `test_cli_client_live.py` (those test api's async CLI client, which stays frozen in api; worker's `llm_client_sync` gets SDK-replacement coverage in story 1.3)
@@ -73,7 +73,7 @@ Architecture AR3 / boundary 5: the verdict pipeline is the single planned cross-
 **worker side — already exists in `components/worker/app/`:**
 - `verdict_lib/`: `validator.py`, `json_extraction.py`, `prompt_loader.py` (SLUG_TO_FILENAME 26 slugs + Triage), `flatten_analysis.py` (worker-only — api flow received flat analysis; BFF lazy-fire path flattens `final_json`), `llm_client_sync.py` (sync claude-CLI wrapper — actors use this, NOT api's async client)
 - Actors: `verdict_actor.py` (`run_specialist(analysis_id, slug, user_id)`, queue `default`), `triage_actor.py` (`run_triage(analysis_id)`), `reference_analyzer_actor.py`, `tasks_dramatiq.py` (`analyze_audio_job`); registered via `dramatiq_app.py`
-- `prompts/experts/` — 27 specialist prompts + Triage.md, duplicates of api copies
+- `prompts/experts/` — 26 specialist prompts + Triage.md, duplicates of api copies
 - Tests: `pytest.ini` (asyncio_mode=auto), `tests/conftest.py` (sqlite JSONB→JSON shim for `Base.metadata.create_all`), `tests/__init__.py` — no verdict tests yet
 
 **Golden fixtures (api only today):** `components/api/tests/verdict_pipeline/` — conftest with 5 analysis fixtures (`clean_trance`, `muddy_hiphop`, `clipped_pop`, `mono_broken_indie`, `tiny_dynamics_edm`) loaded from `fixtures/analyses/*.json` + `MockLLMClient` (async `call`, canned responses keyed by prompt-excerpt + track_id); ~1,050 lines across test_rule_engine / test_triage / test_specialists / test_extended_specialists / test_stem_specialists / test_validator / test_dedupe / test_ranker / test_orchestrator / test_json_extraction / test_prompt_loader.
@@ -164,6 +164,33 @@ claude-fable-5 (Claude Code)
 ### Change Log
 
 - 2026-06-12: Story implemented end-to-end on branch `restructure`; all 5 tasks complete, all gates green. Status → review.
+- 2026-06-12: Code review (3 adversarial layers) — 8 patch findings resolved same-session; status → done.
+
+## Senior Developer Review (AI)
+
+- **Date:** 2026-06-12 · **Outcome:** Changes Requested → all action items resolved → **Approve**
+- **Layers:** Blind Hunter (diff-only) + Edge Case Hunter (diff + repo) + Acceptance Auditor (diff + spec + repo), run as parallel fresh-context subagents on commit `caa2f25`.
+- **AC verdicts (auditor, independently verified):** AC1–AC5 all SATISFIED. Dev Agent Record claims cross-checked true (73-passed, byte-identical prompt blobs, 23→26 test red at 5e36782, SLUG map ↔ SpecialistCatalog.cs 26/26).
+- **Triage:** 0 intent_gap · 2 bad_spec (recorded, no action: 23→26 deviation unavoidable + disclosed; triage prompt not pinnable — README-noted, future story) · 8 patch (all resolved below) · 5 defer · ~14 rejected as noise (incl. v1-api ImportError — by-design, documented).
+
+### Action Items
+
+- [x] [High→fixed] `pinned_version` path traversal — `_SAFE_VERSION_RE` whitelist; traversal pins ignored with warning + test
+- [x] [Med→fixed] Archive read exceptions escaped fail-open (TOCTOU/encoding/permissions) — `_load_pinned_archive` catches `OSError`/`UnicodeDecodeError`, falls back to live
+- [x] [Med→fixed] Pin consulted after live-file check — reordered; valid pinned archive now rescues a missing live file + tests
+- [x] [Med→fixed] Archive frontmatter ≠ pin silently recorded — mismatch warning (archive still served; what ran is what's recorded) + test
+- [x] [Med→fixed] Unit tests reached real DB via pin path; `_pin_cache` leaked across tests — autouse stub + cache clear in `tests/verdict_pipeline/conftest.py`; real DB path now covered by `tests/test_prompt_pin_db.py` (sqlite, genuine lazy-import + ORM query)
+- [x] [Med→fixed] Boundary-test gaps — backslash normalization, `from app import verdict_pipeline` form, requirements/Procfile/pyproject scanned, misleading docstring-exemption comment corrected
+- [x] [Low→fixed] `json_extraction.py` docstring corruption ("the legacy the legacy")
+- [x] [Low→fixed] Doc counts (27 files = 26 specialists + Triage) corrected in story; compose comment now documents old-volume cleanup; README documents safe-token rule + triage-not-pinnable
+
+### Deferred (pre-existing / future stories)
+
+- `db_sync` engine lacks connect timeout; pin lookup is sync inside async stages (orchestrator path unwired until 1.4) → revisit in 1.3/1.4
+- No metric/alert on pin-lookup failure (rollback observability) → Epic 10 / D9
+- Compose `worker` service references a missing `components/worker/Dockerfile`; baked-in prompts would defeat pin rollback in containers → story 10.1 deploy topology
+- `Procfile` lacks `--processes 1 --threads 1` (CLI concurrency assumption) → moot after 1.3 SDK gateway
+- Project CLAUDE.md stale post-relocation ("api still hosts the verdict pipeline", "27 specialists") → refresh at Epic 1 close
 
 ### File List
 
@@ -180,7 +207,7 @@ Moved (git mv, history preserved):
 
 Deleted (worker copies canonical):
 - components/api/app/verdict_pipeline/{__init__.py,validator.py,json_extraction.py,prompt_loader.py}
-- components/api/prompts/experts/ (28 .md files — 27 specialists + Triage; byte-identical duplicates of worker copies)
+- components/api/prompts/experts/ (27 .md files — 26 specialists + Triage; byte-identical duplicates of worker copies)
 
 New:
 - components/worker/app/verdict_lib/llm_protocol.py

@@ -41,7 +41,12 @@ def _walk(root: Path, suffixes: tuple[str, ...]):
 
 
 def test_no_python_imports_from_frozen_api():
-    """New-stack Python never imports v1 api modules."""
+    """New-stack Python never imports v1 api modules — both the dotted form
+    (``from app.verdict_pipeline.x import y``) and the from-package form
+    (``from app import verdict_pipeline``)."""
+    from_app_form = re.compile(
+        r"^\s*from\s+app\s+import\s+.*\b" + "verdict" + "_pipeline\\b"
+    )
     offenders: list[str] = []
     for component in ("worker", "shared", "analysis"):
         root = COMPONENTS / component
@@ -57,7 +62,7 @@ def test_no_python_imports_from_frozen_api():
                 if not m:
                     continue
                 module = m.group(2)
-                if module.startswith((_VP, _API_PKG)):
+                if module.startswith((_VP, _API_PKG)) or from_app_form.match(line):
                     offenders.append(f"{path.relative_to(REPO_ROOT)}:{lineno}: {line.strip()}")
     assert not offenders, "frozen-v1 imports found:\n" + "\n".join(offenders)
 
@@ -65,14 +70,17 @@ def test_no_python_imports_from_frozen_api():
 def test_no_new_stack_path_references_into_frozen_components():
     """New-stack source files never reference frozen component paths in code.
 
-    Markdown and docstrings may mention them historically; this scan covers
-    code files only and ignores comment-only lines.
+    Lines are normalized (backslashes → slashes) before matching so Windows
+    path forms are caught too. Comment-only lines are skipped; .py docstring
+    lines are NOT exempt — keep provenance notes path-free (git history holds
+    provenance). Dependency/process files (requirements, Procfile, pyproject)
+    are scanned so editable installs like ``-e ../api`` can't slip through.
     """
     comment_prefixes = ("#", "//", "*", "/*", "--", "<!--")
     offenders: list[str] = []
     scan_targets = [
-        (COMPONENTS / "worker", (".py",)),
-        (COMPONENTS / "shared", (".py",)),
+        (COMPONENTS / "worker", (".py", ".txt", ".toml", "")),  # "" → Procfile
+        (COMPONENTS / "shared", (".py", ".txt", ".toml")),
         (COMPONENTS / "bff" / "src", (".cs", ".csproj", ".json")),
         (COMPONENTS / "frontend-spectr-v2" / "src", (".ts", ".tsx", ".js", ".jsx", ".css")),
     ]
@@ -82,12 +90,15 @@ def test_no_new_stack_path_references_into_frozen_components():
         for path in _walk(root, suffixes):
             if path.resolve() == Path(__file__).resolve():
                 continue
+            if path.suffix == "" and path.name != "Procfile":
+                continue
             for lineno, line in enumerate(
                 path.read_text(encoding="utf-8", errors="replace").splitlines(), 1
             ):
                 stripped = line.strip()
                 if stripped.startswith(comment_prefixes):
                     continue
-                if _API_PATH in line or _FE_PATH in line or _FE_SPECTR.search(line):
+                normalized = line.replace("\\\\", "/").replace("\\", "/")
+                if _API_PATH in normalized or _FE_PATH in normalized or _FE_SPECTR.search(normalized):
                     offenders.append(f"{path.relative_to(REPO_ROOT)}:{lineno}: {stripped}")
     assert not offenders, "frozen-v1 path references found:\n" + "\n".join(offenders)

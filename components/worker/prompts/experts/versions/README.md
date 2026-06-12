@@ -28,5 +28,15 @@ its frontmatter intact.
    unreachable, the live file is served and a warning is logged — the
    pipeline never fails a job because of the pin mechanism.
 
+Notes:
+
+- `pinned_version` must be a plain version token (`[A-Za-z0-9._-]`, max 32
+  chars, no slashes) — anything else is ignored with a warning, since the
+  value is used in a filesystem path.
+- A valid pin + archive also serves when the live prompt file is missing
+  (rollback can rescue a bad deploy that lost the live file).
+- The Triage prompt is not yet pinnable — pins cover specialist slugs only.
+  Extend `load_triage` when triage rollback is needed.
+
 Admin endpoints for flipping pins arrive in Epic 10 (story 10.5); until
 then, raw SQL as above.

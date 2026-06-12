@@ -1,5 +1,5 @@
-"""Extract a JSON object from an LLM response. Same logic as the legacy
-the legacy v1 api implementation — verbatim copy.
+"""Extract a JSON object from an LLM response. Verbatim copy of the legacy
+v1 api implementation.
 """
 from __future__ import annotations
 

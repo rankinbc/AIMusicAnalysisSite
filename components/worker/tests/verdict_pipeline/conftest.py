@@ -5,9 +5,23 @@ import re
 from pathlib import Path
 import pytest
 
+from app.verdict_lib import prompt_loader
+
 _TRACK_ID_RE = re.compile(r'"track_id"\s*:\s*"([^"]+)"')
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+@pytest.fixture(autouse=True)
+def _no_db_pin_lookups(monkeypatch):
+    """Keep this package's tests DB-free and order-independent: stub the
+    prompt-pin DB fetch (tests that exercise pins re-monkeypatch it) and
+    clear the module-level TTL cache around every test. The real DB path is
+    covered by ``tests/test_prompt_pin_db.py`` outside this package."""
+    monkeypatch.setattr(prompt_loader, "_fetch_pin_from_db", lambda slug: None)
+    prompt_loader.clear_pin_cache()
+    yield
+    prompt_loader.clear_pin_cache()
 
 
 def _load_analysis(name: str) -> dict:

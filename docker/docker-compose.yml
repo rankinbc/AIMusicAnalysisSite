@@ -11,6 +11,9 @@ services:
       # postgres_data_16: fresh volume for postgres:16 — the original
       # `postgres_data` volume was initialized by PG15 (v1 era) and is
       # incompatible; it is intentionally left in place, unused.
+      # To reclaim it once you're sure nothing in it is needed:
+      #   docker volume rm docker_postgres_data
+      # (or dump first: run a postgres:15 container mounting it + pg_dumpall)
       - postgres_data_16:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U spectr"]
