@@ -1,5 +1,5 @@
 """Extract a JSON object from an LLM response. Same logic as the legacy
-``components/api/app/verdict_pipeline/json_extraction.py`` — verbatim copy.
+the legacy v1 api implementation — verbatim copy.
 """
 from __future__ import annotations
 

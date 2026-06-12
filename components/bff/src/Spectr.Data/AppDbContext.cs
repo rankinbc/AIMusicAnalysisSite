@@ -23,6 +23,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Analysis> Analyses => Set<Analysis>();
     public DbSet<Verdict> Verdicts => Set<Verdict>();
     public DbSet<VerdictUserState> VerdictUserStates => Set<VerdictUserState>();
+    public DbSet<PromptVersion> PromptVersions => Set<PromptVersion>();
 
     // Listen
     public DbSet<SessionNote> SessionNotes => Set<SessionNote>();
@@ -112,6 +113,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         builder.Entity<Verdict>().Property(v => v.CreatedAt).HasDefaultValueSql("now()");
         builder.Entity<VerdictUserState>().Property(s => s.CreatedAt).HasDefaultValueSql("now()");
         builder.Entity<VerdictUserState>().Property(s => s.UpdatedAt).HasDefaultValueSql("now()");
+        builder.Entity<PromptVersion>().Property(p => p.UpdatedAt).HasDefaultValueSql("now()");
         builder.Entity<SessionNote>().Property(n => n.CreatedAt).HasDefaultValueSql("now()");
         builder.Entity<SessionNote>().Property(n => n.UpdatedAt).HasDefaultValueSql("now()");
         builder.Entity<ReferenceTrack>().Property(r => r.CreatedAt).HasDefaultValueSql("now()");

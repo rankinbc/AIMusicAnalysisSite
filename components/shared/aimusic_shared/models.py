@@ -317,6 +317,22 @@ class VerdictUserState(Base):
     )
 
 
+class PromptVersion(Base):
+    """Operator-controlled prompt-version pin (FR48). NULL pinned_version =
+    serve the live prompt file's frontmatter version. The worker's prompt
+    loader reads this (TTL-cached); only the operator writes."""
+
+    __tablename__ = "prompt_versions"
+
+    slug: Mapped[str] = mapped_column("slug", String(64), primary_key=True)
+    pinned_version: Mapped[Optional[str]] = mapped_column(
+        "pinned_version", String(32), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class SessionNote(Base):
     __tablename__ = "session_notes"
     __table_args__ = (

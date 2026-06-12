@@ -1,5 +1,6 @@
 from __future__ import annotations
 import math
+import re as _re
 from dataclasses import dataclass
 from typing import Any
 
@@ -24,8 +25,6 @@ class ValidationResult:
     verdict: Verdict | None = None
     failure: ValidationFailure | None = None
 
-
-import re as _re
 
 def _resolve_path(obj: Any, path: str) -> Any:
     """Resolve a dotted path against a dict/list tree.

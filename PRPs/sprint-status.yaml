@@ -1,0 +1,139 @@
+# generated: 2026-06-12
+# last_updated: 2026-06-12
+# project: Spectr
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: PRPs/stories
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog -> in-progress: Automatically when first story is created (via create-story)
+#   - in-progress -> done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+#
+# SPRINT 1 SCOPE: stories 1.1 + 1.2 only (readiness report 2026-06-12: READY).
+# Build order: E1 -> E2 -> E3 -> E4 -> E5 -> E6 -> E7 -> E8 -> E9 -> E10.
+
+generated: 2026-06-12
+last_updated: 2026-06-12
+project: Spectr
+project_key: NOKEY
+tracking_system: file-system
+story_location: PRPs/stories
+
+development_status:
+  epic-1: in-progress
+  1-1-relocate-verdict-pipeline-into-worker-ownership: review
+  1-2-ci-from-clean-checkout: backlog
+  1-3-anthropic-sdk-gateway-with-per-call-metering: backlog
+  1-4-llm-budgets-circuit-breaker-and-degraded-verdicts: backlog
+  1-5-grounded-coach-conversations: backlog
+  1-6-coach-streaming-relay: backlog
+  1-7-design-system-foundation-fidelity-phase-a: backlog
+  1-8-coach-chat-ui-with-grounding-affordances: backlog
+  1-9-per-analysis-coach-caps: backlog
+  epic-1-retrospective: optional
+
+  epic-2: backlog
+  2-1-subscribe-to-pro-via-stripe-checkout: backlog
+  2-2-manage-subscription-self-service: backlog
+  2-3-buy-credits-with-append-only-ledger: backlog
+  2-4-server-side-entitlements-and-metering: backlog
+  2-5-paid-jobs-never-starve: backlog
+  2-6-tier-aware-coach-caps: backlog
+  2-7-cap-hit-upgrade-flow-upgradesheet-and-blurlock: backlog
+  2-8-usage-page-with-honest-math: backlog
+  2-9-dunning-states-and-graceful-degradation: backlog
+  2-10-billing-integrity-and-reconciliation: backlog
+  epic-2-retrospective: optional
+
+  epic-3: backlog
+  3-1-direct-to-r2-presigned-multipart-upload: backlog
+  3-2-worker-side-validation-and-attachments-via-r2: backlog
+  3-3-signed-playback-and-durable-reports: backlog
+  3-4-retention-sweep: backlog
+  3-5-upload-and-job-persistence-resilience-verified: backlog
+  epic-3-retrospective: optional
+
+  epic-4: backlog
+  4-1-secrets-hardening-and-auth-regression: backlog
+  4-2-transactional-email-foundation-resend: backlog
+  4-3-email-verification-and-password-reset: backlog
+  4-4-lifecycle-emails-completion-dunning-retention: backlog
+  4-5-anonymous-devices-and-claim: backlog
+  4-6-gdpr-export-and-account-deletion: backlog
+  epic-4-retrospective: optional
+
+  epic-5: backlog
+  5-1-app-shell-and-library-fidelity-phase-b: backlog
+  5-2-results-restructure-verdicthero-and-tabs-phase-c-core: backlog
+  5-3-featuredverdictcard-and-coach-handoff: backlog
+  5-4-analysis-summary-tab-filters-and-specialist-roster: backlog
+  5-5-frequency-stem-clash-reference-and-arrangement-panels: backlog
+  5-6-als-project-panel-and-track-name-attribution: backlog
+  5-7-partial-failure-reporting-and-free-retry: backlog
+  5-8-song-detail-and-version-compare: backlog
+  5-9-upload-dialog-polish-club-check-and-playback-verify: backlog
+  5-10-product-a11y-keyboard-and-kitchen-sink: backlog
+  epic-5-retrospective: optional
+
+  epic-6: backlog
+  6-1-landing-and-pricing-pages: backlog
+  6-2-trust-pages: backlog
+  6-3-anonymous-instant-analysis: backlog
+  6-4-resume-cards: backlog
+  6-5-funnel-instrumentation: backlog
+  epic-6-retrospective: optional
+
+  epic-7: backlog
+  7-1-share-link-and-read-only-public-report: backlog
+  7-2-og-share-shell: backlog
+  7-3-share-revocation: backlog
+  7-4-share-cta-and-attribution: backlog
+  epic-7-retrospective: optional
+
+  epic-8: backlog
+  8-1-genre-profile-builder-tool: backlog
+  8-2-house-genre-profile: backlog
+  8-3-techno-genre-profile: backlog
+  8-4-genre-reference-browsing-and-scoring-verification: backlog
+  epic-8-retrospective: optional
+
+  epic-9: backlog
+  9-1-affiliate-registration-and-attribution: backlog
+  9-2-partner-dashboard-and-payout-reporting: backlog
+  epic-9-retrospective: optional
+
+  epic-10: backlog
+  10-1-production-deploy-topology: backlog
+  10-2-backups-and-restore-proof: backlog
+  10-3-observability-stack: backlog
+  10-4-phone-grade-alerting-and-status: backlog
+  10-5-admin-endpoints-and-audit-log: backlog
+  10-6-abuse-containment: backlog
+  10-7-measurement-conformance-harness: backlog
+  10-8-runbook-and-launch-checklist: backlog
+  epic-10-retrospective: optional

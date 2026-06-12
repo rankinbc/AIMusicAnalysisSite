@@ -1,6 +1,6 @@
 """Synchronous claude-CLI wrapper for use inside dramatiq actors.
 
-The legacy ``components/api/app/llm/client.py`` is async (uses
+The legacy v1 api client is async (uses
 ``asyncio.to_thread`` and ``asyncio.Semaphore``). Dramatiq actors are sync,
 and concurrency-safety is provided at the process level (one CLI call per
 worker subprocess), so we don't need a semaphore here.

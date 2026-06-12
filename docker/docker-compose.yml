@@ -8,7 +8,10 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # postgres_data_16: fresh volume for postgres:16 — the original
+      # `postgres_data` volume was initialized by PG15 (v1 era) and is
+      # incompatible; it is intentionally left in place, unused.
+      - postgres_data_16:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U spectr"]
       interval: 5s
@@ -77,4 +80,4 @@ services:
       - "5174:80"
 
 volumes:
-  postgres_data:
+  postgres_data_16:
