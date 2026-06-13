@@ -97,6 +97,30 @@ def test_non_retryable_fails_without_retry(configure, metered, monkeypatch):
     assert metered[0]["outcome"] == "error"
 
 
+def test_unexpected_error_still_records_one_error_row(configure, metered, monkeypatch):
+    # A non-anthropic, non-gateway exception (e.g. a malformed usage shape)
+    # must NOT escape unmetered — one error row, raised as LlmInvocationError.
+    configure(llm_max_retries=1, llm_default_model="m1", llm_fallback_model="m1")
+    install_fake_client(monkeypatch, lambda n, kw: ValueError("unexpected boom"))
+    with pytest.raises(LlmInvocationError):
+        _run(gateway.complete(system="s", user="u", purpose="specialist"))
+    assert len(metered) == 1
+    assert metered[0]["outcome"] == "error"
+
+
+def test_non_retryable_does_not_burn_fallback(configure, metered, monkeypatch):
+    # 4xx/auth on the primary must NOT trigger a billed fallback call.
+    configure(llm_max_retries=2, llm_default_model="primary-m",
+              llm_fallback_model="fallback-m")
+    msgs = install_fake_client(monkeypatch, lambda n, kw: LlmInvocationError("400"))
+    with pytest.raises(LlmInvocationError):
+        _run(gateway.complete(system="s", user="u", purpose="specialist"))
+    assert len(msgs.calls) == 1  # primary only — no retry, no fallback
+    assert msgs.calls[0]["model"] == "primary-m"
+    assert len(metered) == 1
+    assert metered[0]["outcome"] == "error"
+
+
 def test_anthropic_timeout_is_translated_and_retried(configure, metered, monkeypatch):
     configure(llm_max_retries=1)
     req = httpx.Request("POST", "https://api.anthropic.com/v1/messages")

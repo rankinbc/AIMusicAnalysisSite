@@ -1,6 +1,6 @@
 # Story 1.3: Anthropic SDK Gateway with Per-Call Metering
 
-Status: review
+Status: done
 
 ## Story
 
@@ -156,6 +156,32 @@ claude-opus-4-8 (Claude Code)
 ### Change Log
 
 - 2026-06-13: Implemented; all gates green incl. real-DB metering smoke. Status → review.
+- 2026-06-13: Code review (3 adversarial layers) — 2 High + several Med/Low resolved same-session; status → done.
+
+## Senior Developer Review (AI)
+
+- **Date:** 2026-06-13 · **Outcome:** Changes Requested → all action items resolved → **Approve**
+- **Layers:** Blind Hunter + Edge Case Hunter + Acceptance Auditor (parallel fresh-context subagents on `7f46484..e05ea88`). Auditor independently re-ran worker 99/99 + shared 18/18, confirmed the single `anthropic` import, CLI deletion, and CI success on e05ea88.
+- **AC verdicts:** AC1–AC6 all SATISFIED (auditor-verified). Scope boundaries respected (budgets = comment-only seam; coach sub-pool built, no coach actor; tier defaults free). No Dev-Record claim contradicted.
+- **Triage:** 0 intent_gap · 0 bad_spec · ~9 patch (resolved) · ~6 defer · rest rejected. Two findings were genuine production bugs (the value of adversarial review):
+
+### Action Items
+
+- [x] [High→fixed] Untranslated SDK errors (e.g. `APIResponseValidationError`, a subclass of `AnthropicError` but not `APIStatusError`) and any unexpected exception escaped `complete()` UNMETERED and as a non-`LlmError` the actors don't catch — violating AC3 + crashing the actor. Fixed: `_call_once` now translates all `anthropic.AnthropicError`; the retry loop has a final `except Exception` that records the error row and raises `LlmInvocationError`. One row on every path is now total (new test `test_unexpected_error_still_records_one_error_row`).
+- [x] [High→fixed] The cached `AsyncAnthropic` client was reused across `asyncio.run` loops (`complete_sync` opens a fresh loop per call) and across dramatiq's default thread pool → "Event loop is closed" on the 2nd real call. Fixed: client is built fresh per `complete()` and closed in a `finally`; no module cache. Belt: pinned worker concurrency to 1 (below).
+- [x] [Med→fixed] Worker entrypoint didn't pin concurrency (CLAUDE.md "concurrency=1 always"); dramatiq defaults are 16×8. Fixed: `Procfile` (the canonical entrypoint) now `--processes 1 --threads 1`. (Compose worker has no `command:` override and references a not-yet-existing Dockerfile — story 10.1 wires the Procfile there.)
+- [x] [Med→fixed] Non-retryable provider error (4xx/auth) burned a second billed fallback call. Fixed: `give_up` flag stops after a non-retryable/unexpected error — fallback is only attempted on retryable exhaustion (new test `test_non_retryable_does_not_burn_fallback`).
+- [x] [Med→fixed] `compute_cost_usd` could raise on a malformed `usage` shape and skip the success metering row. Fixed: `_safe_cost` coerces/clamps tokens and never raises.
+- [x] [Med→fixed] EF (no default) vs SQLAlchemy (client-side default) disagreed on `input_tokens`/`output_tokens`/`cost_usd`. Fixed: EF DB-side `HasDefaultValue(0)` for all three; migration regenerated.
+- [x] [Low→fixed] Triage model pin ignored (`load_triage` parsed only version). Fixed: `load_triage_model()` + wired into the triage actor (NFR24 now realized for triage too).
+- [x] [Low→fixed] `timeout_s=0` falsy-replaced by default → `is None` check. Coach held its scarce sub-pool slot while blocked on the global pool → acquire global-then-coach. Fake rows fabricated `output_tokens` → now 0 (no token-volume pollution in the shared dev DB). Redundant `except (ValueError, Exception)` in triage → `except Exception`.
+
+### Deferred (noted, not blocking)
+
+- `outcome` column advertises `ok|validation_rejected|error|refused`; the gateway only writes `ok|error`. Recording `validation_rejected` (verdict validator rejection) / `refused` (coach) belongs to those call sites — verdict actor can stamp `validation_rejected` in a later polish; coach `refused` lands in 1.5.
+- Per-attempt metering granularity (one row tagged `last_model`): the AC is one row per logical call; primary-failure-then-fallback detail is a future enhancement.
+- Specialist malformed-JSON re-prompt produces two `ok` rows (both calls genuinely cost money — metering both is correct per AC3; dashboards should group by correlation_id).
+- Longest-prefix pricing fragility for future overlapping model families; `asyncio.run`-from-running-loop guard (only sync actors call `complete_sync`).
 
 ### File List
 

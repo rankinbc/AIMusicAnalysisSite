@@ -119,6 +119,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         builder.Entity<VerdictUserState>().Property(s => s.UpdatedAt).HasDefaultValueSql("now()");
         builder.Entity<PromptVersion>().Property(p => p.UpdatedAt).HasDefaultValueSql("now()");
         builder.Entity<LlmCall>().Property(c => c.CreatedAt).HasDefaultValueSql("now()");
+        // DB-side defaults so a direct/partial insert (outside the worker's
+        // SQLAlchemy client-side defaults) can't hit a NOT NULL violation.
+        builder.Entity<LlmCall>().Property(c => c.InputTokens).HasDefaultValue(0);
+        builder.Entity<LlmCall>().Property(c => c.OutputTokens).HasDefaultValue(0);
+        builder.Entity<LlmCall>().Property(c => c.CostUsd).HasDefaultValue(0m);
         builder.Entity<SessionNote>().Property(n => n.CreatedAt).HasDefaultValueSql("now()");
         builder.Entity<SessionNote>().Property(n => n.UpdatedAt).HasDefaultValueSql("now()");
         builder.Entity<ReferenceTrack>().Property(r => r.CreatedAt).HasDefaultValueSql("now()");

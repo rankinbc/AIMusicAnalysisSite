@@ -48,7 +48,7 @@ development_status:
   epic-1: in-progress
   1-1-relocate-verdict-pipeline-into-worker-ownership: done
   1-2-ci-from-clean-checkout: done
-  1-3-anthropic-sdk-gateway-with-per-call-metering: review
+  1-3-anthropic-sdk-gateway-with-per-call-metering: done
   1-4-llm-budgets-circuit-breaker-and-degraded-verdicts: backlog
   1-5-grounded-coach-conversations: backlog
   1-6-coach-streaming-relay: backlog

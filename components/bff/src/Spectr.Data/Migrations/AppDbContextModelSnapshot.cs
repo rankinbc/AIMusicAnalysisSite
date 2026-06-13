@@ -243,7 +243,9 @@ namespace Spectr.Data.Migrations
                         .HasColumnName("correlation_id");
 
                     b.Property<decimal>("CostUsd")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("numeric(12,6)")
+                        .HasDefaultValue(0m)
                         .HasColumnName("cost_usd");
 
                     b.Property<DateTimeOffset>("CreatedAt")
@@ -253,7 +255,9 @@ namespace Spectr.Data.Migrations
                         .HasDefaultValueSql("now()");
 
                     b.Property<int>("InputTokens")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
+                        .HasDefaultValue(0)
                         .HasColumnName("input_tokens");
 
                     b.Property<int>("LatencyMs")
@@ -273,7 +277,9 @@ namespace Spectr.Data.Migrations
                         .HasColumnName("outcome");
 
                     b.Property<int>("OutputTokens")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
+                        .HasDefaultValue(0)
                         .HasColumnName("output_tokens");
 
                     b.Property<string>("PriceTableVersion")

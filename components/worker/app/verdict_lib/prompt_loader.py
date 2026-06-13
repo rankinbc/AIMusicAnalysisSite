@@ -230,3 +230,12 @@ def load_triage() -> tuple[str, str]:
     if not path.exists():
         raise FileNotFoundError(f"triage prompt file not found: {path}")
     return parse_version_frontmatter(path.read_text(encoding="utf-8"))
+
+
+def load_triage_model() -> str | None:
+    """Optional model pin from the Triage prompt's frontmatter (NFR24).
+    ``None`` → caller uses the gateway's configured default."""
+    path = PROMPTS_DIR / f"{TRIAGE_FILENAME}.md"
+    if not path.exists():
+        return None
+    return parse_model_frontmatter(path.read_text(encoding="utf-8"))

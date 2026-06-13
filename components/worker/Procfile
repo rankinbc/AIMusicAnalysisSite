@@ -1,3 +1,5 @@
 # v2 entrypoint — dramatiq replaces celery.
-# Pool selection (--processes/--threads) is per-platform; defaults are safe for slice 1.
-worker: python -m dramatiq app.dramatiq_app
+# concurrency=1 always: Demucs is memory-heavy AND the LLM gateway builds its
+# async client per call/loop — multiple threads sharing a process would reuse a
+# client across event loops. Pin a single worker (CLAUDE.md worker gotcha).
+worker: python -m dramatiq app.dramatiq_app --processes 1 --threads 1

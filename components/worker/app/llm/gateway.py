@@ -79,25 +79,21 @@ class GatewayResult:
 
 # ── anthropic client (lazy, cached) ─────────────────────────────────────────
 
-_client: anthropic.AsyncAnthropic | None = None
-
-
 def _get_client() -> anthropic.AsyncAnthropic:
-    """Lazily build the async SDK client. ``max_retries=0`` — the gateway owns
-    the retry policy (AC6), not the SDK."""
-    global _client
-    if _client is None:
-        settings = get_llm_settings()
-        _client = anthropic.AsyncAnthropic(
-            api_key=settings.anthropic_api_key, max_retries=0
-        )
-    return _client
+    """Build a FRESH async SDK client. ``max_retries=0`` — the gateway owns the
+    retry policy (AC6), not the SDK.
+
+    NOT cached: ``complete_sync`` runs each call under its own ``asyncio.run``
+    loop, and an ``AsyncAnthropic``'s underlying httpx client binds to the loop
+    it was constructed on — reusing it under a later loop raises "Event loop is
+    closed". ``complete`` closes the client in a ``finally``.
+    """
+    settings = get_llm_settings()
+    return anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key, max_retries=0)
 
 
 def reset_client_cache() -> None:
-    """Test helper — drop the cached client."""
-    global _client
-    _client = None
+    """Retained for test compatibility — the client is no longer cached."""
 
 
 # ── per-event-loop semaphores (AR6) ─────────────────────────────────────────
@@ -194,12 +190,12 @@ def _extract_text(message: Any) -> str:
 
 
 async def _call_once(
-    *, model: str, system: str, user: str, max_tokens: int, timeout_s: int
+    client: anthropic.AsyncAnthropic, *, model: str, system: str, user: str,
+    max_tokens: int, timeout_s: int,
 ) -> tuple[str, int, int]:
     """One SDK call. Returns ``(text, input_tokens, output_tokens)``.
     Translates anthropic exceptions into gateway exceptions (retryable vs not).
     """
-    client = _get_client()
     try:
         msg = await client.messages.create(
             model=model,
@@ -216,6 +212,10 @@ async def _call_once(
         raise LlmServerError(str(e)) from e
     except anthropic.APIStatusError as e:
         # 4xx (bad request, auth, not found, …) — non-retryable.
+        raise LlmInvocationError(str(e)) from e
+    except anthropic.AnthropicError as e:
+        # Any other SDK error (e.g. response-validation) — non-retryable, but
+        # still translated so it can never escape the gateway unmetered.
         raise LlmInvocationError(str(e)) from e
     return _extract_text(msg), msg.usage.input_tokens, msg.usage.output_tokens
 
@@ -241,7 +241,7 @@ async def complete(
     retry exhaustion or a non-retryable provider error.
     """
     settings = get_llm_settings()
-    timeout_s = timeout_s or settings.llm_timeout_s
+    timeout_s = settings.llm_timeout_s if timeout_s is None else timeout_s
     effective_tier = tier or settings.llm_default_tier
 
     # story 1.4 — budget check hook: pre-call ceiling/circuit-breaker check
@@ -264,40 +264,54 @@ async def complete(
     last_model = primary
 
     async with _acquire(g_sem, c_sem, purpose):
-        for attempt_model in models_to_try:
-            last_model = attempt_model
-            for retry in range(settings.llm_max_retries + 1):
-                try:
-                    text, in_tok, out_tok = await _call_once(
-                        model=attempt_model, system=system, user=user,
-                        max_tokens=max_tokens, timeout_s=timeout_s,
+        client = _get_client()
+        try:
+            for attempt_model in models_to_try:
+                last_model = attempt_model
+                give_up = False
+                for retry in range(settings.llm_max_retries + 1):
+                    try:
+                        text, in_tok, out_tok = await _call_once(
+                            client, model=attempt_model, system=system,
+                            user=user, max_tokens=max_tokens, timeout_s=timeout_s,
+                        )
+                    except _RETRYABLE as e:
+                        last_exc = e
+                        if retry < settings.llm_max_retries:
+                            await asyncio.sleep(_RETRY_BASE_S * (2 ** retry))
+                            continue
+                        break  # retryable exhausted for this model → try fallback
+                    except Exception as e:  # noqa: BLE001
+                        # Non-retryable provider error (4xx/auth) OR an
+                        # unexpected error: do NOT burn a fallback call, and
+                        # never let it escape unmetered. (CancelledError is a
+                        # BaseException and correctly propagates.)
+                        last_exc = e
+                        give_up = True
+                        break
+                    # success
+                    latency_ms = int((time.monotonic() - t0) * 1000)
+                    cost = _safe_cost(attempt_model, in_tok, out_tok)
+                    record_llm_call(
+                        user_id=user_id, tier=effective_tier, purpose=purpose,
+                        prompt_slug=prompt_slug, prompt_version=prompt_version,
+                        model=attempt_model, input_tokens=in_tok,
+                        output_tokens=out_tok, cost_usd=cost, latency_ms=latency_ms,
+                        outcome="ok", correlation_id=correlation_id,
                     )
-                except _RETRYABLE as e:
-                    last_exc = e
-                    if retry < settings.llm_max_retries:
-                        await asyncio.sleep(_RETRY_BASE_S * (2 ** retry))
-                        continue
-                    break  # exhausted retries for this model → try fallback
-                except LlmInvocationError as e:
-                    last_exc = e
-                    break  # non-retryable for this model → try fallback
-                # success
-                latency_ms = int((time.monotonic() - t0) * 1000)
-                cost = compute_cost_usd(attempt_model, in_tok, out_tok)
-                record_llm_call(
-                    user_id=user_id, tier=effective_tier, purpose=purpose,
-                    prompt_slug=prompt_slug, prompt_version=prompt_version,
-                    model=attempt_model, input_tokens=in_tok, output_tokens=out_tok,
-                    cost_usd=cost, latency_ms=latency_ms, outcome="ok",
-                    correlation_id=correlation_id,
-                )
-                return GatewayResult(
-                    text=text, model=attempt_model, input_tokens=in_tok,
-                    output_tokens=out_tok, cost_usd=cost, outcome="ok",
-                    latency_ms=latency_ms,
-                )
+                    return GatewayResult(
+                        text=text, model=attempt_model, input_tokens=in_tok,
+                        output_tokens=out_tok, cost_usd=cost, outcome="ok",
+                        latency_ms=latency_ms,
+                    )
+                if give_up:
+                    break  # non-retryable / unexpected → no fallback attempt
+        finally:
+            aclose = getattr(client, "aclose", None)
+            if aclose is not None:
+                await aclose()
 
-    # all models + retries exhausted → one error row, then raise
+    # retries (+ fallback for retryable failures) exhausted → one error row
     latency_ms = int((time.monotonic() - t0) * 1000)
     record_llm_call(
         user_id=user_id, tier=effective_tier, purpose=purpose,
@@ -306,9 +320,18 @@ async def complete(
         latency_ms=latency_ms, outcome="error", correlation_id=correlation_id,
     )
     raise LlmInvocationError(
-        f"LLM call failed after retries/fallback (purpose={purpose} "
-        f"slug={prompt_slug}): {last_exc}"
+        f"LLM call failed (purpose={purpose} slug={prompt_slug}): {last_exc}"
     ) from last_exc
+
+
+def _safe_cost(model: str, input_tokens: Any, output_tokens: Any) -> Decimal:
+    """Cost from the price table, defended against malformed token counts so a
+    weird ``usage`` shape can never skip the metering row."""
+    try:
+        return compute_cost_usd(model, max(0, int(input_tokens)), max(0, int(output_tokens)))
+    except Exception:  # noqa: BLE001
+        logger.warning("cost computation failed for model %r — recording 0", model)
+        return Decimal("0")
 
 
 def _acquire(g_sem: asyncio.Semaphore, c_sem: asyncio.Semaphore, purpose: str):
@@ -319,7 +342,11 @@ def _acquire(g_sem: asyncio.Semaphore, c_sem: asyncio.Semaphore, purpose: str):
     @asynccontextmanager
     async def _ctx():
         if purpose == "coach":
-            async with c_sem, g_sem:
+            # Global first, then the coach sub-pool: caps coach at
+            # min(global, coach) without holding the scarce coach slot while
+            # blocked on the global pool. No reverse-order acquirer exists, so
+            # no two-lock deadlock.
+            async with g_sem, c_sem:
                 yield
         else:
             async with g_sem:
@@ -333,7 +360,9 @@ def _fake_result(
     user_id: Any | None, tier: str | None, correlation_id: str | None,
 ) -> GatewayResult:
     text = fake_response_text(purpose=purpose, prompt_slug=prompt_slug)
-    in_tok, out_tok = 0, len(text) // 4
+    # Zero tokens so fake rows never pollute real token-volume dashboards
+    # (the docker dev stack runs LLM_FAKE=1 against the shared DB).
+    in_tok, out_tok = 0, 0
     record_llm_call(
         user_id=user_id, tier=tier, purpose=purpose, prompt_slug=prompt_slug,
         prompt_version=prompt_version, model=_FAKE_MODEL, input_tokens=in_tok,

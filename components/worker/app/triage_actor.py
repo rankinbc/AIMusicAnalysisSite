@@ -41,7 +41,7 @@ from .llm import gateway
 from .llm.gateway import LlmError
 from .verdict_lib.flatten_analysis import flatten
 from .verdict_lib.json_extraction import extract_json_object
-from .verdict_lib.prompt_loader import load_triage
+from .verdict_lib.prompt_loader import load_triage, load_triage_model
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +107,7 @@ def run_triage(analysis_id: str) -> None:
             purpose="triage",
             prompt_slug="triage",
             prompt_version=triage_version,
+            model=load_triage_model(),  # None → gateway default
             user_id=caller_id,
             correlation_id=analysis_id,
             timeout_s=120,
@@ -119,7 +120,7 @@ def run_triage(analysis_id: str) -> None:
     try:
         obj = extract_json_object(result.text)
         plan = SpecialistRoutingPlan(**obj)
-    except (ValueError, Exception) as exc:
+    except Exception as exc:  # noqa: BLE001 — any parse/validation failure → skip
         logger.info("run_triage: invalid plan for %s: %s", analysis_id, exc)
         return
 
