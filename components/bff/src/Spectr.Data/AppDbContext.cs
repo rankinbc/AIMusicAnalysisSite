@@ -24,6 +24,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Verdict> Verdicts => Set<Verdict>();
     public DbSet<VerdictUserState> VerdictUserStates => Set<VerdictUserState>();
     public DbSet<PromptVersion> PromptVersions => Set<PromptVersion>();
+    public DbSet<LlmCall> LlmCalls => Set<LlmCall>();
 
     // Listen
     public DbSet<SessionNote> SessionNotes => Set<SessionNote>();
@@ -93,6 +94,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         builder.Entity<Verdict>().HasIndex(v => v.AnalysisId);
         builder.Entity<Verdict>().HasIndex(v => new { v.AnalysisId, v.Specialist });
         builder.Entity<AnalysisJob>().HasIndex(j => new { j.UserId, j.Status });
+        // LLM spend dashboards (Epic 10) query by time and by user.
+        builder.Entity<LlmCall>().HasIndex(c => c.CreatedAt);
+        builder.Entity<LlmCall>().HasIndex(c => new { c.UserId, c.CreatedAt });
         builder.Entity<SessionNote>().HasIndex(n => new { n.VersionId, n.UserId });
         builder.Entity<TrackComment>().HasIndex(c => c.TargetShareToken);
         builder.Entity<TrackBookmark>().HasIndex(b => b.UserId);
@@ -114,6 +118,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         builder.Entity<VerdictUserState>().Property(s => s.CreatedAt).HasDefaultValueSql("now()");
         builder.Entity<VerdictUserState>().Property(s => s.UpdatedAt).HasDefaultValueSql("now()");
         builder.Entity<PromptVersion>().Property(p => p.UpdatedAt).HasDefaultValueSql("now()");
+        builder.Entity<LlmCall>().Property(c => c.CreatedAt).HasDefaultValueSql("now()");
         builder.Entity<SessionNote>().Property(n => n.CreatedAt).HasDefaultValueSql("now()");
         builder.Entity<SessionNote>().Property(n => n.UpdatedAt).HasDefaultValueSql("now()");
         builder.Entity<ReferenceTrack>().Property(r => r.CreatedAt).HasDefaultValueSql("now()");

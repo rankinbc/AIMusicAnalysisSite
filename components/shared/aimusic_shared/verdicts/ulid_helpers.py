@@ -11,6 +11,10 @@ def new_fix_id() -> str:
     return f"fix_{ULID()}"
 
 
+def new_llm_call_id() -> str:
+    return f"llm_{ULID()}"
+
+
 def is_verdict_id(s: str) -> bool:
     return s.startswith("vrd_") and len(s) == 30  # 4 prefix + 26 ulid
 

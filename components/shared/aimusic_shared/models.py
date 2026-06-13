@@ -19,6 +19,7 @@ from sqlalchemy import (
     Index,
     Integer,
     LargeBinary,
+    Numeric,
     SmallInteger,
     String,
     UniqueConstraint,
@@ -330,6 +331,44 @@ class PromptVersion(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         "updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class LlmCall(Base):
+    """Per-call LLM metering (story 1.3, AR7). The worker's gateway is the sole
+    writer (one row per call, every outcome). Mirrors the EF ``LlmCall`` entity;
+    the BFF maps it read-only for operator dashboards."""
+
+    __tablename__ = "llm_calls"
+    __table_args__ = (
+        Index("ix_llm_calls_created_at", "created_at"),
+        Index("ix_llm_calls_user_id_created_at", "user_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column("id", String(40), primary_key=True)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "user_id", UUID(as_uuid=True), nullable=True
+    )
+    tier: Mapped[Optional[str]] = mapped_column("tier", String(20), nullable=True)
+    purpose: Mapped[str] = mapped_column("purpose", String(20), nullable=False)
+    prompt_slug: Mapped[Optional[str]] = mapped_column("prompt_slug", String(64), nullable=True)
+    prompt_version: Mapped[Optional[str]] = mapped_column(
+        "prompt_version", String(120), nullable=True
+    )
+    model: Mapped[str] = mapped_column("model", String(60), nullable=False)
+    input_tokens: Mapped[int] = mapped_column("input_tokens", Integer, nullable=False, default=0)
+    output_tokens: Mapped[int] = mapped_column("output_tokens", Integer, nullable=False, default=0)
+    cost_usd: Mapped[Any] = mapped_column("cost_usd", Numeric(12, 6), nullable=False, default=0)
+    price_table_version: Mapped[Optional[str]] = mapped_column(
+        "price_table_version", String(20), nullable=True
+    )
+    latency_ms: Mapped[int] = mapped_column("latency_ms", Integer, nullable=False, default=0)
+    outcome: Mapped[str] = mapped_column("outcome", String(20), nullable=False)
+    correlation_id: Mapped[Optional[str]] = mapped_column(
+        "correlation_id", String(64), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
 

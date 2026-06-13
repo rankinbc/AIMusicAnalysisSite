@@ -66,6 +66,7 @@ TRIAGE_FILENAME = "Triage"
 
 _FRONTMATTER_RE = re.compile(r"\A---\s*\n(?P<body>.*?)\n---\s*\n", re.DOTALL)
 _VERSION_RE = re.compile(r"^version:\s*(?P<v>\S+)\s*$", re.MULTILINE)
+_MODEL_RE = re.compile(r"^model:\s*(?P<m>\S+)\s*$", re.MULTILINE)
 
 
 def parse_version_frontmatter(content: str) -> tuple[str, str]:
@@ -81,6 +82,19 @@ def parse_version_frontmatter(content: str) -> tuple[str, str]:
     vm = _VERSION_RE.search(fm)
     version = vm.group("v") if vm else "0.0.0"
     return version, content[m.end():]
+
+
+def parse_model_frontmatter(content: str) -> str | None:
+    """Extract an optional ``model:`` pin from frontmatter (NFR24).
+
+    Returns the model id, or ``None`` when unset (caller falls back to the
+    gateway's configured default).
+    """
+    m = _FRONTMATTER_RE.match(content)
+    if not m:
+        return None
+    mm = _MODEL_RE.search(m.group("body"))
+    return mm.group("m") if mm else None
 
 
 # ── prompt-version pinning (FR48) ──────────────────────────────────────────
@@ -141,8 +155,9 @@ def _resolve_pin(slug: str) -> str | None:
     return pinned
 
 
-def _load_pinned_archive(name: str, slug: str, pinned: str) -> tuple[str, str] | None:
-    """Read ``versions/{name}@{pinned}.md``; None on any failure (fail-open)."""
+def _load_pinned_archive_content(name: str, slug: str, pinned: str) -> str | None:
+    """Raw content of ``versions/{name}@{pinned}.md``; None on any failure
+    (fail-open)."""
     archived = PROMPTS_DIR / "versions" / f"{name}@{pinned}.md"
     try:
         content = archived.read_text(encoding="utf-8")
@@ -161,26 +176,21 @@ def _load_pinned_archive(name: str, slug: str, pinned: str) -> tuple[str, str] |
             archived, exc,
         )
         return None
-    version, body = parse_version_frontmatter(content)
+    version, _ = parse_version_frontmatter(content)
     if version != pinned:
         logger.warning(
             "archive %s frontmatter says version %s but the pin is %s — "
             "serving the archive; fix the file's frontmatter or its name",
             archived, version, pinned,
         )
-    return version, body
+    return content
 
 
-def load_prompt(slug: str) -> tuple[str, str]:
-    """Returns ``(version, body)`` for a specialist prompt by slug.
-
-    Honors a ``prompt_versions`` pin: when the pinned version differs from
-    the live file's frontmatter, the archived copy at
-    ``versions/{PascalName}@{pinned}.md`` is served instead (fail-open to the
-    live file if the archive is missing/unreadable). The pin is consulted
-    before the live file so a valid pinned archive can still serve when the
-    live file is absent.
-    """
+def _served_prompt_content(slug: str) -> str:
+    """Raw content of the prompt file that should serve for ``slug``,
+    pin-aware. The pin is consulted before the live file so a valid pinned
+    archive can still serve when the live file is absent (fail-open to live
+    when the archive is missing/unreadable)."""
     if slug not in SLUG_TO_FILENAME:
         raise KeyError(f"unknown specialist slug: {slug!r}")
     name = SLUG_TO_FILENAME[slug]
@@ -188,21 +198,30 @@ def load_prompt(slug: str) -> tuple[str, str]:
 
     pinned = _resolve_pin(slug)
     if pinned:
-        live_version: str | None = None
         if path.exists():
-            live_version, live_body = parse_version_frontmatter(
-                path.read_text(encoding="utf-8")
-            )
+            live_content = path.read_text(encoding="utf-8")
+            live_version, _ = parse_version_frontmatter(live_content)
             if pinned == live_version:
-                return live_version, live_body
-        archive = _load_pinned_archive(name, slug, pinned)
-        if archive is not None:
-            return archive
+                return live_content
+        archived = _load_pinned_archive_content(name, slug, pinned)
+        if archived is not None:
+            return archived
         # fall through to the live file (fail-open)
 
     if not path.exists():
         raise FileNotFoundError(f"prompt file not found: {path}")
-    return parse_version_frontmatter(path.read_text(encoding="utf-8"))
+    return path.read_text(encoding="utf-8")
+
+
+def load_prompt(slug: str) -> tuple[str, str]:
+    """Returns ``(version, body)`` for a specialist prompt by slug (pin-aware)."""
+    return parse_version_frontmatter(_served_prompt_content(slug))
+
+
+def load_prompt_model(slug: str) -> str | None:
+    """Optional model pin from a specialist prompt's frontmatter (NFR24),
+    pin-aware. ``None`` → caller uses the gateway's configured default."""
+    return parse_model_frontmatter(_served_prompt_content(slug))
 
 
 def load_triage() -> tuple[str, str]:

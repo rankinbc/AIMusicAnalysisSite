@@ -33,14 +33,11 @@ from aimusic_shared.verdicts.scoring import compute_priority_score
 from aimusic_shared.verdicts.ulid_helpers import new_fix_id, new_verdict_id
 
 from .db_sync import SessionFactory
+from .llm import gateway
+from .llm.gateway import LlmError
 from .verdict_lib.flatten_analysis import flatten
 from .verdict_lib.json_extraction import extract_json_object
-from .verdict_lib.llm_client_sync import (
-    LLMInvocationError,
-    LLMTimeoutError,
-    llm_call_sync,
-)
-from .verdict_lib.prompt_loader import load_prompt
+from .verdict_lib.prompt_loader import load_prompt, load_prompt_model
 from .verdict_lib.validator import validate_verdict
 
 # Verdict ORM row (separate module-level reference so we don't shadow the
@@ -191,20 +188,46 @@ def run_specialist(analysis_id: str, slug: str, user_id: str) -> None:
         _persist_fail_marker(aid, slug, f"Prompt missing: {exc}")
         return
 
-    # ── Phase C: LLM call ──────────────────────────────────────────────────
+    # ── Phase C: LLM call (via the metered gateway) ────────────────────────
+    # The gateway owns transport retries + model fallback; the two-attempt
+    # loop here is only for a malformed-JSON re-prompt (RETRY_SUFFIX), which
+    # is distinct from a transport failure.
     user_msg = _build_user_message(flattened, focus="")
+    pinned_model = load_prompt_model(slug)  # None → gateway default
+    try:
+        caller_id: uuid.UUID | None = uuid.UUID(user_id)
+    except (ValueError, TypeError, AttributeError):
+        caller_id = None
+
     parsed: dict[str, Any] | None = None
+    used_model = "unknown"
     last_err: Exception | None = None
 
     for attempt in (1, 2):
         msg = user_msg if attempt == 1 else user_msg + RETRY_SUFFIX
         try:
-            raw_text = llm_call_sync(system=prompt_body, user=msg, timeout_s=120)
-            parsed = extract_json_object(raw_text)
-            break
-        except (LLMTimeoutError, LLMInvocationError, ValueError) as exc:
+            result = gateway.complete_sync(
+                system=prompt_body,
+                user=msg,
+                purpose="specialist",
+                prompt_slug=slug,
+                prompt_version=prompt_version,
+                model=pinned_model,
+                user_id=caller_id,
+                correlation_id=analysis_id,
+                timeout_s=120,
+            )
+        except LlmError as exc:
             last_err = exc
-            logger.info("specialist %s attempt %d failed: %s", slug, attempt, exc)
+            logger.info("specialist %s LLM call failed: %s", slug, exc)
+            break  # gateway already retried transport — re-prompt won't help
+        used_model = result.model
+        try:
+            parsed = extract_json_object(result.text)
+            break
+        except ValueError as exc:
+            last_err = exc
+            logger.info("specialist %s attempt %d: bad JSON: %s", slug, attempt, exc)
             continue
 
     if parsed is None:
@@ -225,7 +248,7 @@ def run_specialist(analysis_id: str, slug: str, user_id: str) -> None:
                 track_id=track_id,
                 slug=slug,
                 prompt_version=f"{slug}@{prompt_version}",
-                model="claude-cli",
+                model=used_model,
             )
         except Exception as exc:
             logger.info("hydrate failed for one verdict (slug=%s): %s", slug, exc)

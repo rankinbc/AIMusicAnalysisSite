@@ -37,13 +37,10 @@ from aimusic_shared.models import Analysis
 from aimusic_shared.verdicts.models import SpecialistRoutingPlan
 
 from .db_sync import SessionFactory
+from .llm import gateway
+from .llm.gateway import LlmError
 from .verdict_lib.flatten_analysis import flatten
 from .verdict_lib.json_extraction import extract_json_object
-from .verdict_lib.llm_client_sync import (
-    LLMInvocationError,
-    LLMTimeoutError,
-    llm_call_sync,
-)
 from .verdict_lib.prompt_loader import load_triage
 
 logger = logging.getLogger(__name__)
@@ -87,6 +84,7 @@ def run_triage(analysis_id: str) -> None:
                             analysis_id)
                 return
             raw_final = analysis.final_json
+            caller_id = analysis.user_id  # for the metering row
     except Exception:
         logger.exception("run_triage Phase A failed for %s", analysis_id)
         return
@@ -95,22 +93,31 @@ def run_triage(analysis_id: str) -> None:
 
     # ── C: load prompt ─────────────────────────────────────────────────────
     try:
-        _version, prompt_body = load_triage()
+        triage_version, prompt_body = load_triage()
     except (KeyError, FileNotFoundError):
         logger.exception("run_triage: triage prompt missing")
         return
 
-    # ── D: LLM call ────────────────────────────────────────────────────────
+    # ── D: LLM call (via the metered gateway) ──────────────────────────────
     user_msg = _build_user_message(flattened)
     try:
-        raw_text = llm_call_sync(system=prompt_body, user=user_msg, timeout_s=120)
-    except (LLMTimeoutError, LLMInvocationError) as exc:
+        result = gateway.complete_sync(
+            system=prompt_body,
+            user=user_msg,
+            purpose="triage",
+            prompt_slug="triage",
+            prompt_version=triage_version,
+            user_id=caller_id,
+            correlation_id=analysis_id,
+            timeout_s=120,
+        )
+    except LlmError as exc:
         logger.info("run_triage: LLM call failed for %s: %s", analysis_id, exc)
         return
 
     # ── E: parse + validate ────────────────────────────────────────────────
     try:
-        obj = extract_json_object(raw_text)
+        obj = extract_json_object(result.text)
         plan = SpecialistRoutingPlan(**obj)
     except (ValueError, Exception) as exc:
         logger.info("run_triage: invalid plan for %s: %s", analysis_id, exc)

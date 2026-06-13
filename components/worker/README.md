@@ -73,12 +73,16 @@ components/worker/
 │   ├── __init__.py
 │   ├── dramatiq_app.py    # Broker wiring + actor module import
 │   ├── tasks_dramatiq.py  # analyze_audio_job actor (3-phase tx pattern)
-│   ├── verdict_actor.py   # run_specialist actor
+│   ├── verdict_actor.py   # run_specialist actor (calls llm.gateway)
 │   ├── triage_actor.py    # run_triage actor (Triage routing plan)
+│   ├── llm/
+│   │   ├── gateway.py          # SOLE anthropic SDK touchpoint — metered calls
+│   │   ├── settings.py         # pydantic-settings (keys, concurrency, models)
+│   │   ├── pricing.py          # versioned price table → cost_usd
+│   │   └── fake.py             # LLM_FAKE=1 canned replay
 │   ├── verdict_lib/
 │   │   ├── prompt_loader.py    # SLUG_TO_FILENAME mapping + frontmatter parse
-│   │   ├── llm_client_sync.py  # claude CLI subprocess wrapper
-│   │   ├── json_extraction.py  # tolerant JSON extraction from CLI stdout
+│   │   ├── json_extraction.py  # tolerant JSON extraction from model output
 │   │   ├── validator.py        # Pydantic + severity downgrade
 │   │   └── flatten_analysis.py # final_json → prompt-ready context
 │   └── db_sync.py         # Sync SQLAlchemy session factory (actors are sync)
