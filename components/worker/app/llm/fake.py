@@ -39,27 +39,31 @@ def _fake_triage_text() -> str:
     })
 
 
+# Story 1.5 code review E-H3 + story 1.6 P8: single source of truth for
+# the fake coach body so the v1 (`_fake_coach_text`) and v2 streaming
+# (`fake_coach_stream_chunks`) paths can never drift. Body intentionally
+# numeric-free so ``answer_makes_numeric_claim_without_evidence`` doesn't
+# demote it; empty evidence keeps the placeholder honest.
+_FAKE_COACH_PROSE = (
+    "[FAKE] LLM_FAKE replay — this is a placeholder coach reply for "
+    "local development. Real answers cite measured values from your "
+    "analysis."
+)
+_FAKE_COACH_EVIDENCE_JSON = (
+    '{"kind":"answer","evidence":[],"refusal_reason":null}'
+)
+
+
 def _fake_coach_text() -> str:
     """Story 1.5 code review E-H3: without this branch the coach actor
     received specialist-shaped JSON in ``LLM_FAKE=1`` mode, the Pydantic
     schema rejected it, and every coach reply persisted as
     ``status="error"`` — breaking AR41's end-to-end-with-zero-spend
     guarantee for the dev/CI default.
-
-    The fake answer carries NO evidence chip (an answer with an unresolved
-    chip would be dropped by ``resolve_evidence`` anyway; an empty chip
-    list keeps the body honest about being a placeholder). The body is
-    intentionally numeric-free so the
-    ``answer_makes_numeric_claim_without_evidence`` heuristic doesn't
-    demote it.
     """
     return json.dumps({
         "kind": "answer",
-        "body": (
-            "[FAKE] LLM_FAKE replay — this is a placeholder coach reply for "
-            "local development. Real answers cite measured values from your "
-            "analysis."
-        ),
+        "body": _FAKE_COACH_PROSE,
         "evidence": [],
         "refusal_reason": None,
     })
@@ -72,3 +76,30 @@ def fake_response_text(*, purpose: str, prompt_slug: str | None) -> str:
     if purpose == "coach":
         return _fake_coach_text()
     return _fake_specialist_text(prompt_slug or "unknown")
+
+
+def fake_coach_stream_chunks() -> list[str]:
+    """Deterministic delta sequence for the streaming fake coach path
+    (AR41 + story 1.6 AC2 — ≥3 token frames per fake reply).
+
+    Splits the prose into 5 deltas, then emits the sentinel + evidence
+    JSON as further deltas so the consumer's ``StreamSplitter`` sees the
+    full v2 wire format. The non-streaming :func:`fake_response_text`
+    (used by batch ``complete_sync``) keeps the v1 single-JSON-object
+    output — it predates v2 and is only exercised when a non-coach test
+    or a legacy ``complete_sync`` consumer hits coach purpose.
+    """
+    prose = _FAKE_COACH_PROSE
+    # Split prose roughly evenly into 5 chunks at word boundaries.
+    words = prose.split(" ")
+    n_chunks = 5
+    chunk_size = max(1, -(-len(words) // n_chunks))  # ceil divide
+    prose_chunks: list[str] = []
+    for i in range(0, len(words), chunk_size):
+        slice_words = words[i:i + chunk_size]
+        # Preserve inter-word space; trailing chunk gets no extra space.
+        text = " ".join(slice_words)
+        if i + chunk_size < len(words):
+            text += " "
+        prose_chunks.append(text)
+    return prose_chunks + ["\n<<<EVIDENCE>>>\n", _FAKE_COACH_EVIDENCE_JSON]

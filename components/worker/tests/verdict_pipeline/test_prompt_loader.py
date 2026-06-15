@@ -97,8 +97,14 @@ def test_load_coach_grounded_model_no_pin_returns_none(tmp_path: Path, monkeypat
 
 def test_live_coach_prompt_loads():
     """The on-disk CoachGrounded.md must parse — guards against a syntax
-    typo in the frontmatter slipping into production."""
+    typo in the frontmatter slipping into production. Story 1.6: bumped to
+    v2.0.0 (streamable two-section format with the ``<<<EVIDENCE>>>``
+    sentinel between prose body and JSON evidence)."""
     version, body = load_coach_grounded()
-    assert version == "1.0.0"
+    assert version == "2.0.0"
     assert "AI Mix Coach" in body
+    # The v2 sentinel contract must be visible in the prompt body so the
+    # model emits it deterministically (and so any prompt edit that
+    # accidentally drops the contract surfaces here, not in production).
+    assert "<<<EVIDENCE>>>" in body
     assert load_coach_grounded_model() == "claude-sonnet-4-5"

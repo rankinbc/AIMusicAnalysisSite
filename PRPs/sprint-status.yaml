@@ -2,6 +2,7 @@
 # last_updated: 2026-06-15
 # project: Spectr
 # story 1-5 transitioned: backlog → ready-for-dev → in-progress → review → done (code-review workflow, 2026-06-15)
+# story 1-6 transitioned: backlog → ready-for-dev → in-progress → review → done (code-review workflow, 2026-06-15)
 # project_key: NOKEY
 # tracking_system: file-system
 # story_location: PRPs/stories
@@ -41,6 +42,7 @@
 generated: 2026-06-12
 last_updated: 2026-06-15
 project: Spectr
+# (re-updated 2026-06-15: 1-6 → done after code review)
 project_key: NOKEY
 tracking_system: file-system
 story_location: PRPs/stories
@@ -52,7 +54,7 @@ development_status:
   1-3-anthropic-sdk-gateway-with-per-call-metering: done
   1-4-llm-budgets-circuit-breaker-and-degraded-verdicts: done
   1-5-grounded-coach-conversations: done
-  1-6-coach-streaming-relay: backlog
+  1-6-coach-streaming-relay: done
   1-7-design-system-foundation-fidelity-phase-a: backlog
   1-8-coach-chat-ui-with-grounding-affordances: backlog
   1-9-per-analysis-coach-caps: backlog

@@ -1,35 +1,43 @@
 """Dramatiq actor: generate one grounded coach reply (story 1.5 / AR9 / AR10).
 
-Wire format (2 string args, matches the BFF's ``DramatiqJobQueue`` envelope):
+Wire format (3 string args, matches the BFF's ``DramatiqJobQueue`` envelope):
 
-    coach_reply(conversation_id: str, message_id: str)
+    coach_reply(conversation_id: str, user_message_id: str, assistant_message_id: str)
 
-``message_id`` is the UUID of the pending **assistant** row the BFF inserted
-on POST; the user-turn row is already persisted. The actor only loads + updates
-this single assistant row.
+``assistant_message_id`` is the UUID of the pending assistant row the BFF
+inserted on POST; ``user_message_id`` is the user-turn row in the same
+conversation. The actor only loads + updates the assistant row.
 
-Lifecycle:
+Lifecycle (story 1.5 baseline; story 1.6 swaps Phase D + E onto streaming):
 
-  A. Load. Assistant row + conversation + analysis. Idempotency: bail
-     unless ``status == "pending"`` (a dramatiq retry must not double-charge).
+  A. Load. Assistant row + user row + conversation + analysis. Idempotency:
+     bail unless ``status == "pending"`` (a dramatiq retry must not double-charge).
   A.1 Degraded short-circuit. If ``analysis.degradation_notice is not None``
       → mark the row ``refused`` with the UX-DR17 offline line.
   B. Build context bundle. flatten(analysis.final_json) + top verdicts +
      optional .als summary + last-10 conversation tail.
   C. Build user-turn. User text never enters ``system=``; it lands in
-     ``user=`` between triple-quoted delimiters (NFR12 injection defense).
-  D. Gateway call (``purpose="coach"``). Catch ``LlmBudgetExceeded`` → mark
-     row ``refused`` with offline line. Catch ``LlmError`` → mark row
-     ``error`` with generic message.
-  E. Parse + validate. ``extract_json_object`` → ``CoachReplyPayload``.
-     Numeric-without-evidence rejection downgrades to ``error``.
+     ``user=`` between ``<user_input>…</user_input>`` delimiters (NFR12).
+  D. Stream gateway call (``purpose="coach"``, story 1.6). Each delta
+     feeds the v2 sentinel splitter; prose chunks publish as ``token``
+     frames on ``coach:{cid}:{mid}``. Catch ``LlmBudgetExceeded`` → publish
+     ``error(code="coach_offline")`` + mark row ``refused``. Catch
+     ``LlmError`` → publish ``error(code="coach_error")`` + mark row
+     ``error``.
+  E. End-of-stream parse + validate (v2 contract). ``splitter.finish()``
+     yields (prose, evidence_json, saw_sentinel). When the sentinel was
+     missed → persist a partial answer (cancel-mid-stream branch). When
+     present → parse Section 2 JSON, re-inject ``body`` = prose, run
+     ``CoachReplyPayload`` + numeric-without-evidence rejection.
   F. Resolve evidence. Drop unresolvable citations.
   G. Persist. UPDATE the assistant row with status + content + evidence
-     + refusal_reason + llm_call_id + completed_at.
+     + refusal_reason + llm_call_id + completed_at. Publish ``done`` /
+     ``refusal`` frame.
 
-Failures in any phase mark the row ``error`` (never raise; the dramatiq
-retry policy is ``max_retries=1`` and a real retry just re-runs the LLM
-call which is wasted spend in most failure modes).
+Failures in any phase mark the row ``error`` AND publish an ``error``
+frame so SSE consumers never see a silent dead stream (story 1.6 AR9
+"never a silent dead stream"). The dramatiq retry policy is
+``max_retries=1``; the Phase-A status check makes a retry a no-op.
 """
 from __future__ import annotations
 
@@ -41,11 +49,14 @@ from typing import Any
 
 import dramatiq
 
+from .coach_lib.cancel import cancel_check_for
 from .coach_lib.context import build_context_bundle, resolve_evidence
 from .coach_lib.payload import (
     CoachReplyPayload,
     answer_makes_numeric_claim_without_evidence,
 )
+from .coach_lib.stream_parser import StreamSplitter
+from .coach_lib.stream_publisher import CoachStreamPublisher
 from .llm import gateway
 from .llm.gateway import LlmBudgetExceeded, LlmError
 from .verdict_lib.flatten_analysis import flatten
@@ -157,6 +168,34 @@ def _mark_complete(
         logger.exception("mark_complete failed for message %s", message_id)
 
 
+def _mark_complete_partial(
+    message_id: uuid.UUID, *, body: str, llm_call_id: str | None,
+) -> None:
+    """Story 1.6 cancel-mid-stream branch — persist the partial prose we
+    streamed before the SSE consumer disconnected. Status = ``complete``
+    with empty evidence (no Section 2 was emitted, so nothing to cite).
+    Idempotent — only updates if still ``pending``.
+    """
+    try:
+        from .db_sync import SessionFactory  # noqa: PLC0415 — lazy DB import
+        from aimusic_shared.models import CoachMessage  # noqa: PLC0415
+
+        with SessionFactory.begin() as s:
+            row = s.get(CoachMessage, message_id)
+            if row is None or row.status != "pending":
+                return
+            row.status = "complete"
+            row.content = body
+            row.evidence = []
+            row.refusal_reason = None
+            row.llm_call_id = llm_call_id
+            row.completed_at = _utc_now()
+    except Exception:
+        logger.exception(
+            "mark_complete_partial failed for message %s", message_id,
+        )
+
+
 # ── prompt assembly ────────────────────────────────────────────────────────
 
 def _build_user_turn(
@@ -224,6 +263,14 @@ def coach_reply(
         conversation_id, user_message_id, assistant_message_id,
     )
 
+    # Story 1.6 code review P7: construct the publisher BEFORE Phase A so
+    # every early-exit branch (DB hiccup, missing row, degraded analysis,
+    # empty question) can publish a terminal SSE frame. An SSE consumer
+    # racing /stream during Phase A would otherwise hit the 30 s idle
+    # fallback before seeing any terminal frame. Publisher only touches
+    # Redis on the first publish call (lazy module client).
+    publisher = CoachStreamPublisher(conversation_id=cid, message_id=mid)
+
     # ── Phase A: load assistant row + user row + conversation + analysis ──
     try:
         from sqlalchemy import select  # noqa: PLC0415 — lazy SA usage
@@ -263,6 +310,7 @@ def coach_reply(
                     "coach_reply: user message %s missing or wrong role",
                     user_message_id,
                 )
+                publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
                 _mark_error(mid, body=COACH_GENERIC_ERROR_BODY)
                 return
             user_question = user_row.content
@@ -270,12 +318,14 @@ def coach_reply(
             conversation = s.get(Conversation, cid)
             if conversation is None:
                 logger.warning("coach_reply: conversation %s missing", conversation_id)
+                publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
                 _mark_error(mid, body=COACH_GENERIC_ERROR_BODY)
                 return
             analysis = s.get(Analysis, conversation.analysis_id)
             if analysis is None:
                 logger.warning("coach_reply: analysis %s missing",
                                conversation.analysis_id)
+                publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
                 _mark_error(mid, body=COACH_GENERIC_ERROR_BODY)
                 return
 
@@ -303,24 +353,27 @@ def coach_reply(
     except Exception:
         logger.exception("coach_reply Phase A failed for assistant %s",
                          assistant_message_id)
+        publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
         _mark_error(mid)
         return
 
     # ── Phase A.1: degraded short-circuit ─────────────────────────────────
     if degradation_notice is not None:
         logger.info("coach_reply: analysis is degraded, short-circuiting")
+        publisher.refusal(reason="coach_offline", body=COACH_OFFLINE_BODY)
         _mark_refused(mid, refusal_reason="coach_offline", body=COACH_OFFLINE_BODY)
         return
 
     if not user_question.strip():
         logger.warning("coach_reply: empty user question on %s", user_message_id)
+        publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
         _mark_error(mid)
         return
 
-    # Story 1.5 code review E-H1: any unexpected failure in Phases B-G
-    # must not leave the assistant row stuck in `pending` (which renders as
-    # a perpetual spinner with no error message). The catch-all here pairs
-    # with the per-phase catches below for known failure modes.
+    # Story 1.5 code review E-H1 + story 1.6: any unexpected failure in
+    # Phases B-G must not leave the assistant row stuck in `pending`
+    # (perpetual spinner) AND must publish a terminal SSE frame so
+    # subscribers never see a silent dead stream (AC4 / AR9).
     try:
         # ── Phase B: build context bundle ──────────────────────────────────
         flattened = flatten(raw_final if isinstance(raw_final, dict) else {})
@@ -336,14 +389,18 @@ def coach_reply(
             version, system_body = load_coach_grounded()
         except FileNotFoundError:
             logger.exception("coach_reply: coach prompt file missing")
+            publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
             _mark_error(mid)
             return
         model_pin = load_coach_grounded_model()
         user_turn = _build_user_turn(bundle, user_question)
 
-        # ── Phase D: gateway call ──────────────────────────────────────────
+        # ── Phase D: stream gateway call (story 1.6) ───────────────────────
+        splitter = StreamSplitter()
+        cancel_check = cancel_check_for(mid)
+        final_event_result: Any | None = None
         try:
-            result = gateway.complete_sync(
+            for ev in gateway.stream_complete_sync(
                 system=system_body,
                 user=user_turn,
                 purpose="coach",
@@ -353,7 +410,14 @@ def coach_reply(
                 user_id=user_id,
                 correlation_id=str(cid),
                 timeout_s=120,
-            )
+                cancel_check=cancel_check,
+            ):
+                if ev.kind == "delta":
+                    prose_chunk = splitter.feed(ev.text)
+                    if prose_chunk:
+                        publisher.token(prose_chunk)
+                elif ev.kind == "final":
+                    final_event_result = ev.result
         except LlmBudgetExceeded as exc:
             logger.info(
                 "coach_reply: budget/breaker hit (reason=%s) — refusing as offline",
@@ -363,6 +427,7 @@ def coach_reply(
             # to the llm_calls row the gateway wrote (if any). For
             # LlmBudgetExceeded the gateway raises PRE-call so there is no
             # row to link — exc.llm_call_id is None and that's correct.
+            publisher.error(code="coach_offline", message=COACH_OFFLINE_BODY)
             _mark_refused(
                 mid, refusal_reason="coach_offline", body=COACH_OFFLINE_BODY,
                 llm_call_id=exc.llm_call_id,
@@ -373,24 +438,69 @@ def coach_reply(
             # so forensics can join the user-visible error to the metering row.
             logger.info("coach_reply: LLM call failed for %s: %s",
                         assistant_message_id, exc)
+            publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
             _mark_error(mid, llm_call_id=exc.llm_call_id)
             return
 
-        # ── Phase E: parse + validate ──────────────────────────────────────
-        try:
-            parsed = extract_json_object(result.text)
-        except ValueError:
-            logger.info("coach_reply: extract_json_object failed for %s",
-                        assistant_message_id)
-            _mark_error(mid, llm_call_id=result.llm_call_id)
+        llm_call_id = (
+            final_event_result.llm_call_id if final_event_result is not None else None
+        )
+
+        # ── Phase E: end-of-stream parse + validate (v2 contract) ──────────
+        parsed = splitter.finish()
+
+        if not parsed.saw_sentinel:
+            # Cancel-mid-stream OR a model crash before Section 2. Persist
+            # whatever prose we streamed as a partial answer; SSE consumers
+            # already saw the tokens, so a typed ``done`` (with no evidence)
+            # closes the stream cleanly.
+            partial_body = parsed.prose.strip()
+            if partial_body:
+                logger.info(
+                    "coach_reply: cancel-mid-prose for %s — persisting partial",
+                    assistant_message_id,
+                )
+                # Story 1.6 code review P5: persist BEFORE publishing the
+                # terminal frame so a DB failure leaves the row in error,
+                # not in pending with a clean ``done`` already delivered.
+                # Phase G uses the same persist-then-publish order.
+                _mark_complete_partial(
+                    mid, body=partial_body, llm_call_id=llm_call_id,
+                )
+                publisher.done(evidence=[])
+            else:
+                # Nothing usable streamed — treat as error.
+                logger.info(
+                    "coach_reply: empty pre-sentinel stream for %s — marking error",
+                    assistant_message_id,
+                )
+                publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
+                _mark_error(mid, llm_call_id=llm_call_id)
             return
 
+        # Sentinel was seen — parse Section 2 and re-inject the prose body
+        # so ``CoachReplyPayload`` (which still has ``body``) validates.
         try:
-            payload = CoachReplyPayload(**parsed)
+            meta = extract_json_object(parsed.evidence_json)
+        except ValueError:
+            logger.info(
+                "coach_reply: Section-2 JSON parse failed for %s",
+                assistant_message_id,
+            )
+            publisher.error(code="coach_parse_failed", message=COACH_GENERIC_ERROR_BODY)
+            _mark_error(mid, llm_call_id=llm_call_id)
+            return
+
+        meta["body"] = parsed.prose.strip()
+        try:
+            payload = CoachReplyPayload(**meta)
         except Exception as exc:  # noqa: BLE001 — Pydantic ValidationError catch-all
-            logger.info("coach_reply: payload validation failed for %s: %s",
-                        assistant_message_id, exc)
-            _mark_error(mid, llm_call_id=result.llm_call_id)
+            logger.info(
+                "coach_reply: payload validation failed for %s: %s",
+                assistant_message_id, exc,
+            )
+            publisher.error(code="coach_parse_failed", message=COACH_GENERIC_ERROR_BODY)
+            _mark_error(mid, llm_call_id=llm_call_id)
             return
 
         if answer_makes_numeric_claim_without_evidence(payload):
@@ -398,16 +508,25 @@ def coach_reply(
                 "coach_reply: rejecting numeric answer with no evidence (msg=%s)",
                 assistant_message_id,
             )
-            _mark_error(mid, llm_call_id=result.llm_call_id)
+            publisher.error(code="coach_parse_failed", message=COACH_GENERIC_ERROR_BODY)
+            _mark_error(mid, llm_call_id=llm_call_id)
             return
 
         # ── Phase F: resolve evidence ──────────────────────────────────────
         payload = payload.model_copy(
             update={"evidence": resolve_evidence(payload.evidence, bundle)},
         )
+        evidence_dicts = [e.model_dump() for e in payload.evidence]
 
-        # ── Phase G: persist ───────────────────────────────────────────────
-        _mark_complete(mid, payload=payload, llm_call_id=result.llm_call_id)
+        # ── Phase G: persist + publish terminal frame ──────────────────────
+        _mark_complete(mid, payload=payload, llm_call_id=llm_call_id)
+        if payload.kind == "answer":
+            publisher.done(evidence=evidence_dicts)
+        else:
+            publisher.refusal(
+                reason=payload.refusal_reason or "out_of_scope",
+                body=payload.body,
+            )
         logger.info(
             "coach_reply done conversation=%s message=%s kind=%s evidence=%d",
             conversation_id, assistant_message_id,
@@ -418,6 +537,7 @@ def coach_reply(
             "coach_reply: unexpected failure in Phases B-G for %s",
             assistant_message_id,
         )
+        publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
         _mark_error(mid)
         return
 

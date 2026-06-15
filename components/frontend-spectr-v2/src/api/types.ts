@@ -735,3 +735,41 @@ export interface CreateCoachMessageResponse {
   userMessageId: string;
   pendingAssistantMessageId: string;
 }
+
+// ── Story 1.6 / AR9 / AR44 — SSE coach stream wire types ──────────────────
+// The SSE endpoint at GET /api/coach/{analysisId}/messages/{messageId}/stream
+// emits frames whose `data:` field is a single-line JSON object matching one
+// of the four payload shapes below. `event:` field carries the type name.
+// The chat UI (story 1.8) will consume these via an EventSource hook;
+// story 1.6 ships only the wire types so 1.8 has a stable contract to code
+// against.
+
+export type CoachStreamEventType = 'token' | 'done' | 'refusal' | 'error';
+
+/** Prose delta — append to the in-flight assistant body. Newline characters
+ *  inside `text` are SSE-escaped (`\n`) on the wire by the BFF and decoded
+ *  by the consumer before append. */
+export interface CoachStreamTokenPayload {
+  text: string;
+}
+
+/** Terminal frame for an answer. Closes the stream cleanly. */
+export interface CoachStreamDonePayload {
+  evidence: CoachEvidenceDto[];
+}
+
+/** Terminal frame for a refusal. The `body` text is also persisted on the
+ *  row (status="refused") — consumers should prefer this frame over a
+ *  subsequent poll if both arrive. */
+export interface CoachStreamRefusalPayload {
+  reason: string;
+  body: string;
+}
+
+/** Terminal frame for an error. `code` matches AR38 machine-code vocabulary:
+ *  "coach_offline" | "coach_error" | "coach_parse_failed" | "coach_stream_idle".
+ *  Frontend keys off `code`, not `message`. */
+export interface CoachStreamErrorPayload {
+  code: string;
+  message: string;
+}

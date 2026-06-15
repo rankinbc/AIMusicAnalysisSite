@@ -47,6 +47,8 @@ __all__ = [
     "DEGRADATION_REASON_GLOBAL_BUDGET",
     "DEGRADATION_REASON_TIER_BUDGET",
     "GatewayResult",
+    "GatewayResultLike",
+    "GatewayStreamEvent",
     "LlmBudgetExceeded",
     "LlmError",
     "LlmInvocationError",
@@ -56,6 +58,7 @@ __all__ = [
     "complete",
     "complete_sync",
     "record_llm_call",
+    "stream_complete_sync",
 ]
 
 logger = logging.getLogger(__name__)
@@ -417,3 +420,14 @@ def complete_sync(**kwargs: Any) -> GatewayResult:
     """Synchronous wrapper for dramatiq actors (sync ``def``). Runs the async
     core in a fresh event loop per call."""
     return asyncio.run(complete(**kwargs))
+
+
+# Story 1.6 — streaming entrypoint. Imported at the bottom because
+# ``streaming.py`` late-imports ``record_llm_call`` / ``_safe_cost`` /
+# ``_acquire`` / ``_semaphores`` from this module, so they must all be
+# defined before the streaming module is loaded.
+from .streaming import (  # noqa: E402,F401 — late import is deliberate
+    GatewayResultLike,
+    GatewayStreamEvent,
+    stream_complete_sync,
+)

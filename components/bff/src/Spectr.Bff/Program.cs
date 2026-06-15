@@ -6,6 +6,7 @@ using Spectr.Bff.Auth;
 using Spectr.Bff.Endpoints;
 using Spectr.Bff.Services;
 using Spectr.Data;
+using StackExchange.Redis;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -72,6 +73,16 @@ builder.Services.AddSingleton<IFileStorage, LocalDiskFileStorage>();
 
 // Job queue — dramatiq-compatible Redis client.
 builder.Services.AddSingleton<IJobQueue, DramatiqJobQueue>();
+
+// Story 1.6: shared StackExchange.Redis connection for the coach SSE relay
+// (pub/sub + cancel-key writes). The existing DramatiqJobQueue keeps its own
+// multiplexer — leaving that wiring untouched is an additive choice; a
+// follow-up could consolidate. ConnectionMultiplexer is documented as
+// thread-safe and designed to be shared across the whole process.
+builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
+    ConnectionMultiplexer.Connect(
+        builder.Configuration["Redis:ConnectionString"]
+            ?? throw new InvalidOperationException("Redis:ConnectionString not set")));
 
 // Coach chat — invokes claude CLI as a subprocess and streams stdout. Same
 // binary the Python worker uses for verdict pipeline.

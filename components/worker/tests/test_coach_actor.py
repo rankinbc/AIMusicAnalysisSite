@@ -1,9 +1,13 @@
-"""Integration tests for the ``coach_reply`` actor (story 1.5).
+"""Integration tests for the ``coach_reply`` actor (story 1.5 + 1.6).
 
 Runs the actor's inner function against a throwaway sqlite-backed
 ``SessionFactory`` so the full Phase A→G lifecycle is exercised end-to-end
-without needing Postgres. The gateway is stubbed by monkeypatching
-``coach_actor.gateway.complete_sync`` per-test.
+without needing Postgres. Story 1.6: the gateway entrypoint is now
+``stream_complete_sync`` — the ``_stub_gateway`` helper synthesizes a v2
+sentinel-separated stream from the existing canned v1 JSON so the
+story-1.5 test cases keep working unchanged. New story-1.6 cases
+(streaming happy-path, cancel-mid-stream, error frame on parse failure)
+target the streaming wire format directly.
 
 Mirrors the ``test_budget_aggregator.py`` scaffold (story 1.4 code review):
 lives OUTSIDE the ``tests/llm/`` stubbing package so the autouse fixtures
@@ -15,12 +19,48 @@ import json
 import sys
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
-from app.llm.gateway import GatewayResult, LlmBudgetExceeded, LlmInvocationError
+from app.llm.gateway import (
+    GatewayResultLike,
+    GatewayStreamEvent,
+    LlmBudgetExceeded,
+    LlmInvocationError,
+)
 from app.llm.errors import DEGRADATION_REASON_TIER_BUDGET
+
+
+# ── autouse Redis stub: keep publisher + cancel-check off the real broker ──
+
+@pytest.fixture(autouse=True)
+def _stub_redis(monkeypatch):
+    """Fresh per-test fake Redis client (recording publisher + EXISTS=False
+    cancel). Exposed via the returned ``FakeRedis`` so streaming-aware
+    tests can assert published frames.
+    """
+    from app.coach_lib import stream_publisher  # noqa: PLC0415
+
+    class FakeRedis:
+        def __init__(self):
+            self.published: list[tuple[str, str]] = []
+            self.exists_calls: list[str] = []
+
+        def publish(self, channel, payload):
+            self.published.append((channel, payload))
+
+        def exists(self, key):
+            self.exists_calls.append(key)
+            return False
+
+    fake = FakeRedis()
+    monkeypatch.setattr(stream_publisher, "_get_client", lambda: fake)
+    # Also short-circuit the cached client so the module never tries
+    # ``redis.Redis.from_url`` during a test.
+    monkeypatch.setattr(stream_publisher, "_client", fake)
+    return fake
 
 
 # ── sqlite fixture (mirror of test_budget_aggregator.sqlite_db_sync) ───────
@@ -110,29 +150,55 @@ def _fetch_message(s, mid: uuid.UUID):
 def _stub_gateway(monkeypatch, *, text: str | None = None,
                   raises: Exception | None = None,
                   llm_call_id: str = "llm_TESTID000000000000000000"):
-    """Replace ``app.coach_actor.gateway.complete_sync`` with a fake.
-    Records call count on the returned object for assertions.
+    """Replace ``app.coach_actor.gateway.stream_complete_sync`` with a
+    fake that yields v2 sentinel-separated stream events synthesized from
+    a v1-style canned JSON ``text``. Existing story-1.5 tests keep their
+    inputs unchanged — the helper does the v1→v2 wire-format translation
+    so the actor (now streaming-aware) sees a realistic stream.
+
+    The ``raises`` path raises BEFORE yielding anything — matches the
+    pre-stream error branch in ``stream_complete_sync``.
     """
     from app import coach_actor  # noqa: PLC0415
 
     calls: list[dict] = []
 
-    def fake(**kwargs):
+    def fake_stream(**kwargs):
         calls.append(kwargs)
         if raises is not None:
             raise raises
-        return GatewayResult(
-            text=text or "",
-            model="fake",
-            input_tokens=0,
-            output_tokens=0,
-            cost_usd=__import__("decimal").Decimal("0"),
-            outcome="ok",
-            latency_ms=0,
-            llm_call_id=llm_call_id,
+
+        if text:
+            data = json.loads(text)
+            body = data.get("body", "")
+            evidence_obj = {
+                "kind": data.get("kind"),
+                "evidence": data.get("evidence", []),
+                "refusal_reason": data.get("refusal_reason"),
+            }
+            evidence_json = json.dumps(evidence_obj)
+            full_text = body + "\n<<<EVIDENCE>>>\n" + evidence_json
+            # Split the body into two deltas to exercise sentinel-straddling
+            # behaviour incidentally (a single-delta body would mask any
+            # buffer-handling regression).
+            mid = max(1, len(body) // 2)
+            yield GatewayStreamEvent(kind="delta", text=body[:mid])
+            yield GatewayStreamEvent(kind="delta", text=body[mid:])
+            yield GatewayStreamEvent(kind="delta", text="\n<<<EVIDENCE>>>\n")
+            yield GatewayStreamEvent(kind="delta", text=evidence_json)
+        else:
+            full_text = ""
+
+        yield GatewayStreamEvent(
+            kind="final", text=full_text,
+            result=GatewayResultLike(
+                text=full_text, model="fake",
+                input_tokens=0, output_tokens=0, cost_usd=Decimal("0"),
+                outcome="ok", latency_ms=0, llm_call_id=llm_call_id,
+            ),
         )
 
-    monkeypatch.setattr(coach_actor.gateway, "complete_sync", fake)
+    monkeypatch.setattr(coach_actor.gateway, "stream_complete_sync", fake_stream)
     return calls
 
 
@@ -535,3 +601,407 @@ def test_llm_error_propagates_llm_call_id_to_message(sqlite_db, monkeypatch):
         row = _fetch_message(s, pending_id)
         assert row.status == "error"
         assert row.llm_call_id == "llm_ERRROW42"
+
+
+# ── Story 1.6 streaming-path tests ─────────────────────────────────────────
+
+
+def test_streaming_happy_path_publishes_token_then_done_frames(
+    sqlite_db, monkeypatch, _stub_redis,
+):
+    """End-to-end streaming: actor publishes ``token`` frames per prose
+    chunk + a ``done`` frame with resolved evidence at end-of-stream.
+    """
+    from app import coach_actor  # noqa: PLC0415
+
+    with sqlite_db.SessionFactory.begin() as s:
+        analysis_id = _seed_analysis(s)
+        cid = _seed_conversation(s, analysis_id)
+        user_msg_id, pending_id = _seed_pair(s, cid, "Why low LUFS?")
+
+    def fake_stream(**kwargs):
+        yield GatewayStreamEvent(kind="delta", text="Your LUFS sits ")
+        yield GatewayStreamEvent(kind="delta", text="at -11.2.\n")
+        yield GatewayStreamEvent(kind="delta", text="<<<EVIDENCE>>>\n")
+        yield GatewayStreamEvent(
+            kind="delta",
+            text=(
+                '{"kind":"answer","evidence":[{"label":"LUFS -11.2",'
+                '"path":"phase1.lufs_integrated"}],"refusal_reason":null}'
+            ),
+        )
+        result = GatewayResultLike(
+            text="Your LUFS sits at -11.2.\n",
+            model="fake", input_tokens=0, output_tokens=0,
+            cost_usd=Decimal("0"), outcome="ok", latency_ms=0,
+            llm_call_id="llm_HAPPY",
+        )
+        yield GatewayStreamEvent(kind="final", text=result.text, result=result)
+
+    monkeypatch.setattr(coach_actor.gateway, "stream_complete_sync", fake_stream)
+
+    coach_actor.coach_reply.fn(str(cid), str(user_msg_id), str(pending_id))
+
+    # Persisted row.
+    with sqlite_db.SessionFactory() as s:
+        row = _fetch_message(s, pending_id)
+        assert row.status == "complete"
+        assert row.content == "Your LUFS sits at -11.2."
+        assert row.evidence == [
+            {"label": "LUFS -11.2", "path": "phase1.lufs_integrated"},
+        ]
+        assert row.llm_call_id == "llm_HAPPY"
+
+    # Published frames — ``token`` frames must NOT leak JSON or sentinel.
+    types = [json.loads(p)["type"] for _, p in _stub_redis.published]
+    assert "token" in types
+    assert types[-1] == "done"
+    for _, payload in _stub_redis.published:
+        frame = json.loads(payload)
+        if frame["type"] == "token":
+            assert "<<<EVIDENCE>>>" not in frame["text"]
+            assert '"kind"' not in frame["text"]
+
+
+def test_streaming_refusal_publishes_refusal_frame(
+    sqlite_db, monkeypatch, _stub_redis,
+):
+    from app import coach_actor  # noqa: PLC0415
+
+    with sqlite_db.SessionFactory.begin() as s:
+        analysis_id = _seed_analysis(s)
+        cid = _seed_conversation(s, analysis_id)
+        user_msg_id, pending_id = _seed_pair(s, cid, "How do my stems compare?")
+
+    def fake_stream(**kwargs):
+        yield GatewayStreamEvent(
+            kind="delta",
+            text="No stems uploaded — add stems to enable this.",
+        )
+        yield GatewayStreamEvent(kind="delta", text="\n<<<EVIDENCE>>>\n")
+        yield GatewayStreamEvent(
+            kind="delta",
+            text='{"kind":"refusal","evidence":[],"refusal_reason":"missing_data"}',
+        )
+        result = GatewayResultLike(
+            text="No stems uploaded — add stems to enable this.",
+            model="fake", input_tokens=0, output_tokens=0,
+            cost_usd=Decimal("0"), outcome="ok", latency_ms=0,
+            llm_call_id="llm_REFUSAL",
+        )
+        yield GatewayStreamEvent(kind="final", text=result.text, result=result)
+
+    monkeypatch.setattr(coach_actor.gateway, "stream_complete_sync", fake_stream)
+
+    coach_actor.coach_reply.fn(str(cid), str(user_msg_id), str(pending_id))
+
+    with sqlite_db.SessionFactory() as s:
+        row = _fetch_message(s, pending_id)
+        assert row.status == "refused"
+        assert row.refusal_reason == "missing_data"
+        assert row.evidence == []
+
+    types = [json.loads(p)["type"] for _, p in _stub_redis.published]
+    assert types[-1] == "refusal"
+    refusal_frame = json.loads(_stub_redis.published[-1][1])
+    assert refusal_frame["reason"] == "missing_data"
+    assert "stems" in refusal_frame["body"].lower()
+
+
+def test_cancel_mid_stream_persists_partial_and_publishes_done(
+    sqlite_db, monkeypatch, _stub_redis,
+):
+    """The model never reached the sentinel (cancel-mid-prose). The
+    actor MUST persist the partial prose as ``status="complete"`` with
+    empty evidence AND publish a typed ``done`` frame so the SSE
+    consumer sees the stream end cleanly.
+    """
+    from app import coach_actor  # noqa: PLC0415
+
+    with sqlite_db.SessionFactory.begin() as s:
+        analysis_id = _seed_analysis(s)
+        cid = _seed_conversation(s, analysis_id)
+        user_msg_id, pending_id = _seed_pair(s, cid, "Anything to fix?")
+
+    def fake_stream(**kwargs):
+        yield GatewayStreamEvent(kind="delta", text="Start with the low end")
+        yield GatewayStreamEvent(kind="delta", text=" — clean below 40 Hz.")
+        # No sentinel — simulates a client-cancel between prose deltas.
+        result = GatewayResultLike(
+            text="Start with the low end — clean below 40 Hz.",
+            model="fake", input_tokens=0, output_tokens=0,
+            cost_usd=Decimal("0"), outcome="ok", latency_ms=0,
+            llm_call_id="llm_PARTIAL",
+        )
+        yield GatewayStreamEvent(kind="final", text=result.text, result=result)
+
+    monkeypatch.setattr(coach_actor.gateway, "stream_complete_sync", fake_stream)
+
+    coach_actor.coach_reply.fn(str(cid), str(user_msg_id), str(pending_id))
+
+    with sqlite_db.SessionFactory() as s:
+        row = _fetch_message(s, pending_id)
+        assert row.status == "complete"
+        assert "low end" in row.content
+        assert row.evidence == []
+        assert row.llm_call_id == "llm_PARTIAL"
+
+    types = [json.loads(p)["type"] for _, p in _stub_redis.published]
+    assert types[-1] == "done"
+
+
+def test_empty_pre_sentinel_stream_marks_error(
+    sqlite_db, monkeypatch, _stub_redis,
+):
+    """Zero-delta stream that ended before the sentinel — nothing
+    usable, so the row goes to ``error`` and an ``error`` frame fires.
+    """
+    from app import coach_actor  # noqa: PLC0415
+
+    with sqlite_db.SessionFactory.begin() as s:
+        analysis_id = _seed_analysis(s)
+        cid = _seed_conversation(s, analysis_id)
+        user_msg_id, pending_id = _seed_pair(s, cid, "Hello?")
+
+    def fake_stream(**kwargs):
+        result = GatewayResultLike(
+            text="", model="fake", input_tokens=0, output_tokens=0,
+            cost_usd=Decimal("0"), outcome="ok", latency_ms=0,
+            llm_call_id="llm_EMPTY",
+        )
+        yield GatewayStreamEvent(kind="final", text="", result=result)
+
+    monkeypatch.setattr(coach_actor.gateway, "stream_complete_sync", fake_stream)
+
+    coach_actor.coach_reply.fn(str(cid), str(user_msg_id), str(pending_id))
+
+    with sqlite_db.SessionFactory() as s:
+        row = _fetch_message(s, pending_id)
+        assert row.status == "error"
+
+    types = [json.loads(p)["type"] for _, p in _stub_redis.published]
+    assert "error" in types
+
+
+def test_budget_exceeded_publishes_offline_error_frame(
+    sqlite_db, monkeypatch, _stub_redis,
+):
+    """LlmBudgetExceeded → publishes ``error(code="coach_offline")``
+    frame before refusing the row. SSE subscribers see the error in
+    real time, not just on the next poll.
+    """
+    from app import coach_actor  # noqa: PLC0415
+
+    with sqlite_db.SessionFactory.begin() as s:
+        analysis_id = _seed_analysis(s)
+        cid = _seed_conversation(s, analysis_id)
+        user_msg_id, pending_id = _seed_pair(s, cid, "Tell me everything.")
+
+    exc = LlmBudgetExceeded(
+        reason=DEGRADATION_REASON_TIER_BUDGET, detail="tier=free",
+    )
+    _stub_gateway(monkeypatch, raises=exc)
+
+    coach_actor.coach_reply.fn(str(cid), str(user_msg_id), str(pending_id))
+
+    frames = [json.loads(p) for _, p in _stub_redis.published]
+    error_frames = [f for f in frames if f["type"] == "error"]
+    assert any(f["code"] == "coach_offline" for f in error_frames)
+
+
+def test_generic_llm_error_publishes_error_frame(
+    sqlite_db, monkeypatch, _stub_redis,
+):
+    """LlmError (generic) → publishes ``error(code="coach_error")`` AND
+    persists ``status="error"``. Confirms the actor catch-all in Phase D
+    talks to the publisher (not just the DB)."""
+    from app import coach_actor  # noqa: PLC0415
+
+    with sqlite_db.SessionFactory.begin() as s:
+        analysis_id = _seed_analysis(s)
+        cid = _seed_conversation(s, analysis_id)
+        user_msg_id, pending_id = _seed_pair(s, cid, "Something.")
+
+    _stub_gateway(monkeypatch, raises=LlmInvocationError("provider 500"))
+    coach_actor.coach_reply.fn(str(cid), str(user_msg_id), str(pending_id))
+
+    frames = [json.loads(p) for _, p in _stub_redis.published]
+    error_frames = [f for f in frames if f["type"] == "error"]
+    assert any(f["code"] == "coach_error" for f in error_frames)
+    with sqlite_db.SessionFactory() as s:
+        row = _fetch_message(s, pending_id)
+        assert row.status == "error"
+
+
+def test_section2_parse_failure_publishes_parse_failed_error(
+    sqlite_db, monkeypatch, _stub_redis,
+):
+    """A malformed Section 2 (sentinel was seen but the JSON below is
+    garbage) → publishes ``error(code="coach_parse_failed")`` AND marks
+    the row ``error``."""
+    from app import coach_actor  # noqa: PLC0415
+
+    with sqlite_db.SessionFactory.begin() as s:
+        analysis_id = _seed_analysis(s)
+        cid = _seed_conversation(s, analysis_id)
+        user_msg_id, pending_id = _seed_pair(s, cid, "Q?")
+
+    def fake_stream(**kwargs):
+        yield GatewayStreamEvent(kind="delta", text="prose body here")
+        yield GatewayStreamEvent(kind="delta", text="\n<<<EVIDENCE>>>\n")
+        yield GatewayStreamEvent(kind="delta", text="not-json garbage")
+        result = GatewayResultLike(
+            text="prose body here", model="fake",
+            input_tokens=0, output_tokens=0, cost_usd=Decimal("0"),
+            outcome="ok", latency_ms=0, llm_call_id="llm_BAD",
+        )
+        yield GatewayStreamEvent(kind="final", text=result.text, result=result)
+
+    monkeypatch.setattr(coach_actor.gateway, "stream_complete_sync", fake_stream)
+    coach_actor.coach_reply.fn(str(cid), str(user_msg_id), str(pending_id))
+
+    frames = [json.loads(p) for _, p in _stub_redis.published]
+    assert any(
+        f["type"] == "error" and f["code"] == "coach_parse_failed"
+        for f in frames
+    )
+    with sqlite_db.SessionFactory() as s:
+        row = _fetch_message(s, pending_id)
+        assert row.status == "error"
+
+
+# ── Story 1.6 code review P13: invariant assertions ───────────────────────
+
+
+def test_done_frame_evidence_equals_persisted_row_evidence(
+    sqlite_db, monkeypatch, _stub_redis,
+):
+    """Code review P13: the published ``done`` frame's evidence list MUST
+    match the persisted row.evidence byte-for-byte. A drift here means
+    SSE consumers and poll-after-refresh consumers see different
+    answers (AR9 cross-store divergence)."""
+    from app import coach_actor  # noqa: PLC0415
+
+    with sqlite_db.SessionFactory.begin() as s:
+        analysis_id = _seed_analysis(s)
+        cid = _seed_conversation(s, analysis_id)
+        user_msg_id, pending_id = _seed_pair(s, cid, "Why low LUFS?")
+
+    reply_text = json.dumps({
+        "kind": "answer",
+        "body": "Your LUFS is -11.2.",
+        "evidence": [
+            {"label": "LUFS -11.2", "path": "phase1.lufs_integrated"},
+        ],
+        "refusal_reason": None,
+    })
+    _stub_gateway(monkeypatch, text=reply_text)
+
+    coach_actor.coach_reply.fn(str(cid), str(user_msg_id), str(pending_id))
+
+    with sqlite_db.SessionFactory() as s:
+        row = _fetch_message(s, pending_id)
+        assert row.status == "complete"
+
+    frames = [json.loads(p) for _, p in _stub_redis.published]
+    done_frames = [f for f in frames if f["type"] == "done"]
+    assert len(done_frames) == 1, "exactly one terminal done frame per call"
+    assert done_frames[0]["evidence"] == row.evidence
+
+
+def test_persist_completes_before_terminal_publish(
+    sqlite_db, monkeypatch, _stub_redis,
+):
+    """Code review P13 (also covers P5): the persist call MUST complete
+    before the terminal SSE frame is published. If the publish fired
+    first and the persist then failed, SSE consumers would see a clean
+    ``done`` while the row stayed ``pending`` forever (no timeout
+    reclaims pending rows). Recorded via a wrapper that timestamps each
+    side-effect.
+    """
+    from app import coach_actor  # noqa: PLC0415
+
+    with sqlite_db.SessionFactory.begin() as s:
+        analysis_id = _seed_analysis(s)
+        cid = _seed_conversation(s, analysis_id)
+        user_msg_id, pending_id = _seed_pair(s, cid, "Anything to fix?")
+
+    # Cancel-mid-prose path so we exercise the formerly-buggy branch.
+    def fake_stream(**kwargs):
+        yield GatewayStreamEvent(kind="delta", text="Start with the low end")
+        yield GatewayStreamEvent(kind="delta", text=" — clean below 40 Hz.")
+        result = GatewayResultLike(
+            text="Start with the low end — clean below 40 Hz.",
+            model="fake", input_tokens=0, output_tokens=0,
+            cost_usd=Decimal("0"), outcome="ok", latency_ms=0,
+            llm_call_id="llm_ORDER",
+        )
+        yield GatewayStreamEvent(kind="final", text=result.text, result=result)
+
+    monkeypatch.setattr(coach_actor.gateway, "stream_complete_sync", fake_stream)
+
+    events: list[str] = []
+    original_partial = coach_actor._mark_complete_partial
+
+    def recording_partial(*args, **kwargs):
+        original_partial(*args, **kwargs)
+        events.append("persist")
+
+    monkeypatch.setattr(coach_actor, "_mark_complete_partial", recording_partial)
+
+    # Hook the FakeRedis publish to record ordering.
+    original_publish = _stub_redis.publish
+
+    def recording_publish(channel, payload):
+        original_publish(channel, payload)
+        frame_type = json.loads(payload).get("type")
+        if frame_type in ("done", "refusal", "error"):
+            events.append(f"publish:{frame_type}")
+
+    _stub_redis.publish = recording_publish  # type: ignore[method-assign]
+
+    coach_actor.coach_reply.fn(str(cid), str(user_msg_id), str(pending_id))
+
+    # Persist MUST land before the terminal publish.
+    assert "persist" in events
+    persist_idx = events.index("persist")
+    publish_idxs = [i for i, e in enumerate(events) if e.startswith("publish:")]
+    assert publish_idxs, "expected at least one terminal publish"
+    assert all(i > persist_idx for i in publish_idxs), (
+        f"terminal publish raced persist: events={events}"
+    )
+
+
+def test_phase_a_failure_publishes_error_frame(
+    sqlite_db, monkeypatch, _stub_redis,
+):
+    """Code review P7: a Phase A DB hiccup (or any pre-Phase-D failure)
+    MUST publish a typed terminal frame so SSE subscribers don't sit
+    through the 30 s idle-fallback for a row that's already in error.
+    """
+    from app import coach_actor  # noqa: PLC0415
+
+    with sqlite_db.SessionFactory.begin() as s:
+        analysis_id = _seed_analysis(s)
+        cid = _seed_conversation(s, analysis_id)
+        user_msg_id, pending_id = _seed_pair(s, cid, "Q?")
+
+    # Force a Phase A failure by stubbing SessionFactory.begin to raise.
+    from app import db_sync  # noqa: PLC0415
+    real_begin = db_sync.SessionFactory.begin
+    raise_once = [True]
+
+    def begin_or_raise():
+        if raise_once[0]:
+            raise_once[0] = False
+            raise RuntimeError("synthetic Phase A DB error")
+        return real_begin()
+
+    monkeypatch.setattr(db_sync.SessionFactory, "begin", begin_or_raise)
+
+    coach_actor.coach_reply.fn(str(cid), str(user_msg_id), str(pending_id))
+
+    frames = [json.loads(p) for _, p in _stub_redis.published]
+    assert any(f["type"] == "error" for f in frames), (
+        "Phase A failure must publish an error frame before _mark_error"
+    )

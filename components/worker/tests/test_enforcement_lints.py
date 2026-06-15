@@ -22,7 +22,16 @@ _IMPORT_RE = re.compile(
 )
 _DYNAMIC_RE = re.compile(rf"""["']{_SDK}["']""")
 
-ALLOWED = COMPONENTS / "worker" / "app" / "llm" / "gateway.py"
+# Story 1.6: the streaming entrypoint was extracted from gateway.py to keep
+# the file under the 500-line CLAUDE.md ceiling. The AR39 boundary is the
+# ``app/llm/`` package, not any single file — frontmatter allowlist mirrors
+# that. Anything else under ``components/`` MUST stay clean.
+ALLOWED = frozenset(
+    {
+        COMPONENTS / "worker" / "app" / "llm" / "gateway.py",
+        COMPONENTS / "worker" / "app" / "llm" / "streaming.py",
+    }
+)
 
 SKIP_DIRS = {
     ".git", "node_modules", "__pycache__", ".venv", "venv", "env",
@@ -43,7 +52,7 @@ def test_anthropic_imports_only_in_gateway():
             if any(part in SKIP_DIRS or part.endswith(".egg-info") for part in path.parts):
                 continue
             resolved = path.resolve()
-            if resolved == Path(__file__).resolve() or resolved == ALLOWED:
+            if resolved == Path(__file__).resolve() or resolved in ALLOWED:
                 continue
             for lineno, line in enumerate(
                 path.read_text(encoding="utf-8", errors="replace").splitlines(), 1
