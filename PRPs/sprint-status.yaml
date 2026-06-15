@@ -5,6 +5,7 @@
 # story 1-6 transitioned: backlog → ready-for-dev → in-progress → review → done (code-review workflow, 2026-06-15)
 # story 1-7 transitioned: backlog → ready-for-dev → in-progress → review → done (code-review workflow, 2026-06-15)
 # story 1-8 transitioned: backlog → ready-for-dev → in-progress → review → done (code-review workflow, 2026-06-15)
+# story 1-9 transitioned: backlog → ready-for-dev (create-story workflow, 2026-06-15)
 # project_key: NOKEY
 # tracking_system: file-system
 # story_location: PRPs/stories
@@ -45,6 +46,7 @@ generated: 2026-06-12
 last_updated: 2026-06-15
 project: Spectr
 # (re-updated 2026-06-15: 1-6 → done after code review)
+# (re-updated 2026-06-15: 1-9 → ready-for-dev after create-story; epic 1 still in-progress)
 project_key: NOKEY
 tracking_system: file-system
 story_location: PRPs/stories
@@ -59,7 +61,7 @@ development_status:
   1-6-coach-streaming-relay: done
   1-7-design-system-foundation-fidelity-phase-a: done
   1-8-coach-chat-ui-with-grounding-affordances: done
-  1-9-per-analysis-coach-caps: backlog
+  1-9-per-analysis-coach-caps: ready-for-dev
   epic-1-retrospective: optional
 
   epic-2: backlog
