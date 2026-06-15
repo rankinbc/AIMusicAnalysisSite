@@ -155,6 +155,13 @@ def analyze_audio_job(job_id: str) -> None:
         done.phase_pct = 1.0
         done.current_phase = "complete"
         done.completed_at = _utc_now()
+        # Clear stale failure state from any prior retry attempts so the
+        # frontend's `errorMessage`-driven failed-banner doesn't render on
+        # a successfully-rerun job (Results page reads `errorMessage` and
+        # shows "Analysis failed." whenever the field is non-null,
+        # regardless of `status`). Always Nones these two on success.
+        done.error_message = None
+        done.failed_at = None
 
     _try_write_artifact(job_id, result_dict)
     logger.info("analyze_audio_job: done job=%s", job_id)
