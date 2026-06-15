@@ -12,6 +12,21 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
+
+# Load the worker's .env BEFORE any module imports os.environ. db_sync.py
+# reads DATABASE_URL at import time; without this, Windows-native runs
+# (no docker) would fail with "DATABASE_URL not set" even when the var
+# is configured in .env. python-dotenv is a transitive dep of
+# pydantic-settings — already in the venv.
+try:
+    from dotenv import load_dotenv
+
+    _ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
+    if _ENV_PATH.exists():
+        load_dotenv(_ENV_PATH, override=False)
+except ImportError:
+    pass  # dotenv missing → caller must export env vars manually
 
 import dramatiq
 from dramatiq.brokers.redis import RedisBroker
