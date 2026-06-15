@@ -43,3 +43,24 @@ def test_fake_triage_parses_to_routing_plan():
 def test_fake_specialist_keyed_by_slug():
     a = fake_response_text(purpose="specialist", prompt_slug="dynamics")
     assert "dynamics" in a
+
+
+def test_fake_coach_parses_to_coach_reply_payload():
+    """Story 1.5 code review E-H3: ``LLM_FAKE=1`` for ``purpose="coach"``
+    MUST emit a CoachReplyPayload-compatible JSON; otherwise the coach
+    actor demotes every reply to ``status="error"`` and AR41's
+    end-to-end-with-zero-spend guarantee breaks."""
+    from app.coach_lib.payload import (  # noqa: PLC0415 — keep fake.py-free of coach_lib
+        CoachReplyPayload,
+        answer_makes_numeric_claim_without_evidence,
+    )
+
+    text = fake_response_text(purpose="coach", prompt_slug="coach_grounded")
+    payload = CoachReplyPayload(**json.loads(text))
+    assert payload.kind == "answer"
+    assert payload.body
+    assert payload.evidence == []
+    assert payload.refusal_reason is None
+    # The numeric-without-evidence heuristic must NOT reject the fake body —
+    # otherwise the actor will downgrade to status="error".
+    assert answer_makes_numeric_claim_without_evidence(payload) is False

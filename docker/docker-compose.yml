@@ -54,7 +54,10 @@ services:
       - ../data:/data
 
   # Python analysis worker — dramatiq consumer; runs the 7-phase pipeline +
-  # the 26 specialists + waveform peaks pre-compute.
+  # the 26 specialists + waveform peaks pre-compute + coach_reply (story 1.5).
+  # Queues consumed: `default` + `coach` (the Procfile is the canonical
+  # entrypoint; if/when this service is rebuilt in docker, the Dockerfile
+  # CMD must mirror the Procfile's --queues default coach).
   worker:
     build:
       context: ../components/worker

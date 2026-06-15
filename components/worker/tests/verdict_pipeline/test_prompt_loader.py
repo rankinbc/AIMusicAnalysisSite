@@ -4,6 +4,8 @@ import pytest
 from app.verdict_lib.prompt_loader import (
     SLUG_TO_FILENAME,
     SPECIALIST_SLUGS,
+    load_coach_grounded,
+    load_coach_grounded_model,
     load_prompt,
     parse_version_frontmatter,
 )
@@ -54,3 +56,49 @@ def test_load_unknown_slug_raises(monkeypatch, tmp_path):
     monkeypatch.setattr("app.verdict_lib.prompt_loader.PROMPTS_DIR", tmp_path)
     with pytest.raises(KeyError):
         load_prompt("nonexistent_slug")
+
+
+# ── coach prompt loader (story 1.5) ────────────────────────────────────────
+
+def test_load_coach_grounded_real_file(tmp_path: Path, monkeypatch):
+    fake_dir = tmp_path / "coach"
+    fake_dir.mkdir()
+    (fake_dir / "CoachGrounded.md").write_text(
+        "---\nversion: 3.4.5\nmodel: claude-opus-4-7\n---\n\nbody here",
+    )
+    monkeypatch.setattr(
+        "app.verdict_lib.prompt_loader.COACH_PROMPTS_DIR", fake_dir,
+    )
+    version, body = load_coach_grounded()
+    assert version == "3.4.5"
+    assert "body here" in body
+    assert load_coach_grounded_model() == "claude-opus-4-7"
+
+
+def test_load_coach_grounded_missing_file_raises(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(
+        "app.verdict_lib.prompt_loader.COACH_PROMPTS_DIR", tmp_path,
+    )
+    with pytest.raises(FileNotFoundError):
+        load_coach_grounded()
+
+
+def test_load_coach_grounded_model_no_pin_returns_none(tmp_path: Path, monkeypatch):
+    fake_dir = tmp_path / "coach"
+    fake_dir.mkdir()
+    (fake_dir / "CoachGrounded.md").write_text(
+        "---\nversion: 1.0.0\n---\n\nbody",
+    )
+    monkeypatch.setattr(
+        "app.verdict_lib.prompt_loader.COACH_PROMPTS_DIR", fake_dir,
+    )
+    assert load_coach_grounded_model() is None
+
+
+def test_live_coach_prompt_loads():
+    """The on-disk CoachGrounded.md must parse — guards against a syntax
+    typo in the frontmatter slipping into production."""
+    version, body = load_coach_grounded()
+    assert version == "1.0.0"
+    assert "AI Mix Coach" in body
+    assert load_coach_grounded_model() == "claude-sonnet-4-5"

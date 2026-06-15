@@ -330,6 +330,123 @@ class VerdictUserState(Base):
     )
 
 
+class Conversation(Base):
+    """Story 1.5 / AR9: one conversation per (analysis, user). The BFF
+    get-or-creates this row on the first POST to
+    ``/coach/{analysisId}/messages``. All ``CoachMessage`` rows hang off
+    this row; per-analysis coach caps (story 1.9) will count messages by
+    joining on ``conversation_id``."""
+
+    __tablename__ = "conversations"
+    __table_args__ = (
+        UniqueConstraint("analysis_id", "user_id",
+                         name="uq_conversations_analysis_user"),
+        Index("ix_conversations_analysis_id", "analysis_id"),
+        Index("ix_conversations_user_id", "user_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        "id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
+    )
+    # Story 1.5 code review B-M1: EF migrations are the canonical schema
+    # and the project's convention is no DB-level foreign keys (see the
+    # other entities — Verdict, AnalysisJob, etc. — none declare FKs
+    # either). The SQLAlchemy ``ForeignKey(...)`` declaration here would
+    # MISREPRESENT the actual schema as ``CASCADE`` on delete; in reality
+    # ownership integrity is enforced at the BFF endpoint layer. We keep
+    # ``ForeignKey`` here so the ORM relationship metadata is correct
+    # (e.g. for joins), but with NO ``ondelete=`` argument so the SA
+    # mirror doesn't claim a cascade the database never enforces.
+    analysis_id: Mapped[uuid.UUID] = mapped_column(
+        "analysis_id",
+        UUID(as_uuid=True),
+        ForeignKey("analyses.id"),
+        nullable=False,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        "user_id",
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        "created_at", DateTime(timezone=True), nullable=False,
+        server_default=func.now(),
+    )
+
+
+class CoachMessage(Base):
+    """Story 1.5 / AR9 / AR10: one row per turn in a coach conversation.
+
+    Rows with ``role="user"`` are written by the BFF inline on POST.
+    Rows with ``role="assistant"`` are written by the BFF in
+    ``status="pending"`` on the same POST and then UPDATED by the
+    ``coach_reply`` dramatiq actor when the LLM call returns
+    (``status`` transitions to ``complete``/``refused``/``error``).
+
+    ``evidence`` carries the citation chips that survived resolution
+    against the in-memory context bundle (unresolvable paths dropped per
+    AR10). ``refusal_reason`` is set on assistant rows that emitted a
+    structured refusal: ``"missing_data"``, ``"out_of_scope"``,
+    ``"injection_attempt"`` (from the prompt), or the coach-offline
+    marker ``"coach_offline"`` written when ``LlmBudgetExceeded`` fires
+    or the analysis is already degraded.
+    """
+
+    __tablename__ = "coach_messages"
+    __table_args__ = (
+        # Enum-as-string CHECKs mirror the EF declarations in AppDbContext.
+        CheckConstraint(
+            "role IN ('user','assistant')", name="ck_coach_messages_role",
+        ),
+        CheckConstraint(
+            "status IN ('pending','complete','refused','error')",
+            name="ck_coach_messages_status",
+        ),
+        Index(
+            "ix_coach_messages_conversation_created_at",
+            "conversation_id", "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        "id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
+    )
+    # Story 1.5 code review B-M1: see Conversation.analysis_id — no
+    # ``ondelete=`` on the SA side because the EF migration creates no FK
+    # constraint. Ownership integrity is enforced at the BFF layer.
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        "conversation_id",
+        UUID(as_uuid=True),
+        ForeignKey("conversations.id"),
+        nullable=False,
+    )
+    role: Mapped[str] = mapped_column("role", String(16), nullable=False)
+    status: Mapped[str] = mapped_column(
+        "status", String(16), nullable=False, default="complete",
+    )
+    content: Mapped[str] = mapped_column("content", String, nullable=False, default="")
+    evidence: Mapped[Optional[Any]] = mapped_column(
+        "evidence", JSONB, nullable=True,
+    )
+    refusal_reason: Mapped[Optional[str]] = mapped_column(
+        "refusal_reason", String(64), nullable=True,
+    )
+    # ULID of the matching ``llm_calls`` row when the assistant message hit
+    # the gateway. Null on user rows AND on assistant rows that
+    # short-circuited without a gateway call (coach_offline / budget).
+    llm_call_id: Mapped[Optional[str]] = mapped_column(
+        "llm_call_id", String(40), nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        "created_at", DateTime(timezone=True), nullable=False,
+        server_default=func.now(),
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        "completed_at", DateTime(timezone=True), nullable=True,
+    )
+
+
 class PromptVersion(Base):
     """Operator-controlled prompt-version pin (FR48). NULL pinned_version =
     serve the live prompt file's frontmatter version. The worker's prompt
@@ -610,6 +727,8 @@ __all__ = [
     "Analysis",
     "Verdict",
     "VerdictUserState",
+    "Conversation",
+    "CoachMessage",
     "SessionNote",
     "ReferenceTrack",
     "ReferenceSet",

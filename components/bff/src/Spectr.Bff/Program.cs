@@ -112,6 +112,7 @@ api.MapShareEndpoints();
 api.MapBookmarkEndpoints();
 api.MapFileEndpoints();
 api.MapCoachEndpoints();
+api.MapCoachConversationEndpoints();
 api.MapCompareEndpoints();
 
 app.MapGet("/", () => Results.Json(new { status = "ok", version = "2.0.0" }))

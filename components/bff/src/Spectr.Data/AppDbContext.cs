@@ -26,6 +26,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<PromptVersion> PromptVersions => Set<PromptVersion>();
     public DbSet<LlmCall> LlmCalls => Set<LlmCall>();
 
+    // Coach (story 1.5)
+    public DbSet<Conversation> Conversations => Set<Conversation>();
+    public DbSet<CoachMessage> CoachMessages => Set<CoachMessage>();
+
     // Listen
     public DbSet<SessionNote> SessionNotes => Set<SessionNote>();
 
@@ -72,11 +76,23 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             .HasIndex(a => a.ShareToken).IsUnique();
         builder.Entity<CompareCache>()
             .HasIndex(c => new { c.TrackVersionId, c.ReferenceId }).IsUnique();
+        // Story 1.5: one conversation per (analysis, user) — keeps the
+        // poll endpoint trivial (no list-and-merge by date).
+        builder.Entity<Conversation>()
+            .HasIndex(c => new { c.AnalysisId, c.UserId }).IsUnique()
+            .HasDatabaseName("uq_conversations_analysis_user");
 
         // Partial unique index — only ONE current version per song.
         // (raw SQL because EF Core doesn't expose partial-index DSL fluently for Postgres yet)
         builder.Entity<SongVersion>().ToTable(t => t.HasCheckConstraint(
             "ck_song_versions_version_positive", "\"version_number\" > 0"));
+
+        // Story 1.5: enum-as-string CHECKs on coach_messages role + status.
+        builder.Entity<CoachMessage>().ToTable(t => t.HasCheckConstraint(
+            "ck_coach_messages_role", "\"role\" IN ('user','assistant')"));
+        builder.Entity<CoachMessage>().ToTable(t => t.HasCheckConstraint(
+            "ck_coach_messages_status",
+            "\"status\" IN ('pending','complete','refused','error')"));
 
         // Polymorphic CHECKs on comments + bookmarks (exactly one target set).
         builder.Entity<TrackComment>().ToTable(t => t.HasCheckConstraint(
@@ -98,6 +114,15 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         builder.Entity<LlmCall>().HasIndex(c => c.CreatedAt);
         builder.Entity<LlmCall>().HasIndex(c => new { c.UserId, c.CreatedAt });
         builder.Entity<SessionNote>().HasIndex(n => new { n.VersionId, n.UserId });
+        // Story 1.5: coach polling reads messages by conversation in order.
+        // Note: an analysis-id-only index is redundant — the unique compound
+        // index uq_conversations_analysis_user already serves as a prefix
+        // index on (analysis_id), so single-column lookups by analysis_id
+        // use it. We only declare the user_id single-column index and the
+        // (conversation_id, created_at) ordering index. (Code review E-M3.)
+        builder.Entity<Conversation>().HasIndex(c => c.UserId);
+        builder.Entity<CoachMessage>().HasIndex(m => new { m.ConversationId, m.CreatedAt })
+            .HasDatabaseName("ix_coach_messages_conversation_created_at");
         builder.Entity<TrackComment>().HasIndex(c => c.TargetShareToken);
         builder.Entity<TrackBookmark>().HasIndex(b => b.UserId);
 
@@ -119,6 +144,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         builder.Entity<VerdictUserState>().Property(s => s.UpdatedAt).HasDefaultValueSql("now()");
         builder.Entity<PromptVersion>().Property(p => p.UpdatedAt).HasDefaultValueSql("now()");
         builder.Entity<LlmCall>().Property(c => c.CreatedAt).HasDefaultValueSql("now()");
+        builder.Entity<Conversation>().Property(c => c.CreatedAt).HasDefaultValueSql("now()");
+        builder.Entity<CoachMessage>().Property(m => m.CreatedAt).HasDefaultValueSql("now()");
         // DB-side defaults so a direct/partial insert (outside the worker's
         // SQLAlchemy client-side defaults) can't hit a NOT NULL violation.
         builder.Entity<LlmCall>().Property(c => c.InputTokens).HasDefaultValue(0);

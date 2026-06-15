@@ -28,3 +28,4 @@ from . import tasks_dramatiq  # noqa: E402,F401
 from . import verdict_actor  # noqa: E402,F401
 from . import triage_actor  # noqa: E402,F401
 from . import reference_analyzer_actor  # noqa: E402,F401
+from . import coach_actor  # noqa: E402,F401

@@ -30,6 +30,14 @@ _DEFAULT_DIR = Path(__file__).resolve().parents[2] / "prompts" / "experts"
 
 PROMPTS_DIR = Path(os.environ.get("VERDICT_PROMPTS_DIR") or _DEFAULT_DIR)
 
+# Story 1.5 / AR10: coach prompts live in a sibling folder and use the same
+# frontmatter convention as specialists. Pin-table support (FR48) is
+# deferred to a later coach-prompt story — v0 reads the live file only.
+_DEFAULT_COACH_DIR = Path(__file__).resolve().parents[2] / "prompts" / "coach"
+COACH_PROMPTS_DIR = Path(os.environ.get("COACH_PROMPTS_DIR") or _DEFAULT_COACH_DIR)
+
+COACH_GROUNDED_FILENAME = "CoachGrounded"
+
 
 SLUG_TO_FILENAME: dict[str, str] = {
     "low_end": "LowEnd",
@@ -236,6 +244,32 @@ def load_triage_model() -> str | None:
     """Optional model pin from the Triage prompt's frontmatter (NFR24).
     ``None`` → caller uses the gateway's configured default."""
     path = PROMPTS_DIR / f"{TRIAGE_FILENAME}.md"
+    if not path.exists():
+        return None
+    return parse_model_frontmatter(path.read_text(encoding="utf-8"))
+
+
+# ── coach prompts (story 1.5) ──────────────────────────────────────────────
+
+def load_coach_grounded() -> tuple[str, str]:
+    """Returns ``(version, body)`` for the coach grounded-conversation prompt.
+
+    Reads the live ``CoachGrounded.md`` file under ``COACH_PROMPTS_DIR``;
+    no pin-table lookup (FR48 extension to coach is deferred). Raises
+    :class:`FileNotFoundError` if the file is missing — the caller (the
+    ``coach_reply`` actor) writes an ``error`` status on the assistant
+    row so the user sees a real message instead of a stuck spinner.
+    """
+    path = COACH_PROMPTS_DIR / f"{COACH_GROUNDED_FILENAME}.md"
+    if not path.exists():
+        raise FileNotFoundError(f"coach prompt file not found: {path}")
+    return parse_version_frontmatter(path.read_text(encoding="utf-8"))
+
+
+def load_coach_grounded_model() -> str | None:
+    """Optional ``model:`` pin from the coach prompt's frontmatter (NFR24).
+    ``None`` → caller uses the gateway's configured default."""
+    path = COACH_PROMPTS_DIR / f"{COACH_GROUNDED_FILENAME}.md"
     if not path.exists():
         return None
     return parse_model_frontmatter(path.read_text(encoding="utf-8"))

@@ -85,6 +85,11 @@ class GatewayResult:
     cost_usd: Decimal
     outcome: str  # "ok" | "error"
     latency_ms: int
+    # Story 1.5: ULID of the matching ``llm_calls`` row so callers can link
+    # downstream artifacts (e.g. ``coach_messages.llm_call_id``). Always set
+    # for success/fake; un-set (``None``) is reserved for budget-exhausted
+    # raises (no row written) where ``GatewayResult`` is never returned.
+    llm_call_id: str | None = None
 
 
 # ── anthropic client (lazy, cached) ─────────────────────────────────────────
@@ -153,20 +158,27 @@ def record_llm_call(
     latency_ms: int,
     outcome: str,
     correlation_id: str | None,
-) -> None:
+    row_id: str | None = None,
+) -> str:
     """Write one ``llm_calls`` row. Best-effort: a metering failure is logged
     and swallowed — the call already happened, so it must still be observable
     in logs but must never mask the result or fail a job.
 
     DB import is lazy (``app.db_sync`` raises without ``DATABASE_URL``) so unit
     tests stay DB-free by stubbing this function.
+
+    Story 1.5: returns the ULID assigned to the row so callers can link
+    downstream artifacts (e.g. ``coach_messages.llm_call_id``). If ``row_id``
+    is provided it's used verbatim (so ``complete`` can stamp the same id
+    on both the row and the ``GatewayResult``); otherwise one is generated.
     """
+    rid = row_id or new_llm_call_id()
     try:
         from app.db_sync import SessionFactory  # noqa: PLC0415 — deliberate lazy import
         from aimusic_shared.models import LlmCall
 
         row = LlmCall(
-            id=new_llm_call_id(),
+            id=rid,
             user_id=user_id,
             tier=tier,
             purpose=purpose,
@@ -188,6 +200,7 @@ def record_llm_call(
             "metering write failed (purpose=%s slug=%s outcome=%s) — continuing",
             purpose, prompt_slug, outcome,
         )
+    return rid
 
 
 # ── SDK call boundary: translate anthropic errors → gateway errors ──────────
@@ -309,7 +322,7 @@ async def complete(
                     # success
                     latency_ms = int((time.monotonic() - t0) * 1000)
                     cost = _safe_cost(attempt_model, in_tok, out_tok)
-                    record_llm_call(
+                    call_id = record_llm_call(
                         user_id=user_id, tier=effective_tier, purpose=purpose,
                         prompt_slug=prompt_slug, prompt_version=prompt_version,
                         model=attempt_model, input_tokens=in_tok,
@@ -320,7 +333,7 @@ async def complete(
                     return GatewayResult(
                         text=text, model=attempt_model, input_tokens=in_tok,
                         output_tokens=out_tok, cost_usd=cost, outcome="ok",
-                        latency_ms=latency_ms,
+                        latency_ms=latency_ms, llm_call_id=call_id,
                     )
                 if give_up:
                     break  # non-retryable / unexpected → no fallback attempt
@@ -331,16 +344,22 @@ async def complete(
 
     # retries (+ fallback for retryable failures) exhausted → one error row
     latency_ms = int((time.monotonic() - t0) * 1000)
-    record_llm_call(
+    err_call_id = record_llm_call(
         user_id=user_id, tier=effective_tier, purpose=purpose,
         prompt_slug=prompt_slug, prompt_version=prompt_version,
         model=last_model, input_tokens=0, output_tokens=0, cost_usd=Decimal("0"),
         latency_ms=latency_ms, outcome="error", correlation_id=correlation_id,
     )
     _budget.record_outcome(outcome="error")
-    raise LlmInvocationError(
+    # Story 1.5 code review E-M1: thread the error row's ULID through the
+    # raised exception so callers (e.g. the coach actor) can stamp it on
+    # ``coach_messages.llm_call_id``. Forensics can then link a user-visible
+    # "transient error" back to the metering row that caused it.
+    err = LlmInvocationError(
         f"LLM call failed (purpose={purpose} slug={prompt_slug}): {last_exc}"
-    ) from last_exc
+    )
+    err.llm_call_id = err_call_id
+    raise err from last_exc
 
 
 def _safe_cost(model: str, input_tokens: Any, output_tokens: Any) -> Decimal:
@@ -382,7 +401,7 @@ def _fake_result(
     # Zero tokens so fake rows never pollute real token-volume dashboards
     # (the docker dev stack runs LLM_FAKE=1 against the shared DB).
     in_tok, out_tok = 0, 0
-    record_llm_call(
+    call_id = record_llm_call(
         user_id=user_id, tier=tier, purpose=purpose, prompt_slug=prompt_slug,
         prompt_version=prompt_version, model=_FAKE_MODEL, input_tokens=in_tok,
         output_tokens=out_tok, cost_usd=Decimal("0"), latency_ms=0,
@@ -390,7 +409,7 @@ def _fake_result(
     )
     return GatewayResult(
         text=text, model=_FAKE_MODEL, input_tokens=in_tok, output_tokens=out_tok,
-        cost_usd=Decimal("0"), outcome="ok", latency_ms=0,
+        cost_usd=Decimal("0"), outcome="ok", latency_ms=0, llm_call_id=call_id,
     )
 
 

@@ -682,3 +682,56 @@ export interface VerdictsListResponse {
 export interface RunSpecialistResponse {
   status: 'queued' | 'exists';
 }
+
+// ─── Coach conversations (story 1.5) ────────────────────────────────────
+//
+// Wire shapes for POST /api/coach/{analysisId}/messages and
+// GET /api/coach/{analysisId}/conversation. Persisted-message + poll path
+// (streaming relay = story 1.6; chat UI = story 1.8). The existing
+// CoachChat.tsx still hits the legacy /api/coach/{jobId}/chat SSE endpoint
+// until 1.8 swaps over.
+
+export type CoachMessageRole = 'user' | 'assistant';
+
+export type CoachMessageStatus = 'pending' | 'complete' | 'refused' | 'error';
+
+export interface CoachEvidenceDto {
+  label: string;
+  path: string;
+}
+
+export interface CoachMessageDto {
+  id: string;
+  role: CoachMessageRole;
+  status: CoachMessageStatus;
+  content: string;
+  /** Null on user rows; present (possibly empty) on assistant rows that
+   *  reached the parse phase. Chips with unresolvable paths are dropped
+   *  server-side per AR10. */
+  evidence: CoachEvidenceDto[] | null;
+  /** Stable refusal reason string from the prompt or the gateway:
+   *  "missing_data" | "out_of_scope" | "injection_attempt" | "coach_offline". */
+  refusalReason: string | null;
+  /** ISO-8601 UTC. */
+  createdAt: string;
+  /** ISO-8601 UTC; null while status === 'pending'. */
+  completedAt: string | null;
+}
+
+export interface CoachConversationDto {
+  /** Guid.Empty (`"00000000-0000-0000-0000-000000000000"`) when no
+   *  conversation exists yet — the UI may poll before the user posts. */
+  conversationId: string;
+  analysisId: string;
+  messages: CoachMessageDto[];
+}
+
+export interface CreateCoachMessageRequest {
+  content: string;
+}
+
+export interface CreateCoachMessageResponse {
+  conversationId: string;
+  userMessageId: string;
+  pendingAssistantMessageId: string;
+}

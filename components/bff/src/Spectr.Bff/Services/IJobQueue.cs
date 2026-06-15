@@ -7,18 +7,29 @@ namespace Spectr.Bff.Services;
 // dramatiq's @actor decorator on the matching task name.
 public interface IJobQueue
 {
+    // Enqueues on the default queue. Retained as the zero-arg overload so
+    // existing callers (run_triage, run_specialist, analyze_audio_job, etc.)
+    // need no change.
     Task EnqueueAsync(string taskName, object[] args, CancellationToken ct = default);
+
+    // Story 1.5: queue-name overload. The actor on the worker side must
+    // declare `queue_name=<queueName>` in its @dramatiq.actor decorator,
+    // and the worker process must subscribe to that queue.
+    Task EnqueueAsync(string taskName, object[] args, string queueName, CancellationToken ct = default);
 }
 
 internal sealed class DramatiqJobQueue(IConfiguration config) : IJobQueue
 {
     private const string Namespace = "dramatiq";
-    private const string DefaultQueue = "default";
 
     private readonly ConnectionMultiplexer _redis = ConnectionMultiplexer.Connect(
         config["Redis:ConnectionString"] ?? throw new InvalidOperationException("Redis:ConnectionString not set"));
 
-    public async Task EnqueueAsync(string taskName, object[] args, CancellationToken ct = default)
+    public Task EnqueueAsync(string taskName, object[] args, CancellationToken ct = default)
+        => EnqueueAsync(taskName, args, DramatiqQueues.Default, ct);
+
+    public async Task EnqueueAsync(
+        string taskName, object[] args, string queueName, CancellationToken ct = default)
     {
         // Dramatiq's RedisBroker (per dispatch.lua "enqueue" branch) uses:
         //   * dramatiq:<queue>.msgs   — HASH: { message_id → JSON payload }
@@ -35,7 +46,7 @@ internal sealed class DramatiqJobQueue(IConfiguration config) : IJobQueue
 
         var envelope = new
         {
-            queue_name = DefaultQueue,
+            queue_name = queueName,
             actor_name = taskName,
             args,
             kwargs = new { },
@@ -48,7 +59,7 @@ internal sealed class DramatiqJobQueue(IConfiguration config) : IJobQueue
         };
         var json = JsonSerializer.Serialize(envelope);
 
-        var queueKey = $"{Namespace}:{DefaultQueue}";
+        var queueKey = $"{Namespace}:{queueName}";
         var msgsKey = $"{queueKey}.msgs";
 
         var db = _redis.GetDatabase();

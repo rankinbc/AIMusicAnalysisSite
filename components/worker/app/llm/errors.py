@@ -16,7 +16,17 @@ DEGRADATION_REASON_CIRCUIT_BREAKER = "circuit_breaker"
 
 
 class LlmError(RuntimeError):
-    """Base for all gateway errors."""
+    """Base for all gateway errors.
+
+    Story 1.5 code review E-M1: subclasses (notably
+    :class:`LlmInvocationError` raised on retry exhaustion) may carry the
+    ULID of the ``llm_calls`` row the gateway wrote so callers can link a
+    user-visible error to the metering row that caused it. Default is
+    ``None`` because not every path writes a metered row (e.g.
+    :class:`LlmBudgetExceeded` is raised PRE-call, un-metered).
+    """
+
+    llm_call_id: str | None = None
 
 
 class LlmTimeoutError(LlmError):
