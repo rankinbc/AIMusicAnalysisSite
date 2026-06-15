@@ -305,3 +305,36 @@
   font-size: 10px;
   color: var(--muted);
 }
+
+/* Story 1.9 — caps chip in the header row, right-aligned next to the
+   status overline (UX-DR16 "chip in card header"). */
+.capsChipSlot {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Story 1.9 / Task 5.2 — CoachGateInline visual rhythm. Mirrors the
+   offline card structure so the input-replacement transitions don't jar
+   the layout. */
+.gateCard {
+  padding: 14px;
+  margin-top: 12px;
+}
+.gateHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.gateBody {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.gateActions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}

@@ -3,11 +3,15 @@ import { toast } from 'sonner';
 
 import { getAccessToken } from '../../api/fetcher';
 import type {
+  CoachCapsDto,
+  CoachConversationDto,
   CreateCoachMessageResponse,
   VerdictDto,
 } from '../../api/types';
 import { Pill } from '../../ui/Pill';
 import { TranceBot } from './TranceBot';
+import { CoachCapChip } from './CoachCapChip';
+import { CoachGateInline } from './CoachGateInline';
 import { EvidenceChips } from './EvidenceChips';
 import { deriveCoachSuggestions } from './coach-suggestion-templates';
 import {
@@ -89,6 +93,9 @@ export function CoachChat({
   const [streaming, setStreaming] = useState(false);
   const [offlineState, setOfflineState] = useState(false);
   const [streamStatus, setStreamStatus] = useState<string>('');
+  // Story 1.9 — per-analysis cap state. `null` pre-hydration; the server is
+  // the single source of truth (no frontend arithmetic — see Task 6.2).
+  const [caps, setCaps] = useState<CoachCapsDto | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   // Code-review P3 — synchronous double-send guard. `streaming` state is
   // batched; rapid Enter+click could slip through the React-state check.
@@ -151,6 +158,52 @@ export function CoachChat({
     setStreaming(false);
     setStreamStatus('');
     sendingRef.current = false;
+    setCaps(null);  // Re-hydrate from the new analysis.
+  }, [analysisId]);
+
+  // Story 1.9 / Task 6.1 — hydrate caps + transcript from
+  // GET /api/coach/{analysisId}/conversation on mount and on analysis
+  // change. The same endpoint surfaces both messages and caps so the chip
+  // + gate state are correct on first paint without a separate roundtrip.
+  useEffect(() => {
+    const ac = new AbortController();
+    const token = getAccessToken();
+    const authHeaders: Record<string, string> = token
+      ? { Authorization: `Bearer ${token}` }
+      : {};
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/coach/${analysisId}/conversation`, {
+          headers: authHeaders,
+          signal: ac.signal,
+        });
+        if (!res.ok) return;
+        const dto = (await res.json()) as CoachConversationDto;
+        setCaps(dto.caps);
+        // Hydrate prior turns so a refresh mid-conversation keeps context.
+        if (dto.messages.length > 0) {
+          const prior: ChatTurn[] = dto.messages.map((m) => {
+            const turn: ChatTurn = {
+              role: m.role,
+              text: m.content,
+              finalized: m.status === 'complete' || m.status === 'refused',
+            };
+            if (m.evidence) turn.evidence = m.evidence;
+            if (m.status === 'refused') {
+              turn.refused = true;
+              if (m.refusalReason) turn.refusalReason = m.refusalReason;
+            }
+            return turn;
+          });
+          setTurns(prior);
+        }
+      } catch {
+        /* hydration is best-effort; the user can still send messages */
+      }
+    })();
+
+    return () => ac.abort();
   }, [analysisId]);
 
   const suggestions = useMemo(() => deriveCoachSuggestions(verdicts), [verdicts]);
@@ -197,7 +250,11 @@ export function CoachChat({
 
   const send = useCallback(async () => {
     const msg = input.trim();
+    // Story 1.9 — defence-in-depth: even if the gate is rendered we never
+    // emit a POST when the cap is already reached (the server would reject
+    // it with `coach_cap_reached` anyway).
     if (!msg || sendingRef.current || streaming || offlineState) return;
+    if (caps?.capReached) return;
     sendingRef.current = true;
     setInput('');
     setTurns((t) => [
@@ -236,11 +293,31 @@ export function CoachChat({
           setStreamStatus(COACH_OFFLINE_COPY);
           return;
         }
+        // Story 1.9 — AR38 cap-reached. Roll back the optimistic-append
+        // so the refused message never appears in the transcript, then
+        // flip caps to the gate state from the server's `details` field.
+        if (code === 'coach_cap_reached') {
+          setTurns((t) => trimEmptyPending(t));
+          // Drop the optimistically-appended user bubble too.
+          setTurns((t) => (t.length > 0 && t[t.length - 1]?.role === 'user' ? t.slice(0, -1) : t));
+          const details = (errBody as { error?: { details?: { used?: number; limit?: number } } })
+            ?.error?.details;
+          if (typeof details?.used === 'number' && typeof details?.limit === 'number') {
+            setCaps({ used: details.used, limit: details.limit, capReached: true });
+          } else if (caps) {
+            // Fall back to local arithmetic only if the server omitted details.
+            setCaps({ used: caps.limit, limit: caps.limit, capReached: true });
+          }
+          setStreamStatus('Follow-up limit reached for this analysis.');
+          return;
+        }
         throw new Error(extractErrorMessage(errBody) ?? `HTTP ${postRes.status}`);
       }
 
       const created = (await postRes.json()) as CreateCoachMessageResponse;
       const messageId = created.pendingAssistantMessageId;
+      // Story 1.9 / Task 6.2 — server-computed caps reflect the new user row.
+      setCaps(created.caps);
 
       // ── Phase 2: open the SSE stream.
       const streamRes = await fetch(
@@ -344,7 +421,7 @@ export function CoachChat({
         ariaLiveTimerRef.current = null;
       }
     }
-  }, [analysisId, flushAriaLive, input, offlineState, scheduleAriaLive, streaming]);
+  }, [analysisId, caps, flushAriaLive, input, offlineState, scheduleAriaLive, streaming]);
 
   return (
     <section className={s.coach}>
@@ -359,6 +436,11 @@ export function CoachChat({
             {/* P17 — `·` separator matches UX-DR13 overline */}
             <span className={s.statusSep}>·</span>
             <span className={s.statusSub}>online · trained on your analysis</span>
+            {caps && (
+              <span className={s.capsChipSlot}>
+                <CoachCapChip used={caps.used} limit={caps.limit} />
+              </span>
+            )}
           </div>
           <h3 className={s.title}>Ask anything about this mix</h3>
           <p className={s.subtitle}>
@@ -396,55 +478,65 @@ export function CoachChat({
             </div>
           )}
 
-          <div className={s.suggestions}>
-            {suggestions.map((q) => (
-              <button
-                key={q}
-                type="button"
-                className={s.suggestion}
-                onClick={() => setInput(q)}
-                disabled={offlineState}
-              >
-                {q}
-              </button>
-            ))}
-          </div>
+          {caps?.capReached && !streaming ? (
+            // Story 1.9 / AC3 — input row replaced by CoachGateInline once
+            // the per-analysis cap is reached. Transcript above remains
+            // visible + scrollable. Suggestion chips disappear too — they'd
+            // prefill an input that no longer exists.
+            <CoachGateInline />
+          ) : (
+            <>
+              <div className={s.suggestions}>
+                {suggestions.map((q) => (
+                  <button
+                    key={q}
+                    type="button"
+                    className={s.suggestion}
+                    onClick={() => setInput(q)}
+                    disabled={offlineState}
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
 
-          <div className={s.inputRow}>
-            <input
-              className={`${s.input}${offlineState ? ` ${s.inputDisabled}` : ''}`}
-              placeholder={offlineState ? 'Coach is offline' : 'Ask the coach…'}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !streaming) {
-                  e.preventDefault();
-                  send();
-                }
-              }}
-              disabled={offlineState}
-              aria-label="Coach question input"
-            />
-            {streaming ? (
-              <button
-                type="button"
-                className="btn ghost"
-                onClick={handleStop}
-                aria-label="Stop coach response"
-              >
-                ◼ Stop
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="btn primary"
-                onClick={send}
-                disabled={!input.trim() || offlineState}
-              >
-                Ask →
-              </button>
-            )}
-          </div>
+              <div className={s.inputRow}>
+                <input
+                  className={`${s.input}${offlineState ? ` ${s.inputDisabled}` : ''}`}
+                  placeholder={offlineState ? 'Coach is offline' : 'Ask the coach…'}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !streaming) {
+                      e.preventDefault();
+                      send();
+                    }
+                  }}
+                  disabled={offlineState}
+                  aria-label="Coach question input"
+                />
+                {streaming ? (
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    onClick={handleStop}
+                    aria-label="Stop coach response"
+                  >
+                    ◼ Stop
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn primary"
+                    onClick={send}
+                    disabled={!input.trim() || offlineState}
+                  >
+                    Ask →
+                  </button>
+                )}
+              </div>
+            </>
+          )}
 
           <p
             className={s.groundingScope}

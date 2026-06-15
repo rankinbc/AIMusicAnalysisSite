@@ -17,14 +17,24 @@ public sealed record CoachMessageDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset? CompletedAt);
 
+// Story 1.9 / UX-DR16: per-analysis follow-up cap state. `CapReached` is
+// server-computed (single source of truth — if the formula changes in
+// story 2.6 we don't have a frontend that disagrees). The free-tier
+// specialization of UX-DR16 grammar `{used} of {limit} follow-ups · this
+// analysis` is owned by the frontend; story 2.6 will add `Tier` / `ResetsAt`
+// fields for the Pro-per-month form.
+public sealed record CoachCapsDto(int Used, int Limit, bool CapReached);
+
 public sealed record CoachConversationDto(
     Guid ConversationId,
     Guid AnalysisId,
-    IReadOnlyList<CoachMessageDto> Messages);
+    IReadOnlyList<CoachMessageDto> Messages,
+    CoachCapsDto Caps);
 
 public sealed record CreateCoachMessageRequest(string Content);
 
 public sealed record CreateCoachMessageResponse(
     Guid ConversationId,
     Guid UserMessageId,
-    Guid PendingAssistantMessageId);
+    Guid PendingAssistantMessageId,
+    CoachCapsDto Caps);

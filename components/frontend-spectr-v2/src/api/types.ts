@@ -718,12 +718,27 @@ export interface CoachMessageDto {
   completedAt: string | null;
 }
 
+/** Story 1.9 / UX-DR16 — per-analysis follow-up cap state. `capReached` is
+ *  server-computed (single source of truth — if the formula changes in
+ *  story 2.6 the frontend won't disagree). The free-tier specialization of
+ *  the UX-DR16 grammar `{used} of {limit} follow-ups · this analysis` is
+ *  rendered by `CoachCapChip`; story 2.6 will widen this shape with `tier`
+ *  + `resetsAt` for the Pro-per-month form. */
+export interface CoachCapsDto {
+  used: number;
+  limit: number;
+  capReached: boolean;
+}
+
 export interface CoachConversationDto {
   /** Guid.Empty (`"00000000-0000-0000-0000-000000000000"`) when no
    *  conversation exists yet — the UI may poll before the user posts. */
   conversationId: string;
   analysisId: string;
   messages: CoachMessageDto[];
+  /** Story 1.9 — added on first paint so the chip + gate state render
+   *  without a second roundtrip. */
+  caps: CoachCapsDto;
 }
 
 export interface CreateCoachMessageRequest {
@@ -734,6 +749,9 @@ export interface CreateCoachMessageResponse {
   conversationId: string;
   userMessageId: string;
   pendingAssistantMessageId: string;
+  /** Story 1.9 — post-POST cap snapshot lets the frontend flip to
+   *  `CoachGateInline` in the same render tick that streaming starts. */
+  caps: CoachCapsDto;
 }
 
 // ── Story 1.6 / AR9 / AR44 — SSE coach stream wire types ──────────────────

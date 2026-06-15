@@ -77,12 +77,15 @@ public sealed class CoachConversationDtoSerializationTests
         var dto = new CoachConversationDto(
             ConversationId: Guid.NewGuid(),
             AnalysisId: Guid.NewGuid(),
-            Messages: Array.Empty<CoachMessageDto>());
+            Messages: Array.Empty<CoachMessageDto>(),
+            Caps: new CoachCapsDto(Used: 0, Limit: 3, CapReached: false));
 
         var json = JsonSerializer.Serialize(dto, WebDefaults);
         Assert.Contains("\"conversationId\":", json);
         Assert.Contains("\"analysisId\":", json);
         Assert.Contains("\"messages\":[]", json);
+        Assert.Contains("\"caps\":", json);
+        Assert.Contains("\"capReached\":false", json);
         Assert.DoesNotContain("conversation_id", json);
         Assert.DoesNotContain("analysis_id", json);
     }
@@ -97,11 +100,15 @@ public sealed class CoachConversationDtoSerializationTests
         var resp = new CreateCoachMessageResponse(
             ConversationId: Guid.NewGuid(),
             UserMessageId: Guid.NewGuid(),
-            PendingAssistantMessageId: Guid.NewGuid());
+            PendingAssistantMessageId: Guid.NewGuid(),
+            Caps: new CoachCapsDto(Used: 1, Limit: 3, CapReached: false));
         var respJson = JsonSerializer.Serialize(resp, WebDefaults);
         Assert.Contains("\"conversationId\":", respJson);
         Assert.Contains("\"userMessageId\":", respJson);
         Assert.Contains("\"pendingAssistantMessageId\":", respJson);
+        Assert.Contains("\"caps\":", respJson);
+        Assert.Contains("\"used\":1", respJson);
+        Assert.Contains("\"limit\":3", respJson);
         Assert.DoesNotContain("user_message_id", respJson);
     }
 }

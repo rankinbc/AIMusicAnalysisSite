@@ -4,6 +4,7 @@ using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using Spectr.Bff.Auth;
 using Spectr.Bff.Endpoints;
+using Spectr.Bff.Options;
 using Spectr.Bff.Services;
 using Spectr.Data;
 using StackExchange.Redis;
@@ -87,6 +88,14 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 // Coach chat — invokes claude CLI as a subprocess and streams stdout. Same
 // binary the Python worker uses for verdict pipeline.
 builder.Services.AddSingleton<CoachChatService>();
+
+// Story 1.9: per-analysis free-tier coach follow-up cap. Fail-fast at startup
+// on a non-positive value — a zero cap would make the product unusable and we
+// don't want a config typo to ship silently.
+builder.Services.AddOptions<CoachCapsOptions>()
+    .Bind(builder.Configuration.GetSection(CoachCapsOptions.SectionName))
+    .Validate(o => o.FreeFollowups > 0, "CoachCaps:FreeFollowups must be > 0")
+    .ValidateOnStart();
 
 // CORS for the frontend dev server.
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>

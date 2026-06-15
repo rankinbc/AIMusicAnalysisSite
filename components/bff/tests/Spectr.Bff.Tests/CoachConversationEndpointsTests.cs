@@ -415,4 +415,148 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
             await CleanupUser(factory, userId);
         }
     }
+
+    // ── Story 1.9: Per-Analysis Coach Caps (AC1-4) ───────────────────────────
+
+    [Fact]
+    public async Task Post_AtCapLimit_Returns_403_CoachCapReached_And_Does_Not_Enqueue()
+    {
+        // AC1: server rejects further messages with `coach_cap_reached`.
+        // AC4: source-of-truth is COUNT user messages on the conversation.
+        // Regression guard: NO new coach_messages row, NO actor enqueue.
+        if (!await PostgresReachable()) { return; }
+
+        var (factory, queue) = BuildWithFakeQueue();
+        var (client, userId, analysisId) = await SeedAuthedUserAndAnalysis(factory, "coach-cap");
+
+        try
+        {
+            // Send three (the default FreeFollowups cap). Each one should
+            // succeed and return an incrementing `used` field.
+            for (var i = 1; i <= 3; i++)
+            {
+                var ok = await client.PostAsJsonAsync(
+                    $"/api/coach/{analysisId}/messages",
+                    new CreateCoachMessageRequest($"Q{i}"));
+                Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+                var body = await ok.Content.ReadFromJsonAsync<CreateCoachMessageResponse>();
+                Assert.NotNull(body);
+                Assert.Equal(i, body!.Caps.Used);
+                Assert.Equal(3, body.Caps.Limit);
+                Assert.Equal(i == 3, body.Caps.CapReached);
+            }
+
+            // The fourth POST must refuse with coach_cap_reached.
+            var refused = await client.PostAsJsonAsync(
+                $"/api/coach/{analysisId}/messages",
+                new CreateCoachMessageRequest("Q4 — over the line"));
+            Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+            var refusedBody = await refused.Content.ReadAsStringAsync();
+            using (var doc = JsonDocument.Parse(refusedBody))
+            {
+                var err = doc.RootElement.GetProperty("error");
+                Assert.Equal("coach_cap_reached", err.GetProperty("code").GetString());
+                var details = err.GetProperty("details");
+                Assert.Equal(3, details.GetProperty("used").GetInt32());
+                Assert.Equal(3, details.GetProperty("limit").GetInt32());
+            }
+
+            // Zero side-effects on refusal: still 3 user rows + 3 assistant
+            // rows + 3 enqueues — nothing from the refused Q4.
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var conv = await db.Conversations.SingleAsync(c => c.UserId == userId);
+            var userMsgs = await db.CoachMessages
+                .CountAsync(m => m.ConversationId == conv.Id && m.Role == "user");
+            Assert.Equal(3, userMsgs);
+            Assert.Equal(3, queue.Calls.Count);
+        }
+        finally
+        {
+            await CleanupUser(factory, userId);
+        }
+    }
+
+    [Fact]
+    public async Task Post_OneBelowLimit_Succeeds_And_Reports_CapReached_True()
+    {
+        // AC2 sanity case: at used = limit - 1 the POST goes through and the
+        // returned caps shows CapReached = false (still room for one more);
+        // the NEXT POST should flip CapReached = true in the response.
+        if (!await PostgresReachable()) { return; }
+
+        var (factory, _) = BuildWithFakeQueue();
+        var (client, userId, analysisId) = await SeedAuthedUserAndAnalysis(factory, "coach-belowcap");
+
+        try
+        {
+            var first = await client.PostAsJsonAsync(
+                $"/api/coach/{analysisId}/messages",
+                new CreateCoachMessageRequest("Q1"));
+            Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+            var firstBody = await first.Content.ReadFromJsonAsync<CreateCoachMessageResponse>();
+            Assert.Equal(1, firstBody!.Caps.Used);
+            Assert.False(firstBody.Caps.CapReached);
+
+            var second = await client.PostAsJsonAsync(
+                $"/api/coach/{analysisId}/messages",
+                new CreateCoachMessageRequest("Q2"));
+            Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+            var secondBody = await second.Content.ReadFromJsonAsync<CreateCoachMessageResponse>();
+            Assert.Equal(2, secondBody!.Caps.Used);
+            Assert.False(secondBody.Caps.CapReached);  // 2 of 3, not yet capped.
+
+            var third = await client.PostAsJsonAsync(
+                $"/api/coach/{analysisId}/messages",
+                new CreateCoachMessageRequest("Q3"));
+            Assert.Equal(HttpStatusCode.OK, third.StatusCode);
+            var thirdBody = await third.Content.ReadFromJsonAsync<CreateCoachMessageResponse>();
+            Assert.Equal(3, thirdBody!.Caps.Used);
+            Assert.True(thirdBody.Caps.CapReached);  // 3 of 3, capped.
+        }
+        finally
+        {
+            await CleanupUser(factory, userId);
+        }
+    }
+
+    [Fact]
+    public async Task Get_Conversation_Includes_Caps_Field_Reflecting_User_Message_Count()
+    {
+        // AC2 + AC4: the GET DTO must surface caps so the frontend can render
+        // the chip + gate state on first paint without a separate roundtrip.
+        if (!await PostgresReachable()) { return; }
+
+        var (factory, _) = BuildWithFakeQueue();
+        var (client, userId, analysisId) = await SeedAuthedUserAndAnalysis(factory, "coach-getcaps");
+
+        try
+        {
+            // Empty state: caps present, 0 of 3.
+            var empty = await client.GetAsync($"/api/coach/{analysisId}/conversation");
+            var emptyBody = await empty.Content.ReadFromJsonAsync<CoachConversationDto>();
+            Assert.NotNull(emptyBody);
+            Assert.Equal(0, emptyBody!.Caps.Used);
+            Assert.Equal(3, emptyBody.Caps.Limit);
+            Assert.False(emptyBody.Caps.CapReached);
+
+            // After two POSTs: caps reflects 2 of 3.
+            await client.PostAsJsonAsync(
+                $"/api/coach/{analysisId}/messages",
+                new CreateCoachMessageRequest("Q1"));
+            await client.PostAsJsonAsync(
+                $"/api/coach/{analysisId}/messages",
+                new CreateCoachMessageRequest("Q2"));
+
+            var hydrated = await client.GetAsync($"/api/coach/{analysisId}/conversation");
+            var hydratedBody = await hydrated.Content.ReadFromJsonAsync<CoachConversationDto>();
+            Assert.Equal(2, hydratedBody!.Caps.Used);
+            Assert.Equal(3, hydratedBody.Caps.Limit);
+            Assert.False(hydratedBody.Caps.CapReached);
+        }
+        finally
+        {
+            await CleanupUser(factory, userId);
+        }
+    }
 }
