@@ -1,6 +1,6 @@
 # Story 1.9: Per-Analysis Coach Caps
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -206,3 +206,41 @@ claude-opus-4-7 (1M context)
 ### Change Log
 
 - 2026-06-15 — story 1.9 implementation complete. 4/4 ACs satisfied. BFF 36/36 tests pass; frontend 122/122 vitest pass + 0 lint + clean tsc + clean build. Status → review.
+- 2026-06-15 — code review (3-layer adversarial Sonnet × 3: Blind Hunter + Edge Case Hunter + Acceptance Auditor). 15 patches applied + 7 deferred + 2 dismissed. BFF 36/36 still pass; frontend 122 → 134 vitest (+12 from new CoachChat.caps.test.tsx + extended CoachCapChip + CoachGateInline tests). Lint + build remain clean. Status → done.
+
+### Review Findings
+
+15 patches applied during the review-pass cycle. Codes (P1, P2 …) reference inline comments in the affected files.
+
+| Code | Severity | Title | Files |
+|---|---|---|---|
+| P1 | H | Single-pass `setTurns` rollback on `coach_cap_reached` — fixes stale-closure double-call bug under React 18+ automatic batching | `CoachChat.tsx` |
+| P2 | H | `usedAfter` re-queries `db.CoachMessages.CountAsync` post-commit instead of `usedBefore + 1` — truthful under concurrent-first-POST races | `CoachConversationEndpoints.cs` |
+| P3 | H | New `CoachChat.caps.test.tsx` exercises the gate-vs-input swap invariant + AR38 optimistic-rollback regression (the patch that fixes P1) | `__tests__/CoachChat.caps.test.tsx` (new) |
+| P4 | H | `GetConversation` now uses `db.CoachMessages.CountAsync` (mirrors PostMessage path) instead of counting from the in-memory DTO list — single counting strategy, no future drift | `CoachConversationEndpoints.cs` |
+| P5 | H | AR38 ARIA announcement uses canonical copy `Coach follow-ups exhausted for this analysis. Pro and credit options available.` from Task 5.4; fires on both POST-rejection AND first-paint hydration | `CoachChat.tsx` |
+| P6 | H | `CoachGateInline` body copy `Pro = pooled monthly coach access` (no trailing period) per AC3 literal | `CoachGateInline.tsx` |
+| P8 | M | `ValidateOnStart_Throws_At_Host_Build` exercises the real host lifecycle so `.ValidateOnStart()` regressions are caught at startup (was previously testing `.Value` lazy validation only) | `CoachCapsOptionsTests.cs` |
+| P9 | M | Removed `"// FreeFollowups"` JSON comment-key hack from `appsettings.json` (invalid JSON convention; pollutes the options bind graph) | `appsettings.json` |
+| P10 | M | `CoachCapChip` is now always rendered in the header (default `used=0, limit=3` during hydration window) per Task 4.3 "ALWAYS visible" requirement | `CoachChat.tsx` |
+| P11 | M | `ErrorEnvelope` helper extended with optional `details` parameter; cap-reached path now routes through it for consistent serializer behaviour across all AR38 emissions | `CoachConversationEndpoints.cs` |
+| P12 | M | Same as P11 (now applied at the cap-reached call site) | `CoachConversationEndpoints.cs` |
+| P13 | L | Removed `role="status"` from `CoachCapChip` — implicit live region was announcing on every render including mid-stream caps updates | `CoachCapChip.tsx` |
+| P14 | M | `aria-label` on `CoachCapChip` now embeds the visible text verbatim then appends the remaining cue (WCAG 2.5.3 "Label in Name") | `CoachCapChip.tsx` |
+| P15 | M | `send()` snapshots `analysisId` and the hydration effect captures `hydrationAnalysisId`; both guard against stale-response writes after a mid-flight analysis change | `CoachChat.tsx` |
+| P23 | L | `CoachGateInline.test.tsx` extended with prop-call tests (onUpgrade / onBuyCredits / default sonner handler) per Task 5.5 | `__tests__/CoachGateInline.test.tsx` |
+
+**Deferred** (real findings, out of 1.9 scope) — moved to [PRPs/deferred-work.md](../deferred-work.md):
+- TOCTOU concurrent cap race (acknowledged design trade-off; Epic 2 story 2.6's `usage_events` ledger fixes properly).
+- Cancelled (Stop) messages still count toward cap — product decision pending.
+- Refused messages count toward cap — product decision pending.
+- `useEffect` hydration uses raw fetch rather than widening "the existing TanStack Query" — the existing CoachChat didn't have one for `/conversation`; spec assumption inaccurate.
+- Generic `catch` path doesn't roll back the optimistic user bubble (pre-existing inconsistency for network failures).
+- Nested `<section>` landmark in CoachChat shell has no aria-label (pre-existing structural issue).
+- `CoachCapsDto` forward-compat for story 2.6 documented in comments only (no `tier?` / `resetsAt?` type stubs); cosmetic.
+
+**Dismissed**:
+- UX-spec line 191 says `3 follow-ups left (free)` while story spec AC2 says `{used} of {limit} follow-ups · this analysis`. The story spec is the canonical refined version — it explicitly cites UX-DR16 as the grammar template. Implementation correctly follows the story spec.
+- Negative `FreeFollowups` not explicitly tested. The `> 0` validator predicate handles it; the existing zero-value test pins the boundary; an additional `-1` test adds zero coverage.
+
+**Debug log arithmetic** (P21 / Blind #10) was corrected in the Completion Notes by this commit — the "+5 / 35+5=36" arithmetic was wrong; the actual delta was +5 tests across two new files (CoachCapsOptionsTests has 3 + the BFF endpoint tests added 3 caps integration tests = 6 new tests; the earlier 36/36 count is correct because one DTO serialization test was modified, not added). The current BFF count is 36/36.

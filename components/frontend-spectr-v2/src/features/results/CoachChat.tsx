@@ -165,8 +165,12 @@ export function CoachChat({
   // GET /api/coach/{analysisId}/conversation on mount and on analysis
   // change. The same endpoint surfaces both messages and caps so the chip
   // + gate state are correct on first paint without a separate roundtrip.
+  // review-fix P5 — also fire the SR announcement when the user lands on
+  // a page where the cap is already reached (no POST in flight, but the
+  // gate will appear on first render).
   useEffect(() => {
     const ac = new AbortController();
+    const hydrationAnalysisId = analysisId;
     const token = getAccessToken();
     const authHeaders: Record<string, string> = token
       ? { Authorization: `Bearer ${token}` }
@@ -180,7 +184,16 @@ export function CoachChat({
         });
         if (!res.ok) return;
         const dto = (await res.json()) as CoachConversationDto;
+        // review-fix P15 — guard against the analysisId changing mid-fetch.
+        // If the user navigated away during the await, do not overwrite the
+        // new analysis's state with this stale response.
+        if (hydrationAnalysisId !== analysisId) return;
         setCaps(dto.caps);
+        if (dto.caps.capReached) {
+          setStreamStatus(
+            'Coach follow-ups exhausted for this analysis. Pro and credit options available.',
+          );
+        }
         // Hydrate prior turns so a refresh mid-conversation keeps context.
         if (dto.messages.length > 0) {
           const prior: ChatTurn[] = dto.messages.map((m) => {
@@ -255,6 +268,10 @@ export function CoachChat({
     // it with `coach_cap_reached` anyway).
     if (!msg || sendingRef.current || streaming || offlineState) return;
     if (caps?.capReached) return;
+    // review-fix P15 — snapshot the analysisId at send time so the POST
+    // response can't overwrite a freshly-mounted analysis's caps with the
+    // outgoing analysis's reply.
+    const sendAnalysisId = analysisId;
     sendingRef.current = true;
     setInput('');
     setTurns((t) => [
@@ -293,13 +310,19 @@ export function CoachChat({
           setStreamStatus(COACH_OFFLINE_COPY);
           return;
         }
-        // Story 1.9 — AR38 cap-reached. Roll back the optimistic-append
-        // so the refused message never appears in the transcript, then
-        // flip caps to the gate state from the server's `details` field.
+        // Story 1.9 / review-fix P1 — AR38 cap-reached. Single setTurns
+        // updater so the two-step rollback can't desync under React 18+
+        // automatic batching (an earlier two-call form would re-read the
+        // same `t` in both closures and skip the user-bubble removal).
+        // We trim the empty pending assistant AND the optimistic user
+        // bubble in one pass.
         if (code === 'coach_cap_reached') {
-          setTurns((t) => trimEmptyPending(t));
-          // Drop the optimistically-appended user bubble too.
-          setTurns((t) => (t.length > 0 && t[t.length - 1]?.role === 'user' ? t.slice(0, -1) : t));
+          setTurns((t) => {
+            const trimmed = trimEmptyPending(t);
+            return trimmed.length > 0 && trimmed[trimmed.length - 1]?.role === 'user'
+              ? trimmed.slice(0, -1)
+              : trimmed;
+          });
           const details = (errBody as { error?: { details?: { used?: number; limit?: number } } })
             ?.error?.details;
           if (typeof details?.used === 'number' && typeof details?.limit === 'number') {
@@ -308,7 +331,10 @@ export function CoachChat({
             // Fall back to local arithmetic only if the server omitted details.
             setCaps({ used: caps.limit, limit: caps.limit, capReached: true });
           }
-          setStreamStatus('Follow-up limit reached for this analysis.');
+          // review-fix P5 — canonical SR copy from Task 5.4.
+          setStreamStatus(
+            'Coach follow-ups exhausted for this analysis. Pro and credit options available.',
+          );
           return;
         }
         throw new Error(extractErrorMessage(errBody) ?? `HTTP ${postRes.status}`);
@@ -317,6 +343,8 @@ export function CoachChat({
       const created = (await postRes.json()) as CreateCoachMessageResponse;
       const messageId = created.pendingAssistantMessageId;
       // Story 1.9 / Task 6.2 — server-computed caps reflect the new user row.
+      // review-fix P15 — drop stale response if analysis changed mid-flight.
+      if (sendAnalysisId !== analysisId) return;
       setCaps(created.caps);
 
       // ── Phase 2: open the SSE stream.
@@ -436,11 +464,12 @@ export function CoachChat({
             {/* P17 — `·` separator matches UX-DR13 overline */}
             <span className={s.statusSep}>·</span>
             <span className={s.statusSub}>online · trained on your analysis</span>
-            {caps && (
-              <span className={s.capsChipSlot}>
-                <CoachCapChip used={caps.used} limit={caps.limit} />
-              </span>
-            )}
+            {/* review-fix P10 — chip is always visible per Task 4.3, even
+                during the hydration window. Default to 0/limit so it never
+                disappears on a failed/slow hydration. */}
+            <span className={s.capsChipSlot}>
+              <CoachCapChip used={caps?.used ?? 0} limit={caps?.limit ?? 3} />
+            </span>
           </div>
           <h3 className={s.title}>Ask anything about this mix</h3>
           <p className={s.subtitle}>

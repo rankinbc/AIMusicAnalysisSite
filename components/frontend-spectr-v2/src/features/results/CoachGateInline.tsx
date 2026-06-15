@@ -42,7 +42,7 @@ export function CoachGateInline({
       <div className={s.gateHeader}>
         <span className="label">Follow-ups used for this analysis</span>
       </div>
-      <p className={s.gateBody}>Pro = pooled monthly coach access.</p>
+      <p className={s.gateBody}>Pro = pooled monthly coach access</p>
       <div className={s.gateActions}>
         <button type="button" className="btn primary" onClick={onUpgrade}>
           Get Pro

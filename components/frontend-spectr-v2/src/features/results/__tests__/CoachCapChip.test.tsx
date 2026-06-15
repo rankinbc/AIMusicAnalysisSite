@@ -22,10 +22,13 @@ describe('CoachCapChip', () => {
     expect(html).toContain('class="pill orange"');
   });
 
-  it('aria-label includes used/limit/remaining triplet at 1 remaining', () => {
+  it('aria-label embeds visible text + remaining cue (WCAG 2.5.3, review-fix P14)', () => {
+    // review-fix P14: aria-label must contain the visible text verbatim
+    // so screen-reader content matches the visual chip (Label in Name).
+    // The remaining cue is appended after the visible text.
     const html = renderToStaticMarkup(<CoachCapChip used={2} limit={3} />);
     expect(html).toContain(
-      'aria-label="Coach follow-ups: 2 used of 3 available, 1 remaining"',
+      'aria-label="2 of 3 follow-ups · this analysis, 1 remaining"',
     );
   });
 
@@ -35,7 +38,7 @@ describe('CoachCapChip', () => {
     // status when the input swaps to the gate.
     const html = renderToStaticMarkup(<CoachCapChip used={3} limit={3} />);
     expect(html).toContain(
-      'aria-label="Coach follow-ups: 3 used of 3 available, 0 remaining"',
+      'aria-label="3 of 3 follow-ups · this analysis, 0 remaining"',
     );
     expect(html).toContain('3 of 3 follow-ups · this analysis');
   });
@@ -47,8 +50,11 @@ describe('CoachCapChip', () => {
     expect(html).not.toContain('class="pill orange"');
   });
 
-  it('renders the status role for the screen-reader announcement', () => {
+  it('does NOT carry role="status" (review-fix P13 — no spurious live-region announcements)', () => {
+    // role="status" is an implicit aria-live region; the chip re-renders
+    // on every successful POST and would announce repeatedly mid-stream.
+    // The aria-label alone (WCAG 2.5.3) is the SR cue.
     const html = renderToStaticMarkup(<CoachCapChip used={0} limit={3} />);
-    expect(html).toContain('role="status"');
+    expect(html).not.toContain('role="status"');
   });
 });

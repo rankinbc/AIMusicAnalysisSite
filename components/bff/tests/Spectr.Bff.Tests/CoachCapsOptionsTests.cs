@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Spectr.Bff.Options;
 using Xunit;
@@ -49,26 +50,33 @@ public sealed class CoachCapsOptionsTests
     }
 
     [Fact]
-    public void ValidateOnStart_Throws_On_Zero_FreeFollowups()
+    public async Task ValidateOnStart_Throws_At_Host_Build_On_Zero_FreeFollowups()
     {
-        // A zero cap would make the product unusable. Fail-fast at startup
-        // to prevent a config typo shipping silently.
-        var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
+        // review-fix P8 — exercise the actual ValidateOnStart hook by
+        // building a real host. The prior version of this test only
+        // asserted on IOptions<T>.Value access, which would still throw
+        // even if ValidateOnStart were removed from Program.cs. This
+        // version fails fast at host.StartAsync the same way prod does.
+        var hostBuilder = Host.CreateDefaultBuilder()
+            .ConfigureAppConfiguration(cfg =>
             {
-                ["CoachCaps:FreeFollowups"] = "0",
+                cfg.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["CoachCaps:FreeFollowups"] = "0",
+                });
             })
-            .Build();
+            .ConfigureServices((ctx, services) =>
+            {
+                services.AddOptions<CoachCapsOptions>()
+                    .Bind(ctx.Configuration.GetSection(CoachCapsOptions.SectionName))
+                    .Validate(o => o.FreeFollowups > 0, "CoachCaps:FreeFollowups must be > 0")
+                    .ValidateOnStart();
+            });
 
-        var services = new ServiceCollection();
-        services.AddOptions<CoachCapsOptions>()
-            .Bind(config.GetSection(CoachCapsOptions.SectionName))
-            .Validate(o => o.FreeFollowups > 0, "CoachCaps:FreeFollowups must be > 0")
-            .ValidateOnStart();
-
-        var provider = services.BuildServiceProvider();
-        var ex = Assert.Throws<OptionsValidationException>(() =>
-            provider.GetRequiredService<IOptions<CoachCapsOptions>>().Value);
+        var host = hostBuilder.Build();
+        var ex = await Assert.ThrowsAsync<OptionsValidationException>(
+            async () => await host.StartAsync());
         Assert.Contains("must be > 0", ex.Message);
+        await host.StopAsync();
     }
 }

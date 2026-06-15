@@ -5,7 +5,8 @@
 # story 1-6 transitioned: backlog → ready-for-dev → in-progress → review → done (code-review workflow, 2026-06-15)
 # story 1-7 transitioned: backlog → ready-for-dev → in-progress → review → done (code-review workflow, 2026-06-15)
 # story 1-8 transitioned: backlog → ready-for-dev → in-progress → review → done (code-review workflow, 2026-06-15)
-# story 1-9 transitioned: backlog → ready-for-dev (create-story workflow, 2026-06-15)
+# story 1-9 transitioned: backlog → ready-for-dev → in-progress → review → done (code-review workflow, 2026-06-15)
+# epic-1 completed 2026-06-15 — all 9 stories done. Optional retrospective remains.
 # project_key: NOKEY
 # tracking_system: file-system
 # story_location: PRPs/stories
@@ -52,7 +53,7 @@ tracking_system: file-system
 story_location: PRPs/stories
 
 development_status:
-  epic-1: in-progress
+  epic-1: done
   1-1-relocate-verdict-pipeline-into-worker-ownership: done
   1-2-ci-from-clean-checkout: done
   1-3-anthropic-sdk-gateway-with-per-call-metering: done
@@ -61,7 +62,7 @@ development_status:
   1-6-coach-streaming-relay: done
   1-7-design-system-foundation-fidelity-phase-a: done
   1-8-coach-chat-ui-with-grounding-affordances: done
-  1-9-per-analysis-coach-caps: review
+  1-9-per-analysis-coach-caps: done
   epic-1-retrospective: optional
 
   epic-2: backlog

@@ -127,17 +127,14 @@ public static class CoachConversationEndpoints
                     ct);
         if (usedBefore >= capLimit)
         {
-            return Results.Json(
-                new
-                {
-                    error = new
-                    {
-                        code = "coach_cap_reached",
-                        message = "Per-analysis follow-up limit reached.",
-                        details = new { used = usedBefore, limit = capLimit },
-                    },
-                },
-                statusCode: StatusCodes.Status403Forbidden);
+            // review-fix P12 — route through the shared ErrorEnvelope helper
+            // (now accepts optional details). One AR38 emission path keeps
+            // serializer/header behaviour identical across error codes.
+            return ErrorEnvelope(
+                StatusCodes.Status403Forbidden,
+                "coach_cap_reached",
+                "Per-analysis follow-up limit reached.",
+                new { used = usedBefore, limit = capLimit });
         }
 
         // Get-or-create the conversation row. The unique constraint on
@@ -218,7 +215,15 @@ public static class CoachConversationEndpoints
         // Story 1.9: post-write cap state reflects the new user row so the
         // frontend can flip to gate state in the same render tick that
         // streaming starts — no second roundtrip to /conversation needed.
-        var usedAfter = usedBefore + 1;
+        // review-fix P2 — re-query the post-commit count instead of using
+        // `usedBefore + 1`. Under the documented concurrent-first-POST race
+        // a second winner could have inserted its own user row between our
+        // initial COUNT and the GetOrCreate, so `+ 1` would under-count.
+        // A re-query against the conversation row gives the truthful state.
+        var usedAfter = await db.CoachMessages.AsNoTracking()
+            .CountAsync(
+                m => m.ConversationId == conversation.Id && m.Role == "user",
+                ct);
         var capsAfter = new CoachCapsDto(
             Used: usedAfter,
             Limit: capLimit,
@@ -275,7 +280,15 @@ public static class CoachConversationEndpoints
 
         // Story 1.9: count user messages in this conversation for the
         // caps chip — single source of truth, no frontend arithmetic.
-        var used = messages.Count(m => m.Role == "user");
+        // review-fix P4 — count via a separate db CountAsync (mirrors the
+        // PostMessage path) instead of counting from the just-loaded DTO
+        // list. Two parallel counting strategies for the same quantity
+        // would silently desync under any future pagination/filter change
+        // to the messages projection. The COUNT is a single index seek.
+        var used = await db.CoachMessages.AsNoTracking()
+            .CountAsync(
+                m => m.ConversationId == conversation.Id && m.Role == "user",
+                ct);
         var caps = new CoachCapsDto(
             Used: used,
             Limit: capLimit,
@@ -340,10 +353,11 @@ public static class CoachConversationEndpoints
         }
     }
 
-    private static IResult ErrorEnvelope(int status, string code, string message)
+    private static IResult ErrorEnvelope(
+        int status, string code, string message, object? details = null)
     {
         return Results.Json(
-            new { error = new { code, message, details = (object?)null } },
+            new { error = new { code, message, details } },
             statusCode: status);
     }
 
