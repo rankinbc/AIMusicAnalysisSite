@@ -7,6 +7,8 @@
 # story 1-8 transitioned: backlog → ready-for-dev → in-progress → review → done (code-review workflow, 2026-06-15)
 # story 1-9 transitioned: backlog → ready-for-dev → in-progress → review → done (code-review workflow, 2026-06-15)
 # epic-1 completed 2026-06-15 — all 9 stories done. Optional retrospective remains.
+# story 2-1 transitioned: backlog → ready-for-dev (create-story workflow, 2026-06-15)
+# epic-2 transitioned to in-progress 2026-06-15.
 # project_key: NOKEY
 # tracking_system: file-system
 # story_location: PRPs/stories
@@ -65,8 +67,8 @@ development_status:
   1-9-per-analysis-coach-caps: done
   epic-1-retrospective: optional
 
-  epic-2: backlog
-  2-1-subscribe-to-pro-via-stripe-checkout: backlog
+  epic-2: in-progress
+  2-1-subscribe-to-pro-via-stripe-checkout: ready-for-dev
   2-2-manage-subscription-self-service: backlog
   2-3-buy-credits-with-append-only-ledger: backlog
   2-4-server-side-entitlements-and-metering: backlog
