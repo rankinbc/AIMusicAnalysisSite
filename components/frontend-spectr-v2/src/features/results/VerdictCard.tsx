@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { CSSProperties } from 'react';
 
 import type { FeedbackKind, VerdictDspOp, VerdictDto } from '../../api/types';
+import { Pill } from '../../ui/Pill';
 import { specialistGroup, groupColor } from './helpers/specialists';
 import { severityColor, severityLabel } from './helpers/severity';
 import { MiniBot } from './TranceBot';
@@ -104,7 +105,7 @@ export function VerdictCard({ verdict, rank, onDismiss, onApply, onFeedback }: V
                 <span style={{ color: 'var(--cyan)' }}>◆</span> The Fix
               </span>
               {verdict.presetName && (
-                <span className="pill cyan">preset · {verdict.presetName}</span>
+                <Pill tone="cyan">preset · {verdict.presetName}</Pill>
               )}
             </div>
             <ol className={s.fixSteps}>

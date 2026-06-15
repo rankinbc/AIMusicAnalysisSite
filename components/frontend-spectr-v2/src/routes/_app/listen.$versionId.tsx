@@ -690,7 +690,7 @@ function ListenPage() {
           <section className={`card ${s.meterCard}`}>
             <header className={s.cardHd}>
               <span className={s.cardTitle}>Live meters</span>
-              <Pill tone={playing ? 'cyan' : 'neutral'}>{playing ? 'live' : 'idle'}</Pill>
+              <Pill tone={playing ? 'cyan' : 'default'}>{playing ? 'live' : 'idle'}</Pill>
             </header>
             <MeterRow
               label="Short LUFS"

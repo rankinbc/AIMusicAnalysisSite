@@ -6,6 +6,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { normalizeGrade } from '../../features/results/helpers/grade';
 import { CoverArt } from '../../ui/CoverArt';
 import { GradePill } from '../../ui/GradePill';
+import { Pill } from '../../ui/Pill';
 import { hueFromId } from '../../ui/hueFromId';
 import type { ActivityItemDto, MeStatsDto, SongDto } from '../../api/types';
 import s from './profile.module.css';
@@ -129,7 +130,7 @@ function Header({ initial, displayName, handle, email, stats }: HeaderProps) {
           <div className={s.nameRow}>
             <span className={s.displayName}>{displayName}</span>
             {handle && <span className={`mono ${s.handle}`}>{handle}</span>}
-            <span className="pill cyan">Free plan</span>
+            <Pill tone="cyan">Free plan</Pill>
           </div>
           <div className={`mono ${s.meta}`}>{email}</div>
           <div className={s.statsRow}>

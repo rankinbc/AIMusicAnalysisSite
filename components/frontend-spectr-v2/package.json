@@ -7,9 +7,10 @@
     "dev": "vite",
     "build": "vite build && tsc -b",
     "preview": "vite preview --port 5174",
-    "lint": "eslint . --max-warnings 0",
+    "lint": "eslint . --max-warnings 0 && node scripts/check-no-google-fonts.mjs",
     "lint:css": "node scripts/check-css-tokens.mjs",
     "lint:prices": "node scripts/check-price-literals.mjs",
+    "lint:fonts": "node scripts/check-no-google-fonts.mjs",
     "test": "vitest",
     "test:e2e": "playwright test",
     "gen-types": "orval --config orval.config.ts"

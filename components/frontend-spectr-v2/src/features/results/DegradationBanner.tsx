@@ -7,6 +7,7 @@
 // `.pill.orange`) per spec — no bespoke layout system.
 
 import type { DegradationNoticeDto } from '../../api/types';
+import { Pill } from '../../ui/Pill';
 import s from './DegradationBanner.module.css';
 import { DEGRADATION_COPY } from './degradationCopy';
 
@@ -25,10 +26,10 @@ export function DegradationBanner({ notice }: DegradationBannerProps) {
     >
       <div className={s.headRow}>
         <span className="label">AI verdicts offline</span>
-        <span className="pill orange">
+        <Pill tone="orange">
           <span className={s.dot} aria-hidden="true" />
           rule-based
-        </span>
+        </Pill>
       </div>
       <h3 className={s.headline}>{copy.headline}</h3>
       <p className={s.text}>{copy.body}</p>

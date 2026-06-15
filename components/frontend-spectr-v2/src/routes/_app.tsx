@@ -70,7 +70,7 @@ function AppLayout() {
     <div className={s.shell}>
       <header className={s.topnav}>
         <Link to="/library" className={s.brand}>
-          <BrandMark size={22} />
+          <BrandMark size={22} glow />
           <div className={s.brandText}>
             <span>SPECTR</span>
             <span className={s.brandCaption}>AI Music Analysis</span>

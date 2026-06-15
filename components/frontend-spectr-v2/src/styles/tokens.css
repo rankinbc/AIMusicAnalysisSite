@@ -43,6 +43,7 @@
   --space-2:    8px;
   --space-3:    12px;
   --space-4:    16px;
+  --space-4-5:  18px;  /* story 1.7 / UX-DR3 — bridges 16→20 (.card-body.tight uses this slot) */
   --space-5:    20px;
   --space-6:    24px;
 
@@ -53,7 +54,21 @@
   --sev-minor:    var(--cyan);
   --sev-win:      var(--green);
 
-  /* Streaming readiness verdicts (used by Results page) */
+  /* Story 1.7 / UX-DR3 — severity aliases. The verdict pipeline emits the
+     canonical severity vocabulary (severe/minor/win); other surfaces (audit
+     log, billing dunning, coach refusals) sometimes use the alias names
+     (warning/info/fixed). Both resolve to the same color so a future
+     rename is purely lexical. */
+  --sev-warning: var(--sev-severe);
+  --sev-info:    var(--sev-minor);
+  --sev-fixed:   var(--sev-win);
+
+  /* Streaming readiness verdicts (used by Results page).
+     NOTE: `--sev-warn` (yellow, streaming-readiness "warn" state) is
+     distinct from the alias `--sev-warning` above (orange, maps to
+     critical severity). Keep both — the near-identical names are
+     intentional but easy to misuse; reach for `--sev-warning` only when
+     you mean the orange severity-alias namespace. */
   --sev-ok:       var(--green);
   --sev-warn:     var(--yellow);
   --sev-fail:     var(--red);
@@ -74,10 +89,24 @@
 
   /* Bridge tokens (story 1.2): exact values lifted from raw hex that lived
      in *.module.css files, moved here to satisfy the no-raw-hex lint.
-     Story 1.7 (Phase A token design, UX-DR3) may consolidate these into the
-     final accent ramp — keep the values byte-identical until then. */
+     Story 1.7 decision (UX-DR3): KEEP as-is. Six *.module.css consumers
+     reference these (library, listen, profile, _appLayout, auth, forms) —
+     above the ≤3 consolidate-now threshold. Phase B (Epic 5 story 1)
+     will revisit when it sweeps the app shell. Values stay byte-identical. */
   --accent-bright:   #00f3bd;
   --accent-bright-2: #1eedba;
   --ink-on-accent:   #06151a;
   --ink-on-accent-2: #04221b;
+
+  /* Story 1.7 / UX-DR3 — commerce surface tokens (consumed by Epic 2 BillingCard,
+     PlanCard, TierChip, UpgradeSheet, UsageMeter). Declared here in advance so
+     Epic 2 surfaces consume them from day one — no parallel styling system. */
+  --tier-free:    var(--muted);
+  --tier-pro:     var(--cyan);
+  --tier-credits: var(--violet);
+
+  /* Story 1.7 / UX-DR3 — paywall overlay (consumed by Epic 2 BlurLock).
+     Dark scrim sitting over --bg; opacity tuned so blurred content underneath
+     remains shape-recognisable but unreadable. */
+  --paywall-overlay: rgba(7, 10, 18, 0.72);
 }

@@ -3,6 +3,7 @@
 # project: Spectr
 # story 1-5 transitioned: backlog → ready-for-dev → in-progress → review → done (code-review workflow, 2026-06-15)
 # story 1-6 transitioned: backlog → ready-for-dev → in-progress → review → done (code-review workflow, 2026-06-15)
+# story 1-7 transitioned: backlog → ready-for-dev → in-progress → review → done (code-review workflow, 2026-06-15)
 # project_key: NOKEY
 # tracking_system: file-system
 # story_location: PRPs/stories
@@ -55,7 +56,7 @@ development_status:
   1-4-llm-budgets-circuit-breaker-and-degraded-verdicts: done
   1-5-grounded-coach-conversations: done
   1-6-coach-streaming-relay: done
-  1-7-design-system-foundation-fidelity-phase-a: backlog
+  1-7-design-system-foundation-fidelity-phase-a: done
   1-8-coach-chat-ui-with-grounding-affordances: backlog
   1-9-per-analysis-coach-caps: backlog
   epic-1-retrospective: optional

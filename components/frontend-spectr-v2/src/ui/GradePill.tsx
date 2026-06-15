@@ -20,6 +20,8 @@ export function GradePill({ grade, size = 'md' }: GradePillProps) {
   return (
     <div
       className="mono"
+      role="img"
+      aria-label={`Grade: ${label}`}
       style={{
         width: box,
         height: box,
@@ -35,7 +37,7 @@ export function GradePill({ grade, size = 'md' }: GradePillProps) {
         flexShrink: 0,
       }}
     >
-      {label}
+      <span aria-hidden="true">{label}</span>
     </div>
   );
 }

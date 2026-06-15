@@ -148,6 +148,8 @@
   background: var(--violet);
   border-radius: 1px;
   transform-origin: bottom;
+  /* `eqBars` keyframe lives in src/styles/global.css. CSS Modules do not
+     scope @keyframes globals — rename both sides together. */
   animation: eqBars 0.7s ease-in-out infinite;
   height: 100%;
 }

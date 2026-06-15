@@ -3,7 +3,12 @@ interface BrandMarkProps {
   glow?: boolean;
 }
 
-export function BrandMark({ size = 22, glow = true }: BrandMarkProps) {
+/**
+ * Story 1.7 / UX-DR4 — bare mark by default (matches the canonical mockup
+ * at requirements/claude-design-ui-files/components.jsx:7-17). Pass
+ * `glow={true}` to opt into the cyan-bordered container used in the topnav.
+ */
+export function BrandMark({ size = 22, glow = false }: BrandMarkProps) {
   const inner = Math.round(size * 0.82);
   return (
     <div

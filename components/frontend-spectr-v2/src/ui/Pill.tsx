@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 
-export type PillTone = 'neutral' | 'cyan' | 'violet' | 'orange' | 'red' | 'green' | 'yellow';
+export type PillTone = 'default' | 'cyan' | 'violet' | 'orange' | 'red' | 'green' | 'yellow';
 
 interface PillProps {
   tone?: PillTone;
@@ -10,8 +10,8 @@ interface PillProps {
   title?: string;
 }
 
-export function Pill({ tone = 'neutral', children, className, style, title }: PillProps) {
-  const toneClass = tone === 'neutral' ? '' : ` ${tone}`;
+export function Pill({ tone = 'default', children, className, style, title }: PillProps) {
+  const toneClass: string = tone === 'default' ? '' : ` ${tone}`;
   return (
     <span className={`pill${toneClass}${className ? ` ${className}` : ''}`} style={style} title={title}>
       {children}
