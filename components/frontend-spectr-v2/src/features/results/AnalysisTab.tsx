@@ -201,10 +201,18 @@ export function AnalysisTab({
           </div>
         </section>
 
-        {(coachName || coachIntro || (coachedFixes && coachedFixes.length > 0)) && (
+        {(verdictsData?.degradation != null ||
+          coachName ||
+          coachIntro ||
+          (coachedFixes && coachedFixes.length > 0)) && (
           <section className={`card ${s.coachCard}`}>
             <div className={s.coachOverline}>Recommended fixes — from initial analysis</div>
-            <CoachPanel name={coachName} intro={coachIntro} fixes={coachedFixes} />
+            <CoachPanel
+              name={coachName}
+              intro={coachIntro}
+              fixes={coachedFixes}
+              degraded={verdictsData?.degradation != null}
+            />
           </section>
         )}
 

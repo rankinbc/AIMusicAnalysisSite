@@ -6,8 +6,15 @@ from decimal import Decimal
 import httpx
 import pytest
 
-from app.llm import gateway
-from app.llm.gateway import GatewayResult, LlmInvocationError, LlmTimeoutError
+from app.llm import budget, gateway
+from app.llm.gateway import (
+    DEGRADATION_REASON_CIRCUIT_BREAKER,
+    DEGRADATION_REASON_TIER_BUDGET,
+    GatewayResult,
+    LlmBudgetExceeded,
+    LlmInvocationError,
+    LlmTimeoutError,
+)
 
 from .conftest import FakeMessage, install_fake_client
 
@@ -160,3 +167,86 @@ def test_complete_sync_wraps_async(configure, metered, monkeypatch):
     result = gateway.complete_sync(system="s", user="u", purpose="specialist")
     assert result.text == "sync path"
     assert len(metered) == 1
+
+
+# ── Story 1.4: budget + circuit breaker integration with the gateway ────────
+
+
+def test_budget_exceeded_raises_before_any_sdk_call(configure, metered, monkeypatch):
+    """AC1: budget guard fires PRE-call, NO sdk client constructed, NO row."""
+    configure(llm_budget_free_usd=Decimal("5.00"))
+    monkeypatch.setattr(
+        budget, "_aggregate_tier_spend",
+        lambda tier, *, include_all_tiers=False: Decimal("5.00"),
+    )
+
+    def _boom():
+        raise AssertionError("SDK client must not be constructed when budget blown")
+
+    monkeypatch.setattr(gateway, "_get_client", _boom)
+
+    with pytest.raises(LlmBudgetExceeded) as exc:
+        _run(gateway.complete(system="s", user="u", purpose="specialist",
+                              tier="free"))
+    assert exc.value.reason == DEGRADATION_REASON_TIER_BUDGET
+    # AC1 explicitly: no metering row for a budget-rejected call.
+    assert len(metered) == 0
+
+
+def test_circuit_breaker_open_blocks_calls(configure, metered, monkeypatch):
+    """An open breaker raises before the SDK client is built."""
+    configure(llm_circuit_breaker_threshold=2, llm_circuit_breaker_cooldown_s=600)
+    # Push two errors directly into the breaker state.
+    budget.record_outcome(outcome="error")
+    budget.record_outcome(outcome="error")
+
+    def _boom():
+        raise AssertionError("SDK client must not be constructed when breaker is OPEN")
+
+    monkeypatch.setattr(gateway, "_get_client", _boom)
+
+    with pytest.raises(LlmBudgetExceeded) as exc:
+        _run(gateway.complete(system="s", user="u", purpose="specialist"))
+    assert exc.value.reason == DEGRADATION_REASON_CIRCUIT_BREAKER
+    assert len(metered) == 0
+
+
+def test_success_path_resets_breaker_counter(configure, metered, monkeypatch):
+    """Each successful gateway call calls record_outcome("ok"), which clears
+    the breaker's consecutive-error counter (AC4 — automatic recovery)."""
+    configure()
+    install_fake_client(monkeypatch, lambda n, kw: FakeMessage("ok"))
+    # Pre-load some failures to verify the counter clears.
+    budget.record_outcome(outcome="error")
+    budget.record_outcome(outcome="error")
+    assert budget._breaker.consecutive_errors == 2
+
+    _run(gateway.complete(system="s", user="u", purpose="specialist"))
+    assert budget._breaker.consecutive_errors == 0
+
+
+def test_error_path_increments_breaker_counter(configure, metered, monkeypatch):
+    """Final-error path must call record_outcome("error") so the breaker
+    can open under persistent provider failure."""
+    configure(llm_max_retries=1, llm_default_model="m1", llm_fallback_model="m1")
+    install_fake_client(monkeypatch, lambda n, kw: LlmTimeoutError("always down"))
+
+    with pytest.raises(LlmInvocationError):
+        _run(gateway.complete(system="s", user="u", purpose="specialist"))
+    assert budget._breaker.consecutive_errors == 1
+    # One metering error row (story 1.3 contract) — still upheld.
+    assert len(metered) == 1
+    assert metered[0]["outcome"] == "error"
+
+
+def test_fake_mode_still_advances_breaker_state(configure, metered, monkeypatch):
+    """Fake mode short-circuits to a canned response but must still call
+    record_outcome("ok") so the breaker doesn't stay stuck in dev/CI."""
+    configure(llm_fake=True)
+    budget.record_outcome(outcome="error")
+    budget.record_outcome(outcome="error")
+    assert budget._breaker.consecutive_errors == 2
+
+    _run(gateway.complete(system="s", user="u", purpose="specialist",
+                          prompt_slug="low_end"))
+    assert budget._breaker.consecutive_errors == 0

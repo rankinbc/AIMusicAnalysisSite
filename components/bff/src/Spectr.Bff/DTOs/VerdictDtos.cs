@@ -55,12 +55,25 @@ public sealed record RoutingPlanDto(
     string Rationale,
     int EstimatedTotalTokens);
 
+// Story 1.4 / FR16: machine-readable notice the worker stamps on the
+// analysis when LLM verdict generation is unavailable (per-tier or global
+// monthly budget exhausted, or provider-outage circuit breaker tripped).
+// Frontend renders the "rule-based findings only" banner + the coach
+// offline state copy off this.
+public sealed record DegradationNoticeDto(
+    string Reason,             // "tier_budget" | "global_budget" | "circuit_breaker"
+    string? Detail,            // operator-readable string from the gateway exception
+    DateTimeOffset OccurredAt);
+
 public sealed record VerdictsListResponse(
     IReadOnlyList<VerdictDto> Verdicts,
     IReadOnlyList<SpecialistStatus> Specialists,
     // Null until Triage has run for this analysis. The frontend treats
     // absence as "Triage hasn't fired yet" — UI shows a loading state.
-    RoutingPlanDto? RoutingPlan);
+    RoutingPlanDto? RoutingPlan,
+    // Null on a healthy report. Non-null → render the degradation banner
+    // + offline-coach copy; verdicts list contains rule-engine fallback rows.
+    DegradationNoticeDto? Degradation);
 
 public sealed record RunSpecialistResponse(string Status);  // "queued" | "exists"
 

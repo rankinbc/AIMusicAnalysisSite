@@ -38,7 +38,11 @@ from aimusic_shared.verdicts.models import SpecialistRoutingPlan
 
 from .db_sync import SessionFactory
 from .llm import gateway
-from .llm.gateway import LlmError
+from .llm.gateway import LlmBudgetExceeded, LlmError
+from .verdict_lib.degraded import (
+    run_rule_engine_for_analysis,
+    write_degradation_notice,
+)
 from .verdict_lib.flatten_analysis import flatten
 from .verdict_lib.json_extraction import extract_json_object
 from .verdict_lib.prompt_loader import load_triage, load_triage_model
@@ -83,6 +87,18 @@ def run_triage(analysis_id: str) -> None:
                 logger.info("run_triage: %s already has routing_plan, skipping",
                             analysis_id)
                 return
+            if analysis.degradation_notice is not None:
+                # Story 1.4: a prior call already stamped the degradation
+                # notice (and rule-engine verdicts). A dramatiq retry or BFF
+                # race could re-dispatch this actor; skipping here avoids
+                # burning another LLM call only to re-trip the same exception
+                # OR worse, succeeding (after recovery) and leaving the
+                # analysis with both a routing_plan AND a degradation banner.
+                logger.info(
+                    "run_triage: %s already has degradation_notice, skipping",
+                    analysis_id,
+                )
+                return
             raw_final = analysis.final_json
             caller_id = analysis.user_id  # for the metering row
     except Exception:
@@ -112,6 +128,18 @@ def run_triage(analysis_id: str) -> None:
             correlation_id=analysis_id,
             timeout_s=120,
         )
+    except LlmBudgetExceeded as exc:
+        # Story 1.4 / FR16: budget exhausted OR provider outage tripped the
+        # circuit breaker. Persist the machine-readable notice + rule-engine
+        # verdicts so the user gets actionable findings + a clear banner
+        # instead of a silent empty report.
+        logger.info(
+            "run_triage: degradation triggered for %s (reason=%s)",
+            analysis_id, exc.reason,
+        )
+        write_degradation_notice(aid, reason=exc.reason, detail=exc.detail)
+        run_rule_engine_for_analysis(aid)
+        return
     except LlmError as exc:
         logger.info("run_triage: LLM call failed for %s: %s", analysis_id, exc)
         return

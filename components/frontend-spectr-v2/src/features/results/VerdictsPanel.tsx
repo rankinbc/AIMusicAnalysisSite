@@ -10,6 +10,7 @@ import {
 } from '../../api/hooks';
 import type { FeedbackKind, SpecialistStatusKind } from '../../api/types';
 import { CoachFilters, type CoachFilterKey } from './CoachFilters';
+import { DegradationBanner } from './DegradationBanner';
 import {
   SPECIALIST_CATALOG,
   SPECIALIST_GROUPS,
@@ -141,6 +142,8 @@ export function VerdictsPanel({ jobId, hasStems }: VerdictsPanelProps) {
 
   return (
     <div>
+      {data?.degradation && <DegradationBanner notice={data.degradation} />}
+
       <CoachFilters
         verdicts={verdicts}
         active={filter}

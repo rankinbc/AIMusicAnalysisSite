@@ -44,7 +44,7 @@ public static class VerdictEndpoints
         // round-trip; project it alongside the id.
         var analysisRow = await db.Analyses.AsNoTracking()
             .Where(a => a.JobId == jobId && a.UserId == userId)
-            .Select(a => new { a.Id, a.RoutingPlan })
+            .Select(a => new { a.Id, a.RoutingPlan, a.DegradationNotice })
             .FirstOrDefaultAsync(ct);
         if (analysisRow is null) return Results.NotFound();
         var analysisId = (Guid?)analysisRow.Id;
@@ -53,7 +53,12 @@ public static class VerdictEndpoints
         // so the next ListVerdicts poll picks it up. Fire-and-forget — the
         // actor itself is idempotent (writes only when column IS NULL), so
         // concurrent polls double-enqueueing is harmless.
-        if (analysisRow.RoutingPlan is null)
+        //
+        // Story 1.4: skip the lazy-fire if the analysis is already degraded —
+        // the worker would just re-trip the same budget/breaker exception
+        // and waste a queue dispatch. The worker actors are also idempotent
+        // on degraded analyses (degraded.py helpers no-op when state is set).
+        if (analysisRow.RoutingPlan is null && analysisRow.DegradationNotice is null)
         {
             try
             {
@@ -102,13 +107,14 @@ public static class VerdictEndpoints
             .ToList();
 
         var plan = ParseRoutingPlan(analysisRow.RoutingPlan);
+        var degradation = ParseDegradationNotice(analysisRow.DegradationNotice);
 
-        return Results.Ok(new VerdictsListResponse(verdictDtos, statuses, plan));
+        return Results.Ok(new VerdictsListResponse(verdictDtos, statuses, plan, degradation));
     }
 
-    // The Python actor writes `routing_plan` as snake_case JSONB matching
-    // `SpecialistRoutingPlan`. EF gives us the raw string; deserialize into
-    // our PascalCase record with a property-naming policy.
+    // The Python actor writes `routing_plan` and `degradation_notice` as
+    // snake_case JSONB. EF gives us the raw string; deserialize into our
+    // PascalCase records with a property-naming policy.
     private static readonly JsonSerializerOptions RoutingPlanJsonOpts = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
@@ -125,6 +131,20 @@ public static class VerdictEndpoints
         {
             // Corrupt JSONB — treat as "no plan yet" rather than 500'ing
             // the whole endpoint.
+            return null;
+        }
+    }
+
+    private static DegradationNoticeDto? ParseDegradationNotice(string? raw)
+    {
+        if (string.IsNullOrEmpty(raw)) return null;
+        try
+        {
+            return JsonSerializer.Deserialize<DegradationNoticeDto>(raw, RoutingPlanJsonOpts);
+        }
+        catch (JsonException)
+        {
+            // Corrupt JSONB — better to show a healthy report than 500.
             return null;
         }
     }

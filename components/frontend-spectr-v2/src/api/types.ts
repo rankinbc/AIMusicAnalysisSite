@@ -649,12 +649,34 @@ export interface RoutingPlanDto {
   estimated_total_tokens: number;
 }
 
+/** Story 1.4 / FR16: worker-set when LLM verdict generation is unavailable
+ *  (per-tier or global monthly budget exhausted, or provider-outage circuit
+ *  breaker tripped). Drives the "rule-based findings only" banner + the
+ *  offline coach copy (UX-DR17). Absent on a healthy report.
+ *
+ *  BFF wire uses `JsonSerializerDefaults.Web` (camelCase) for response
+ *  records, so the field names here are camelCase. The enum string literals
+ *  (`reason`) are passed through verbatim from the Python gateway.
+ */
+export type DegradationReason = 'tier_budget' | 'global_budget' | 'circuit_breaker';
+
+export interface DegradationNoticeDto {
+  reason: DegradationReason;
+  detail: string | null;
+  /** ISO-8601 UTC string. */
+  occurredAt: string;
+}
+
 export interface VerdictsListResponse {
   verdicts: VerdictDto[];
   specialists: SpecialistStatus[];
   /** Present once a batch generation has run. Absent on jobs where only the
    *  piecewise `/run/{slug}` flow has fired or where Triage failed. */
   routing_plan?: RoutingPlanDto;
+  /** Present iff the report is degraded — read this BEFORE rendering verdicts
+   *  to show the banner + offline-coach copy. The verdicts list still has
+   *  rule-engine fallback rows; render them as normal cards under the banner. */
+  degradation?: DegradationNoticeDto;
 }
 
 export interface RunSpecialistResponse {

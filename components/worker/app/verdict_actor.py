@@ -34,7 +34,11 @@ from aimusic_shared.verdicts.ulid_helpers import new_fix_id, new_verdict_id
 
 from .db_sync import SessionFactory
 from .llm import gateway
-from .llm.gateway import LlmError
+from .llm.gateway import LlmBudgetExceeded, LlmError
+from .verdict_lib.degraded import (
+    run_rule_engine_for_analysis,
+    write_degradation_notice,
+)
 from .verdict_lib.flatten_analysis import flatten
 from .verdict_lib.json_extraction import extract_json_object
 from .verdict_lib.prompt_loader import load_prompt, load_prompt_model
@@ -217,6 +221,19 @@ def run_specialist(analysis_id: str, slug: str, user_id: str) -> None:
                 correlation_id=analysis_id,
                 timeout_s=120,
             )
+        except LlmBudgetExceeded as exc:
+            # Story 1.4 / FR16: degraded path. Stamp the notice + ensure
+            # rule-engine verdicts exist (both idempotent if a prior
+            # specialist on the same analysis already triggered). Do NOT
+            # write a fail-marker — the degradation banner is the UX, not
+            # a per-specialist failure tile.
+            logger.info(
+                "specialist %s: degradation triggered (reason=%s)",
+                slug, exc.reason,
+            )
+            write_degradation_notice(aid, reason=exc.reason, detail=exc.detail)
+            run_rule_engine_for_analysis(aid)
+            return
         except LlmError as exc:
             last_err = exc
             logger.info("specialist %s LLM call failed: %s", slug, exc)

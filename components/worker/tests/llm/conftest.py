@@ -5,9 +5,11 @@ No ``anthropic`` import here (AR39). The SDK is stubbed by monkeypatching
 """
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 
-from app.llm import gateway
+from app.llm import budget, gateway
 from app.llm.settings import LlmSettings
 
 _DEFAULTS = dict(
@@ -20,7 +22,29 @@ _DEFAULTS = dict(
     llm_max_retries=2,
     llm_timeout_s=120,
     llm_default_tier="free",
+    # Story 1.4 — budgets default very high in tests so individual cases
+    # opt-in to "blow the budget" via ``configure(llm_budget_free_usd=...)``.
+    llm_budget_free_usd=Decimal("1000000.00"),
+    llm_budget_pro_usd=Decimal("1000000.00"),
+    llm_budget_global_usd=Decimal("1000000.00"),
+    llm_circuit_breaker_threshold=5,
+    llm_circuit_breaker_cooldown_s=300,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_breaker_and_stub_spend(monkeypatch):
+    """Story 1.4: reset breaker state per-test and stub the DB-side spend
+    aggregator so unit tests stay ``DATABASE_URL``-free. Tests that want a
+    specific tier spend can override the stub via monkeypatch.setattr.
+    """
+    budget.reset_breaker_state()
+    monkeypatch.setattr(
+        budget, "_aggregate_tier_spend",
+        lambda tier, *, include_all_tiers=False: Decimal("0"),
+    )
+    yield
+    budget.reset_breaker_state()
 
 
 @pytest.fixture
@@ -40,8 +64,12 @@ def configure(monkeypatch):
         merged = {**_DEFAULTS, **overrides}
         settings = LlmSettings(**merged)
         monkeypatch.setattr(gateway, "get_llm_settings", lambda: settings)
+        # Story 1.4: budget.py reads settings via the same getter; keep them
+        # in sync so a single configure() call covers both modules.
+        monkeypatch.setattr(budget, "get_llm_settings", lambda: settings)
         gateway.reset_semaphore_cache()
         gateway.reset_client_cache()
+        budget.reset_breaker_state()
         return settings
 
     return _set

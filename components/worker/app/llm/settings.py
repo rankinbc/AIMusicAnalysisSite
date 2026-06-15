@@ -4,6 +4,7 @@ No ``anthropic`` import here (AR39). Secrets via env only (NFR6).
 """
 from __future__ import annotations
 
+from decimal import Decimal
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -35,6 +36,32 @@ class LlmSettings(BaseSettings):
     # Default tier stamped on metering rows until Epic 2 billing stamps the
     # job row with the real tier.
     llm_default_tier: str = "free"
+
+    # ── Story 1.4: budgets + circuit breaker (AR8 / FR16) ──────────────────
+    # Per-tier monthly USD ceilings — Decimal not float (money). Tier strings
+    # mirror LlmCall.tier values: "free" (default until Epic 2 stamps real
+    # tier), "pro" (Epic 2). Unknown tier falls back to the global ceiling.
+    llm_budget_free_usd: Decimal = Decimal("5.00")
+    llm_budget_pro_usd: Decimal = Decimal("100.00")
+    # Operator hard cap across all tiers in a calendar month.
+    llm_budget_global_usd: Decimal = Decimal("1000.00")
+
+    # Provider-outage circuit breaker (per-process; workers run concurrency=1).
+    # Opens after N consecutive error outcomes; stays open for the cooldown
+    # window. Next call after cooldown is a "probe" — closes on success,
+    # re-opens on failure. Automatic recovery (AC4) — no manual reset.
+    llm_circuit_breaker_threshold: int = 5
+    llm_circuit_breaker_cooldown_s: int = 300
+
+    def tier_ceiling(self, tier: str | None) -> Decimal:
+        """Resolve the monthly USD ceiling for a tier. Unknown / None →
+        global cap (operators get a defended hard floor).
+        """
+        if tier == "free":
+            return self.llm_budget_free_usd
+        if tier == "pro":
+            return self.llm_budget_pro_usd
+        return self.llm_budget_global_usd
 
 
 @lru_cache(maxsize=1)

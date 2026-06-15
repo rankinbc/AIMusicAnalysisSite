@@ -52,6 +52,15 @@ public sealed class Analysis
     [Column("routing_plan", TypeName = "jsonb")]
     public string? RoutingPlan { get; set; }
 
+    // Story 1.4 / FR16: machine-readable degradation notice stamped by the
+    // worker when the per-tier monthly budget is blown, the operator's
+    // global hard cap is hit, or the provider-outage circuit breaker opens.
+    // Shape: `{ "reason": "tier_budget|global_budget|circuit_breaker",
+    //          "detail": "...", "occurred_at": "<ISO-8601 UTC>" }`.
+    // Null on a healthy report. First failure wins (never overwritten).
+    [Column("degradation_notice", TypeName = "jsonb")]
+    public string? DegradationNotice { get; set; }
+
     // ── Sharing ────────────────────────────────────────────────────────────
     // Token is null until producer enables sharing. Generated lazily.
     [Column("share_token"), MaxLength(36)]

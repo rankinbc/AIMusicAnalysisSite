@@ -236,6 +236,18 @@ class Analysis(Base):
     # BFF lazy-fires it on first ListVerdicts call. Null until generated;
     # never recomputed once non-null.
     routing_plan: Mapped[Optional[Any]] = mapped_column("routing_plan", JSONB, nullable=True)
+    # Story 1.4 / FR16: machine-readable degradation notice stamped by the
+    # worker when budget is blown or the provider-outage circuit breaker
+    # fires. Null on a healthy report. Shape:
+    #   {"reason": "tier_budget|global_budget|circuit_breaker",
+    #    "detail": "<operator-readable string>",
+    #    "occurred_at": "<ISO-8601 UTC>"}
+    # First failure wins (never overwritten while non-null). Read by the
+    # BFF verdicts endpoint and rendered as the "rule-based findings only"
+    # banner on the v2 frontend.
+    degradation_notice: Mapped[Optional[Any]] = mapped_column(
+        "degradation_notice", JSONB, nullable=True,
+    )
     share_token: Mapped[Optional[str]] = mapped_column("share_token", String(36), nullable=True)
     share_show_verdicts: Mapped[bool] = mapped_column(
         "share_show_verdicts", Boolean, nullable=False, default=False

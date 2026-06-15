@@ -1,5 +1,5 @@
 # generated: 2026-06-12
-# last_updated: 2026-06-12
+# last_updated: 2026-06-15
 # project: Spectr
 # project_key: NOKEY
 # tracking_system: file-system
@@ -38,7 +38,7 @@
 # Build order: E1 -> E2 -> E3 -> E4 -> E5 -> E6 -> E7 -> E8 -> E9 -> E10.
 
 generated: 2026-06-12
-last_updated: 2026-06-12
+last_updated: 2026-06-15
 project: Spectr
 project_key: NOKEY
 tracking_system: file-system
@@ -49,7 +49,7 @@ development_status:
   1-1-relocate-verdict-pipeline-into-worker-ownership: done
   1-2-ci-from-clean-checkout: done
   1-3-anthropic-sdk-gateway-with-per-call-metering: done
-  1-4-llm-budgets-circuit-breaker-and-degraded-verdicts: backlog
+  1-4-llm-budgets-circuit-breaker-and-degraded-verdicts: done
   1-5-grounded-coach-conversations: backlog
   1-6-coach-streaming-relay: backlog
   1-7-design-system-foundation-fidelity-phase-a: backlog

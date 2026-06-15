@@ -8,10 +8,9 @@ through :func:`complete` / :func:`complete_sync`:
 * metered (AC3: exactly one ``llm_calls`` row per call, every outcome),
 * priced (versioned table → ``cost_usd`` Decimal),
 * retried under an explicit policy with model fallback (AC5/AC6),
-* fakeable (AR41: ``LLM_FAKE=1`` → canned replay, zero spend).
-
-Budget ceilings + circuit breaker (``LlmBudgetExceeded``) are story 1.4 — the
-pre-call seam is marked below; do not implement budgets here.
+* fakeable (AR41: ``LLM_FAKE=1`` → canned replay, zero spend),
+* budgeted with per-tier monthly ceilings + a global circuit breaker that
+  trip ``LlmBudgetExceeded`` PRE-call, un-metered (story 1.4 / AR8).
 """
 from __future__ import annotations
 
@@ -26,9 +25,38 @@ import anthropic
 
 from aimusic_shared.verdicts.ulid_helpers import new_llm_call_id
 
+from .errors import (
+    DEGRADATION_REASON_CIRCUIT_BREAKER,
+    DEGRADATION_REASON_GLOBAL_BUDGET,
+    DEGRADATION_REASON_TIER_BUDGET,
+    LlmBudgetExceeded,
+    LlmError,
+    LlmInvocationError,
+    LlmRateLimitError,
+    LlmServerError,
+    LlmTimeoutError,
+)
 from .fake import fake_response_text
 from .pricing import PRICE_TABLE_VERSION, compute_cost_usd
 from .settings import get_llm_settings
+
+# Re-exported for backward compatibility with code that imports from
+# ``app.llm.gateway``: actors and tests already use these names from here.
+__all__ = [
+    "DEGRADATION_REASON_CIRCUIT_BREAKER",
+    "DEGRADATION_REASON_GLOBAL_BUDGET",
+    "DEGRADATION_REASON_TIER_BUDGET",
+    "GatewayResult",
+    "LlmBudgetExceeded",
+    "LlmError",
+    "LlmInvocationError",
+    "LlmRateLimitError",
+    "LlmServerError",
+    "LlmTimeoutError",
+    "complete",
+    "complete_sync",
+    "record_llm_call",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -38,28 +66,10 @@ _RETRY_BASE_S = 0.5
 _FAKE_MODEL = "fake"
 
 
-# ── exceptions ──────────────────────────────────────────────────────────────
-
-class LlmError(RuntimeError):
-    """Base for all gateway errors."""
-
-
-class LlmTimeoutError(LlmError):
-    """Call timed out — retryable."""
-
-
-class LlmRateLimitError(LlmError):
-    """Provider rate limit — retryable."""
-
-
-class LlmServerError(LlmError):
-    """Provider 5xx / connection error — retryable."""
-
-
-class LlmInvocationError(LlmError):
-    """Non-retryable provider error (4xx, auth, bad request) or retry
-    exhaustion."""
-
+# Exception hierarchy + degradation constants live in errors.py so
+# ``budget.py`` can import them without creating a cycle with gateway.
+# All public names are re-exported above for callers that still import
+# them from ``app.llm.gateway``.
 
 _RETRYABLE = (LlmTimeoutError, LlmRateLimitError, LlmServerError)
 
@@ -244,14 +254,21 @@ async def complete(
     timeout_s = settings.llm_timeout_s if timeout_s is None else timeout_s
     effective_tier = tier or settings.llm_default_tier
 
-    # story 1.4 — budget check hook: pre-call ceiling/circuit-breaker check
-    # raising LlmBudgetExceeded goes HERE, before any spend.
+    # Story 1.4: budget + circuit-breaker guard. Raises LlmBudgetExceeded
+    # PRE-call, un-metered. ``budget.check_budget`` is a no-op when
+    # LLM_FAKE=1 so dev/CI never sees degraded reports without explicit
+    # test setup. Lazy import keeps the gateway free of any DB import path
+    # at module load.
+    from . import budget as _budget  # noqa: PLC0415 — deliberate lazy
+    _budget.check_budget(tier=effective_tier, purpose=purpose, user_id=user_id)
 
     if settings.llm_fake:
-        return _fake_result(
+        result = _fake_result(
             purpose=purpose, prompt_slug=prompt_slug, prompt_version=prompt_version,
             user_id=user_id, tier=effective_tier, correlation_id=correlation_id,
         )
+        _budget.record_outcome(outcome="ok")
+        return result
 
     primary = model or settings.llm_default_model
     models_to_try = [primary]
@@ -299,6 +316,7 @@ async def complete(
                         output_tokens=out_tok, cost_usd=cost, latency_ms=latency_ms,
                         outcome="ok", correlation_id=correlation_id,
                     )
+                    _budget.record_outcome(outcome="ok")
                     return GatewayResult(
                         text=text, model=attempt_model, input_tokens=in_tok,
                         output_tokens=out_tok, cost_usd=cost, outcome="ok",
@@ -319,6 +337,7 @@ async def complete(
         model=last_model, input_tokens=0, output_tokens=0, cost_usd=Decimal("0"),
         latency_ms=latency_ms, outcome="error", correlation_id=correlation_id,
     )
+    _budget.record_outcome(outcome="error")
     raise LlmInvocationError(
         f"LLM call failed (purpose={purpose} slug={prompt_slug}): {last_exc}"
     ) from last_exc
