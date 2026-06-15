@@ -235,3 +235,73 @@
   color: var(--text);
   white-space: pre-wrap;
 }
+
+/* Story 1.8 / Task 3 / AC2 — grounding scope line directly below the
+   input row. Dim mono, single line. */
+.groundingScope {
+  margin-top: 6px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.groundingScope code {
+  color: var(--cyan);
+  font-family: inherit;
+}
+
+/* Story 1.8 / Task 6 / AC5 — refusal turns. TranceBot styling unchanged
+   per UX-DR17, but the unlock action gets its own row below the body. */
+.unlockRow {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.unlockBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+/* Story 1.8 / Task 7 / AC6 — offline state. Banner is rendered via the
+   existing DegradationBanner component; this disables the input row when
+   `offlineState` is true. */
+.offlineRow {
+  margin-top: 12px;
+}
+.inputDisabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Story 1.8 / code-review P11 — offline state card (was inline styles). */
+.offlineCard {
+  padding: 14px;
+  margin-top: 12px;
+}
+.offlineHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.offlineBody {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.offlineActions {
+  margin-top: 10px;
+}
+
+/* Story 1.8 / code-review P17 — visible · separator between the
+   already-uppercased `.statusLabel` and the dim `.statusSub`. */
+.statusSep {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--muted);
+}

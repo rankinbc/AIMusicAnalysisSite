@@ -135,7 +135,12 @@ export function ReportView({ results, songId }: ReportViewProps) {
       <div className={s.tabBody}>
         {tab === 'coach' && (
           <div className={s.coachStack}>
-            <CoachChat trackName={results.songName ?? ''} jobId={results.jobId} />
+            <CoachChat
+              trackName={results.songName ?? ''}
+              analysisId={results.analysisId}
+              verdicts={verdictsData?.verdicts ?? []}
+              measurementsCount={countMeasurements(fj)}
+            />
             <VerdictsPanel jobId={results.jobId} hasStems={false} />
           </div>
         )}
@@ -177,4 +182,28 @@ export function ReportView({ results, songId }: ReportViewProps) {
 
 function pickPhaseData<T>(fj: FinalJson, phaseNumber: number): T | undefined {
   return fj.phases?.find((p) => p.phase === phaseNumber)?.data as T | undefined;
+}
+
+/** Story 1.8 / Task 3 / AC2 — count of leaf-level keys across the per-phase
+ *  `data` objects, capped at 9999. Drives the grounding-scope line in
+ *  CoachChat. Code-review P14 — walks one level deeper for object-valued
+ *  keys (`phase4.data.band_rms_db` is itself an object of 7 frequency
+ *  bands) so the count better reflects the actual measurement surface
+ *  area the coach can ground on. Arrays count as 1 (a single ordered
+ *  list). */
+function countMeasurements(fj: FinalJson): number {
+  let count = 0;
+  for (const p of fj.phases ?? []) {
+    const data = p.data;
+    if (!data || typeof data !== 'object') continue;
+    for (const value of Object.values(data as Record<string, unknown>)) {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        count += Object.keys(value as Record<string, unknown>).length;
+      } else {
+        count += 1;
+      }
+      if (count > 9999) return 9999;
+    }
+  }
+  return count;
 }

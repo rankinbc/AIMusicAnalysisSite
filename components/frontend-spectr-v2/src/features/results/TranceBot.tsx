@@ -1,16 +1,31 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import { useReducedMotion } from '../../hooks/useReducedMotion';
+
 interface TranceBotProps {
   size?: number;
   thinking?: boolean;
   glow?: boolean;
 }
 
+// Story 1.8 / Task 8 / closes story 1.7 deferred D1 — static-frame bars
+// when the user prefers reduced motion. The CSS-side blanket freeze in
+// global.css cannot reach this JS-driven rAF loop; checking the media
+// query here is the only way to honour the OS-level preference.
+const STATIC_BARS: number[] = [0.4, 0.55, 0.65, 0.5, 0.4];
+
 export function TranceBot({ size = 64, thinking = false, glow = true }: TranceBotProps) {
-  const [bars, setBars] = useState<number[]>(() => Array.from({ length: 5 }, () => 0.3));
+  const reduceMotion = useReducedMotion();
+  const [bars, setBars] = useState<number[]>(() =>
+    reduceMotion ? [...STATIC_BARS] : Array.from({ length: 5 }, () => 0.3),
+  );
   const uid = useMemo(() => Math.random().toString(36).slice(2, 8), []);
 
   useEffect(() => {
+    if (reduceMotion) {
+      setBars([...STATIC_BARS]);
+      return;
+    }
     let raf = 0;
     const t0 = performance.now() / 1000;
     function frame() {
@@ -27,7 +42,7 @@ export function TranceBot({ size = 64, thinking = false, glow = true }: TranceBo
     }
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [thinking]);
+  }, [thinking, reduceMotion]);
 
   return (
     <svg
@@ -88,12 +103,18 @@ export function TranceBot({ size = 64, thinking = false, glow = true }: TranceBo
         strokeLinecap="round"
       />
       <circle cx="40" cy="3" r="2.6" fill="#00e5b0">
-        <animate
-          attributeName="opacity"
-          values="0.4;1;0.4"
-          dur="1.4s"
-          repeatCount="indefinite"
-        />
+        {/* Code-review P15 — SVG SMIL `<animate>` is not covered by
+            CSS `prefers-reduced-motion` (it's SMIL, not CSS). Gate
+            the antenna pulse on the same hook the rAF visor uses so
+            reduced-motion users get a fully static avatar. */}
+        {!reduceMotion && (
+          <animate
+            attributeName="opacity"
+            values="0.4;1;0.4"
+            dur="1.4s"
+            repeatCount="indefinite"
+          />
+        )}
       </circle>
       <rect
         x="36"

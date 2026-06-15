@@ -57,7 +57,7 @@ Child-route gotcha: `songs.$songId.tsx` checks `useChildMatches().length > 0` an
 
 - `VerdictHero` — 340/1fr grid, grade pill + verdict text + percentile / track meta + 4-metric grid (LUFS, true peak, dyn range, danceability)
 - `ResultsTabs` — 5-tab strip: AI Coach (default + pulsing dot), Analysis, Spectrum, Reference, Arrangement. Each tab swaps the body
-- `CoachChat` — featured chat block on AI Coach tab. Full TranceBot SVG (~150 lines, animated EQ visor). Suggestion chips + input bar. Chat submit toasts "not wired" until the LLM endpoint ships.
+- `CoachChat` — featured chat block on AI Coach tab. TranceBot avatar (72 px, EQ visor idle-pulse, faster while streaming, **static under `prefers-reduced-motion: reduce`** via the `useReducedMotion` hook). Wired to the v2 BFF coach API (`POST /api/coach/{analysisId}/messages` + SSE relay at `/messages/{id}/stream` + abort-the-fetch cancel). Streams `{token|done|refusal|error}` events per AR44 with `: heartbeat` comments every 15 s. Stop button replaces "Ask →" while streaming; aborting the SSE fetch flips the BFF cancel path which SETs the Redis cancel key for the worker. Suggestion chips are derived from THIS report's verdict categories (generic fallback when verdicts are empty). Below the input: grounding scope line `Answers grounded in analysis #{shortid} · {n} measurements · {m} verdicts`. Refused turns render the worker's body text + a violet unlock pill (e.g. `Add stems`); TranceBot styling is unchanged per UX-DR17. `EvidenceChips` (`<Pill tone="cyan">` from story 1.7) render below each finalized assistant turn, scroll the matching panel into view + transient-highlight on click. AR38 error codes (`coach_offline` / `coach_unavailable` / `circuit_open` / `llm_provider_down` / `coach_queue_unavailable` / `coach_stream_idle`) flip the chat into an offline state with the canonical copy "Coach is offline — your measured analysis and rule-based findings are unaffected." plus a Retry button. Aria-live announcements are throttled to ≤1 update per 500 ms so screen readers don't stutter every token.
 - `CoachFilters` — category filter pills with persona colors + Show fixed toggle
 - `VerdictCard` — atmospheric rank numeral (88px @ 6% opacity), PersonaChip + MiniBot avatar, ImpactTag, ConfidenceMeter, FixRecipe panel
 - `SpecialistTile` — 28px MiniBot avatar + contextual status ("no issues" / "{N} findings" / "running…" / Run button)
@@ -163,5 +163,5 @@ npm run lint:css                   # no raw hex in *.module.css
 npm run lint:prices                # no price literals outside config
 npm run lint:fonts                 # no Google Fonts references (story 1.7)
 npm run build                      # production bundle
-npx vitest run                     # current baseline: 72 tests
+npx vitest run                     # current baseline: 112 tests
 ```

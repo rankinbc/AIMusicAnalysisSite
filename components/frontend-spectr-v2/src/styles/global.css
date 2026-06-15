@@ -337,6 +337,15 @@ button:focus-visible {
   animation: pulse 2s ease-in-out infinite;
 }
 
+/* Story 1.8 / Task 5 — EvidenceChips scroll-target highlight. Programmatically
+   added to a verdict panel or tab body for ~1.4 s on EvidenceChip click. Sits
+   in global.css so it's available everywhere without CSS Modules leakage. */
+.sr-target-highlight {
+  outline: 2px solid var(--cyan);
+  outline-offset: 4px;
+  transition: outline-color 0.3s ease;
+}
+
 /* Story 1.7 / UX-DR44 / AC6 — honor prefers-reduced-motion.
    Blanket pattern (WCAG recommended): collapse every animation + transition
    to imperceptible duration. We don't fully disable because some CSS
