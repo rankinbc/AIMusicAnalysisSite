@@ -116,6 +116,70 @@ redis-cli HGETALL dramatiq:default.msgs
 redis-cli LRANGE dramatiq:default 0 -1
 ```
 
+## Billing — Stripe Checkout (story 2.1)
+
+The BFF owns the Stripe-mirrored billing state. Three endpoints ship in
+story 2.1:
+
+- `GET  /api/billing/plans` — public; returns display cents for the
+  pricing page (no inline price literals per AR39).
+- `POST /api/billing/checkout/subscription` — authed; creates a hosted
+  Stripe Checkout session and returns the URL.
+- `POST /api/billing/stripe/webhook` — anonymous; Stripe-signed payloads
+  only. AR11 idempotency via `webhook_events.id` PK; the only writer to
+  the `subscriptions` mirror table.
+
+### Local dev setup
+
+1. Install the Stripe CLI: https://stripe.com/docs/stripe-cli
+2. `stripe login` to authenticate against your test-mode account.
+3. Create two Price objects in the test dashboard (Pro Monthly $12.99
+   and Pro Annual $99); copy the `price_...` IDs.
+4. Store secrets via `dotnet user-secrets`:
+
+   ```bash
+   cd components/bff/src/Spectr.Bff
+   dotnet user-secrets set Stripe:SecretKey sk_test_<from-dashboard>
+   dotnet user-secrets set Stripe:PriceProMonthly price_<monthly>
+   dotnet user-secrets set Stripe:PriceProAnnual  price_<annual>
+   ```
+
+5. Forward webhooks to the BFF and grab the signing secret:
+
+   ```bash
+   stripe listen --forward-to localhost:5000/api/billing/stripe/webhook
+   # prints: whsec_<signing-secret>
+   dotnet user-secrets set Stripe:WebhookSecret whsec_<signing-secret>
+   ```
+
+6. `dotnet run` — the BFF picks up the secrets at startup. With all four
+   keys set, the checkout endpoint returns a real Checkout Session URL.
+
+Without keys, the endpoint returns `{ error: { code:
+"stripe_not_configured" } }` and the frontend renders a friendly notice.
+
+### Wire-format notes
+
+- AR38 envelope codes: `invalid_cadence` (400), `stripe_not_configured`
+  (503), `webhook_signature_invalid` (400).
+- The webhook handler reads the raw request body verbatim (the Stripe
+  signature is computed over unparsed bytes) and verifies via
+  `EventUtility.ConstructEvent`. PCI hygiene: only the SHA-256 hash of
+  the body is persisted on `webhook_events.payload_hash` — never the
+  full payload.
+- Stripe.net 52 moved `current_period_end` and `price` from
+  `Subscription` to `SubscriptionItem` (per-item billing periods landed
+  in the 2024 API restructure). The mirror service reads both from
+  `stripeSub.Items.Data[0]`.
+
+### Tier derivation on `/me`
+
+`GET /api/auth/me` returns a transitional `tier: "free" | "pro"` field.
+Computed via LEFT JOIN against `subscriptions`: status ∈ {`active`,
+`trialing`} → `pro`; everything else (including no row) → `free`. Story
+2.4's `Entitlements.For(user)` resolver will replace this with a richer
+object + 60-s cache + webhook-driven invalidation.
+
 ## Triage routing plan persistence
 
 `Analysis.routing_plan` (jsonb) holds the Triage step output:

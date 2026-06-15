@@ -1,0 +1,11 @@
+{
+  "id": "evt_test_unsupported_001",
+  "object": "event",
+  "type": "product.created",
+  "data": {
+    "object": {
+      "id": "prod_test_001",
+      "object": "product"
+    }
+  }
+}

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using Spectr.Bff.Auth;
@@ -89,6 +90,13 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 // binary the Python worker uses for verdict pipeline.
 builder.Services.AddSingleton<CoachChatService>();
 
+// Story 2.1 — Stripe checkout client + subscription mirror service.
+// IStripeCheckoutClient is a thin abstraction so tests can substitute a
+// fake without hitting api.stripe.com. SubscriptionMirrorService is the
+// ONLY writer to the `subscriptions` table (architecture money-boundary).
+builder.Services.AddSingleton<IStripeCheckoutClient, StripeCheckoutClient>();
+builder.Services.AddScoped<SubscriptionMirrorService>();
+
 // Story 1.9: per-analysis free-tier coach follow-up cap. Fail-fast at startup
 // on a non-positive value — a zero cap would make the product unusable and we
 // don't want a config typo to ship silently.
@@ -96,6 +104,39 @@ builder.Services.AddOptions<CoachCapsOptions>()
     .Bind(builder.Configuration.GetSection(CoachCapsOptions.SectionName))
     .Validate(o => o.FreeFollowups > 0, "CoachCaps:FreeFollowups must be > 0")
     .ValidateOnStart();
+
+// Story 2.1: Stripe SDK + pricing display options.
+// Stripe creds are env-aware: prod fail-fast requires SecretKey + WebhookSecret;
+// dev runs without keys but the checkout endpoint returns `stripe_not_configured`
+// at request time so the rest of the BFF still boots for non-billing flows.
+var isProd = builder.Environment.IsProduction();
+builder.Services.AddOptions<StripeOptions>()
+    .Bind(builder.Configuration.GetSection(StripeOptions.SectionName))
+    .Validate(
+        o => !isProd
+            || (!string.IsNullOrWhiteSpace(o.SecretKey)
+                && !string.IsNullOrWhiteSpace(o.WebhookSecret)
+                && !string.IsNullOrWhiteSpace(o.PriceProMonthly)
+                && !string.IsNullOrWhiteSpace(o.PriceProAnnual)),
+        "Stripe configuration (SecretKey, WebhookSecret, PriceProMonthly, PriceProAnnual) must be set in production")
+    .ValidateOnStart();
+
+builder.Services.AddOptions<PricingDisplayOptions>()
+    .Bind(builder.Configuration.GetSection(PricingDisplayOptions.SectionName))
+    .Validate(o => o.ProMonthlyCents > 0 && o.ProAnnualCents > 0,
+        "PricingDisplay cents values must be positive")
+    .ValidateOnStart();
+
+// Initialize Stripe SDK if a key is present. Read straight from
+// IConfiguration to avoid BuildServiceProvider() at config-time (ASP0000).
+// StripeConfiguration.ApiKey is process-static; setting it once is enough.
+{
+    var stripeKeyAtBoot = builder.Configuration[$"{StripeOptions.SectionName}:SecretKey"];
+    if (!string.IsNullOrWhiteSpace(stripeKeyAtBoot))
+    {
+        Stripe.StripeConfiguration.ApiKey = stripeKeyAtBoot;
+    }
+}
 
 // CORS for the frontend dev server.
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
@@ -134,6 +175,7 @@ api.MapFileEndpoints();
 api.MapCoachEndpoints();
 api.MapCoachConversationEndpoints();
 api.MapCompareEndpoints();
+api.MapBillingEndpoints();
 
 app.MapGet("/", () => Results.Json(new { status = "ok", version = "2.0.0" }))
    .AllowAnonymous();

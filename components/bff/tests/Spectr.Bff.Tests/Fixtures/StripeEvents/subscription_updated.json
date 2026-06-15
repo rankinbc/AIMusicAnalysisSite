@@ -1,0 +1,29 @@
+{
+  "id": "evt_test_sub_updated_001",
+  "object": "event",
+  "type": "customer.subscription.updated",
+  "data": {
+    "object": {
+      "id": "sub_test_001",
+      "object": "subscription",
+      "customer": "cus_test_001",
+      "status": "past_due",
+      "cancel_at": null,
+      "metadata": {
+        "spectr_user_id": "00000000-0000-0000-0000-000000000001"
+      },
+      "items": {
+        "data": [
+          {
+            "id": "si_test_001",
+            "current_period_end": 1788393600,
+            "price": {
+              "id": "price_test_monthly_REPLACE_IN_DEV_SECRETS",
+              "object": "price"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

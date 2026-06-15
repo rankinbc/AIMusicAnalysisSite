@@ -63,7 +63,8 @@ public static class AuthEndpoints
 
         var access = jwt.Issue(user);
         return Results.Ok(new AuthResponse(access,
-            new AuthedUser(user.Id, user.Email, user.Handle, user.DisplayName)));
+            new AuthedUser(user.Id, user.Email, user.Handle, user.DisplayName,
+                await ResolveTierAsync(db, user.Id, ct))));
     }
 
     // POST /api/auth/login
@@ -91,7 +92,8 @@ public static class AuthEndpoints
 
         var access = jwt.Issue(user);
         return Results.Ok(new AuthResponse(access,
-            new AuthedUser(user.Id, user.Email, user.Handle, user.DisplayName)));
+            new AuthedUser(user.Id, user.Email, user.Handle, user.DisplayName,
+                await ResolveTierAsync(db, user.Id, ct))));
     }
 
     // POST /api/auth/refresh — reads spectr_refresh cookie, rotates it, returns fresh access token.
@@ -117,7 +119,8 @@ public static class AuthEndpoints
 
         var access = jwt.Issue(user);
         return Results.Ok(new AuthResponse(access,
-            new AuthedUser(user.Id, user.Email, user.Handle, user.DisplayName)));
+            new AuthedUser(user.Id, user.Email, user.Handle, user.DisplayName,
+                await ResolveTierAsync(db, user.Id, ct))));
     }
 
     // POST /api/auth/logout — revokes the current refresh row + clears the cookie.
@@ -143,9 +146,56 @@ public static class AuthEndpoints
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
-        if (user is null) return Results.Unauthorized();
-        return Results.Ok(new AuthedUser(user.Id, user.Email, user.Handle, user.DisplayName));
+        // Story 2.1: project user + tier in one roundtrip. Tier derives
+        // from a LEFT JOIN against `subscriptions`. Story 2.4 will swap
+        // this for the cached Entitlements.For(user) resolver.
+        var row = await (
+            from u in db.Users.AsNoTracking()
+            join s in db.Subscriptions.AsNoTracking()
+                on u.Id equals s.UserId into joined
+            from sub in joined.DefaultIfEmpty()
+            where u.Id == userId
+            select new
+            {
+                u.Id,
+                u.Email,
+                u.Handle,
+                u.DisplayName,
+                SubStatus = sub == null ? null : sub.Status,
+            }
+        ).FirstOrDefaultAsync(ct);
+        if (row is null) return Results.Unauthorized();
+
+        var tier = ResolveTier(row.SubStatus);
+        return Results.Ok(new AuthedUser(
+            row.Id, row.Email, row.Handle, row.DisplayName, tier));
+    }
+
+    // Story 2.1 — Stripe subscription status → product tier mapping.
+    // active + trialing → "pro"; everything else (including null = no
+    // subscription row) → "free". This mirrors the entitlement model
+    // story 2.4 will formalize; the only callers are /me and any other
+    // endpoint that needs a quick tier check before story 2.4 ships.
+    internal static string ResolveTier(string? subscriptionStatus)
+    {
+        if (subscriptionStatus is null) return "free";
+        return subscriptionStatus switch
+        {
+            "active" or "trialing" => "pro",
+            _ => "free",
+        };
+    }
+
+    // Convenience for register/login/refresh/patch paths that already have
+    // the user row but need the tier field on AuthedUser.
+    private static async Task<string> ResolveTierAsync(
+        AppDbContext db, Guid userId, CancellationToken ct)
+    {
+        var status = await db.Subscriptions.AsNoTracking()
+            .Where(s => s.UserId == userId)
+            .Select(s => (string?)s.Status)
+            .FirstOrDefaultAsync(ct);
+        return ResolveTier(status);
     }
 
     // PATCH /api/auth/me — partial update of display_name + handle.
@@ -207,7 +257,9 @@ public static class AuthEndpoints
         if (errors.Count > 0) return Results.ValidationProblem(errors);
 
         await db.SaveChangesAsync(ct);
-        return Results.Ok(new AuthedUser(user.Id, user.Email, user.Handle, user.DisplayName));
+        return Results.Ok(new AuthedUser(
+            user.Id, user.Email, user.Handle, user.DisplayName,
+            await ResolveTierAsync(db, user.Id, ct)));
     }
 
     // Mirror of HandleSeeder.Sanitize — keeps PATCH consistent with seed.

@@ -7,6 +7,29 @@ export interface AuthedUser {
   email: string;
   handle: string | null;
   displayName: string | null;
+  /** Story 2.1 — derived from subscriptions.status ∈ {active, trialing}.
+   *  "free" until the user subscribes; "pro" once a webhook delivers an
+   *  active or trialing subscription. Story 2.4 will widen this to a
+   *  richer Entitlements.For(user) shape. */
+  tier: 'free' | 'pro';
+}
+
+/** Story 2.1 — POST /api/billing/checkout/subscription request body. */
+export interface CreateCheckoutSessionRequest {
+  cadence: 'monthly' | 'annual';
+}
+
+/** Story 2.1 — POST /api/billing/checkout/subscription success response. */
+export interface CreateCheckoutSessionResponse {
+  url: string;
+  sessionId: string;
+}
+
+/** Story 2.1 — GET /api/billing/plans display values (integer cents). */
+export interface PlansResponse {
+  proMonthlyCents: number;
+  proAnnualCents: number;
+  currency: string;
 }
 
 export interface AuthResponse {

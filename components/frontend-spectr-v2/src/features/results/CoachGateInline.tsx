@@ -22,11 +22,19 @@ interface CoachGateInlineProps {
 }
 
 const DEFAULT_UPGRADE = () => {
-  toast.info('Pro subscription ships in Epic 2.');
+  // Story 2.1 — Get Pro routes to the public pricing page. Story 2.2's
+  // Customer Portal link will live separately for already-subscribed users.
+  if (typeof window !== 'undefined') {
+    window.location.assign('/pricing');
+  } else {
+    toast.info('Open /pricing to subscribe.');
+  }
 };
 
 const DEFAULT_BUY_CREDITS = () => {
-  toast.info('Credit packs ship in Epic 2.');
+  // Story 2.3 will ship credit-pack purchase. Until then, surface the
+  // intent so the click is never silently swallowed.
+  toast.info('Credit packs ship in story 2.3.');
 };
 
 export function CoachGateInline({

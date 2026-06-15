@@ -43,6 +43,13 @@ public sealed class User
     [Column("ui_prefs", TypeName = "jsonb")]
     public string? UiPrefs { get; set; }    // { density, ... }
 
+    // Story 2.1 / Stripe Customer mirror. Set once by the checkout
+    // endpoint after Stripe.Customer.create; reused on every subsequent
+    // checkout so we don't create duplicate Stripe customers per user.
+    // Unique-where-non-null (partial index added in migration Up()).
+    [Column("stripe_customer_id"), MaxLength(64)]
+    public string? StripeCustomerId { get; set; }
+
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

@@ -43,6 +43,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<TrackComment> TrackComments => Set<TrackComment>();
     public DbSet<TrackBookmark> TrackBookmarks => Set<TrackBookmark>();
 
+    // Billing (story 2.1)
+    public DbSet<Subscription> Subscriptions => Set<Subscription>();
+    public DbSet<WebhookEvent> WebhookEvents => Set<WebhookEvent>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         builder.HasPostgresExtension("pgcrypto");      // gen_random_uuid()
@@ -125,6 +129,27 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             .HasDatabaseName("ix_coach_messages_conversation_created_at");
         builder.Entity<TrackComment>().HasIndex(c => c.TargetShareToken);
         builder.Entity<TrackBookmark>().HasIndex(b => b.UserId);
+
+        // Story 2.1 — billing tables.
+        // subscriptions: keyed by user_id (1:1 mirror per architecture D2).
+        builder.Entity<Subscription>().HasKey(s => s.UserId);
+        builder.Entity<Subscription>()
+            .HasIndex(s => s.StripeCustomerId).IsUnique()
+            .HasDatabaseName("uq_subscriptions_stripe_customer_id");
+        builder.Entity<Subscription>()
+            .HasIndex(s => s.StripeSubscriptionId).IsUnique()
+            .HasDatabaseName("uq_subscriptions_stripe_subscription_id");
+        builder.Entity<Subscription>().Property(s => s.CreatedAt).HasDefaultValueSql("now()");
+        builder.Entity<Subscription>().Property(s => s.UpdatedAt).HasDefaultValueSql("now()");
+
+        // webhook_events: Stripe event.id PK (string), AR11 idempotency.
+        builder.Entity<WebhookEvent>().HasKey(w => w.Id);
+        builder.Entity<WebhookEvent>().Property(w => w.ReceivedAt).HasDefaultValueSql("now()");
+        // Triage queries: "what failed to process recently"
+        builder.Entity<WebhookEvent>().HasIndex(w => w.ReceivedAt);
+
+        // User.StripeCustomerId — partial unique index added via raw SQL in
+        // the migration Up() since EF can't fluently express partial-where.
 
         // DB-side defaults for *_at timestamp columns.
         // Without these, inserts from outside EF (the Python worker via SQLAlchemy)

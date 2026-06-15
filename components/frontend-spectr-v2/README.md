@@ -36,11 +36,14 @@ The BFF must be running on port 5000 for `/api/*` to resolve.
 /                              → redirect to /library
 /_public/login                 anon
 /_public/register              anon
+/_public/pricing               anon — pricing page (story 2.1)
 /_public/r/$token              anon — public share-link reviewer
 /_app/library                  authed — grid card view + filter pills
 /_app/songs/$songId            authed — Song detail (hero + ProgressTimeline + VersionList)
 /_app/songs/$songId/results/$jobId   authed — Results page (5-tab strip + AI Coach + verdicts + DSP-side tabs)
 /_app/listen/$versionId        authed — Listen page (Web Audio DSP chain)
+/_app/billing/success          authed — post-checkout poll for tier flip (story 2.1)
+/_app/billing/cancelled        authed — Stripe Checkout cancellation landing (story 2.1)
 /_app/profile                  authed
 ```
 
@@ -163,5 +166,5 @@ npm run lint:css                   # no raw hex in *.module.css
 npm run lint:prices                # no price literals outside config
 npm run lint:fonts                 # no Google Fonts references (story 1.7)
 npm run build                      # production bundle
-npx vitest run                     # current baseline: 122 tests
+npx vitest run                     # current baseline: 145 tests
 ```
