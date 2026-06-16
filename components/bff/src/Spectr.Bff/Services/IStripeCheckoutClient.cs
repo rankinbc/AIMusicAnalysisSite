@@ -9,11 +9,25 @@ namespace Spectr.Bff.Services;
 //
 // We DO NOT abstract every Stripe primitive — only the two calls the
 // checkout endpoint makes. Keeping the surface tiny means fewer test stubs.
+//
+// review-fix P1 — every call carries an `IdempotencyKey` (Stripe's official
+// retry-safety primitive). Without it, a dropped response from Stripe could
+// cause a second customer or a second Checkout session to be created on
+// retry, exposing the user to duplicate billing. The key is caller-supplied
+// so the BFF can derive deterministic keys from the user id + operation
+// (e.g. "checkout_session:<userId>:<cadence>:<request-id>").
 
 public interface IStripeCheckoutClient
 {
-    Task<Customer> CreateCustomerAsync(CustomerCreateOptions options, CancellationToken ct);
-    Task<Session> CreateCheckoutSessionAsync(SessionCreateOptions options, CancellationToken ct);
+    Task<Customer> CreateCustomerAsync(
+        CustomerCreateOptions options,
+        string idempotencyKey,
+        CancellationToken ct);
+
+    Task<Session> CreateCheckoutSessionAsync(
+        SessionCreateOptions options,
+        string idempotencyKey,
+        CancellationToken ct);
 }
 
 internal sealed class StripeCheckoutClient : IStripeCheckoutClient
@@ -21,9 +35,21 @@ internal sealed class StripeCheckoutClient : IStripeCheckoutClient
     private readonly CustomerService _customers = new();
     private readonly SessionService _sessions = new();
 
-    public Task<Customer> CreateCustomerAsync(CustomerCreateOptions options, CancellationToken ct)
-        => _customers.CreateAsync(options, cancellationToken: ct);
+    public Task<Customer> CreateCustomerAsync(
+        CustomerCreateOptions options,
+        string idempotencyKey,
+        CancellationToken ct)
+        => _customers.CreateAsync(
+            options,
+            new RequestOptions { IdempotencyKey = idempotencyKey },
+            cancellationToken: ct);
 
-    public Task<Session> CreateCheckoutSessionAsync(SessionCreateOptions options, CancellationToken ct)
-        => _sessions.CreateAsync(options, cancellationToken: ct);
+    public Task<Session> CreateCheckoutSessionAsync(
+        SessionCreateOptions options,
+        string idempotencyKey,
+        CancellationToken ct)
+        => _sessions.CreateAsync(
+            options,
+            new RequestOptions { IdempotencyKey = idempotencyKey },
+            cancellationToken: ct);
 }

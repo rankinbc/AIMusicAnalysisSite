@@ -83,13 +83,13 @@ public static class BillingEndpoints
 
         if (body is null || string.IsNullOrWhiteSpace(body.Cadence))
         {
-            return ErrorEnvelope(StatusCodes.Status400BadRequest,
+            return ErrorEnvelope.Build(StatusCodes.Status400BadRequest,
                 "invalid_cadence", "Cadence must be 'monthly' or 'annual'.");
         }
         var cadence = body.Cadence.Trim().ToLowerInvariant();
         if (cadence != "monthly" && cadence != "annual")
         {
-            return ErrorEnvelope(StatusCodes.Status400BadRequest,
+            return ErrorEnvelope.Build(StatusCodes.Status400BadRequest,
                 "invalid_cadence", "Cadence must be 'monthly' or 'annual'.");
         }
 
@@ -97,7 +97,7 @@ public static class BillingEndpoints
         {
             // Dev runs without Stripe creds — surface the state so the
             // frontend can render a friendly message instead of hanging.
-            return ErrorEnvelope(StatusCodes.Status503ServiceUnavailable,
+            return ErrorEnvelope.Build(StatusCodes.Status503ServiceUnavailable,
                 "stripe_not_configured",
                 "Stripe is not configured in this environment.");
         }
@@ -113,6 +113,11 @@ public static class BillingEndpoints
 
         if (string.IsNullOrEmpty(user.StripeCustomerId))
         {
+            // review-fix P1 — idempotency key on the Stripe call. A
+            // user-stable key (one customer per user, ever) makes any retry
+            // of this exact request a no-op on Stripe's side. They'll
+            // return the same `cus_...` id.
+            var customerIdempotencyKey = $"customer:{userId:N}";
             var customer = await stripeClient.CreateCustomerAsync(
                 new CustomerCreateOptions
                 {
@@ -122,11 +127,47 @@ public static class BillingEndpoints
                         ["spectr_user_id"] = userId.ToString(),
                     },
                 },
+                customerIdempotencyKey,
                 ct);
-            user.StripeCustomerId = customer.Id;
-            await db.SaveChangesAsync(ct);
+
+            // review-fix P2 — TOCTOU-safe write. Two concurrent checkout
+            // POSTs from the same user could both read `StripeCustomerId
+            // == null`; without this guard both would create separate
+            // Stripe customers and the second SaveChanges would 500 on
+            // the partial-where unique index. An UPDATE … WHERE
+            // stripe_customer_id IS NULL is atomic; the loser falls
+            // through to re-read the winner's customer id and abandons
+            // its own (Stripe's idempotency key makes this safe — the
+            // loser's call returned the SAME customer id as the winner's
+            // since both passed `customer:<userId>` as the key).
+            var rows = await db.Users
+                .Where(u => u.Id == userId && u.StripeCustomerId == null)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(
+                        u => u.StripeCustomerId, customer.Id),
+                    ct);
+            if (rows == 0)
+            {
+                // Loser of the race — winner's customer id is already
+                // persisted. Re-read so the session uses the canonical id.
+                user.StripeCustomerId = await db.Users
+                    .AsNoTracking()
+                    .Where(u => u.Id == userId)
+                    .Select(u => u.StripeCustomerId)
+                    .FirstAsync(ct);
+            }
+            else
+            {
+                user.StripeCustomerId = customer.Id;
+            }
         }
 
+        // review-fix P1 — idempotency key on session creation too. A
+        // user+cadence-stable key means a retry returns the SAME session
+        // URL; the user gets one checkout, not two. Salting with
+        // `priceId` lets a user start monthly, cancel, then start annual
+        // without colliding.
+        var sessionIdempotencyKey = $"session:{userId:N}:{priceId}";
         var session = await stripeClient.CreateCheckoutSessionAsync(
             new SessionCreateOptions
             {
@@ -153,6 +194,7 @@ public static class BillingEndpoints
                     },
                 },
             },
+            sessionIdempotencyKey,
             ct);
 
         return Results.Ok(new CreateCheckoutSessionResponse(
@@ -166,7 +208,12 @@ public static class BillingEndpoints
         AppDbContext db,
         IOptions<StripeOptions> stripeOpts,
         SubscriptionMirrorService mirrorService,
-        ILogger<StripeWebhookLogScope> logger,
+        // review-fix P17 — log category is the public marker
+        // `Spectr.Bff.Endpoints.BillingWebhook`. Static classes can't be
+        // ILogger<T> targets, so we use a small concrete marker type
+        // declared below. Cleaner than the prior nested-type name in log
+        // filters; DI resolves ILogger<T> for any concrete T.
+        ILogger<BillingWebhook> logger,
         CancellationToken ct)
     {
         var opts = stripeOpts.Value;
@@ -175,7 +222,7 @@ public static class BillingEndpoints
         {
             // Don't accept webhooks in an unconfigured environment — would
             // otherwise log noisy unverified payloads.
-            return ErrorEnvelope(StatusCodes.Status503ServiceUnavailable,
+            return ErrorEnvelope.Build(StatusCodes.Status503ServiceUnavailable,
                 "stripe_not_configured",
                 "Stripe webhook secret is not configured.");
         }
@@ -194,7 +241,7 @@ public static class BillingEndpoints
         var signatureHeader = httpCtx.Request.Headers["Stripe-Signature"].ToString();
         if (string.IsNullOrEmpty(signatureHeader))
         {
-            return ErrorEnvelope(StatusCodes.Status400BadRequest,
+            return ErrorEnvelope.Build(StatusCodes.Status400BadRequest,
                 "webhook_signature_invalid",
                 "Stripe-Signature header missing.");
         }
@@ -216,12 +263,18 @@ public static class BillingEndpoints
             logger.LogWarning(ex,
                 "Stripe webhook signature verification failed (secret tail ****{Tail})",
                 tail);
-            return ErrorEnvelope(StatusCodes.Status400BadRequest,
+            return ErrorEnvelope.Build(StatusCodes.Status400BadRequest,
                 "webhook_signature_invalid",
                 "Webhook signature verification failed.");
         }
 
         // AR11 idempotency — insert-or-skip on the Stripe event.id PK.
+        // review-fix P3 — the duplicate skip MUST be conditional on a
+        // previous SUCCESSFUL processing (processed_at IS NOT NULL).
+        // The prior version skipped on row existence alone, so a row
+        // inserted by a failed-then-retried delivery would forever-after
+        // tell Stripe `{ duplicate: true }` and never re-process. The
+        // RETURNING clause + a fall-through reads the row to decide.
         var payloadHash = ComputeSha256Hex(rawBody);
         var inserted = await db.Database.ExecuteSqlInterpolatedAsync(
             $@"INSERT INTO webhook_events (id, event_type, payload_hash, received_at)
@@ -230,8 +283,22 @@ public static class BillingEndpoints
             ct);
         if (inserted == 0)
         {
-            // Duplicate delivery — Stripe retried; we've already processed.
-            return Results.Ok(new { duplicate = true });
+            // Row already exists. Check if it was successfully processed —
+            // if so, this is a Stripe retry of a completed event and we
+            // safely skip. If processed_at IS NULL, the prior dispatch
+            // failed and we must let this retry proceed to dispatch.
+            var prev = await db.WebhookEvents
+                .AsNoTracking()
+                .Where(w => w.Id == stripeEvent.Id)
+                .Select(w => w.ProcessedAt)
+                .FirstOrDefaultAsync(ct);
+            if (prev is not null)
+            {
+                return Results.Ok(new { duplicate = true });
+            }
+            // Fall through — re-dispatch the previously-failed event.
+            // The processing_error column will be overwritten if it
+            // fails again, or cleared on success below.
         }
 
         if (!SupportedSubscriptionEvents.Contains(stripeEvent.Type))
@@ -248,8 +315,13 @@ public static class BillingEndpoints
         try
         {
             await DispatchAsync(stripeEvent, mirrorService, ct);
+            // review-fix P3 — also clear processing_error on success so
+            // a previously-failed event that succeeds on retry leaves
+            // no stale error trail.
             await db.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE webhook_events SET processed_at = now() WHERE id = {stripeEvent.Id}",
+                $@"UPDATE webhook_events
+                    SET processed_at = now(), processing_error = NULL
+                    WHERE id = {stripeEvent.Id}",
                 ct);
             return Results.Ok(new { processed = true });
         }
@@ -258,8 +330,16 @@ public static class BillingEndpoints
             logger.LogError(ex,
                 "Stripe webhook dispatch failed — event type {Type}, id {Id}",
                 stripeEvent.Type, stripeEvent.Id);
+            // review-fix P16 — PII hygiene. Stripe SDK exceptions can
+            // include customer email / billing address / decline reason
+            // text. The webhook_events table is supposed to stay
+            // payload-hash-only (no PII). Strip to the exception type +
+            // first-line and truncate hard to a small safe length so a
+            // future log analyser sees enough to triage but the table
+            // never accumulates PII.
+            var safeError = SanitizeProcessingError(ex);
             await db.Database.ExecuteSqlInterpolatedAsync(
-                $@"UPDATE webhook_events SET processing_error = {ex.Message}
+                $@"UPDATE webhook_events SET processing_error = {safeError}
                     WHERE id = {stripeEvent.Id}",
                 ct);
             // Re-throw so Stripe sees a 5xx and retries via its dashboard.
@@ -310,13 +390,7 @@ public static class BillingEndpoints
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
-    private static IResult ErrorEnvelope(
-        int status, string code, string message, object? details = null)
-    {
-        return Results.Json(
-            new { error = new { code, message, details } },
-            statusCode: status);
-    }
+    // review-fix P10 — uses the shared Endpoints.ErrorEnvelope helper.
 
     private static string ComputeSha256Hex(string s)
     {
@@ -324,7 +398,28 @@ public static class BillingEndpoints
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
-    // Marker so we can scope an ILogger<T> without exposing the full
-    // class name in log output.
-    internal sealed class StripeWebhookLogScope { }
+    // review-fix P16 — strip PII from exception messages before persisting
+    // them on webhook_events.processing_error. Keeps the exception type
+    // name + a hard-truncated first-line so ops can triage without
+    // accumulating customer emails / billing addresses / card-decline
+    // reasons in what should be a payload-hash-only audit table.
+    // review-fix P17 — concrete marker for ILogger<T> category. Logs
+    // surface as `Spectr.Bff.Endpoints.BillingWebhook` in filters.
+    public sealed class BillingWebhook { }
+
+    private const int ProcessingErrorMaxLength = 200;
+    private static string SanitizeProcessingError(Exception ex)
+    {
+        var typeName = ex.GetType().Name;
+        var firstLine = (ex.Message ?? string.Empty)
+            .Split('\n', 2)[0]
+            .Trim();
+        if (firstLine.Length > ProcessingErrorMaxLength)
+        {
+            firstLine = firstLine[..ProcessingErrorMaxLength];
+        }
+        return string.IsNullOrEmpty(firstLine)
+            ? typeName
+            : $"{typeName}: {firstLine}";
+    }
 }

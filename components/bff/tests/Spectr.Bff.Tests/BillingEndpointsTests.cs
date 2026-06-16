@@ -39,10 +39,14 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
         public CustomerCreateOptions? LastCustomerOptions { get; set; }
         public SessionCreateOptions? LastSessionOptions { get; set; }
 
+        public string? LastCustomerIdempotencyKey { get; set; }
+        public string? LastSessionIdempotencyKey { get; set; }
+
         public Task<Customer> CreateCustomerAsync(
-            CustomerCreateOptions options, CancellationToken ct)
+            CustomerCreateOptions options, string idempotencyKey, CancellationToken ct)
         {
             LastCustomerOptions = options;
+            LastCustomerIdempotencyKey = idempotencyKey;
             return Task.FromResult(new Customer
             {
                 Id = $"cus_test_{Guid.NewGuid():N}",
@@ -51,9 +55,10 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
         }
 
         public Task<Session> CreateCheckoutSessionAsync(
-            SessionCreateOptions options, CancellationToken ct)
+            SessionCreateOptions options, string idempotencyKey, CancellationToken ct)
         {
             LastSessionOptions = options;
+            LastSessionIdempotencyKey = idempotencyKey;
             return Task.FromResult(new Session
             {
                 Id = $"cs_test_{Guid.NewGuid():N}",
@@ -166,6 +171,13 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
                 userId.ToString(),
                 fake.LastCustomerOptions!.Metadata["spectr_user_id"]);
 
+            // review-fix P1 — idempotency keys are deterministic per user
+            // so any retry is a no-op on Stripe's side.
+            Assert.NotNull(fake.LastCustomerIdempotencyKey);
+            Assert.StartsWith("customer:", fake.LastCustomerIdempotencyKey!);
+            Assert.NotNull(fake.LastSessionIdempotencyKey);
+            Assert.StartsWith("session:", fake.LastSessionIdempotencyKey!);
+
             // Session used the monthly price + automatic tax.
             Assert.NotNull(fake.LastSessionOptions);
             Assert.Equal("subscription", fake.LastSessionOptions!.Mode);
@@ -186,6 +198,38 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
         {
             await CleanupUser(factory, userId);
         }
+    }
+
+    [Fact]
+    public async Task Post_Checkout_Idempotency_Key_Is_Stable_Across_Cadence()
+    {
+        // review-fix P1 — two checkouts with the same cadence must use the
+        // same session idempotency key (so a retry is a no-op); switching
+        // cadence must use a DIFFERENT key (so a user who starts monthly
+        // then starts annual gets the second session, not a cached one).
+        if (!await PostgresReachable()) { return; }
+
+        var (factory, fake) = BuildWithFakeStripe();
+        var (client, userId) = await SeedAuthed(factory, "billing-idemp");
+
+        try
+        {
+            await client.PostAsJsonAsync(
+                "/api/billing/checkout/subscription",
+                new CreateCheckoutSessionRequest("monthly"));
+            var monthlyKey = fake.LastSessionIdempotencyKey;
+
+            await client.PostAsJsonAsync(
+                "/api/billing/checkout/subscription",
+                new CreateCheckoutSessionRequest("monthly"));
+            Assert.Equal(monthlyKey, fake.LastSessionIdempotencyKey);
+
+            await client.PostAsJsonAsync(
+                "/api/billing/checkout/subscription",
+                new CreateCheckoutSessionRequest("annual"));
+            Assert.NotEqual(monthlyKey, fake.LastSessionIdempotencyKey);
+        }
+        finally { await CleanupUser(factory, userId); }
     }
 
     [Fact]

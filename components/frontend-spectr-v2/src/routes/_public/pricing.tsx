@@ -71,6 +71,15 @@ function PricingPage() {
         return;
       }
       const data = (await res.json()) as CreateCheckoutSessionResponse;
+      // review-fix P7 — origin validation. UX-spec line 357 mandates
+      // Stripe-hosted only; if the BFF response somehow contained a
+      // non-Stripe URL (compromise, MITM, or a future bug), we must
+      // refuse to redirect rather than send the user to an attacker's
+      // page. Stripe Checkout URLs are always on checkout.stripe.com.
+      if (!isStripeCheckoutUrl(data.url)) {
+        toast.error('Refusing to redirect: checkout URL is not a Stripe host.');
+        return;
+      }
       window.location.assign(data.url);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Network error');
@@ -78,6 +87,15 @@ function PricingPage() {
       setPending(null);
     }
   };
+
+  function isStripeCheckoutUrl(raw: string): boolean {
+    try {
+      const u = new URL(raw);
+      return u.protocol === 'https:' && u.hostname === 'checkout.stripe.com';
+    } catch {
+      return false;
+    }
+  }
 
   return (
     <main className={s.shell}>

@@ -1,7 +1,7 @@
 import { Link, createFileRoute } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 
-import { getAccessToken } from '../../api/fetcher';
+import { ApiError, fetcher } from '../../api/fetcher';
 import type { AuthedUser } from '../../api/types';
 import s from './billing.module.css';
 
@@ -10,6 +10,15 @@ import s from './billing.module.css';
 // the webhook delivery is normally <2s but Stripe doesn't make that
 // guarantee. After 60s without a flip we tell the user it's still
 // processing rather than misrepresenting the state.
+//
+// review-fix P6 — go through `fetcher<T>` (CLAUDE.md "single fetch
+// wrapper with 401 → silent refresh + retry") instead of a raw fetch.
+// Without this, an access token expiring during the 60-s window leaks
+// 401s into the poll path and the page misleadingly shows "still
+// processing" even after the webhook lands.
+//
+// review-fix P15 — store the setTimeout handle so unmount actually
+// cancels the next tick (the prior cancel flag only guarded setState).
 
 const POLL_INTERVAL_MS = 5_000;
 const MAX_POLL_DURATION_MS = 60_000;
@@ -24,45 +33,50 @@ function BillingSuccessPage() {
   useEffect(() => {
     let elapsed = 0;
     let cancelled = false;
-    const token = getAccessToken();
-    if (!token) {
-      setState('timeout');
-      return () => {};
-    }
+    let timerHandle: number | null = null;
 
     const pollOnce = async (): Promise<boolean> => {
       try {
-        const res = await fetch('/api/auth/me', {
-          headers: { Authorization: `Bearer ${token}` },
+        const me = await fetcher<AuthedUser>({
+          url: '/auth/me',
+          method: 'GET',
         });
-        if (!res.ok) return false;
-        const me = (await res.json()) as AuthedUser;
         if (me.tier === 'pro') {
           if (!cancelled) setState('pro');
           return true;
         }
         return false;
-      } catch {
+      } catch (err) {
+        // Swallow non-auth errors (network blips); the loop will retry.
+        // ApiError 401 means refresh failed AND the user really is signed
+        // out — bail out with timeout state.
+        if (err instanceof ApiError && err.status === 401) {
+          if (!cancelled) setState('timeout');
+          return true;  // halt the loop
+        }
         return false;
       }
     };
 
     const tick = async () => {
       if (cancelled) return;
-      const ok = await pollOnce();
-      if (ok) return;
+      const halt = await pollOnce();
+      if (halt || cancelled) return;
       elapsed += POLL_INTERVAL_MS;
       if (elapsed >= MAX_POLL_DURATION_MS) {
         if (!cancelled) setState('timeout');
         return;
       }
-      setTimeout(tick, POLL_INTERVAL_MS);
+      timerHandle = window.setTimeout(tick, POLL_INTERVAL_MS);
     };
 
-    // Fire the first poll immediately so a fast webhook doesn't waste 5s.
     void tick();
     return () => {
       cancelled = true;
+      if (timerHandle !== null) {
+        window.clearTimeout(timerHandle);
+        timerHandle = null;
+      }
     };
   }, []);
 

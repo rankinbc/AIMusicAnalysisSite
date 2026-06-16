@@ -22,6 +22,9 @@ public sealed record ActivityItemDto(
 
 // Extended profile beyond AuthedUser. Returns the same fields PATCH /me/profile
 // accepts so the frontend can do a round-trip without an extra GET.
+// Story 2.1 review-fix P9 — Tier matches AuthedUser.Tier so /me/profile and
+// /auth/me agree on subscription state and the frontend has one source
+// of truth for "am I Pro?" no matter which endpoint it hit.
 public sealed record MeProfileDto(
     Guid Id,
     string Email,
@@ -31,7 +34,8 @@ public sealed record MeProfileDto(
     short? AvatarHue,
     short? BannerHue,
     string? Accent,
-    string? PublicLink);
+    string? PublicLink,
+    string Tier);
 
 public sealed record PatchMeProfileRequest(
     string? DisplayName,

@@ -6,7 +6,7 @@ import s from './billing.module.css';
 // only state we know is "the user didn't complete checkout" which Stripe
 // already enforces (no charge was made).
 
-export const Route = createFileRoute('/_app/billing/cancelled')({
+export const Route = createFileRoute('/_public/billing/cancelled')({
   component: BillingCancelledPage,
 });
 

@@ -1,17 +1,40 @@
-import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
+import { Link, createFileRoute } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
+import { z } from 'zod';
 
 import { useAuth } from '../../auth/AuthContext';
 import f from '../../styles/forms.module.css';
 import s from './auth.module.css';
 
+// Story 2.1 review-fix P13 — accept `?next=/path` so that anonymous users
+// bounced from the pricing page (or any other "must-be-authed" flow)
+// return to the same page after registration. Sanitized: only same-origin
+// path-relative values are accepted; absolute or scheme-bearing values
+// are silently dropped to defeat open-redirect via `?next=http://evil.com`.
+
+const search = z.object({
+  next: z.string().optional(),
+});
+
+function safeNext(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  // Must start with a single `/` and not be a protocol-relative URL
+  // (`//evil.com`). Reject anything containing `:` to drop scheme-based
+  // attacks. Path may include `?` query, but no scheme/host.
+  if (!raw.startsWith('/')) return undefined;
+  if (raw.startsWith('//')) return undefined;
+  if (raw.includes(':')) return undefined;
+  return raw;
+}
+
 export const Route = createFileRoute('/_public/register')({
+  validateSearch: search,
   component: RegisterPage,
 });
 
 function RegisterPage() {
   const { register } = useAuth();
-  const navigate = useNavigate();
+  const { next } = Route.useSearch();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +50,11 @@ function RegisterPage() {
     setPending(true);
     try {
       await register(email, password);
-      void navigate({ to: '/library' });
+      const target = safeNext(next) ?? '/library';
+      // window.location.assign so a `/pricing` redirect reaches the
+      // public route (TanStack Router would otherwise need a typed
+      // entry for every possible target).
+      window.location.assign(target);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {
@@ -81,3 +108,4 @@ function RegisterPage() {
     </div>
   );
 }
+

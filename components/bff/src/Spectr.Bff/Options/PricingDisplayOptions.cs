@@ -14,7 +14,12 @@ public sealed class PricingDisplayOptions
 {
     public const string SectionName = "PricingDisplay";
 
-    public int ProMonthlyCents { get; init; } = 1299;   // $12.99
-    public int ProAnnualCents { get; init; } = 9900;    // $99.00
+    // review-fix P23 — comments dropped; the integers are self-describing
+    // (1299 cents = 12.99 in any cent-based currency). Keeping the inline
+    // currency literal would be a copy-paste trap if these definitions
+    // ever migrate to a non-Options file (the price-literal lint exempts
+    // *Options.cs and would suddenly fire elsewhere).
+    public int ProMonthlyCents { get; init; } = 1299;
+    public int ProAnnualCents { get; init; } = 9900;
     public string Currency { get; init; } = "USD";
 }

@@ -39,10 +39,32 @@ logger = logging.getLogger(__name__)
 
 # Local file storage root. The BFF stores upload keys like "audio/upload/{jobId}/source.wav";
 # this joins them with LOCAL_ROOT to get the absolute path.
-LOCAL_ROOT = os.environ.get("STORAGE_LOCAL_ROOT", "/data")
+def _default_local_root() -> str:
+    """Storage root to use when ``STORAGE_LOCAL_ROOT`` is unset.
+
+    Inside the Linux container the data volume is mounted at ``/data``. For
+    local dev — notably Windows, where ``/data`` resolves to ``C:\\data`` and
+    misses the file the BFF wrote under the repo's ``data/`` dir — fall back to
+    the repo-root ``data/`` dir, mirroring the BFF's ``../../../../data``
+    auto-resolution.
+    """
+    if os.name == "nt":
+        # components/worker/app/tasks_dramatiq.py → repo root is 3 levels up from app/.
+        return str(Path(__file__).resolve().parents[3] / "data")
+    return "/data"
+
+
+def _resolve_local_root() -> str:
+    return os.environ.get("STORAGE_LOCAL_ROOT") or _default_local_root()
+
+
+LOCAL_ROOT = _resolve_local_root()
 
 # Per-job JSON artifact directory. Optional — primary storage is `analyses.final_json` in Postgres.
-RESULTS_DIR = Path(os.environ.get("RESULTS_DIR", "/data/output/analysis_results"))
+# Derived from LOCAL_ROOT so it follows the same repo-vs-container resolution.
+RESULTS_DIR = Path(
+    os.environ.get("RESULTS_DIR") or str(Path(LOCAL_ROOT) / "output" / "analysis_results")
+)
 
 try:
     from audio_analysis import run_pipeline

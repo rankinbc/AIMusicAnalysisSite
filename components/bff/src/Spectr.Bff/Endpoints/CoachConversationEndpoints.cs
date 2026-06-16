@@ -78,14 +78,14 @@ public static class CoachConversationEndpoints
 
         if (body is null || string.IsNullOrWhiteSpace(body.Content))
         {
-            return ErrorEnvelope(
+            return ErrorEnvelope.Build(
                 StatusCodes.Status400BadRequest,
                 "coach_message_invalid",
                 "Message content is required.");
         }
         if (body.Content.Length > MaxMessageLength)
         {
-            return ErrorEnvelope(
+            return ErrorEnvelope.Build(
                 StatusCodes.Status400BadRequest,
                 "coach_message_invalid",
                 $"Message exceeds {MaxMessageLength} characters.");
@@ -102,7 +102,7 @@ public static class CoachConversationEndpoints
         // burn an extra queue dispatch only to refuse server-side.
         if (!string.IsNullOrEmpty(analysis.DegradationNotice))
         {
-            return ErrorEnvelope(
+            return ErrorEnvelope.Build(
                 StatusCodes.Status503ServiceUnavailable,
                 "coach_offline",
                 CoachOfflineBody);
@@ -130,7 +130,7 @@ public static class CoachConversationEndpoints
             // review-fix P12 — route through the shared ErrorEnvelope helper
             // (now accepts optional details). One AR38 emission path keeps
             // serializer/header behaviour identical across error codes.
-            return ErrorEnvelope(
+            return ErrorEnvelope.Build(
                 StatusCodes.Status403Forbidden,
                 "coach_cap_reached",
                 "Per-analysis follow-up limit reached.",
@@ -206,7 +206,7 @@ public static class CoachConversationEndpoints
             assistantRow.Content = "The coach hit a transient error. Please try again.";
             assistantRow.CompletedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(ct);
-            return ErrorEnvelope(
+            return ErrorEnvelope.Build(
                 StatusCodes.Status503ServiceUnavailable,
                 "coach_queue_unavailable",
                 "Coach queue is temporarily unavailable. Please try again.");
@@ -353,13 +353,7 @@ public static class CoachConversationEndpoints
         }
     }
 
-    private static IResult ErrorEnvelope(
-        int status, string code, string message, object? details = null)
-    {
-        return Results.Json(
-            new { error = new { code, message, details } },
-            statusCode: status);
-    }
+    // review-fix P10 — replaced by shared Endpoints.ErrorEnvelope helper.
 
     // ── Story 1.6: SSE relay for the worker's per-token pub/sub stream ────
 

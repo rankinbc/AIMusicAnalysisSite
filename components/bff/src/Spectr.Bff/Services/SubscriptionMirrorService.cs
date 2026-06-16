@@ -49,9 +49,15 @@ public sealed class SubscriptionMirrorService(
         var existing = await db.Subscriptions
             .FirstOrDefaultAsync(s => s.UserId == userId.Value, ct);
 
+        // review-fix P20 — missing period_end is a Stripe API anomaly, not a
+        // signal that the subscription expired right now. Substitute a
+        // sentinel far-future date so tier-derivation predicates don't
+        // mistakenly flip the user to "free" because of a transport hiccup
+        // that dropped the field. The reconciliation job (story 2.10) will
+        // re-query the canonical state.
         var periodEndRaw = firstItem?.CurrentPeriodEnd ?? default;
         var periodEnd = periodEndRaw == default
-            ? DateTimeOffset.UtcNow
+            ? DateTimeOffset.UtcNow.AddYears(10)
             : new DateTimeOffset(periodEndRaw, TimeSpan.Zero);
 
         DateTimeOffset? cancelAt = stripeSub.CancelAt is null

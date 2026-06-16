@@ -267,6 +267,55 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
     }
 
     [Fact]
+    public async Task Webhook_Concurrent_Deliveries_Of_Same_Event_Produce_Exactly_One_Row()
+    {
+        // review-fix P5 / Task 4.7(e) — explicit concurrency test. Stripe
+        // delivers each event at-least-once and can fan-out duplicates
+        // in pathological retry scenarios. The ON CONFLICT DO NOTHING
+        // primitive must collapse them to a single webhook_events row +
+        // a single subscriptions row.
+        if (!await PostgresReachable()) { return; }
+
+        var factory = BuildConfigured();
+        var userId = await SeedUserWithCustomerIdAsync(factory, "cus_test_001");
+
+        try
+        {
+            var body = StripeTestUtilities.ReadFixture("subscription_created.json");
+            var sig = StripeTestUtilities.ComputeSignatureHeader(
+                body, StripeTestUtilities.TestWebhookSecret);
+
+            // Fire three deliveries in parallel from three separate clients
+            // (separate HttpClients so they don't share connection state).
+            var tasks = Enumerable.Range(0, 3)
+                .Select(_ => Task.Run(async () =>
+                {
+                    var c = factory.CreateClient();
+                    return await PostWebhookAsync(c, body, sig);
+                }))
+                .ToArray();
+            var responses = await Task.WhenAll(tasks);
+
+            // Every response is OK (some say processed, others duplicate).
+            foreach (var r in responses)
+                Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            // Exactly one webhook_events row and exactly one subscriptions row.
+            Assert.Equal(1, await db.WebhookEvents
+                .CountAsync(w => w.Id == "evt_test_sub_created_001"));
+            Assert.Equal(1, await db.Subscriptions
+                .CountAsync(s => s.UserId == userId));
+        }
+        finally
+        {
+            await CleanupAsync(factory, userId, "evt_test_sub_created_001");
+        }
+    }
+
+    [Fact]
     public async Task Webhook_Unsupported_Event_Type_Is_Recorded_But_Not_Processed()
     {
         if (!await PostgresReachable()) { return; }

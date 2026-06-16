@@ -1,6 +1,6 @@
 # Story 2.1: Subscribe to Pro via Stripe Checkout
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -284,3 +284,41 @@ claude-opus-4-7 (1M context)
 ### Change Log
 
 - 2026-06-15 — story 2.1 implementation complete. 5/5 ACs satisfied. BFF 36/36 → 51/51 (+15 tests). Frontend 134/134 → 145/145 (+11 tests). All lint + tsc + build gates green. Status → review. End-to-end Stripe smoke deferred until test creds are provided; the BFF surfaces `stripe_not_configured` cleanly until then.
+- 2026-06-15 — code review (3-layer adversarial Sonnet × 3). 18 patches applied + 4 deferred + 4 dismissed. BFF 51 → 59 (+8: SubscriptionMirrorService unit tests + concurrent webhook delivery + idempotency-key assertions + 2 StripeOptions host-build tests). Frontend 145/145 unchanged. Status → done.
+
+### Review Findings
+
+18 patches applied across BFF + frontend + docs.
+
+| Code | Severity | Title | Files |
+|---|---|---|---|
+| P1 | H | Stripe `IdempotencyKey` on every Customer + Session create call — deterministic per-user keys so retries are no-ops on Stripe's side | `IStripeCheckoutClient.cs`, `BillingEndpoints.cs` |
+| P2 | H | Customer-creation TOCTOU fix — atomic `UPDATE … WHERE stripe_customer_id IS NULL` so concurrent first-checkouts don't create orphan Stripe customers | `BillingEndpoints.cs` |
+| P3 | H | Failed-dispatch retry path — duplicate-skip is conditional on `processed_at IS NOT NULL`; otherwise a row from a failed dispatch would forever-after tell Stripe `{ duplicate: true }` | `BillingEndpoints.cs` |
+| P4 | H | New `SubscriptionMirrorServiceTests.cs` — 4 dedicated unit tests (first apply, mutation, orphan no-op, fallback via User.StripeCustomerId) | `SubscriptionMirrorServiceTests.cs` |
+| P5 | H | New concurrent-delivery webhook test — 3 parallel posts of the same event collapse to 1 webhook_events row + 1 subscriptions row | `StripeWebhookEndpointTests.cs` |
+| P6 | H | `billing.success.tsx` now routes through `fetcher<T>` so 401-silent-refresh fires; raw `useEffect+fetch` removed | `routes/_app/billing.success.tsx` |
+| P7 | M | Origin validation on Stripe checkout URL — `new URL(data.url).hostname === 'checkout.stripe.com'` before `window.location.assign` | `routes/_public/pricing.tsx` |
+| P9 | M | `MeProfileDto` gains `Tier` field; both `/me/profile` and `/auth/me` agree on Pro state | `MeDtos.cs`, `MeEndpoints.cs` |
+| P10 | M | Shared `Endpoints/ErrorEnvelope.cs` helper; `BillingEndpoints` + `CoachConversationEndpoints` both consume it (was duplicated) | `Endpoints/ErrorEnvelope.cs` (new), `BillingEndpoints.cs`, `CoachConversationEndpoints.cs` |
+| P11 | M | `SPECTR_REQUIRE_STRIPE=1` env var gates the fail-fast (replaces fragile `IHostEnvironment.IsProduction()`); 2 host-build assertion tests added | `Program.cs`, `CoachCapsOptionsTests.cs` |
+| P13 | M | `register.tsx` honors `?next=/path` with same-origin sanitization; post-registration users return to `/pricing` instead of `/library` | `routes/_public/register.tsx` |
+| P14 | M | `billing/cancelled` moved from `_app/` to `_public/` so unauthenticated-session-during-checkout cancellations don't dead-end at login | `routes/_public/billing.cancelled.tsx` |
+| P15 | M | `billing.success.tsx` stores `setTimeout` handle and clears it on unmount; the prior cancel flag only guarded `setState` | `routes/_app/billing.success.tsx` |
+| P16 | L | `processing_error` sanitized to `{ExceptionType}: {first-line truncated to 200 chars}` — webhook_events stays payload-hash-only (no PII leakage from Stripe SDK exception messages) | `BillingEndpoints.cs` |
+| P17 | L | `ILogger<BillingWebhook>` (new public marker class) replaces the prior nested type; cleaner category in log filters | `BillingEndpoints.cs` |
+| P20 | L | Missing `current_period_end` from a Stripe payload defaults to `UtcNow + 10 years` (sentinel) instead of `UtcNow` (which would have flipped tier to free on transport hiccup) | `SubscriptionMirrorService.cs` |
+| P22 | L | `CLAUDE.md` Stripe.net 52 gotcha documented: per-item `CurrentPeriodEnd` + `Price` location, idempotency-key requirement, ON CONFLICT pattern | `CLAUDE.md` |
+| P23 | L | `// $12.99` comment removed from `PricingDisplayOptions.cs` (copy-paste trap if migrated to a non-Options file) | `PricingDisplayOptions.cs` |
+
+**Deferred** (real findings, out of 2.1 scope — moved to `PRPs/deferred-work.md`):
+- Currency mismatch detection (PricingDisplay.Currency vs actual Stripe Price currency) — story 2.10 reconciliation owns drift detection.
+- Rate limiting on `/checkout/subscription` + `/stripe/webhook` — Epic 10 abuse containment.
+- Webhook endpoint CORS posture — signature verification is sufficient defense; Epic 10 may add defense-in-depth.
+- `IStripeCheckoutClient` Singleton captive-dep risk for future consumers — no actual broken callers; revisit if it materializes.
+
+**Dismissed**:
+- `paused` Stripe status → `free` tier (Edge M3). Intentional product behavior — paused = user explicitly paused billing, downgrade is correct.
+- `AuthedUser` positional record breaking change (Edge L1). No actual broken callers; the spec uses named arguments consistently.
+- README baseline test-count discrepancy (Auditor L4). The committed count `145` is accurate; the pre-change line was stale from a prior story.
+- `SuccessUrl ?session_id={CHECKOUT_SESSION_ID}` token never consumed (Blind L2). Correct by design — polling `/me` is the canonical post-checkout signal.

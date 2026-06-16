@@ -27,14 +27,26 @@ public static class MeEndpoints
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
-        var u = await db.Users.AsNoTracking()
-            .Where(x => x.Id == userId)
-            .Select(x => new MeProfileDto(
+        // Story 2.1 review-fix P9 — include tier via LEFT JOIN against
+        // subscriptions so /me/profile agrees with /auth/me on Pro state.
+        var row = await (
+            from x in db.Users.AsNoTracking()
+            join s in db.Subscriptions.AsNoTracking()
+                on x.Id equals s.UserId into joined
+            from sub in joined.DefaultIfEmpty()
+            where x.Id == userId
+            select new
+            {
                 x.Id, x.Email, x.Handle, x.DisplayName, x.Bio,
-                x.AvatarHue, x.BannerHue, x.Accent, x.PublicLink))
-            .FirstOrDefaultAsync(ct);
-        if (u is null) return Results.Unauthorized();
-        return Results.Ok(u);
+                x.AvatarHue, x.BannerHue, x.Accent, x.PublicLink,
+                SubStatus = sub == null ? null : sub.Status,
+            }
+        ).FirstOrDefaultAsync(ct);
+        if (row is null) return Results.Unauthorized();
+        var tier = AuthEndpoints.ResolveTier(row.SubStatus);
+        return Results.Ok(new MeProfileDto(
+            row.Id, row.Email, row.Handle, row.DisplayName, row.Bio,
+            row.AvatarHue, row.BannerHue, row.Accent, row.PublicLink, tier));
     }
 
     // PATCH /api/me/profile — full profile patch (display_name+handle also
@@ -100,9 +112,15 @@ public static class MeEndpoints
 
         if (errors.Count > 0) return Results.ValidationProblem(errors);
         await db.SaveChangesAsync(ct);
+        // Story 2.1 review-fix P9 — include tier in the PATCH response too.
+        var tierAfter = AuthEndpoints.ResolveTier(
+            await db.Subscriptions.AsNoTracking()
+                .Where(s => s.UserId == userId)
+                .Select(s => (string?)s.Status)
+                .FirstOrDefaultAsync(ct));
         return Results.Ok(new MeProfileDto(
             user.Id, user.Email, user.Handle, user.DisplayName, user.Bio,
-            user.AvatarHue, user.BannerHue, user.Accent, user.PublicLink));
+            user.AvatarHue, user.BannerHue, user.Accent, user.PublicLink, tierAfter));
     }
 
     // GET /api/me/stats — top-of-profile summary numbers.

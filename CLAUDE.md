@@ -326,6 +326,9 @@ curl -f http://localhost:5000/openapi/v1.json && echo "BFF OK"
 - DTOs in `Spectr.Bff/DTOs/` — record types preferred.
 - IFileStorage abstraction: `LocalDiskFileStorage` (dev) / R2 (prod via signed URLs). Don't bypass the interface.
 - `<NuGetAuditMode>direct</NuGetAuditMode>` in `Directory.Build.props` — without it transitive CVEs fail the build.
+- **Stripe.net SDK gotcha (52.x, story 2.1)**: in the 2024 API restructure, per-item billing periods moved `CurrentPeriodEnd` and `Price` from `Stripe.Subscription` to `Stripe.SubscriptionItem`. Read them via `stripeSub.Items.Data[0]`, not directly off the subscription. Any new consumer of `Stripe.Subscription` must follow the same pattern. Also: every mutating Stripe call (customer/session/subscription create + update) MUST carry an `IdempotencyKey` in `RequestOptions` — derived deterministically from the user id + operation so retries don't duplicate side effects.
+- **Webhook idempotency pattern** (story 2.1): all webhook handlers use `INSERT … ON CONFLICT (id) DO NOTHING` on the dedupe table (e.g. `webhook_events`). The duplicate-skip MUST be conditional on `processed_at IS NOT NULL` — skipping on row existence alone strands events whose first dispatch failed.
+- **Shared error envelope** (story 2.1): `Endpoints/ErrorEnvelope.cs` — call `ErrorEnvelope.Build(status, code, message, details)` from any endpoint group. Don't add per-file copies.
 
 **Python (analysis, worker, legacy api)**
 - Python 3.11+. Format with `ruff format`. Lint with `ruff check`. Type-check with `mypy`.

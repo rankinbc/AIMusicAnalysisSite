@@ -50,6 +50,95 @@ public sealed class CoachCapsOptionsTests
     }
 
     [Fact]
+    public async Task StripeOptions_ValidateOnStart_Fails_When_Required_And_Missing()
+    {
+        // Story 2.1 review-fix P11 — equivalent of the CoachCapsOptions
+        // host-build assertion for the StripeOptions validation predicate.
+        // When SPECTR_REQUIRE_STRIPE=1 and any of the four Stripe keys
+        // are missing, host.StartAsync must throw OptionsValidationException
+        // (not surface the failure lazily at first IOptions<T>.Value access).
+        Environment.SetEnvironmentVariable("SPECTR_REQUIRE_STRIPE", "1");
+        try
+        {
+            var hostBuilder = Host.CreateDefaultBuilder()
+                .ConfigureAppConfiguration(cfg =>
+                {
+                    cfg.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["Stripe:SecretKey"] = "",
+                        ["Stripe:WebhookSecret"] = "",
+                        ["Stripe:PriceProMonthly"] = "",
+                        ["Stripe:PriceProAnnual"] = "",
+                    });
+                })
+                .ConfigureServices((ctx, services) =>
+                {
+                    var requireStripe = string.Equals(
+                        Environment.GetEnvironmentVariable("SPECTR_REQUIRE_STRIPE"),
+                        "1", StringComparison.Ordinal);
+                    services.AddOptions<Spectr.Bff.Options.StripeOptions>()
+                        .Bind(ctx.Configuration.GetSection(
+                            Spectr.Bff.Options.StripeOptions.SectionName))
+                        .Validate(o => !requireStripe
+                            || (!string.IsNullOrWhiteSpace(o.SecretKey)
+                                && !string.IsNullOrWhiteSpace(o.WebhookSecret)
+                                && !string.IsNullOrWhiteSpace(o.PriceProMonthly)
+                                && !string.IsNullOrWhiteSpace(o.PriceProAnnual)),
+                            "Stripe configuration must be set when SPECTR_REQUIRE_STRIPE=1")
+                        .ValidateOnStart();
+                });
+
+            var host = hostBuilder.Build();
+            var ex = await Assert.ThrowsAsync<OptionsValidationException>(
+                async () => await host.StartAsync());
+            Assert.Contains("Stripe configuration", ex.Message);
+            await host.StopAsync();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SPECTR_REQUIRE_STRIPE", null);
+        }
+    }
+
+    [Fact]
+    public async Task StripeOptions_ValidateOnStart_Passes_When_Not_Required()
+    {
+        // The dev default: SPECTR_REQUIRE_STRIPE unset; the host MUST boot
+        // even with all four Stripe fields empty. The checkout endpoint
+        // will return stripe_not_configured (503) at request time instead.
+        Environment.SetEnvironmentVariable("SPECTR_REQUIRE_STRIPE", null);
+
+        var hostBuilder = Host.CreateDefaultBuilder()
+            .ConfigureAppConfiguration(cfg =>
+            {
+                cfg.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Stripe:SecretKey"] = "",
+                });
+            })
+            .ConfigureServices((ctx, services) =>
+            {
+                var requireStripe = string.Equals(
+                    Environment.GetEnvironmentVariable("SPECTR_REQUIRE_STRIPE"),
+                    "1", StringComparison.Ordinal);
+                services.AddOptions<Spectr.Bff.Options.StripeOptions>()
+                    .Bind(ctx.Configuration.GetSection(
+                        Spectr.Bff.Options.StripeOptions.SectionName))
+                    .Validate(o => !requireStripe
+                        || (!string.IsNullOrWhiteSpace(o.SecretKey)
+                            && !string.IsNullOrWhiteSpace(o.WebhookSecret)
+                            && !string.IsNullOrWhiteSpace(o.PriceProMonthly)
+                            && !string.IsNullOrWhiteSpace(o.PriceProAnnual)),
+                        "Stripe configuration must be set when SPECTR_REQUIRE_STRIPE=1")
+                    .ValidateOnStart();
+            });
+
+        var host = hostBuilder.Build();
+        await host.StartAsync();
+        await host.StopAsync();
+    }
+
+    [Fact]
     public async Task ValidateOnStart_Throws_At_Host_Build_On_Zero_FreeFollowups()
     {
         // review-fix P8 — exercise the actual ValidateOnStart hook by

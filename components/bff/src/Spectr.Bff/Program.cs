@@ -109,16 +109,26 @@ builder.Services.AddOptions<CoachCapsOptions>()
 // Stripe creds are env-aware: prod fail-fast requires SecretKey + WebhookSecret;
 // dev runs without keys but the checkout endpoint returns `stripe_not_configured`
 // at request time so the rest of the BFF still boots for non-billing flows.
-var isProd = builder.Environment.IsProduction();
+//
+// review-fix P11 — gate the fail-fast on an explicit env var
+// `SPECTR_REQUIRE_STRIPE=1` rather than `IHostEnvironment.IsProduction()`.
+// `dotnet run` without an explicit ASPNETCORE_ENVIRONMENT defaults the
+// environment to "Production" on some platforms, which made the prior
+// `IsProduction()` predicate fire during plain local dev and prevented
+// the BFF from starting. The new env var is set explicitly in prod
+// deployments (Docker Compose runbook) and never in dev.
+var requireStripe = string.Equals(
+    Environment.GetEnvironmentVariable("SPECTR_REQUIRE_STRIPE"), "1",
+    StringComparison.Ordinal);
 builder.Services.AddOptions<StripeOptions>()
     .Bind(builder.Configuration.GetSection(StripeOptions.SectionName))
     .Validate(
-        o => !isProd
+        o => !requireStripe
             || (!string.IsNullOrWhiteSpace(o.SecretKey)
                 && !string.IsNullOrWhiteSpace(o.WebhookSecret)
                 && !string.IsNullOrWhiteSpace(o.PriceProMonthly)
                 && !string.IsNullOrWhiteSpace(o.PriceProAnnual)),
-        "Stripe configuration (SecretKey, WebhookSecret, PriceProMonthly, PriceProAnnual) must be set in production")
+        "Stripe configuration (SecretKey, WebhookSecret, PriceProMonthly, PriceProAnnual) must be set when SPECTR_REQUIRE_STRIPE=1")
     .ValidateOnStart();
 
 builder.Services.AddOptions<PricingDisplayOptions>()

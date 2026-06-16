@@ -2,6 +2,13 @@
 
 Real findings that are out of scope for the current story but worth revisiting.
 
+## Deferred from: code review of story-2.1 (2026-06-15)
+
+- **Currency mismatch detection — `PricingDisplay.Currency` vs actual Stripe Price currency** [components/bff/src/Spectr.Bff/Options/PricingDisplayOptions.cs] — If `PricingDisplay.Currency=USD` but the configured Stripe Price object is in EUR, the pricing page renders `$12.99` while Stripe charges `€12.99`. Story 2.10's nightly reconciliation job owns this drift detection.
+- **Rate limiting on `/checkout/subscription` + `/stripe/webhook`** — Both endpoints are unprotected against per-IP / per-user flood. Webhook is signature-gated so unverified payloads can't trigger DB writes, but they still cost CPU for HMAC + SHA-256. Epic 10 abuse containment owns this.
+- **Webhook endpoint CORS posture** — `/api/billing/stripe/webhook` is `.AllowAnonymous()`; the signature header is the only defense. Defense-in-depth (origin allowlist, optional IP filter) deferred to Epic 10.
+- **`IStripeCheckoutClient` Singleton captive-dep risk** — Current consumers are endpoint handlers (scoped per-request from DI), so no captive-dep bug today. If a future singleton injects `IStripeCheckoutClient` and uses `AppDbContext` (Scoped), it would silently get a captive DB context. Revisit if any singleton needs Stripe access.
+
 ## Deferred from: code review of story-1.9 (2026-06-15)
 
 - **TOCTOU cap race — concurrent POSTs can collectively exceed the cap** [components/bff/src/Spectr.Bff/Endpoints/CoachConversationEndpoints.cs] — `COUNT` + `INSERT` is not serializable; two tabs from the same user at `used = limit - 1` can both pass and put used at `limit + 1` for one extra reply. Acknowledged design trade-off per AC4 ("config-default fallback before Epic 2"). Story 2.6's `Entitlements.For(user)` + `usage_events` append-only ledger provides the stricter accounting. Acceptable for Epic 1.
