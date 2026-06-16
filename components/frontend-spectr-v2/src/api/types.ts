@@ -25,10 +25,14 @@ export interface CreateCheckoutSessionResponse {
   sessionId: string;
 }
 
-/** Story 2.1 — GET /api/billing/plans display values (integer cents). */
+/** Story 2.1 — GET /api/billing/plans display values (integer cents).
+ *  Story 2.3 — adds credit-pack cents so the BuyCreditsCard renders
+ *  prices via formatCents (AR39 no-literals lint). */
 export interface PlansResponse {
   proMonthlyCents: number;
   proAnnualCents: number;
+  creditPack5Cents: number;
+  creditPack10Cents: number;
   currency: string;
 }
 
@@ -59,6 +63,32 @@ export interface ChangeCadenceRequest {
 /** Story 2.2 — POST /api/billing/portal — Customer Portal session URL. */
 export interface CreatePortalSessionResponse {
   url: string;
+}
+
+// ── Story 2.3 — credit packs + ledger ──────────────────────────────
+
+/** POST /api/billing/checkout/credits — pack size must be 5 or 10. */
+export interface BuyCreditsRequest {
+  packSize: 5 | 10;
+}
+
+/** Single row of the user's credit ledger. Amount is signed:
+ *  +N (purchase), -1 (spend), +1 (reversal), arbitrary (adjustment). */
+export interface CreditLedgerEntryDto {
+  id: string;
+  amount: number;
+  reason: 'purchase' | 'spend' | 'reversal' | 'adjustment' | string;
+  reference: string | null;
+  createdAt: string;
+}
+
+/** GET /api/billing/credits — balance + most recent N entries.
+ *  nextCursor is the ISO-8601 createdAt of the last returned row when
+ *  more pages exist; null when the response is exhaustive. */
+export interface CreditsResponse {
+  balance: number;
+  entries: CreditLedgerEntryDto[];
+  nextCursor: string | null;
 }
 
 export interface AuthResponse {
@@ -108,7 +138,9 @@ export interface PatchSongRequest {
 export interface UploadResponse {
   songId: string;
   versionId: string;
-  jobId: string;
+  // null when the upload deferred analysis (unified-upload sends analyze=false
+  // on the mix, then dispatches a single job downstream).
+  jobId: string | null;
 }
 
 export interface NoteDto {
@@ -150,7 +182,8 @@ export interface StemUploadResponse {
 export interface AlsUploadResponse {
   versionId: string;
   alsPath: string;
-  reanalysisJobId: string;
+  // null when the .als was attached with analyze=false (unified-upload flow).
+  reanalysisJobId: string | null;
 }
 
 export type StemRole =
@@ -164,6 +197,42 @@ export type StemRole =
   | 'pad'
   | 'fx'
   | 'other';
+
+// ── Bulk stem upload (drag-drop + audio-content auto-classification) ──
+export interface StemRawDto {
+  id: string;
+  originalFilename: string;
+  detectedRole: StemRole | null;
+  confidence: number;
+  evidence: string | null;
+  confirmedRole: StemRole | null;
+}
+
+export interface StageStemsResponse {
+  versionId: string;
+  stems: StemRawDto[];
+}
+
+export interface StemProposalsResponse {
+  versionId: string;
+  classified: boolean;
+  stems: StemRawDto[];
+}
+
+export interface ConfirmStemItem {
+  id: string;
+  confirmedRole: StemRole;
+}
+
+export interface ConfirmStemsRequest {
+  stems: ConfirmStemItem[];
+  mode: 'grouped' | 'per_stem';
+}
+
+export interface ConfirmStemsResponse {
+  versionId: string;
+  reanalysisJobId: string;
+}
 
 export const STEM_ROLES: readonly StemRole[] = [
   'kick',

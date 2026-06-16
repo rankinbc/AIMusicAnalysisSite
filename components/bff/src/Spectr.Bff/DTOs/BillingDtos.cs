@@ -15,7 +15,14 @@ public sealed record CreateCheckoutSessionResponse(string Url, string SessionId)
 /// per architecture line 96; the frontend renders these so the
 /// no-price-literals lint (AR39) stays clean.
 /// </summary>
-public sealed record PlansResponse(int ProMonthlyCents, int ProAnnualCents, string Currency);
+public sealed record PlansResponse(
+    int ProMonthlyCents,
+    int ProAnnualCents,
+    // Story 2.3 — credit-pack display cents so the BuyCreditsCard can
+    // render prices via formatCents (AR39 no-literals lint).
+    int CreditPack5Cents,
+    int CreditPack10Cents,
+    string Currency);
 
 // ── Story 2.2 — manage-subscription self-service wire shapes ──────────
 
@@ -42,3 +49,34 @@ public sealed record CancelSubscriptionRequest(string? Reason);
 public sealed record ChangeCadenceRequest(string Cadence);
 
 public sealed record CreatePortalSessionResponse(string Url);
+
+// ── Story 2.3 — credit packs + ledger wire shapes ────────────────────
+
+/// <summary>
+/// Frontend posts this to start a one-time credit-pack Checkout.
+/// PackSize MUST be 5 or 10; any other value returns
+/// `invalid_pack_size` 400.
+/// </summary>
+public sealed record BuyCreditsRequest(int PackSize);
+
+/// <summary>
+/// Single ledger row projected onto the wire. The frontend's mono
+/// ledger table renders these directly.
+/// </summary>
+public sealed record CreditLedgerEntryDto(
+    Guid Id,
+    int Amount,
+    string Reason,
+    string? Reference,
+    DateTimeOffset CreatedAt);
+
+/// <summary>
+/// GET /api/billing/credits response. Balance is SUM(amount) across the
+/// user's ledger entries; entries is the most recent N rows in DESC
+/// order. NextCursor is the ISO-8601 created_at of the last returned
+/// row when more pages exist; null when the response is exhaustive.
+/// </summary>
+public sealed record CreditsResponse(
+    int Balance,
+    IReadOnlyList<CreditLedgerEntryDto> Entries,
+    string? NextCursor);

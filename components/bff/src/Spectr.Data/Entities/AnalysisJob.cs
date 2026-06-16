@@ -40,6 +40,16 @@ public sealed class AnalysisJob
     [Column("error_message")]
     public string? ErrorMessage { get; set; }
 
+    // Story 2.3 / AC3 — typed error code so the BFF can fire a
+    // credit-reversal entry idempotently when the worker fails a job
+    // pre-pipeline due to an invalid file. Worker writes
+    // `error_code = "invalid_file"` (or any future typed-failure key);
+    // the BFF's GET /api/jobs/{id} hook observes it and calls
+    // CreditLedgerService.ReverseAsync. Nullable for back-compat with
+    // existing rows + successful jobs.
+    [Column("error_code"), MaxLength(64)]
+    public string? ErrorCode { get; set; }
+
     [Column("dispatched_at")]
     public DateTimeOffset DispatchedAt { get; set; } = DateTimeOffset.UtcNow;
 

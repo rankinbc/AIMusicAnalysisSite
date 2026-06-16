@@ -21,5 +21,11 @@ public sealed class PricingDisplayOptions
     // *Options.cs and would suddenly fire elsewhere).
     public int ProMonthlyCents { get; init; } = 1299;
     public int ProAnnualCents { get; init; } = 9900;
+    // Story 2.3 — credit pack display cents per UX-DR32 (5-pack / 10-pack).
+    // Source of truth for the BILLED amount is the Stripe Price object
+    // referenced by StripeOptions.PriceCreditPack5 / .PriceCreditPack10;
+    // story 2.10's reconciliation alerts on drift.
+    public int CreditPack5Cents { get; init; } = 1900;
+    public int CreditPack10Cents { get; init; } = 3500;
     public string Currency { get; init; } = "USD";
 }

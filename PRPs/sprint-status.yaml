@@ -53,6 +53,7 @@ project: Spectr
 # (re-updated 2026-06-15: 2-2 → done → in-progress after code review — 30 patches + 3 decisions queued)
 # (re-updated 2026-06-15: 2-2 → done after 26 patches applied + 3 decisions resolved + 4 deferred; BFF 81/81, frontend 171/171)
 # (re-updated 2026-06-15: 2-3 → ready-for-dev after create-story; 12 tasks across BFF + frontend; AC2 dispatch wiring + AC3 reversal pattern scoped against Entitlements.For() landing in story 2.4)
+# (re-updated 2026-06-15: 2-3 → review after dev-story; BFF 100/100 + frontend 189/189; AC2 dispatch-hook integration deferred to 2.4 per spec out-of-scope)
 project_key: NOKEY
 tracking_system: file-system
 story_location: PRPs/stories
@@ -73,7 +74,7 @@ development_status:
   epic-2: in-progress
   2-1-subscribe-to-pro-via-stripe-checkout: done
   2-2-manage-subscription-self-service: done
-  2-3-buy-credits-with-append-only-ledger: ready-for-dev
+  2-3-buy-credits-with-append-only-ledger: review
   2-4-server-side-entitlements-and-metering: backlog
   2-5-paid-jobs-never-starve: backlog
   2-6-tier-aware-coach-caps: backlog

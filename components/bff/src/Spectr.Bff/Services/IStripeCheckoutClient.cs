@@ -16,6 +16,11 @@ namespace Spectr.Bff.Services;
 // retry, exposing the user to duplicate billing. The key is caller-supplied
 // so the BFF can derive deterministic keys from the user id + operation
 // (e.g. "checkout_session:<userId>:<cadence>:<request-id>").
+//
+// Story 2.3 — `CreateCheckoutSessionAsync` is mode-agnostic; the caller
+// sets `SessionCreateOptions.Mode = "subscription"` (story 2.1) or
+// `Mode = "payment"` (story 2.3 — credit-pack purchase). Same idempotency
+// + RequestOptions plumbing; no new method needed.
 
 public interface IStripeCheckoutClient
 {

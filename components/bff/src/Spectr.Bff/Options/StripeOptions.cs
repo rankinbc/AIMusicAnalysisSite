@@ -17,6 +17,12 @@ public sealed class StripeOptions
     public string? WebhookSecret { get; init; }
     public string? PriceProMonthly { get; init; }
     public string? PriceProAnnual { get; init; }
+    // Story 2.3 — Stripe Price ids for the one-time credit packs.
+    // These are NOT secrets (Stripe Price IDs are designed for client-side
+    // embedding) but still travel through config so dev/stage/prod can
+    // rotate pack pricing without code changes.
+    public string? PriceCreditPack5 { get; init; }
+    public string? PriceCreditPack10 { get; init; }
     public string SuccessUrl { get; init; } = "http://localhost:5174/billing/success?session_id={CHECKOUT_SESSION_ID}";
     public string CancelUrl { get; init; } = "http://localhost:5174/billing/cancelled";
 
@@ -31,4 +37,14 @@ public sealed class StripeOptions
         && !string.IsNullOrWhiteSpace(WebhookSecret)
         && !string.IsNullOrWhiteSpace(PriceProMonthly)
         && !string.IsNullOrWhiteSpace(PriceProAnnual);
+
+    // Story 2.3 — credit packs gate the /credits checkout + webhook
+    // handler separately. A deployment that ships subscriptions only
+    // (no credit packs yet) leaves these null; the /checkout/credits
+    // endpoint returns `stripe_not_configured` 503. This keeps the two
+    // monetization surfaces independently rolloutable.
+    public bool CreditPacksConfigured =>
+        IsConfigured
+        && !string.IsNullOrWhiteSpace(PriceCreditPack5)
+        && !string.IsNullOrWhiteSpace(PriceCreditPack10);
 }

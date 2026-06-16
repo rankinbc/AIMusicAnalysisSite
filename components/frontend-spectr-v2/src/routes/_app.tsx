@@ -161,6 +161,20 @@ function AppLayout() {
                 >
                   Library
                 </Link>
+                <Link
+                  to="/billing"
+                  className={s.avatarMenuItem}
+                  onClick={() => setMenuOpen(false)}
+                >
+                  Billing
+                </Link>
+                <Link
+                  to="/usage"
+                  className={s.avatarMenuItem}
+                  onClick={() => setMenuOpen(false)}
+                >
+                  Usage
+                </Link>
                 <button type="button" className={s.avatarMenuItem} onClick={handleLogout}>
                   Sign out
                 </button>

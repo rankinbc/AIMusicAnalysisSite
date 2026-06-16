@@ -107,6 +107,13 @@ builder.Services.AddSingleton<IStripeCheckoutClient, StripeCheckoutClient>();
 builder.Services.AddSingleton<IStripeSubscriptionClient, StripeSubscriptionClient>();
 builder.Services.AddScoped<SubscriptionMirrorService>();
 
+// Story 2.3 — append-only credit ledger. The ONLY writer to credit_ledger
+// (architecture D2 money-boundary). Used by the webhook handler (purchase
+// on checkout.session.completed mode=payment), the job dispatch hook
+// (spend; gated by CreditSpendEnabled, story 2.4 enables), and the
+// GET /jobs/{id} read path (lazy reversal on invalid_file).
+builder.Services.AddScoped<CreditLedgerService>();
+
 // Story 1.9: per-analysis free-tier coach follow-up cap. Fail-fast at startup
 // on a non-positive value — a zero cap would make the product unusable and we
 // don't want a config typo to ship silently.

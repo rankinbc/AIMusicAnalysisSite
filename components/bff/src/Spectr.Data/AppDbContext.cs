@@ -47,6 +47,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<WebhookEvent> WebhookEvents => Set<WebhookEvent>();
 
+    // Billing (story 2.3 — append-only signed ledger + period usage log)
+    public DbSet<CreditLedgerEntry> CreditLedger => Set<CreditLedgerEntry>();
+    public DbSet<UsageEvent> UsageEvents => Set<UsageEvent>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         builder.HasPostgresExtension("pgcrypto");      // gen_random_uuid()
@@ -150,6 +154,33 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 
         // User.StripeCustomerId — partial unique index added via raw SQL in
         // the migration Up() since EF can't fluently express partial-where.
+
+        // Story 2.3 — credit_ledger + usage_events (append-only).
+        builder.Entity<CreditLedgerEntry>().HasKey(e => e.Id);
+        builder.Entity<CreditLedgerEntry>().Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+        // CHECK constraints: enum-as-string for reason; amount nonzero.
+        builder.Entity<CreditLedgerEntry>().ToTable(t => t.HasCheckConstraint(
+            "ck_credit_ledger_reason",
+            "\"reason\" IN ('purchase','spend','reversal','adjustment')"));
+        builder.Entity<CreditLedgerEntry>().ToTable(t => t.HasCheckConstraint(
+            "ck_credit_ledger_amount_nonzero", "\"amount\" <> 0"));
+        // Hot path: balance = SUM(amount) WHERE user_id = ?; ledger
+        // pagination = ORDER BY created_at DESC. Composite index covers both.
+        builder.Entity<CreditLedgerEntry>()
+            .HasIndex(e => new { e.UserId, e.CreatedAt })
+            .HasDatabaseName("ix_credit_ledger_user_created");
+        // Partial unique index on idempotency_key — raw SQL in the
+        // migration Up() (EF can't express partial-where fluently).
+
+        builder.Entity<UsageEvent>().HasKey(e => e.Id);
+        builder.Entity<UsageEvent>().Property(e => e.OccurredAt).HasDefaultValueSql("now()");
+        builder.Entity<UsageEvent>().ToTable(t => t.HasCheckConstraint(
+            "ck_usage_events_type",
+            "\"event_type\" IN ('analysis','coach_message')"));
+        // Story 2.4 entitlement rollup queries by (user, billing_period).
+        builder.Entity<UsageEvent>()
+            .HasIndex(e => new { e.UserId, e.BillingPeriod })
+            .HasDatabaseName("ix_usage_events_user_period");
 
         // DB-side defaults for *_at timestamp columns.
         // Without these, inserts from outside EF (the Python worker via SQLAlchemy)

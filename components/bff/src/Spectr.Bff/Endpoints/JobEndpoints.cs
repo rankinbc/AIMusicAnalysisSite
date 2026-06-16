@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Spectr.Bff.Auth;
 using Spectr.Bff.DTOs;
+using Spectr.Bff.Services;
 using Spectr.Data;
 using System.Security.Claims;
 using System.Text;
@@ -139,6 +140,8 @@ public static class JobEndpoints
         Guid jobId,
         ClaimsPrincipal currentUser,
         AppDbContext db,
+        CreditLedgerService credits,
+        ILogger<JobStatusReversal> logger,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -153,6 +156,7 @@ public static class JobEndpoints
                 j.PhasePct,
                 j.VersionId,
                 j.ErrorMessage,
+                j.ErrorCode,
                 j.DispatchedAt,
                 j.StartedAt,
                 j.CompletedAt,
@@ -164,6 +168,38 @@ public static class JobEndpoints
             }
         ).FirstOrDefaultAsync(ct);
         if (row is null) return Results.NotFound();
+
+        // Story 2.3 / AC3 — lazy credit reversal on read. If the worker
+        // failed pre-pipeline with a typed `invalid_file` error AND a
+        // prior credit spend exists for this job (i.e. the user paid
+        // with credits), refund the credit. The partial unique index
+        // on `idempotency_key = "reversal:<jobId>"` makes this safe to
+        // call repeatedly — duplicate reads are no-ops.
+        //
+        // Per AR13, the worker never reads/writes billing tables. This
+        // read-path observer keeps that separation: the worker writes
+        // a typed error code; the BFF observes it on the next read and
+        // issues the reversal. Story 2.10 reconciliation is the
+        // backstop for failed jobs the user never re-opens.
+        if (row.Status == "failed"
+            && string.Equals(row.ErrorCode, "invalid_file", StringComparison.Ordinal))
+        {
+            var hasSpend = await db.CreditLedger.AsNoTracking()
+                .AnyAsync(e => e.UserId == userId
+                    && e.Reason == "spend"
+                    && e.Reference == jobId.ToString(), ct);
+            if (hasSpend)
+            {
+                var entry = await credits.ReverseAsync(
+                    userId, jobId, "invalid_file", ct);
+                if (entry is not null)
+                {
+                    logger.LogInformation(
+                        "Refunded credit for invalid-file failure: user={UserId}, jobId={JobId}",
+                        userId, jobId);
+                }
+            }
+        }
 
         return Results.Ok(new JobStatusDto(
             row.Id,
@@ -178,6 +214,10 @@ public static class JobEndpoints
             row.CompletedAt,
             row.FailedAt));
     }
+
+    // Story 2.3 — concrete marker for ILogger<T> category. Surfaces as
+    // `Spectr.Bff.Endpoints.JobStatusReversal` in log filters.
+    public sealed class JobStatusReversal { }
 
     private static async Task<IResult> GetResults(
         Guid jobId,

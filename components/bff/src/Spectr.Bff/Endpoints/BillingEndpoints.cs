@@ -57,6 +57,10 @@ public static class BillingEndpoints
         billing.MapPost("/change-cadence", PostChangeCadence).RequireAuthorization();
         billing.MapPost("/portal", PostPortal).RequireAuthorization();
 
+        // Story 2.3 — credit pack purchase + ledger read.
+        billing.MapPost("/checkout/credits", PostCheckoutCredits).RequireAuthorization();
+        billing.MapGet("/credits", GetCredits).RequireAuthorization();
+
         // Anonymous because Stripe webhooks don't carry a user session;
         // they authenticate via the Stripe-Signature header instead.
         billing.MapPost("/stripe/webhook", PostStripeWebhook).AllowAnonymous();
@@ -72,6 +76,8 @@ public static class BillingEndpoints
         return Results.Ok(new PlansResponse(
             ProMonthlyCents: o.ProMonthlyCents,
             ProAnnualCents: o.ProAnnualCents,
+            CreditPack5Cents: o.CreditPack5Cents,
+            CreditPack10Cents: o.CreditPack10Cents,
             Currency: o.Currency));
     }
 
@@ -621,6 +627,172 @@ public static class BillingEndpoints
         return "unknown";
     }
 
+    // ── Story 2.3: credit packs ─────────────────────────────────────────────
+
+    private static async Task<IResult> PostCheckoutCredits(
+        BuyCreditsRequest body,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        IOptions<StripeOptions> stripeOpts,
+        IStripeCheckoutClient stripeClient,
+        CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        var opts = stripeOpts.Value;
+
+        if (body is null || (body.PackSize != 5 && body.PackSize != 10))
+        {
+            return ErrorEnvelope.Build(StatusCodes.Status400BadRequest,
+                "invalid_pack_size",
+                "Pack size must be 5 or 10.");
+        }
+        if (!opts.CreditPacksConfigured)
+        {
+            return ErrorEnvelope.Build(StatusCodes.Status503ServiceUnavailable,
+                "stripe_not_configured",
+                "Stripe is not configured in this environment.");
+        }
+
+        var priceId = body.PackSize == 5
+            ? opts.PriceCreditPack5!
+            : opts.PriceCreditPack10!;
+
+        // Resolve or create the Stripe customer — same atomic
+        // UPDATE-WHERE-NULL pattern as story 2.1's subscription checkout
+        // (review-fix P2). The customer is shared between subscription
+        // and one-time purchases (Stripe stores both under one cus_*).
+        var user = await db.Users
+            .FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null) return Results.NotFound();
+
+        if (string.IsNullOrEmpty(user.StripeCustomerId))
+        {
+            var customerIdempotencyKey = $"customer:{userId:N}";
+            var customer = await stripeClient.CreateCustomerAsync(
+                new CustomerCreateOptions
+                {
+                    Email = user.Email,
+                    Metadata = new Dictionary<string, string>
+                    {
+                        ["spectr_user_id"] = userId.ToString(),
+                    },
+                },
+                customerIdempotencyKey,
+                ct);
+
+            var rows = await db.Users
+                .Where(u => u.Id == userId && u.StripeCustomerId == null)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(
+                        u => u.StripeCustomerId, customer.Id),
+                    ct);
+            if (rows == 0)
+            {
+                user.StripeCustomerId = await db.Users
+                    .AsNoTracking()
+                    .Where(u => u.Id == userId)
+                    .Select(u => u.StripeCustomerId)
+                    .FirstAsync(ct);
+            }
+            else
+            {
+                user.StripeCustomerId = customer.Id;
+            }
+        }
+
+        // Idempotency key: per-day so a user can retry tomorrow if a
+        // request fails after Stripe commits but before the response
+        // reaches us. Same recipe as story 2.2 /portal.
+        var dayBucket = DateTimeOffset.UtcNow.Date.ToString("yyyyMMdd");
+        var sessionIdempotencyKey =
+            $"credits_session:{userId:N}:{body.PackSize}:{dayBucket}";
+
+        var session = await stripeClient.CreateCheckoutSessionAsync(
+            new SessionCreateOptions
+            {
+                Mode = "payment",
+                Customer = user.StripeCustomerId,
+                ClientReferenceId = userId.ToString(),
+                LineItems = new List<SessionLineItemOptions>
+                {
+                    new() { Price = priceId, Quantity = 1 },
+                },
+                AutomaticTax = new SessionAutomaticTaxOptions { Enabled = true },
+                SuccessUrl = opts.SuccessUrl,
+                CancelUrl = opts.CancelUrl,
+                AllowPromotionCodes = false,
+                BillingAddressCollection = "auto",
+                // The webhook reads spectr_user_id + pack_size off the
+                // PaymentIntent's metadata to record the +N ledger
+                // entry — store both at session creation so the
+                // webhook never has to look up local state.
+                PaymentIntentData = new SessionPaymentIntentDataOptions
+                {
+                    Metadata = new Dictionary<string, string>
+                    {
+                        ["spectr_user_id"] = userId.ToString(),
+                        ["pack_size"] = body.PackSize.ToString(),
+                    },
+                },
+            },
+            sessionIdempotencyKey,
+            ct);
+
+        return Results.Ok(new CreateCheckoutSessionResponse(
+            Url: session.Url, SessionId: session.Id));
+    }
+
+    private static async Task<IResult> GetCredits(
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        CreditLedgerService credits,
+        [Microsoft.AspNetCore.Mvc.FromQuery] string? cursor,
+        CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        var balance = await credits.GetBalanceAsync(userId, ct);
+
+        DateTimeOffset? cursorTs = null;
+        if (!string.IsNullOrWhiteSpace(cursor))
+        {
+            if (!DateTimeOffset.TryParse(
+                    cursor, System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.RoundtripKind,
+                    out var parsed))
+            {
+                return ErrorEnvelope.Build(StatusCodes.Status400BadRequest,
+                    "invalid_cursor",
+                    "Cursor must be an ISO-8601 timestamp.");
+            }
+            cursorTs = parsed;
+        }
+
+        const int PageSize = 50;
+        var query = db.CreditLedger.AsNoTracking()
+            .Where(e => e.UserId == userId);
+        if (cursorTs is not null)
+        {
+            query = query.Where(e => e.CreatedAt < cursorTs.Value);
+        }
+        var rows = await query
+            .OrderByDescending(e => e.CreatedAt)
+            .Take(PageSize + 1)
+            .Select(e => new CreditLedgerEntryDto(
+                e.Id, e.Amount, e.Reason, e.Reference, e.CreatedAt))
+            .ToListAsync(ct);
+
+        string? nextCursor = null;
+        if (rows.Count > PageSize)
+        {
+            nextCursor = rows[PageSize - 1].CreatedAt
+                .ToString("o", System.Globalization.CultureInfo.InvariantCulture);
+            rows = rows.Take(PageSize).ToList();
+        }
+
+        return Results.Ok(new CreditsResponse(
+            Balance: balance, Entries: rows, NextCursor: nextCursor));
+    }
+
     // ── POST /stripe/webhook ────────────────────────────────────────────────
 
     private static async Task<IResult> PostStripeWebhook(
@@ -628,6 +800,9 @@ public static class BillingEndpoints
         AppDbContext db,
         IOptions<StripeOptions> stripeOpts,
         SubscriptionMirrorService mirrorService,
+        // Story 2.3 — credit-pack purchases land on
+        // checkout.session.completed with Mode=="payment".
+        CreditLedgerService credits,
         // review-fix P17 — log category is the public marker
         // `Spectr.Bff.Endpoints.BillingWebhook`. Static classes can't be
         // ILogger<T> targets, so we use a small concrete marker type
@@ -734,7 +909,7 @@ public static class BillingEndpoints
 
         try
         {
-            await DispatchAsync(stripeEvent, mirrorService, ct);
+            await DispatchAsync(stripeEvent, mirrorService, credits, logger, ct);
             // review-fix P3 — also clear processing_error on success so
             // a previously-failed event that succeeds on retry leaves
             // no stale error trail.
@@ -770,16 +945,53 @@ public static class BillingEndpoints
     private static async Task DispatchAsync(
         Event stripeEvent,
         SubscriptionMirrorService mirrorService,
+        CreditLedgerService credits,
+        ILogger<BillingWebhook> logger,
         CancellationToken ct)
     {
         switch (stripeEvent.Type)
         {
             case "checkout.session.completed":
             {
-                // The session payload references a subscription id; we
-                // wait for the customer.subscription.created event for the
-                // actual mirror write. Some merchants apply ancillary
-                // state here; we don't have any in 2.1.
+                // Story 2.3 — credit-pack purchase delivery. The session
+                // is in mode="payment" with a PaymentIntent attached;
+                // metadata carries spectr_user_id + pack_size.
+                // Subscription sessions (mode="subscription") fall
+                // through to the no-op tail of this branch — the
+                // mirror write happens on customer.subscription.created.
+                if (stripeEvent.Data.Object is Stripe.Checkout.Session session
+                    && string.Equals(session.Mode, "payment", StringComparison.Ordinal))
+                {
+                    if (!TryReadUserMetadata(session.Metadata, out var userId)
+                        || !session.Metadata.TryGetValue("pack_size", out var packStr)
+                        || !int.TryParse(packStr, out var packSize)
+                        || packSize <= 0)
+                    {
+                        logger.LogError(
+                            "Credit purchase webhook missing metadata: session={SessionId}, paymentIntent={PaymentIntentId}",
+                            session.Id, session.PaymentIntentId);
+                        return;
+                    }
+
+                    if (string.IsNullOrEmpty(session.PaymentIntentId))
+                    {
+                        logger.LogError(
+                            "Credit purchase webhook missing PaymentIntent id: session={SessionId}",
+                            session.Id);
+                        return;
+                    }
+
+                    // Defense-in-depth on top of AR11 webhook_events
+                    // dedupe — partial unique index on the ledger
+                    // catches duplicates even if the webhook layer
+                    // somehow misses.
+                    await credits.PurchaseAsync(
+                        userId,
+                        packSize,
+                        session.PaymentIntentId,
+                        idempotencyKey: $"credits_purchase:{stripeEvent.Id}",
+                        ct);
+                }
                 return;
             }
             case "customer.subscription.created":
@@ -809,6 +1021,18 @@ public static class BillingEndpoints
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
+
+    // Story 2.3 — read spectr_user_id off arbitrary Stripe metadata.
+    // Both Subscription and PaymentIntent objects propagate the field
+    // when we set it at customer/session creation time.
+    private static bool TryReadUserMetadata(
+        IDictionary<string, string>? metadata, out Guid userId)
+    {
+        userId = default;
+        return metadata is not null
+            && metadata.TryGetValue("spectr_user_id", out var raw)
+            && Guid.TryParse(raw, out userId);
+    }
 
     // review-fix P10 — uses the shared Endpoints.ErrorEnvelope helper.
 
