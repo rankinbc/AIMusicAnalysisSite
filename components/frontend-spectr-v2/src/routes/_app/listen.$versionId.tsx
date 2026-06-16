@@ -11,6 +11,7 @@ import {
   useNotes,
   usePatchNote,
   useSong,
+  useStemProposals,
   useVersion,
 } from '../../api/hooks';
 import {
@@ -38,6 +39,8 @@ import { DEFAULT_VIZ_STATE, VizControls } from '../../features/listen/VizControl
 import type { StageId } from '../../features/listen/stageRegistry';
 import { buildRailTabs } from '../../features/listen/tabRegistry';
 import { useAudioGraph, type AudioFrame } from '../../features/listen/useAudioGraph';
+import { StemDeck, type DeckStem } from '../../features/listen/StemDeck';
+import { useStemEngine } from '../../features/listen/useStemEngine';
 import { fmtBpm, fmtGenre, fmtNumber } from '../../features/results/helpers/format';
 import { CoverArt } from '../../ui/CoverArt';
 import { hueFromId } from '../../ui/hueFromId';
@@ -161,6 +164,46 @@ function ListenPage() {
   // instead of the MediaElement. Owned by the page so transport ops know
   // which lane to operate on.
   const pitchModeRef = useRef(false);
+
+  // ── Stem deck (DJ tab) ── real per-stem audio, mutually exclusive with the
+  // single-track graph. Backed by the existing stems pipeline (GetStems +
+  // /stems/{stemId}/audio); stems are id-keyed (per-stem mode allows multiple
+  // stems per role).
+  const { data: stemProposals, isLoading: stemsLoading } = useStemProposals(
+    versionId,
+    Boolean(versionId),
+  );
+  const deckStems = useMemo<DeckStem[]>(
+    () =>
+      (stemProposals?.stems ?? []).map((st) => ({
+        id: st.id,
+        role: st.confirmedRole ?? st.detectedRole ?? null,
+        filename: st.originalFilename,
+      })),
+    [stemProposals],
+  );
+  const stemEngine = useStemEngine(() => graph.ensureContext());
+  const [stemPlaying, setStemPlaying] = useState(false);
+  const stemUrl = useCallback(
+    (stemId: string) =>
+      `/api/versions/${versionId}/stems/${stemId}/audio?t=${encodeURIComponent(getAccessToken() ?? '')}`,
+    [versionId],
+  );
+  // Entering stem mode pauses the single-track lanes (MediaElement + pitch).
+  const activateStemMode = useCallback(() => {
+    if (pitchModeRef.current && graph.pitchPlaying()) graph.pitchPause();
+    const a = audioRef.current;
+    if (a && !a.paused) a.pause();
+    setPlaying(false);
+  }, [graph]);
+  // Reverse exclusivity: starting the single-track audio stops the stem deck.
+  const stopStems = () => {
+    setStemPlaying((prev) => {
+      if (prev) stemEngine.pause();
+      return false;
+    });
+  };
+
   // Throttle gate for the rail's meter frame so the rail subtree doesn't
   // reconcile at the 60fps spectrum cadence. Updated to ~12 Hz in the draw loop.
   const lastMeterTsRef = useRef(0);
@@ -315,6 +358,7 @@ function ListenPage() {
           toast.error(`Audio engine failed: ${err instanceof Error ? err.message : err}`);
           return;
         }
+        stopStems();
         graph.pitchResume();
         setPlaying(true);
       }
@@ -326,6 +370,7 @@ function ListenPage() {
       setPlaying(false);
       return;
     }
+    stopStems();
     try {
       graph.ensureContext();
     } catch (err) {
@@ -528,13 +573,24 @@ function ListenPage() {
   const issuesNode = useMemo(() => <IssuesPanel jobId={latestJobId} />, [latestJobId]);
   const djNode = useMemo(
     () => (
-      <VizControls
-        viz={viz}
-        onChange={patchViz}
-        onLaunchFireworks={() => fireworksRef.current?.launch()}
-      />
+      <>
+        <StemDeck
+          stems={deckStems}
+          isLoading={stemsLoading}
+          stemUrl={stemUrl}
+          engine={stemEngine}
+          playing={stemPlaying}
+          onActivate={activateStemMode}
+          onPlayPause={setStemPlaying}
+        />
+        <VizControls
+          viz={viz}
+          onChange={patchViz}
+          onLaunchFireworks={() => fireworksRef.current?.launch()}
+        />
+      </>
     ),
-    [viz, patchViz],
+    [deckStems, stemsLoading, stemUrl, stemEngine, stemPlaying, activateStemMode, viz, patchViz],
   );
   const notesNode = useMemo(
     () => (
