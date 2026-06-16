@@ -1,7 +1,32 @@
 # DJ-tab audio-reactive features — copy-paste build prompt
 
-Status: draft brief (not yet executed)
+Status: IMPLEMENTED 2026-06-16 (branch `listen-v2-visual`, commits 8368be4 · 0956bdc · bfc5b21 · efdc95b)
 Created: 2026-06-16
+
+## Shipped vs. the brief
+
+| # | Feature | Status |
+|---|---------|--------|
+| 1 | Beat detection module | ✅ `beatDetector.ts` (+ tests) |
+| 2 | Reactive laser effects | ✅ reactive layer over the existing CSS rig (Beat/Strobe/Flash beat-locked, ≤3 Hz cap). Full Canvas beam-fan / ground-hit / Burst engine **not** built — deferred as a larger, destructive rewrite. |
+| 3 | Auto color (spectral centroid) | ✅ `autoColor.ts` (+ tests) |
+| 4 | Energy macro | ✅ `VizState.energy` → laser/bars/radial |
+| 5 | Radial-pulse visualizer | ✅ `RadialPulse.tsx` (new 'radial' stage) |
+| 6 | Spectrogram waterfall | ✅ `Spectrogram.tsx` (new 'spectro' stage) |
+| 7 | Drop detection → fireworks | ✅ `dropDetector.ts` (+ tests) |
+| 8 | Snapshot presets | ✅ `vizPresets.ts` + `PresetBar.tsx` (localStorage, crossfade) |
+
+Infra: one shared rАF loop (the existing page `draw` loop drives all of it — no
+per-frame React state), `flashLimiter.ts` as the single ≤3 Hz photosensitivity
+chokepoint, and reduced-motion gating throughout. 30 new unit tests.
+
+Still open: feature 2's full Canvas beam-fan engine (ground-hit pools, Burst
+mode), and the one-time "contains flashing lights" opt-in notice from the laser
+safety block.
+
+---
+## Original brief (verbatim)
+
 Target surface: Listen / DJ page (`components/frontend-spectr-v2/src/features/listen/`)
 Related: `PRPs/brainstorming/brainstorming-session-2026-06-16.md` (live concert / DJ room vision)
 
