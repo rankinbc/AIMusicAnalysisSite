@@ -8,17 +8,15 @@ interface Props {
   effect: LaserEffect;
 }
 
-// Per-beam color + delay form a denser rainbow fan. In mono mode the CSS var
-// --laser-c overrides each beam's --bc. Staggered delays make the sweep/beat
-// motion fan out across the beams instead of moving as one block.
-const BEAM_COLORS = ['#f472b6', '#5eead4', '#fbbf24', '#60a5fa', '#a78bfa', '#34d399'];
-const BEAM_COUNT = 11;
-const BEAMS = Array.from({ length: BEAM_COUNT }, (_, i) => ({
-  bc: BEAM_COLORS[i % BEAM_COLORS.length]!,
-  dl: `${(i * 0.06).toFixed(2)}s`,
-  // Spread evenly across 5%..95% so the fan fills the stage width.
-  left: `${(5 + (90 * i) / (BEAM_COUNT - 1)).toFixed(1)}%`,
-}));
+// Per-beam color + delay come from the prototype's 5-beam rainbow set. In mono
+// mode the CSS var --laser-c overrides each beam's --bc.
+const BEAMS = [
+  { bc: '#f472b6', dl: '0s', left: '12%' },
+  { bc: '#5eead4', dl: '0.1s', left: '31%' },
+  { bc: '#fbbf24', dl: '0.2s', left: '50%' },
+  { bc: '#60a5fa', dl: '0.3s', left: '69%' },
+  { bc: '#a78bfa', dl: '0.4s', left: '88%' },
+];
 
 /**
  * Renders a 5-beam laser-rig overlay.
