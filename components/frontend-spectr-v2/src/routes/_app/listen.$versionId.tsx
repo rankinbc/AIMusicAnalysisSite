@@ -39,8 +39,11 @@ import { DEFAULT_VIZ_STATE, VizControls } from '../../features/listen/VizControl
 import type { StageId } from '../../features/listen/stageRegistry';
 import { buildRailTabs } from '../../features/listen/tabRegistry';
 import { useAudioGraph, type AudioFrame } from '../../features/listen/useAudioGraph';
+import { createBeatDetector } from '../../features/listen/beatDetector';
+import { createFlashLimiter } from '../../features/listen/flashLimiter';
 import { StemDeck, type DeckStem } from '../../features/listen/StemDeck';
 import { useStemEngine } from '../../features/listen/useStemEngine';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { fmtBpm, fmtGenre, fmtNumber } from '../../features/results/helpers/format';
 import { CoverArt } from '../../ui/CoverArt';
 import { hueFromId } from '../../ui/hueFromId';
@@ -58,17 +61,6 @@ export const Route = createFileRoute('/_app/listen/$versionId')({
 
 const SPECTRUM_BARS = 56;
 const WAVEFORM_BARS = 240;
-
-const SECTION_COLORS: Record<string, string> = {
-  intro: 'rgba(0, 229, 176, 0.32)',
-  buildup: 'rgba(167, 139, 250, 0.42)',
-  drop: 'rgba(251, 146, 60, 0.45)',
-  chorus: 'rgba(251, 146, 60, 0.45)',
-  verse: 'rgba(96, 165, 250, 0.32)',
-  bridge: 'rgba(96, 165, 250, 0.32)',
-  breakdown: 'rgba(96, 165, 250, 0.35)',
-  outro: 'rgba(255, 255, 255, 0.18)',
-};
 
 interface Section {
   name: string;
@@ -149,6 +141,26 @@ function ListenPage() {
   const fireworksRef = useRef<FireworksHandle | null>(null);
   const patchViz = useCallback((p: Partial<VizState>) => setViz((v) => ({ ...v, ...p })), []);
 
+  // ── Audio-reactive laser wiring ──
+  // The visualizer root receives reactive CSS vars (--laser-pulse / --beat-flash)
+  // written imperatively from the rAF loop — no per-frame React state. Beat
+  // onsets come from the band-energy detector; every FLASH routes through one
+  // shared ≤3 Hz limiter (photosensitivity safety). reduced-motion freezes it.
+  const stageRootRef = useRef<HTMLDivElement | null>(null);
+  const beatDetectorRef = useRef(createBeatDetector());
+  const flashLimiterRef = useRef(createFlashLimiter());
+  const pulseEnvRef = useRef(0); // smooth beam pulse envelope 0..1 (motion)
+  const flashEnvRef = useRef(0); // capped flash envelope 0..1 (photosensitive)
+  const reduceMotion = useReducedMotion();
+  // Mirror reactive-relevant state into refs so the rAF loop (deps [playing,
+  // graph]) reads the latest without re-subscribing every render.
+  const reduceMotionRef = useRef(reduceMotion);
+  reduceMotionRef.current = reduceMotion;
+  const laserOnRef = useRef(viz.laserOn);
+  laserOnRef.current = viz.laserOn;
+  const laserEffectRef = useRef(viz.laserEffect);
+  laserEffectRef.current = viz.laserEffect;
+
   // Half-beat pulse drives the visualizer's --beat CSS var (~0.484s @124 BPM).
   const bpm = Math.max(1, phase2?.bpm ?? phase1?.bpm ?? 124);
   const beatSeconds = 60 / bpm / 2;
@@ -157,7 +169,6 @@ function ListenPage() {
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState<number>(phase1?.duration_seconds ?? 0);
   const [volume, setVolume] = useState(0.8);
-  const [rate, setRate] = useState(1);
   const [loop, setLoop] = useState<LoopState>(LOOP_DEFAULT);
   const [pitch, setPitch] = useState<PitchPanelState>(PITCH_PANEL_DEFAULT);
   // True while the audio buffer source (pitch lane) is driving playback
@@ -245,11 +256,6 @@ function ListenPage() {
     const a = audioRef.current;
     if (a) a.volume = volume;
   }, [volume]);
-
-  useEffect(() => {
-    const a = audioRef.current;
-    if (a) a.playbackRate = rate;
-  }, [rate]);
 
   // ── Pitch lane wiring ──
   // The audio graph owns a BufferSource lane; when pitch is enabled the page
@@ -387,6 +393,9 @@ function ListenPage() {
 
   const seek = useCallback(
     (pct: number) => {
+      // Drop the rolling beat average so the detector doesn't fire a phantom
+      // beat from the energy discontinuity right after a jump.
+      beatDetectorRef.current.reset();
       const dur = pitch.enabled && pitchModeRef.current
         ? graph.pitchDuration()
         : Number.isFinite(audioRef.current?.duration ?? NaN)
@@ -410,11 +419,6 @@ function ListenPage() {
   const [spectrumValues, setSpectrumValues] = useState<number[]>(
     () => Array.from({ length: SPECTRUM_BARS }, () => 0),
   );
-  const [meters, setMeters] = useState({
-    lufsShort: phase1?.lufs ?? -14,
-    truePeakDb: phase1?.true_peak_db ?? phase1?.peak_dbfs ?? -1,
-    correlation: phase1?.stereo_correlation ?? 0.6,
-  });
   // Full live frame captured for the rail's Meters tab (buildMeterCells).
   const [meterFrame, setMeterFrame] = useState<AudioFrame | null>(null);
 
@@ -428,6 +432,41 @@ function ListenPage() {
         lastMeterTsRef.current = nowMs;
         setMeterFrame(frame);
       }
+
+      // ── Beat-reactive laser (imperative CSS vars, no React state) ──
+      const root = stageRootRef.current;
+      if (root) {
+        const reactive = laserOnRef.current && !reduceMotionRef.current;
+        if (reactive && frame.bandAverages.length > 0) {
+          const { beat } = beatDetectorRef.current.push(frame.bandAverages, nowMs);
+          if (beat) {
+            // Smooth beam pulse fires on every detected beat (it's motion, so
+            // reduced-motion already gates it above).
+            pulseEnvRef.current = 1;
+            // The white-flash channel is photosensitivity-capped: only the
+            // flash/strobe/beat effects flash, and only when the shared ≤3 Hz
+            // limiter allows it.
+            const fx = laserEffectRef.current;
+            if (
+              (fx === 'flash' || fx === 'strobe' || fx === 'beat') &&
+              flashLimiterRef.current.allow(nowMs)
+            ) {
+              flashEnvRef.current = 1;
+            }
+          }
+          pulseEnvRef.current *= 0.86; // ~exp decay (~160ms tail @60fps)
+          flashEnvRef.current *= 0.8; // faster decay; min 333ms gap caps rate
+          root.style.setProperty('--laser-pulse', pulseEnvRef.current.toFixed(3));
+          root.style.setProperty('--beat-flash', flashEnvRef.current.toFixed(3));
+        } else if (pulseEnvRef.current !== 0 || flashEnvRef.current !== 0) {
+          // Laser off or reduced-motion: settle the vars to a static frame once.
+          pulseEnvRef.current = 0;
+          flashEnvRef.current = 0;
+          root.style.setProperty('--laser-pulse', '0');
+          root.style.setProperty('--beat-flash', '0');
+        }
+      }
+
       if (frame.fftBins.length > 0) {
         const bins = frame.fftBins;
         // Down-sample the FFT to SPECTRUM_BARS bars using log-spaced bins so
@@ -446,11 +485,6 @@ function ListenPage() {
           next[i] = Math.min(1, (sum / Math.max(1, hi - lo)) * 1.4);
         }
         setSpectrumValues(next);
-        setMeters({
-          lufsShort: frame.lufsShort,
-          truePeakDb: frame.truePeakDb,
-          correlation: frame.correlation,
-        });
       }
       raf = requestAnimationFrame(draw);
     };
@@ -650,10 +684,6 @@ function ListenPage() {
   const trackName = song?.name ?? `Version ${version.versionNumber}`;
   const hue = song?.id ? hueFromId(song.id) : 168;
   const positionPct = duration > 0 ? position / duration : 0;
-  const currentSection =
-    sections.find((sec) => positionPct >= sec.startPct && positionPct < sec.endPct) ??
-    sections[0];
-
   return (
     <div className={s.page}>
       <section className={s.trackHeader}>
@@ -699,18 +729,11 @@ function ListenPage() {
               meterOverlay={meterOverlayNode}
               fireworks={fireworksNode}
               infoContent={infoContentNode}
+              rootRef={stageRootRef}
             />
-
-            <div className={s.liveStrip}>
-              <LivePill label="Section" value={currentSection.name} />
-              <LivePill label="LUFS-S" value={fmtNumber(meters.lufsShort, 1)} />
-              <LivePill label="Peak" value={fmtNumber(meters.truePeakDb, 1)} />
-              <LivePill label="Corr" value={fmtNumber(meters.correlation, 2)} />
-            </div>
 
             <div className={s.heroTransport}>
               <Scrubber
-                sections={sections}
                 waveform={waveform}
                 positionPct={positionPct}
                 duration={duration}
@@ -740,7 +763,6 @@ function ListenPage() {
                   <span className={s.tcSep}>/</span>
                   <span className={s.tcTotal}>{formatTime(duration)}</span>
                 </div>
-                <SpeedDial value={rate} onChange={setRate} />
                 <div className={s.volumeWrap}>
                   <span className={s.volumeIcon}>VOL</span>
                   <input
@@ -767,26 +789,26 @@ function ListenPage() {
               </div>
             </div>
           </section>
+
+          <div className={s.toolStrip}>
+            <PreviewTools
+              graph={graph}
+              activeTool={activeTool}
+              onActiveToolChange={setActiveTool}
+              loop={loop}
+              onLoopChange={setLoop}
+              audioRef={audioRef}
+              currentTime={position}
+              duration={duration}
+              pitch={pitch}
+              onPitchChange={handlePitchChange}
+            />
+          </div>
         </div>
 
         <aside className={s.railCol}>
           <RightRail tabs={railTabs} defaultTab="meters" />
         </aside>
-      </div>
-
-      <div className={s.toolStrip}>
-        <PreviewTools
-          graph={graph}
-          activeTool={activeTool}
-          onActiveToolChange={setActiveTool}
-          loop={loop}
-          onLoopChange={setLoop}
-          audioRef={audioRef}
-          currentTime={position}
-          duration={duration}
-          pitch={pitch}
-          onPitchChange={handlePitchChange}
-        />
       </div>
 
       {audioUrl && (
@@ -797,7 +819,6 @@ function ListenPage() {
 }
 
 interface ScrubberProps {
-  sections: Section[];
   waveform: number[];
   positionPct: number;
   duration: number;
@@ -809,7 +830,6 @@ interface ScrubberProps {
 }
 
 function Scrubber({
-  sections,
   waveform,
   positionPct,
   duration,
@@ -837,18 +857,6 @@ function Scrubber({
 
   return (
     <div className={s.scrubber}>
-      <div className={s.scrubberRibbon} aria-hidden="true">
-        {sections.map((sec) => (
-          <div
-            key={sec.name}
-            className={s.ribbonSection}
-            style={{ flex: sec.endPct - sec.startPct, background: SECTION_COLORS[sec.type] }}
-          >
-            {sec.name}
-          </div>
-        ))}
-        <div className={s.ribbonPlayhead} style={{ left: `${positionPct * 100}%` }} />
-      </div>
       <div
         ref={ref}
         className={s.waveform}
@@ -906,28 +914,6 @@ function Scrubber({
           </button>
         ))}
       </div>
-    </div>
-  );
-}
-
-function SpeedDial({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  const options = [0.75, 1, 1.25, 1.5];
-  return (
-    <div className={s.speedDial} role="group" aria-label="Playback speed">
-      {options.map((o) => (
-        <button key={o} type="button" data-active={value === o} onClick={() => onChange(o)}>
-          {o}×
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function LivePill({ label, value }: { label: string; value: string }) {
-  return (
-    <div className={s.livePill}>
-      <span className={s.livePillLabel}>{label}</span>
-      <span className={s.livePillValue}>{value}</span>
     </div>
   );
 }

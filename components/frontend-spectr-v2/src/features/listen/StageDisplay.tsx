@@ -1,4 +1,4 @@
-import { memo, type ReactNode } from 'react';
+import { memo, type ReactNode, type RefObject } from 'react';
 import { StageSelect } from './StageSelect';
 import { EqCurveOverlay } from './EqCurveOverlay';
 import { LaserRig, type LaserEffect } from './LaserRig';
@@ -71,6 +71,10 @@ interface Props {
   meterOverlay: ReactNode; // <MeterModule variant="overlay" />
   fireworks: ReactNode; // <Fireworks ref=... />
   infoContent: ReactNode; // title/cover/pills for the info stage
+  // Optional ref to the visualizer root so the page's rAF loop can write
+  // audio-reactive CSS vars (--laser-pulse / --beat-flash) imperatively
+  // without a per-frame React re-render.
+  rootRef?: RefObject<HTMLDivElement | null>;
 }
 
 export function StageDisplay(props: Props) {
@@ -85,6 +89,7 @@ export function StageDisplay(props: Props) {
 
   return (
     <div
+      ref={props.rootRef}
       className={`${s.visualizer} ${viz.enabled ? s.vizCustom : ''}`}
       data-stage={stage}
       style={styleVars as React.CSSProperties}
