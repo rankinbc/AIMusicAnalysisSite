@@ -88,6 +88,8 @@ AIMusicAnalysisSite/
 - **NuGet audit gating**: set `<NuGetAuditMode>direct</NuGetAuditMode>` in `Directory.Build.props` — without it, transitive CVEs in Serilog deps fail the build.
 - **CORS allowCredentials + explicit origins (not `*`)**: BFF allows only `http://localhost:5174` (Vite dev). Frontend uses `credentials: 'include'` for the refresh-cookie flow.
 - **Routing plan is persisted in both `analyses.routing_plan` AND `verdicts_payload.routing_plan`**: the parallel column is the lookup path; the embedded JSON copy survives cache reset.
+- **`analyze` deferral flag on `POST /versions/` and `POST /versions/{id}/als`**: optional form field, `bool?` defaulting to true. The unified-upload flow sends `analyze=false` so the version/.als is created WITHOUT enqueuing `analyze_audio_job`; a single analysis is dispatched downstream by `/stems/confirm` (stems) or `/versions/{id}/analyze` (no stems). Declared `bool?` not `bool` — an absent minimal-API form field binds a non-nullable bool to `false`, which would break every existing caller that omits it; `?? true` preserves back-compat. `UploadResponse.JobId` / `AlsUploadResponse.ReanalysisJobId` are now `Guid?` (null when deferred).
+- **Per-phase re-run** — `POST /api/reports/{jobId}/phases/{phase}/rerun` (`ReportPhaseEndpoints.cs`) re-runs ONE analysis phase in place. Server accepts phase 2–8 (rejects 1 = full re-analyze); UI exposes Re-run on stem-clash(4)/reference(5)/als(8) + Retry on failed rows. It creates a lightweight re-run `AnalysisJob` (progress vehicle) and enqueues the `rerun_phase` worker actor, which calls `audio_analysis.rerun_single_phase(...)` — runs just that phase, merges it into the EXISTING `analyses.final_json`, re-derives the rollups, and writes back to the **same** analysis row (never a 2nd `analyses` row). The pipeline was refactored into `run_single_phase` + `finalize_result` (+ `rerun_single_phase`) with `run_pipeline` output guarded byte-identical by the golden snapshots. Frontend: `useRerunPhase` + per-row buttons in `AnalysisTab` poll the re-run job, then invalidate `['jobs', jobId, 'results']` to refresh in place.
 
 ### frontend-spectr-v2 (NEW — PRIMARY frontend)
 
@@ -115,6 +117,7 @@ AIMusicAnalysisSite/
 - **Access token rotation can re-mount the `<audio>` element**: the `audioUrl` memo embeds the access token (`?t=`), so a silent refresh changes it, swapping the audio src and resetting `<audio>.currentTime`. Position state for the Listen page is therefore tracked off the audio graph's `pitchCurrentTime()` in pitch mode and the audio element's `timeupdate` event otherwise.
 - **`<audio>` requires `crossOrigin="anonymous"`** to feed `MediaElementSource`. BFF must set permissive CORS on the audio response (already configured for `localhost:5174`).
 - **`React.useState` initial value isn't recomputed after a token refresh**: derived state like `duration` is set by the MediaElement's `durationchange` event — initial value comes from `phase1?.duration_seconds`. Don't expect React state to track the live audio property without an explicit handler.
+- **`UnifiedUploadDialog` is the entry point for NEW uploads** (library "+ New song" / song-detail "+ Add version"): mix required; stems/.als/reference optional; "Review stem roles before analyzing" checkbox (default off). It uploads the mix + .als with `analyze=false` and dispatches a SINGLE analysis via `/stems/confirm` (stems) or `/versions/{id}/analyze` (no stems); reference uploads run their own `run_reference_analyzer` and never touch the track's analysis. The standalone `UploadVersionDialog`/`AlsUploadDialog`/`StemsUploadDialog`/`ReferenceUploadDialog` remain for adding assets to an already-analyzed version. **Orchestration calls stage/classify/confirm/analyze via `fetcher` directly with the just-created versionId** — NOT via the `useStemStaging`/`useConfirmStems` hooks, because those capture `versionId` at render time (which is `''` until the mix upload returns), so calling them in the same async tick would hit a stale-closure empty id. `useStemProposals` is the exception — it's render-driven, safe for the review-step polling. Pure path/payload decisions live in `unified-upload-helpers.ts` (`decideDispatchPath`, `buildAutoConfirmPayload`).
 
 ### api (LEGACY — api.md)
 
@@ -450,3 +453,35 @@ branch (`components/frontend-spectr/`) is vanilla `.jsx` (no
 TypeScript / Tailwind / shadcn / vitest / Playwright). A separate
 follow-up plan will wire the upload + mapping + report UI to the
 backend changes that are now in place.
+
+### Bulk stem upload + audio-content classification (added 2026-06-16, v2)
+
+The v2 stack replaces the one-file-per-role stems UI with a single drag-drop
+zone (up to **100** stems). Flow: **stage → classify → poll → confirm**.
+- BFF (`VersionEndpoints.cs`): `POST /versions/{id}/stems/stage` (multi-file,
+  appends to `song_versions.stem_paths_raw`), `POST .../stems/classify`
+  (enqueues the `classify_stems` dramatiq actor), `GET .../stems` (poll
+  proposals; `classified=true` once every row has a `detected_role`),
+  `POST .../stems/confirm` (writes `stem_paths` role→[paths] groups +
+  `stem_analysis_mode`, dispatches `analyze_audio_job`), `GET .../stems/{stemId}/audio`.
+  The legacy role-keyed `POST /stems` endpoint is kept.
+- **Classification is a Python worker actor** (`classify_stems`) — the BFF is
+  .NET and can't run it in-process. It's audio-content based (not filename).
+- Classifier lives in `audio_analysis.stems` as an **import-light** module
+  (librosa only, NO demucs/torch): `classify_stems(paths) -> [StemProposal]`
+  plus a tuning CLI: `python -m audio_analysis.stems.classify <dir>`.
+- `stem_paths` value shape widened from `{role: "path"}` to `{role: ["path",…]}`;
+  the phase4/phase5 coercion accepts **both** (old rows still analyze). Grouped
+  mode (default) sums each role's stems into a bus; `per_stem` mode (opt-in,
+  `song_versions.stem_analysis_mode`) analyzes each stem individually with
+  capped pairwise clash.
+- Frontend: `StemsUploadDialog.tsx` (drag-drop, local-blob preview, editable
+  detected roles, mode toggle) + hooks `useStemStaging` / `useClassifyStems` /
+  `useStemProposals` / `useConfirmStems`.
+- **EF gotcha:** a write-path version lookup must NOT use `db.Songs.AsNoTracking()`
+  in its join — `AsNoTracking()` anywhere makes the WHOLE query no-tracking, so
+  `SaveChanges` silently drops the update. (The legacy `UploadStems` POST `/stems`
+  has this latent bug and never persisted in v2; the new flow uses a tracked lookup.)
+- **Follow-ups (not done):** BFF endpoint integration tests; cleanup of
+  abandoned `audio/stems/{versionId}/` staging dirs; fix the legacy `/stems` endpoint's
+  AsNoTracking bug if it's kept.

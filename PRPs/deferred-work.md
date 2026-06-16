@@ -9,6 +9,13 @@ Real findings that are out of scope for the current story but worth revisiting.
 - **README updates** — bff/README Customer Portal configuration + frontend-spectr-v2/README vitest baseline 145 → 163.
 - **Cadence-change confirm dialog** — Task 7.4 mid-flow confirmation deferred; inline `Switch to monthly` button POSTs directly today.
 
+## Deferred from: code review of story-2.3 (2026-06-16)
+
+- **bff/README.md Billing section** — `Stripe:PriceCreditPack5` + `Stripe:PriceCreditPack10` `dotnet user-secrets set` lines not yet documented. Bundle with story 2.4's README pass when the entitlement-resolver section is also added.
+- **`PostgresReachable()` silent-skip in BillingCreditsEndpointsTests** [components/bff/tests/Spectr.Bff.Tests/BillingCreditsEndpointsTests.cs] — Same codebase-wide pattern tracked under P14 in the story-2.2 deferred section. Address as part of the broader test-infrastructure cleanup.
+- **`WebApplicationFactory` instances not disposed in `BuildWithFakeStripe`** [components/bff/tests/Spectr.Bff.Tests/BillingCreditsEndpointsTests.cs] — Same pattern as P15 in story-2.2 deferred section. Bundle with P14 cleanup.
+- **Same-hour repeat purchase collision** — hourBucket idempotency key prevents duplicate Stripe sessions within the same hour (intended for retry deduplication). If a user cancels and wants to buy again in the same hour, they'll receive the prior completed session URL. No user-visible path to trigger this in MVP UX; revisit if usage data shows friction.
+
 ## Deferred from: code review of story-2.2 (2026-06-15)
 
 - **Cadence-change inline confirm dialog (Task 7.4)** [components/frontend-spectr-v2/src/routes/_app/billing.tsx] — Already tracked above from the original implementation commit; re-confirmed during code review as the sole deferred UX item. The toggle currently POSTs directly to `/api/billing/change-cadence`, violating the "no surprise billing" intent. Land alongside the review-patch commit so a single action can't trigger a real Stripe proration charge.

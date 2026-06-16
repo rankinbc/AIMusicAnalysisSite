@@ -49,6 +49,20 @@ class RoleProposal:
     evidence: str
 
 
+@dataclass(frozen=True)
+class StemProposal:
+    """One classified stem: a file plus its detected role, confidence and evidence.
+
+    Emitted by ``audio_analysis.stems.classify_stems`` and surfaced to the
+    confirm UI. Distinct from ``StemMappingProposal`` (which carries an optional
+    .als track name); this is the audio-content classifier's output.
+    """
+    file: Path
+    role: StemRole
+    confidence: float
+    evidence: str
+
+
 @dataclass
 class StemMappingProposal:
     file: Path

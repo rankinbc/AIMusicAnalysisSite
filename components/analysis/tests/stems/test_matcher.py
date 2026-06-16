@@ -34,15 +34,15 @@ def test_validate_passes_with_unique_roles(tmp_path: Path):
     validate_confirmed_mapping(mappings)
 
 
-def test_validate_rejects_duplicate_roles(tmp_path: Path):
+def test_validate_allows_duplicate_roles(tmp_path: Path):
+    # Bulk upload supports many stems per role (summed into a role bus).
     a = tmp_path / "a.flac"; a.write_bytes(b"")
     b = tmp_path / "b.flac"; b.write_bytes(b"")
     mappings = [
         ConfirmedMapping(a, StemRole.BASS, None),
         ConfirmedMapping(b, StemRole.BASS, None),
     ]
-    with pytest.raises(ValueError, match="duplicate_role"):
-        validate_confirmed_mapping(mappings)
+    validate_confirmed_mapping(mappings)  # no raise
 
 
 def test_validate_rejects_missing_file(tmp_path: Path):

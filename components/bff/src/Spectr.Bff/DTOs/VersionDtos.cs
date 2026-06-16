@@ -7,9 +7,29 @@ public sealed record VersionDto(
     string? Label,
     bool IsCurrent,
     string FilePath,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    string? AlsFilePath = null,
+    string? ReferencePath = null);
 
-public sealed record UploadResponse(Guid SongId, Guid VersionId, Guid JobId);
+// GET /api/versions/{id}/files — metadata for all files attached to a version.
+// `Available` is false when the file has been deleted / expired from storage.
+// `StemId` is set only for type="stem" and is used to build the download path.
+public sealed record VersionFileEntry(
+    string Type,
+    string Filename,
+    long? SizeBytes,
+    bool Available,
+    string? StemId = null);
+
+// POST /api/reports/{jobId}/phases/{phase}/rerun — id of the lightweight re-run
+// job to poll; the re-run updates the existing analysis in place.
+public sealed record RerunPhaseResponse(Guid JobId);
+
+public sealed record VersionFilesResponse(Guid VersionId, List<VersionFileEntry> Files);
+
+// JobId is null when the upload deferred analysis (unified-upload flow uses
+// analyze=false on the mix, then dispatches a single job downstream).
+public sealed record UploadResponse(Guid SongId, Guid VersionId, Guid? JobId);
 
 // PATCH /api/versions/{id}
 public sealed record PatchVersionRequest(string? Label);
@@ -38,4 +58,27 @@ public sealed record StemUploadResponse(
     Dictionary<string, string> StemPaths,
     Guid ReanalysisJobId);
 
-public sealed record AlsUploadResponse(Guid VersionId, string AlsPath, Guid ReanalysisJobId);
+// ReanalysisJobId is null when the .als was attached with analyze=false.
+public sealed record AlsUploadResponse(Guid VersionId, string AlsPath, Guid? ReanalysisJobId);
+
+// ── Bulk stem upload (drag-drop up to 100, audio-content auto-classification) ──
+// One staged stem as surfaced to the confirm UI (camelCase over the wire).
+public sealed record StemRawDto(
+    string Id,
+    string OriginalFilename,
+    string? DetectedRole,
+    double Confidence,
+    string? Evidence,
+    string? ConfirmedRole);
+
+public sealed record StageStemsResponse(Guid VersionId, List<StemRawDto> Stems);
+
+// classified=true once every staged stem has a detected_role (worker finished).
+public sealed record StemProposalsResponse(Guid VersionId, bool Classified, List<StemRawDto> Stems);
+
+public sealed record ConfirmStemItem(string Id, string ConfirmedRole);
+
+// mode: "grouped" (default) | "per_stem"
+public sealed record ConfirmStemsRequest(List<ConfirmStemItem> Stems, string? Mode);
+
+public sealed record ConfirmStemsResponse(Guid VersionId, Guid ReanalysisJobId);

@@ -42,6 +42,7 @@ def analyze(
     wav_path: Path,
     progress_cb: Callable | None = None,
     stem_paths: dict | None = None,
+    stem_mode: str = "grouped",
 ) -> dict:
     if USE_DEMUCS:
         result = _demucs_analyze(wav_path, progress_cb)
@@ -49,43 +50,52 @@ def analyze(
         result = _spectral_analyze(wav_path, progress_cb)
 
     if stem_paths:
-        result["stems"] = _analyze_user_stems(stem_paths)
+        result["stems"] = _analyze_user_stems(stem_paths, stem_mode)
     return result
 
 
-def _analyze_user_stems(stem_paths: dict) -> dict:
-    """Run the stems module on user-provided stems and serialize for JSON."""
-    from ..stems import analyze as analyze_stems
+def _coerce_groups(stem_paths: dict) -> dict:
+    """Normalize the persisted stem_paths into ``{StemRole: [Path, ...]}``.
+
+    Accepts both the legacy single-path-per-role shape (``{role: "path"}``) and the
+    new many-stems-per-role shape (``{role: ["path", ...]}``) so old rows still work.
+    """
     from ..stems.types import StemRole
 
-    typed_paths = {
-        StemRole(r) if isinstance(r, str) else r: Path(p) if isinstance(p, str) else p
-        for r, p in stem_paths.items()
-    }
+    out: dict = {}
+    for r, v in stem_paths.items():
+        role = StemRole(r) if isinstance(r, str) else r
+        values = v if isinstance(v, (list, tuple)) else [v]
+        out[role] = [Path(p) if isinstance(p, str) else p for p in values]
+    return out
+
+
+def _analyze_user_stems(stem_paths: dict, stem_mode: str = "grouped") -> dict:
+    """Run the stems module on user-provided stems and serialize for JSON.
+
+    grouped (default): stems sharing a role are summed into a role bus, then analyzed
+    per role (output shape identical to the legacy single-file-per-role path).
+    per_stem: each stem analyzed individually with capped pairwise clash.
+    """
+    from ..stems import analyze_grouped, analyze_per_stem
+    from ..stems.analyzer import metrics_to_dict
+
+    groups = _coerce_groups(stem_paths)
     try:
-        stem_result = analyze_stems(typed_paths)
+        if stem_mode == "per_stem":
+            flat = [(p.stem, role, p) for role, paths in groups.items() for p in paths]
+            ps = analyze_per_stem(flat)
+            return {"status": "ok", "mode": "per_stem", **ps}
+
+        stem_result = analyze_grouped(groups)
     except Exception as exc:
         logger.exception("stem analysis failed")
         return {"status": "failed", "error": str(exc)}
 
     return {
         "status": "ok",
-        "per_stem": {
-            role.value: {
-                "duration_s": m.duration_s,
-                "peak_db": m.peak_db,
-                "rms_db": m.rms_db,
-                "lufs_integrated": m.lufs_integrated,
-                "dynamic_range_db": m.dynamic_range_db,
-                "band_energy_db": {b.value: v for b, v in m.band_energy_db.items()},
-                "spectral_centroid_hz": m.spectral_centroid_hz,
-                "dominant_frequencies_hz": m.dominant_frequencies_hz,
-                "stereo_width": m.stereo_width,
-                "pan_estimate": m.pan_estimate,
-                "is_mono": m.is_mono,
-            }
-            for role, m in stem_result.per_stem.items()
-        },
+        "mode": "grouped",
+        "per_stem": {role.value: metrics_to_dict(m) for role, m in stem_result.per_stem.items()},
         "clash_matrix": [
             {
                 "stem_a": c.stem_a.value, "stem_b": c.stem_b.value,

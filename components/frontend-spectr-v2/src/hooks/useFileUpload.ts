@@ -8,6 +8,10 @@ import type { UploadResponse } from '../api/types';
 interface UploadFields {
   song_id?: string;
   genre_hint?: string;
+  // Omit to keep the default (BFF analyzes on upload). Set false to defer the
+  // analysis dispatch — the unified-upload flow uploads the mix with analyze=false
+  // and dispatches a single job downstream.
+  analyze?: boolean;
 }
 
 interface UploadState {
@@ -31,6 +35,7 @@ export function useFileUpload() {
         form.append('file', file);
         if (fields.song_id) form.append('song_id', fields.song_id);
         if (fields.genre_hint) form.append('genre_hint', fields.genre_hint);
+        if (fields.analyze !== undefined) form.append('analyze', String(fields.analyze));
 
         const xhr = new XMLHttpRequest();
         xhrRef.current = xhr;

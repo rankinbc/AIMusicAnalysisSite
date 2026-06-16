@@ -2,6 +2,7 @@
 import re
 from pathlib import Path
 
+import librosa
 import numpy as np
 
 from .types import RoleProposal, StemRole
@@ -53,22 +54,106 @@ def _band_energy_ratios(audio: np.ndarray, sr: int = 44100) -> dict[str, float]:
     }
 
 
-def _spectral_classify(audio: np.ndarray) -> RoleProposal:
-    r = _band_energy_ratios(audio)
-    if r["sub"] + r["bass"] > 0.55 and r["air"] < 0.05:
-        return RoleProposal(StemRole.BASS, 0.7, "spectral: low-band dominant")
-    if r["high_mid"] + r["presence"] + r["air"] > 0.55 and r["sub"] + r["bass"] < 0.10:
-        return RoleProposal(StemRole.HATS, 0.6, "spectral: high-band dominant")
-    if 0.40 < r["mid"] + r["low_mid"] < 0.75 and r["sub"] < 0.10:
-        return RoleProposal(StemRole.VOCALS, 0.55, "spectral: mid-band dominant")
+def _to_mono(audio: np.ndarray) -> np.ndarray:
+    mono = audio.mean(axis=1) if audio.ndim == 2 else audio
+    return np.ascontiguousarray(mono, dtype=np.float32)
+
+
+def _features(audio: np.ndarray, sr: int) -> dict[str, float]:
+    """DSP features for content-based role classification (import-light: librosa only)."""
+    mono = _to_mono(audio)
+    n = len(mono)
+    dur = n / sr if sr else 0.0
+    rms = float(np.sqrt(np.mean(mono ** 2)) + 1e-12)
+    peak = float(np.max(np.abs(mono)) + 1e-12)
+    crest = peak / rms
+    try:
+        zcr = float(librosa.feature.zero_crossing_rate(mono)[0].mean())
+    except Exception:
+        zcr = 0.0
+    try:
+        centroid = float(librosa.feature.spectral_centroid(y=mono, sr=sr).mean())
+    except Exception:
+        centroid = 0.0
+    try:
+        harm, perc = librosa.effects.hpss(mono)
+        pe, he = float(np.sum(perc ** 2)), float(np.sum(harm ** 2))
+        perc_ratio = pe / (pe + he + 1e-12)
+    except Exception:
+        perc_ratio = 0.0
+    try:
+        onsets = librosa.onset.onset_detect(y=mono, sr=sr, units="frames")
+        onset_rate = (len(onsets) / dur) if dur > 0 else 0.0
+    except Exception:
+        onset_rate = 0.0
+    return {
+        "crest": crest, "zcr": zcr, "centroid": centroid,
+        "perc_ratio": perc_ratio, "onset_rate": onset_rate,
+    }
+
+
+def _spectral_classify(audio: np.ndarray, sr: int = 44100) -> RoleProposal:
+    """Content-based classifier: band-energy distribution + transient/tonal features.
+
+    Ordered rules; the first strong match wins. Distinguishes percussive low-end
+    (kick) from sustained low-end (bass) via onset rate + percussive ratio + crest —
+    the single most important split for producers.
+    """
+    r = _band_energy_ratios(audio, sr)
+    f = _features(audio, sr)
+    low = r["sub"] + r["bass"]
+    high = r["presence"] + r["air"]
+    mids = r["low_mid"] + r["mid"] + r["high_mid"]
+    # perc_ratio (HPSS) + crest are reliable transient indicators; onset_rate is NOT
+    # trustworthy on sustained tones (a pure sine reports spurious onsets), so it is
+    # used only for human-readable evidence, never as a gate.
+    percussive = f["perc_ratio"] > 0.45 or f["crest"] > 5.0
+    ev = f"perc {f['perc_ratio']:.2f}, crest {f['crest']:.1f}, zcr {f['zcr']:.2f}"
+
+    # Hats: high-band dominant, noisy, percussive.
+    if high > 0.45 and f["zcr"] > 0.10 and percussive:
+        return RoleProposal(StemRole.HATS, 0.7, f"spectral: high-band {high:.2f}, {ev}")
+
+    # Kick: low-end dominant AND percussive (vs sustained bass).
+    if low > 0.5 and percussive:
+        return RoleProposal(StemRole.KICK, 0.7, f"spectral: low-band {low:.2f} + transient ({ev})")
+
+    # Bass: low-end dominant AND sustained.
+    if low > 0.5:
+        return RoleProposal(StemRole.BASS, 0.7, f"spectral: low-band {low:.2f}, sustained ({ev})")
+
+    # Snare: mid / high-mid energy, percussive, broadband.
+    if (r["mid"] + r["high_mid"]) > 0.35 and percussive and f["zcr"] > 0.05:
+        return RoleProposal(StemRole.SNARE, 0.6, f"spectral: mid-band percussive ({ev})")
+
+    # Drums (full bus): broadband percussive with energy in both low and mids.
+    if percussive and low > 0.2 and mids > 0.2:
+        return RoleProposal(StemRole.DRUMS, 0.55, f"spectral: broadband percussive ({ev})")
+
+    # Vocals: mid-dominant, harmonic, sustained.
+    if mids > 0.4 and not percussive:
+        return RoleProposal(StemRole.VOCALS, 0.55, f"spectral: mid-band {mids:.2f}, harmonic ({ev})")
+
+    # Lead vs Pad: mid/high harmonic & sustained. Pad = very steady (low crest).
+    if (r["mid"] + r["high_mid"]) > 0.35 and not percussive:
+        if f["crest"] < 2.0:
+            return RoleProposal(StemRole.PAD, 0.5, f"spectral: sustained mid/high, low crest {f['crest']:.1f}")
+        return RoleProposal(StemRole.LEAD, 0.5, f"spectral: mid/high harmonic, centroid {f['centroid']:.0f}Hz")
+
+    # FX: noisy / atonal.
+    if f["zcr"] > 0.15:
+        return RoleProposal(StemRole.FX, 0.4, f"spectral: noisy/atonal ({ev})")
+
     return RoleProposal(StemRole.OTHER, 0.3, "spectral: no clear dominant band")
 
 
-def detect_role(file_path: Path, audio: np.ndarray | None = None) -> RoleProposal:
-    """Filename-first role detection. Spectral fallback when audio is provided."""
+def detect_role(
+    file_path: Path, audio: np.ndarray | None = None, sr: int = 44100,
+) -> RoleProposal:
+    """Filename-first role detection. Content-based spectral fallback when audio is provided."""
     proposal = _filename_match(file_path.stem)
     if proposal is not None:
         return proposal
     if audio is not None:
-        return _spectral_classify(audio)
+        return _spectral_classify(audio, sr)
     return RoleProposal(StemRole.OTHER, 0.2, "no filename match, no audio provided")

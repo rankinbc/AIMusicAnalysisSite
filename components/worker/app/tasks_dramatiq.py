@@ -125,8 +125,28 @@ def analyze_audio_job(job_id: str) -> None:
         reference_path = version.reference_path
         als_file_path = version.als_file_path
         stem_paths = version.stem_paths
+        stem_mode = version.stem_analysis_mode or "grouped"
 
-    # ── Phase B — run pipeline outside any DB transaction ────────────────────
+    # ── Phase B — run pipeline outside any long-held DB transaction ──────────
+    # Live per-phase progress: the pipeline calls progress_cb(phase, name, pct)
+    # at each phase boundary (and intra-phase for stems). We translate that into
+    # an OVERALL 0..1 fraction + the phase name, persisted via short standalone
+    # transactions (Phase B holds no transaction — the 3-phase pattern keeps
+    # slow work tx-free). The BFF SSE/poll surfaces current_phase + phase_pct.
+    total_phases = 8 if als_file_path else 7
+
+    def _report_progress(phase: int, name: str, pct: float) -> None:
+        frac = max(0.0, min(1.0, pct))
+        overall = max(0.0, min(1.0, (phase - 1 + frac) / total_phases))
+        try:
+            with SessionFactory.begin() as ps:
+                pj = ps.get(AnalysisJob, jid)
+                if pj is not None:
+                    pj.current_phase = name
+                    pj.phase_pct = overall
+        except Exception:  # progress is best-effort — never fail the job over it
+            logger.warning("progress update failed (phase=%s)", phase, exc_info=True)
+
     try:
         logger.info("analyze_audio_job: pipeline begin job=%s file=%s", job_id, file_abs)
         pipeline_result = run_pipeline(
@@ -134,6 +154,8 @@ def analyze_audio_job(job_id: str) -> None:
             reference_path=(str(Path(LOCAL_ROOT) / reference_path) if reference_path else None),
             als_file_path=(str(Path(LOCAL_ROOT) / als_file_path) if als_file_path else None),
             stem_paths=stem_paths,
+            stem_mode=stem_mode,
+            progress_cb=_report_progress,
         )
         # The pipeline returns a TypedDict that may contain nested TypedDicts —
         # coerce to plain JSON-safe dict so SA's JSONB serializer doesn't
@@ -187,6 +209,52 @@ def analyze_audio_job(job_id: str) -> None:
 
     _try_write_artifact(job_id, result_dict)
     logger.info("analyze_audio_job: done job=%s", job_id)
+
+
+@dramatiq.actor(
+    actor_name="classify_stems",
+    queue_name="default",
+    max_retries=1,
+    time_limit=600_000,  # 10 minutes
+)
+def classify_stems(version_id: str) -> None:
+    """Audio-content classify each staged stem; write detected roles back to the version.
+
+    Reads ``song_versions.stem_paths_raw`` (a list of staged-stem dicts), resolves
+    each ``path`` against LOCAL_ROOT, classifies by sound (import-light, no demucs),
+    and writes ``detected_role`` / ``confidence`` / ``evidence`` back so the BFF's
+    GET /stems poll can return proposals. Classification is best-effort per file
+    (failures map to role "other"), so every row always ends with a detected_role.
+    """
+    from audio_analysis.stems import classify_stems as classify_audio
+
+    vid = uuid.UUID(version_id)
+    logger.info("classify_stems: start version=%s", version_id)
+
+    with SessionFactory.begin() as s:
+        version = s.get(SongVersion, vid)
+        if version is None:
+            raise ValueError(f"version {version_id} not found")
+        entries = list(version.stem_paths_raw or [])
+        if not entries:
+            logger.info("classify_stems: no staged stems for version=%s", version_id)
+            return
+
+        abs_paths = [Path((Path(LOCAL_ROOT) / e["path"]).resolve()) for e in entries]
+        proposals = classify_audio(abs_paths)
+
+        updated = []
+        for e, prop in zip(entries, proposals):
+            ne = dict(e)
+            ne["detected_role"] = prop.role.value
+            ne["confidence"] = round(float(prop.confidence), 3)
+            ne["evidence"] = prop.evidence
+            updated.append(ne)
+        # Reassign so SQLAlchemy flags the JSONB column dirty (in-place mutation
+        # of a JSON list is not tracked).
+        version.stem_paths_raw = updated
+
+    logger.info("classify_stems: done version=%s (%d stems)", version_id, len(entries))
 
 
 def _try_write_artifact(job_id: str, result_dict: dict) -> None:

@@ -36,6 +36,9 @@ public sealed class SongVersion
     [Column("stem_paths", TypeName = "jsonb")]
     public string? StemPaths { get; set; }
 
+    [Column("stem_analysis_mode"), MaxLength(16)]
+    public string StemAnalysisMode { get; set; } = "grouped";
+
     [Column("is_current")]
     public bool IsCurrent { get; set; }
 

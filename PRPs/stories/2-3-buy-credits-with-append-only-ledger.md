@@ -1,6 +1,6 @@
 # Story 2.3: Buy Credits with Append-Only Ledger
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -350,3 +350,47 @@ These items are in the spec's "Out of scope" list — explicitly scoped against 
 ### Change Log
 
 - 2026-06-15 — story 2.3 implementation lands. 4/4 ACs satisfied at the production-code layer (AC2 dispatch-hook integration deferred to story 2.4 per spec out-of-scope list — service primitive ships fully tested). BFF 81 → **100/100 tests**; frontend 171 → **189/189 vitest** + tsc/lint/build clean. Migration applied. Status → review.
+- 2026-06-16 — 3-agent adversarial code review complete (Blind Hunter + Edge Case Hunter + Acceptance Auditor via bmad-code-review). 5 patches applied (P1-A, P1-B, P2-A, P2-B, P2-C, P2-D). Status → done.
+
+## Review Findings
+
+### Adversarial code review: story 2.3 (2026-06-16)
+
+**Reviewers:** 3 parallel Sonnet agents — Blind Hunter, Edge Case Hunter, Acceptance Auditor.
+**Implementation model:** claude-opus-4-7.
+
+#### P1 — Critical (production money loss)
+
+**P1-A: Stripe session metadata placement mismatch** `[BillingEndpoints.cs PostCheckoutCredits]`
+`SessionCreateOptions` placed metadata only inside `PaymentIntentData.Metadata` but the `checkout.session.completed` webhook handler reads `session.Metadata` — a separate Stripe object. In production every credit purchase would process the webhook, find empty `session.Metadata`, fail the `TryReadUserMetadata` check, and never record the ledger row. The integration test masked this because `BuildPaymentSessionEvent` hand-rolled JSON with metadata at the session level (which is what Stripe actually sends), so the test exercised the correct read path while the write path wrote to the wrong location.
+*Fix:* Added session-level `Metadata` to `SessionCreateOptions` alongside the `PaymentIntentData` copy (defense-in-depth for PaymentIntent webhooks).
+
+**P1-B: Silent money loss on metadata-failure webhook path** `[BillingEndpoints.cs DispatchAsync]`
+The `TryReadUserMetadata` failure branches used `return;` instead of `throw`. The outer webhook handler interprets a clean return as success, writes `processed_at = now()`, returns 200 to Stripe, and Stripe never retries. A credit purchase with missing/corrupt metadata (e.g. Stripe metadata key collisions, future config drift) would be permanently lost.
+*Fix:* Both failure branches (`TryReadUserMetadata` and `string.IsNullOrEmpty(PaymentIntentId)`) changed to `throw new InvalidOperationException(...)` so the outer handler writes `processing_error`, returns 5xx, and Stripe retries.
+
+#### P2 — High (correctness / concurrency / pagination)
+
+**P2-A: Serialization-failure retry doesn't cover the read phase** `[CreditLedgerService.cs SpendAsync / IsSerializationFailure]`
+`IsSerializationFailure(DbUpdateException ex)` only catches DML exceptions. When Postgres aborts the `SumAsync` SELECT during a serializable conflict, Npgsql surfaces a raw `PostgresException` (not wrapped in `DbUpdateException`). The catch clause `catch (DbUpdateException ex) when (...)` never matched the SELECT-phase abort — the retry loop never fired for the common read-phase conflict.
+*Fix:* Changed catch to `catch (Exception ex)` + updated `IsSerializationFailure` to check `(ex is DbUpdateException dbe && dbe.InnerException is PostgresException pg1 && pg1.SqlState == "40001") || (ex is PostgresException pg2 && pg2.SqlState == "40001")`.
+
+**P2-B: Timestamp-only cursor causes row loss on pagination** `[BillingEndpoints.cs GetCredits]`
+Cursor was `rows[PageSize-1].CreatedAt.ToString("o")` with `WHERE created_at < @cursor`. Any two ledger entries with the same `created_at` (common for purchase + spend in a single request) would silently disappear when the older one straddled a page boundary — the next query would skip both.
+*Fix:* Compound cursor `(created_at ISO-8601)|(id UUID)` with `WHERE created_at < cTs OR (created_at = cTs AND id < cId)` and `ORDER BY created_at DESC, id DESC`.
+
+**P2-C: dayBucket idempotency key blocks repeat purchases** `[BillingEndpoints.cs PostCheckoutCredits]`
+`credits_session:{userId}:{packSize}:{dayBucket}` caused Stripe to return a cached (completed) session when a user bought the same pack size twice in one calendar day. Stripe's idempotency-key deduplication returns the prior session object — with a stale `url` already consumed or expired — so the second purchase silently receives a dead link.
+*Fix:* Changed `dayBucket` to `hourBucket` (`yyyyMMddHH`) — same-day repeat purchases in different hours work; same-hour retry still collapses (intentional).
+
+**P2-D: Test gap — session-level Metadata not asserted** `[BillingCreditsEndpointsTests.cs PostCheckoutCredits_With_Pack5_Returns_Stripe_Url]`
+The checkout test only asserted `PaymentIntentData.Metadata` keys, not `SessionCreateOptions.Metadata`. P1-A's metadata placement bug would have passed the test even before the fix.
+*Fix:* Added `fake.LastSessionOptions.Metadata["spectr_user_id"]` and `fake.LastSessionOptions.Metadata["pack_size"]` assertions.
+
+#### Acceptance audit — all ACs confirmed
+
+- **FR29 / AC5 structural invariant**: confirmed no `expires_at` column anywhere in the diff, no scheduled cleanup, no expiry policy. The CHECK constraint on `credit_ledger` does not reference time.
+- **Append-only invariant**: no `UPDATE` or `DELETE` statements targeting `credit_ledger` or `usage_events` in any code path — EF entity state is always `Added`. Reversal and spend use new row inserts only.
+- **Architecture D2 money-boundary**: `CreditLedgerService` is the sole writer. `PostCheckoutCredits` creates a Stripe session and returns the URL — no optimistic ledger write at session-create time. Confirmed no accidental writes bypassing the service.
+- **AC3 reversal read-path**: `GET /api/jobs/{id}` checks `status=failed && error_code=invalid_file && prior spend row exists && no prior reversal row` before calling `ReverseAsync`. User-id match verified via JWT userId from the request context — no cross-user reversal possible.
+- **CreditSpendEnabled=false gate**: confirmed the dispatch-path hook is a no-op in 2.3; the flag default-false in `appsettings.json` prevents any accidental spend writes before 2.4's entitlement resolver ships.

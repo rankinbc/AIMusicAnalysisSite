@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { useSetCurrentVersion, useSong } from '../../api/hooks';
 import { CompareDialog } from '../../components/CompareDialog';
 import { SharePublishDialog } from '../../components/SharePublishDialog';
-import { UploadVersionDialog } from '../../components/UploadVersionDialog';
+import { UnifiedUploadDialog } from '../../components/UnifiedUploadDialog';
 import { CoverArt } from '../../ui/CoverArt';
 import { hueFromId } from '../../ui/hueFromId';
 import { GradePill } from '../../ui/GradePill';
@@ -273,10 +273,11 @@ function SongDetailPage() {
         </aside>
       </div>
 
-      <UploadVersionDialog
+      <UnifiedUploadDialog
         open={uploadOpen}
         onOpenChange={setUploadOpen}
         songId={song.id}
+        {...(song.genreHint ? { defaultGenre: song.genreHint } : {})}
       />
       <CompareDialog
         open={compareOpen}

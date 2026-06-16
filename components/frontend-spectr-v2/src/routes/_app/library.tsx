@@ -3,7 +3,7 @@ import { useMemo, useState, type MouseEvent } from 'react';
 
 import { useSongs } from '../../api/hooks';
 import { NewSongDialog } from '../../components/NewSongDialog';
-import { UploadVersionDialog } from '../../components/UploadVersionDialog';
+import { UnifiedUploadDialog } from '../../components/UnifiedUploadDialog';
 import { normalizeGrade } from '../../features/results/helpers/grade';
 import { CoverArt } from '../../ui/CoverArt';
 import { hueFromId } from '../../ui/hueFromId';
@@ -119,6 +119,7 @@ function LibraryPage() {
     );
   }
 
+  const uploadSong = list.find((x) => x.id === uploadSongId);
   const versionCount = list.reduce((acc, song) => acc + song.versions.length, 0);
   const lastEdit = list.reduce<Date | null>((latest, song) => {
     const d = new Date(song.updatedAt);
@@ -219,10 +220,11 @@ function LibraryPage() {
         onOpenChange={setNewSongOpen}
         onCreated={(id) => openUpload(id)}
       />
-      <UploadVersionDialog
+      <UnifiedUploadDialog
         open={uploadOpen}
         onOpenChange={setUploadOpen}
         {...(uploadSongId ? { songId: uploadSongId } : {})}
+        {...(uploadSong?.genreHint ? { defaultGenre: uploadSong.genreHint } : {})}
       />
     </div>
   );

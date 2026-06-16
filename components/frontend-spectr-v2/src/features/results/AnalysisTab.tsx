@@ -1,13 +1,15 @@
-import { useMemo, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 
 import { useState } from 'react';
 
-import { useRunSpecialist, useVerdicts } from '../../api/hooks';
-import type { Phase8Data, PhaseResult, RoutingPlanEntry } from '../../api/types';
+import { useJob, useRerunPhase, useRunSpecialist, useVerdicts } from '../../api/hooks';
+import type { Phase4Data, Phase8Data, PhaseResult, RoutingPlanEntry } from '../../api/types';
 import { AlsUploadDialog } from '../../components/AlsUploadDialog';
 import { ReferenceUploadDialog } from '../../components/ReferenceUploadDialog';
 import { StemsUploadDialog } from '../../components/StemsUploadDialog';
+import { rerunPhaseFor } from './analysis-tab-helpers';
 import { CoachPanel } from './CoachPanel';
 import { SPECIALIST_CATALOG, specialistLabel } from './helpers/specialists';
 import s from './AnalysisTab.module.css';
@@ -37,6 +39,8 @@ interface PipelineRow {
   cta?: string;
   ctaTone?: 'cyan' | 'violet';
   progress?: number;
+  /** When set, this row can be re-run in place via the rerun_phase endpoint. */
+  rerunPhase?: number;
 }
 
 const STATUS_GLYPH: Record<PipelineStatus, string> = {
@@ -90,6 +94,44 @@ export function AnalysisTab({
     () => derivePipeline(phases ?? [], verdictsData?.specialists ?? []),
     [phases, verdictsData],
   );
+
+  // "Current uploads" presence — derived from the actual analysis result, not
+  // hardcoded. Stems ⇔ phase 4 produced a `stems` block; .als ⇔ phase 8 ran.
+  // Reference is library-only in the unified-upload flow (not attached to this
+  // version's analysis), so there's no per-version reference signal to show yet.
+  const hasStems = useMemo(() => hasStemData(phases ?? []), [phases]);
+  const hasAls = useMemo(() => hasAlsData(phases ?? []), [phases]);
+
+  // Per-phase re-run: dispatch → poll the lightweight re-run job → refetch the
+  // report in place on completion.
+  const qc = useQueryClient();
+  const rerun = useRerunPhase(jobId);
+  const [rerunJobId, setRerunJobId] = useState<string | null>(null);
+  const rerunJob = useJob(rerunJobId ?? '', { pollMs: 1500 });
+  const rerunStatus = rerunJob.data?.status;
+
+  useEffect(() => {
+    if (!rerunJobId) return;
+    if (rerunStatus === 'complete') {
+      qc.invalidateQueries({ queryKey: ['jobs', jobId, 'results'] });
+      qc.invalidateQueries({ queryKey: ['songs'] });
+      toast.success('Phase re-run complete.');
+      setRerunJobId(null);
+    } else if (rerunStatus === 'failed') {
+      toast.error('Phase re-run failed.');
+      setRerunJobId(null);
+    }
+  }, [rerunStatus, rerunJobId, jobId, qc]);
+
+  const rerunning = rerunJobId != null;
+  const handleRerun = (phase: number) => {
+    if (rerunning) return;
+    rerun.mutate(phase, {
+      onSuccess: (res) => setRerunJobId(res.jobId),
+      onError: (err) =>
+        toast.error(err instanceof Error ? err.message : 'Could not start re-run'),
+    });
+  };
 
   const done = pipeline.filter((r) => r.status === 'ok').length;
   const running = pipeline.filter((r) => r.status === 'running' || r.status === 'partial').length;
@@ -229,6 +271,8 @@ export function AnalysisTab({
                   key={row.id}
                   row={row}
                   onCta={() => handleRowCta(row.id)}
+                  onRerun={handleRerun}
+                  rerunning={rerunning}
                 />
               ))}
             </ul>
@@ -306,10 +350,13 @@ export function AnalysisTab({
                 ✓ Master
               </span>
             </li>
-            <li className={s.uploadItem} data-present="false">
-              <span>No stems yet</span>
-              <span className="mono" style={{ fontSize: 10 }}>
-                +
+            <li className={s.uploadItem} data-present={hasStems ? 'true' : 'false'}>
+              <span>{hasStems ? 'Stems' : 'No stems yet'}</span>
+              <span
+                className="mono"
+                style={{ fontSize: 10, ...(hasStems ? { color: 'var(--cyan)' } : {}) }}
+              >
+                {hasStems ? '✓' : '+'}
               </span>
             </li>
             <li className={s.uploadItem} data-present="false">
@@ -318,10 +365,13 @@ export function AnalysisTab({
                 +
               </span>
             </li>
-            <li className={s.uploadItem} data-present="false">
-              <span>No .als yet</span>
-              <span className="mono" style={{ fontSize: 10 }}>
-                +
+            <li className={s.uploadItem} data-present={hasAls ? 'true' : 'false'}>
+              <span>{hasAls ? 'Ableton project' : 'No .als yet'}</span>
+              <span
+                className="mono"
+                style={{ fontSize: 10, ...(hasAls ? { color: 'var(--cyan)' } : {}) }}
+              >
+                {hasAls ? '✓' : '+'}
               </span>
             </li>
           </ul>
@@ -630,7 +680,17 @@ function Stat({
   );
 }
 
-function PipelineRowItem({ row, onCta }: { row: PipelineRow; onCta: () => void }) {
+function PipelineRowItem({
+  row,
+  onCta,
+  onRerun,
+  rerunning,
+}: {
+  row: PipelineRow;
+  onCta: () => void;
+  onRerun: (phase: number) => void;
+  rerunning: boolean;
+}) {
   const isMissing = row.status === 'missing';
   const isRunning = row.status === 'running';
   const isPartial = row.status === 'partial';
@@ -682,6 +742,17 @@ function PipelineRowItem({ row, onCta }: { row: PipelineRow; onCta: () => void }
           onClick={onCta}
         >
           {row.cta}
+        </button>
+      )}
+      {row.rerunPhase != null && (
+        <button
+          type="button"
+          className={s.phaseCta}
+          data-tone="cyan"
+          disabled={rerunning}
+          onClick={() => onRerun(row.rerunPhase as number)}
+        >
+          {rerunning ? '…' : row.status === 'failed' ? 'Retry' : 'Re-run'}
         </button>
       )}
     </li>
@@ -740,6 +811,20 @@ const PHASE_LABEL_OVERRIDES: Record<number, string> = {
   // avoid a duplicate stage.
 };
 
+// Stems were analyzed ⇔ phase 4 ran ok and produced a `stems` block (only
+// present when the user attached stems).
+function hasStemData(phases: PhaseResult[]): boolean {
+  const p4 = phases.find((p) => p.phase === 4);
+  if (!p4 || p4.status !== 'ok') return false;
+  const stems = (p4.data as Phase4Data | undefined)?.stems;
+  return Boolean(stems) && typeof stems === 'object' && Object.keys(stems as object).length > 0;
+}
+
+// .als was analyzed ⇔ phase 8 ran ok.
+function hasAlsData(phases: PhaseResult[]): boolean {
+  return phases.find((p) => p.phase === 8)?.status === 'ok';
+}
+
 function derivePipeline(
   phases: PhaseResult[],
   specialists: ReadonlyArray<{ slug: string; status: string }>,
@@ -756,6 +841,8 @@ function derivePipeline(
         status: phaseStatus(p.status),
       };
       if (detail) row.detail = detail;
+      const rp = rerunPhaseFor(p.phase, row.status);
+      if (rp != null) row.rerunPhase = rp;
       return row;
     });
 
@@ -775,18 +862,22 @@ function derivePipeline(
   if (run < total) specialistsRow.cta = 'Run all';
   rows.push(specialistsRow);
 
-  // Stem analysis row — slice 1 has no stem-upload state in the report DTO,
-  // so this is always "missing" for now. The +N count comes from the catalog.
+  // Stem analysis row — derived from phase 4's `stems` block. "ok" once stems
+  // were uploaded + analyzed; otherwise a drop target advertising the unlock.
   const stemUnlocks = SPECIALIST_CATALOG.filter((s) => s.needsStems).length;
-  rows.push({
-    id: 'stems',
-    label: 'Stem analysis',
-    status: 'missing',
-    detail: 'No stems uploaded',
-    cta: '+ Stems',
-    ctaTone: 'violet',
-    unlocks: stemUnlocks,
-  });
+  if (hasStemData(phases)) {
+    rows.push({ id: 'stems', label: 'Stem analysis', status: 'ok', detail: 'Stems analyzed' });
+  } else {
+    rows.push({
+      id: 'stems',
+      label: 'Stem analysis',
+      status: 'missing',
+      detail: 'No stems uploaded',
+      cta: '+ Stems',
+      ctaTone: 'violet',
+      unlocks: stemUnlocks,
+    });
+  }
 
   // Reference comparison — currently no DTO field that tells us whether a
   // reference was attached, so we render this as missing without an unlock
@@ -806,7 +897,7 @@ function derivePipeline(
   const alsRow: PipelineRow = (() => {
     if (phase8?.status === 'ok') {
       const detail = deriveDetail(phase8);
-      const r: PipelineRow = { id: 'als', label: 'Ableton project', status: 'ok' };
+      const r: PipelineRow = { id: 'als', label: 'Ableton project', status: 'ok', rerunPhase: 8 };
       if (detail) r.detail = detail;
       return r;
     }

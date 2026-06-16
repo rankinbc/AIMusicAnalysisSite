@@ -23,14 +23,18 @@ export function AlsUploadDialog({ open, onOpenChange, versionId, songId }: Props
     e.preventDefault();
     if (!file) return;
     try {
-      const res = await upload.mutateAsync(file);
+      const res = await upload.mutateAsync({ file });
       toast.success('Project uploaded — re-analyzing.');
       onOpenChange(false);
       setFile(null);
-      void navigate({
-        to: '/songs/$songId/results/$jobId',
-        params: { songId, jobId: res.reanalysisJobId },
-      });
+      // This dialog always re-analyzes (never analyze=false), so the job id is
+      // present; the guard satisfies the now-nullable type.
+      if (res.reanalysisJobId) {
+        void navigate({
+          to: '/songs/$songId/results/$jobId',
+          params: { songId, jobId: res.reanalysisJobId },
+        });
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Upload failed');
     }

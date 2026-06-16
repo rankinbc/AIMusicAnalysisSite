@@ -202,21 +202,16 @@ def _attach_stem_reference_deltas(
     if not user_stem_paths:
         return
 
-    from ..stems import analyze as analyze_stems, compare as compare_stems
-    from ..stems.types import StemRole
+    from ..stems import analyze_grouped as analyze_stems, compare as compare_stems
+    from .phase4_stems import _coerce_groups
 
-    typed_user = {
-        StemRole(r) if isinstance(r, str) else r: Path(p) if isinstance(p, str) else p
-        for r, p in user_stem_paths.items()
-    }
+    # Reference deltas are role-level: sum many-stems-per-role into role buses (grouped).
+    typed_user = _coerce_groups(user_stem_paths)
 
     reference = None
     if reference_stem_paths:
         try:
-            typed_ref = {
-                StemRole(r) if isinstance(r, str) else r: Path(p) if isinstance(p, str) else p
-                for r, p in reference_stem_paths.items()
-            }
+            typed_ref = _coerce_groups(reference_stem_paths)
             reference = analyze_stems(typed_ref)
         except Exception as exc:
             logger.exception("reference-stem analysis failed")

@@ -28,10 +28,14 @@ export function UploadVersionDialog({ open, onOpenChange, songId }: Props) {
       toast.success('Upload complete — analysis dispatched.');
       onOpenChange(false);
       setFile(null);
-      void navigate({
-        to: '/songs/$songId/results/$jobId',
-        params: { songId: res.songId, jobId: res.jobId },
-      });
+      // This dialog always analyzes on upload (never sets analyze=false), so
+      // jobId is non-null here; the guard satisfies the now-nullable type.
+      if (res.jobId) {
+        void navigate({
+          to: '/songs/$songId/results/$jobId',
+          params: { songId: res.songId, jobId: res.jobId },
+        });
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Upload failed');
     }

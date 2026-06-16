@@ -34,6 +34,150 @@ PHASE_DEFS = [
     (7, "Arrangement Advice"),
 ]
 
+# Phase-number → display name (phases 1–7; phase 8 is the conditional ALS step).
+_PHASE_NAMES = {num: name for num, name in PHASE_DEFS}
+
+
+def run_single_phase(
+    phase_num: int,
+    *,
+    wav_path,
+    phase_data: dict[int, dict],
+    reference_path: str | None = None,
+    als_file_path: str | None = None,
+    stem_paths: dict | None = None,
+    reference_stem_paths: dict | None = None,
+    genre_hint: str | None = None,
+    stem_mode: str = "grouped",
+    progress_cb=None,
+) -> PhaseResult:
+    """Run one phase (1–7) against an already-converted WAV and return its
+    :class:`PhaseResult`.
+
+    Any upstream data the phase needs (phase-1 output, detected genre, structure)
+    is read from *phase_data* — it is NOT mutated here; the caller is responsible
+    for folding the returned ``data`` back in on success. Phase 8 (ALS) is handled
+    by the caller, not this function. Behaviour mirrors the original ``run_pipeline``
+    loop body exactly (same dispatch args, logging, progress_cb, try/except).
+    """
+    phase_name = _PHASE_NAMES.get(phase_num, f"Phase {phase_num}")
+    if progress_cb:
+        progress_cb(phase_num, phase_name, 0.0)
+    logger.info("phase %d (%s) starting", phase_num, phase_name)
+    t0 = time.perf_counter()
+    try:
+        if phase_num == 1:
+            data = phase1_universal.analyze(wav_path, progress_cb)
+        elif phase_num == 2:
+            data = phase2_genre.classify(wav_path, phase_data.get(1, {}), progress_cb, genre_hint=genre_hint)
+        elif phase_num == 3:
+            genre = phase_data.get(2, {}).get("genre", "other")
+            data = phase3_genre_specific.score(
+                wav_path, genre, phase_data.get(1, {}), progress_cb
+            )
+        elif phase_num == 4:
+            data = phase4_stems.analyze(
+                wav_path, progress_cb, stem_paths=stem_paths, stem_mode=stem_mode,
+            )
+        elif phase_num == 5:
+            genre = phase_data.get(2, {}).get("genre", "other")
+            data = phase5_reference.compare(
+                wav_path, reference_path, phase_data.get(1, {}), progress_cb,
+                genre=genre,
+                user_stem_paths=stem_paths,
+                reference_stem_paths=reference_stem_paths,
+            )
+        elif phase_num == 6:
+            genre = phase_data.get(2, {}).get("genre", "other")
+            data = phase6_gap.analyze(
+                wav_path, genre, phase_data.get(1, {}), progress_cb
+            )
+        elif phase_num == 7:
+            structure = phase_data.get(1, {}).get("structure", {})
+            genre = phase_data.get(2, {}).get("genre", "other")
+            bpm = float(phase_data.get(1, {}).get("bpm", 128.0))
+            duration_seconds = float(phase_data.get(1, {}).get("duration_seconds", 0.0))
+            data = phase7_arrangement.advise(
+                structure, genre, progress_cb,
+                bpm=bpm, duration_seconds=duration_seconds,
+            )
+        else:
+            data = {}
+
+        elapsed = time.perf_counter() - t0
+        logger.info("phase %d (%s) done in %.1fs", phase_num, phase_name, elapsed)
+        result = PhaseResult(
+            phase=phase_num,
+            name=phase_name,
+            status="ok",
+            data=data,
+            error=None,
+        )
+        if progress_cb:
+            progress_cb(phase_num, phase_name, 1.0)
+        return result
+
+    except Exception as exc:
+        elapsed = time.perf_counter() - t0
+        logger.exception("phase %d (%s) FAILED after %.1fs: %s", phase_num, phase_name, elapsed, exc)
+        return PhaseResult(
+            phase=phase_num,
+            name=phase_name,
+            status="failed",
+            data={},
+            error=str(exc),
+        )
+
+
+def finalize_result(
+    phase_data: dict[int, dict],
+    phase_results: list[PhaseResult],
+    file_path: str,
+) -> PipelineResult:
+    """Derive the top-level rollups from the full phase set and assemble the
+    :class:`PipelineResult`. Shared by ``run_pipeline`` (full run) and
+    ``rerun_single_phase`` (in-place per-phase re-run) so both stay consistent.
+    """
+    ok_phases = [r for r in phase_results if r["status"] == "ok"]
+    if phase_data.get(3):
+        overall_score = float(phase_data[3].get("total_score", 50.0))
+    else:
+        overall_score = 50.0 * (len(ok_phases) / len(PHASE_DEFS))
+
+    grade = _score_to_grade(overall_score)
+    top_fixes = _extract_fixes(phase_data)
+
+    p1 = phase_data.get(1, {})
+    p2 = phase_data.get(2, {})
+    genre = p2.get("genre", "other") or "other"
+
+    onset_density = p2.get("onset_density")
+    if onset_density is None:
+        dur = p1.get("duration_seconds", 0)
+        onset_count = p2.get("onset_count", 0)
+        onset_density = float(onset_count) / dur if dur > 0 else 4.0
+
+    dance_score = danceability_score(
+        bpm=float(p1.get("bpm", 128.0)),
+        onset_density=float(onset_density),
+        low_energy=float(p1.get("low_energy", 0.2)),
+        genre=str(genre),
+    )
+
+    coaching = generate_coached_fixes({**p1, "top_fixes": top_fixes})
+
+    return PipelineResult(
+        file_path=str(file_path),
+        phases=phase_results,
+        overall_score=overall_score,
+        grade=grade,
+        top_fixes=top_fixes,
+        danceability_score=dance_score,
+        coach_name=coaching["coach_name"],
+        coach_intro=coaching["coach_intro"],
+        coached_fixes=coaching["coached_fixes"],
+    )
+
 
 def run_pipeline(
     file_path: str,
@@ -43,12 +187,14 @@ def run_pipeline(
     progress_cb=None,
     stem_paths: dict | None = None,
     reference_stem_paths: dict | None = None,
+    stem_mode: str = "grouped",
 ) -> PipelineResult:
-    """Run all 7 analysis phases and return a structured result dict.
+    """Run all 7 analysis phases (+ optional ALS phase 8) and return a structured
+    result dict.
 
-    The input *file_path* is converted to a temporary 44100 Hz WAV before
-    any phase runs.  The temp file is always deleted in the ``finally``
-    block — even if the pipeline raises an unhandled exception.
+    The input *file_path* is converted to a temporary 44100 Hz WAV before any phase
+    runs.  The temp file is always deleted in the ``finally`` block — even if the
+    pipeline raises an unhandled exception.
 
     Args:
         file_path:      Path to the uploaded audio file (MP3, FLAC, WAV …).
@@ -64,75 +210,22 @@ def run_pipeline(
         phase_results: list[PhaseResult] = []
         phase_data: dict[int, dict] = {}
 
-        for phase_num, phase_name in PHASE_DEFS:
-            if progress_cb:
-                progress_cb(phase_num, phase_name, 0.0)
-            logger.info("phase %d (%s) starting", phase_num, phase_name)
-            t0 = time.perf_counter()
-            try:
-                if phase_num == 1:
-                    data = phase1_universal.analyze(wav_path, progress_cb)
-                elif phase_num == 2:
-                    data = phase2_genre.classify(wav_path, phase_data.get(1, {}), progress_cb, genre_hint=genre_hint)
-                elif phase_num == 3:
-                    genre = phase_data.get(2, {}).get("genre", "other")
-                    data = phase3_genre_specific.score(
-                        wav_path, genre, phase_data.get(1, {}), progress_cb
-                    )
-                elif phase_num == 4:
-                    data = phase4_stems.analyze(wav_path, progress_cb, stem_paths=stem_paths)
-                elif phase_num == 5:
-                    genre = phase_data.get(2, {}).get("genre", "other")
-                    data = phase5_reference.compare(
-                        wav_path, reference_path, phase_data.get(1, {}), progress_cb,
-                        genre=genre,
-                        user_stem_paths=stem_paths,
-                        reference_stem_paths=reference_stem_paths,
-                    )
-                elif phase_num == 6:
-                    genre = phase_data.get(2, {}).get("genre", "other")
-                    data = phase6_gap.analyze(
-                        wav_path, genre, phase_data.get(1, {}), progress_cb
-                    )
-                elif phase_num == 7:
-                    structure = phase_data.get(1, {}).get("structure", {})
-                    genre = phase_data.get(2, {}).get("genre", "other")
-                    bpm = float(phase_data.get(1, {}).get("bpm", 128.0))
-                    duration_seconds = float(phase_data.get(1, {}).get("duration_seconds", 0.0))
-                    data = phase7_arrangement.advise(
-                        structure, genre, progress_cb,
-                        bpm=bpm, duration_seconds=duration_seconds,
-                    )
-                else:
-                    data = {}
-
-                elapsed = time.perf_counter() - t0
-                logger.info("phase %d (%s) done in %.1fs", phase_num, phase_name, elapsed)
-                phase_data[phase_num] = data
-                phase_results.append(
-                    PhaseResult(
-                        phase=phase_num,
-                        name=phase_name,
-                        status="ok",
-                        data=data,
-                        error=None,
-                    )
-                )
-                if progress_cb:
-                    progress_cb(phase_num, phase_name, 1.0)
-
-            except Exception as exc:
-                elapsed = time.perf_counter() - t0
-                logger.exception("phase %d (%s) FAILED after %.1fs: %s", phase_num, phase_name, elapsed, exc)
-                phase_results.append(
-                    PhaseResult(
-                        phase=phase_num,
-                        name=phase_name,
-                        status="failed",
-                        data={},
-                        error=str(exc),
-                    )
-                )
+        for phase_num, _phase_name in PHASE_DEFS:
+            pr = run_single_phase(
+                phase_num,
+                wav_path=wav_path,
+                phase_data=phase_data,
+                reference_path=reference_path,
+                als_file_path=als_file_path,
+                stem_paths=stem_paths,
+                reference_stem_paths=reference_stem_paths,
+                genre_hint=genre_hint,
+                stem_mode=stem_mode,
+                progress_cb=progress_cb,
+            )
+            phase_results.append(pr)
+            if pr["status"] == "ok":
+                phase_data[phase_num] = pr["data"]
 
         # Phase 8: ALS analysis (skipped when als_file_path is None)
         if progress_cb:
@@ -142,54 +235,80 @@ def run_pipeline(
         if progress_cb:
             progress_cb(8, "ALS Analysis", 1.0)
 
-        # ------------------------------------------------------------------
-        # Overall score and grade
-        # ------------------------------------------------------------------
-        ok_phases = [r for r in phase_results if r["status"] == "ok"]
-        if phase_data.get(3):
-            overall_score = float(phase_data[3].get("total_score", 50.0))
+        return finalize_result(phase_data, phase_results, file_path)
+    finally:
+        if wav_path is not None and os.path.exists(wav_path):
+            try:
+                os.unlink(wav_path)
+            except OSError:
+                logger.warning("Could not delete temp WAV: %s", wav_path)
+
+
+def rerun_single_phase(
+    phase_num: int,
+    file_path: str,
+    prior_result: PipelineResult | dict,
+    *,
+    reference_path: str | None = None,
+    als_file_path: str | None = None,
+    stem_paths: dict | None = None,
+    reference_stem_paths: dict | None = None,
+    stem_mode: str = "grouped",
+    progress_cb=None,
+) -> PipelineResult:
+    """Re-run a single phase and merge it into *prior_result* in place, re-deriving
+    the rollups. Every other phase is preserved byte-for-byte.
+
+    Inputs for the re-run come from the stored result: the prior ``phases`` list is
+    rebuilt into a ``phase_data`` map (ok phases only) so dependent phases (3/5/6/7)
+    get phase-1 output + genre without recomputing them. Phases 2–7 re-convert the
+    audio to WAV; phase 8 re-parses the ``.als``. No cascade — re-running phase N
+    does NOT re-run its dependents.
+    """
+    prior_phases = list(prior_result.get("phases", []))
+    phase_data: dict[int, dict] = {
+        p["phase"]: p["data"] for p in prior_phases if p.get("status") == "ok"
+    }
+
+    wav_path: Path | None = None
+    try:
+        if phase_num == 8:
+            if progress_cb:
+                progress_cb(8, "ALS Analysis", 0.0)
+            new_pr = PhaseResult(**analyze_als(als_file_path))
+            if progress_cb:
+                progress_cb(8, "ALS Analysis", 1.0)
         else:
-            overall_score = 50.0 * (len(ok_phases) / len(PHASE_DEFS))
+            wav_path = to_wav(file_path)
+            new_pr = run_single_phase(
+                phase_num,
+                wav_path=wav_path,
+                phase_data=phase_data,
+                reference_path=reference_path,
+                als_file_path=als_file_path,
+                stem_paths=stem_paths,
+                reference_stem_paths=reference_stem_paths,
+                genre_hint=None,
+                stem_mode=stem_mode,
+                progress_cb=progress_cb,
+            )
 
-        grade = _score_to_grade(overall_score)
-        top_fixes = _extract_fixes(phase_data)
+        # Replace the existing entry for this phase (append if it wasn't present).
+        replaced = False
+        for i, p in enumerate(prior_phases):
+            if p.get("phase") == phase_num:
+                prior_phases[i] = new_pr
+                replaced = True
+                break
+        if not replaced:
+            prior_phases.append(new_pr)
 
-        # ------------------------------------------------------------------
-        # Danceability score
-        # ------------------------------------------------------------------
-        p1 = phase_data.get(1, {})
-        p2 = phase_data.get(2, {})
-        genre = p2.get("genre", "other") or "other"
+        if new_pr["status"] == "ok":
+            phase_data[phase_num] = new_pr["data"]
+        else:
+            phase_data.pop(phase_num, None)
 
-        onset_density = p2.get("onset_density")
-        if onset_density is None:
-            dur = p1.get("duration_seconds", 0)
-            onset_count = p2.get("onset_count", 0)
-            onset_density = float(onset_count) / dur if dur > 0 else 4.0
-
-        dance_score = danceability_score(
-            bpm=float(p1.get("bpm", 128.0)),
-            onset_density=float(onset_density),
-            low_energy=float(p1.get("low_energy", 0.2)),
-            genre=str(genre),
-        )
-
-        # ------------------------------------------------------------------
-        # Coached fixes
-        # ------------------------------------------------------------------
-        coaching = generate_coached_fixes({**p1, "top_fixes": top_fixes})
-
-        return PipelineResult(
-            file_path=str(file_path),
-            phases=phase_results,
-            overall_score=overall_score,
-            grade=grade,
-            top_fixes=top_fixes,
-            danceability_score=dance_score,
-            coach_name=coaching["coach_name"],
-            coach_intro=coaching["coach_intro"],
-            coached_fixes=coaching["coached_fixes"],
-        )
+        return finalize_result(phase_data, prior_phases, str(file_path))
     finally:
         if wav_path is not None and os.path.exists(wav_path):
             try:

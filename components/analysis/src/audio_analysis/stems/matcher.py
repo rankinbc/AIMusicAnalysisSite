@@ -1,12 +1,12 @@
 """Auto-match uploaded stem files to roles and (optionally) .als track names."""
 import re
-from collections import Counter
 from pathlib import Path
 
+import soundfile as sf
 from rapidfuzz import fuzz, process
 
 from .role_detector import detect_role
-from .types import ConfirmedMapping, StemMappingProposal
+from .types import ConfirmedMapping, StemMappingProposal, StemRole
 
 
 # RapidFuzz score threshold (0-100). Below this, no .als track is proposed.
@@ -20,12 +20,24 @@ def _normalize_for_match(name: str) -> str:
     return _LEADING_NUMERIC.sub("", name).strip()
 
 
+def _detect_role_with_audio_fallback(f: Path):
+    """Filename-first; fall back to audio-content classification when the name is uninformative."""
+    rp = detect_role(f)
+    if rp.role != StemRole.OTHER and rp.confidence >= 0.8:
+        return rp
+    try:
+        audio, sr = sf.read(f, always_2d=True, dtype="float32")
+    except Exception:
+        return rp
+    return detect_role(f, audio=audio, sr=sr)
+
+
 def propose_mapping(
     stem_files: list[Path],
     als_track_names: list[str] | None,
 ) -> list[StemMappingProposal]:
     """Returns one StemMappingProposal per file with role + optional als_track."""
-    role_proposals = [detect_role(f) for f in stem_files]
+    role_proposals = [_detect_role_with_audio_fallback(f) for f in stem_files]
     proposals: list[StemMappingProposal] = []
     available_tracks = list(als_track_names) if als_track_names else []
 
@@ -53,16 +65,14 @@ def propose_mapping(
 
 
 def validate_confirmed_mapping(mappings: list[ConfirmedMapping]) -> None:
-    """Raise ValueError on duplicate roles or missing files.
+    """Raise ValueError on an empty set or missing files.
 
-    The API layer is responsible for translating these into 422 responses.
+    Duplicate roles are ALLOWED — bulk upload supports many stems per role (they
+    are summed into a role bus in grouped mode). The API layer translates these
+    errors into 422 responses.
     """
     if not mappings:
         raise ValueError("no_mappings: at least one mapping required")
-    role_counts = Counter(m.role for m in mappings)
-    duplicates = [r for r, c in role_counts.items() if c > 1]
-    if duplicates:
-        raise ValueError(f"duplicate_role: {duplicates[0].value}")
     for m in mappings:
         if not m.file.exists():
             raise ValueError(f"missing_file: {m.file}")

@@ -1,5 +1,5 @@
 # generated: 2026-06-12
-# last_updated: 2026-06-15
+# last_updated: 2026-06-16
 # project: Spectr
 # story 1-5 transitioned: backlog → ready-for-dev → in-progress → review → done (code-review workflow, 2026-06-15)
 # story 1-6 transitioned: backlog → ready-for-dev → in-progress → review → done (code-review workflow, 2026-06-15)
@@ -46,7 +46,7 @@
 # Build order: E1 -> E2 -> E3 -> E4 -> E5 -> E6 -> E7 -> E8 -> E9 -> E10.
 
 generated: 2026-06-12
-last_updated: 2026-06-15
+last_updated: 2026-06-16
 project: Spectr
 # (re-updated 2026-06-15: 1-6 → done after code review)
 # (re-updated 2026-06-15: 1-9 → ready-for-dev after create-story; epic 1 still in-progress)
@@ -54,6 +54,9 @@ project: Spectr
 # (re-updated 2026-06-15: 2-2 → done after 26 patches applied + 3 decisions resolved + 4 deferred; BFF 81/81, frontend 171/171)
 # (re-updated 2026-06-15: 2-3 → ready-for-dev after create-story; 12 tasks across BFF + frontend; AC2 dispatch wiring + AC3 reversal pattern scoped against Entitlements.For() landing in story 2.4)
 # (re-updated 2026-06-15: 2-3 → review after dev-story; BFF 100/100 + frontend 189/189; AC2 dispatch-hook integration deferred to 2.4 per spec out-of-scope)
+# (re-updated 2026-06-16: 2-3 → done after bmad-code-review; 5 patches — P1-A session metadata, P1-B webhook throw, P2-A IsSerializationFailure(Exception), P2-B compound cursor, P2-C hourBucket, P2-D session metadata test)
+# (re-updated 2026-06-16: 2-4 → ready-for-dev after create-story; EntitlementsService + 60s IMemoryCache + tier stamping on all 5 dispatch sites + GET /api/billing/entitlements)
+# (re-updated 2026-06-16: 2-4 → review after dev-story; BFF 118/118 + frontend 201/201; all 5 dispatch sites gated; AR15 results-forever tested; CreditSpendEnabled removed)
 project_key: NOKEY
 tracking_system: file-system
 story_location: PRPs/stories
@@ -74,8 +77,8 @@ development_status:
   epic-2: in-progress
   2-1-subscribe-to-pro-via-stripe-checkout: done
   2-2-manage-subscription-self-service: done
-  2-3-buy-credits-with-append-only-ledger: review
-  2-4-server-side-entitlements-and-metering: backlog
+  2-3-buy-credits-with-append-only-ledger: done
+  2-4-server-side-entitlements-and-metering: review
   2-5-paid-jobs-never-starve: backlog
   2-6-tier-aware-coach-caps: backlog
   2-7-cap-hit-upgrade-flow-upgradesheet-and-blurlock: backlog

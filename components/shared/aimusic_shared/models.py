@@ -146,6 +146,9 @@ class SongVersion(Base):
     als_file_path: Mapped[Optional[str]] = mapped_column("als_file_path", String(500), nullable=True)
     stem_paths_raw: Mapped[Optional[Any]] = mapped_column("stem_paths_raw", JSONB, nullable=True)
     stem_paths: Mapped[Optional[Any]] = mapped_column("stem_paths", JSONB, nullable=True)
+    stem_analysis_mode: Mapped[str] = mapped_column(
+        "stem_analysis_mode", String(16), nullable=False, server_default="grouped", default="grouped"
+    )
     is_current: Mapped[bool] = mapped_column("is_current", Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()

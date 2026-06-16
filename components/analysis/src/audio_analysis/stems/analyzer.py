@@ -92,6 +92,12 @@ def _dominant_freqs(mono: np.ndarray, sr: int, k: int = 3) -> list[float]:
 
 def _measure_one(role: StemRole, file_path: Path, sr: int) -> StemMetrics:
     audio, sr = _load(file_path, sr)
+    return _measure_from_audio(role, audio, sr)
+
+
+def _measure_from_audio(role: StemRole, audio: np.ndarray, sr: int) -> StemMetrics:
+    if audio.ndim == 1:
+        audio = audio[:, None]
     mono = audio.mean(axis=1)
     meter = pyln.Meter(sr)
     try:
@@ -167,10 +173,140 @@ def analyze(
     genre_profile: Any | None = None,
     sample_rate: int = 44100,
 ) -> StemAnalysisResult:
-    """Analyze each stem and produce a per-stem + cross-stem result."""
+    """Analyze each stem and produce a per-stem + cross-stem result.
+
+    One file per role (legacy shape). For many-stems-per-role use analyze_grouped.
+    """
     per_stem = {role: _measure_one(role, p, sample_rate) for role, p in stem_paths.items()}
     return StemAnalysisResult(
         per_stem=per_stem,
         clash_matrix=_build_clash_matrix(stem_paths, sample_rate),
         balance_flags=_balance_flags(per_stem, genre_profile),
     )
+
+
+def metrics_to_dict(m: StemMetrics) -> dict:
+    """JSON-safe serialization of a StemMetrics (shared by phase4 + per-stem mode)."""
+    return {
+        "duration_s": m.duration_s,
+        "peak_db": m.peak_db,
+        "rms_db": m.rms_db,
+        "lufs_integrated": m.lufs_integrated,
+        "dynamic_range_db": m.dynamic_range_db,
+        "band_energy_db": {b.value: v for b, v in m.band_energy_db.items()},
+        "spectral_centroid_hz": m.spectral_centroid_hz,
+        "dominant_frequencies_hz": m.dominant_frequencies_hz,
+        "stereo_width": m.stereo_width,
+        "pan_estimate": m.pan_estimate,
+        "is_mono": m.is_mono,
+    }
+
+
+def _sum_group(paths: list[Path], sr: int) -> np.ndarray:
+    """Sum (mix) several stems of one role into a single stereo buffer."""
+    arrs: list[np.ndarray] = []
+    for p in paths:
+        a, _ = _load(p, sr)
+        if a.shape[1] == 1:
+            a = np.repeat(a, 2, axis=1)
+        arrs.append(a)
+    if not arrs:
+        return np.zeros((1, 2), dtype=np.float32)
+    maxlen = max(a.shape[0] for a in arrs)
+    acc = np.zeros((maxlen, 2), dtype=np.float32)
+    for a in arrs:
+        acc[: a.shape[0], :] += a[:, :2]
+    return acc
+
+
+def _build_clash_from_ratios(
+    ratios: dict[StemRole, dict[FreqBand, float]],
+) -> list[StemClash]:
+    out: list[StemClash] = []
+    for (role_a, ra), (role_b, rb) in combinations(ratios.items(), 2):
+        for band in FreqBand:
+            overlap = _clash_overlap(ra, rb, band)
+            if overlap >= CLASH_THRESHOLDS["info"]:
+                out.append(StemClash(
+                    stem_a=role_a, stem_b=role_b, band=band,
+                    overlap_severity=overlap, severity_tier=_severity_for_overlap(overlap),
+                ))
+    return out
+
+
+def analyze_grouped(
+    groups: dict[StemRole, list[Path]],
+    genre_profile: Any | None = None,
+    sample_rate: int = 44100,
+) -> StemAnalysisResult:
+    """Many-stems-per-role: sum each role's stems into one bus, then analyze per role.
+
+    Reuses the role-keyed metrics + clash + balance so downstream output is identical
+    in shape to analyze().
+    """
+    role_audio = {
+        role: _sum_group(paths, sample_rate)
+        for role, paths in groups.items() if paths
+    }
+    per_stem = {role: _measure_from_audio(role, audio, sample_rate) for role, audio in role_audio.items()}
+    ratios = {role: _band_energy_ratios(audio.mean(axis=1), sample_rate) for role, audio in role_audio.items()}
+    return StemAnalysisResult(
+        per_stem=per_stem,
+        clash_matrix=_build_clash_from_ratios(ratios),
+        balance_flags=_balance_flags(per_stem, genre_profile),
+    )
+
+
+# Cap pairwise clash work in per-stem mode (N*(N-1)/2 grows fast).
+MAX_CLASH_PAIRS = 600
+
+
+def analyze_per_stem(
+    stems: list[tuple[str, StemRole, Path]],
+    genre_profile: Any | None = None,
+    sample_rate: int = 44100,
+    max_pairs: int = MAX_CLASH_PAIRS,
+) -> dict:
+    """Per-stem mode: one metrics row per stem (labelled), with capped pairwise clash.
+
+    stems: list of (label, role, path). Returns a JSON-safe dict (NOT StemAnalysisResult)
+    because rows are keyed by stem label, not role.
+    """
+    measured: list[tuple[str, StemRole, StemMetrics, dict[FreqBand, float]]] = []
+    for label, role, path in stems:
+        audio, _ = _load(path, sample_rate)
+        m = _measure_from_audio(role, audio, sample_rate)
+        ratios = _band_energy_ratios(audio.mean(axis=1), sample_rate)
+        measured.append((label, role, m, ratios))
+
+    per_stem_list = [
+        {"id": label, "role": role.value, **metrics_to_dict(m)}
+        for label, role, m, _ in measured
+    ]
+
+    # Cap clash: keep the loudest k stems where k*(k-1)/2 <= max_pairs.
+    order = sorted(range(len(measured)), key=lambda i: measured[i][2].rms_db, reverse=True)
+    k = len(measured)
+    while k > 2 and k * (k - 1) // 2 > max_pairs:
+        k -= 1
+    keep = set(order[:k])
+    truncated = k < len(measured)
+
+    clash: list[dict] = []
+    sub = [measured[i] for i in range(len(measured)) if i in keep]
+    for (la, ra, _ma, rra), (lb, rb, _mb, rrb) in combinations(sub, 2):
+        for band in FreqBand:
+            overlap = _clash_overlap(rra, rrb, band)
+            if overlap >= CLASH_THRESHOLDS["info"]:
+                clash.append({
+                    "stem_a": la, "stem_b": lb,
+                    "role_a": ra.value, "role_b": rb.value,
+                    "band": band.value, "overlap_severity": overlap,
+                    "severity_tier": _severity_for_overlap(overlap),
+                })
+    return {
+        "per_stem_list": per_stem_list,
+        "clash_matrix": clash,
+        "truncated": truncated,
+        "stem_count": len(measured),
+    }
