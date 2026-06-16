@@ -23,7 +23,9 @@ public sealed class SubscriptionMirrorService(
     AppDbContext db,
     ILogger<SubscriptionMirrorService> logger)
 {
-    public async Task ApplyAsync(StripeSubscription stripeSub, CancellationToken ct)
+    // Returns the resolved userId on success, null if the user could not be found.
+    // Callers use the returned userId to invalidate per-user caches (story 2.4).
+    public async Task<Guid?> ApplyAsync(StripeSubscription stripeSub, CancellationToken ct)
     {
         var userId = await ResolveUserIdAsync(stripeSub, ct);
         if (userId is null)
@@ -31,7 +33,7 @@ public sealed class SubscriptionMirrorService(
             logger.LogWarning(
                 "Subscription webhook for unresolvable user — stripe_customer_id={CustomerId}, stripe_subscription_id={SubscriptionId}. Skipping.",
                 stripeSub.CustomerId, stripeSub.Id);
-            return;
+            return null;
         }
 
         // Stripe.net 52: period_end + price live on the SubscriptionItem
@@ -43,7 +45,7 @@ public sealed class SubscriptionMirrorService(
             logger.LogWarning(
                 "Subscription webhook missing price id — stripe_subscription_id={SubscriptionId}. Skipping.",
                 stripeSub.Id);
-            return;
+            return null;
         }
 
         var existing = await db.Subscriptions
@@ -107,6 +109,7 @@ public sealed class SubscriptionMirrorService(
         }
 
         await db.SaveChangesAsync(ct);
+        return userId;
     }
 
     private async Task<Guid?> ResolveUserIdAsync(StripeSubscription stripeSub, CancellationToken ct)

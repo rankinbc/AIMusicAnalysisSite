@@ -62,8 +62,9 @@ public sealed class CreditLedgerServiceTests
     private CreditLedgerService NewService(IServiceScope scope)
     {
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var cache = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
         return new CreditLedgerService(
-            db, NullLogger<CreditLedgerService>.Instance);
+            db, cache, NullLogger<CreditLedgerService>.Instance);
     }
 
     [Fact]

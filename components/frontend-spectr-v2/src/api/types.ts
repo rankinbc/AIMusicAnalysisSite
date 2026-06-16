@@ -91,6 +91,21 @@ export interface CreditsResponse {
   nextCursor: string | null;
 }
 
+// ── Story 2.4 — entitlement snapshot ───────────────────────────────
+
+/** GET /api/me/entitlements — caller's current entitlement snapshot.
+ *  null means unlimited (pro tier). Cached 60 s server-side;
+ *  staleTime 30 s on the client. AR12, AR15, AR38. */
+export interface EntitlementsDto {
+  analysesRemaining: number | null;
+  coachRemaining: number;
+  stemsEnabled: boolean;
+  alsEnabled: boolean;
+  fullVerdictsEnabled: boolean;
+  historyDepth: number | null;
+  tier: 'free' | 'credits' | 'pro';
+}
+
 export interface AuthResponse {
   accessToken: string;
   user: AuthedUser;
@@ -104,6 +119,23 @@ export interface VersionDto {
   isCurrent: boolean;
   filePath: string;
   createdAt: string;
+  alsFilePath: string | null;
+  referencePath: string | null;
+}
+
+export type VersionFileType = 'mix' | 'als' | 'stem' | 'reference';
+
+export interface VersionFileEntry {
+  type: VersionFileType;
+  filename: string;
+  sizeBytes: number | null;
+  available: boolean;
+  stemId: string | null;
+}
+
+export interface VersionFilesResponse {
+  versionId: string;
+  files: VersionFileEntry[];
 }
 
 export interface AnalysisSummaryDto {
@@ -170,6 +202,12 @@ export interface PatchVersionRequest {
 }
 
 export interface ReanalyzeResponse {
+  jobId: string;
+}
+
+// POST /api/reports/{jobId}/phases/{phase}/rerun — id of the lightweight re-run
+// job to poll; the re-run updates the existing report in place.
+export interface RerunPhaseResponse {
   jobId: string;
 }
 

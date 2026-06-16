@@ -15,6 +15,7 @@ import type {
   CreateNoteRequest,
   CreateReferenceSetRequest,
   CreateSongRequest,
+  EntitlementsDto,
   FeedbackKind,
   JobResultsDto,
   JobStatusDto,
@@ -33,7 +34,11 @@ import type {
   PatchVersionRequest,
   AlsUploadResponse,
   ReanalyzeResponse,
+  RerunPhaseResponse,
   StemUploadResponse,
+  StemProposalsResponse,
+  ConfirmStemsRequest,
+  ConfirmStemsResponse,
   ReferenceDto,
   ReferenceSetDto,
   RunSpecialistResponse,
@@ -41,6 +46,7 @@ import type {
   UploadResponse,
   VerdictsListResponse,
   VersionDto,
+  VersionFilesResponse,
 } from './types';
 
 // ── Auth ────────────────────────────────────────────────────────────────────
@@ -88,6 +94,14 @@ export function useMeStats() {
   return useQuery<MeStatsDto>({
     queryKey: ['me', 'stats'],
     queryFn: () => fetcher<MeStatsDto>({ url: '/me/stats', method: 'GET' }),
+  });
+}
+
+export function useEntitlements() {
+  return useQuery<EntitlementsDto>({
+    queryKey: ['me', 'entitlements'],
+    queryFn: () => fetcher<EntitlementsDto>({ url: '/me/entitlements', method: 'GET' }),
+    staleTime: 30_000,
   });
 }
 
@@ -178,6 +192,16 @@ export function useVersion(versionId: string) {
   });
 }
 
+export function useVersionFiles(versionId: string) {
+  return useQuery<VersionFilesResponse>({
+    queryKey: ['versions', versionId, 'files'],
+    queryFn: () =>
+      fetcher<VersionFilesResponse>({ url: `/versions/${versionId}/files`, method: 'GET' }),
+    enabled: Boolean(versionId),
+    staleTime: 30_000,
+  });
+}
+
 export function usePatchVersion(versionId: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -232,14 +256,55 @@ export function useUploadStems(versionId: string) {
   });
 }
 
+/** Bulk-stem flow: enqueue audio-content classification of staged stems. */
+export function useClassifyStems(versionId: string) {
+  return useMutation({
+    mutationFn: () =>
+      fetcher<unknown>({ url: `/versions/${versionId}/stems/classify`, method: 'POST' }),
+  });
+}
+
+/** Poll staged-stem proposals; stops polling once the worker reports classified. */
+export function useStemProposals(versionId: string, enabled: boolean) {
+  return useQuery<StemProposalsResponse>({
+    queryKey: ['stems', versionId],
+    queryFn: () =>
+      fetcher<StemProposalsResponse>({ url: `/versions/${versionId}/stems`, method: 'GET' }),
+    enabled: enabled && Boolean(versionId),
+    refetchInterval: (query) => (query.state.data?.classified ? false : 1500),
+    retry: false,
+  });
+}
+
+/** Confirm stem roles + analysis mode; dispatches re-analysis. */
+export function useConfirmStems(versionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ConfirmStemsRequest) =>
+      fetcher<ConfirmStemsResponse>({
+        url: `/versions/${versionId}/stems/confirm`,
+        method: 'POST',
+        data: body,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['versions', versionId] });
+      qc.invalidateQueries({ queryKey: ['songs'] });
+      qc.invalidateQueries({ queryKey: ['stems', versionId] });
+    },
+  });
+}
+
 /** Upload an Ableton .als project file for an existing version. Triggers
  *  re-analysis so phase 8 (ALS) populates project-health data. */
 export function useUploadAls(versionId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (file: File) => {
+    // analyze omitted → BFF re-analyzes (existing behavior). The unified-upload
+    // flow passes analyze=false to attach the project without dispatching a job.
+    mutationFn: async (input: { file: File; analyze?: boolean }) => {
       const fd = new FormData();
-      fd.append('file', file, file.name);
+      fd.append('file', input.file, input.file.name);
+      if (input.analyze !== undefined) fd.append('analyze', String(input.analyze));
       return fetcher<AlsUploadResponse>({
         url: `/versions/${versionId}/als`,
         method: 'POST',
@@ -351,6 +416,19 @@ export function useJobResults(jobId: string, enabled: boolean) {
     queryFn: () => fetcher<JobResultsDto>({ url: `/jobs/${jobId}/results`, method: 'GET' }),
     enabled: enabled && Boolean(jobId),
     retry: false,
+  });
+}
+
+/** Re-run a single analysis phase (2–8) in place. Returns the lightweight re-run
+ *  job id; poll it with `useJob` and invalidate `['jobs', jobId, 'results']` on
+ *  completion to refresh the report. */
+export function useRerunPhase(jobId: string) {
+  return useMutation({
+    mutationFn: (phase: number) =>
+      fetcher<RerunPhaseResponse>({
+        url: `/reports/${jobId}/phases/${phase}/rerun`,
+        method: 'POST',
+      }),
   });
 }
 

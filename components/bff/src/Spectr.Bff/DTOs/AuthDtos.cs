@@ -2,6 +2,8 @@ namespace Spectr.Bff.DTOs;
 
 public sealed record RegisterRequest(string Email, string Password);
 public sealed record LoginRequest(string Email, string Password);
+// Development-only one-click sign-in. Email optional (defaults to the dev account).
+public sealed record DevLoginRequest(string? Email);
 public sealed record AuthResponse(string AccessToken, AuthedUser User);
 // Story 2.1 — Tier is "free" until a subscription with status ∈ {active,
 // trialing} exists. Transitional field; story 2.4's Entitlements.For(user)

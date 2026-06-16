@@ -110,9 +110,15 @@ builder.Services.AddScoped<SubscriptionMirrorService>();
 // Story 2.3 — append-only credit ledger. The ONLY writer to credit_ledger
 // (architecture D2 money-boundary). Used by the webhook handler (purchase
 // on checkout.session.completed mode=payment), the job dispatch hook
-// (spend; gated by CreditSpendEnabled, story 2.4 enables), and the
-// GET /jobs/{id} read path (lazy reversal on invalid_file).
+// (spend; story 2.4 DispatchAnalysisAsync), and the GET /jobs/{id} read
+// path (lazy reversal on invalid_file).
 builder.Services.AddScoped<CreditLedgerService>();
+
+// Story 2.4 — entitlement resolver + in-process cache.
+// IMemoryCache is process-local; EntitlementService caches per-user
+// snapshots for 60 s and feature flags globally for 60 s.
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<EntitlementService>();
 
 // Story 1.9: per-analysis free-tier coach follow-up cap. Fail-fast at startup
 // on a non-positive value — a zero cap would make the product unusable and we
@@ -212,6 +218,7 @@ api.MapSongEndpoints();
 api.MapVersionEndpoints();
 api.MapJobEndpoints();
 api.MapVerdictEndpoints();
+api.MapReportPhaseEndpoints();
 api.MapReferenceEndpoints();
 api.MapShareEndpoints();
 api.MapBookmarkEndpoints();

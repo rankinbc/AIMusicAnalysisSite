@@ -200,7 +200,8 @@ public static class SongEndpoints
 
     // ── helpers ───────────────────────────────────────────────────────────────
     private static VersionDto ToVersionDto(SongVersion v) =>
-        new(v.Id, v.SongId, v.VersionNumber, v.Label, v.IsCurrent, v.FilePath, v.CreatedAt);
+        new(v.Id, v.SongId, v.VersionNumber, v.Label, v.IsCurrent, v.FilePath, v.CreatedAt,
+            v.AlsFilePath, v.ReferencePath);
 
     private static AnalysisSummaryDto ToSummaryDto(Analysis a)
     {

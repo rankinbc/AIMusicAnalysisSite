@@ -80,3 +80,19 @@ public sealed record CreditsResponse(
     int Balance,
     IReadOnlyList<CreditLedgerEntryDto> Entries,
     string? NextCursor);
+
+// ── Story 2.4 — entitlement snapshot ─────────────────────────────────
+
+/// <summary>
+/// GET /api/me/entitlements — caller's current entitlement snapshot.
+/// Null means unlimited (Pro tier). Cached 60 s server-side; staleTime
+/// 30 s on the frontend so the client rarely needs a round-trip.
+/// </summary>
+public sealed record EntitlementsDto(
+    int? AnalysesRemaining,
+    int CoachRemaining,
+    bool StemsEnabled,
+    bool AlsEnabled,
+    bool FullVerdictsEnabled,
+    int? HistoryDepth,
+    string Tier);

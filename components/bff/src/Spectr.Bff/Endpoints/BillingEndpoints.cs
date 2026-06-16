@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Spectr.Bff.Auth;
 using Spectr.Bff.DTOs;
@@ -700,12 +701,16 @@ public static class BillingEndpoints
             }
         }
 
-        // Idempotency key: per-day so a user can retry tomorrow if a
-        // request fails after Stripe commits but before the response
-        // reaches us. Same recipe as story 2.2 /portal.
-        var dayBucket = DateTimeOffset.UtcNow.Date.ToString("yyyyMMdd");
+        // Review-fix P2-C — hourly bucket instead of daily so the user can
+        // buy the same pack size more than once per calendar day. The daily
+        // bucket caused Stripe to return a cached completed session on the
+        // second same-day same-pack call. The ledger partial-unique index
+        // (idempotency_key = "credits_purchase:{stripeEventId}") is the
+        // canonical financial guard; this key only dedupes network retries
+        // within the same hour window.
+        var hourBucket = DateTimeOffset.UtcNow.ToString("yyyyMMddHH");
         var sessionIdempotencyKey =
-            $"credits_session:{userId:N}:{body.PackSize}:{dayBucket}";
+            $"credits_session:{userId:N}:{body.PackSize}:{hourBucket}";
 
         var session = await stripeClient.CreateCheckoutSessionAsync(
             new SessionCreateOptions
@@ -726,6 +731,17 @@ public static class BillingEndpoints
                 // PaymentIntent's metadata to record the +N ledger
                 // entry — store both at session creation so the
                 // webhook never has to look up local state.
+                // Review-fix P1-A — metadata must also live on the Session object
+        // (SessionCreateOptions.Metadata) so session.Metadata is populated
+        // in the checkout.session.completed webhook payload. The webhook
+        // handler reads session.Metadata, NOT the nested PaymentIntent
+        // metadata. PaymentIntentData.Metadata is kept as a dashboard-visible
+        // copy on the PaymentIntent object.
+                Metadata = new Dictionary<string, string>
+                {
+                    ["spectr_user_id"] = userId.ToString(),
+                    ["pack_size"] = body.PackSize.ToString(),
+                },
                 PaymentIntentData = new SessionPaymentIntentDataOptions
                 {
                     Metadata = new Dictionary<string, string>
@@ -752,30 +768,46 @@ public static class BillingEndpoints
         var userId = currentUser.UserId();
         var balance = await credits.GetBalanceAsync(userId, ct);
 
+        // Review-fix P2-B — compound cursor "(created_at ISO-8601)|(id UUID)"
+        // eliminates row loss when multiple entries share the same created_at
+        // timestamp (e.g., purchase + spend written within the same Postgres
+        // transaction-time tick). A timestamp-only cursor uses strict `<` which
+        // silently skips any sibling rows with the exact boundary timestamp.
         DateTimeOffset? cursorTs = null;
+        Guid? cursorId = null;
         if (!string.IsNullOrWhiteSpace(cursor))
         {
-            if (!DateTimeOffset.TryParse(
-                    cursor, System.Globalization.CultureInfo.InvariantCulture,
+            var parts = cursor.Split('|');
+            if (parts.Length != 2
+                || !DateTimeOffset.TryParse(
+                    parts[0], System.Globalization.CultureInfo.InvariantCulture,
                     System.Globalization.DateTimeStyles.RoundtripKind,
-                    out var parsed))
+                    out var parsedTs)
+                || !Guid.TryParse(parts[1], out var parsedId))
             {
                 return ErrorEnvelope.Build(StatusCodes.Status400BadRequest,
                     "invalid_cursor",
-                    "Cursor must be an ISO-8601 timestamp.");
+                    "Cursor must be in the format 'timestamp|id'.");
             }
-            cursorTs = parsed;
+            cursorTs = parsedTs;
+            cursorId = parsedId;
         }
 
         const int PageSize = 50;
         var query = db.CreditLedger.AsNoTracking()
             .Where(e => e.UserId == userId);
-        if (cursorTs is not null)
+        if (cursorTs is not null && cursorId is not null)
         {
-            query = query.Where(e => e.CreatedAt < cursorTs.Value);
+            // Keyset: rows that appear AFTER the cursor row in the
+            // (created_at DESC, id DESC) sort order.
+            var cTs = cursorTs.Value;
+            var cId = cursorId.Value;
+            query = query.Where(e =>
+                e.CreatedAt < cTs || (e.CreatedAt == cTs && e.Id < cId));
         }
         var rows = await query
             .OrderByDescending(e => e.CreatedAt)
+            .ThenByDescending(e => e.Id)
             .Take(PageSize + 1)
             .Select(e => new CreditLedgerEntryDto(
                 e.Id, e.Amount, e.Reason, e.Reference, e.CreatedAt))
@@ -784,8 +816,13 @@ public static class BillingEndpoints
         string? nextCursor = null;
         if (rows.Count > PageSize)
         {
-            nextCursor = rows[PageSize - 1].CreatedAt
-                .ToString("o", System.Globalization.CultureInfo.InvariantCulture);
+            // Cursor from the last RETURNED row — the keyset filter
+            // uses strict inequality so this row is excluded from the
+            // next page, and rows sharing its timestamp but with smaller
+            // IDs are correctly included.
+            var last = rows[PageSize - 1];
+            nextCursor =
+                $"{last.CreatedAt.ToString("o", System.Globalization.CultureInfo.InvariantCulture)}|{last.Id}";
             rows = rows.Take(PageSize).ToList();
         }
 
@@ -803,6 +840,8 @@ public static class BillingEndpoints
         // Story 2.3 — credit-pack purchases land on
         // checkout.session.completed with Mode=="payment".
         CreditLedgerService credits,
+        // Story 2.4 — subscription events invalidate the per-user entitlement cache.
+        IMemoryCache cache,
         // review-fix P17 — log category is the public marker
         // `Spectr.Bff.Endpoints.BillingWebhook`. Static classes can't be
         // ILogger<T> targets, so we use a small concrete marker type
@@ -909,7 +948,7 @@ public static class BillingEndpoints
 
         try
         {
-            await DispatchAsync(stripeEvent, mirrorService, credits, logger, ct);
+            await DispatchAsync(stripeEvent, mirrorService, credits, cache, logger, ct);
             // review-fix P3 — also clear processing_error on success so
             // a previously-failed event that succeeds on retry leaves
             // no stale error trail.
@@ -946,6 +985,7 @@ public static class BillingEndpoints
         Event stripeEvent,
         SubscriptionMirrorService mirrorService,
         CreditLedgerService credits,
+        IMemoryCache cache,
         ILogger<BillingWebhook> logger,
         CancellationToken ct)
     {
@@ -967,18 +1007,19 @@ public static class BillingEndpoints
                         || !int.TryParse(packStr, out var packSize)
                         || packSize <= 0)
                     {
-                        logger.LogError(
-                            "Credit purchase webhook missing metadata: session={SessionId}, paymentIntent={PaymentIntentId}",
-                            session.Id, session.PaymentIntentId);
-                        return;
+                        // Review-fix P1-B — throw (not return) so the outer
+                        // handler writes processing_error + returns 5xx to Stripe
+                        // for retry. A silent return would mark processed_at = now()
+                        // and Stripe would never retry — the purchase credit would
+                        // be permanently lost.
+                        throw new InvalidOperationException(
+                            $"Credit purchase webhook is missing required metadata on session {session.Id}.");
                     }
 
                     if (string.IsNullOrEmpty(session.PaymentIntentId))
                     {
-                        logger.LogError(
-                            "Credit purchase webhook missing PaymentIntent id: session={SessionId}",
-                            session.Id);
-                        return;
+                        throw new InvalidOperationException(
+                            $"Credit purchase webhook has no PaymentIntent on session {session.Id} — cannot record the purchase.");
                     }
 
                     // Defense-in-depth on top of AR11 webhook_events
@@ -1000,7 +1041,9 @@ public static class BillingEndpoints
             {
                 if (stripeEvent.Data.Object is Stripe.Subscription stripeSub)
                 {
-                    await mirrorService.ApplyAsync(stripeSub, ct);
+                    var resolvedUserId = await mirrorService.ApplyAsync(stripeSub, ct);
+                    if (resolvedUserId.HasValue)
+                        cache.Remove($"ent:{resolvedUserId.Value:N}");
                 }
                 return;
             }

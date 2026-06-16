@@ -2,6 +2,8 @@ import { useMemo, useRef, useState, useCallback } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { toast } from 'sonner';
 
+import { ApiError } from '../../api/fetcher';
+import { extractApiError } from '../../api/error-utils';
 import { useReanalyzeVersion, useVerdicts } from '../../api/hooks';
 import {
   isFinalJson,
@@ -18,7 +20,9 @@ import {
 import { AnalysisTab } from './AnalysisTab';
 import { ArrangementTab } from './ArrangementTab';
 import { CoachChat } from './CoachChat';
+import { FilesTab } from './FilesTab';
 import { SPECIALIST_CATALOG } from './helpers/specialists';
+import { RawTab } from './RawTab';
 import { ReferenceTab } from './ReferenceTab';
 import { ResultsTabs, type ResultsTabKey } from './ResultsTabs';
 import { SpectrumTab } from './SpectrumTab';
@@ -91,8 +95,13 @@ export function ReportView({ results, songId }: ReportViewProps) {
           params: { songId, jobId: res.jobId },
         });
       },
-      onError: (err) =>
-        toast.error(err instanceof Error ? err.message : 'Could not re-analyze'),
+      onError: (err) => {
+        if (err instanceof ApiError && extractApiError(err.body).code === 'entitlement_exhausted') {
+          toast.error('You have used all your analyses for this period.');
+        } else {
+          toast.error(err instanceof Error ? err.message : 'Could not re-analyze');
+        }
+      },
     });
   }, [results.versionId, reanalyze, navigate, songId]);
 
@@ -175,6 +184,15 @@ export function ReportView({ results, songId }: ReportViewProps) {
           />
         )}
         {tab === 'arrangement' && <ArrangementTab phase7={phase7} />}
+        {tab === 'raw' && <RawTab rawJson={results.finalJson} />}
+        {tab === 'files' && results.versionId && (
+          <FilesTab versionId={results.versionId} />
+        )}
+        {tab === 'files' && !results.versionId && (
+          <div style={{ color: 'var(--muted)', fontSize: 14, padding: '32px 0', textAlign: 'center' }}>
+            No version attached to this analysis.
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 using System.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Npgsql;
 using Spectr.Data;
 using Spectr.Data.Entities;
@@ -21,6 +22,7 @@ namespace Spectr.Bff.Services;
 
 public sealed class CreditLedgerService(
     AppDbContext db,
+    IMemoryCache cache,
     ILogger<CreditLedgerService> logger)
 {
     // SUM(amount) WHERE user_id. No cache in story 2.3; story 2.4 adds
@@ -66,6 +68,7 @@ public sealed class CreditLedgerService(
             logger.LogInformation(
                 "Credit purchase recorded: user={UserId}, amount=+{Amount}, paymentIntent={PaymentIntentId}, idempotencyKey={Key}",
                 userId, packSize, stripePaymentIntentId, idempotencyKey);
+            cache.Remove($"ent:{userId:N}");
             return entry;
         }
         catch (DbUpdateException ex) when (IsUniqueViolation(ex))
@@ -101,7 +104,11 @@ public sealed class CreditLedgerService(
             {
                 return await SpendOnceAsync(userId, jobId, billingPeriod, ct);
             }
-            catch (DbUpdateException ex)
+            catch (Exception ex)
+                // Review-fix P2-A — use IsSerializationFailure(Exception) which
+                // also catches raw PostgresException from the SumAsync read phase.
+                // PG 40001 from a SELECT/SUM surfaces as PostgresException directly
+                // (not wrapped in DbUpdateException), bypassing the original filter.
                 when (IsSerializationFailure(ex) && attempt == 0)
             {
                 logger.LogWarning(
@@ -156,6 +163,7 @@ public sealed class CreditLedgerService(
         logger.LogInformation(
             "Credit spend recorded: user={UserId}, jobId={JobId}, billingPeriod={Period}",
             userId, jobId, billingPeriod);
+        cache.Remove($"ent:{userId:N}");
         return spend;
     }
 
@@ -198,6 +206,7 @@ public sealed class CreditLedgerService(
     private static bool IsUniqueViolation(DbUpdateException ex)
         => ex.InnerException is PostgresException pg && pg.SqlState == "23505";
 
-    private static bool IsSerializationFailure(DbUpdateException ex)
-        => ex.InnerException is PostgresException pg && pg.SqlState == "40001";
+    private static bool IsSerializationFailure(Exception ex) =>
+        (ex is DbUpdateException dbe && dbe.InnerException is PostgresException pg1 && pg1.SqlState == "40001")
+        || (ex is PostgresException pg2 && pg2.SqlState == "40001");
 }

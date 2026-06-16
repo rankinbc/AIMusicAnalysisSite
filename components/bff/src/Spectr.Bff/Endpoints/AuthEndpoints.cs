@@ -16,6 +16,7 @@ public static class AuthEndpoints
 
         g.MapPost("/register", Register).AllowAnonymous();
         g.MapPost("/login", Login).AllowAnonymous();
+        g.MapPost("/dev-login", DevLogin).AllowAnonymous();
         g.MapPost("/refresh", Refresh).AllowAnonymous();
         g.MapPost("/logout", Logout).RequireAuthorization();
         g.MapGet("/me", Me).RequireAuthorization();
@@ -86,6 +87,38 @@ public static class AuthEndpoints
             return Results.Unauthorized();
         if (!user.IsActive)
             return Results.Unauthorized();
+
+        var (rawRefresh, _) = await refresh.IssueAsync(user.Id, ct);
+        resp.Cookies.Append(RefreshTokenService.CookieName, rawRefresh, refresh.CookieOptions());
+
+        var access = jwt.Issue(user);
+        return Results.Ok(new AuthResponse(access,
+            new AuthedUser(user.Id, user.Email, user.Handle, user.DisplayName,
+                await ResolveTierAsync(db, user.Id, ct))));
+    }
+
+    // POST /api/auth/dev-login — DEVELOPMENT ONLY one-click sign-in. Mints tokens
+    // for an existing account WITHOUT a password so local dev can skip the form.
+    // Inert (404) outside the Development environment. Defaults to the dev account.
+    private static async Task<IResult> DevLogin(
+        DevLoginRequest? req,
+        IWebHostEnvironment env,
+        AppDbContext db,
+        JwtTokenService jwt,
+        RefreshTokenService refresh,
+        HttpResponse resp,
+        CancellationToken ct)
+    {
+        if (!env.IsDevelopment()) return Results.NotFound();
+
+        var email = string.IsNullOrWhiteSpace(req?.Email)
+            ? "brankin92@yahoo.com"
+            : req!.Email!.Trim();
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email, ct);
+        if (user is null)
+            return Results.NotFound(new { error = $"Dev user '{email}' not found — register it first." });
+        if (!user.IsActive) return Results.Unauthorized();
 
         var (rawRefresh, _) = await refresh.IssueAsync(user.Id, ct);
         resp.Cookies.Append(RefreshTokenService.CookieName, rawRefresh, refresh.CookieOptions());

@@ -20,6 +20,8 @@ interface AuthState {
 
 interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<void>;
+  /** Development-only one-click sign-in (no password). Defaults to the dev account. */
+  devLogin: (email?: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<boolean>;
@@ -101,6 +103,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [applyAuth],
   );
 
+  const devLogin = useCallback(
+    async (email?: string) => {
+      const auth = await fetcher<AuthResponse>({
+        url: '/auth/dev-login',
+        method: 'POST',
+        data: { email },
+      });
+      applyAuth(auth);
+    },
+    [applyAuth],
+  );
+
   const register = useCallback(
     async (email: string, password: string) => {
       const auth = await fetcher<AuthResponse>({
@@ -126,8 +140,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ ...state, login, register, logout, refresh, updateUser }),
-    [state, login, register, logout, refresh, updateUser],
+    () => ({ ...state, login, devLogin, register, logout, refresh, updateUser }),
+    [state, login, devLogin, register, logout, refresh, updateUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

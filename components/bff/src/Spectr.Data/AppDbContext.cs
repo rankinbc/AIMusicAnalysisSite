@@ -51,6 +51,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<CreditLedgerEntry> CreditLedger => Set<CreditLedgerEntry>();
     public DbSet<UsageEvent> UsageEvents => Set<UsageEvent>();
 
+    // Billing (story 2.4 — operator-controlled feature flags)
+    public DbSet<FeatureFlag> FeatureFlags => Set<FeatureFlag>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         builder.HasPostgresExtension("pgcrypto");      // gen_random_uuid()
@@ -181,6 +184,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         builder.Entity<UsageEvent>()
             .HasIndex(e => new { e.UserId, e.BillingPeriod })
             .HasDatabaseName("ix_usage_events_user_period");
+
+        // Story 2.4 — feature_flags: string PK, DB-side updated_at default.
+        builder.Entity<FeatureFlag>().HasKey(f => f.Name);
+        builder.Entity<FeatureFlag>().Property(f => f.UpdatedAt).HasDefaultValueSql("now()");
 
         // DB-side defaults for *_at timestamp columns.
         // Without these, inserts from outside EF (the Python worker via SQLAlchemy)

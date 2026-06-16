@@ -10,6 +10,9 @@ public interface IFileStorage
     Task<Uri> GetPresignedReadUrlAsync(string key, TimeSpan expiry);
 
     Task<bool> ExistsAsync(string key, CancellationToken ct = default);
+
+    // Returns the byte size of the stored object, or null if the key does not exist.
+    Task<long?> GetFileSizeAsync(string key, CancellationToken ct = default);
 }
 
 internal sealed class LocalDiskFileStorage(IConfiguration config) : IFileStorage
@@ -47,4 +50,11 @@ internal sealed class LocalDiskFileStorage(IConfiguration config) : IFileStorage
 
     public Task<bool> ExistsAsync(string key, CancellationToken ct = default)
         => Task.FromResult(File.Exists(Resolve(key)));
+
+    public Task<long?> GetFileSizeAsync(string key, CancellationToken ct = default)
+    {
+        var path = Resolve(key);
+        if (!File.Exists(path)) return Task.FromResult<long?>(null);
+        return Task.FromResult<long?>(new FileInfo(path).Length);
+    }
 }

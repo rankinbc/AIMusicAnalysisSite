@@ -2,7 +2,14 @@ import { toast } from 'sonner';
 
 import s from './ResultsTabs.module.css';
 
-export type ResultsTabKey = 'coach' | 'analysis' | 'spectrum' | 'reference' | 'arrangement';
+export type ResultsTabKey =
+  | 'coach'
+  | 'analysis'
+  | 'spectrum'
+  | 'reference'
+  | 'arrangement'
+  | 'raw'
+  | 'files';
 
 interface TabDef {
   id: ResultsTabKey;
@@ -62,6 +69,8 @@ export function ResultsTabs({
       badge: arrangementFlag ? '!' : null,
       badgeTone: 'orange',
     },
+    { id: 'raw', label: 'Raw' },
+    { id: 'files', label: 'Files' },
   ];
 
   return (

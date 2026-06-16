@@ -11,3 +11,11 @@ export function extractApiMessage(body: unknown): string | undefined {
   }
   return undefined;
 }
+
+export function extractApiError(body: unknown): { code?: string; message?: string } {
+  if (typeof body === 'object' && body !== null && 'error' in body) {
+    const err = (body as { error?: { code?: string; message?: string } }).error;
+    return err ?? {};
+  }
+  return {};
+}

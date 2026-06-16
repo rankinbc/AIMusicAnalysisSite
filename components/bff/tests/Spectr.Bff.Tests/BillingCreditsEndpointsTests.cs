@@ -138,6 +138,14 @@ public sealed class BillingCreditsEndpointsTests(WebApplicationFactory<Program> 
             Assert.NotNull(fake.LastSessionOptions);
             Assert.Equal("payment", fake.LastSessionOptions!.Mode);
             Assert.Equal("price_test_pack5", fake.LastSessionOptions.LineItems![0].Price);
+            // Review-fix P1-A: session-level Metadata must carry user+pack so the
+            // checkout.session.completed webhook can read session.Metadata (not
+            // PaymentIntent.Metadata, which is a separate Stripe object).
+            Assert.NotNull(fake.LastSessionOptions.Metadata);
+            Assert.Equal(userId.ToString(),
+                fake.LastSessionOptions.Metadata!["spectr_user_id"]);
+            Assert.Equal("5", fake.LastSessionOptions.Metadata["pack_size"]);
+            // PaymentIntent-level copy (defense-in-depth for PI webhooks).
             Assert.Equal(userId.ToString(),
                 fake.LastSessionOptions.PaymentIntentData!.Metadata!["spectr_user_id"]);
             Assert.Equal("5",

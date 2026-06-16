@@ -201,11 +201,73 @@ Keys salt with the stable `StripeSubscriptionId` rather than `CurrentPeriodEnd` 
 
 ### Tier derivation on `/me`
 
-`GET /api/auth/me` returns a transitional `tier: "free" | "pro"` field.
-Computed via LEFT JOIN against `subscriptions`: status ∈ {`active`,
-`trialing`} → `pro`; everything else (including no row) → `free`. Story
-2.4's `Entitlements.For(user)` resolver will replace this with a richer
-object + 60-s cache + webhook-driven invalidation.
+`GET /api/auth/me` returns `tier: "free" | "pro"` for the nav bar. The
+authoritative entitlement resolution is `GET /api/me/entitlements`
+(see below).
+
+### Entitlement resolver (story 2.4)
+
+`EntitlementService.ForAsync(userId)` is the single source of truth for
+what a user may do. It is cached 60 s per user (`IMemoryCache`,
+key `ent:{userId:N}`). Call `InvalidateAsync(userId)` after any write
+that would change their tier (credit spend, sub status change).
+
+**Tier derivation:**
+
+| Priority | Condition | Tier |
+|----------|-----------|------|
+| 1 | `subscriptions.status` ∈ `{active, past_due}` | `pro` |
+| 2 | `credit_ledger` SUM ≥ 1 | `credits` |
+| 3 | otherwise | `free` |
+
+**`GET /api/me/entitlements` response:**
+```jsonc
+{
+  "tier": "free" | "credits" | "pro",
+  "analysesRemaining": 2,   // null for pro (unlimited)
+  "coachRemaining": 3,      // int.MaxValue for credits/pro
+  "stemsEnabled": false,
+  "alsEnabled": false,
+  "fullVerdictsEnabled": false,
+  "historyDepth": 10        // null for pro
+}
+```
+
+**AR15 — results-forever guarantee:** `EntitlementService` is NEVER
+injected into `GET /api/jobs/{id}` or `GET /api/jobs/{id}/results`.
+Completed analyses are always readable regardless of tier.
+
+**Feature-flag overrides** (via `feature_flags` table, key/value rows):
+
+| Flag key | Default | Effect |
+|----------|---------|--------|
+| `free_analyses_per_month` | `3` | Free-tier monthly cap |
+| `coach_free_followups` | `3` | Free-tier coach turns |
+| `history_depth_free` | `10` | Library rows visible to free user |
+| `history_depth_credits` | `30` | Library rows visible to credits user |
+
+To override locally during dev (survives restarts, no redeploy needed):
+```sql
+INSERT INTO feature_flags (name, value)
+VALUES ('free_analyses_per_month', '10')
+ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value;
+```
+
+### Buy credits (story 2.3)
+
+- `POST /api/billing/checkout/credits { pack }` — `pack` ∈ `{5, 10}`;
+  returns a hosted Stripe Checkout URL.
+- On successful payment, the `checkout.session.completed` webhook calls
+  `CreditLedgerService.AddAsync` (append-only, idempotent on
+  `payment_intent_id`).
+
+**Config keys (story 2.3 — deferred until live Stripe account is ready):**
+```bash
+dotnet user-secrets set Stripe:PriceCreditPack5  price_<5-pack-price-id>
+dotnet user-secrets set Stripe:PriceCreditPack10 price_<10-pack-price-id>
+```
+Without these keys, `POST /billing/checkout/credits` returns
+`{ error: { code: "stripe_not_configured" } }` (503).
 
 ## Triage routing plan persistence
 

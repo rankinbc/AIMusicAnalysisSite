@@ -50,6 +50,10 @@ public sealed class AnalysisJob
     [Column("error_code"), MaxLength(64)]
     public string? ErrorCode { get; set; }
 
+    // Story 2.4 — tier stamped at dispatch time so the worker never reads billing tables.
+    [Column("tier"), MaxLength(16)]
+    public string? Tier { get; set; }
+
     [Column("dispatched_at")]
     public DateTimeOffset DispatchedAt { get; set; } = DateTimeOffset.UtcNow;
 

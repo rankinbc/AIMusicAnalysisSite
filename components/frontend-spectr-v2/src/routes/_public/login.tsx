@@ -15,8 +15,10 @@ export const Route = createFileRoute('/_public/login')({
   component: LoginPage,
 });
 
+const DEV_EMAIL = 'brankin92@yahoo.com';
+
 function LoginPage() {
-  const { login } = useAuth();
+  const { login, devLogin } = useAuth();
   const navigate = useNavigate();
   const { next } = Route.useSearch();
   const [email, setEmail] = useState('');
@@ -33,6 +35,20 @@ function LoginPage() {
       void navigate({ to: next ?? '/library' });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign-in failed');
+    } finally {
+      setPending(false);
+    }
+  };
+
+  // Development-only convenience: one click signs in as the dev account.
+  const handleDevLogin = async () => {
+    setError(null);
+    setPending(true);
+    try {
+      await devLogin(DEV_EMAIL);
+      void navigate({ to: next ?? '/library' });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Dev sign-in failed');
     } finally {
       setPending(false);
     }
@@ -77,6 +93,16 @@ function LoginPage() {
           {pending ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
+      {import.meta.env.DEV && (
+        <button
+          type="button"
+          onClick={handleDevLogin}
+          disabled={pending}
+          className={`${f.button} ${s.submit}`}
+        >
+          Dev sign-in ({DEV_EMAIL})
+        </button>
+      )}
       <p className={s.footerLink}>
         No account?
         <Link to="/register">Create one</Link>

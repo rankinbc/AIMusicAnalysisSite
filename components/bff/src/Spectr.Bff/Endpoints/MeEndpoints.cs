@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Spectr.Bff.Auth;
 using Spectr.Bff.DTOs;
+using Spectr.Bff.Services;
 using Spectr.Data;
 using System.Security.Claims;
 
@@ -16,6 +17,7 @@ public static class MeEndpoints
         g.MapPatch("/profile", PatchProfile);
         g.MapGet("/stats", GetStats);
         g.MapGet("/activity", GetActivity);
+        g.MapGet("/entitlements", GetEntitlements);
 
         return app;
     }
@@ -223,6 +225,26 @@ public static class MeEndpoints
         // collapse repeated underscores
         var collapsed = System.Text.RegularExpressions.Regex.Replace(buf.ToString(), "_+", "_");
         return collapsed.Trim('_');
+    }
+
+    // GET /api/me/entitlements — caller's current entitlement snapshot.
+    // Story 2.4 / AR12. No entitlement check on results read paths (AR15).
+    private static async Task<IResult> GetEntitlements(
+        ClaimsPrincipal currentUser,
+        EntitlementService ents,
+        CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        try
+        {
+            var dto = await ents.ForAsync(userId, ct);
+            return Results.Ok(dto);
+        }
+        catch (Exception)
+        {
+            return ErrorEnvelope.Build(503, "entitlements_unavailable",
+                "Entitlement service temporarily unavailable.");
+        }
     }
 
     private static short ClampHue(short hue) =>
