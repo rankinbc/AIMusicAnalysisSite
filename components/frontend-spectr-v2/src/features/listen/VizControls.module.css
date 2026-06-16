@@ -1,0 +1,127 @@
+.block {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.heading {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.sub {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sub:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.laserSub {
+  border: 0;
+  margin: 0;
+  padding: 6px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.laserSub:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.subLabel {
+  display: block;
+}
+.swatches {
+  display: flex;
+  gap: 6px;
+}
+.swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid var(--border-2);
+  cursor: pointer;
+}
+.swatch[data-active='true'] {
+  outline: 2px solid var(--cyan);
+  outline-offset: 1px;
+}
+.effects {
+  display: flex;
+  gap: 4px;
+}
+.fxBtn {
+  flex: 1;
+  padding: 5px;
+  font-size: 10px;
+  text-transform: capitalize;
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.fxBtn[data-active='true'] {
+  background: var(--cyan);
+  color: #0a1414;
+  border-color: var(--cyan);
+}
+.switch {
+  width: 34px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--card-2);
+  border: 1px solid var(--border-2);
+  position: relative;
+}
+.switch[data-state='checked'] {
+  background: var(--cyan);
+}
+.thumb {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s;
+  transform: translateX(2px);
+}
+.switch[data-state='checked'] .thumb {
+  transform: translateX(18px);
+}
+.slider {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 18px;
+}
+.track {
+  position: relative;
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--card-2);
+}
+.range {
+  position: absolute;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--cyan);
+}
+.sliderThumb {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+}

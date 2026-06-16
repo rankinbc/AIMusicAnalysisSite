@@ -90,43 +90,13 @@
   padding: 0;
 }
 
-.heroVisual {
-  position: relative;
-  height: 380px;
-  background:
-    radial-gradient(ellipse 75% 60% at 50% 100%, rgba(0, 229, 176, 0.16) 0%, transparent 65%),
-    radial-gradient(ellipse 40% 60% at 20% 0%, rgba(167, 139, 250, 0.12) 0%, transparent 60%),
-    linear-gradient(180deg, var(--card) 0%, var(--bg-2) 100%);
-  overflow: hidden;
-}
-
-.sectionOverlay {
-  position: absolute;
-  top: 14px;
-  left: 18px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: rgba(7, 10, 18, 0.6);
-  backdrop-filter: blur(10px);
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-2);
-  font-weight: 700;
-  z-index: 2;
-}
-
 .liveStrip {
-  position: absolute;
-  top: 14px;
-  right: 18px;
   display: flex;
-  gap: 6px;
-  z-index: 2;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
 }
 
 .livePill {
@@ -153,37 +123,6 @@
   font-size: 12px;
   font-weight: 700;
   color: var(--text);
-}
-
-.spectrumWrap {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: flex-end;
-  padding: 36px 18px 26px;
-  gap: 2px;
-}
-
-.spectrumBar {
-  flex: 1;
-  background: linear-gradient(180deg, var(--cyan) 0%, rgba(0, 229, 176, 0.3) 100%);
-  border-radius: 2px;
-  transition: height 0.05s linear;
-  box-shadow: 0 0 6px rgba(0, 229, 176, 0.3);
-  min-height: 2px;
-}
-
-.freqGrid {
-  position: absolute;
-  left: 18px;
-  right: 18px;
-  bottom: 8px;
-  display: flex;
-  justify-content: space-between;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 9px;
-  color: var(--dim);
-  pointer-events: none;
 }
 
 .heroTransport {
@@ -318,7 +257,7 @@
   height: 48px;
   border-radius: 50%;
   background: var(--cyan);
-  color: var(--ink-on-accent);
+  color: #06151a;
   display: grid;
   place-items: center;
   border: none;
@@ -331,7 +270,7 @@
   box-shadow: 0 0 24px rgba(0, 229, 176, 0.45);
 }
 .playBig:hover {
-  background: var(--accent-bright);
+  background: #00f3bd;
 }
 
 .transportBtn {
@@ -557,255 +496,34 @@
   letter-spacing: 0.04em;
 }
 
-/* ── 2-col grid below tools ─────────────────────────────────────────── */
+/* ── Main grid: center column + right rail ──────────────────────────── */
 
-.belowGrid {
+.mainGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: 1fr 300px;
+  gap: 1px;
+  background: var(--border);
+  min-height: 0;
+}
+
+.centerCol {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg);
   gap: 18px;
-  align-items: flex-start;
 }
 
-.activityCol,
-.meterRail {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.notesCard {
-  padding: 18px;
-}
-
-.notesHd {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.notesTitle {
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.notesList {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.noteRow {
-  display: grid;
-  grid-template-columns: 28px 1fr;
-  gap: 12px;
-  align-items: center;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.015);
-  cursor: pointer;
-  font-family: inherit;
-  text-align: left;
-  color: var(--text);
-}
-.noteRow:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-.noteRow[data-active='true'] {
-  border-color: rgba(0, 229, 176, 0.4);
-  background: rgba(0, 229, 176, 0.06);
-}
-
-.noteIcon {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  display: grid;
-  place-items: center;
-  background: rgba(167, 139, 250, 0.1);
-  border: 1px solid rgba(167, 139, 250, 0.32);
-  color: var(--violet);
-  font-size: 12px;
-}
-.noteIcon[data-pinned='true'] {
-  background: rgba(0, 229, 176, 0.1);
-  border-color: rgba(0, 229, 176, 0.32);
-  color: var(--cyan);
-}
-
-.noteMeta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10px;
-  color: var(--muted);
-}
-
-.noteBody {
-  font-size: 12px;
-  color: var(--text-2);
-  margin-top: 2px;
-}
-
-.newNoteRow {
-  display: grid;
-  grid-template-columns: 28px 1fr auto auto;
-  gap: 8px;
-  align-items: center;
-  margin-top: 12px;
-}
-
-.newNoteInput {
-  background: rgba(7, 10, 18, 0.6);
-  border: 1px solid var(--border-2);
-  border-radius: 6px;
-  padding: 8px 12px;
-  color: var(--text);
-  font-family: inherit;
-  font-size: 12px;
-  outline: none;
-}
-.newNoteInput:focus {
-  border-color: rgba(0, 229, 176, 0.4);
-  box-shadow: 0 0 0 3px var(--cyan-dim);
-}
-
-.newNoteTime {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10px;
-  color: var(--muted);
-}
-
-.contextCard {
-  padding: 18px;
-}
-
-.contextGrid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-}
-
-.contextStat {
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.018);
-}
-
-.statLabel {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 9px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.statValue {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text);
-  margin-top: 4px;
-}
-
-.meterCard,
-.similarCard {
-  padding: 16px 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.cardHd {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.cardTitle {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--muted);
-  font-weight: 700;
-}
-
-.meterRow {
-  display: grid;
-  grid-template-columns: 80px auto 1fr;
-  align-items: center;
-  gap: 12px;
-}
-
-.meterRowLabel {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-  text-transform: uppercase;
-}
-
-.meterRowValue {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text);
-  text-align: right;
-}
-
-.meterBar {
-  position: relative;
-  height: 8px;
-  border-radius: 4px;
-  background: var(--dim);
-  overflow: hidden;
-}
-
-.meterFill {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  border-radius: 4px;
-  background: var(--cyan);
-  box-shadow: 0 0 6px rgba(0, 229, 176, 0.4);
-  transition: width 0.1s linear;
-}
-
-.miniSpectrum {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 56px;
-}
-.miniSpectrum > div {
-  flex: 1;
-  background: linear-gradient(180deg, var(--cyan) 0%, rgba(0, 229, 176, 0.4) 100%);
-  border-radius: 1px;
-  transition: height 0.08s linear;
-  min-height: 2px;
-}
-
-.miniLabels {
-  display: flex;
-  justify-content: space-between;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 9px;
-  color: var(--dim);
+.railCol {
+  background: var(--bg-2);
+  min-height: 0;
 }
 
 @media (max-width: 980px) {
-  .belowGrid {
+  .mainGrid {
     grid-template-columns: 1fr;
   }
-  .contextGrid {
-    grid-template-columns: repeat(2, 1fr);
+  .railCol {
+    display: none;
   }
 }

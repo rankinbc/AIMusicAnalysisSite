@@ -1,0 +1,198 @@
+.visualizer {
+  position: relative;
+  overflow: hidden;
+  flex: 0 0 clamp(320px, 40vh, 480px);
+  background: linear-gradient(180deg, #161a23, #0c0f15);
+}
+.vizCustom {
+  background: var(--viz-bg, linear-gradient(180deg, #161a23, #0c0f15));
+}
+
+.overlayTL {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.overlayTR {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 6;
+}
+.modeChip {
+  font-size: 9px;
+  opacity: 0.7;
+}
+
+/* eq stage — 8-band spectrum bars */
+.spectrum {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 0 12px 24px;
+}
+.bar {
+  flex: 1;
+  background: linear-gradient(180deg, var(--viz-bar, var(--cyan)) 0%, rgba(0, 229, 176, 0.3) 100%);
+  border-radius: 2px 2px 0 0;
+}
+
+/* lights stage — pulsing vertical light columns */
+.lights {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 0 14px 30px;
+}
+.lights > span {
+  flex: 1;
+  height: 30%;
+  border-radius: 3px 3px 0 0;
+  background: linear-gradient(180deg, var(--viz-bar, var(--cyan)), transparent);
+  transform-origin: bottom;
+  animation: lightPulse calc(var(--beat, 0.5s)) ease-in-out infinite;
+  animation-delay: var(--ld, 0s);
+}
+@keyframes lightPulse {
+  0%,
+  100% {
+    transform: scaleY(0.4);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scaleY(1.6);
+    opacity: 1;
+  }
+}
+
+/* bloom stage — concentric expanding rings */
+.bloom {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+.bloom > span {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--viz-bar, var(--cyan));
+  opacity: 0;
+  animation: bloomRing calc(var(--beat, 0.5s) * 4) ease-out infinite;
+}
+@keyframes bloomRing {
+  0% {
+    transform: scale(0.2);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(6);
+    opacity: 0;
+  }
+}
+
+/* orbit stage — core + orbiting dots */
+.orbit {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  animation: orbitSpin calc(var(--beat, 0.5s) * 8) linear infinite;
+}
+.core {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--viz-bar, var(--cyan));
+  box-shadow: 0 0 18px var(--cyan-glow);
+}
+.dot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--viz-bar, var(--cyan));
+  opacity: 0.85;
+}
+.dot:nth-child(2) {
+  transform: rotate(0deg) translateX(70px);
+}
+.dot:nth-child(3) {
+  transform: rotate(22.5deg) translateX(82px);
+}
+.dot:nth-child(4) {
+  transform: rotate(45deg) translateX(70px);
+}
+.dot:nth-child(5) {
+  transform: rotate(67.5deg) translateX(94px);
+}
+.dot:nth-child(6) {
+  transform: rotate(90deg) translateX(70px);
+}
+.dot:nth-child(7) {
+  transform: rotate(112.5deg) translateX(82px);
+}
+.dot:nth-child(8) {
+  transform: rotate(135deg) translateX(70px);
+}
+.dot:nth-child(9) {
+  transform: rotate(157.5deg) translateX(94px);
+}
+.dot:nth-child(10) {
+  transform: rotate(180deg) translateX(70px);
+}
+.dot:nth-child(11) {
+  transform: rotate(202.5deg) translateX(82px);
+}
+.dot:nth-child(12) {
+  transform: rotate(225deg) translateX(70px);
+}
+.dot:nth-child(13) {
+  transform: rotate(247.5deg) translateX(94px);
+}
+.dot:nth-child(14) {
+  transform: rotate(270deg) translateX(70px);
+}
+.dot:nth-child(15) {
+  transform: rotate(292.5deg) translateX(82px);
+}
+.dot:nth-child(16) {
+  transform: rotate(315deg) translateX(70px);
+}
+.dot:nth-child(17) {
+  transform: rotate(337.5deg) translateX(94px);
+}
+@keyframes orbitSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* info stage — static slot for cover/title/pills */
+.info {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lights > span,
+  .bloom > span,
+  .orbit,
+  .orbit .dot {
+    animation: none !important;
+  }
+}

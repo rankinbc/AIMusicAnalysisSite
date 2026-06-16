@@ -1,0 +1,15 @@
+.root { display: flex; flex-direction: column; height: 100%; background: var(--bg-2); }
+.list { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border-bottom: 1px solid var(--border); }
+.trigger {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 9px 4px; background: none; border: 0; color: var(--muted); cursor: pointer;
+  border-bottom: 1.5px solid transparent;
+}
+.trigger[data-state='active'] { color: var(--text); background: var(--card); border-bottom-color: var(--cyan); }
+.icon { font-size: 15px; }
+.label { font-size: 9px; font-weight: 600; }
+.badge {
+  position: absolute; top: 4px; right: 8px; font-size: 9px; min-width: 14px; text-align: center;
+  background: var(--orange); color: #1a1205; border-radius: 999px; padding: 0 4px;
+}
+.content { flex: 1; overflow-y: auto; }
