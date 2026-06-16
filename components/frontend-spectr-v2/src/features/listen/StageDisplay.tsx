@@ -1,5 +1,6 @@
 import { memo, type ReactNode } from 'react';
 import { StageSelect } from './StageSelect';
+import { EqCurveOverlay } from './EqCurveOverlay';
 import { LaserRig, type LaserEffect } from './LaserRig';
 import type { StageId } from './stageRegistry';
 import { laserVars } from './laser';
@@ -113,6 +114,7 @@ export function StageDisplay(props: Props) {
               <span key={f} className="mono">{f}</span>
             ))}
           </div>
+          <EqCurveOverlay />
         </>
       )}
 
