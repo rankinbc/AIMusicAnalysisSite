@@ -1,81 +1,75 @@
 .block {
-  padding: 12px;
+  padding: 11px 12px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 11px;
 }
 .row {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
 }
-.heading {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-}
+.heading { font-size: 12px; font-weight: 600; color: var(--text-2); }
 .sub {
   border: 0;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  transition: opacity 0.15s;
 }
-.sub:disabled {
-  opacity: 0.4;
-  pointer-events: none;
-}
+.sub:disabled { opacity: 0.38; pointer-events: none; }
 .laserSub {
-  border: 0;
+  border: 1px solid rgba(244, 114, 182, 0.22);
   margin: 0;
-  padding: 6px 0 0;
+  padding: 10px;
+  border-radius: 7px;
+  background: rgba(244, 114, 182, 0.05);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 9px;
 }
-.laserSub:disabled {
-  opacity: 0.4;
-  pointer-events: none;
-}
-.subLabel {
-  display: block;
-}
-.swatches {
-  display: flex;
-  gap: 6px;
-}
+.laserSub:disabled { opacity: 0.38; pointer-events: none; }
+.subLabel { display: block; font-size: 11px; color: var(--muted); font-weight: 500; }
+
+.swatches { display: flex; gap: 6px; flex-wrap: wrap; }
 .swatch {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
   border: 1px solid var(--border-2);
   cursor: pointer;
+  padding: 0;
 }
 .swatch[data-active='true'] {
-  outline: 2px solid var(--cyan);
-  outline-offset: 1px;
+  box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px var(--cyan);
 }
-.effects {
-  display: flex;
-  gap: 4px;
-}
+
+.effects { display: flex; gap: 4px; flex-wrap: wrap; }
 .fxBtn {
   flex: 1;
-  padding: 5px;
-  font-size: 10px;
+  padding: 5px 9px;
+  font-size: 10.5px;
+  font-weight: 600;
   text-transform: capitalize;
   background: var(--card-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text-2);
+  border: 1px solid var(--border-2);
+  border-radius: 5px;
+  color: var(--muted);
   cursor: pointer;
 }
+.fxBtn:hover { color: var(--text-2); }
 .fxBtn[data-active='true'] {
-  background: var(--cyan);
-  color: #0a1414;
-  border-color: var(--cyan);
+  color: #f472b6;
+  border-color: rgba(244, 114, 182, 0.45);
+  background: rgba(244, 114, 182, 0.1);
 }
+
+/* Radix switch */
 .switch {
   width: 34px;
   height: 18px;
@@ -83,10 +77,9 @@
   background: var(--card-2);
   border: 1px solid var(--border-2);
   position: relative;
+  flex-shrink: 0;
 }
-.switch[data-state='checked'] {
-  background: var(--cyan);
-}
+.switch[data-state='checked'] { background: var(--cyan); border-color: transparent; }
 .thumb {
   display: block;
   width: 14px;
@@ -96,32 +89,18 @@
   transition: transform 0.15s;
   transform: translateX(2px);
 }
-.switch[data-state='checked'] .thumb {
-  transform: translateX(18px);
-}
-.slider {
-  position: relative;
-  display: flex;
-  align-items: center;
-  height: 18px;
-}
-.track {
-  position: relative;
-  flex: 1;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--card-2);
-}
-.range {
-  position: absolute;
-  height: 100%;
-  border-radius: 999px;
-  background: var(--cyan);
-}
+.switch[data-state='checked'] .thumb { transform: translateX(18px); }
+
+/* Radix slider — pink (laser theme) */
+.slider { position: relative; display: flex; align-items: center; flex: 1; height: 16px; }
+.track { position: relative; flex: 1; height: 4px; border-radius: 3px; background: var(--dim); }
+.range { position: absolute; height: 100%; border-radius: 3px; background: #f472b6; }
 .sliderThumb {
   display: block;
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   border-radius: 50%;
-  background: #fff;
+  background: #f472b6;
+  border: 2px solid #1a0e14;
+  box-shadow: 0 0 6px rgba(244, 114, 182, 0.6);
 }
