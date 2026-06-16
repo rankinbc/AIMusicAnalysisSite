@@ -172,6 +172,18 @@ Without keys, the endpoint returns `{ error: { code:
   in the 2024 API restructure). The mirror service reads both from
   `stripeSub.Items.Data[0]`.
 
+### Manage subscription (story 2.2)
+
+- `GET  /api/billing/me` — billing summary (tier, status, cadence, next charge, cancelAt).
+- `POST /api/billing/cancel { reason? }` — sets `cancel_at_period_end=true` on Stripe.
+- `POST /api/billing/resubscribe` — reverses cancel.
+- `POST /api/billing/change-cadence { cadence }` — Items[0].Price swap with proration.
+- `POST /api/billing/portal` — Customer Portal session URL (origin-validated on the frontend).
+
+**Customer Portal configuration** (Stripe dashboard, both test + live modes):
+- **Enable**: invoice history, payment-method updates, billing address.
+- **Disable**: subscription cancellation, subscription pause, plan changes (the BFF handles these inline for the UX-DR33 two-click rule).
+
 ### Tier derivation on `/me`
 
 `GET /api/auth/me` returns a transitional `tier: "free" | "pro"` field.

@@ -69,7 +69,7 @@ development_status:
 
   epic-2: in-progress
   2-1-subscribe-to-pro-via-stripe-checkout: done
-  2-2-manage-subscription-self-service: review
+  2-2-manage-subscription-self-service: done
   2-3-buy-credits-with-append-only-ledger: backlog
   2-4-server-side-entitlements-and-metering: backlog
   2-5-paid-jobs-never-starve: backlog

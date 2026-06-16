@@ -1,6 +1,6 @@
 # Story 2.2: Manage Subscription Self-Service
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -245,3 +245,4 @@ These items are spec'd in the original Tasks/Subtasks and not yet implemented; q
 ### Change Log
 
 - 2026-06-15 — story 2.2 implementation lands core. 4/4 ACs satisfied at the production-code layer. BFF green; frontend 163/163 vitest + tsc/lint/build clean. Status → review. Deferrals: BFF integration tests for the 5 new endpoints + README updates + cadence-change confirm dialog (queued in deferred-work).
+- 2026-06-15 — closed deferrals. `BillingManageEndpointsTests.cs` shipped with 13 integration tests covering: GET /me (free/active/canceled), POST /cancel (no-sub → 409, success + metadata, no-reason → null metadata, no-config → 503), POST /resubscribe (no-pending → 409, success), POST /change-cadence (same-cadence → 409, annual swap with proration + idempotency-key, null-StripeItemId → 409), POST /portal (no-customer → 409, success). BFF 59 → **73/73 tests**; frontend 163/163 unchanged. `bff/README.md` Billing section extended with Customer Portal configuration steps. `frontend-spectr-v2/README.md` routes table + vitest baseline bumped. Status → done. Cadence-change confirm dialog remains the only deferred item.
