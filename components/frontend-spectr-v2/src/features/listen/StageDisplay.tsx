@@ -74,6 +74,7 @@ interface Props {
   meterOverlay: ReactNode; // <MeterModule variant="overlay" />
   fireworks: ReactNode; // <Fireworks ref=... />
   radial: ReactNode; // <RadialPulse ref=... />, shown on the 'radial' stage
+  spectro: ReactNode; // <Spectrogram ref=... />, shown on the 'spectro' stage
   infoContent: ReactNode; // title/cover/pills for the info stage
   // Optional ref to the visualizer root so the page's rAF loop can write
   // audio-reactive CSS vars (--laser-pulse / --beat-flash) imperatively
@@ -140,6 +141,9 @@ export function StageDisplay(props: Props) {
 
       {/* radial pulse — Canvas 2D, drawn by the page rAF loop via RadialPulse ref */}
       {stage === 'radial' && props.radial}
+
+      {/* spectrogram — Canvas 2D waterfall, drawn by the page rAF loop */}
+      {stage === 'spectro' && props.spectro}
 
       {/* decorative stages — markup hooks; CSS in the stylesheet drives them */}
       {stage === 'lights' && <LightsStage />}

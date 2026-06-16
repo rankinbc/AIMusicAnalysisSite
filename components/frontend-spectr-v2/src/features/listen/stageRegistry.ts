@@ -1,4 +1,4 @@
-export type StageId = 'eq' | 'radial' | 'lights' | 'bloom' | 'orbit' | 'info';
+export type StageId = 'eq' | 'radial' | 'spectro' | 'lights' | 'bloom' | 'orbit' | 'info';
 
 export interface StageDef {
   id: StageId;
@@ -12,6 +12,7 @@ export interface StageDef {
 export const STAGES: StageDef[] = [
   { id: 'eq', label: 'EQ bars', icon: '▮▮▮' },
   { id: 'radial', label: 'Radial pulse', icon: '◉' },
+  { id: 'spectro', label: 'Spectrogram', icon: '▤' },
   { id: 'lights', label: 'Flashing lights', icon: '▦' },
   { id: 'bloom', label: 'Bloom rings', icon: '◎' },
   { id: 'orbit', label: 'Orbit', icon: '◌' },

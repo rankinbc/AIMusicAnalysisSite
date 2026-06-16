@@ -36,7 +36,16 @@ import { RightRail } from '../../features/listen/RightRail';
 import { StageDisplay, type VizState } from '../../features/listen/StageDisplay';
 import { Fireworks, type FireworksHandle } from '../../features/listen/Fireworks';
 import { RadialPulse, type RadialPulseHandle } from '../../features/listen/RadialPulse';
+import { Spectrogram, type SpectrogramHandle } from '../../features/listen/Spectrogram';
 import { DEFAULT_VIZ_STATE, VizControls } from '../../features/listen/VizControls';
+import { PresetBar } from '../../features/listen/PresetBar';
+import {
+  loadPresets,
+  removePreset,
+  savePresets,
+  upsertPreset,
+  type VizPreset,
+} from '../../features/listen/vizPresets';
 import type { StageId } from '../../features/listen/stageRegistry';
 import { buildRailTabs } from '../../features/listen/tabRegistry';
 import { useAudioGraph, type AudioFrame } from '../../features/listen/useAudioGraph';
@@ -149,6 +158,9 @@ function ListenPage() {
   const fireworksRef = useRef<FireworksHandle | null>(null);
   const patchViz = useCallback((p: Partial<VizState>) => setViz((v) => ({ ...v, ...p })), []);
 
+  // ── Snapshot presets (persisted to localStorage) ──
+  const [presets, setPresets] = useState<VizPreset[]>(() => loadPresets());
+
   // ── Audio-reactive laser wiring ──
   // The visualizer root receives reactive CSS vars (--laser-pulse / --beat-flash)
   // written imperatively from the rAF loop — no per-frame React state. Beat
@@ -156,6 +168,7 @@ function ListenPage() {
   // shared ≤3 Hz limiter (photosensitivity safety). reduced-motion freezes it.
   const stageRootRef = useRef<HTMLDivElement | null>(null);
   const radialRef = useRef<RadialPulseHandle | null>(null);
+  const spectroRef = useRef<SpectrogramHandle | null>(null);
   const beatDetectorRef = useRef(createBeatDetector());
   const dropDetectorRef = useRef(createDropDetector());
   const flashLimiterRef = useRef(createFlashLimiter());
@@ -183,6 +196,46 @@ function ListenPage() {
   dropFxRef.current = viz.dropFx;
   const stageRef = useRef(stage);
   stageRef.current = stage;
+  const vizRef = useRef(viz);
+  vizRef.current = viz;
+
+  // Preset save/recall/delete. Recall crossfades the visualizer (dim → swap →
+  // restore) unless reduced-motion is on, in which case it swaps instantly.
+  const savePreset = useCallback((name: string) => {
+    setPresets((prev) => {
+      const next = upsertPreset(prev, { name, viz: vizRef.current, stage: stageRef.current });
+      savePresets(next);
+      return next;
+    });
+  }, []);
+  const deletePreset = useCallback((name: string) => {
+    setPresets((prev) => {
+      const next = removePreset(prev, name);
+      savePresets(next);
+      return next;
+    });
+  }, []);
+  const recallPreset = useCallback((p: VizPreset) => {
+    // Merge over defaults so presets saved before a field existed still apply.
+    const apply = () => {
+      setViz({ ...DEFAULT_VIZ_STATE, ...p.viz });
+      setStage(p.stage);
+    };
+    const root = stageRootRef.current;
+    if (!root || reduceMotionRef.current) {
+      apply();
+      return;
+    }
+    root.style.transition = 'opacity 0.2s ease';
+    root.style.opacity = '0.2';
+    window.setTimeout(() => {
+      apply();
+      root.style.opacity = '1';
+      window.setTimeout(() => {
+        root.style.transition = '';
+      }, 220);
+    }, 190);
+  }, []);
   // Energy macro as a 0..2 multiplier (50% = ×1), mirrored for the loop.
   const energyMulRef = useRef(1);
   energyMulRef.current = Math.max(0, Math.min(2, viz.energy / 50));
@@ -558,6 +611,9 @@ function ListenPage() {
             radialColor,
             energyMulRef.current,
           );
+        } else if (stageRef.current === 'spectro' && !reduced) {
+          // Spectrogram reads the full-resolution FFT, not the downsampled bars.
+          spectroRef.current?.draw(frame.fftBins, energyMulRef.current);
         }
       }
       raf = requestAnimationFrame(draw);
@@ -696,9 +752,16 @@ function ListenPage() {
           onChange={patchViz}
           onLaunchFireworks={() => fireworksRef.current?.launch()}
         />
+        <PresetBar
+          presets={presets}
+          onSave={savePreset}
+          onRecall={recallPreset}
+          onDelete={deletePreset}
+        />
       </>
     ),
-    [deckStems, stemsLoading, stemUrl, stemEngine, stemPlaying, activateStemMode, viz, patchViz],
+    [deckStems, stemsLoading, stemUrl, stemEngine, stemPlaying, activateStemMode, viz, patchViz,
+      presets, savePreset, recallPreset, deletePreset],
   );
   const notesNode = useMemo(
     () => (
@@ -730,6 +793,7 @@ function ListenPage() {
   );
   const fireworksNode = useMemo(() => <Fireworks ref={fireworksRef} />, []);
   const radialNode = useMemo(() => <RadialPulse ref={radialRef} />, []);
+  const spectroNode = useMemo(() => <Spectrogram ref={spectroRef} />, []);
   const infoContentNode = useMemo(
     () => (
       <>
@@ -804,6 +868,7 @@ function ListenPage() {
               meterOverlay={meterOverlayNode}
               fireworks={fireworksNode}
               radial={radialNode}
+              spectro={spectroNode}
               infoContent={infoContentNode}
               rootRef={stageRootRef}
             />
