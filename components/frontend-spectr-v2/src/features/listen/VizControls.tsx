@@ -37,6 +37,7 @@ export const DEFAULT_VIZ_STATE: VizState = {
   laserColor: '#f472b6',
   laserEffect: 'sweep',
   laserIntensity: 70,
+  energy: 50,
 };
 
 export function VizControls({ viz, onChange, onLaunchFireworks }: Props) {
@@ -54,6 +55,20 @@ export function VizControls({ viz, onChange, onLaunchFireworks }: Props) {
       </div>
 
       <fieldset className={s.sub} disabled={!viz.enabled}>
+        <span className={`${s.subLabel} label`}>Energy {viz.energy}%</span>
+        <Slider.Root
+          className={s.slider}
+          min={0}
+          max={100}
+          value={[viz.energy]}
+          onValueChange={([v]) => onChange({ energy: v ?? 50 })}
+        >
+          <Slider.Track className={s.track}>
+            <Slider.Range className={s.range} />
+          </Slider.Track>
+          <Slider.Thumb className={s.sliderThumb} aria-label="Energy macro" />
+        </Slider.Root>
+
         <span className={`${s.subLabel} label`}>EQ bar color</span>
         <div className={s.swatches}>
           {BAR_COLORS.map((c) => (

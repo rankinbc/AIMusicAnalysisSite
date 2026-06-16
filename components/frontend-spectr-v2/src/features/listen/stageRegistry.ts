@@ -1,4 +1,4 @@
-export type StageId = 'eq' | 'lights' | 'bloom' | 'orbit' | 'info';
+export type StageId = 'eq' | 'radial' | 'lights' | 'bloom' | 'orbit' | 'info';
 
 export interface StageDef {
   id: StageId;
@@ -11,6 +11,7 @@ export interface StageDef {
 // that doesn't exist yet. A future Show mode appends it here.
 export const STAGES: StageDef[] = [
   { id: 'eq', label: 'EQ bars', icon: '▮▮▮' },
+  { id: 'radial', label: 'Radial pulse', icon: '◉' },
   { id: 'lights', label: 'Flashing lights', icon: '▦' },
   { id: 'bloom', label: 'Bloom rings', icon: '◎' },
   { id: 'orbit', label: 'Orbit', icon: '◌' },

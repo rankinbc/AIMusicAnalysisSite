@@ -35,6 +35,7 @@ import { PreviewTools } from '../../features/listen/PreviewTools';
 import { RightRail } from '../../features/listen/RightRail';
 import { StageDisplay, type VizState } from '../../features/listen/StageDisplay';
 import { Fireworks, type FireworksHandle } from '../../features/listen/Fireworks';
+import { RadialPulse, type RadialPulseHandle } from '../../features/listen/RadialPulse';
 import { DEFAULT_VIZ_STATE, VizControls } from '../../features/listen/VizControls';
 import type { StageId } from '../../features/listen/stageRegistry';
 import { buildRailTabs } from '../../features/listen/tabRegistry';
@@ -147,6 +148,7 @@ function ListenPage() {
   // onsets come from the band-energy detector; every FLASH routes through one
   // shared ≤3 Hz limiter (photosensitivity safety). reduced-motion freezes it.
   const stageRootRef = useRef<HTMLDivElement | null>(null);
+  const radialRef = useRef<RadialPulseHandle | null>(null);
   const beatDetectorRef = useRef(createBeatDetector());
   const flashLimiterRef = useRef(createFlashLimiter());
   const pulseEnvRef = useRef(0); // smooth beam pulse envelope 0..1 (motion)
@@ -160,6 +162,13 @@ function ListenPage() {
   laserOnRef.current = viz.laserOn;
   const laserEffectRef = useRef(viz.laserEffect);
   laserEffectRef.current = viz.laserEffect;
+  const barColorRef = useRef(viz.barColor);
+  barColorRef.current = viz.barColor;
+  const stageRef = useRef(stage);
+  stageRef.current = stage;
+  // Energy macro as a 0..2 multiplier (50% = ×1), mirrored for the loop.
+  const energyMulRef = useRef(1);
+  energyMulRef.current = Math.max(0, Math.min(2, viz.energy / 50));
 
   // Half-beat pulse drives the visualizer's --beat CSS var (~0.484s @124 BPM).
   const bpm = Math.max(1, phase2?.bpm ?? phase1?.bpm ?? 124);
@@ -433,15 +442,23 @@ function ListenPage() {
         setMeterFrame(frame);
       }
 
+      // ── Beat detection (shared by the laser + radial visualizers) ──
+      // Run once per frame whenever there's motion to drive. Reduced-motion
+      // freezes everything, so we skip detection (and animation) entirely.
+      const reduced = reduceMotionRef.current;
+      let beatNow = false;
+      if (!reduced && frame.bandAverages.length > 0) {
+        beatNow = beatDetectorRef.current.push(frame.bandAverages, nowMs).beat;
+      }
+
       // ── Beat-reactive laser (imperative CSS vars, no React state) ──
       const root = stageRootRef.current;
       if (root) {
-        const reactive = laserOnRef.current && !reduceMotionRef.current;
-        if (reactive && frame.bandAverages.length > 0) {
-          const { beat } = beatDetectorRef.current.push(frame.bandAverages, nowMs);
-          if (beat) {
-            // Smooth beam pulse fires on every detected beat (it's motion, so
-            // reduced-motion already gates it above).
+        const reactive = laserOnRef.current && !reduced;
+        if (reactive) {
+          if (beatNow) {
+            // Smooth beam pulse fires on every detected beat (motion only;
+            // reduced-motion already gated detection above).
             pulseEnvRef.current = 1;
             // The white-flash channel is photosensitivity-capped: only the
             // flash/strobe/beat effects flash, and only when the shared ≤3 Hz
@@ -485,6 +502,19 @@ function ListenPage() {
           next[i] = Math.min(1, (sum / Math.max(1, hi - lo)) * 1.4);
         }
         setSpectrumValues(next);
+
+        // Drive the radial-pulse canvas from the SAME spectrum array — one
+        // shared loop, no second readFrame. Reduced-motion leaves the canvas
+        // frozen on its last frame (the loop simply stops feeding it).
+        if (stageRef.current === 'radial' && !reduced) {
+          radialRef.current?.draw(
+            next,
+            pulseEnvRef.current,
+            beatNow,
+            barColorRef.current,
+            energyMulRef.current,
+          );
+        }
       }
       raf = requestAnimationFrame(draw);
     };
@@ -655,6 +685,7 @@ function ListenPage() {
     [meterCells],
   );
   const fireworksNode = useMemo(() => <Fireworks ref={fireworksRef} />, []);
+  const radialNode = useMemo(() => <RadialPulse ref={radialRef} />, []);
   const infoContentNode = useMemo(
     () => (
       <>
@@ -728,6 +759,7 @@ function ListenPage() {
               viz={viz}
               meterOverlay={meterOverlayNode}
               fireworks={fireworksNode}
+              radial={radialNode}
               infoContent={infoContentNode}
               rootRef={stageRootRef}
             />

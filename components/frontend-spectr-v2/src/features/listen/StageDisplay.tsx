@@ -60,6 +60,7 @@ export interface VizState {
   laserColor: string; // used when mono
   laserEffect: LaserEffect;
   laserIntensity: number; // 0..400, the source of truth
+  energy: number; // 0..100 macro; 50 = neutral (×1). Scales laser + bars + radial.
 }
 
 interface Props {
@@ -70,6 +71,7 @@ interface Props {
   viz: VizState;
   meterOverlay: ReactNode; // <MeterModule variant="overlay" />
   fireworks: ReactNode; // <Fireworks ref=... />
+  radial: ReactNode; // <RadialPulse ref=... />, shown on the 'radial' stage
   infoContent: ReactNode; // title/cover/pills for the info stage
   // Optional ref to the visualizer root so the page's rAF loop can write
   // audio-reactive CSS vars (--laser-pulse / --beat-flash) imperatively
@@ -80,10 +82,14 @@ interface Props {
 export function StageDisplay(props: Props) {
   const { stage, viz } = props;
 
+  // Energy macro: 50 = neutral (×1), 0 = ×0, 100 = ×2. Scales the laser
+  // intensity, the EQ bar gain, and (via the page loop) the radial reach.
+  const energyMul = Math.max(0, Math.min(2, (viz.energy ?? 50) / 50));
+
   const styleVars: Record<string, string | number> = {
     '--beat': `${props.beatSeconds}s`,
     ...(viz.enabled ? { '--viz-bar': viz.barColor, '--viz-bg': viz.bgColor } : {}),
-    ...(viz.laserOn ? laserVars(viz.laserIntensity) : {}),
+    ...(viz.laserOn ? laserVars(viz.laserIntensity * energyMul) : {}),
     ...(viz.laserMono ? { '--laser-c': viz.laserColor } : {}),
   };
 
@@ -111,7 +117,11 @@ export function StageDisplay(props: Props) {
           </div>
           <div className={s.spectrum} aria-hidden="true">
             {props.spectrumValues.map((v, i) => (
-              <span key={i} className={s.bar} style={{ height: `${Math.round(v * 92)}%` }} />
+              <span
+                key={i}
+                className={s.bar}
+                style={{ height: `${Math.min(100, Math.round(v * 92 * energyMul))}%` }}
+              />
             ))}
           </div>
           <div className={s.freqGrid} aria-hidden="true">
@@ -122,6 +132,9 @@ export function StageDisplay(props: Props) {
           <EqCurveOverlay />
         </>
       )}
+
+      {/* radial pulse — Canvas 2D, drawn by the page rAF loop via RadialPulse ref */}
+      {stage === 'radial' && props.radial}
 
       {/* decorative stages — markup hooks; CSS in the stylesheet drives them */}
       {stage === 'lights' && <LightsStage />}
