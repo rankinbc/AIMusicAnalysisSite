@@ -9,6 +9,14 @@ Real findings that are out of scope for the current story but worth revisiting.
 - **README updates** — bff/README Customer Portal configuration + frontend-spectr-v2/README vitest baseline 145 → 163.
 - **Cadence-change confirm dialog** — Task 7.4 mid-flow confirmation deferred; inline `Switch to monthly` button POSTs directly today.
 
+## Deferred from: code review of story-2.2 (2026-06-15)
+
+- **Cadence-change inline confirm dialog (Task 7.4)** [components/frontend-spectr-v2/src/routes/_app/billing.tsx] — Already tracked above from the original implementation commit; re-confirmed during code review as the sole deferred UX item. The toggle currently POSTs directly to `/api/billing/change-cadence`, violating the "no surprise billing" intent. Land alongside the review-patch commit so a single action can't trigger a real Stripe proration charge.
+- **P14 — `PostgresReachable()` silent-skip pattern in BFF integration tests** [components/bff/tests/Spectr.Bff.Tests/*.cs] — Every BFF integration test class starts with `if (!await PostgresReachable()) { return; }` which makes CI without Postgres report green with zero coverage. Modifying one class is worse than fixing all of them. Bundle with a broader test-infrastructure cleanup (xUnit `Skip.IfNot`-style helper or Testcontainers enforcement).
+- **P15 — `WebApplicationFactory` instances not disposed in `BuildWithFakeStripe`** [components/bff/tests/Spectr.Bff.Tests/BillingManageEndpointsTests.cs] — Same codebase pattern across multiple test classes. Add `await f.DisposeAsync()` to the `finally` blocks alongside the P14 cleanup.
+- **P18 — `SeedSubscriptionAsync` test helper doesn't set `UpdatedAt`** [components/bff/tests/Spectr.Bff.Tests/BillingManageEndpointsTests.cs] — Entity-default initialization currently masks this; pin the column to NOT NULL in a future migration tightening pass and add the field then.
+- **P21 — Price-id → cadence resolution not pre-cached per Task 2.4** [components/bff/src/Spectr.Bff/Endpoints/BillingEndpoints.cs] — Two-entry comparison is cheaper than a dictionary lookup today. When story 2.4's `Entitlements.For(user)` adds richer per-price metadata, fold the cadence map into a singleton `PriceCatalog` service.
+
 ## Deferred from: code review of story-2.1 (2026-06-15)
 
 - **Currency mismatch detection — `PricingDisplay.Currency` vs actual Stripe Price currency** [components/bff/src/Spectr.Bff/Options/PricingDisplayOptions.cs] — If `PricingDisplay.Currency=USD` but the configured Stripe Price object is in EUR, the pricing page renders `$12.99` while Stripe charges `€12.99`. Story 2.10's nightly reconciliation job owns this drift detection.

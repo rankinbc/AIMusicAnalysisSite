@@ -184,6 +184,21 @@ Without keys, the endpoint returns `{ error: { code:
 - **Enable**: invoice history, payment-method updates, billing address.
 - **Disable**: subscription cancellation, subscription pause, plan changes (the BFF handles these inline for the UX-DR33 two-click rule).
 
+**Config keys added in story 2.2 review:**
+- `Stripe:PortalReturnUrl` — explicit landing URL for portal return (defaults to dev origin `http://localhost:5174/billing`). Production sets this to the deployed `/billing` page so users land back on self-service after editing their payment method. Avoids the string-munging-of-SuccessUrl approach that landed users on the checkout-success page instead.
+- `App:FrontendOrigin` — single CORS origin (defaults to `http://localhost:5174`). Required in production so OPTIONS preflight from the deployed frontend doesn't 403. `AllowCredentials` forbids `*` so the explicit origin is the only safe shape.
+
+**Architecture D2 — money-boundary enforcement (story 2.2 review):**
+The five mutation endpoints (`/checkout/subscription`, `/cancel`, `/resubscribe`, `/change-cadence`, `/portal`) CALL Stripe and project the post-call view into the response body WITHOUT persisting to the local `subscriptions` mirror. The webhook processor + `SubscriptionMirrorService` is the only canonical writer. The HTTP 200 response is the immediate optimistic view; the mirror catches up via the inevitable `customer.subscription.updated` Stripe dispatches as a side effect of the Update call.
+
+**Idempotency key recipe (story 2.2 review):**
+- Cancel: `cancel:<userId:N>:<StripeSubscriptionId>`
+- Resubscribe: `resubscribe:<userId:N>:<StripeSubscriptionId>`
+- Change-cadence: `cadence:<userId:N>:<StripeSubscriptionId>:<CurrentPeriodEnd.ToUnixTimeSeconds()>:<newPriceId>`
+- Portal: `portal:<userId:N>:<yyyyMMdd>`
+
+Keys salt with the stable `StripeSubscriptionId` rather than `CurrentPeriodEnd` because story 2.1's mirror service falls back to a `UtcNow + 10y` sentinel when Stripe doesn't supply a period end (which would make timestamp-based keys non-deterministic across pods).
+
 ### Tier derivation on `/me`
 
 `GET /api/auth/me` returns a transitional `tier: "free" | "pro"` field.

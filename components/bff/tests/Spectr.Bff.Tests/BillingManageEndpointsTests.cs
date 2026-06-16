@@ -251,18 +251,30 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
             Assert.True(fake.LastUpdateOptions!.CancelAtPeriodEnd);
             Assert.Equal("too_expensive",
                 fake.LastUpdateOptions.Metadata!["cancel_reason"]);
+            // Story 2.2 review-fix P3 — idempotency key salted with the
+            // stable StripeSubscriptionId, not the period_end timestamp.
             Assert.StartsWith("cancel:", fake.LastUpdateIdempotencyKey);
+            Assert.Contains("sub_test_", fake.LastUpdateIdempotencyKey);
 
-            // Response reflects optimistic mirror update.
+            // Story 2.2 review-fix P1 — response is the projected
+            // post-Stripe view (architecture D2: webhook is canonical
+            // writer; endpoint does not persist locally).
             var body = await resp.Content.ReadFromJsonAsync<BillingSummaryDto>();
             Assert.True(body!.CancelAtPeriodEnd);
+            // Story 2.2 review-fix P22 — Currency goes null when no
+            // upcoming charge exists.
+            Assert.Null(body.Currency);
+            Assert.Null(body.NextChargeCents);
         }
         finally { await CleanupAsync(f, userId); }
     }
 
     [Fact]
-    public async Task PostCancel_Without_Reason_Does_Not_Send_Metadata()
+    public async Task PostCancel_Without_Reason_Sends_Empty_Cancel_Reason_Metadata()
     {
+        // Story 2.2 review-fix P4 / D3 — metadata is ALWAYS sent with
+        // the cancel_reason key (per spec text `reason ?? ""`). Sending
+        // null Metadata to Stripe would clear ALL existing metadata.
         if (!await PostgresReachable()) { return; }
         var (f, fake) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-cancel-noreason");
@@ -271,7 +283,33 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
         {
             await client.PostAsJsonAsync(
                 "/api/billing/cancel", new CancelSubscriptionRequest(null));
-            Assert.Null(fake.LastUpdateOptions!.Metadata);
+            Assert.NotNull(fake.LastUpdateOptions!.Metadata);
+            Assert.Equal(string.Empty,
+                fake.LastUpdateOptions.Metadata!["cancel_reason"]);
+        }
+        finally { await CleanupAsync(f, userId); }
+    }
+
+    [Fact]
+    public async Task PostCancel_Already_Canceling_Returns_409()
+    {
+        // Story 2.2 review-fix P7 — double-cancel is a 409 short-circuit,
+        // not a wasted Stripe roundtrip.
+        if (!await PostgresReachable()) { return; }
+        var (f, fake) = BuildWithFakeStripe();
+        var (client, userId) = await SeedAuthedAsync(f, "billmgr-already-canc");
+        await SeedSubscriptionAsync(
+            f, userId, cancelAt: DateTimeOffset.UtcNow.AddDays(30));
+        try
+        {
+            var resp = await client.PostAsJsonAsync(
+                "/api/billing/cancel", new CancelSubscriptionRequest(null));
+            Assert.Equal(HttpStatusCode.Conflict, resp.StatusCode);
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            Assert.Equal("already_canceling",
+                doc.RootElement.GetProperty("error").GetProperty("code").GetString());
+            // Stripe was NOT called (short-circuited locally).
+            Assert.Null(fake.LastUpdateOptions);
         }
         finally { await CleanupAsync(f, userId); }
     }
@@ -309,9 +347,45 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
             var resp = await client.PostAsync("/api/billing/resubscribe", null);
             Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
             Assert.False(fake.LastUpdateOptions!.CancelAtPeriodEnd);
+            // Story 2.2 review-fix P3 — key salted with subscription id.
             Assert.StartsWith("resubscribe:", fake.LastUpdateIdempotencyKey);
+            Assert.Contains("sub_test_", fake.LastUpdateIdempotencyKey);
+            // Story 2.2 review-fix P5 — metadata sent with empty
+            // cancel_reason (clears the prior reason; does NOT pass
+            // null which would wipe other metadata).
+            Assert.NotNull(fake.LastUpdateOptions.Metadata);
+            Assert.Equal(string.Empty,
+                fake.LastUpdateOptions.Metadata!["cancel_reason"]);
             var body = await resp.Content.ReadFromJsonAsync<BillingSummaryDto>();
             Assert.False(body!.CancelAtPeriodEnd);
+            // Currency comes back (active state has an upcoming charge).
+            Assert.Equal("USD", body.Currency);
+        }
+        finally { await CleanupAsync(f, userId); }
+    }
+
+    [Fact]
+    public async Task PostResubscribe_On_Terminated_Subscription_Returns_409()
+    {
+        // Story 2.2 review-fix P6 — once status flips past active/
+        // trialing/past_due (e.g. webhook delivered `canceled` after
+        // period end), resubscribe must reject up-front instead of
+        // letting Stripe's 400 surface as a 500.
+        if (!await PostgresReachable()) { return; }
+        var (f, fake) = BuildWithFakeStripe();
+        var (client, userId) = await SeedAuthedAsync(f, "billmgr-resub-terminated");
+        await SeedSubscriptionAsync(
+            f, userId,
+            status: "canceled",
+            cancelAt: DateTimeOffset.UtcNow.AddDays(-1));
+        try
+        {
+            var resp = await client.PostAsync("/api/billing/resubscribe", null);
+            Assert.Equal(HttpStatusCode.Conflict, resp.StatusCode);
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            Assert.Equal("no_active_subscription",
+                doc.RootElement.GetProperty("error").GetProperty("code").GetString());
+            Assert.Null(fake.LastUpdateOptions);
         }
         finally { await CleanupAsync(f, userId); }
     }
@@ -353,10 +427,42 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
                 fake.LastUpdateOptions!.Items![0].Price);
             Assert.Equal("create_prorations",
                 fake.LastUpdateOptions.ProrationBehavior);
+            // Story 2.2 review-fix P11 — key includes subscription id +
+            // period_end + target price so a retry across cycles or a
+            // round-trip in the same cycle don't collide.
             Assert.Contains("price_test_annual", fake.LastUpdateIdempotencyKey);
+            Assert.Contains("sub_test_", fake.LastUpdateIdempotencyKey);
 
             var body = await resp.Content.ReadFromJsonAsync<BillingSummaryDto>();
             Assert.Equal("annual", body!.Cadence);
+            // The projected response reflects the new price → new
+            // monthly-cents = annual price.
+            Assert.Equal(9900, body.NextChargeCents);
+        }
+        finally { await CleanupAsync(f, userId); }
+    }
+
+    [Fact]
+    public async Task PostChangeCadence_While_Pending_Cancel_Returns_409()
+    {
+        // Story 2.2 review-fix P10 — cadence swap on a sub pending
+        // cancellation would trigger a surprise proration charge.
+        if (!await PostgresReachable()) { return; }
+        var (f, fake) = BuildWithFakeStripe();
+        var (client, userId) = await SeedAuthedAsync(f, "billmgr-cadence-pending");
+        await SeedSubscriptionAsync(
+            f, userId,
+            priceId: "price_test_monthly",
+            cancelAt: DateTimeOffset.UtcNow.AddDays(20));
+        try
+        {
+            var resp = await client.PostAsJsonAsync(
+                "/api/billing/change-cadence", new ChangeCadenceRequest("annual"));
+            Assert.Equal(HttpStatusCode.Conflict, resp.StatusCode);
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            Assert.Equal("subscription_pending_cancel",
+                doc.RootElement.GetProperty("error").GetProperty("code").GetString());
+            Assert.Null(fake.LastUpdateOptions);
         }
         finally { await CleanupAsync(f, userId); }
     }
@@ -400,7 +506,7 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
     }
 
     [Fact]
-    public async Task PostPortal_Returns_Stripe_Hosted_Url()
+    public async Task PostPortal_Returns_Stripe_Hosted_Url_With_Billing_Return_Path()
     {
         if (!await PostgresReachable()) { return; }
         var (f, fake) = BuildWithFakeStripe();
@@ -413,6 +519,13 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
             var body = await resp.Content.ReadFromJsonAsync<CreatePortalSessionResponse>();
             Assert.StartsWith("https://billing.stripe.com/", body!.Url);
             Assert.StartsWith("portal:", fake.LastPortalIdempotencyKey);
+            // Story 2.2 review-fix P30 — verify the ReturnUrl passed to
+            // Stripe lands the user back on the self-service billing
+            // page (not the checkout-success page from string-munged
+            // SuccessUrl, which was the P2 bug).
+            Assert.NotNull(fake.LastPortalOptions);
+            Assert.EndsWith("/billing", fake.LastPortalOptions!.ReturnUrl);
+            Assert.DoesNotContain("session_id", fake.LastPortalOptions.ReturnUrl);
         }
         finally { await CleanupAsync(f, userId); }
     }
@@ -422,11 +535,68 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
     {
         if (!await PostgresReachable()) { return; }
         var (f, _) = BuildWithFakeStripe(configured: false);
-        var (client, userId) = await SeedAuthedAsync(f, "billmgr-noconfig");
+        var (client, userId) = await SeedAuthedAsync(f, "billmgr-noconfig-cancel");
         try
         {
             var resp = await client.PostAsJsonAsync(
                 "/api/billing/cancel", new CancelSubscriptionRequest(null));
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            Assert.Equal("stripe_not_configured",
+                doc.RootElement.GetProperty("error").GetProperty("code").GetString());
+        }
+        finally { await CleanupAsync(f, userId); }
+    }
+
+    // Story 2.2 review-fix P16 — Task 10.1(g) required `POST /portal`
+    // 503-no-config coverage. Adding parallels for /resubscribe and
+    // /change-cadence so the no-config guard on every mutating endpoint
+    // is locked.
+
+    [Fact]
+    public async Task PostResubscribe_Without_Stripe_Config_Returns_503()
+    {
+        if (!await PostgresReachable()) { return; }
+        var (f, _) = BuildWithFakeStripe(configured: false);
+        var (client, userId) = await SeedAuthedAsync(f, "billmgr-noconfig-resub");
+        try
+        {
+            var resp = await client.PostAsync("/api/billing/resubscribe", null);
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            Assert.Equal("stripe_not_configured",
+                doc.RootElement.GetProperty("error").GetProperty("code").GetString());
+        }
+        finally { await CleanupAsync(f, userId); }
+    }
+
+    [Fact]
+    public async Task PostChangeCadence_Without_Stripe_Config_Returns_503()
+    {
+        if (!await PostgresReachable()) { return; }
+        var (f, _) = BuildWithFakeStripe(configured: false);
+        var (client, userId) = await SeedAuthedAsync(f, "billmgr-noconfig-cad");
+        try
+        {
+            var resp = await client.PostAsJsonAsync(
+                "/api/billing/change-cadence", new ChangeCadenceRequest("annual"));
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            Assert.Equal("stripe_not_configured",
+                doc.RootElement.GetProperty("error").GetProperty("code").GetString());
+        }
+        finally { await CleanupAsync(f, userId); }
+    }
+
+    [Fact]
+    public async Task PostPortal_Without_Stripe_Config_Returns_503()
+    {
+        if (!await PostgresReachable()) { return; }
+        var (f, _) = BuildWithFakeStripe(configured: false);
+        var (client, userId) = await SeedAuthedAsync(f, "billmgr-noconfig-portal");
+        try
+        {
+            var resp = await client.PostAsync("/api/billing/portal", null);
             Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
             Assert.Equal("stripe_not_configured",

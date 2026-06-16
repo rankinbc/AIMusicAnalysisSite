@@ -246,3 +246,67 @@ These items are spec'd in the original Tasks/Subtasks and not yet implemented; q
 
 - 2026-06-15 — story 2.2 implementation lands core. 4/4 ACs satisfied at the production-code layer. BFF green; frontend 163/163 vitest + tsc/lint/build clean. Status → review. Deferrals: BFF integration tests for the 5 new endpoints + README updates + cadence-change confirm dialog (queued in deferred-work).
 - 2026-06-15 — closed deferrals. `BillingManageEndpointsTests.cs` shipped with 13 integration tests covering: GET /me (free/active/canceled), POST /cancel (no-sub → 409, success + metadata, no-reason → null metadata, no-config → 503), POST /resubscribe (no-pending → 409, success), POST /change-cadence (same-cadence → 409, annual swap with proration + idempotency-key, null-StripeItemId → 409), POST /portal (no-customer → 409, success). BFF 59 → **73/73 tests**; frontend 163/163 unchanged. `bff/README.md` Billing section extended with Customer Portal configuration steps. `frontend-spectr-v2/README.md` routes table + vitest baseline bumped. Status → done. Cadence-change confirm dialog remains the only deferred item.
+- 2026-06-15 — `bmad-code-review` (Sonnet, 3-layer adversarial: Blind Hunter + Edge Case Hunter + Acceptance Auditor). 62 raw findings → 30 patches + 3 decision-needed + 1 defer + 9 dismissed after triage. Status → in-progress until patches land. Critical money-correctness findings: optimistic local writes to the `subscriptions` mirror violate architecture D2 (P1); Portal `ReturnUrl` string-munging produces wrong post-portal landing page (P2); cancel/resubscribe idempotency keys salted with `CurrentPeriodEnd` go non-deterministic when story 2.1's sentinel (UtcNow+10y) is in play (P3); CORS hardcoded to localhost:5174 will break prod (P8). Plus 7 testing-gap patches (P12-P18) covering the original Task 10.1+10.2 deferred work and the tautological `cancel-dialog-flow` + `CancelDialog` tests.
+- 2026-06-15 — 26 review patches landed (4 deferred as low-impact codebase-pattern items). 3 decisions resolved (D1: keep `Cancel my subscription` label; D2: map `past_due` → `"pro"` in `ResolveTier` for Stripe-aligned dunning-grace semantics; D3: always include `cancel_reason` metadata per spec text to avoid Stripe-side metadata clearing). BFF 73 → **81/81 tests**; frontend 163 → **171/171 vitest**, tsc/lint/build clean. Architecture D2 money-boundary now strictly enforced — cancel/resubscribe/change-cadence endpoints CALL Stripe and project the post-call DTO without writing the mirror; webhook reconciles canonical state. Idempotency keys salted with stable `StripeSubscriptionId` (not the UtcNow+10y sentinel-prone `CurrentPeriodEnd`). New `StripeOptions.PortalReturnUrl` config key. Status → done. Cadence-change confirm dialog (Task 7.4) remains the only deferred UX item.
+
+### Review Findings
+
+3-layer adversarial review (Sonnet × 3). 62 raw findings → 30 patches + 3 decision-needed + 1 defer + 9 dismissed.
+
+**Resolution status (2026-06-15):** 26 patches applied + 3 decisions resolved + 1 defer carried + 9 dismissed. 4 low-impact patches re-classified to defer (codebase-wide test patterns; modifying one class inconsistently makes it worse). BFF 73 → 81/81 tests; frontend 163 → 171/171 vitest.
+
+| Code | Severity | Title | Status | Files |
+|---|---|---|---|---|
+| D1 | — | Cancel-button label spec contradiction (`Confirm cancellation` vs `Cancel my subscription`) | Resolved → keep `Cancel my subscription` (Task 7.5 wording); AC4 to be updated in a spec-editorial pass | spec |
+| D2 | — | `past_due` tier asymmetry | Resolved → `ResolveTier` maps `past_due` → `"pro"` for Stripe-aligned dunning-grace semantics | `AuthEndpoints.cs` |
+| D3 | — | `cancel_reason` metadata always-present vs conditional | Resolved → always include the key (spec text wins; defends against Stripe-side metadata clearing) | `BillingEndpoints.cs` |
+| P1 | H | Architecture D2 violation — optimistic mirror writes in cancel/resubscribe/change-cadence | Applied — endpoints call Stripe, project DTO inline, no local SaveChanges; webhook reconciles | `BillingEndpoints.cs` |
+| P2 | H | `PostPortal.ReturnUrl` string-munging from `SuccessUrl` | Applied — new `StripeOptions.PortalReturnUrl` config key | `StripeOptions.cs`, `BillingEndpoints.cs` |
+| P3 | H | Idempotency keys salted with sentinel `CurrentPeriodEnd` (UtcNow+10y) | Applied — keys salted with stable `StripeSubscriptionId` | `BillingEndpoints.cs` |
+| P4 | H | `PostCancel` Metadata=null clears existing Stripe metadata | Applied — always include `cancel_reason ?? ""` key (per spec) | `BillingEndpoints.cs` |
+| P5 | H | `PostResubscribe` Metadata default null also clears metadata | Applied — explicit empty `cancel_reason = ""` (reverses the prior cancel intent) | `BillingEndpoints.cs` |
+| P6 | H | `PostResubscribe` lacks status guard | Applied — rejects with `no_active_subscription` 409 on terminated subs | `BillingEndpoints.cs` |
+| P7 | H | `PostCancel` lacks `already_canceling` early-return | Applied — 409 short-circuit before the Stripe roundtrip | `BillingEndpoints.cs` |
+| P8 | H | CORS hardcoded to `localhost:5174` | Applied — reads `App:FrontendOrigin` from config (defaults to dev origin) | `Program.cs` |
+| P9 | H | `SubscriptionMirrorService` overwrites `StripeItemId` with null on empty items | Applied — only overwrites when incoming itemId is non-null | `SubscriptionMirrorService.cs` |
+| P10 | H | `PostChangeCadence` allows cadence swap on a sub pending cancel | Applied — `subscription_pending_cancel` 409 guard | `BillingEndpoints.cs` |
+| P11 | H | Cadence idempotency key not bounded across cycles | Applied — includes `StripeSubscriptionId` + `CurrentPeriodEnd.ToUnixTimeSeconds()` + target price | `BillingEndpoints.cs` |
+| P12 | M | `CancelDialog.test.tsx` zero behavioral assertions | Applied — flattened Radix Portal stub + all 4 Task 8.4 assertions land | `CancelDialog.test.tsx` |
+| P13 | M | `cancel-dialog-flow.test.ts` tautological | Applied — state machine now invokes `onConfirmed` callback so a detached callback regression is caught | `cancel-dialog-flow.test.ts` |
+| P14 | M | BFF tests silently pass when Postgres unreachable | **Deferred** — codebase-wide `PostgresReachable()` convention; isolated fix to one class makes it worse. Bundle with a test-infrastructure cleanup story | `PRPs/deferred-work.md` |
+| P15 | M | `BuildWithFakeStripe` factory never disposed | **Deferred** — consistent with WebApplicationFactory usage in other test classes; address as part of broader cleanup | `PRPs/deferred-work.md` |
+| P16 | M | Task 10.1(g) — `/portal` 503-no-config test missing | Applied — added 3 parallel tests for /resubscribe, /change-cadence, /portal | `BillingManageEndpointsTests.cs` |
+| P17 | M | Task 10.2 — `SubscriptionMirrorServiceTests` StripeItemId extension not landed | Applied — 2 new tests (populate from first item; preserve on empty-items webhook) | `SubscriptionMirrorServiceTests.cs` |
+| P18 | M | `SeedSubscriptionAsync` test helper omits `UpdatedAt` | **Deferred** — entity-default initialization sets it on insert; revisit if/when EF stops auto-defaulting | `PRPs/deferred-work.md` |
+| P19 | M | `billing-page-state.test.ts` PRO_CANCELED fixture lacks lapsed-state case | Applied — new fixture for `tier=free, status=canceled, cancelAtPeriodEnd=false` | `billing-page-state.test.ts` |
+| P20 | M | `ResolveCadence` logs no warning on `"unknown"` | Applied — `ILogger<BillingWebhook>` threaded through; warns with both configured prices | `BillingEndpoints.cs` |
+| P21 | M | Price-id → cadence resolution not pre-cached (Task 2.4) | **Deferred** — 2-entry comparison is cheaper than a dictionary lookup; bundle with a singleton service refactor when entitlements (story 2.4) adds more price-tier mapping | `PRPs/deferred-work.md` |
+| P22 | M | `Currency` returned non-null in canceled state — wire-shape drift | Applied — `BuildSummary` returns `Currency: cancelAtPeriodEnd ? null : pricing.Currency` | `BillingEndpoints.cs` |
+| P23 | M | `ResolveCadence` null-bang on potentially-null config | Applied — `PostChangeCadence` adds explicit `stripe_not_configured` 503 fast-fail | `BillingEndpoints.cs` |
+| P24 | M | `/audio` substring carve-out is loose | Applied — `StartsWith("/api/versions/") && EndsWith("/audio")` | `Program.cs` |
+| P25 | M | `isStripeHostedUrl` doesn't explicitly reject scheme-relative URLs | Applied — tests added for `//billing.stripe.com/x` + `javascript:` + `data:` (implementation already had the `https:`-only guard) | `stripe-url.test.ts` |
+| P26 | L | `extractApiMessage` duplicated | Applied — extracted to `api/error-utils.ts`; consumed by both `billing.tsx` and `CancelDialog.tsx` | `error-utils.ts`, `billing.tsx`, `CancelDialog.tsx` |
+| P27 | L | `CancelDialog` reason state not reset on close | Applied — `setReason('')` on `onOpenChange` close + "Keep subscription" button | `CancelDialog.tsx` |
+| P28 | L | `BillingPage` `useQuery` has no `staleTime` | Applied — `staleTime: 30_000` so tab-focus after Stripe Portal doesn't flicker | `billing.tsx` |
+| P29 | L | Migration lacks nullable-backfill comment (Task 6.2) | Applied — migration `Up()` carries the rationale | `20260616004406_AddSubscriptionStripeItemId.cs` |
+| P30 | L | `PostPortal_Returns_Stripe_Hosted_Url` test doesn't verify `ReturnUrl` | Applied — asserts `EndsWith("/billing")` + `DoesNotContain("session_id")` | `BillingManageEndpointsTests.cs` |
+| DF1 | — | Cadence-change confirm dialog (Task 7.4) | Deferred (carried from original story commit) — toggle still POSTs directly | `PRPs/deferred-work.md` |
+
+#### Cumulative test deltas
+
+- BFF: 73 → **81/81 tests** (+3 cancel-flow scenarios: `already_canceling`, `subscription_pending_cancel`, terminated resubscribe; +3 no-config 503 tests for /resubscribe, /change-cadence, /portal; +2 mirror StripeItemId tests).
+- Frontend: 163 → **171/171 vitest** (+3 CancelDialog Task 8.4 behavioral assertions replacing the 2 shape-only ones; +1 billing-page lapsed-state fixture; +2 stripe-url scheme-relative + js-scheme tests).
+- All four frontend gates green: tsc, eslint --max-warnings 0, vite build, vitest.
+
+#### Dismissed (9)
+
+- R1: `userId:N` / `ToUnixTimeSeconds()` documentation gap in spec table — pure doc nit.
+- R2: `CancelSubscriptionRequest.reason?: string | null` type redundancy — benign at runtime, idiomatic TS.
+- R3: Portal session 24h-vs-5min comment mismatch — pure comment fix.
+- R4: Portal UTC midnight 2-key edge — workable, very low impact.
+- R5: `StripeSubscriptionClient` field-init timing — consistent with story 2.1's `IStripeCheckoutClient` precedent; already tracked in deferred-work for cross-singleton DI captive-dep audit.
+- R6: `handlePortal` `setPendingAction(null)` after `window.location.assign` — benign (component unmounts on navigation).
+- R7: Portal error toast "contact support" polish — pure polish.
+- R8: `JetBrains Mono` font literal in `*.module.css` — no `--font-mono` token exists in `tokens.css`; consistent with current codebase font handling (story 1.7 baseline). Defer to a global font-token sweep.
+- R9: README route reclassification `_app/_public/billing/cancelled` without route file in diff — verified: `routes/_public/billing.cancelled.tsx` already exists in the tree; README correctly updated to match.
+

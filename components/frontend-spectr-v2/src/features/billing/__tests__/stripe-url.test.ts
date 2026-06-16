@@ -36,4 +36,19 @@ describe('isStripeHostedUrl', () => {
     expect(isStripeHostedUrl('not a url', 'checkout')).toBe(false);
     expect(isStripeHostedUrl('', 'portal')).toBe(false);
   });
+
+  // Story 2.2 review-fix P25 — defence-in-depth: explicitly reject
+  // scheme-relative URLs and dangerous schemes. Today both throw in
+  // `new URL()` because there's no base URL (so we land in the catch),
+  // but pin the behaviour so a future refactor that passes a base URL
+  // doesn't silently flip these from safe to unsafe.
+  it('rejects scheme-relative URLs', () => {
+    expect(isStripeHostedUrl('//billing.stripe.com/x', 'portal')).toBe(false);
+    expect(isStripeHostedUrl('//checkout.stripe.com/x', 'checkout')).toBe(false);
+  });
+
+  it('rejects javascript: and data: schemes', () => {
+    expect(isStripeHostedUrl('javascript:alert(1)', 'portal')).toBe(false);
+    expect(isStripeHostedUrl('data:text/html,<script>alert(1)</script>', 'portal')).toBe(false);
+  });
 });

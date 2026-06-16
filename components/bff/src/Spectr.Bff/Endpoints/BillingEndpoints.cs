@@ -209,12 +209,22 @@ public static class BillingEndpoints
     }
 
     // ── Story 2.2: manage-subscription endpoints ────────────────────────────
+    //
+    // Architecture D2 / Story 2.2 review-fix P1 — every mutation endpoint
+    // here CALLS Stripe (which is canonical), then projects the post-call
+    // state into a BillingSummaryDto WITHOUT persisting to the local
+    // mirror. The webhook processor + SubscriptionMirrorService is the
+    // ONLY canonical writer to the `subscriptions` table. The response
+    // body is the immediate post-mutation view for the frontend; the
+    // mirror catches up via the inevitable `customer.subscription.updated`
+    // event Stripe dispatches as a side effect of every UpdateAsync.
 
     private static async Task<IResult> GetBillingSummary(
         ClaimsPrincipal currentUser,
         AppDbContext db,
         IOptions<StripeOptions> stripeOpts,
         IOptions<PricingDisplayOptions> pricingOpts,
+        ILogger<BillingWebhook> logger,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -222,35 +232,17 @@ public static class BillingEndpoints
             .FirstOrDefaultAsync(s => s.UserId == userId, ct);
         if (sub is null)
         {
-            return Results.Ok(new BillingSummaryDto(
-                Tier: "free", Status: null, Cadence: null, PriceId: null,
-                CurrentPeriodEnd: null, CancelAt: null,
-                CancelAtPeriodEnd: false,
-                NextChargeAt: null, NextChargeCents: null, Currency: null));
+            return Results.Ok(FreeSummary());
         }
 
-        var cadence = ResolveCadence(sub.PriceId, stripeOpts.Value);
-        var tier = AuthEndpoints.ResolveTier(sub.Status);
-        var cancelAtPeriodEnd = sub.CancelAt is not null;
-        var pricing = pricingOpts.Value;
-        int? nextChargeCents = cadence switch
-        {
-            "monthly" => pricing.ProMonthlyCents,
-            "annual" => pricing.ProAnnualCents,
-            _ => null,
-        };
-
-        return Results.Ok(new BillingSummaryDto(
-            Tier: tier,
-            Status: sub.Status,
-            Cadence: cadence,
-            PriceId: sub.PriceId,
-            CurrentPeriodEnd: sub.CurrentPeriodEnd,
-            CancelAt: sub.CancelAt,
-            CancelAtPeriodEnd: cancelAtPeriodEnd,
-            NextChargeAt: cancelAtPeriodEnd ? null : sub.CurrentPeriodEnd,
-            NextChargeCents: cancelAtPeriodEnd ? null : nextChargeCents,
-            Currency: pricing.Currency));
+        return Results.Ok(BuildSummary(
+            status: sub.Status,
+            priceId: sub.PriceId,
+            currentPeriodEnd: sub.CurrentPeriodEnd,
+            cancelAt: sub.CancelAt,
+            stripeOpts: stripeOpts.Value,
+            pricingOpts: pricingOpts.Value,
+            logger: logger));
     }
 
     private static async Task<IResult> PostCancel(
@@ -260,6 +252,7 @@ public static class BillingEndpoints
         IOptions<StripeOptions> stripeOpts,
         IOptions<PricingDisplayOptions> pricingOpts,
         IStripeSubscriptionClient stripeSubs,
+        ILogger<BillingWebhook> logger,
         CancellationToken ct)
     {
         var opts = stripeOpts.Value;
@@ -271,7 +264,7 @@ public static class BillingEndpoints
         }
 
         var userId = currentUser.UserId();
-        var sub = await db.Subscriptions
+        var sub = await db.Subscriptions.AsNoTracking()
             .FirstOrDefaultAsync(s => s.UserId == userId, ct);
         if (sub is null
             || (sub.Status != "active" && sub.Status != "trialing" && sub.Status != "past_due"))
@@ -281,34 +274,56 @@ public static class BillingEndpoints
                 "You don't have an active subscription to cancel.");
         }
 
-        // Idempotency key salted with current period so a new period
-        // (post-renewal) gets a fresh key; retries within the period
-        // collapse on Stripe's side.
-        var idempotencyKey =
-            $"cancel:{userId:N}:{sub.CurrentPeriodEnd.ToUnixTimeSeconds()}";
-        var metadata = new Dictionary<string, string>();
-        if (!string.IsNullOrWhiteSpace(body?.Reason))
+        // Story 2.2 review-fix P7 — double-cancel guard. A user already
+        // pending cancel calling /cancel again would otherwise re-hit
+        // Stripe (collapsed on the idempotency key) for no behavior
+        // change. Surface a clean 409 instead so the frontend can
+        // refresh state and the BFF avoids the wasted roundtrip.
+        if (sub.CancelAt is not null)
         {
-            metadata["cancel_reason"] = body.Reason!.Trim();
+            return ErrorEnvelope.Build(StatusCodes.Status409Conflict,
+                "already_canceling",
+                "This subscription is already scheduled to cancel.");
         }
+
+        // Story 2.2 review-fix P3 — idempotency keys are salted with the
+        // stable `StripeSubscriptionId` rather than `CurrentPeriodEnd`.
+        // The mirror's period_end can fall back to a UtcNow-derived
+        // sentinel (story 2.1 review-fix P20) when the payload is
+        // missing the field, which would produce a different unix
+        // timestamp on each pod and defeat idempotency.
+        var idempotencyKey = $"cancel:{userId:N}:{sub.StripeSubscriptionId}";
+
+        // Story 2.2 review-fix P4 / D3 — always include the
+        // `cancel_reason` key (per spec text `reason ?? ""`). Passing
+        // null Metadata to Stripe clears ALL existing metadata; always
+        // including the key keeps analytics consistent and never wipes
+        // other Stripe-side metadata.
+        var reason = body?.Reason?.Trim() ?? string.Empty;
         await stripeSubs.UpdateAsync(
             sub.StripeSubscriptionId,
             new SubscriptionUpdateOptions
             {
                 CancelAtPeriodEnd = true,
-                Metadata = metadata.Count > 0 ? metadata : null,
+                Metadata = new Dictionary<string, string>
+                {
+                    ["cancel_reason"] = reason,
+                },
             },
             idempotencyKey,
             ct);
 
-        // Apply the local mirror change optimistically so the response
-        // reflects the new state without waiting for the webhook. The
-        // webhook will reconcile via the existing SubscriptionMirrorService.
-        sub.CancelAt = sub.CurrentPeriodEnd;
-        sub.UpdatedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(ct);
-
-        return await GetBillingSummary(currentUser, db, stripeOpts, pricingOpts, ct);
+        // Architecture D2: do NOT write the mirror here. The webhook
+        // reconciles the canonical state. Project the post-Stripe view
+        // for the immediate response.
+        return Results.Ok(BuildSummary(
+            status: sub.Status,
+            priceId: sub.PriceId,
+            currentPeriodEnd: sub.CurrentPeriodEnd,
+            cancelAt: sub.CurrentPeriodEnd,
+            stripeOpts: opts,
+            pricingOpts: pricingOpts.Value,
+            logger: logger));
     }
 
     private static async Task<IResult> PostResubscribe(
@@ -317,9 +332,11 @@ public static class BillingEndpoints
         IOptions<StripeOptions> stripeOpts,
         IOptions<PricingDisplayOptions> pricingOpts,
         IStripeSubscriptionClient stripeSubs,
+        ILogger<BillingWebhook> logger,
         CancellationToken ct)
     {
-        if (!stripeOpts.Value.IsConfigured)
+        var opts = stripeOpts.Value;
+        if (!opts.IsConfigured)
         {
             return ErrorEnvelope.Build(StatusCodes.Status503ServiceUnavailable,
                 "stripe_not_configured",
@@ -327,7 +344,7 @@ public static class BillingEndpoints
         }
 
         var userId = currentUser.UserId();
-        var sub = await db.Subscriptions
+        var sub = await db.Subscriptions.AsNoTracking()
             .FirstOrDefaultAsync(s => s.UserId == userId, ct);
         if (sub is null || sub.CancelAt is null)
         {
@@ -335,20 +352,45 @@ public static class BillingEndpoints
                 "not_pending_cancel",
                 "There's no pending cancellation to reverse.");
         }
+        // Story 2.2 review-fix P6 — guard against a terminated sub.
+        // Once Stripe transitions status to `canceled` (post-period-end),
+        // Update returns a 400-class error that would surface as a 500.
+        // Reject up front with a clean 409.
+        if (sub.Status != "active" && sub.Status != "trialing" && sub.Status != "past_due")
+        {
+            return ErrorEnvelope.Build(StatusCodes.Status409Conflict,
+                "no_active_subscription",
+                "This subscription has ended; start a new one from the pricing page.");
+        }
 
-        var idempotencyKey =
-            $"resubscribe:{userId:N}:{sub.CurrentPeriodEnd.ToUnixTimeSeconds()}";
+        var idempotencyKey = $"resubscribe:{userId:N}:{sub.StripeSubscriptionId}";
+
+        // Story 2.2 review-fix P5 — explicit empty metadata key so we
+        // don't accidentally clear other Stripe-side metadata. We also
+        // clear the cancel_reason since resubscribing reverses the
+        // intent (story 2.10 reconciliation can see the empty string
+        // and treat it as "user reactivated").
         await stripeSubs.UpdateAsync(
             sub.StripeSubscriptionId,
-            new SubscriptionUpdateOptions { CancelAtPeriodEnd = false },
+            new SubscriptionUpdateOptions
+            {
+                CancelAtPeriodEnd = false,
+                Metadata = new Dictionary<string, string>
+                {
+                    ["cancel_reason"] = string.Empty,
+                },
+            },
             idempotencyKey,
             ct);
 
-        sub.CancelAt = null;
-        sub.UpdatedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(ct);
-
-        return await GetBillingSummary(currentUser, db, stripeOpts, pricingOpts, ct);
+        return Results.Ok(BuildSummary(
+            status: sub.Status,
+            priceId: sub.PriceId,
+            currentPeriodEnd: sub.CurrentPeriodEnd,
+            cancelAt: null,
+            stripeOpts: opts,
+            pricingOpts: pricingOpts.Value,
+            logger: logger));
     }
 
     private static async Task<IResult> PostChangeCadence(
@@ -358,6 +400,7 @@ public static class BillingEndpoints
         IOptions<StripeOptions> stripeOpts,
         IOptions<PricingDisplayOptions> pricingOpts,
         IStripeSubscriptionClient stripeSubs,
+        ILogger<BillingWebhook> logger,
         CancellationToken ct)
     {
         var opts = stripeOpts.Value;
@@ -379,8 +422,20 @@ public static class BillingEndpoints
                 "invalid_cadence", "Cadence must be 'monthly' or 'annual'.");
         }
 
+        // Story 2.2 review-fix P23 — defensive null-check on the price
+        // options before the null-bang dereference below. IsConfigured
+        // already guarantees both are non-empty, but make the dependency
+        // explicit so a future loosening of IsConfigured doesn't NRE here.
+        if (string.IsNullOrWhiteSpace(opts.PriceProMonthly)
+            || string.IsNullOrWhiteSpace(opts.PriceProAnnual))
+        {
+            return ErrorEnvelope.Build(StatusCodes.Status503ServiceUnavailable,
+                "stripe_not_configured",
+                "Stripe price ids are not configured.");
+        }
+
         var userId = currentUser.UserId();
-        var sub = await db.Subscriptions
+        var sub = await db.Subscriptions.AsNoTracking()
             .FirstOrDefaultAsync(s => s.UserId == userId, ct);
         if (sub is null
             || (sub.Status != "active" && sub.Status != "trialing"))
@@ -389,8 +444,18 @@ public static class BillingEndpoints
                 "no_active_subscription",
                 "You don't have an active subscription to modify.");
         }
+        // Story 2.2 review-fix P10 — block cadence change while a
+        // cancellation is pending. The frontend hides the toggle in
+        // this state, but a direct API call would otherwise trigger a
+        // real Stripe proration charge on a sub the user is leaving.
+        if (sub.CancelAt is not null)
+        {
+            return ErrorEnvelope.Build(StatusCodes.Status409Conflict,
+                "subscription_pending_cancel",
+                "Resubscribe before changing cadence.");
+        }
 
-        var currentCadence = ResolveCadence(sub.PriceId, opts);
+        var currentCadence = ResolveCadence(sub.PriceId, opts, logger);
         if (currentCadence == cadence)
         {
             return ErrorEnvelope.Build(StatusCodes.Status409Conflict,
@@ -408,9 +473,13 @@ public static class BillingEndpoints
         }
 
         var newPriceId = cadence == "monthly"
-            ? opts.PriceProMonthly!
-            : opts.PriceProAnnual!;
-        var idempotencyKey = $"cadence:{userId:N}:{newPriceId}";
+            ? opts.PriceProMonthly
+            : opts.PriceProAnnual;
+        // Story 2.2 review-fix P11 — period-salted so a retry of the
+        // same direction within a future billing cycle gets a fresh
+        // idempotency key (Stripe caches keys for 24h).
+        var idempotencyKey =
+            $"cadence:{userId:N}:{sub.StripeSubscriptionId}:{sub.CurrentPeriodEnd.ToUnixTimeSeconds()}:{newPriceId}";
         await stripeSubs.UpdateAsync(
             sub.StripeSubscriptionId,
             new SubscriptionUpdateOptions
@@ -428,14 +497,15 @@ public static class BillingEndpoints
             idempotencyKey,
             ct);
 
-        // Optimistic mirror: reflect the new price id immediately. The
-        // webhook will reconcile the full subscription state (period_end,
-        // etc.) when it arrives.
-        sub.PriceId = newPriceId;
-        sub.UpdatedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(ct);
-
-        return await GetBillingSummary(currentUser, db, stripeOpts, pricingOpts, ct);
+        // Architecture D2: no local mirror write — webhook reconciles.
+        return Results.Ok(BuildSummary(
+            status: sub.Status,
+            priceId: newPriceId,
+            currentPeriodEnd: sub.CurrentPeriodEnd,
+            cancelAt: sub.CancelAt,
+            stripeOpts: opts,
+            pricingOpts: pricingOpts.Value,
+            logger: logger));
     }
 
     private static async Task<IResult> PostPortal(
@@ -462,9 +532,12 @@ public static class BillingEndpoints
                 "You need to start a subscription before opening the billing portal.");
         }
 
-        var portalReturnUrl = stripeOpts.Value.SuccessUrl.Replace(
-            "?session_id={CHECKOUT_SESSION_ID}", string.Empty,
-            StringComparison.Ordinal);
+        // Story 2.2 review-fix P2 — use the dedicated PortalReturnUrl
+        // option instead of string-munging SuccessUrl. The prior code
+        // produced `/billing/success` (the checkout success route)
+        // instead of `/billing` (the self-service page the user came
+        // from). Defaults to the dev origin; prod overrides via env.
+        var portalReturnUrl = stripeOpts.Value.PortalReturnUrl;
         var dayBucket = DateTimeOffset.UtcNow.Date.ToString("yyyyMMdd");
         var idempotencyKey = $"portal:{userId:N}:{dayBucket}";
         var session = await stripeSubs.CreatePortalSessionAsync(
@@ -479,14 +552,72 @@ public static class BillingEndpoints
         return Results.Ok(new CreatePortalSessionResponse(session.Url));
     }
 
-    // Cadence resolution from a Stripe price id (small in-memory map; the
-    // four-way lookup is hot-path).
-    private static string ResolveCadence(string priceId, StripeOptions opts)
+    // ── Story 2.2 helpers ───────────────────────────────────────────────────
+
+    // Story 2.2 review-fix P22 — `Currency` is null when there is no
+    // upcoming charge (free or canceled state). Matches the frontend
+    // type declaration `currency: string | null` and prevents stale
+    // currency strings from being read in canceled-state UI.
+    private static BillingSummaryDto FreeSummary() => new(
+        Tier: "free", Status: null, Cadence: null, PriceId: null,
+        CurrentPeriodEnd: null, CancelAt: null,
+        CancelAtPeriodEnd: false,
+        NextChargeAt: null, NextChargeCents: null, Currency: null);
+
+    // Project a known subscription state into the response DTO. Used by
+    // both the read path (GetBillingSummary) and the write paths
+    // (Cancel / Resubscribe / ChangeCadence) so the post-mutation
+    // response shape is identical to a subsequent GET.
+    private static BillingSummaryDto BuildSummary(
+        string status,
+        string priceId,
+        DateTimeOffset currentPeriodEnd,
+        DateTimeOffset? cancelAt,
+        StripeOptions stripeOpts,
+        PricingDisplayOptions pricingOpts,
+        ILogger<BillingWebhook> logger)
+    {
+        var cadence = ResolveCadence(priceId, stripeOpts, logger);
+        var tier = AuthEndpoints.ResolveTier(status);
+        var cancelAtPeriodEnd = cancelAt is not null;
+        int? nextChargeCents = cadence switch
+        {
+            "monthly" => pricingOpts.ProMonthlyCents,
+            "annual" => pricingOpts.ProAnnualCents,
+            _ => null,
+        };
+
+        return new BillingSummaryDto(
+            Tier: tier,
+            Status: status,
+            Cadence: cadence,
+            PriceId: priceId,
+            CurrentPeriodEnd: currentPeriodEnd,
+            CancelAt: cancelAt,
+            CancelAtPeriodEnd: cancelAtPeriodEnd,
+            NextChargeAt: cancelAtPeriodEnd ? null : currentPeriodEnd,
+            NextChargeCents: cancelAtPeriodEnd ? null : nextChargeCents,
+            Currency: cancelAtPeriodEnd ? null : pricingOpts.Currency);
+    }
+
+    // Cadence resolution from a Stripe price id. The configured price
+    // map is tiny (2 entries) so a comparison is cheaper than a
+    // dictionary lookup; the `unknown` branch warns the operator so
+    // admin price drift (a price was archived and a new one rotated in)
+    // doesn't go silently undetected — story 2.2 / Task 2.2 spec.
+    private static string ResolveCadence(
+        string priceId, StripeOptions opts, ILogger<BillingWebhook>? logger)
     {
         if (string.Equals(priceId, opts.PriceProMonthly, StringComparison.Ordinal))
             return "monthly";
         if (string.Equals(priceId, opts.PriceProAnnual, StringComparison.Ordinal))
             return "annual";
+        // Story 2.2 review-fix P20 — warn on price drift so ops can
+        // catch admin-side price rotation that doesn't sync to BFF
+        // config. Story 2.10's reconciliation job is the long-term fix.
+        logger?.LogWarning(
+            "Subscription price id {PriceId} matches neither configured monthly ({Monthly}) nor annual ({Annual}) — cadence unknown",
+            priceId, opts.PriceProMonthly, opts.PriceProAnnual);
         return "unknown";
     }
 

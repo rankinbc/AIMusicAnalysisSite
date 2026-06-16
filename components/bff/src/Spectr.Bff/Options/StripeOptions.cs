@@ -20,6 +20,12 @@ public sealed class StripeOptions
     public string SuccessUrl { get; init; } = "http://localhost:5174/billing/success?session_id={CHECKOUT_SESSION_ID}";
     public string CancelUrl { get; init; } = "http://localhost:5174/billing/cancelled";
 
+    // Story 2.2 review-fix P2 — Customer Portal landing URL. Used as the
+    // `ReturnUrl` on Stripe portal sessions so users land back on the
+    // self-service billing page (not the checkout-success route). Kept
+    // separate from SuccessUrl so dev/stage/prod can rotate independently.
+    public string PortalReturnUrl { get; init; } = "http://localhost:5174/billing";
+
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(SecretKey)
         && !string.IsNullOrWhiteSpace(WebhookSecret)

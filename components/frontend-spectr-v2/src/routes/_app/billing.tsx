@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
+import { extractApiMessage } from '../../api/error-utils';
 import { ApiError, fetcher } from '../../api/fetcher';
 import type {
   BillingSummaryResponse,
@@ -38,6 +39,12 @@ function BillingPage() {
     queryKey: ['billing', 'me'],
     queryFn: () =>
       fetcher<BillingSummaryResponse>({ url: '/billing/me', method: 'GET' }),
+    // Story 2.2 review-fix P28 — billing state only changes via explicit
+    // user actions (cancel/resub/cadence/portal) or webhook arrival.
+    // Without staleTime, every tab focus (especially after returning
+    // from the Stripe Portal) refires `GET /billing/me` and flickers
+    // the UI. 30s is short enough that webhook lag is bounded.
+    staleTime: 30_000,
   });
 
   if (isLoading || !data) {
@@ -281,10 +288,3 @@ function CanceledCard({ summary, onMutated }: CanceledCardProps) {
   );
 }
 
-function extractApiMessage(body: unknown): string | undefined {
-  if (typeof body === 'object' && body !== null && 'error' in body) {
-    const err = (body as { error?: { message?: string } }).error;
-    return err?.message;
-  }
-  return undefined;
-}

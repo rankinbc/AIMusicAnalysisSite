@@ -172,16 +172,24 @@ public static class AuthEndpoints
     }
 
     // Story 2.1 — Stripe subscription status → product tier mapping.
-    // active + trialing → "pro"; everything else (including null = no
-    // subscription row) → "free". This mirrors the entitlement model
-    // story 2.4 will formalize; the only callers are /me and any other
-    // endpoint that needs a quick tier check before story 2.4 ships.
+    // active + trialing + past_due → "pro"; everything else (including
+    // null = no subscription row) → "free". This mirrors the entitlement
+    // model story 2.4 will formalize; the only callers are /me and any
+    // other endpoint that needs a quick tier check before story 2.4 ships.
+    //
+    // Story 2.2 review-fix D2 — `past_due` returns "pro" because Stripe
+    // semantics keep the user entitled during the dunning grace period
+    // (the subscription hasn't been terminated yet — Stripe will retry
+    // the invoice). The billing page must show the management UI in this
+    // state so the user can update their payment method via the portal
+    // and self-cancel. Story 2.9 will add the dunning banner on top of
+    // this tier mapping; the entitlement itself is unchanged.
     internal static string ResolveTier(string? subscriptionStatus)
     {
         if (subscriptionStatus is null) return "free";
         return subscriptionStatus switch
         {
-            "active" or "trialing" => "pro",
+            "active" or "trialing" or "past_due" => "pro",
             _ => "free",
         };
     }

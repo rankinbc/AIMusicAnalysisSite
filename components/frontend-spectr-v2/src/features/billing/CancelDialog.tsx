@@ -2,6 +2,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
+import { extractApiMessage } from '../../api/error-utils';
 import { ApiError, fetcher } from '../../api/fetcher';
 import type { BillingSummaryResponse } from '../../api/types';
 import s from './CancelDialog.module.css';
@@ -56,7 +57,13 @@ export function CancelDialog({ open, onClose, onConfirmed }: CancelDialogProps) 
     <Dialog.Root
       open={open}
       onOpenChange={(next) => {
-        if (!next) onClose();
+        if (!next) {
+          // Story 2.2 review-fix P27 — reset the reason selection when
+          // the dialog closes so a re-open shows the empty default
+          // rather than the previously-selected reason.
+          setReason('');
+          onClose();
+        }
       }}
     >
       <Dialog.Portal>
@@ -88,7 +95,10 @@ export function CancelDialog({ open, onClose, onConfirmed }: CancelDialogProps) 
             <button
               type="button"
               className="btn"
-              onClick={onClose}
+              onClick={() => {
+                setReason('');
+                onClose();
+              }}
               disabled={pending}
             >
               Keep subscription
@@ -108,10 +118,3 @@ export function CancelDialog({ open, onClose, onConfirmed }: CancelDialogProps) 
   );
 }
 
-function extractApiMessage(body: unknown): string | undefined {
-  if (typeof body === 'object' && body !== null && 'error' in body) {
-    const err = (body as { error?: { message?: string } }).error;
-    return err?.message;
-  }
-  return undefined;
-}

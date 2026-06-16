@@ -53,7 +53,16 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             {
                 if (!string.IsNullOrEmpty((string?)ctx.Token)) return Task.CompletedTask;
                 var path = ctx.HttpContext.Request.Path.Value ?? string.Empty;
-                if (path.Contains("/audio", StringComparison.OrdinalIgnoreCase))
+                // Story 2.2 review-fix P24 — tighten the carve-out to the
+                // exact route we mean (`/api/versions/{id}/audio`). The
+                // prior `Contains("/audio")` would have also matched any
+                // future path containing "audio" as a substring (e.g.
+                // `/api/audio-analysis/...`), silently granting them the
+                // query-param JWT path. The token still flows through
+                // the same JwtBearer pipeline; we just limit WHERE it's
+                // accepted in lieu of an Authorization header.
+                if (path.StartsWith("/api/versions/", StringComparison.OrdinalIgnoreCase)
+                    && path.EndsWith("/audio", StringComparison.OrdinalIgnoreCase))
                 {
                     var t = ctx.Request.Query["t"].ToString();
                     if (!string.IsNullOrEmpty(t)) ctx.Token = t;
@@ -149,14 +158,31 @@ builder.Services.AddOptions<PricingDisplayOptions>()
     }
 }
 
-// CORS for the frontend dev server.
+// CORS for the frontend.
+// Story 2.2 review-fix P8 — origin is config-driven so prod doesn't ship
+// with the dev origin baked in. `App:FrontendOrigin` defaults to the
+// Vite dev server; prod deploys set it via env to the deployed frontend
+// host. AllowCredentials forbids `*` so the explicit single origin is
+// the only safe shape.
+var frontendOrigin = builder.Configuration["App:FrontendOrigin"]
+    ?? "http://localhost:5174";
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
-    p.WithOrigins("http://localhost:5174")
+    p.WithOrigins(frontendOrigin)
      .AllowAnyHeader()
      .AllowAnyMethod()
      .AllowCredentials()));
 
 builder.Services.AddOpenApi();
+
+// Allow large multipart bodies for bulk stem staging (up to ~100 stems per request).
+// Per-endpoint RequestSizeLimitAttribute still applies; this lifts the form reader's
+// own cap so ReadFormAsync doesn't reject the batch.
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
+{
+    o.MultipartBodyLengthLimit = 250L * 1024 * 1024 * 20; // 5 GB
+    o.ValueLengthLimit = int.MaxValue;
+    o.MultipartHeadersLengthLimit = int.MaxValue;
+});
 
 var app = builder.Build();
 

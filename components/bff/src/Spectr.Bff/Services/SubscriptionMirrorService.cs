@@ -89,7 +89,16 @@ public sealed class SubscriptionMirrorService(
         {
             existing.StripeCustomerId = stripeSub.CustomerId;
             existing.StripeSubscriptionId = stripeSub.Id;
-            existing.StripeItemId = itemId;
+            // Story 2.2 review-fix P9 — only overwrite StripeItemId when
+            // the incoming webhook carries one. Some Stripe events
+            // (subscription.deleted, certain edge-case payloads) deliver
+            // empty items arrays; unconditional assignment would wipe a
+            // valid si_* id and re-introduce `subscription_not_ready`
+            // 409 for the user until the next item-bearing webhook.
+            if (itemId is not null)
+            {
+                existing.StripeItemId = itemId;
+            }
             existing.Status = stripeSub.Status;
             existing.PriceId = priceId;
             existing.CurrentPeriodEnd = periodEnd;

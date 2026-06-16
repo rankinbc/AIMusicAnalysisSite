@@ -60,4 +60,20 @@ describe('Billing page card-selection state machine', () => {
   it('Pro past_due without cancel → active card (so user can update payment via portal)', () => {
     expect(pickCard({ ...PRO_ACTIVE, status: 'past_due' })).toBe('active');
   });
+
+  // Story 2.2 review-fix P19 — document the lapsed-account boundary.
+  // When `status: "canceled"` arrives via webhook (post-period-end) but
+  // `cancelAtPeriodEnd: false`, the BFF's ResolveTier will map this
+  // back to "free" before reaching the page. The page itself would
+  // therefore render the free card. This test pins that contract so
+  // story 2.3 (Buy Credits) doesn't accidentally split the lapsed
+  // state into its own card without an explicit decision.
+  it('Fully lapsed (tier=free) → free card regardless of status string', () => {
+    expect(pickCard({
+      ...PRO_ACTIVE,
+      tier: 'free',
+      status: 'canceled',
+      cancelAtPeriodEnd: false,
+    })).toBe('free');
+  });
 });

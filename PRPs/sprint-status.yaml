@@ -50,6 +50,8 @@ last_updated: 2026-06-15
 project: Spectr
 # (re-updated 2026-06-15: 1-6 → done after code review)
 # (re-updated 2026-06-15: 1-9 → ready-for-dev after create-story; epic 1 still in-progress)
+# (re-updated 2026-06-15: 2-2 → done → in-progress after code review — 30 patches + 3 decisions queued)
+# (re-updated 2026-06-15: 2-2 → done after 26 patches applied + 3 decisions resolved + 4 deferred; BFF 81/81, frontend 171/171)
 project_key: NOKEY
 tracking_system: file-system
 story_location: PRPs/stories
