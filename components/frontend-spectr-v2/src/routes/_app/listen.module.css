@@ -29,43 +29,50 @@
   color: var(--red);
 }
 
-/* ── Track header row ────────────────────────────────────────────────── */
+/* ── Track strip ─────────────────────────────────────────────────────── */
+/* Horizontal 66px-style strip: cover · meta · pills · spacer · CTA.
+   Ported from the prototype's `.track-strip`, reconciled to app tokens. */
 
 .trackHeader {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 14px 18px;
+  gap: 14px;
+  padding: 10px 16px;
+  box-shadow: inset 0 1px 0 var(--inner-hi, rgba(255, 255, 255, 0.035));
 }
 
 .titleBlock {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
-  flex: 1;
+}
+
+.trackName {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  line-height: 1.15;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .nowPlayingRow {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--cyan);
-  font-weight: 700;
+  gap: 7px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--muted);
 }
-
-.trackName {
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.nowPlaying {
+  color: var(--cyan);
+  font-weight: 600;
+}
+.subLabel {
+  color: var(--muted);
 }
 
 .pillRow {
@@ -73,7 +80,10 @@
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
-  margin-top: 2px;
+}
+
+.stripSpacer {
+  flex: 1;
 }
 
 .headerRight {
@@ -142,7 +152,7 @@
 
 .scrubberRibbon {
   display: flex;
-  height: 14px;
+  height: 20px;
   border-radius: 4px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -153,12 +163,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 8px;
-  letter-spacing: 0.1em;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
   border-right: 1px solid rgba(0, 0, 0, 0.3);
-  text-transform: uppercase;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -180,20 +189,21 @@
 
 .waveform {
   position: relative;
-  height: 64px;
+  height: 48px;
   display: flex;
   align-items: flex-end;
-  gap: 1.5px;
-  background: rgba(255, 255, 255, 0.02);
+  gap: 1px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 4px 6px;
+  padding: 3px 4px;
   cursor: pointer;
   user-select: none;
 }
 
 .waveBar {
   flex: 1;
-  border-radius: 1px;
+  border-radius: 0.5px;
   transition: background 0.1s;
 }
 .waveBar[data-played='true'] {
@@ -205,7 +215,7 @@
 
 .waveTooltip {
   position: absolute;
-  bottom: 68px;
+  bottom: 52px;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 10px;
   background: var(--surface);
@@ -248,102 +258,153 @@
 .transportRow {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
+/* Grouped transport: skip-back · play · skip-fwd in one bordered pill. */
+.transportGroup {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 6px;
+  height: 38px;
+  border-radius: 7px;
+  background: var(--surface-2, var(--card-2));
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 var(--inner-hi, rgba(255, 255, 255, 0.035));
+}
+
 .playBig {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
   background: var(--cyan);
   color: #06151a;
   display: grid;
   place-items: center;
   border: none;
   cursor: pointer;
-  font-size: 18px;
+  font-size: 15px;
   font-family: inherit;
-  transition: box-shadow 0.15s, background 0.15s;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: background 0.15s, box-shadow 0.15s;
 }
 .playBig[data-playing='true'] {
-  box-shadow: 0 0 24px rgba(0, 229, 176, 0.45);
+  box-shadow: 0 0 18px rgba(0, 229, 176, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 .playBig:hover {
-  background: #00f3bd;
+  background: var(--cyan-2, #00f3bd);
+}
+.playBig:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .transportBtn {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--border);
+  width: 30px;
+  height: 30px;
+  border-radius: 5px;
+  background: transparent;
+  border: none;
   color: var(--text-2);
   display: grid;
   place-items: center;
   cursor: pointer;
   font-family: inherit;
+  font-size: 13px;
 }
 .transportBtn:hover {
-  border-color: var(--border-2);
+  background: rgba(255, 255, 255, 0.04);
   color: var(--text);
 }
 
-.timecode {
+.timecodeBlock {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  height: 38px;
+  border-radius: 7px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 var(--inner-hi, rgba(255, 255, 255, 0.035));
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 13px;
-  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.tcNow {
+  color: var(--text);
+  font-size: 14px;
   font-weight: 600;
+}
+.tcSep {
+  color: var(--muted);
+  font-size: 12px;
+}
+.tcTotal {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .speedDial {
   display: flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.03);
+  gap: 1px;
+  padding: 2px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--surface-2, var(--card-2));
   border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 3px;
-  gap: 2px;
 }
 .speedDial button {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--muted);
-  padding: 4px 8px;
+  padding: 4px 9px;
   border-radius: 4px;
   background: transparent;
   border: none;
   cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.speedDial button:hover {
+  color: var(--text-2);
 }
 .speedDial button[data-active='true'] {
   background: var(--card-hover);
-  color: var(--text);
-  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--cyan);
+  box-shadow: inset 0 0 0 1px var(--border-2);
+}
+
+.transportSpacer {
+  flex: 1;
 }
 
 .volumeWrap {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1;
-  min-width: 140px;
-  max-width: 220px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: var(--surface-2, var(--card-2));
+  border: 1px solid var(--border);
 }
 
 .volumeIcon {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.12em;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
   color: var(--muted);
 }
 
 .volumeSlider {
-  flex: 1;
+  width: 84px;
   -webkit-appearance: none;
   appearance: none;
-  height: 4px;
+  height: 3px;
   border-radius: 2px;
   background: var(--dim);
   outline: none;
@@ -352,12 +413,19 @@
 .volumeSlider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: var(--cyan);
   cursor: pointer;
-  box-shadow: 0 0 6px rgba(0, 229, 176, 0.5);
+}
+.volumeSlider::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: none;
+  border-radius: 50%;
+  background: var(--cyan);
+  cursor: pointer;
 }
 
 /* ── Tools rail ──────────────────────────────────────────────────────── */

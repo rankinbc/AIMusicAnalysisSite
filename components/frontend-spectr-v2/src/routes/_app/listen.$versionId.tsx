@@ -661,20 +661,21 @@ function ListenPage() {
       <section className={`card ${s.trackHeader}`}>
         <CoverArt hue={hue} size="md" />
         <div className={s.titleBlock}>
+          <div className={s.trackName}>{trackName}</div>
           <div className={s.nowPlayingRow}>
             <span className="dot pulse-soft" />
-            <span>Now playing</span>
-            {version.label && <span style={{ color: 'var(--muted)' }}>· {version.label}</span>}
-          </div>
-          <div className={s.trackName}>{trackName}</div>
-          <div className={s.pillRow}>
-            {phase2?.genre && <Pill tone="cyan">{fmtGenre(phase2.genre)}</Pill>}
-            {phase1?.bpm != null && <Pill><span className="mono">{fmtBpm(phase1.bpm)}</span> BPM</Pill>}
-            {phase1?.detected_key && <Pill><span className="mono">{phase1.detected_key}</span></Pill>}
-            {phase1?.lufs != null && <Pill><span className="mono">{fmtNumber(phase1.lufs, 1)}</span> LUFS</Pill>}
-            <Pill><span className="mono">v{version.versionNumber}</span></Pill>
+            <span className={s.nowPlaying}>Now playing</span>
+            {version.label && <span className={s.subLabel}>· {version.label}</span>}
           </div>
         </div>
+        <div className={s.pillRow}>
+          {phase2?.genre && <Pill tone="cyan">{fmtGenre(phase2.genre)}</Pill>}
+          {phase1?.bpm != null && <Pill><span className="mono">{fmtBpm(phase1.bpm)}</span> BPM</Pill>}
+          {phase1?.detected_key && <Pill><span className="mono">{phase1.detected_key}</span></Pill>}
+          {phase1?.lufs != null && <Pill><span className="mono">{fmtNumber(phase1.lufs, 1)}</span> LUFS</Pill>}
+          <Pill><span className="mono">v{version.versionNumber}</span></Pill>
+        </div>
+        <div className={s.stripSpacer} />
         <div className={s.headerRight}>
           {song && latestJobId && (
             <Link
@@ -722,19 +723,25 @@ function ListenPage() {
                 activeNote={activeNote}
               />
               <div className={s.transportRow}>
-                <button
-                  type="button"
-                  className={s.playBig}
-                  data-playing={playing}
-                  onClick={togglePlay}
-                  disabled={!audioUrl}
-                  aria-label={playing ? 'Pause' : 'Play'}
-                >
-                  {playing ? '⏸' : '▶'}
-                </button>
-                <button type="button" className={s.transportBtn} onClick={() => seek(Math.max(0, positionPct - 0.05))} aria-label="Back 5%">⏮</button>
-                <button type="button" className={s.transportBtn} onClick={() => seek(Math.min(1, positionPct + 0.05))} aria-label="Forward 5%">⏭</button>
-                <span className={s.timecode}>{formatTime(position)} / {formatTime(duration)}</span>
+                <div className={s.transportGroup}>
+                  <button type="button" className={s.transportBtn} onClick={() => seek(Math.max(0, positionPct - 0.05))} aria-label="Back 5%">⏮</button>
+                  <button
+                    type="button"
+                    className={s.playBig}
+                    data-playing={playing}
+                    onClick={togglePlay}
+                    disabled={!audioUrl}
+                    aria-label={playing ? 'Pause' : 'Play'}
+                  >
+                    {playing ? '⏸' : '▶'}
+                  </button>
+                  <button type="button" className={s.transportBtn} onClick={() => seek(Math.min(1, positionPct + 0.05))} aria-label="Forward 5%">⏭</button>
+                </div>
+                <div className={s.timecodeBlock}>
+                  <span className={s.tcNow}>{formatTime(position)}</span>
+                  <span className={s.tcSep}>/</span>
+                  <span className={s.tcTotal}>{formatTime(duration)}</span>
+                </div>
                 <SpeedDial value={rate} onChange={setRate} />
                 <div className={s.volumeWrap}>
                   <span className={s.volumeIcon}>VOL</span>
@@ -748,8 +755,9 @@ function ListenPage() {
                     className={s.volumeSlider}
                     aria-label="Volume"
                   />
-                  <span className={s.volumeIcon}>{Math.round(volume * 100)}</span>
+                  <span className={`${s.volumeIcon} mono`}>{Math.round(volume * 100)}</span>
                 </div>
+                <div className={s.transportSpacer} />
                 <button
                   type="button"
                   className="btn sm"
