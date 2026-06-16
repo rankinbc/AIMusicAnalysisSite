@@ -1,15 +1,61 @@
-.root { display: flex; flex-direction: column; height: 100%; background: var(--bg-2); }
-.list { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border-bottom: 1px solid var(--border); }
+.root { display: flex; flex-direction: column; height: 100%; background: var(--bg); }
+
+.list {
+  display: flex;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
 .trigger {
-  position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px;
-  padding: 9px 4px; background: none; border: 0; color: var(--muted); cursor: pointer;
-  border-bottom: 1.5px solid transparent;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 9px 4px 8px;
+  background: none;
+  border: 0;
+  border-right: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
 }
-.trigger[data-state='active'] { color: var(--text); background: var(--card); border-bottom-color: var(--cyan); }
-.icon { font-size: 15px; }
-.label { font-size: 9px; font-weight: 600; }
+.trigger:last-child { border-right: none; }
+.trigger:hover { color: var(--text-2); background: rgba(255, 255, 255, 0.015); }
+.trigger[data-state='active'] { color: var(--text); background: var(--card); }
+.trigger[data-state='active']::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1.5px;
+  background: var(--cyan);
+}
+.icon { display: block; font-size: 14px; line-height: 1; }
+.label { font-size: 8.5px; font-weight: 600; white-space: nowrap; }
 .badge {
-  position: absolute; top: 4px; right: 8px; font-size: 9px; min-width: 14px; text-align: center;
-  background: var(--orange); color: #1a1205; border-radius: 999px; padding: 0 4px;
+  position: absolute;
+  top: 4px;
+  right: 7px;
+  display: grid;
+  place-items: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 8.5px;
+  font-weight: 600;
+  background: var(--card-2);
+  color: var(--text-2);
+  border: 1px solid var(--border-2);
 }
-.content { flex: 1; overflow-y: auto; }
+.trigger[data-state='active'] .badge {
+  background: var(--cyan-dim);
+  color: var(--cyan);
+  border-color: rgba(0, 229, 176, 0.35);
+}
+.content { flex: 1; min-height: 0; overflow-y: auto; }

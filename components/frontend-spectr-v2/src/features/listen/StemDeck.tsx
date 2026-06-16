@@ -30,6 +30,25 @@ function prettyFilename(name: string): string {
   return name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() || 'Stem';
 }
 
+// Deterministic mini-waveform bar heights (0..1) derived from the stem id, so a
+// given stem always renders the same shape. Decorative — not the real waveform.
+function waveBars(id: string, n = 42): number[] {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    h ^= h << 13;
+    h ^= h >>> 17;
+    h ^= h << 5;
+    h >>>= 0;
+    out.push(0.18 + ((h % 1000) / 1000) * 0.82);
+  }
+  return out;
+}
+
 function metaFor(stem: DeckStem): { label: string; color: string; sub: string } {
   const m = stem.role ? ROLE_META[stem.role] : undefined;
   return {
@@ -153,8 +172,13 @@ export function StemDeck({ stems, isLoading, stemUrl, engine, playing, onActivat
                   onClick={() => patch(c.id, { mute: !c.mute })} aria-pressed={c.mute}>M</button>
               </div>
             </div>
+            <div className={s.wave} aria-hidden="true">
+              {waveBars(c.id).map((bh, i) => (
+                <div key={i} style={{ height: `${Math.round(bh * 100)}%` }} />
+              ))}
+            </div>
             <div className={s.volRow}>
-              <span className="label">VOL</span>
+              <span className={`${s.vlab} mono`}>VOL</span>
               <Slider.Root className={s.slider} min={0} max={1} step={0.01} value={[c.volume]}
                 onValueChange={([v]) => patch(c.id, { volume: v ?? 0 })}>
                 <Slider.Track className={s.track}><Slider.Range className={s.range} /></Slider.Track>
