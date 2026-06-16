@@ -3,8 +3,8 @@
   overflow: hidden; mix-blend-mode: screen; opacity: var(--laser-i, 0.7);
   --beat: 0.4839s;
   /* --laser-pulse (0..1) is written by the page rAF loop on each detected beat
-     and decays back to 0, so the whole rig brightens on the beat. */
-  filter: brightness(calc(var(--laser-boost, 1) + var(--laser-pulse, 0) * 0.7))
+     and decays back to 0, so the whole rig kicks brighter on the beat. */
+  filter: brightness(calc(var(--laser-boost, 1) + var(--laser-pulse, 0) * 1.1))
     saturate(var(--laser-sat, 1));
 }
 .on { display: block; }
@@ -36,19 +36,26 @@
   animation-delay: var(--dl, 0s);
 }
 
-/* fx_strobe — beams snap bright on each detected beat (beat-locked, ≤3 Hz via
-   the shared flash limiter). Dim between beats; no fixed-interval blink. */
+/* fx_strobe — fast hard blink of the thin, screen-blended beams: the classic
+   laser strobe. The beams are a small luminance area (not a full-field flash),
+   and each beat brightens them via --laser-pulse. The hazardous full-field
+   white flash stays on its own ≤3 Hz channel (.flash), not here. */
+@keyframes laserStrobe {
+  0%, 42% { opacity: 1; }
+  48%, 100% { opacity: 0; }
+}
 .fx_strobe .beam {
-  opacity: calc(0.22 + var(--beat-flash, 0) * 0.78);
+  animation: laserStrobe 0.1s steps(1, end) infinite;
+  animation-delay: var(--dl, 0s);
 }
 
-/* fx_flash — the white area flash (the .flash rule above) carries it; beams
-   stay steady so the eye reads the room-flash, not the beams. */
+/* fx_flash — the full-field white flash (the .flash rule above) fires on beats,
+   rate-limited to ≤3 Hz; beams stay steady so the eye reads the room flash. */
 
-/* fx_beat — beams pulse taller/brighter on each beat via --laser-pulse, with a
-   light supporting flash. Driven by real onsets, not the BPM timer. */
+/* fx_beat — beams kick taller/brighter on each beat via --laser-pulse, with a
+   supporting flash. Driven by real onsets, not the BPM timer. */
 .fx_beat .beam {
-  transform: scaleY(calc(1 + var(--laser-pulse, 0) * 0.16));
+  transform: scaleY(calc(1 + var(--laser-pulse, 0) * 0.28));
   transform-origin: top center;
 }
 

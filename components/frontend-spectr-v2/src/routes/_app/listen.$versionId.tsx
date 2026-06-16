@@ -554,12 +554,12 @@ function ListenPage() {
             // Smooth beam pulse fires on every detected beat (motion only;
             // reduced-motion already gated detection above).
             pulseEnvRef.current = 1;
-            // The white-flash channel is photosensitivity-capped: only the
-            // flash/strobe/beat effects flash, and only when the shared ≤3 Hz
-            // limiter allows it.
+            // The full-field WHITE flash is the photosensitivity-sensitive
+            // channel, so it stays capped at ≤3 Hz. Strobe doesn't use it —
+            // it blinks its own thin beams in CSS — only flash/beat do.
             const fx = laserEffectRef.current;
             if (
-              (fx === 'flash' || fx === 'strobe' || fx === 'beat') &&
+              (fx === 'flash' || fx === 'beat') &&
               flashLimiterRef.current.allow(nowMs)
             ) {
               flashEnvRef.current = 1;
