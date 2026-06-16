@@ -42,15 +42,22 @@ export const MeterModule = memo(function MeterModule({ cells, variant = 'panel',
         </button>
       </div>
       {!collapsed && (
-        <div className={s.grid}>
-          {cells.map((c) => (
-            <div key={c.key} className={s.cell} data-tone={c.tone} data-empty={c.value === null}>
-              <span className={`${s.cellLabel} label`}>{c.label}</span>
-              <span className={`${s.cellValue} mono`} title={c.value === null ? 'Not yet measured' : undefined}>
-                {fmt(c)}
-              </span>
-            </div>
-          ))}
+        <div className={s.body}>
+          <div className={s.grid}>
+            {cells.map((c) => (
+              <div key={c.key} className={s.cell} data-tone={c.tone} data-empty={c.value === null}>
+                <span className={`${s.cellLabel} mono`}>{c.label}</span>
+                <span className={`${s.cellValue} mono`} title={c.value === null ? 'Not yet measured' : undefined}>
+                  {fmt(c)}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className={`${s.target} mono`}>
+            <span className={s.targetDot} aria-hidden="true" />
+            <span className={s.targetLabel}>target</span>
+            <span>−9 · −1 dBTP · 48k/24</span>
+          </div>
         </div>
       )}
     </div>

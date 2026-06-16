@@ -36,6 +36,9 @@ const OrbitStage = memo(function OrbitStage() {
   );
 });
 
+const DB_LABELS = ['0', '-6', '-12', '-24', '-36', '-60'];
+const FREQ_LABELS = ['20', '60', '200', '500', '1k', '2k', '5k', '10k', '20k'];
+
 export interface VizState {
   enabled: boolean;
   barColor: string;
@@ -76,18 +79,30 @@ export function StageDisplay(props: Props) {
     >
       <div className={s.overlayTL}>
         <StageSelect value={stage} onChange={props.onStageChange} />
-        {stage === 'eq' && <span className={`${s.modeChip} label`}>EQ · 8-BAND OVERLAY</span>}
+        {stage === 'eq' && <span className={s.modeChip}>EQ · 8-BAND OVERLAY</span>}
       </div>
 
       {stage !== 'info' && <div className={s.overlayTR}>{props.meterOverlay}</div>}
 
       {/* eq stage */}
       {stage === 'eq' && (
-        <div className={s.spectrum} aria-hidden="true">
-          {props.spectrumValues.map((v, i) => (
-            <span key={i} className={s.bar} style={{ height: `${Math.round(v * 92)}%` }} />
-          ))}
-        </div>
+        <>
+          <div className={s.dbGutter} aria-hidden="true">
+            {DB_LABELS.map((d) => (
+              <span key={d} className="mono">{d}</span>
+            ))}
+          </div>
+          <div className={s.spectrum} aria-hidden="true">
+            {props.spectrumValues.map((v, i) => (
+              <span key={i} className={s.bar} style={{ height: `${Math.round(v * 92)}%` }} />
+            ))}
+          </div>
+          <div className={s.freqGrid} aria-hidden="true">
+            {FREQ_LABELS.map((f) => (
+              <span key={f} className="mono">{f}</span>
+            ))}
+          </div>
+        </>
       )}
 
       {/* decorative stages — markup hooks; CSS in the stylesheet drives them */}
