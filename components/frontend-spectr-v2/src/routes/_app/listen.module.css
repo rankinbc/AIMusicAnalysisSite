@@ -1,12 +1,13 @@
 /* Listen page — Now Playing producer view. */
 
+/* Full-bleed, fixed-height DAW shell sitting under the 56px app topnav.
+   Edge-to-edge hairline panels — NOT centered rounded cards. */
 .page {
-  max-width: 1360px;
-  margin: 0 auto;
-  padding: var(--space-6) var(--space-6) 32px;
+  height: calc(100vh - 56px);
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  background: var(--bg);
+  overflow: hidden;
 }
 
 .backLink {
@@ -34,10 +35,14 @@
    Ported from the prototype's `.track-strip`, reconciled to app tokens. */
 
 .trackHeader {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 10px 16px;
+  height: 66px;
+  padding: 0 16px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
   box-shadow: inset 0 1px 0 var(--inner-hi, rgba(255, 255, 255, 0.035));
 }
 
@@ -96,8 +101,12 @@
 /* ── Hero card (visualizer + transport) ──────────────────────────────── */
 
 .hero {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
-  padding: 0;
+  background: var(--surface);
 }
 
 .liveStrip {
@@ -136,12 +145,14 @@
 }
 
 .heroTransport {
-  padding: 18px 22px;
+  flex-shrink: 0;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
   border-top: 1px solid var(--border);
   background: var(--card);
+  box-shadow: inset 0 1px 0 var(--inner-hi, rgba(255, 255, 255, 0.035));
 }
 
 .scrubber {
@@ -567,27 +578,43 @@
 /* ── Main grid: center column + right rail ──────────────────────────── */
 
 .mainGrid {
+  flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: 1fr 300px;
+  grid-template-columns: 1fr 320px;
   gap: 1px;
   background: var(--border);
-  min-height: 0;
 }
 
 .centerCol {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   background: var(--bg);
-  gap: 18px;
 }
 
 .railCol {
-  background: var(--bg-2);
+  background: var(--bg);
   min-height: 0;
+  overflow: hidden;
+}
+
+/* Full-width tool strip pinned to the bottom of the shell. */
+.toolStrip {
+  flex-shrink: 0;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 var(--inner-hi, rgba(255, 255, 255, 0.035));
+  max-height: 230px;
+  overflow-y: auto;
 }
 
 @media (max-width: 980px) {
+  .page {
+    height: auto;
+    overflow: visible;
+  }
   .mainGrid {
     grid-template-columns: 1fr;
   }

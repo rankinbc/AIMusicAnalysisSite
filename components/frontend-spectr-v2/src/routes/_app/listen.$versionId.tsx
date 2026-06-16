@@ -656,9 +656,7 @@ function ListenPage() {
 
   return (
     <div className={s.page}>
-      <Link to="/library" className={s.backLink}>← Library</Link>
-
-      <section className={`card ${s.trackHeader}`}>
+      <section className={s.trackHeader}>
         <CoverArt hue={hue} size="md" />
         <div className={s.titleBlock}>
           <div className={s.trackName}>{trackName}</div>
@@ -691,7 +689,7 @@ function ListenPage() {
 
       <div className={s.mainGrid}>
         <div className={s.centerCol}>
-          <section className={`card ${s.hero}`}>
+          <section className={s.hero}>
             <StageDisplay
               stage={stage}
               onStageChange={setStage}
@@ -769,24 +767,26 @@ function ListenPage() {
               </div>
             </div>
           </section>
-
-          <PreviewTools
-            graph={graph}
-            activeTool={activeTool}
-            onActiveToolChange={setActiveTool}
-            loop={loop}
-            onLoopChange={setLoop}
-            audioRef={audioRef}
-            currentTime={position}
-            duration={duration}
-            pitch={pitch}
-            onPitchChange={handlePitchChange}
-          />
         </div>
 
         <aside className={s.railCol}>
           <RightRail tabs={railTabs} defaultTab="meters" />
         </aside>
+      </div>
+
+      <div className={s.toolStrip}>
+        <PreviewTools
+          graph={graph}
+          activeTool={activeTool}
+          onActiveToolChange={setActiveTool}
+          loop={loop}
+          onLoopChange={setLoop}
+          audioRef={audioRef}
+          currentTime={position}
+          duration={duration}
+          pitch={pitch}
+          onPitchChange={handlePitchChange}
+        />
       </div>
 
       {audioUrl && (
