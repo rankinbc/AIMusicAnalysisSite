@@ -94,33 +94,32 @@
   pointer-events: none;
 }
 
-/* lights stage — pulsing vertical light columns */
+/* lights stage — 6×3 grid of pulsing club-light cells */
 .lights {
   position: absolute;
   inset: 0;
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  padding: 0 14px 30px;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 6px;
+  padding: 9px;
+  background: #06080c;
 }
 .lights > span {
-  flex: 1;
-  height: 30%;
-  border-radius: 3px 3px 0 0;
-  background: linear-gradient(180deg, var(--viz-bar, var(--cyan)), transparent);
-  transform-origin: bottom;
-  animation: lightPulse calc(var(--beat, 0.5s)) ease-in-out infinite;
+  border-radius: 7px;
+  background: var(--lc, var(--viz-bar, var(--cyan)));
+  opacity: 0.1;
+  box-shadow: 0 0 20px -2px var(--lc, var(--viz-bar, var(--cyan)));
+  animation: lightPulse var(--beat, 0.484s) ease-in-out infinite;
   animation-delay: var(--ld, 0s);
 }
 @keyframes lightPulse {
   0%,
   100% {
-    transform: scaleY(0.4);
-    opacity: 0.45;
+    opacity: 0.08;
   }
-  50% {
-    transform: scaleY(1.6);
-    opacity: 1;
+  38% {
+    opacity: 0.95;
   }
 }
 
@@ -130,13 +129,14 @@
   inset: 0;
   display: grid;
   place-items: center;
+  background: radial-gradient(circle at 50% 52%, #101a26, #06080c 70%);
 }
 .bloom > span {
   position: absolute;
-  width: 40px;
-  height: 40px;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
-  border: 2px solid var(--viz-bar, var(--cyan));
+  border: 2.5px solid var(--viz-bar, var(--cyan));
   opacity: 0;
   animation: bloomRing calc(var(--beat, 0.5s) * 4) ease-out infinite;
 }
@@ -161,11 +161,11 @@
 }
 .core {
   position: absolute;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  background: var(--viz-bar, var(--cyan));
-  box-shadow: 0 0 18px var(--cyan-glow);
+  background: #fff;
+  box-shadow: 0 0 26px 7px rgba(0, 229, 176, 0.6);
 }
 .dot {
   position: absolute;
@@ -229,14 +229,40 @@
   }
 }
 
-/* info stage — static slot for cover/title/pills */
+/* info stage — song card: cover + title + sub */
 .info {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 28px;
   text-align: center;
+  background: linear-gradient(155deg, #121826, #06080c);
+}
+.info::before {
+  content: '';
+  width: 118px;
+  height: 118px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #00e5b0, #60a5fa 55%, #a78bfa);
+  box-shadow: 0 18px 44px -14px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.info h2 {
+  margin: 0;
+  font-size: 33px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+  color: #fff;
+}
+.info p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -245,5 +271,8 @@
   .orbit,
   .orbit .dot {
     animation: none !important;
+  }
+  .lights > span {
+    opacity: 0.45;
   }
 }

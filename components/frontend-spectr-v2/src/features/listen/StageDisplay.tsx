@@ -5,11 +5,22 @@ import type { StageId } from './stageRegistry';
 import { laserVars } from './laser';
 import s from './StageDisplay.module.css';
 
+// Club-light palette for the lights stage. Multicolor is the whole point of
+// this decorative stage, so it intentionally steps outside the one-accent rule.
+const LIGHT_COLORS = ['#00e5b0', '#a78bfa', '#60a5fa', '#fbbf24', '#34d399', '#f472b6'];
+
 const LightsStage = memo(function LightsStage() {
   return (
-    <div className={s.lights}>
+    <div className={s.lights} aria-hidden="true">
       {Array.from({ length: 18 }, (_, i) => (
-        <span key={i} style={{ ['--ld' as string]: `${(i % 6) * 0.08}s` }} />
+        <span
+          key={i}
+          style={{
+            ['--lc' as string]: LIGHT_COLORS[i % LIGHT_COLORS.length],
+            // Deterministic delay spread so cells fire out of phase.
+            ['--ld' as string]: `${((((i * 5) % 18) / 18) * 0.48).toFixed(3)}s`,
+          }}
+        />
       ))}
     </div>
   );
