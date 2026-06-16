@@ -38,6 +38,8 @@ export const DEFAULT_VIZ_STATE: VizState = {
   laserEffect: 'sweep',
   laserIntensity: 70,
   energy: 50,
+  autoColor: false,
+  dropFx: false,
 };
 
 export function VizControls({ viz, onChange, onLaunchFireworks }: Props) {
@@ -69,16 +71,28 @@ export function VizControls({ viz, onChange, onLaunchFireworks }: Props) {
           <Slider.Thumb className={s.sliderThumb} aria-label="Energy macro" />
         </Slider.Root>
 
-        <span className={`${s.subLabel} label`}>EQ bar color</span>
+        <div className={s.row}>
+          <span className={`${s.subLabel} label`}>EQ bar color</span>
+          <button
+            type="button"
+            className={s.fxBtn}
+            data-active={viz.autoColor}
+            onClick={() => onChange({ autoColor: !viz.autoColor })}
+            title="Drive hue from the spectral centroid"
+          >
+            Auto
+          </button>
+        </div>
         <div className={s.swatches}>
           {BAR_COLORS.map((c) => (
             <button
               key={c}
               type="button"
               className={s.swatch}
-              data-active={viz.barColor === c}
+              data-active={!viz.autoColor && viz.barColor === c}
               style={{ background: c }}
-              onClick={() => onChange({ barColor: c })}
+              // Picking a swatch is an explicit manual override → leaves Auto.
+              onClick={() => onChange({ autoColor: false, barColor: c })}
               aria-label={`Bar ${c}`}
             />
           ))}
@@ -169,6 +183,17 @@ export function VizControls({ viz, onChange, onLaunchFireworks }: Props) {
             ))}
           </div>
         </fieldset>
+
+        <div className={s.row}>
+          <span className={`${s.subLabel} label`}>Drop moment</span>
+          <Switch.Root
+            className={s.switch}
+            checked={viz.dropFx}
+            onCheckedChange={(dropFx) => onChange({ dropFx })}
+          >
+            <Switch.Thumb className={s.thumb} />
+          </Switch.Root>
+        </div>
 
         <button type="button" className="btn sm" onClick={onLaunchFireworks}>
           Launch fireworks

@@ -42,6 +42,13 @@ import { buildRailTabs } from '../../features/listen/tabRegistry';
 import { useAudioGraph, type AudioFrame } from '../../features/listen/useAudioGraph';
 import { createBeatDetector } from '../../features/listen/beatDetector';
 import { createFlashLimiter } from '../../features/listen/flashLimiter';
+import { createDropDetector } from '../../features/listen/dropDetector';
+import {
+  barColorForHue,
+  bgColorForHue,
+  hueFromCentroid,
+  spectralCentroidNorm,
+} from '../../features/listen/autoColor';
 import { StemDeck, type DeckStem } from '../../features/listen/StemDeck';
 import { useStemEngine } from '../../features/listen/useStemEngine';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
@@ -150,9 +157,15 @@ function ListenPage() {
   const stageRootRef = useRef<HTMLDivElement | null>(null);
   const radialRef = useRef<RadialPulseHandle | null>(null);
   const beatDetectorRef = useRef(createBeatDetector());
+  const dropDetectorRef = useRef(createDropDetector());
   const flashLimiterRef = useRef(createFlashLimiter());
   const pulseEnvRef = useRef(0); // smooth beam pulse envelope 0..1 (motion)
   const flashEnvRef = useRef(0); // capped flash envelope 0..1 (photosensitive)
+  // Auto-color state: throttled hue, smoothed, plus the live color string the
+  // radial canvas reads (so auto-color also tints the radial visualizer).
+  const autoHueRef = useRef(140);
+  const autoColorValRef = useRef(viz.barColor);
+  const lastHueTsRef = useRef(0);
   const reduceMotion = useReducedMotion();
   // Mirror reactive-relevant state into refs so the rAF loop (deps [playing,
   // graph]) reads the latest without re-subscribing every render.
@@ -164,6 +177,10 @@ function ListenPage() {
   laserEffectRef.current = viz.laserEffect;
   const barColorRef = useRef(viz.barColor);
   barColorRef.current = viz.barColor;
+  const autoColorRef = useRef(viz.autoColor);
+  autoColorRef.current = viz.autoColor;
+  const dropFxRef = useRef(viz.dropFx);
+  dropFxRef.current = viz.dropFx;
   const stageRef = useRef(stage);
   stageRef.current = stage;
   // Energy macro as a 0..2 multiplier (50% = ×1), mirrored for the loop.
@@ -402,9 +419,10 @@ function ListenPage() {
 
   const seek = useCallback(
     (pct: number) => {
-      // Drop the rolling beat average so the detector doesn't fire a phantom
-      // beat from the energy discontinuity right after a jump.
+      // Drop the rolling beat/drop averages so the detectors don't fire a
+      // phantom event from the energy discontinuity right after a jump.
       beatDetectorRef.current.reset();
+      dropDetectorRef.current.reset();
       const dur = pitch.enabled && pitchModeRef.current
         ? graph.pitchDuration()
         : Number.isFinite(audioRef.current?.duration ?? NaN)
@@ -448,7 +466,30 @@ function ListenPage() {
       const reduced = reduceMotionRef.current;
       let beatNow = false;
       if (!reduced && frame.bandAverages.length > 0) {
-        beatNow = beatDetectorRef.current.push(frame.bandAverages, nowMs).beat;
+        const b = beatDetectorRef.current.push(frame.bandAverages, nowMs);
+        beatNow = b.beat;
+
+        // ── Drop detection → one-shot "moment" (fireworks + max laser) ──
+        if (dropFxRef.current && dropDetectorRef.current.push(b.energy, nowMs).drop) {
+          fireworksRef.current?.launch();
+          pulseEnvRef.current = 1;
+          if (flashLimiterRef.current.allow(nowMs)) flashEnvRef.current = 1;
+        }
+      }
+
+      // ── Auto-color: hue from spectral centroid, throttled to ~11 Hz ──
+      const stageRoot = stageRootRef.current;
+      if (autoColorRef.current && !reduced && frame.fftBins.length > 0 && nowMs - lastHueTsRef.current >= 90) {
+        lastHueTsRef.current = nowMs;
+        const targetHue = hueFromCentroid(spectralCentroidNorm(frame.fftBins));
+        // Smooth so the color glides instead of jumping frame-to-frame.
+        autoHueRef.current += (targetHue - autoHueRef.current) * 0.2;
+        const hue = autoHueRef.current;
+        autoColorValRef.current = barColorForHue(hue);
+        if (stageRoot) {
+          stageRoot.style.setProperty('--viz-bar', autoColorValRef.current);
+          stageRoot.style.setProperty('--viz-bg', bgColorForHue(hue));
+        }
       }
 
       // ── Beat-reactive laser (imperative CSS vars, no React state) ──
@@ -507,11 +548,14 @@ function ListenPage() {
         // shared loop, no second readFrame. Reduced-motion leaves the canvas
         // frozen on its last frame (the loop simply stops feeding it).
         if (stageRef.current === 'radial' && !reduced) {
+          const radialColor = autoColorRef.current
+            ? autoColorValRef.current
+            : barColorRef.current;
           radialRef.current?.draw(
             next,
             pulseEnvRef.current,
             beatNow,
-            barColorRef.current,
+            radialColor,
             energyMulRef.current,
           );
         }

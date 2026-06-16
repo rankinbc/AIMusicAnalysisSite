@@ -61,6 +61,8 @@ export interface VizState {
   laserEffect: LaserEffect;
   laserIntensity: number; // 0..400, the source of truth
   energy: number; // 0..100 macro; 50 = neutral (×1). Scales laser + bars + radial.
+  autoColor: boolean; // drive bar/backdrop hue from the spectral centroid
+  dropFx: boolean; // fire fireworks + max laser on detected drops
 }
 
 interface Props {
@@ -86,9 +88,12 @@ export function StageDisplay(props: Props) {
   // intensity, the EQ bar gain, and (via the page loop) the radial reach.
   const energyMul = Math.max(0, Math.min(2, (viz.energy ?? 50) / 50));
 
+  // When auto-color is on the page loop writes --viz-bar / --viz-bg
+  // imperatively from the spectral centroid, so we must NOT set them here (a
+  // React inline style would overwrite the loop's value every render).
   const styleVars: Record<string, string | number> = {
     '--beat': `${props.beatSeconds}s`,
-    ...(viz.enabled ? { '--viz-bar': viz.barColor, '--viz-bg': viz.bgColor } : {}),
+    ...(viz.enabled && !viz.autoColor ? { '--viz-bar': viz.barColor, '--viz-bg': viz.bgColor } : {}),
     ...(viz.laserOn ? laserVars(viz.laserIntensity * energyMul) : {}),
     ...(viz.laserMono ? { '--laser-c': viz.laserColor } : {}),
   };
