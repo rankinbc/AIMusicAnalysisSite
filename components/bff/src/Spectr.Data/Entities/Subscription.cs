@@ -28,6 +28,14 @@ public sealed class Subscription
     [Column("stripe_subscription_id"), MaxLength(64)]
     public required string StripeSubscriptionId { get; set; }
 
+    // Story 2.2 — Stripe SubscriptionItem id. Stored so the
+    // change-cadence endpoint can swap the price without first fetching
+    // the subscription from Stripe just to learn the item id. Nullable
+    // for backward compatibility: rows from story 2.1 (pre-this-column)
+    // populate on the next customer.subscription.updated webhook.
+    [Column("stripe_item_id"), MaxLength(64)]
+    public string? StripeItemId { get; set; }
+
     [Column("status"), MaxLength(24)]
     public required string Status { get; set; }
 

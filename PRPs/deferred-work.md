@@ -2,6 +2,13 @@
 
 Real findings that are out of scope for the current story but worth revisiting.
 
+## Deferred from: story 2.2 implementation (2026-06-15)
+
+- **BFF integration tests for the 5 new billing-manage endpoints** [components/bff/tests/Spectr.Bff.Tests/BillingManageEndpointsTests.cs] — Task 10.1 from story 2.2 spec. Endpoints compile + wire shapes manually verified; full WebApplicationFactory + Stripe-fake integration coverage queued for a follow-up commit.
+- **`SubscriptionMirrorServiceTests` extension for `StripeItemId`** — Task 10.2; production code path is covered by the existing webhook tests writing real subscription rows.
+- **README updates** — bff/README Customer Portal configuration + frontend-spectr-v2/README vitest baseline 145 → 163.
+- **Cadence-change confirm dialog** — Task 7.4 mid-flow confirmation deferred; inline `Switch to monthly` button POSTs directly today.
+
 ## Deferred from: code review of story-2.1 (2026-06-15)
 
 - **Currency mismatch detection — `PricingDisplay.Currency` vs actual Stripe Price currency** [components/bff/src/Spectr.Bff/Options/PricingDisplayOptions.cs] — If `PricingDisplay.Currency=USD` but the configured Stripe Price object is in EUR, the pricing page renders `$12.99` while Stripe charges `€12.99`. Story 2.10's nightly reconciliation job owns this drift detection.

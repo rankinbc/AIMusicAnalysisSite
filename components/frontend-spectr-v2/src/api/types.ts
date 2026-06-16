@@ -32,6 +32,35 @@ export interface PlansResponse {
   currency: string;
 }
 
+/** Story 2.2 — GET /api/billing/me summary for the Billing page. */
+export interface BillingSummaryResponse {
+  tier: 'free' | 'pro';
+  status: string | null;
+  cadence: 'monthly' | 'annual' | 'unknown' | null;
+  priceId: string | null;
+  currentPeriodEnd: string | null;
+  cancelAt: string | null;
+  cancelAtPeriodEnd: boolean;
+  nextChargeAt: string | null;
+  nextChargeCents: number | null;
+  currency: string | null;
+}
+
+/** Story 2.2 — POST /api/billing/cancel optional reason. */
+export interface CancelSubscriptionRequest {
+  reason?: string | null;
+}
+
+/** Story 2.2 — POST /api/billing/change-cadence. */
+export interface ChangeCadenceRequest {
+  cadence: 'monthly' | 'annual';
+}
+
+/** Story 2.2 — POST /api/billing/portal — Customer Portal session URL. */
+export interface CreatePortalSessionResponse {
+  url: string;
+}
+
 export interface AuthResponse {
   accessToken: string;
   user: AuthedUser;

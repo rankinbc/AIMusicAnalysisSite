@@ -16,3 +16,29 @@ public sealed record CreateCheckoutSessionResponse(string Url, string SessionId)
 /// no-price-literals lint (AR39) stays clean.
 /// </summary>
 public sealed record PlansResponse(int ProMonthlyCents, int ProAnnualCents, string Currency);
+
+// ── Story 2.2 — manage-subscription self-service wire shapes ──────────
+
+/// <summary>
+/// Billing summary for the in-product /_app/billing page. Free users get
+/// `Tier = "free"` with all subscription fields null; Pro users get the
+/// full subscription snapshot. The frontend renders three states based
+/// on (Tier, CancelAtPeriodEnd).
+/// </summary>
+public sealed record BillingSummaryDto(
+    string Tier,                          // "free" | "pro"
+    string? Status,                       // Stripe subscription status; null when Tier == "free"
+    string? Cadence,                      // "monthly" | "annual" | "unknown"; null when Tier == "free"
+    string? PriceId,
+    DateTimeOffset? CurrentPeriodEnd,
+    DateTimeOffset? CancelAt,
+    bool CancelAtPeriodEnd,
+    DateTimeOffset? NextChargeAt,         // null when CancelAt is set OR Tier == "free"
+    int? NextChargeCents,                 // null when Tier == "free" or Cadence == "unknown"
+    string? Currency);
+
+public sealed record CancelSubscriptionRequest(string? Reason);
+
+public sealed record ChangeCadenceRequest(string Cadence);
+
+public sealed record CreatePortalSessionResponse(string Url);

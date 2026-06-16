@@ -50,6 +50,13 @@ public static class BillingEndpoints
         billing.MapPost("/checkout/subscription", PostCheckoutSubscription)
             .RequireAuthorization();
 
+        // Story 2.2 — manage-subscription self-service.
+        billing.MapGet("/me", GetBillingSummary).RequireAuthorization();
+        billing.MapPost("/cancel", PostCancel).RequireAuthorization();
+        billing.MapPost("/resubscribe", PostResubscribe).RequireAuthorization();
+        billing.MapPost("/change-cadence", PostChangeCadence).RequireAuthorization();
+        billing.MapPost("/portal", PostPortal).RequireAuthorization();
+
         // Anonymous because Stripe webhooks don't carry a user session;
         // they authenticate via the Stripe-Signature header instead.
         billing.MapPost("/stripe/webhook", PostStripeWebhook).AllowAnonymous();
@@ -199,6 +206,288 @@ public static class BillingEndpoints
 
         return Results.Ok(new CreateCheckoutSessionResponse(
             Url: session.Url, SessionId: session.Id));
+    }
+
+    // ── Story 2.2: manage-subscription endpoints ────────────────────────────
+
+    private static async Task<IResult> GetBillingSummary(
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        IOptions<StripeOptions> stripeOpts,
+        IOptions<PricingDisplayOptions> pricingOpts,
+        CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        var sub = await db.Subscriptions.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.UserId == userId, ct);
+        if (sub is null)
+        {
+            return Results.Ok(new BillingSummaryDto(
+                Tier: "free", Status: null, Cadence: null, PriceId: null,
+                CurrentPeriodEnd: null, CancelAt: null,
+                CancelAtPeriodEnd: false,
+                NextChargeAt: null, NextChargeCents: null, Currency: null));
+        }
+
+        var cadence = ResolveCadence(sub.PriceId, stripeOpts.Value);
+        var tier = AuthEndpoints.ResolveTier(sub.Status);
+        var cancelAtPeriodEnd = sub.CancelAt is not null;
+        var pricing = pricingOpts.Value;
+        int? nextChargeCents = cadence switch
+        {
+            "monthly" => pricing.ProMonthlyCents,
+            "annual" => pricing.ProAnnualCents,
+            _ => null,
+        };
+
+        return Results.Ok(new BillingSummaryDto(
+            Tier: tier,
+            Status: sub.Status,
+            Cadence: cadence,
+            PriceId: sub.PriceId,
+            CurrentPeriodEnd: sub.CurrentPeriodEnd,
+            CancelAt: sub.CancelAt,
+            CancelAtPeriodEnd: cancelAtPeriodEnd,
+            NextChargeAt: cancelAtPeriodEnd ? null : sub.CurrentPeriodEnd,
+            NextChargeCents: cancelAtPeriodEnd ? null : nextChargeCents,
+            Currency: pricing.Currency));
+    }
+
+    private static async Task<IResult> PostCancel(
+        CancelSubscriptionRequest body,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        IOptions<StripeOptions> stripeOpts,
+        IOptions<PricingDisplayOptions> pricingOpts,
+        IStripeSubscriptionClient stripeSubs,
+        CancellationToken ct)
+    {
+        var opts = stripeOpts.Value;
+        if (!opts.IsConfigured)
+        {
+            return ErrorEnvelope.Build(StatusCodes.Status503ServiceUnavailable,
+                "stripe_not_configured",
+                "Stripe is not configured in this environment.");
+        }
+
+        var userId = currentUser.UserId();
+        var sub = await db.Subscriptions
+            .FirstOrDefaultAsync(s => s.UserId == userId, ct);
+        if (sub is null
+            || (sub.Status != "active" && sub.Status != "trialing" && sub.Status != "past_due"))
+        {
+            return ErrorEnvelope.Build(StatusCodes.Status409Conflict,
+                "no_active_subscription",
+                "You don't have an active subscription to cancel.");
+        }
+
+        // Idempotency key salted with current period so a new period
+        // (post-renewal) gets a fresh key; retries within the period
+        // collapse on Stripe's side.
+        var idempotencyKey =
+            $"cancel:{userId:N}:{sub.CurrentPeriodEnd.ToUnixTimeSeconds()}";
+        var metadata = new Dictionary<string, string>();
+        if (!string.IsNullOrWhiteSpace(body?.Reason))
+        {
+            metadata["cancel_reason"] = body.Reason!.Trim();
+        }
+        await stripeSubs.UpdateAsync(
+            sub.StripeSubscriptionId,
+            new SubscriptionUpdateOptions
+            {
+                CancelAtPeriodEnd = true,
+                Metadata = metadata.Count > 0 ? metadata : null,
+            },
+            idempotencyKey,
+            ct);
+
+        // Apply the local mirror change optimistically so the response
+        // reflects the new state without waiting for the webhook. The
+        // webhook will reconcile via the existing SubscriptionMirrorService.
+        sub.CancelAt = sub.CurrentPeriodEnd;
+        sub.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+
+        return await GetBillingSummary(currentUser, db, stripeOpts, pricingOpts, ct);
+    }
+
+    private static async Task<IResult> PostResubscribe(
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        IOptions<StripeOptions> stripeOpts,
+        IOptions<PricingDisplayOptions> pricingOpts,
+        IStripeSubscriptionClient stripeSubs,
+        CancellationToken ct)
+    {
+        if (!stripeOpts.Value.IsConfigured)
+        {
+            return ErrorEnvelope.Build(StatusCodes.Status503ServiceUnavailable,
+                "stripe_not_configured",
+                "Stripe is not configured in this environment.");
+        }
+
+        var userId = currentUser.UserId();
+        var sub = await db.Subscriptions
+            .FirstOrDefaultAsync(s => s.UserId == userId, ct);
+        if (sub is null || sub.CancelAt is null)
+        {
+            return ErrorEnvelope.Build(StatusCodes.Status409Conflict,
+                "not_pending_cancel",
+                "There's no pending cancellation to reverse.");
+        }
+
+        var idempotencyKey =
+            $"resubscribe:{userId:N}:{sub.CurrentPeriodEnd.ToUnixTimeSeconds()}";
+        await stripeSubs.UpdateAsync(
+            sub.StripeSubscriptionId,
+            new SubscriptionUpdateOptions { CancelAtPeriodEnd = false },
+            idempotencyKey,
+            ct);
+
+        sub.CancelAt = null;
+        sub.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+
+        return await GetBillingSummary(currentUser, db, stripeOpts, pricingOpts, ct);
+    }
+
+    private static async Task<IResult> PostChangeCadence(
+        ChangeCadenceRequest body,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        IOptions<StripeOptions> stripeOpts,
+        IOptions<PricingDisplayOptions> pricingOpts,
+        IStripeSubscriptionClient stripeSubs,
+        CancellationToken ct)
+    {
+        var opts = stripeOpts.Value;
+        if (!opts.IsConfigured)
+        {
+            return ErrorEnvelope.Build(StatusCodes.Status503ServiceUnavailable,
+                "stripe_not_configured",
+                "Stripe is not configured in this environment.");
+        }
+        if (body is null || string.IsNullOrWhiteSpace(body.Cadence))
+        {
+            return ErrorEnvelope.Build(StatusCodes.Status400BadRequest,
+                "invalid_cadence", "Cadence must be 'monthly' or 'annual'.");
+        }
+        var cadence = body.Cadence.Trim().ToLowerInvariant();
+        if (cadence != "monthly" && cadence != "annual")
+        {
+            return ErrorEnvelope.Build(StatusCodes.Status400BadRequest,
+                "invalid_cadence", "Cadence must be 'monthly' or 'annual'.");
+        }
+
+        var userId = currentUser.UserId();
+        var sub = await db.Subscriptions
+            .FirstOrDefaultAsync(s => s.UserId == userId, ct);
+        if (sub is null
+            || (sub.Status != "active" && sub.Status != "trialing"))
+        {
+            return ErrorEnvelope.Build(StatusCodes.Status409Conflict,
+                "no_active_subscription",
+                "You don't have an active subscription to modify.");
+        }
+
+        var currentCadence = ResolveCadence(sub.PriceId, opts);
+        if (currentCadence == cadence)
+        {
+            return ErrorEnvelope.Build(StatusCodes.Status409Conflict,
+                "same_cadence",
+                $"You're already on the {cadence} plan.");
+        }
+        if (string.IsNullOrEmpty(sub.StripeItemId))
+        {
+            // Story 2.2 / Task 6.2 — backfill happens on next webhook.
+            // Until that arrives, the change-cadence endpoint can't
+            // operate on this row (Stripe needs the item id).
+            return ErrorEnvelope.Build(StatusCodes.Status409Conflict,
+                "subscription_not_ready",
+                "Your subscription is still syncing. Please retry in a minute.");
+        }
+
+        var newPriceId = cadence == "monthly"
+            ? opts.PriceProMonthly!
+            : opts.PriceProAnnual!;
+        var idempotencyKey = $"cadence:{userId:N}:{newPriceId}";
+        await stripeSubs.UpdateAsync(
+            sub.StripeSubscriptionId,
+            new SubscriptionUpdateOptions
+            {
+                Items = new List<SubscriptionItemOptions>
+                {
+                    new()
+                    {
+                        Id = sub.StripeItemId,
+                        Price = newPriceId,
+                    },
+                },
+                ProrationBehavior = "create_prorations",
+            },
+            idempotencyKey,
+            ct);
+
+        // Optimistic mirror: reflect the new price id immediately. The
+        // webhook will reconcile the full subscription state (period_end,
+        // etc.) when it arrives.
+        sub.PriceId = newPriceId;
+        sub.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+
+        return await GetBillingSummary(currentUser, db, stripeOpts, pricingOpts, ct);
+    }
+
+    private static async Task<IResult> PostPortal(
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        IOptions<StripeOptions> stripeOpts,
+        IStripeSubscriptionClient stripeSubs,
+        CancellationToken ct)
+    {
+        if (!stripeOpts.Value.IsConfigured)
+        {
+            return ErrorEnvelope.Build(StatusCodes.Status503ServiceUnavailable,
+                "stripe_not_configured",
+                "Stripe is not configured in this environment.");
+        }
+
+        var userId = currentUser.UserId();
+        var user = await db.Users.AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null || string.IsNullOrEmpty(user.StripeCustomerId))
+        {
+            return ErrorEnvelope.Build(StatusCodes.Status409Conflict,
+                "no_stripe_customer",
+                "You need to start a subscription before opening the billing portal.");
+        }
+
+        var portalReturnUrl = stripeOpts.Value.SuccessUrl.Replace(
+            "?session_id={CHECKOUT_SESSION_ID}", string.Empty,
+            StringComparison.Ordinal);
+        var dayBucket = DateTimeOffset.UtcNow.Date.ToString("yyyyMMdd");
+        var idempotencyKey = $"portal:{userId:N}:{dayBucket}";
+        var session = await stripeSubs.CreatePortalSessionAsync(
+            new Stripe.BillingPortal.SessionCreateOptions
+            {
+                Customer = user.StripeCustomerId,
+                ReturnUrl = portalReturnUrl,
+            },
+            idempotencyKey,
+            ct);
+
+        return Results.Ok(new CreatePortalSessionResponse(session.Url));
+    }
+
+    // Cadence resolution from a Stripe price id (small in-memory map; the
+    // four-way lookup is hot-path).
+    private static string ResolveCadence(string priceId, StripeOptions opts)
+    {
+        if (string.Equals(priceId, opts.PriceProMonthly, StringComparison.Ordinal))
+            return "monthly";
+        if (string.Equals(priceId, opts.PriceProAnnual, StringComparison.Ordinal))
+            return "annual";
+        return "unknown";
     }
 
     // ── POST /stripe/webhook ────────────────────────────────────────────────

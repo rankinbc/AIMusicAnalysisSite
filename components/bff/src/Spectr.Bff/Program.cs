@@ -95,6 +95,7 @@ builder.Services.AddSingleton<CoachChatService>();
 // fake without hitting api.stripe.com. SubscriptionMirrorService is the
 // ONLY writer to the `subscriptions` table (architecture money-boundary).
 builder.Services.AddSingleton<IStripeCheckoutClient, StripeCheckoutClient>();
+builder.Services.AddSingleton<IStripeSubscriptionClient, StripeSubscriptionClient>();
 builder.Services.AddScoped<SubscriptionMirrorService>();
 
 // Story 1.9: per-analysis free-tier coach follow-up cap. Fail-fast at startup

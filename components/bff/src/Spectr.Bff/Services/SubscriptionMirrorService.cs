@@ -64,6 +64,11 @@ public sealed class SubscriptionMirrorService(
             ? null
             : new DateTimeOffset(stripeSub.CancelAt.Value, TimeSpan.Zero);
 
+        // Story 2.2 — capture the Stripe SubscriptionItem id so the
+        // change-cadence endpoint can swap the price without a roundtrip
+        // to Stripe just to learn the item id.
+        var itemId = firstItem?.Id;
+
         if (existing is null)
         {
             db.Subscriptions.Add(new SubscriptionEntity
@@ -71,6 +76,7 @@ public sealed class SubscriptionMirrorService(
                 UserId = userId.Value,
                 StripeCustomerId = stripeSub.CustomerId,
                 StripeSubscriptionId = stripeSub.Id,
+                StripeItemId = itemId,
                 Status = stripeSub.Status,
                 PriceId = priceId,
                 CurrentPeriodEnd = periodEnd,
@@ -83,6 +89,7 @@ public sealed class SubscriptionMirrorService(
         {
             existing.StripeCustomerId = stripeSub.CustomerId;
             existing.StripeSubscriptionId = stripeSub.Id;
+            existing.StripeItemId = itemId;
             existing.Status = stripeSub.Status;
             existing.PriceId = priceId;
             existing.CurrentPeriodEnd = periodEnd;
