@@ -1,5 +1,5 @@
 import { Link, createFileRoute } from '@tanstack/react-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
@@ -11,6 +11,7 @@ import {
   useNotes,
   usePatchNote,
   useSong,
+  useStemProposals,
   useVersion,
 } from '../../api/hooks';
 import {
@@ -26,8 +27,20 @@ import {
   type LoopState,
   type PitchPanelState,
 } from '../../features/listen/loop';
+import { IssuesPanel } from '../../features/listen/IssuesPanel';
+import { buildMeterCells } from '../../features/listen/meters';
+import { MeterModule } from '../../features/listen/MeterModule';
+import { NotesPanel, type UiNote } from '../../features/listen/NotesPanel';
 import { PreviewTools } from '../../features/listen/PreviewTools';
-import { useAudioGraph } from '../../features/listen/useAudioGraph';
+import { RightRail } from '../../features/listen/RightRail';
+import { StageDisplay, type VizState } from '../../features/listen/StageDisplay';
+import { Fireworks, type FireworksHandle } from '../../features/listen/Fireworks';
+import { DEFAULT_VIZ_STATE, VizControls } from '../../features/listen/VizControls';
+import type { StageId } from '../../features/listen/stageRegistry';
+import { buildRailTabs } from '../../features/listen/tabRegistry';
+import { useAudioGraph, type AudioFrame } from '../../features/listen/useAudioGraph';
+import { StemDeck, type DeckStem } from '../../features/listen/StemDeck';
+import { useStemEngine } from '../../features/listen/useStemEngine';
 import { fmtBpm, fmtGenre, fmtNumber } from '../../features/results/helpers/format';
 import { CoverArt } from '../../ui/CoverArt';
 import { hueFromId } from '../../ui/hueFromId';
@@ -100,12 +113,19 @@ function sectionsFromPhase7(
   }));
 }
 
-interface UiNote {
-  id: string;
-  timePct: number;
-  body: string;
-  pinned: boolean;
-}
+
+// Neutral frame fed to buildMeterCells before the first rAF frame lands (or
+// while paused). Mirrors the AudioFrame shape from useAudioGraph.
+const ZERO_FRAME: AudioFrame = {
+  fftBins: new Float32Array(0),
+  bandAverages: new Float32Array(0),
+  rmsDb: -Infinity,
+  lufsShort: -Infinity,
+  truePeakDb: -Infinity,
+  correlation: 0,
+  scopeL: new Float32Array(0),
+  scopeR: new Float32Array(0),
+};
 
 function ListenPage() {
   const { versionId } = Route.useParams();
@@ -123,6 +143,16 @@ function ListenPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const graph = useAudioGraph(audioRef);
 
+  // ── Visualizer (StageDisplay) state ──
+  const [stage, setStage] = useState<StageId>('eq');
+  const [viz, setViz] = useState<VizState>(DEFAULT_VIZ_STATE);
+  const fireworksRef = useRef<FireworksHandle | null>(null);
+  const patchViz = useCallback((p: Partial<VizState>) => setViz((v) => ({ ...v, ...p })), []);
+
+  // Half-beat pulse drives the visualizer's --beat CSS var (~0.484s @124 BPM).
+  const bpm = Math.max(1, phase2?.bpm ?? phase1?.bpm ?? 124);
+  const beatSeconds = 60 / bpm / 2;
+
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState<number>(phase1?.duration_seconds ?? 0);
@@ -134,6 +164,49 @@ function ListenPage() {
   // instead of the MediaElement. Owned by the page so transport ops know
   // which lane to operate on.
   const pitchModeRef = useRef(false);
+
+  // ── Stem deck (DJ tab) ── real per-stem audio, mutually exclusive with the
+  // single-track graph. Backed by the existing stems pipeline (GetStems +
+  // /stems/{stemId}/audio); stems are id-keyed (per-stem mode allows multiple
+  // stems per role).
+  const { data: stemProposals, isLoading: stemsLoading } = useStemProposals(
+    versionId,
+    Boolean(versionId),
+  );
+  const deckStems = useMemo<DeckStem[]>(
+    () =>
+      (stemProposals?.stems ?? []).map((st) => ({
+        id: st.id,
+        role: st.confirmedRole ?? st.detectedRole ?? null,
+        filename: st.originalFilename,
+      })),
+    [stemProposals],
+  );
+  const stemEngine = useStemEngine(() => graph.ensureContext());
+  const [stemPlaying, setStemPlaying] = useState(false);
+  const stemUrl = useCallback(
+    (stemId: string) =>
+      `/api/versions/${versionId}/stems/${stemId}/audio?t=${encodeURIComponent(getAccessToken() ?? '')}`,
+    [versionId],
+  );
+  // Entering stem mode pauses the single-track lanes (MediaElement + pitch).
+  const activateStemMode = useCallback(() => {
+    if (pitchModeRef.current && graph.pitchPlaying()) graph.pitchPause();
+    const a = audioRef.current;
+    if (a && !a.paused) a.pause();
+    setPlaying(false);
+  }, [graph]);
+  // Reverse exclusivity: starting the single-track audio stops the stem deck.
+  const stopStems = () => {
+    setStemPlaying((prev) => {
+      if (prev) stemEngine.pause();
+      return false;
+    });
+  };
+
+  // Throttle gate for the rail's meter frame so the rail subtree doesn't
+  // reconcile at the 60fps spectrum cadence. Updated to ~12 Hz in the draw loop.
+  const lastMeterTsRef = useRef(0);
 
   const audioUrl = useMemo(() => {
     if (!versionId) return null;
@@ -285,6 +358,7 @@ function ListenPage() {
           toast.error(`Audio engine failed: ${err instanceof Error ? err.message : err}`);
           return;
         }
+        stopStems();
         graph.pitchResume();
         setPlaying(true);
       }
@@ -296,6 +370,7 @@ function ListenPage() {
       setPlaying(false);
       return;
     }
+    stopStems();
     try {
       graph.ensureContext();
     } catch (err) {
@@ -310,23 +385,26 @@ function ListenPage() {
       });
   };
 
-  const seek = (pct: number) => {
-    const dur = pitch.enabled && pitchModeRef.current
-      ? graph.pitchDuration()
-      : Number.isFinite(audioRef.current?.duration ?? NaN)
-        ? audioRef.current!.duration
-        : duration;
-    const t = Math.max(0, Math.min(1, pct)) * dur;
-    if (pitch.enabled && pitchModeRef.current) {
-      graph.pitchSeek(t);
+  const seek = useCallback(
+    (pct: number) => {
+      const dur = pitch.enabled && pitchModeRef.current
+        ? graph.pitchDuration()
+        : Number.isFinite(audioRef.current?.duration ?? NaN)
+          ? audioRef.current!.duration
+          : duration;
+      const t = Math.max(0, Math.min(1, pct)) * dur;
+      if (pitch.enabled && pitchModeRef.current) {
+        graph.pitchSeek(t);
+        setPosition(t);
+        return;
+      }
+      const a = audioRef.current;
+      if (!a) return;
+      a.currentTime = t;
       setPosition(t);
-      return;
-    }
-    const a = audioRef.current;
-    if (!a) return;
-    a.currentTime = t;
-    setPosition(t);
-  };
+    },
+    [pitch.enabled, graph, duration],
+  );
 
   // ── Real-audio reactive state (rAF loop reads from AudioGraph) ──
   const [spectrumValues, setSpectrumValues] = useState<number[]>(
@@ -337,12 +415,19 @@ function ListenPage() {
     truePeakDb: phase1?.true_peak_db ?? phase1?.peak_dbfs ?? -1,
     correlation: phase1?.stereo_correlation ?? 0.6,
   });
+  // Full live frame captured for the rail's Meters tab (buildMeterCells).
+  const [meterFrame, setMeterFrame] = useState<AudioFrame | null>(null);
 
   useEffect(() => {
     if (!playing) return;
     let raf = 0;
     const draw = () => {
       const frame = graph.readFrame();
+      const nowMs = performance.now();
+      if (nowMs - lastMeterTsRef.current >= 80) {
+        lastMeterTsRef.current = nowMs;
+        setMeterFrame(frame);
+      }
       if (frame.fftBins.length > 0) {
         const bins = frame.fftBins;
         // Down-sample the FFT to SPECTRUM_BARS bars using log-spaced bins so
@@ -404,7 +489,6 @@ function ListenPage() {
   const createNote = useCreateNote(versionId);
   const patchNote = usePatchNote(versionId);
   const deleteNote = useDeleteNote(versionId);
-  const [noteInput, setNoteInput] = useState('');
   const [activeNote, setActiveNote] = useState<string | null>(null);
 
   // Project the server's absolute-time notes into the scrubber's pct-of-duration
@@ -420,37 +504,132 @@ function ListenPage() {
     }));
   }, [serverNotes, duration]);
 
-  const handleAddNote = (text?: string) => {
-    const t = (text ?? noteInput).trim();
-    if (!t) return;
-    createNote.mutate(
-      { tSeconds: Math.max(0, position), text: t, pinned: false },
-      {
-        onSuccess: () => {
-          setNoteInput('');
-          toast.success('Note saved');
+  const handleAddNote = useCallback(
+    (text: string) => {
+      const t = text.trim();
+      if (!t) return;
+      createNote.mutate(
+        { tSeconds: Math.max(0, position), text: t, pinned: false },
+        {
+          onSuccess: () => {
+            toast.success('Note saved');
+          },
+          onError: (err) =>
+            toast.error(err instanceof Error ? err.message : 'Could not save note'),
         },
+      );
+    },
+    [createNote, position],
+  );
+
+  const handleTogglePin = useCallback(
+    (id: string, currentlyPinned: boolean) => {
+      patchNote.mutate({ noteId: id, body: { pinned: !currentlyPinned } });
+    },
+    [patchNote],
+  );
+
+  const handleDeleteNote = useCallback(
+    (id: string) => {
+      deleteNote.mutate(id, {
         onError: (err) =>
-          toast.error(err instanceof Error ? err.message : 'Could not save note'),
-      },
-    );
-  };
+          toast.error(err instanceof Error ? err.message : 'Could not delete note'),
+      });
+    },
+    [deleteNote],
+  );
 
-  const handleTogglePin = (id: string, currentlyPinned: boolean) => {
-    patchNote.mutate({ noteId: id, body: { pinned: !currentlyPinned } });
-  };
-
-  const handleDeleteNote = (id: string) => {
-    deleteNote.mutate(id, {
-      onError: (err) =>
-        toast.error(err instanceof Error ? err.message : 'Could not delete note'),
-    });
-  };
+  // Seek to a note via the same `seek(pct)` path the scrubber uses (handles
+  // both the MediaElement and pitch-lane cases).
+  const handleSeekToNote = useCallback(
+    (id: string) => {
+      const n = notes.find((x) => x.id === id);
+      if (!n) return;
+      setActiveNote(id);
+      seek(n.timePct);
+    },
+    [notes, seek],
+  );
 
   const [activeTool, setActiveTool] = useState<string | null>(null);
   useEffect(() => {
     if (verdict_id) toast.info('Preset handoff from Coach not yet wired.');
   }, [verdict_id]);
+
+  // ── Right rail (Meters · Issues · DJ · Notes) ──
+  // Each panel node + the tab set is memoized so the 60fps spectrum re-renders
+  // don't rebuild the rail subtree. meterFrame is throttled to ~12 Hz, so the
+  // meters panel reconciles at that lower cadence. GR is null until a later
+  // plan wires live compressor reduction.
+  const meterCells = useMemo(
+    () => buildMeterCells({ frame: meterFrame ?? ZERO_FRAME, phase1: phase1 ?? {}, grReductionDb: null }),
+    [meterFrame, phase1],
+  );
+  // NotesPanel only uses position for the "@time" label on its add-row, so we
+  // pass whole-second precision to avoid rebuilding it on every position tick
+  // (position updates at 60fps while pitch mode is active).
+  const notePosition = Math.floor(position);
+  const metersNode = useMemo(() => <MeterModule cells={meterCells} variant="panel" />, [meterCells]);
+  const issuesNode = useMemo(() => <IssuesPanel jobId={latestJobId} />, [latestJobId]);
+  const djNode = useMemo(
+    () => (
+      <>
+        <StemDeck
+          stems={deckStems}
+          isLoading={stemsLoading}
+          stemUrl={stemUrl}
+          engine={stemEngine}
+          playing={stemPlaying}
+          onActivate={activateStemMode}
+          onPlayPause={setStemPlaying}
+        />
+        <VizControls
+          viz={viz}
+          onChange={patchViz}
+          onLaunchFireworks={() => fireworksRef.current?.launch()}
+        />
+      </>
+    ),
+    [deckStems, stemsLoading, stemUrl, stemEngine, stemPlaying, activateStemMode, viz, patchViz],
+  );
+  const notesNode = useMemo(
+    () => (
+      <NotesPanel
+        notes={notes}
+        duration={duration}
+        position={notePosition}
+        activeNote={activeNote}
+        pending={createNote.isPending}
+        onSeekToNote={handleSeekToNote}
+        onAdd={handleAddNote}
+        onTogglePin={handleTogglePin}
+        onDelete={handleDeleteNote}
+      />
+    ),
+    [notes, duration, notePosition, activeNote, createNote.isPending, handleSeekToNote, handleAddNote, handleTogglePin, handleDeleteNote],
+  );
+  const railTabs = useMemo(
+    () => buildRailTabs({ meters: metersNode, issues: issuesNode, dj: djNode, notes: notesNode }),
+    [metersNode, issuesNode, djNode, notesNode],
+  );
+
+  // ── StageDisplay slot nodes ──
+  // Memoized so the 60fps spectrum re-renders (spectrumValues state) don't
+  // rebuild the meter overlay, the fireworks canvas, or the info content.
+  const meterOverlayNode = useMemo(
+    () => <MeterModule cells={meterCells} variant="overlay" defaultCollapsed />,
+    [meterCells],
+  );
+  const fireworksNode = useMemo(() => <Fireworks ref={fireworksRef} />, []);
+  const infoContentNode = useMemo(
+    () => (
+      <>
+        <h2>{song?.name ?? 'Untitled'}</h2>
+        <p>{version?.label ?? (version ? `v${version.versionNumber}` : '')}</p>
+      </>
+    ),
+    [song?.name, version],
+  );
 
   if (versionLoading) {
     return (
@@ -477,25 +656,24 @@ function ListenPage() {
 
   return (
     <div className={s.page}>
-      <Link to="/library" className={s.backLink}>← Library</Link>
-
-      <section className={`card ${s.trackHeader}`}>
+      <section className={s.trackHeader}>
         <CoverArt hue={hue} size="md" />
         <div className={s.titleBlock}>
+          <div className={s.trackName}>{trackName}</div>
           <div className={s.nowPlayingRow}>
             <span className="dot pulse-soft" />
-            <span>Now playing</span>
-            {version.label && <span style={{ color: 'var(--muted)' }}>· {version.label}</span>}
-          </div>
-          <div className={s.trackName}>{trackName}</div>
-          <div className={s.pillRow}>
-            {phase2?.genre && <Pill tone="cyan">{fmtGenre(phase2.genre)}</Pill>}
-            {phase1?.bpm != null && <Pill><span className="mono">{fmtBpm(phase1.bpm)}</span> BPM</Pill>}
-            {phase1?.detected_key && <Pill><span className="mono">{phase1.detected_key}</span></Pill>}
-            {phase1?.lufs != null && <Pill><span className="mono">{fmtNumber(phase1.lufs, 1)}</span> LUFS</Pill>}
-            <Pill><span className="mono">v{version.versionNumber}</span></Pill>
+            <span className={s.nowPlaying}>Now playing</span>
+            {version.label && <span className={s.subLabel}>· {version.label}</span>}
           </div>
         </div>
+        <div className={s.pillRow}>
+          {phase2?.genre && <Pill tone="cyan">{fmtGenre(phase2.genre)}</Pill>}
+          {phase1?.bpm != null && <Pill><span className="mono">{fmtBpm(phase1.bpm)}</span> BPM</Pill>}
+          {phase1?.detected_key && <Pill><span className="mono">{phase1.detected_key}</span></Pill>}
+          {phase1?.lufs != null && <Pill><span className="mono">{fmtNumber(phase1.lufs, 1)}</span> LUFS</Pill>}
+          <Pill><span className="mono">v{version.versionNumber}</span></Pill>
+        </div>
+        <div className={s.stripSpacer} />
         <div className={s.headerRight}>
           {song && latestJobId && (
             <Link
@@ -509,229 +687,106 @@ function ListenPage() {
         </div>
       </section>
 
-      <section className={`card ${s.hero}`}>
-        <div className={s.heroVisual}>
-          <div className={s.sectionOverlay}>
-            <span style={{ width: 6, height: 6, borderRadius: 3, background: SECTION_COLORS[currentSection.type] }} />
-            <span>{currentSection.name}</span>
-          </div>
-          <div className={s.liveStrip}>
-            <LivePill label="LUFS-S" value={fmtNumber(meters.lufsShort, 1)} />
-            <LivePill label="Peak" value={fmtNumber(meters.truePeakDb, 1)} />
-            <LivePill label="Corr" value={fmtNumber(meters.correlation, 2)} />
-          </div>
-          <div className={s.spectrumWrap} aria-hidden="true">
-            {spectrumValues.map((v, i) => (
-              <div key={i} className={s.spectrumBar} style={{ height: `${Math.round(v * 92)}%` }} />
-            ))}
-          </div>
-          <div className={s.freqGrid}>
-            <span>20</span><span>60</span><span>200</span><span>500</span><span>1k</span><span>2k</span><span>5k</span><span>10k</span><span>20k</span>
-          </div>
-        </div>
+      <div className={s.mainGrid}>
+        <div className={s.centerCol}>
+          <section className={s.hero}>
+            <StageDisplay
+              stage={stage}
+              onStageChange={setStage}
+              spectrumValues={spectrumValues}
+              beatSeconds={beatSeconds}
+              viz={viz}
+              meterOverlay={meterOverlayNode}
+              fireworks={fireworksNode}
+              infoContent={infoContentNode}
+            />
 
-        <div className={s.heroTransport}>
-          <Scrubber
-            sections={sections}
-            waveform={waveform}
-            positionPct={positionPct}
-            duration={duration}
-            notes={notes}
-            loop={loop}
-            onSeek={seek}
-            onNoteClick={(id) => setActiveNote(id)}
-            activeNote={activeNote}
-          />
-          <div className={s.transportRow}>
-            <button
-              type="button"
-              className={s.playBig}
-              data-playing={playing}
-              onClick={togglePlay}
-              disabled={!audioUrl}
-              aria-label={playing ? 'Pause' : 'Play'}
-            >
-              {playing ? '⏸' : '▶'}
-            </button>
-            <button type="button" className={s.transportBtn} onClick={() => seek(Math.max(0, positionPct - 0.05))} aria-label="Back 5%">⏮</button>
-            <button type="button" className={s.transportBtn} onClick={() => seek(Math.min(1, positionPct + 0.05))} aria-label="Forward 5%">⏭</button>
-            <span className={s.timecode}>{formatTime(position)} / {formatTime(duration)}</span>
-            <SpeedDial value={rate} onChange={setRate} />
-            <div className={s.volumeWrap}>
-              <span className={s.volumeIcon}>VOL</span>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.01}
-                value={volume}
-                onChange={(e) => setVolume(parseFloat(e.target.value))}
-                className={s.volumeSlider}
-                aria-label="Volume"
+            <div className={s.liveStrip}>
+              <LivePill label="Section" value={currentSection.name} />
+              <LivePill label="LUFS-S" value={fmtNumber(meters.lufsShort, 1)} />
+              <LivePill label="Peak" value={fmtNumber(meters.truePeakDb, 1)} />
+              <LivePill label="Corr" value={fmtNumber(meters.correlation, 2)} />
+            </div>
+
+            <div className={s.heroTransport}>
+              <Scrubber
+                sections={sections}
+                waveform={waveform}
+                positionPct={positionPct}
+                duration={duration}
+                notes={notes}
+                loop={loop}
+                onSeek={seek}
+                onNoteClick={(id) => setActiveNote(id)}
+                activeNote={activeNote}
               />
-              <span className={s.volumeIcon}>{Math.round(volume * 100)}</span>
-            </div>
-            <button
-              type="button"
-              className="btn sm"
-              onClick={() => handleAddNote(`Note @ ${formatTime(position)}`)}
-              disabled={!duration || createNote.isPending}
-            >
-              + Note @ time
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <PreviewTools
-        graph={graph}
-        activeTool={activeTool}
-        onActiveToolChange={setActiveTool}
-        loop={loop}
-        onLoopChange={setLoop}
-        audioRef={audioRef}
-        currentTime={position}
-        duration={duration}
-        pitch={pitch}
-        onPitchChange={handlePitchChange}
-      />
-
-      <div className={s.belowGrid}>
-        <div className={s.activityCol}>
-          <section className={`card ${s.notesCard}`}>
-            <header className={s.notesHd}>
-              <span className={s.notesTitle}>Session notes</span>
-              <Pill tone="violet">private to you</Pill>
-            </header>
-            {notes.length === 0 ? (
-              <p className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>
-                No notes yet. Use + Note @ time during playback.
-              </p>
-            ) : (
-              <ul className={s.notesList}>
-                {notes.map((n) => (
-                  <li key={n.id} style={{ display: 'flex', alignItems: 'stretch', gap: 4 }}>
-                    <button
-                      type="button"
-                      className={s.noteRow}
-                      data-active={activeNote === n.id}
-                      onClick={() => { setActiveNote(n.id); seek(n.timePct); }}
-                      style={{ flex: 1 }}
-                    >
-                      <span className={s.noteIcon} data-pinned={n.pinned}>{n.pinned ? '★' : '·'}</span>
-                      <div>
-                        <div className={s.noteMeta}>
-                          <span>@{formatTime(n.timePct * duration)}</span>
-                          {n.pinned && <span style={{ color: 'var(--cyan)' }}>PINNED</span>}
-                        </div>
-                        <div className={s.noteBody}>{n.body}</div>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      className="btn ghost sm"
-                      onClick={(e) => { e.stopPropagation(); handleTogglePin(n.id, n.pinned); }}
-                      title={n.pinned ? 'Unpin' : 'Pin'}
-                      style={{ alignSelf: 'stretch' }}
-                    >
-                      {n.pinned ? '☆' : '★'}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn ghost sm"
-                      onClick={(e) => { e.stopPropagation(); handleDeleteNote(n.id); }}
-                      title="Delete note"
-                      style={{ alignSelf: 'stretch', color: 'var(--red)' }}
-                    >
-                      ×
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className={s.newNoteRow}>
-              <span className={s.noteIcon}>+</span>
-              <input
-                className={s.newNoteInput}
-                placeholder="What did you hear?"
-                value={noteInput}
-                onChange={(e) => setNoteInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddNote(); } }}
-              />
-              <span className={s.newNoteTime}>@{formatTime(position)}</span>
-              <button
-                type="button"
-                className="btn primary sm"
-                onClick={() => handleAddNote()}
-                disabled={!noteInput.trim() || createNote.isPending}
-              >
-                Save
-              </button>
-            </div>
-          </section>
-
-          <section className={`card ${s.contextCard}`}>
-            <header className={s.notesHd}>
-              <span className={s.notesTitle}>Track context</span>
-              <span className="label">from analysis</span>
-            </header>
-            <div className={s.contextGrid}>
-              <ContextStat label="Genre" value={phase2?.genre ? fmtGenre(phase2.genre) : '—'} />
-              <ContextStat label="BPM" value={fmtBpm(phase1?.bpm)} />
-              <ContextStat label="Duration" value={duration > 0 ? formatTime(duration) : '—'} />
-              <ContextStat label="Key" value={phase1?.detected_key ?? '—'} />
-              <ContextStat label="LUFS" value={phase1?.lufs != null ? fmtNumber(phase1.lufs, 1) : '—'} />
-              <ContextStat label="Mono" value={phase1?.mono_compatibility != null ? `${Math.round(phase1.mono_compatibility * 100)}%` : '—'} />
+              <div className={s.transportRow}>
+                <div className={s.transportGroup}>
+                  <button type="button" className={s.transportBtn} onClick={() => seek(Math.max(0, positionPct - 0.05))} aria-label="Back 5%">⏮</button>
+                  <button
+                    type="button"
+                    className={s.playBig}
+                    data-playing={playing}
+                    onClick={togglePlay}
+                    disabled={!audioUrl}
+                    aria-label={playing ? 'Pause' : 'Play'}
+                  >
+                    {playing ? '⏸' : '▶'}
+                  </button>
+                  <button type="button" className={s.transportBtn} onClick={() => seek(Math.min(1, positionPct + 0.05))} aria-label="Forward 5%">⏭</button>
+                </div>
+                <div className={s.timecodeBlock}>
+                  <span className={s.tcNow}>{formatTime(position)}</span>
+                  <span className={s.tcSep}>/</span>
+                  <span className={s.tcTotal}>{formatTime(duration)}</span>
+                </div>
+                <SpeedDial value={rate} onChange={setRate} />
+                <div className={s.volumeWrap}>
+                  <span className={s.volumeIcon}>VOL</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={volume}
+                    onChange={(e) => setVolume(parseFloat(e.target.value))}
+                    className={s.volumeSlider}
+                    aria-label="Volume"
+                  />
+                  <span className={`${s.volumeIcon} mono`}>{Math.round(volume * 100)}</span>
+                </div>
+                <div className={s.transportSpacer} />
+                <button
+                  type="button"
+                  className="btn sm"
+                  onClick={() => handleAddNote(`Note @ ${formatTime(position)}`)}
+                  disabled={!duration || createNote.isPending}
+                >
+                  + Note @ time
+                </button>
+              </div>
             </div>
           </section>
         </div>
 
-        <aside className={s.meterRail}>
-          <section className={`card ${s.meterCard}`}>
-            <header className={s.cardHd}>
-              <span className={s.cardTitle}>Live meters</span>
-              <Pill tone={playing ? 'cyan' : 'default'}>{playing ? 'live' : 'idle'}</Pill>
-            </header>
-            <MeterRow
-              label="Short LUFS"
-              value={fmtNumber(meters.lufsShort, 1)}
-              fillPct={Math.max(0, Math.min(1, (meters.lufsShort + 30) / 30))}
-              color="var(--cyan)"
-            />
-            <MeterRow
-              label="True peak"
-              value={fmtNumber(meters.truePeakDb, 1)}
-              fillPct={Math.max(0, Math.min(1, (meters.truePeakDb + 12) / 12))}
-              color={meters.truePeakDb > -1 ? 'var(--orange)' : 'var(--cyan)'}
-            />
-            <MeterRow
-              label="Correlation"
-              value={fmtNumber(meters.correlation, 2)}
-              fillPct={(meters.correlation + 1) / 2}
-              color={meters.correlation < 0 ? 'var(--red)' : meters.correlation < 0.3 ? 'var(--yellow)' : 'var(--cyan)'}
-            />
-            <MeterRow
-              label="Width"
-              value={phase1?.stereo_width != null ? `${Math.round(phase1.stereo_width * 100)}%` : '—'}
-              fillPct={phase1?.stereo_width ?? 0.5}
-              color="var(--blue)"
-            />
-          </section>
-
-          <section className={`card ${s.meterCard}`}>
-            <header className={s.cardHd}>
-              <span className={s.cardTitle}>Frequency tilt</span>
-            </header>
-            <div className={s.miniSpectrum} aria-hidden="true">
-              {spectrumValues.slice(0, 28).map((v, i) => (
-                <div key={i} style={{ height: `${Math.round(v * 90 + 10)}%` }} />
-              ))}
-            </div>
-            <div className={s.miniLabels}>
-              <span>20Hz</span><span>1kHz</span><span>20kHz</span>
-            </div>
-          </section>
+        <aside className={s.railCol}>
+          <RightRail tabs={railTabs} defaultTab="meters" />
         </aside>
+      </div>
+
+      <div className={s.toolStrip}>
+        <PreviewTools
+          graph={graph}
+          activeTool={activeTool}
+          onActiveToolChange={setActiveTool}
+          loop={loop}
+          onLoopChange={setLoop}
+          audioRef={audioRef}
+          currentTime={position}
+          duration={duration}
+          pitch={pitch}
+          onPitchChange={handlePitchChange}
+        />
       </div>
 
       {audioUrl && (
@@ -873,40 +928,6 @@ function LivePill({ label, value }: { label: string; value: string }) {
     <div className={s.livePill}>
       <span className={s.livePillLabel}>{label}</span>
       <span className={s.livePillValue}>{value}</span>
-    </div>
-  );
-}
-
-function ContextStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className={s.contextStat}>
-      <div className={s.statLabel}>{label}</div>
-      <div className={s.statValue}>{value}</div>
-    </div>
-  );
-}
-
-function MeterRow({
-  label,
-  value,
-  fillPct,
-  color,
-}: {
-  label: string;
-  value: string;
-  fillPct: number;
-  color: string;
-}) {
-  return (
-    <div className={s.meterRow}>
-      <span className={s.meterRowLabel}>{label}</span>
-      <span className={s.meterRowValue}>{value}</span>
-      <div className={s.meterBar}>
-        <div
-          className={s.meterFill}
-          style={{ width: `${Math.max(0, Math.min(1, fillPct)) * 100}%`, background: color }}
-        />
-      </div>
     </div>
   );
 }

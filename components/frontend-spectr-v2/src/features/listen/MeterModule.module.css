@@ -1,0 +1,124 @@
+/* Base (panel variant — used inside the Meters rail tab). */
+.module {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--card);
+  overflow: hidden;
+}
+
+/* Overlay variant — glass card floating over the visualizer (top-right). */
+.overlay {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 6;
+  width: 220px;
+  border: 1px solid var(--border-2);
+  background: rgba(11, 13, 18, 0.82);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 28px -12px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px 7px 11px;
+  border-bottom: 1px solid var(--border);
+}
+.led {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 6px var(--cyan);
+  animation: mmPulse 1.8s ease-in-out infinite;
+}
+@keyframes mmPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.title {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-2);
+}
+.mini {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.chevron {
+  margin-left: auto;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 10px;
+}
+.mini + .chevron { margin-left: 8px; }
+.chevron:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
+
+.body { padding: 9px; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.cell {
+  background: var(--card-2);
+  padding: 6px 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cellLabel {
+  font-size: 8px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.cellValue {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+.cell[data-tone='warn'] .cellValue { color: var(--orange); }
+.cell[data-tone='good'] .cellValue { color: var(--cyan); }
+.cell[data-empty='true'] .cellValue { color: var(--muted); }
+
+.target {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--card-2);
+  font-size: 9.5px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.targetDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--cyan);
+  flex-shrink: 0;
+}
+.targetLabel { color: var(--muted); }

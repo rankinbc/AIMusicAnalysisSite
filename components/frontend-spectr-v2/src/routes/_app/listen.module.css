@@ -1,12 +1,13 @@
 /* Listen page — Now Playing producer view. */
 
+/* Full-bleed, fixed-height DAW shell sitting under the 56px app topnav.
+   Edge-to-edge hairline panels — NOT centered rounded cards. */
 .page {
-  max-width: 1360px;
-  margin: 0 auto;
-  padding: var(--space-6) var(--space-6) 32px;
+  height: calc(100vh - 56px);
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  background: var(--bg);
+  overflow: hidden;
 }
 
 .backLink {
@@ -29,43 +30,54 @@
   color: var(--red);
 }
 
-/* ── Track header row ────────────────────────────────────────────────── */
+/* ── Track strip ─────────────────────────────────────────────────────── */
+/* Horizontal 66px-style strip: cover · meta · pills · spacer · CTA.
+   Ported from the prototype's `.track-strip`, reconciled to app tokens. */
 
 .trackHeader {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 14px 18px;
+  gap: 14px;
+  height: 66px;
+  padding: 0 16px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 var(--inner-hi, rgba(255, 255, 255, 0.035));
 }
 
 .titleBlock {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
-  flex: 1;
+}
+
+.trackName {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  line-height: 1.15;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .nowPlayingRow {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--cyan);
-  font-weight: 700;
+  gap: 7px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--muted);
 }
-
-.trackName {
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.nowPlaying {
+  color: var(--cyan);
+  font-weight: 600;
+}
+.subLabel {
+  color: var(--muted);
 }
 
 .pillRow {
@@ -73,7 +85,10 @@
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
-  margin-top: 2px;
+}
+
+.stripSpacer {
+  flex: 1;
 }
 
 .headerRight {
@@ -86,47 +101,21 @@
 /* ── Hero card (visualizer + transport) ──────────────────────────────── */
 
 .hero {
-  overflow: hidden;
-  padding: 0;
-}
-
-.heroVisual {
-  position: relative;
-  height: 380px;
-  background:
-    radial-gradient(ellipse 75% 60% at 50% 100%, rgba(0, 229, 176, 0.16) 0%, transparent 65%),
-    radial-gradient(ellipse 40% 60% at 20% 0%, rgba(167, 139, 250, 0.12) 0%, transparent 60%),
-    linear-gradient(180deg, var(--card) 0%, var(--bg-2) 100%);
-  overflow: hidden;
-}
-
-.sectionOverlay {
-  position: absolute;
-  top: 14px;
-  left: 18px;
+  flex: 1;
+  min-height: 0;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: rgba(7, 10, 18, 0.6);
-  backdrop-filter: blur(10px);
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-2);
-  font-weight: 700;
-  z-index: 2;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
 }
 
 .liveStrip {
-  position: absolute;
-  top: 14px;
-  right: 18px;
   display: flex;
-  gap: 6px;
-  z-index: 2;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
 }
 
 .livePill {
@@ -155,44 +144,15 @@
   color: var(--text);
 }
 
-.spectrumWrap {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: flex-end;
-  padding: 36px 18px 26px;
-  gap: 2px;
-}
-
-.spectrumBar {
-  flex: 1;
-  background: linear-gradient(180deg, var(--cyan) 0%, rgba(0, 229, 176, 0.3) 100%);
-  border-radius: 2px;
-  transition: height 0.05s linear;
-  box-shadow: 0 0 6px rgba(0, 229, 176, 0.3);
-  min-height: 2px;
-}
-
-.freqGrid {
-  position: absolute;
-  left: 18px;
-  right: 18px;
-  bottom: 8px;
-  display: flex;
-  justify-content: space-between;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 9px;
-  color: var(--dim);
-  pointer-events: none;
-}
-
 .heroTransport {
-  padding: 18px 22px;
+  flex-shrink: 0;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
   border-top: 1px solid var(--border);
   background: var(--card);
+  box-shadow: inset 0 1px 0 var(--inner-hi, rgba(255, 255, 255, 0.035));
 }
 
 .scrubber {
@@ -203,7 +163,7 @@
 
 .scrubberRibbon {
   display: flex;
-  height: 14px;
+  height: 20px;
   border-radius: 4px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -214,12 +174,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 8px;
-  letter-spacing: 0.1em;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
   border-right: 1px solid rgba(0, 0, 0, 0.3);
-  text-transform: uppercase;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -241,20 +200,21 @@
 
 .waveform {
   position: relative;
-  height: 64px;
+  height: 48px;
   display: flex;
   align-items: flex-end;
-  gap: 1.5px;
-  background: rgba(255, 255, 255, 0.02);
+  gap: 1px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 4px 6px;
+  padding: 3px 4px;
   cursor: pointer;
   user-select: none;
 }
 
 .waveBar {
   flex: 1;
-  border-radius: 1px;
+  border-radius: 0.5px;
   transition: background 0.1s;
 }
 .waveBar[data-played='true'] {
@@ -266,7 +226,7 @@
 
 .waveTooltip {
   position: absolute;
-  bottom: 68px;
+  bottom: 52px;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 10px;
   background: var(--surface);
@@ -309,102 +269,153 @@
 .transportRow {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
+/* Grouped transport: skip-back · play · skip-fwd in one bordered pill. */
+.transportGroup {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 6px;
+  height: 38px;
+  border-radius: 7px;
+  background: var(--surface-2, var(--card-2));
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 var(--inner-hi, rgba(255, 255, 255, 0.035));
+}
+
 .playBig {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
   background: var(--cyan);
-  color: var(--ink-on-accent);
+  color: #06151a;
   display: grid;
   place-items: center;
   border: none;
   cursor: pointer;
-  font-size: 18px;
+  font-size: 15px;
   font-family: inherit;
-  transition: box-shadow 0.15s, background 0.15s;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: background 0.15s, box-shadow 0.15s;
 }
 .playBig[data-playing='true'] {
-  box-shadow: 0 0 24px rgba(0, 229, 176, 0.45);
+  box-shadow: 0 0 18px rgba(0, 229, 176, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 .playBig:hover {
-  background: var(--accent-bright);
+  background: var(--cyan-2, #00f3bd);
+}
+.playBig:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .transportBtn {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--border);
+  width: 30px;
+  height: 30px;
+  border-radius: 5px;
+  background: transparent;
+  border: none;
   color: var(--text-2);
   display: grid;
   place-items: center;
   cursor: pointer;
   font-family: inherit;
+  font-size: 13px;
 }
 .transportBtn:hover {
-  border-color: var(--border-2);
+  background: rgba(255, 255, 255, 0.04);
   color: var(--text);
 }
 
-.timecode {
+.timecodeBlock {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  height: 38px;
+  border-radius: 7px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 var(--inner-hi, rgba(255, 255, 255, 0.035));
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 13px;
-  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.tcNow {
+  color: var(--text);
+  font-size: 14px;
   font-weight: 600;
+}
+.tcSep {
+  color: var(--muted);
+  font-size: 12px;
+}
+.tcTotal {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .speedDial {
   display: flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.03);
+  gap: 1px;
+  padding: 2px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--surface-2, var(--card-2));
   border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 3px;
-  gap: 2px;
 }
 .speedDial button {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--muted);
-  padding: 4px 8px;
+  padding: 4px 9px;
   border-radius: 4px;
   background: transparent;
   border: none;
   cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.speedDial button:hover {
+  color: var(--text-2);
 }
 .speedDial button[data-active='true'] {
   background: var(--card-hover);
-  color: var(--text);
-  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--cyan);
+  box-shadow: inset 0 0 0 1px var(--border-2);
+}
+
+.transportSpacer {
+  flex: 1;
 }
 
 .volumeWrap {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1;
-  min-width: 140px;
-  max-width: 220px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: var(--surface-2, var(--card-2));
+  border: 1px solid var(--border);
 }
 
 .volumeIcon {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.12em;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
   color: var(--muted);
 }
 
 .volumeSlider {
-  flex: 1;
+  width: 84px;
   -webkit-appearance: none;
   appearance: none;
-  height: 4px;
+  height: 3px;
   border-radius: 2px;
   background: var(--dim);
   outline: none;
@@ -413,12 +424,19 @@
 .volumeSlider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: var(--cyan);
   cursor: pointer;
-  box-shadow: 0 0 6px rgba(0, 229, 176, 0.5);
+}
+.volumeSlider::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: none;
+  border-radius: 50%;
+  background: var(--cyan);
+  cursor: pointer;
 }
 
 /* ── Tools rail ──────────────────────────────────────────────────────── */
@@ -557,255 +575,50 @@
   letter-spacing: 0.04em;
 }
 
-/* ── 2-col grid below tools ─────────────────────────────────────────── */
+/* ── Main grid: center column + right rail ──────────────────────────── */
 
-.belowGrid {
+.mainGrid {
+  flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 18px;
-  align-items: flex-start;
+  grid-template-columns: 1fr 320px;
+  gap: 1px;
+  background: var(--border);
 }
 
-.activityCol,
-.meterRail {
+.centerCol {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
 }
 
-.notesCard {
-  padding: 18px;
-}
-
-.notesHd {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.notesTitle {
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.notesList {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.noteRow {
-  display: grid;
-  grid-template-columns: 28px 1fr;
-  gap: 12px;
-  align-items: center;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.015);
-  cursor: pointer;
-  font-family: inherit;
-  text-align: left;
-  color: var(--text);
-}
-.noteRow:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-.noteRow[data-active='true'] {
-  border-color: rgba(0, 229, 176, 0.4);
-  background: rgba(0, 229, 176, 0.06);
-}
-
-.noteIcon {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  display: grid;
-  place-items: center;
-  background: rgba(167, 139, 250, 0.1);
-  border: 1px solid rgba(167, 139, 250, 0.32);
-  color: var(--violet);
-  font-size: 12px;
-}
-.noteIcon[data-pinned='true'] {
-  background: rgba(0, 229, 176, 0.1);
-  border-color: rgba(0, 229, 176, 0.32);
-  color: var(--cyan);
-}
-
-.noteMeta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10px;
-  color: var(--muted);
-}
-
-.noteBody {
-  font-size: 12px;
-  color: var(--text-2);
-  margin-top: 2px;
-}
-
-.newNoteRow {
-  display: grid;
-  grid-template-columns: 28px 1fr auto auto;
-  gap: 8px;
-  align-items: center;
-  margin-top: 12px;
-}
-
-.newNoteInput {
-  background: rgba(7, 10, 18, 0.6);
-  border: 1px solid var(--border-2);
-  border-radius: 6px;
-  padding: 8px 12px;
-  color: var(--text);
-  font-family: inherit;
-  font-size: 12px;
-  outline: none;
-}
-.newNoteInput:focus {
-  border-color: rgba(0, 229, 176, 0.4);
-  box-shadow: 0 0 0 3px var(--cyan-dim);
-}
-
-.newNoteTime {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10px;
-  color: var(--muted);
-}
-
-.contextCard {
-  padding: 18px;
-}
-
-.contextGrid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-}
-
-.contextStat {
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.018);
-}
-
-.statLabel {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 9px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.statValue {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text);
-  margin-top: 4px;
-}
-
-.meterCard,
-.similarCard {
-  padding: 16px 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.cardHd {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.cardTitle {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--muted);
-  font-weight: 700;
-}
-
-.meterRow {
-  display: grid;
-  grid-template-columns: 80px auto 1fr;
-  align-items: center;
-  gap: 12px;
-}
-
-.meterRowLabel {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-  text-transform: uppercase;
-}
-
-.meterRowValue {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text);
-  text-align: right;
-}
-
-.meterBar {
-  position: relative;
-  height: 8px;
-  border-radius: 4px;
-  background: var(--dim);
+.railCol {
+  background: var(--bg);
+  min-height: 0;
   overflow: hidden;
 }
 
-.meterFill {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  border-radius: 4px;
-  background: var(--cyan);
-  box-shadow: 0 0 6px rgba(0, 229, 176, 0.4);
-  transition: width 0.1s linear;
-}
-
-.miniSpectrum {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 56px;
-}
-.miniSpectrum > div {
-  flex: 1;
-  background: linear-gradient(180deg, var(--cyan) 0%, rgba(0, 229, 176, 0.4) 100%);
-  border-radius: 1px;
-  transition: height 0.08s linear;
-  min-height: 2px;
-}
-
-.miniLabels {
-  display: flex;
-  justify-content: space-between;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 9px;
-  color: var(--dim);
+/* Full-width tool strip pinned to the bottom of the shell. */
+.toolStrip {
+  flex-shrink: 0;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 var(--inner-hi, rgba(255, 255, 255, 0.035));
+  max-height: 230px;
+  overflow-y: auto;
 }
 
 @media (max-width: 980px) {
-  .belowGrid {
+  .page {
+    height: auto;
+    overflow: visible;
+  }
+  .mainGrid {
     grid-template-columns: 1fr;
   }
-  .contextGrid {
-    grid-template-columns: repeat(2, 1fr);
+  .railCol {
+    display: none;
   }
 }

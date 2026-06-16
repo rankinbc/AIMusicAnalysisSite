@@ -109,3 +109,7 @@ components/data/
 # Loose Playwright screenshots dropped at repo root by browser smoke tests
 /*.png
 !components/**/*.png
+
+# run logs / generated analysis outputs
+*.log.err
+data/output/
