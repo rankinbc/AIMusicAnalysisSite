@@ -1,0 +1,186 @@
+{
+  "file_path": "C:\\Users\\badmin\\projects\\AIMusicAnalysisSite\\data\\audio\\upload\\23f62b73-88c0-4109-b1f6-cf0796d89f2a\\source.flac",
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Universal Mix Analysis",
+      "status": "ok",
+      "data": {
+        "lufs": -10.950908638189,
+        "rms": 0.22763431072235107,
+        "bpm": 71.77734375,
+        "duration_seconds": 773.3333333333334,
+        "bands": {
+          "sub_bass": -23.841899871826172,
+          "bass": -28.63397216796875,
+          "low_mid": -40.73850631713867,
+          "mid": -45.64692306518555,
+          "upper_mid": -46.63581848144531,
+          "presence": -48.290504455566406,
+          "air": -67.23562622070312
+        },
+        "stereo_correlation": 0.6445925256882561,
+        "stereo_width": 0.19191405177116394,
+        "true_peak_db": -1.2861774774435393,
+        "peak_dbfs": -0.3845248530699773,
+        "clipping_detected": false,
+        "clipped_sample_count": 0,
+        "detected_key": "F#",
+        "mono_compatibility": 0.906808198013203,
+        "low_energy": 52.057674407958984,
+        "structure": {
+          "sections": [],
+          "beats": []
+        }
+      },
+      "error": null
+    },
+    {
+      "phase": 2,
+      "name": "Genre Detection",
+      "status": "ok",
+      "data": {
+        "genre": "other",
+        "confidence": 0.5,
+        "bpm": 71.77734375
+      },
+      "error": null
+    },
+    {
+      "phase": 3,
+      "name": "Genre-Specific Scoring",
+      "status": "ok",
+      "data": {
+        "genre": "other",
+        "total_score": 46.82813048362732,
+        "sub_scores": {
+          "frequency_balance": 78.30313682556152,
+          "stereo_width": 15.353124141693115
+        },
+        "notes": []
+      },
+      "error": null
+    },
+    {
+      "phase": 4,
+      "name": "Stem Separation & Clash",
+      "status": "ok",
+      "data": {
+        "stems": {},
+        "band_energy": {
+          "sub_bass": 28.160310943595583,
+          "bass": 38.59182221238753,
+          "low_mid": 29.8815000262292,
+          "mid": 16.1050953900623,
+          "high_mid": 8.57067149407239,
+          "presence": 5.003312551295265,
+          "air": -13.167187982650361
+        },
+        "clashes": [
+          {
+            "stems": "low-end buildup",
+            "frequency_range": "sub-bass / bass (20\u2013200 Hz)",
+            "severity": "high"
+          },
+          {
+            "stems": "low-mid congestion",
+            "frequency_range": "low-mid (200\u2013500 Hz)",
+            "severity": "high"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "phase": 5,
+      "name": "Reference Comparison",
+      "status": "ok",
+      "data": {
+        "status": "skipped",
+        "deltas": {},
+        "genre_context": {
+          "genre": "other",
+          "preset_name": "other",
+          "checks": {}
+        }
+      },
+      "error": null
+    },
+    {
+      "phase": 6,
+      "name": "Gap Analysis",
+      "status": "ok",
+      "data": {
+        "genre": "other",
+        "percentile": 50.0,
+        "gaps": {}
+      },
+      "error": null
+    },
+    {
+      "phase": 7,
+      "name": "Arrangement Advice",
+      "status": "ok",
+      "data": {
+        "overall_score": 0,
+        "grade": "F",
+        "total_duration": 0.0,
+        "component_scores": {},
+        "structure_score": 0,
+        "length_score": 0,
+        "eight_bar_score": 0,
+        "energy_contrast_score": 0,
+        "flow_score": 0,
+        "section_scores": [],
+        "issues": [
+          {
+            "severity": "CRITICAL",
+            "message": "Structure detection failed or no sections found",
+            "section": null,
+            "fix_suggestion": "Ensure audio file is valid and long enough for structure detection"
+          }
+        ],
+        "suggestions": [],
+        "metadata": {
+          "total_bars": 0,
+          "section_count": 0,
+          "detected_tempo": null,
+          "has_intro": false,
+          "has_buildup": false,
+          "has_drop": false,
+          "has_breakdown": false,
+          "has_outro": false,
+          "energy_contrast_db": null
+        },
+        "fixes": [],
+        "violations": [
+          "Structure detection failed or no sections found"
+        ],
+        "section_count": 0
+      },
+      "error": null
+    },
+    {
+      "phase": 8,
+      "name": "ALS Analysis",
+      "status": "skipped",
+      "data": {},
+      "error": null
+    }
+  ],
+  "overall_score": 46.82813048362732,
+  "grade": "F",
+  "top_fixes": [
+    "EQ clash between low-end buildup: reduce sub-bass / bass (20\u2013200 Hz)",
+    "EQ clash between low-mid congestion: reduce low-mid (200\u2013500 Hz)",
+    "Optimize mix levels for streaming targets"
+  ],
+  "danceability_score": 20,
+  "coach_name": "Coach",
+  "coach_intro": "Here's what I'd focus on to push this mix forward:",
+  "coached_fixes": [
+    "EQ clash between low-end buildup: reduce sub-bass / bass (20\u2013200 Hz)",
+    "EQ clash between low-mid congestion: reduce low-mid (200\u2013500 Hz)",
+    "Optimize mix levels for streaming targets"
+  ]
+}
