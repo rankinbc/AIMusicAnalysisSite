@@ -1,0 +1,11 @@
+.canvas {
+  position: absolute;
+  inset: 0;
+  /* <canvas> is a replaced element: without explicit width/height it falls back
+     to its intrinsic 300×150 in the corner (inset:0 alone won't stretch it). */
+  width: 100%;
+  height: 100%;
+  z-index: 3;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}

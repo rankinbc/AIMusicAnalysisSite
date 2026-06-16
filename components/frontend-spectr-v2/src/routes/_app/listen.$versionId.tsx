@@ -37,6 +37,7 @@ import { StageDisplay, type VizState } from '../../features/listen/StageDisplay'
 import { Fireworks, type FireworksHandle } from '../../features/listen/Fireworks';
 import { RadialPulse, type RadialPulseHandle } from '../../features/listen/RadialPulse';
 import { Spectrogram, type SpectrogramHandle } from '../../features/listen/Spectrogram';
+import { LaserShow, type LaserShowHandle } from '../../features/listen/LaserShow';
 import { DEFAULT_VIZ_STATE, VizControls } from '../../features/listen/VizControls';
 import { PresetBar } from '../../features/listen/PresetBar';
 import {
@@ -169,6 +170,8 @@ function ListenPage() {
   const stageRootRef = useRef<HTMLDivElement | null>(null);
   const radialRef = useRef<RadialPulseHandle | null>(null);
   const spectroRef = useRef<SpectrogramHandle | null>(null);
+  const laserShowRef = useRef<LaserShowHandle | null>(null);
+  const laserClearedRef = useRef(true);
   const beatDetectorRef = useRef(createBeatDetector());
   const dropDetectorRef = useRef(createDropDetector());
   const flashLimiterRef = useRef(createFlashLimiter());
@@ -188,6 +191,12 @@ function ListenPage() {
   laserOnRef.current = viz.laserOn;
   const laserEffectRef = useRef(viz.laserEffect);
   laserEffectRef.current = viz.laserEffect;
+  const laserIntensityRef = useRef(viz.laserIntensity);
+  laserIntensityRef.current = viz.laserIntensity;
+  const laserMonoRef = useRef(viz.laserMono);
+  laserMonoRef.current = viz.laserMono;
+  const laserColorRef = useRef(viz.laserColor);
+  laserColorRef.current = viz.laserColor;
   const barColorRef = useRef(viz.barColor);
   barColorRef.current = viz.barColor;
   const autoColorRef = useRef(viz.autoColor);
@@ -545,37 +554,36 @@ function ListenPage() {
         }
       }
 
-      // ── Beat-reactive laser (imperative CSS vars, no React state) ──
-      const root = stageRootRef.current;
-      if (root) {
-        const reactive = laserOnRef.current && !reduced;
-        if (reactive) {
-          if (beatNow) {
-            // Smooth beam pulse fires on every detected beat (motion only;
-            // reduced-motion already gated detection above).
-            pulseEnvRef.current = 1;
-            // The full-field WHITE flash is the photosensitivity-sensitive
-            // channel, so it stays capped at ≤3 Hz. Strobe doesn't use it —
-            // it blinks its own thin beams in CSS — only flash/beat do.
-            const fx = laserEffectRef.current;
-            if (
-              (fx === 'flash' || fx === 'beat') &&
-              flashLimiterRef.current.allow(nowMs)
-            ) {
-              flashEnvRef.current = 1;
-            }
-          }
-          pulseEnvRef.current *= 0.86; // ~exp decay (~160ms tail @60fps)
-          flashEnvRef.current *= 0.8; // faster decay; min 333ms gap caps rate
-          root.style.setProperty('--laser-pulse', pulseEnvRef.current.toFixed(3));
-          root.style.setProperty('--beat-flash', flashEnvRef.current.toFixed(3));
-        } else if (pulseEnvRef.current !== 0 || flashEnvRef.current !== 0) {
-          // Laser off or reduced-motion: settle the vars to a static frame once.
-          pulseEnvRef.current = 0;
-          flashEnvRef.current = 0;
-          root.style.setProperty('--laser-pulse', '0');
-          root.style.setProperty('--beat-flash', '0');
+      // ── Beat pulse envelope (shared by the laser show + radial visualizer) ──
+      if (beatNow) pulseEnvRef.current = 1;
+      pulseEnvRef.current *= 0.86; // ~exp decay (~160ms tail @60fps)
+
+      // ── Laser show (Canvas beam-fan engine) ──
+      if (laserOnRef.current && !reduced) {
+        // Full-field white flash is the photosensitivity-sensitive channel, so
+        // it stays capped at ≤3 Hz; only flash/beat effects use it.
+        const fx = laserEffectRef.current;
+        if (beatNow && (fx === 'flash' || fx === 'beat') && flashLimiterRef.current.allow(nowMs)) {
+          flashEnvRef.current = 1;
         }
+        flashEnvRef.current *= 0.8;
+        laserShowRef.current?.draw({
+          t: nowMs,
+          beat: beatNow,
+          pulse: pulseEnvRef.current,
+          flash: flashEnvRef.current,
+          intensity: laserIntensityRef.current / 100,
+          mono: laserMonoRef.current,
+          color: laserColorRef.current,
+          effect: fx,
+          energyMul: energyMulRef.current,
+        });
+        laserClearedRef.current = false;
+      } else if (!laserClearedRef.current) {
+        // Laser off / reduced-motion: blank the canvas once (frozen frame).
+        flashEnvRef.current = 0;
+        laserShowRef.current?.clear();
+        laserClearedRef.current = true;
       }
 
       if (frame.fftBins.length > 0) {
@@ -621,6 +629,40 @@ function ListenPage() {
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
   }, [playing, graph]);
+
+  // Idle laser: when the laser is on but nothing is playing, keep the fan
+  // gently sweeping (no beats) so it doesn't sit blank. During playback the
+  // main loop above drives it reactively instead.
+  useEffect(() => {
+    if (!viz.laserOn || playing || reduceMotion) return undefined;
+    let raf = 0;
+    const tick = () => {
+      laserShowRef.current?.draw({
+        t: performance.now(),
+        beat: false,
+        pulse: 0,
+        flash: 0,
+        intensity: viz.laserIntensity / 100,
+        mono: viz.laserMono,
+        color: viz.laserColor,
+        effect: viz.laserEffect,
+        energyMul: viz.energy / 50,
+      });
+      laserClearedRef.current = false;
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [
+    viz.laserOn,
+    playing,
+    reduceMotion,
+    viz.laserIntensity,
+    viz.laserMono,
+    viz.laserColor,
+    viz.laserEffect,
+    viz.energy,
+  ]);
 
   // Real section layout from phase 7 (or fallback when phase 7 is missing).
   const sections = useMemo(
@@ -794,6 +836,7 @@ function ListenPage() {
   const fireworksNode = useMemo(() => <Fireworks ref={fireworksRef} />, []);
   const radialNode = useMemo(() => <RadialPulse ref={radialRef} />, []);
   const spectroNode = useMemo(() => <Spectrogram ref={spectroRef} />, []);
+  const laserNode = useMemo(() => <LaserShow ref={laserShowRef} />, []);
   const infoContentNode = useMemo(
     () => (
       <>
@@ -869,6 +912,7 @@ function ListenPage() {
               fireworks={fireworksNode}
               radial={radialNode}
               spectro={spectroNode}
+              laser={laserNode}
               infoContent={infoContentNode}
               rootRef={stageRootRef}
             />

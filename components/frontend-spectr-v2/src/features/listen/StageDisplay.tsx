@@ -1,7 +1,7 @@
 import { memo, type ReactNode, type RefObject } from 'react';
 import { StageSelect } from './StageSelect';
 import { EqCurveOverlay } from './EqCurveOverlay';
-import { LaserRig, type LaserEffect } from './LaserRig';
+import { type LaserEffect } from './LaserRig';
 import type { StageId } from './stageRegistry';
 import { laserVars } from './laser';
 import s from './StageDisplay.module.css';
@@ -75,6 +75,7 @@ interface Props {
   fireworks: ReactNode; // <Fireworks ref=... />
   radial: ReactNode; // <RadialPulse ref=... />, shown on the 'radial' stage
   spectro: ReactNode; // <Spectrogram ref=... />, shown on the 'spectro' stage
+  laser: ReactNode; // <LaserShow ref=... /> overlay, drawn by the page loop
   infoContent: ReactNode; // title/cover/pills for the info stage
   // Optional ref to the visualizer root so the page's rAF loop can write
   // audio-reactive CSS vars (--laser-pulse / --beat-flash) imperatively
@@ -151,7 +152,7 @@ export function StageDisplay(props: Props) {
       {stage === 'orbit' && <OrbitStage />}
       {stage === 'info' && <div className={s.info}>{props.infoContent}</div>}
 
-      <LaserRig on={viz.laserOn} mono={viz.laserMono} effect={viz.laserEffect} />
+      {props.laser}
       {props.fireworks}
     </div>
   );
