@@ -5,7 +5,13 @@ import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'rea
 import { toast } from 'sonner';
 
 import { ApiError, fetcher } from '../api/fetcher';
-import { useEntitlements, useReferences, useStemProposals } from '../api/hooks';
+import {
+  useCreateSong,
+  useEntitlements,
+  useReferences,
+  useSongs,
+  useStemProposals,
+} from '../api/hooks';
 import { extractApiError } from '../api/error-utils';
 import { STEM_ROLES } from '../api/types';
 import type {
@@ -21,11 +27,31 @@ import type {
 import { useFileUpload } from '../hooks/useFileUpload';
 import f from '../styles/forms.module.css';
 import { buildConfirmPayload } from './stems-upload-helpers';
-import { buildAutoConfirmPayload, decideDispatchPath } from './unified-upload-helpers';
+import {
+  buildAutoConfirmPayload,
+  decideDispatchPath,
+  decideSongAssociation,
+  GENRE_HINTS,
+} from './unified-upload-helpers';
 import s from './UploadVersionDialog.module.css';
 
 const MAX_STEMS = 100;
 const STEM_ACCEPT = ['.wav', '.flac'];
+const AUDIO_ACCEPT = ['.wav', '.flac', '.mp3', '.aiff', '.aif', '.m4a', '.ogg'];
+const ALS_ACCEPT = ['.als', '.gz'];
+
+const NEW_SONG = '__new__';
+const CUSTOM_GENRE = '__custom__';
+
+const hasExt = (name: string, exts: string[]) =>
+  exts.some((ext) => name.toLowerCase().endsWith(ext));
+
+/** First dropped/picked file whose extension is allowed (single-file zones). */
+const firstMatching = (list: FileList | null, exts: string[]): File | null => {
+  if (!list) return null;
+  for (const file of Array.from(list)) if (hasExt(file.name, exts)) return file;
+  return null;
+};
 
 interface Props {
   open: boolean;
@@ -73,10 +99,17 @@ async function waitClassified(versionId: string): Promise<StemRawDto[]> {
  * uploaded with analyze=false; a single analysis is dispatched downstream by
  * either /stems/confirm (stems path) or /versions/{id}/analyze (no-stems path).
  */
+// Treat a prefilled genre that isn't one of the curated hints as a custom value.
+const isCustomGenre = (g: string) => Boolean(g) && !(GENRE_HINTS as readonly string[]).includes(g);
+
 export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }: Props) {
   const [phase, setPhase] = useState<Phase>('form');
   const [mix, setMix] = useState<File | null>(null);
   const [genre, setGenre] = useState(defaultGenre ?? '');
+  const [genreCustom, setGenreCustom] = useState(() => isCustomGenre(defaultGenre ?? ''));
+  // Song association (only used when no songId prop): '__new__' or an existing song id.
+  const [songChoice, setSongChoice] = useState<string>(NEW_SONG);
+  const [newSongName, setNewSongName] = useState('');
   const [als, setAls] = useState<File | null>(null);
   const [refMode, setRefMode] = useState<'upload' | 'library'>('upload');
   const [pickedReferenceId, setPickedReferenceId] = useState('');
@@ -88,6 +121,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
   const [reviewStems, setReviewStems] = useState(false);
   const [perStem, setPerStem] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [mixDrag, setMixDrag] = useState(false);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [versionId, setVersionId] = useState('');
   const [songIdState, setSongIdState] = useState('');
@@ -100,6 +134,8 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
   // confirm step (which dispatches in a later tick than handleSubmit).
   const resolvedRefIdRef = useRef<string>('');
   const references = useReferences();
+  const songs = useSongs();
+  const createSong = useCreateSong();
   const fileUpload = useFileUpload();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -130,6 +166,10 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
     setPhase('form');
     setMix(null);
     setGenre(defaultGenre ?? '');
+    setGenreCustom(isCustomGenre(defaultGenre ?? ''));
+    setSongChoice(NEW_SONG);
+    setNewSongName('');
+    setMixDrag(false);
     setAls(null);
     setRefMode('upload');
     setPickedReferenceId('');
@@ -184,6 +224,28 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
     if (phase === 'form') addStemFiles(e.dataTransfer.files);
   };
 
+  const onMixDrop = (e: DragEvent) => {
+    e.preventDefault();
+    setMixDrag(false);
+    const file = firstMatching(e.dataTransfer.files, AUDIO_ACCEPT);
+    if (file) setMix(file);
+    else toast.error('Drop an audio file (WAV / FLAC / MP3 / AIFF / M4A / OGG).');
+  };
+
+  const onAlsDrop = (e: DragEvent) => {
+    e.preventDefault();
+    const file = firstMatching(e.dataTransfer.files, ALS_ACCEPT);
+    if (file) setAls(file);
+    else toast.error('Drop an Ableton .als (or gzip-compressed .als).');
+  };
+
+  const onRefDrop = (e: DragEvent) => {
+    e.preventDefault();
+    const file = firstMatching(e.dataTransfer.files, AUDIO_ACCEPT);
+    if (file) setRefFile(file);
+    else toast.error('Drop a reference audio file.');
+  };
+
   const togglePlay = (row: StemRow) => {
     const a = audioRef.current;
     if (!a) return;
@@ -230,10 +292,35 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
     setBusy(true);
     setPhase('uploading');
     try {
+      // 0. Resolve the song this mix attaches to. A typed new name creates the
+      //    song first (pure frontend orchestration); an existing pick reuses its
+      //    id; otherwise the BFF auto-names the song from the mix filename.
+      const assoc = decideSongAssociation({
+        ...(songId ? { songIdProp: songId } : {}),
+        mode: songChoice === NEW_SONG ? 'new' : 'existing',
+        pickedSongId: songChoice === NEW_SONG ? '' : songChoice,
+        newSongName,
+      });
+      let targetSongId = '';
+      if (assoc.action === 'fixed' || assoc.action === 'existing') {
+        targetSongId = assoc.songId;
+      } else if (assoc.action === 'create') {
+        setStatus('Creating song…');
+        const created = await createSong.mutateAsync({
+          name: assoc.name,
+          genreHint: genre.trim() || null,
+        });
+        targetSongId = created.id;
+        // Remember it: if a later step fails and the user retries, reuse this
+        // song instead of creating a duplicate.
+        setSongChoice(created.id);
+        setNewSongName('');
+      }
+
       // 1. Mix — deferred (no job yet).
       setStatus('Uploading mix…');
       const mixRes = await fileUpload.upload(mix, {
-        ...(songId ? { song_id: songId } : {}),
+        ...(targetSongId ? { song_id: targetSongId } : {}),
         ...(genre.trim() ? { genre_hint: genre.trim() } : {}),
         analyze: false,
       });
@@ -378,7 +465,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
     >
       <Dialog.Portal>
         <Dialog.Overlay className={f.dialogOverlay} />
-        <Dialog.Content className={f.dialogContent}>
+        <Dialog.Content className={`${f.dialogContent} ${s.unifiedContent}`}>
           <Dialog.Title className={f.dialogTitle}>
             {songId ? 'New version' : 'New track'}
           </Dialog.Title>
@@ -440,48 +527,136 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                 <p className={s.dropHint}>{status || 'Working…'}</p>
               ) : (
                 <>
-                  <label className={f.label}>
-                    Song / mix (required)
-                    <input
-                      type="file"
-                      accept=".wav,.flac,.mp3,audio/*"
-                      onChange={(e) => setMix(e.target.files?.[0] ?? null)}
-                      required
-                      className={s.fileInput}
-                    />
-                  </label>
-
-                  <label className={f.label}>
-                    Genre hint (optional)
-                    <input
-                      type="text"
-                      value={genre}
-                      onChange={(e) => setGenre(e.target.value)}
-                      placeholder="e.g. Progressive House"
-                      maxLength={50}
-                    />
-                  </label>
-
-                  <p className={s.subhead}>Stems (optional)</p>
+                  {/* ── Primary: the required mix drop-zone ── */}
                   <label
-                    className={`${s.dropZone} ${dragActive ? s.dropZoneActive : ''}`}
+                    className={`${s.mixZone} ${mixDrag ? s.mixZoneActive : ''} ${
+                      mix ? s.mixZoneFilled : ''
+                    }`}
                     onDragOver={(e) => {
                       e.preventDefault();
-                      setDragActive(true);
+                      setMixDrag(true);
                     }}
-                    onDragLeave={() => setDragActive(false)}
-                    onDrop={onStemDrop}
+                    onDragLeave={() => setMixDrag(false)}
+                    onDrop={onMixDrop}
                   >
-                    <span>Drop stems here, or click to choose</span>
-                    <span className={s.dropHint}>WAV / FLAC · up to {MAX_STEMS} files</span>
+                    <span className={s.mixZoneIcon} aria-hidden>
+                      {mix ? '🎚️' : '⬆'}
+                    </span>
+                    {mix ? (
+                      <span className={s.mixZoneTitle} title={mix.name}>
+                        {mix.name}
+                      </span>
+                    ) : (
+                      <span className={s.mixZoneTitle}>Drop your mix here, or click to choose</span>
+                    )}
+                    <span className={s.dropHint}>
+                      {mix ? 'Click to replace · required' : 'WAV / FLAC / MP3 · required'}
+                    </span>
                     <input
                       type="file"
-                      multiple
-                      accept=".wav,.flac,audio/*"
-                      onChange={(e) => addStemFiles(e.target.files)}
+                      accept=".wav,.flac,.mp3,.aiff,.aif,.m4a,.ogg,audio/*"
+                      onChange={(e) => setMix(e.target.files?.[0] ?? null)}
                       style={{ display: 'none' }}
                     />
                   </label>
+
+                  {/* ── Song association: only when not adding a version to a fixed song ── */}
+                  {!songId && (
+                    <div className={s.optionGroup}>
+                      <label className={f.label}>
+                        Song
+                        <select
+                          value={songChoice}
+                          onChange={(e) => setSongChoice(e.target.value)}
+                        >
+                          <option value={NEW_SONG}>➕ New song…</option>
+                          {(songs.data ?? [])
+                            .filter((song) => song.archivedAt == null)
+                            .map((song) => (
+                              <option key={song.id} value={song.id}>
+                                {song.name}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+                      {songChoice === NEW_SONG && (
+                        <label className={f.label}>
+                          New song name <span className={f.hint}>(optional)</span>
+                          <input
+                            type="text"
+                            value={newSongName}
+                            onChange={(e) => setNewSongName(e.target.value)}
+                            placeholder="defaults to the mix filename"
+                            maxLength={200}
+                          />
+                        </label>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── Genre hint select (UX-DR41) ── */}
+                  <label className={f.label}>
+                    Genre hint <span className={f.hint}>(optional)</span>
+                    <select
+                      value={genreCustom ? CUSTOM_GENRE : genre}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === CUSTOM_GENRE) {
+                          setGenreCustom(true);
+                          setGenre('');
+                        } else {
+                          setGenreCustom(false);
+                          setGenre(v);
+                        }
+                      }}
+                    >
+                      <option value="">— none —</option>
+                      {GENRE_HINTS.map((g) => (
+                        <option key={g} value={g}>
+                          {g}
+                        </option>
+                      ))}
+                      <option value={CUSTOM_GENRE}>Other…</option>
+                    </select>
+                  </label>
+                  {genreCustom && (
+                    <input
+                      type="text"
+                      className={f.input}
+                      value={genre}
+                      onChange={(e) => setGenre(e.target.value)}
+                      placeholder="Type a genre"
+                      maxLength={50}
+                      aria-label="Custom genre"
+                    />
+                  )}
+
+                  {/* ── Optional: Stems ── */}
+                  <div className={s.optionGroup}>
+                    <div className={s.optionHead}>
+                      <p className={s.subhead}>Stems</p>
+                      <span className={s.benefitChip}>Per-stem balance & clash detection</span>
+                    </div>
+                    <label
+                      className={`${s.dropZone} ${dragActive ? s.dropZoneActive : ''}`}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setDragActive(true);
+                      }}
+                      onDragLeave={() => setDragActive(false)}
+                      onDrop={onStemDrop}
+                    >
+                      <span>Drop stems here, or click to choose</span>
+                      <span className={s.dropHint}>WAV / FLAC · up to {MAX_STEMS} files</span>
+                      <input
+                        type="file"
+                        multiple
+                        accept=".wav,.flac,audio/*"
+                        onChange={(e) => addStemFiles(e.target.files)}
+                        style={{ display: 'none' }}
+                      />
+                    </label>
+                  </div>
                   {stemRows.length > 0 && (
                     <div className={s.stemTable}>
                       {stemRows.map((r) => (
@@ -521,18 +696,49 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                     </label>
                   )}
 
-                  <p className={s.subhead}>Ableton project (optional)</p>
-                  <label className={f.label}>
-                    .als or gzip-compressed .als
-                    <input
-                      type="file"
-                      accept=".als,.gz"
-                      onChange={(e) => setAls(e.target.files?.[0] ?? null)}
-                      className={s.fileInput}
-                    />
-                  </label>
+                  {/* ── Optional: Ableton project ── */}
+                  <div className={s.optionGroup}>
+                    <div className={s.optionHead}>
+                      <p className={s.subhead}>Ableton project</p>
+                      <span className={s.benefitChip}>Arrangement & track-name insights</span>
+                    </div>
+                    {als ? (
+                      <div className={s.fileChip}>
+                        <span className={s.stemName} title={als.name}>
+                          {als.name}
+                        </span>
+                        <button
+                          type="button"
+                          className={s.fileClear}
+                          onClick={() => setAls(null)}
+                          aria-label="Remove Ableton project"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <label
+                        className={s.dropZone}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={onAlsDrop}
+                      >
+                        <span>Drop .als here, or click to choose</span>
+                        <span className={s.dropHint}>.als or gzip-compressed .als</span>
+                        <input
+                          type="file"
+                          accept=".als,.gz"
+                          onChange={(e) => setAls(e.target.files?.[0] ?? null)}
+                          style={{ display: 'none' }}
+                        />
+                      </label>
+                    )}
+                  </div>
 
-                  <p className={s.subhead}>Reference track (optional)</p>
+                  {/* ── Optional: Reference track ── */}
+                  <div className={s.optionHead}>
+                    <p className={s.subhead}>Reference track</p>
+                    <span className={s.benefitChip}>Compare your mix to a pro track</span>
+                  </div>
                   <label className={f.label}>
                     Reference source
                     <select
@@ -575,14 +781,33 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                         your library first.
                       </p>
                     )
+                  ) : refFile ? (
+                    <div className={s.fileChip}>
+                      <span className={s.stemName} title={refFile.name}>
+                        {refFile.name}
+                      </span>
+                      <button
+                        type="button"
+                        className={s.fileClear}
+                        onClick={() => setRefFile(null)}
+                        aria-label="Remove reference audio"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   ) : (
-                    <label className={f.label}>
-                      Reference audio
+                    <label
+                      className={s.dropZone}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={onRefDrop}
+                    >
+                      <span>Drop reference audio, or click to choose</span>
+                      <span className={s.dropHint}>WAV / FLAC / MP3</span>
                       <input
                         type="file"
-                        accept=".wav,.flac,.mp3,audio/*"
+                        accept=".wav,.flac,.mp3,.aiff,.aif,.m4a,.ogg,audio/*"
                         onChange={(e) => setRefFile(e.target.files?.[0] ?? null)}
-                        className={s.fileInput}
+                        style={{ display: 'none' }}
                       />
                     </label>
                   )}

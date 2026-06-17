@@ -212,6 +212,10 @@
 }
 
 /* ── Unified "New track" dialog ── */
+.unifiedContent {
+  width: min(560px, 94vw);
+}
+
 .unifiedBody {
   display: flex;
   flex-direction: column;
@@ -228,4 +232,101 @@
   text-transform: uppercase;
   color: var(--muted);
   margin-top: 6px;
+}
+
+/* Primary mix drop-zone — the one required input, visually weightier. */
+.mixZone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 28px 16px;
+  border: 1.5px dashed var(--cyan-dim, var(--border-2));
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--text-2);
+  font-size: 14px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.mixZone:hover,
+.mixZoneActive {
+  border-color: var(--cyan);
+  background: var(--card-2);
+}
+
+.mixZoneFilled {
+  border-style: solid;
+  border-color: var(--cyan);
+}
+
+.mixZoneTitle {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.mixZoneIcon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+/* A labeled optional asset group: heading row (title + benefit chip) + zone. */
+.optionGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.optionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.benefitChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* A chosen single file shown after pick (mix / als / reference upload). */
+.fileChip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.fileChip .stemName {
+  flex: 1;
+}
+
+.fileClear {
+  padding: 2px 8px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.fileClear:hover {
+  border-color: var(--red, #f04);
+  color: var(--red, #f04);
 }
