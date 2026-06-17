@@ -210,8 +210,21 @@
   color: var(--text);
 }
 
+.avatarMenuDivider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
+}
+
 .main {
   flex: 1;
+}
+
+/* Clear the persistent MiniPlayer bar (UX-DR8) — only present ≥768px. */
+@media (min-width: 768px) {
+  .main {
+    padding-bottom: 64px;
+  }
 }
 
 .loading {

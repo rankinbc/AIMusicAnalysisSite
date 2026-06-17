@@ -10,6 +10,7 @@ import {
 
 import { useAuth } from '../auth/AuthContext';
 import { BrandMark } from '../ui/BrandMark';
+import { MiniPlayer } from '../ui/MiniPlayer';
 import s from './_app/_appLayout.module.css';
 
 // Authenticated layout. beforeLoad guards on auth — anonymous users get
@@ -82,15 +83,18 @@ function AppLayout() {
           <Link to="/reports" className={s.navTab} data-active={isReportActive}>
             Report
           </Link>
-          <button type="button" className={s.navTab} data-active={false} disabled>
+          <button
+            type="button"
+            className={s.navTab}
+            data-active={false}
+            disabled
+            title="Open a track from your library to start listening"
+          >
             Listen
           </button>
           <Link to="/library" className={s.navTab} data-active={isLibraryActive}>
             Library
           </Link>
-          <button type="button" className={s.navTab} data-active={false} disabled>
-            Discover
-          </button>
         </nav>
 
         <div className={s.navRight}>
@@ -151,11 +155,11 @@ function AppLayout() {
                   Profile
                 </Link>
                 <Link
-                  to="/library"
+                  to="/usage"
                   className={s.avatarMenuItem}
                   onClick={() => setMenuOpen(false)}
                 >
-                  Library
+                  Usage
                 </Link>
                 <Link
                   to="/billing"
@@ -164,13 +168,7 @@ function AppLayout() {
                 >
                   Billing
                 </Link>
-                <Link
-                  to="/usage"
-                  className={s.avatarMenuItem}
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Usage
-                </Link>
+                <div className={s.avatarMenuDivider} />
                 <button type="button" className={s.avatarMenuItem} onClick={handleLogout}>
                   Sign out
                 </button>
@@ -182,6 +180,7 @@ function AppLayout() {
       <main className={s.main}>
         <Outlet />
       </main>
+      <MiniPlayer />
     </div>
   );
 }
