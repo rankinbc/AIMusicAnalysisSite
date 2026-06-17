@@ -60,13 +60,46 @@ export interface Move {
   evidence: MoveEvidence;
   /** 0..1 → "NN% conf"; the one number shown up front (the rank signal). */
   confidence: number;
+  /** Priority/impact score 0..100 — `VerdictDto.priorityScore` for AI Moves,
+   *  derived from severity for the rule-engine baseline. Drives the impact tag. */
+  impact: number;
   /** "rule engine" or the specialist's display label. */
   source: string;
+  /** True for the free rule-engine baseline (rendered with a `RULE` chip rather
+   *  than an AI persona chip — provenance, UX-DR42). */
+  isRule: boolean;
+  /** Specialist slug for AI Moves (drives the persona chip's group + color);
+   *  null for rule-engine Moves. */
+  specialist: string | null;
   status: MoveStatus;
   /** The originating verdict id, when this Move came from a specialist. Null for
    *  rule-engine Moves (which have no server-side userState to toggle). */
   verdictId: string | null;
 }
+
+export interface ImpactBand {
+  label: string;
+  glyph: string;
+  tone: string;
+}
+
+/** Map a 0..100 priority/impact score to a display band. Thresholds match the
+ *  roster's VerdictCard so the two surfaces read consistently. */
+export function impactBand(impact: number): ImpactBand {
+  if (impact >= 75) return { label: 'HIGH IMPACT', glyph: '↑↑', tone: 'var(--orange)' };
+  if (impact >= 45) return { label: 'MED IMPACT', glyph: '↑', tone: 'var(--yellow)' };
+  return { label: 'LOW IMPACT', glyph: '·', tone: 'var(--muted)' };
+}
+
+/** Rule-engine Moves carry no per-finding priority score, so derive a stable
+ *  impact from severity (keeps the baseline ranked sensibly without inventing
+ *  precision we don't have). */
+const RULE_IMPACT_BY_SEV: Record<MoveSev, number> = {
+  crit: 80,
+  warn: 60,
+  info: 38,
+  low: 22,
+};
 
 const SPECIALIST_LABEL = new Map(SPECIALIST_CATALOG.map((m) => [m.slug, m.label]));
 
@@ -158,7 +191,10 @@ export function verdictToMove(v: VerdictDto): Move {
       chartType: v.chartType,
     },
     confidence: clamp01(v.confidence),
+    impact: clampImpact(v.priorityScore),
     source: SPECIALIST_LABEL.get(v.specialist) ?? prettifyCategory(v.specialist),
+    isRule: false,
+    specialist: v.specialist,
     status: statusFromUserState(v.userState),
     verdictId: v.id,
   };
@@ -189,7 +225,10 @@ export function ruleFixToMove(
     // but they carry no per-finding score, so we use a fixed baseline that
     // still ranks them above unproven low-confidence specialist guesses.
     confidence: 0.9,
+    impact: RULE_IMPACT_BY_SEV.info,
     source: 'rule engine',
+    isRule: true,
+    specialist: null,
     status: 'suggested',
     verdictId: null,
   };
@@ -273,6 +312,11 @@ function capitalize(s: string): string {
 function clamp01(n: number): number {
   if (!Number.isFinite(n)) return 0;
   return Math.max(0, Math.min(1, n));
+}
+
+function clampImpact(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(100, Math.round(n)));
 }
 
 // ── Markdown export ─────────────────────────────────────────────────────────

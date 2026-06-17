@@ -1,11 +1,16 @@
 import { Fragment, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 
-import type { Move, MoveSev } from './move-model';
+import { groupColor, specialistGroup } from './helpers/specialists';
+import { impactBand, type Move, type MoveSev } from './move-model';
+import { MiniBot } from './TranceBot';
 import s from './MoveCard.module.css';
 
 interface MoveCardProps {
   move: Move;
+  /** 1-based position in the plan — rendered as a "Finding #NN" label + ghost
+   *  numeral so each Move reads like a numbered studio finding (UX-DR12). */
+  rank?: number | undefined;
   /** Toggle the Move's plan membership (committed ⇄ suggested). */
   onToggleCommit: (move: Move) => void;
   /** Deep-link to the Listen page to audition the fix. */
@@ -41,18 +46,46 @@ function highlightParams(text: string): ReactNode[] {
   return out;
 }
 
-export function MoveCard({ move, onToggleCommit, onAudition }: MoveCardProps) {
+export function MoveCard({ move, rank, onToggleCommit, onAudition }: MoveCardProps) {
   const [showWhy, setShowWhy] = useState(false);
   const [showData, setShowData] = useState(false);
   const committed = move.status === 'committed';
   const confPct = Math.round(move.confidence * 100);
   const directiveText = move.hasParams ? move.directive : move.directional;
 
-  const style: CSSProperties = { ['--sev' as string]: SEV_VAR[move.sev] };
+  const band = impactBand(move.impact);
+  const group = move.specialist ? specialistGroup(move.specialist) : null;
+  const personaColor = group ? groupColor(group) : 'var(--cyan)';
+  const numeral = rank != null ? String(rank).padStart(2, '0') : null;
+
+  const style: CSSProperties = {
+    ['--sev' as string]: SEV_VAR[move.sev],
+    ['--persona-color' as string]: personaColor,
+  };
 
   return (
     <article className={s.move} style={style} data-committed={committed || undefined}>
       <div className={s.sevBar} aria-hidden />
+      {numeral && (
+        <span className={s.ghostNum} aria-hidden>
+          {numeral}
+        </span>
+      )}
+
+      <div className={s.metaHead}>
+        {numeral && <span className={s.findingNum}>Finding #{numeral}</span>}
+        {move.isRule ? (
+          <span className={s.ruleChip}>RULE</span>
+        ) : (
+          <span className={s.personaChip}>
+            <MiniBot size={13} color={personaColor.startsWith('var') ? '#00e5b0' : personaColor} />
+            {group ?? 'AI'}
+          </span>
+        )}
+        <span className={s.impactTag} style={{ color: band.tone }}>
+          {band.glyph} {band.label}
+        </span>
+      </div>
 
       <h3 className={s.title}>{move.title}</h3>
 
@@ -80,7 +113,6 @@ export function MoveCard({ move, onToggleCommit, onAudition }: MoveCardProps) {
         <span className={`mono ${s.conf}`} title="Confidence">
           {confPct}% conf
         </span>
-        <span className={`mono ${s.source}`}>{move.source}</span>
 
         <div className={s.toggles}>
           {move.why && (

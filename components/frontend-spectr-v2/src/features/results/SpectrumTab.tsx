@@ -58,6 +58,15 @@ export function SpectrumTab({ bands, phase1, phase3, phase4, phase9 }: SpectrumT
     100 - warnCount * 12 - values.reduce((acc, v) => (v.value < 0.18 ? acc + 6 : acc), 0),
   );
 
+  // Text equivalent for the bar chart (UX-DR20/44): screen readers get a single
+  // image with a spoken summary; the per-band values stay visible below.
+  const hotBands = values.filter((v) => v.warn).map((v) => v.name);
+  const spectrumLabel =
+    `Frequency balance across ${values.length} bands, clarity ${Math.round(clarityScore)} of 100. ` +
+    (warnCount === 0
+      ? 'All bands sit within the genre range.'
+      : `${warnCount} band${warnCount === 1 ? '' : 's'} above range: ${hotBands.join(', ')}.`);
+
   return (
     <div className={s.layout}>
       <section className={`card ${s.spectrumCard}`}>
@@ -73,7 +82,7 @@ export function SpectrumTab({ bands, phase1, phase3, phase4, phase9 }: SpectrumT
           </Pill>
         </div>
 
-        <div className={s.bars}>
+        <div className={s.bars} role="img" aria-label={spectrumLabel}>
           {values.map((v) => (
             <div key={`${v.name}-${v.hz}`} className={s.band}>
               <span
@@ -83,7 +92,7 @@ export function SpectrumTab({ bands, phase1, phase3, phase4, phase9 }: SpectrumT
                 {v.warn && <span className={s.warnTri}>▲ </span>}
                 {Math.round(v.value * 100)}%
               </span>
-              <div className={s.bar} aria-label={`${v.name} ${Math.round(v.value * 100)}%`}>
+              <div className={s.bar}>
                 <div
                   className={s.median}
                   style={{ bottom: `${v.median * 100}%` }}
@@ -163,6 +172,11 @@ function ClashCard({ phase4 }: ClashCardProps) {
         </Pill>
       </div>
       <table className={s.clashTable}>
+        <caption className="sr-only">
+          {clashes.length} frequency clash{clashes.length === 1 ? '' : 'es'} detected:
+          {high > 0 ? ` ${high} high severity, ${clashes.length - high} moderate.` : ' all moderate severity.'}
+          Each row lists the frequency region, the elements involved, and severity.
+        </caption>
         <thead>
           <tr>
             <th>Region</th>

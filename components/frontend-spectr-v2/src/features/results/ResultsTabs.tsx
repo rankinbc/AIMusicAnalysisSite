@@ -1,6 +1,7 @@
+import type { ResultsTabKey } from './results-tab-keys';
 import s from './ResultsTabs.module.css';
 
-export type ResultsTabKey = 'actions' | 'analysis' | 'files';
+export type { ResultsTabKey } from './results-tab-keys';
 
 interface TabDef {
   id: ResultsTabKey;

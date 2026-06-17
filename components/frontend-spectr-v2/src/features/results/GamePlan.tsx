@@ -132,8 +132,22 @@ export function GamePlan({
   const committed = useMemo(() => moves.filter((m) => committedIds.has(m.id)), [moves, committedIds]);
   const shallow = !inputs.stems && !inputs.als;
 
+  // Stable 1-based finding number across the whole plan (quick wins lead, then
+  // deeper work — the order `buildMoves` already sorts into).
+  const rankOf = useMemo(() => {
+    const m = new Map<string, number>();
+    moves.forEach((mv, i) => m.set(mv.id, i + 1));
+    return m;
+  }, [moves]);
+
   const renderMove = (m: Move) => (
-    <MoveCard key={m.id} move={{ ...m, status: committedIds.has(m.id) ? 'committed' : m.status }} onToggleCommit={toggleCommit} onAudition={audition} />
+    <MoveCard
+      key={m.id}
+      move={{ ...m, status: committedIds.has(m.id) ? 'committed' : m.status }}
+      rank={rankOf.get(m.id)}
+      onToggleCommit={toggleCommit}
+      onAudition={audition}
+    />
   );
 
   return (

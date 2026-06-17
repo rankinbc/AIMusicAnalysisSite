@@ -2,7 +2,6 @@ import { Link } from '@tanstack/react-router';
 
 import { CoverArt } from '../../ui/CoverArt';
 import { hueFromId } from '../../ui/hueFromId';
-import { fmtBpm, fmtDuration, fmtGenre } from './helpers/format';
 import s from './SongHeader.module.css';
 
 export interface SongHeaderInputs {
@@ -12,15 +11,13 @@ export interface SongHeaderInputs {
   reference: boolean;
 }
 
+// Identity (track name, genre, BPM, key, grade) leads the report in
+// VerdictHero. This header is the complementary "what we analyzed + what to do
+// next" strip: cover, the input roster, and the primary actions.
 interface SongHeaderProps {
   songId: string;
   versionId: string | null;
-  trackName: string;
   versionLabel: string | null;
-  genre: string | undefined;
-  bpm: number | undefined;
-  detectedKey: string | undefined;
-  durationSeconds: number | undefined;
   inputs: SongHeaderInputs;
   /** Jump to the Files tab to attach more inputs / deepen. */
   onAddInputs: () => void;
@@ -38,24 +35,12 @@ const INPUT_DEFS: { key: keyof SongHeaderInputs; label: string }[] = [
 export function SongHeader({
   songId,
   versionId,
-  trackName,
   versionLabel,
-  genre,
-  bpm,
-  detectedKey,
-  durationSeconds,
   inputs,
   onAddInputs,
   onGetFeedback,
 }: SongHeaderProps) {
   const hue = hueFromId(versionId ?? songId);
-  const attrs = [
-    versionLabel,
-    fmtGenre(genre),
-    `${fmtBpm(bpm)} BPM`,
-    detectedKey ?? '—',
-    fmtDuration(durationSeconds),
-  ].filter((x): x is string => Boolean(x) && x !== '—' );
 
   return (
     <header className={s.header}>
@@ -64,9 +49,6 @@ export function SongHeader({
       </CoverArt>
 
       <div className={s.meta}>
-        <h1 className={s.title}>{trackName}</h1>
-        <p className={`mono ${s.attrs}`}>{attrs.join('  ·  ')}</p>
-
         <div className={s.inputs}>
           <span className={s.inputsLabel}>Analyzed from</span>
           {INPUT_DEFS.map(({ key, label }) => {
