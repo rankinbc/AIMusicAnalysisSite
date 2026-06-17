@@ -10,6 +10,8 @@ from aimusic_shared.verdicts.scoring import (
     severity_from_score,
 )
 
+from .input_grounding import als_project_map
+
 
 @dataclass
 class ValidationFailure:
@@ -116,6 +118,24 @@ def validate_verdict(verdict: Verdict, analysis: dict[str, Any]) -> ValidationRe
             return fail(
                 f"fix.section.end_seconds {end} exceeds track duration {duration}"
             )
+
+    # 2b. ALS track grounding — when an authoritative .als project map is present,
+    #     a track-targeted fix may only name a track that actually exists in the map.
+    #     This is the concrete "no hallucinated track names" guard for the .als moat.
+    #     Gated strictly on .als presence: with no .als the map is empty and this whole
+    #     block is skipped, so the role-level path is byte-identical to today.
+    #     Note: ableton_hint.device is intentionally NOT checked — DeviceChainAnalysis
+    #     legitimately recommends *adding* a device the track lacks.
+    track_map = als_project_map(analysis)
+    if track_map and verdict.fix is not None:
+        target = verdict.fix.target or {}
+        if target.get("type") == "track":
+            name = target.get("name")
+            if name not in track_map:
+                return fail(
+                    f"fix.target.name {name!r} is not a track in the .als project map "
+                    f"(known tracks: {sorted(track_map)})"
+                )
 
     # 3. Severity-justification check using a moderate-severity baseline.
     #    If we naively recomputed the score under the claimed severity, category

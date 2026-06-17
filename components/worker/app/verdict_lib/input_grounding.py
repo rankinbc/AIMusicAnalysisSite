@@ -33,6 +33,73 @@ def _stems_state(analysis: dict[str, Any]) -> str:
     return "absent"
 
 
+def als_state(analysis: dict[str, Any]) -> str:
+    """``"ok"`` (an .als project map is present) | ``"absent"`` (no .als).
+
+    Mirrors :func:`_stems_state` / the ``phase4.stems.status == "ok"`` gate. The
+    authoritative map is phase 8 (``analyze_als``): present, status ok, and with at
+    least one parsed track.
+    """
+    phase8 = analysis.get("phase8")
+    if not isinstance(phase8, dict):
+        return "absent"
+    # `flatten()` stores only the phase `data`, so `status` is usually absent here;
+    # when it IS present (raw phase-result shape) an explicit non-ok value means no
+    # usable map. Either way we require a non-empty parsed track list.
+    status = phase8.get("status")
+    if status is not None and status != "ok":
+        return "absent"
+    tracks = phase8.get("tracks")
+    if isinstance(tracks, list) and tracks:
+        return "ok"
+    return "absent"
+
+
+def als_project_map(analysis: dict[str, Any]) -> dict[str, list[str]]:
+    """Authoritative ``{track_name: [device_names]}`` map from phase 8.
+
+    Empty dict when no usable .als is present — callers gate on truthiness, so an
+    absent .als is a pure no-op (no grounding block, no validator branch)."""
+    if als_state(analysis) != "ok":
+        return {}
+    phase8 = analysis.get("phase8") or {}
+    out: dict[str, list[str]] = {}
+    for t in phase8.get("tracks") or []:
+        if not isinstance(t, dict):
+            continue
+        name = t.get("name")
+        if not isinstance(name, str) or not name:
+            continue
+        devices = [d for d in (t.get("devices") or []) if isinstance(d, str)]
+        out[name] = devices
+    return out
+
+
+def als_grounding_block(analysis: dict[str, Any]) -> str:
+    """Authoritative track→device listing for the user message.
+
+    Returns ``""`` when no .als is present so the message stays byte-identical to
+    the role-level path. When present, lists the EXACT track names (and their
+    existing devices) the model is allowed to cite — the "no hallucinated names"
+    guard, the same preamble-instruction mechanism used for stems/reference."""
+    track_map = als_project_map(analysis)
+    if not track_map:
+        return ""
+    lines = [
+        "=== ABLETON PROJECT MAP (authoritative — the ONLY track & device names you "
+        "may cite) ===",
+        "An Ableton .als project was provided. Give project-specific advice: name the "
+        "exact track (and an existing device on it) your fix applies to. For a "
+        "track-specific fix set fix.target = {\"type\": \"track\", \"name\": "
+        "\"<one of the exact track names below>\"}. NEVER invent a track or device "
+        "name that is not listed here.",
+    ]
+    for name, devices in track_map.items():
+        dev = ", ".join(devices) if devices else "(no devices)"
+        lines.append(f"- Track {name!r}: [{dev}]")
+    return "\n".join(lines) + "\n"
+
+
 def _reference_present(analysis: dict[str, Any]) -> bool:
     phase5 = analysis.get("phase5")
     if not isinstance(phase5, dict):
@@ -97,6 +164,7 @@ def build_specialist_user_message(analysis: dict[str, Any], focus: str) -> str:
     return (
         f"Analyze this mix. Triage focus: {focus}\n\n"
         f"{grounding_preamble(analysis)}\n"
+        f"{als_grounding_block(analysis)}"
         f"```json\n{json.dumps(analysis, indent=2, default=str)}\n```\n\n"
         "Return only the verdicts JSON object as specified in your instructions."
     )
@@ -129,6 +197,7 @@ def build_triage_user_message(
     return (
         "Triage this mix.\n\n"
         f"{grounding_preamble(analysis)}\n"
+        f"{als_grounding_block(analysis)}"
         f"```json\n{json.dumps(payload, indent=2, default=str)}\n```\n\n"
         "Return only the routing-plan JSON object."
     )

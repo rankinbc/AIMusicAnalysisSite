@@ -1,5 +1,5 @@
 ---
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Prompt 8: Device Chain Analysis
@@ -418,7 +418,7 @@ Respond ONLY with JSON matching this schema. No prose, no code fences, no commen
         }
       ],
       "fix": {
-        "target": { "type": "stem"|"master"|"bus", "name": "<name>" },
+        "target": { "type": "stem"|"master"|"bus"|"track", "name": "<name>" },
         "section": { "start_seconds": <num>, "end_seconds": <num>,
                      "section_type": "intro|build|drop|breakdown|outro|null" } or null,
         "dsp_chain": [
@@ -438,6 +438,16 @@ Respond ONLY with JSON matching this schema. No prose, no code fences, no commen
 
 Constraints (any violation → the verdict will be rejected):
 
+- **Project-specific grounding (the whole point of this specialist):** the user
+  message contains an authoritative `ABLETON PROJECT MAP` listing every track name and
+  its existing devices. Make each fix track-specific — set
+  `fix.target = { "type": "track", "name": "<an EXACT track name from that map>" }`
+  and write the headline/summary in terms of that track (e.g. "On 'TRITON Pad', tame
+  the Auto Filter resonance"). A `fix.target.name` that is not a real track in the map
+  is REJECTED. When recommending a tweak to an existing device, reference it by the
+  exact name shown for that track, and put the device + EQ band in
+  `ableton_hint` (`{ "device": "<name>", "band": <int> }`). You MAY still recommend
+  *adding* a device the track lacks — name the device to add in `ableton_hint.device`.
 - `evidence[].metric` MUST be a dotted path that resolves in the analysis JSON. NEVER invent metric paths.
 - `summary` MUST be ≤300 characters. `why_it_matters` MUST be ≤200 characters. Verdicts longer than this are rejected outright.
 - Allowed DSP types and their EXACT params (any other key — including `label`, `comment`, `note`, `description` — causes rejection):

@@ -24,6 +24,9 @@ def analyze_als(als_path: Optional[str]) -> dict:
                 "device_count": t.device_count,
                 "disabled_count": t.disabled_count,
                 "muted": t.muted,
+                # Per-track device names — the authoritative track→devices map the
+                # verdict layer grounds track/device-specific advice on.
+                "devices": list(t.devices),
             }
             for t in health.track_summaries
         ]
