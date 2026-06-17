@@ -10,6 +10,7 @@ class TrackSummary:
     device_count: int
     disabled_count: int
     muted: bool
+    devices: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -47,6 +48,7 @@ def score_health(project: ALSProject) -> HealthResult:
             device_count=device_count,
             disabled_count=disabled_count,
             muted=track.is_muted,
+            devices=list(track.devices),
         ))
 
     clutter_pct = (disabled_devices / total_devices * 100) if total_devices > 0 else 0.0

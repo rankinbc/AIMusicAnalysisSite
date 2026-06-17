@@ -55,6 +55,71 @@ def make_minimal_als(tmp_path: Path) -> Path:
     return path
 
 
+def make_als_with_devices(tmp_path: Path) -> Path:
+    """Two tracks: a synth with two devices, an FX track with none — so we can
+    assert per-track device-name extraction AND the empty case."""
+    xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<Ableton MajorVersion="11" MinorVersion="0">
+  <LiveSet>
+    <MasterTrack>
+      <DeviceChain><Mixer><Tempo><Manual Value="128.0"/></Tempo></Mixer></DeviceChain>
+    </MasterTrack>
+    <Tracks>
+      <MidiTrack Id="0">
+        <Name><EffectiveName Value="TRITON Pad"/></Name>
+        <DeviceChain>
+          <Mixer>
+            <Volume><Manual Value="0.85"/></Volume>
+            <Speaker><Manual Value="true"/></Speaker>
+          </Mixer>
+          <DeviceChain>
+            <Devices>
+              <AutoFilter><IsOn><Manual Value="true"/></IsOn></AutoFilter>
+              <Reverb><IsOn><Manual Value="true"/></IsOn></Reverb>
+            </Devices>
+          </DeviceChain>
+        </DeviceChain>
+      </MidiTrack>
+      <AudioTrack Id="1">
+        <Name><EffectiveName Value="FX Riser"/></Name>
+        <DeviceChain>
+          <Mixer>
+            <Volume><Manual Value="0.85"/></Volume>
+            <Speaker><Manual Value="true"/></Speaker>
+          </Mixer>
+          <DeviceChain><Devices/></DeviceChain>
+        </DeviceChain>
+      </AudioTrack>
+    </Tracks>
+  </LiveSet>
+</Ableton>"""
+    path = tmp_path / "devices.als"
+    with gzip.open(str(path), "wb") as f:
+        f.write(xml)
+    return path
+
+
+def test_analyze_als_emits_per_track_device_names(tmp_path):
+    """AC (a): phase8 track summaries now carry the per-track device-name list."""
+    als = make_als_with_devices(tmp_path)
+    tracks = analyze_als(str(als))["data"]["tracks"]
+    by_name = {t["name"]: t for t in tracks}
+
+    assert "devices" in by_name["TRITON Pad"]
+    assert by_name["TRITON Pad"]["devices"] == ["Auto Filter", "Reverb"]
+    assert by_name["TRITON Pad"]["device_count"] == 2
+    # Empty chain → empty list, not a missing key (authoritative-map consumers
+    # can rely on the key always being present).
+    assert by_name["FX Riser"]["devices"] == []
+
+
+def test_minimal_fixture_track_has_devices_key(tmp_path):
+    """Even with no devices, every track entry carries a `devices` list."""
+    als = make_minimal_als(tmp_path)
+    tracks = analyze_als(str(als))["data"]["tracks"]
+    assert all("devices" in t and isinstance(t["devices"], list) for t in tracks)
+
+
 def test_analyze_als_returns_phase_result(tmp_path):
     als = make_minimal_als(tmp_path)
     result = analyze_als(str(als))

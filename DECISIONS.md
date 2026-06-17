@@ -137,6 +137,68 @@ plus a few additive ones (`.zoneRecommended`, `.recommendedTag`, `.advancedToggl
 - Add device names per track to the worker phase8 output so the Project view can
   fall back to the authoritative parse for analyses uploaded before this column
   existed (currently the Project tab is empty for those — phase8 has track names
-  + device_count but no device names).
+  + device_count but no device names). — DONE in D11 below.
 - Track-attribution in the verdict layer (map specialist findings onto specific
-  tracks/devices) — the larger follow-up this feature unblocks.
+  tracks/devices) — the larger follow-up this feature unblocks. — DONE in D12–D16.
+
+---
+
+# DECISIONS — .als → track/device advice moat (branch `feat/als-device-advice`)
+
+Activating the dormant moat: make verdict fixes project-specific ("on your TRITON
+Pad track, reduce the Auto Filter resonance ~250 Hz") instead of role-level ("cut
+the bass"), grounded ONLY on the authoritative phase-8 .als project map.
+Closes the two follow-ups above. Scope: `analysis/phase8_als.py` +
+`worker/app/verdict_lib/` + prompts. No frontend/BFF changes.
+
+## D11 — phase8 carries per-track device names (authoritative map)
+`als_parser` already extracts `Track.devices: List[str]`, but `phase8_als` dropped
+them. Added `devices: List[str]` to `health_scorer.TrackSummary` (populated from
+`track.devices`) and surfaced it in each phase8 `tracks[]` entry as `"devices"`.
+`score_health` already iterates `project.tracks`, so no second/divergent walk.
+This also fixes the logged "older/empty Project view" follow-up. Everything else
+in the track summary is byte-identical.
+
+## D12 — `.als` presence detection mirrors the stem gate
+Added `als_state(analysis)` → `"ok"` (phase8 present, status ok, ≥1 track) |
+`"absent"`, and `als_project_map(analysis)` → `{track_name: [device_names]}` to
+`input_grounding.py`. Analogous to the existing `_stems_state` / `phase4.stems.status
+== "ok"` gate.
+
+## D13 — `input_provenance` left UNCHANGED; ALS grounding is a separate block
+`input_provenance` feeds the coach bundle and is pinned by an exact-equality test.
+Adding an `"als"` key would break it and isn't needed for grounding. Instead
+`als_grounding_block(analysis)` renders an authoritative track→device listing and
+is appended to the specialist/triage user message ONLY when `.als` is present. With
+no `.als` it returns `""`, so the user message is byte-identical to today (guarded
+by `test_no_als_user_message_byte_identical`).
+
+## D14 — Grounding = authoritative map block (primary) + validator track-name check
+- The block lists EXACT track names + their existing devices and tells the model to
+  cite only those names — same preamble-instruction mechanism used for stems/reference.
+- `ableton_hint.device` is NOT validated against the map: DeviceChainAnalysis
+  legitimately recommends *adding* a device the track lacks, so requiring the cited
+  device to pre-exist would defeat the specialist.
+- The validator DOES reject a hallucinated **track**: when a `.als` map is present and
+  a fix uses `target.type == "track"`, `target.name` must be a real track in the map.
+  Gated strictly on `.als` presence → no-`.als` validation is byte-identical.
+
+## D15 — Triage code-level als gate
+`gate_als_specialists(plan, analysis)` in `triage.py`: when `.als` is absent it strips
+`_ALS_ONLY_SPECIALISTS = {"device_chain"}` from the plan (mirrors "don't route stem
+specialists when stems absent"). Only `device_chain` is treated as als-only (the one
+specialist that strictly needs the track/device map); other MIDI-aware specialists are
+left untouched so existing routing is unchanged. When `.als` is present the plan is
+untouched (the prompt routes `device_chain`).
+
+## D16 — Prompts
+`Triage.md` gains an "ALS-aware specialists (route ONLY when an .als is present)"
+section. `DeviceChainAnalysis.md` is instructed to set
+`fix.target = {"type": "track", "name": <exact project track name>}`, fill
+`ableton_hint.device`/`band`, and cite ONLY names from the authoritative project map
+in the user message.
+
+## Graceful degradation (AC c)
+No `.als` → `als_state == "absent"` → no als block in the user message, triage gate is
+a no-op, validator als branch skipped. Role-level output byte-identical to today.
+Guarded by tests.
