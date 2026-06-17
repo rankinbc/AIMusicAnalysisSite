@@ -238,7 +238,7 @@ export function AnalysisTab({
       <div className={s.left}>
         <section className={`card ${s.summary}`}>
           <div className={s.dial}>
-            <svg width={ringSize} height={ringSize} style={{ transform: 'rotate(-90deg)' }}>
+            <svg width={ringSize} height={ringSize} style={{ transform: 'rotate(-90deg)' }} aria-hidden="true">
               <circle
                 cx={ringSize / 2}
                 cy={ringSize / 2}

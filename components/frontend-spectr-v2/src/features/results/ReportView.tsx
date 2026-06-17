@@ -25,14 +25,18 @@ import { GamePlan } from './GamePlan';
 import { buildMoves } from './move-model';
 import { ResultsTabs, type ResultsTabKey } from './ResultsTabs';
 import { SongHeader, type SongHeaderInputs } from './SongHeader';
+import { VerdictHero } from './VerdictHero';
 import s from './ReportView.module.css';
 
 interface ReportViewProps {
   results: JobResultsDto;
   songId: string;
+  /** Active tab — owned by the route's URL search params (deep-linkable). */
+  tab: ResultsTabKey;
+  onTabChange: (tab: ResultsTabKey) => void;
 }
 
-export function ReportView({ results, songId }: ReportViewProps) {
+export function ReportView({ results, songId, tab, onTabChange }: ReportViewProps) {
   const fj: FinalJson = isFinalJson(results.finalJson) ? results.finalJson : {};
   const phase1 = pickPhaseData<Phase1Data>(fj, 1);
   const phase2 = pickPhaseData<Phase2Data>(fj, 2);
@@ -43,7 +47,6 @@ export function ReportView({ results, songId }: ReportViewProps) {
   const phase8 = pickPhaseData<Phase8Data>(fj, 8);
   const phase9 = pickPhaseData<Phase9Data>(fj, 9);
 
-  const [tab, setTab] = useState<ResultsTabKey>('actions');
   const trackName = results.songName ?? 'Untitled';
 
   // Verdicts are the AI-Move source + CoachChat grounding. Shared query cache
@@ -127,17 +130,21 @@ export function ReportView({ results, songId }: ReportViewProps) {
         </Link>
       </header>
 
+      <VerdictHero
+        trackName={trackName}
+        grade={fj.grade}
+        score={fj.overall_score}
+        danceability={fj.danceability_score}
+        phase1={phase1}
+        phase2={phase2}
+      />
+
       <SongHeader
         songId={songId}
         versionId={results.versionId ?? null}
-        trackName={trackName}
         versionLabel={null}
-        genre={phase2?.genre}
-        bpm={phase1?.bpm}
-        detectedKey={phase1?.detected_key}
-        durationSeconds={phase1?.duration_seconds}
         inputs={inputs}
-        onAddInputs={() => setTab('files')}
+        onAddInputs={() => onTabChange('files')}
         onGetFeedback={() =>
           toast('Publishing to the feed for crowd feedback is coming soon.', { icon: '♺' })
         }
@@ -145,11 +152,11 @@ export function ReportView({ results, songId }: ReportViewProps) {
 
       <ResultsTabs
         current={tab}
-        onChange={setTab}
+        onChange={onTabChange}
         moveCount={moves.length}
         phasesDone={phasesDone}
         phasesTotal={phasesTotal}
-        onGamePlan={() => setTab('actions')}
+        onGamePlan={() => onTabChange('actions')}
       />
 
       <div className={s.tabBody}>
@@ -163,7 +170,7 @@ export function ReportView({ results, songId }: ReportViewProps) {
             verdicts={verdicts}
             measurementsCount={countMeasurements(fj)}
             inputs={inputs}
-            onAddInputs={() => setTab('files')}
+            onAddInputs={() => onTabChange('files')}
           />
         )}
         {tab === 'analysis' && (
@@ -191,7 +198,7 @@ export function ReportView({ results, songId }: ReportViewProps) {
           <FilesTab
             versionId={results.versionId}
             inputs={inputs}
-            onAddInputs={() => setTab('files')}
+            onAddInputs={() => onTabChange('files')}
             onReanalyze={handleReanalyze}
             reanalyzing={reanalyze.isPending}
           />

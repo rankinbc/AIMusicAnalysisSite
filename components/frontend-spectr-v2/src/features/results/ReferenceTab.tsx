@@ -74,8 +74,8 @@ export function ReferenceTab({ genre: phase2Genre, score, phase6 }: ReferenceTab
       </div>
 
       <div className={s.summary}>
-        <div className={s.ring}>
-          <svg width={ringSize} height={ringSize} style={{ transform: 'rotate(-90deg)' }}>
+        <div className={s.ring} role="img" aria-label={`${percentile}th percentile versus the genre profile — top ${topPct}%.`}>
+          <svg width={ringSize} height={ringSize} style={{ transform: 'rotate(-90deg)' }} aria-hidden="true">
             <circle
               cx={ringSize / 2}
               cy={ringSize / 2}
@@ -211,12 +211,13 @@ function GapRow({ gapKey, gap }: GapRowProps) {
           >
             {format(gap.user_val)}
             {meta.unit}
-          </strong>{' '}
+          </strong>
+          <span className="sr-only"> ({gap.in_range ? 'in range' : 'out of range'})</span>{' '}
           · mean {format(gap.genre_mean)}
           {meta.unit}
         </span>
       </div>
-      <div className={s.gapBar}>
+      <div className={s.gapBar} aria-hidden="true">
         <div
           className={s.gapAccept}
           style={{ left: `${acceptLeft}%`, width: `${acceptWidth}%` }}

@@ -65,6 +65,10 @@ export function ArrangementTab({ phase7 }: ArrangementTabProps) {
 
   const sections = phase7.section_scores;
   const totalBars = sections.reduce((acc, sec) => acc + (sec.bars ?? 0), 0) || 1;
+  const arrangementLabel =
+    `Arrangement timeline over ${totalBars} bars: ` +
+    sections.map((sec) => `${sec.section_type} (${sec.bars} bars)`).join(', ') +
+    '.';
   const issues = phase7.issues ?? [];
   const suggestions = phase7.suggestions ?? [];
   const score = phase7.overall_score;
@@ -98,7 +102,7 @@ export function ArrangementTab({ phase7 }: ArrangementTabProps) {
         )}
       </div>
 
-      <div className={s.bar}>
+      <div className={s.bar} role="img" aria-label={arrangementLabel}>
         {sections.map((sec, i) => (
           <SectionBlock
             key={`${sec.section_type}-${i}`}

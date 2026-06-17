@@ -2,14 +2,33 @@ import { Link, createFileRoute } from '@tanstack/react-router';
 
 import { useJob, useJobResults } from '../../api/hooks';
 import { ReportView } from '../../features/results/ReportView';
+import {
+  isResultsTabKey,
+  type ResultsTabKey,
+} from '../../features/results/results-tab-keys';
 import s from './results.module.css';
 
+interface ResultsSearch {
+  // Optional so the many existing navigations to this route (upload dialogs,
+  // listen/reports/song-detail links) don't need to pass a tab. Absent ⇒ the
+  // Actions plan. `?tab=analysis` / `?tab=files` deep-link the other tabs.
+  tab?: ResultsTabKey;
+}
+
 export const Route = createFileRoute('/_app/songs/$songId/results/$jobId')({
+  validateSearch: (search: Record<string, unknown>): ResultsSearch =>
+    isResultsTabKey(search.tab) ? { tab: search.tab } : {},
   component: ResultsPage,
 });
 
 function ResultsPage() {
   const { songId, jobId } = Route.useParams();
+  const { tab } = Route.useSearch();
+  const activeTab: ResultsTabKey = tab ?? 'actions';
+  const navigate = Route.useNavigate();
+  const setTab = (next: ResultsTabKey) =>
+    void navigate({ search: (prev) => ({ ...prev, tab: next }), replace: true });
+
   const job = useJob(jobId, { pollMs: 2000 });
   const isComplete = job.data?.status === 'complete';
   const isFailed = job.data?.status === 'failed';
@@ -27,7 +46,7 @@ function ResultsPage() {
   }
 
   if (isComplete && results.data) {
-    return <ReportView results={results.data} songId={songId} />;
+    return <ReportView results={results.data} songId={songId} tab={activeTab} onTabChange={setTab} />;
   }
 
   if (isFailed && job.data) {

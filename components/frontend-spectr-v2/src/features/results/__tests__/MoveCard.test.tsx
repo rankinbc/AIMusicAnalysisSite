@@ -21,7 +21,10 @@ function makeMove(over: Partial<Move> = {}): Move {
     why: 'You are 3 dB hotter than the platform target.',
     evidence: { type: 'meter', metric: 'Integrated: -11.2 LUFS', chartType: 'loudness' },
     confidence: 0.96,
+    impact: 38,
     source: 'rule engine',
+    isRule: true,
+    specialist: null,
     status: 'suggested',
     verdictId: null,
     ...over,
@@ -38,10 +41,31 @@ describe('MoveCard', () => {
     expect(html).toContain('Pull the master back to streaming level');
     expect(html).toContain('Master bus');
     expect(html).toContain('96% conf');
-    expect(html).toContain('rule engine');
     // numeric tokens wrapped as mono params
     expect(html).toMatch(/<code[^>]*>-3 dB<\/code>/);
     expect(html).toMatch(/<code[^>]*>-14 LUFS<\/code>/);
+  });
+
+  it('marks rule-engine provenance with a RULE chip (not an AI persona)', () => {
+    const html = renderToStaticMarkup(
+      <MoveCard move={makeMove()} onToggleCommit={noop} onAudition={noop} />,
+    );
+    expect(html).toContain('RULE');
+  });
+
+  it('renders a finding number, AI persona group, and impact tag for specialist Moves', () => {
+    const html = renderToStaticMarkup(
+      <MoveCard
+        move={makeMove({ isRule: false, specialist: 'low_end', impact: 82, verdictId: 'v1' })}
+        rank={3}
+        onToggleCommit={noop}
+        onAudition={noop}
+      />,
+    );
+    expect(html).toContain('Finding #03');
+    expect(html).toContain('Spectrum'); // low_end specialist's group label
+    expect(html).toContain('HIGH IMPACT'); // impact 82 → high band
+    expect(html).not.toContain('RULE');
   });
 
   it('renders the structured steps when params back the fix', () => {
