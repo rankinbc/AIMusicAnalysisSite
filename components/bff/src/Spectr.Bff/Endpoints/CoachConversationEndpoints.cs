@@ -1,8 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using Spectr.Bff.Auth;
 using Spectr.Bff.DTOs;
-using Spectr.Bff.Options;
 using Spectr.Bff.Services;
 using Spectr.Data;
 using Spectr.Data.Entities;
@@ -70,11 +68,10 @@ public static class CoachConversationEndpoints
         ClaimsPrincipal currentUser,
         AppDbContext db,
         IJobQueue queue,
-        IOptions<CoachCapsOptions> capsOptions,
+        CoachCapService capService,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
-        var capLimit = capsOptions.Value.FreeFollowups;
 
         if (body is null || string.IsNullOrWhiteSpace(body.Content))
         {
@@ -108,24 +105,15 @@ public static class CoachConversationEndpoints
                 CoachOfflineBody);
         }
 
-        // ── Story 1.9: per-analysis cap enforcement (AC1 + AC4) ─────────────
-        // Count BEFORE GetOrCreateConversation so the refusal path produces
+        // ── Story 1.9 + 2.6: tier-aware cap enforcement (AC1 + AC4) ─────────
+        // Resolve BEFORE GetOrCreateConversation so the refusal path produces
         // zero side-effects: no orphan user row, no enqueued actor, no
-        // future usage_events spend (AR16). The cap is read from
-        // IOptions<CoachCapsOptions> with a `= 3` default — story 2.6 will
-        // swap this lookup for Entitlements.For(user) + usage_events.
-        var existingConversation = await db.Conversations.AsNoTracking()
-            .Where(c => c.AnalysisId == analysisId && c.UserId == userId)
-            .Select(c => new { c.Id })
-            .FirstOrDefaultAsync(ct);
-        var usedBefore = existingConversation is null
-            ? 0
-            : await db.CoachMessages.AsNoTracking()
-                .CountAsync(
-                    m => m.ConversationId == existingConversation.Id
-                        && m.Role == "user",
-                    ct);
-        if (usedBefore >= capLimit)
+        // usage_events meter (AR16). Story 2.6: the cap + scope now come from
+        // CoachCapService (Entitlements.For + feature flags + usage_events for
+        // the Pro pooled-monthly form) instead of IOptions<CoachCapsOptions>.
+        // This is the COUNT guard; the worker gateway gates SPEND independently.
+        var capBefore = await capService.ResolveAsync(userId, analysisId, ct);
+        if (capBefore.CapReached)
         {
             // review-fix P12 — route through the shared ErrorEnvelope helper
             // (now accepts optional details). One AR38 emission path keeps
@@ -133,8 +121,10 @@ public static class CoachConversationEndpoints
             return ErrorEnvelope.Build(
                 StatusCodes.Status403Forbidden,
                 "coach_cap_reached",
-                "Per-analysis follow-up limit reached.",
-                new { used = usedBefore, limit = capLimit });
+                capBefore.Scope == CoachCapService.ScopeMonth
+                    ? "Monthly coach allowance reached."
+                    : "Per-analysis follow-up limit reached.",
+                new { used = capBefore.Used, limit = capBefore.Limit, scope = capBefore.Scope });
         }
 
         // Get-or-create the conversation row. The unique constraint on
@@ -178,6 +168,18 @@ public static class CoachConversationEndpoints
         db.CoachMessages.Add(userRow);
         db.CoachMessages.Add(assistantRow);
 
+        // Story 2.6 / AR16: append the coach-message meter row in the SAME
+        // transaction as the message rows (mirrors analysis dispatch). This is
+        // the source of truth for the Pro pooled-monthly count + the Usage page
+        // (2.8). Append-only — never updated. `reference` = the user message id.
+        db.UsageEvents.Add(new UsageEvent
+        {
+            UserId = userId,
+            EventType = "coach_message",
+            BillingPeriod = DateTimeOffset.UtcNow.ToString("yyyy-MM"),
+            Reference = userRow.Id.ToString(),
+        });
+
         await db.SaveChangesAsync(ct);
 
         // Enqueue the worker actor. Story 1.5 code review B-H2: the actor
@@ -212,25 +214,17 @@ public static class CoachConversationEndpoints
                 "Coach queue is temporarily unavailable. Please try again.");
         }
 
-        // Story 1.9: post-write cap state reflects the new user row so the
+        // Story 1.9 + 2.6: post-write cap state reflects the new row so the
         // frontend can flip to gate state in the same render tick that
         // streaming starts — no second roundtrip to /conversation needed.
-        // review-fix P2 — re-query the post-commit count instead of using
-        // `usedBefore + 1`. Under the documented concurrent-first-POST race
-        // a second winner could have inserted its own user row between our
-        // initial COUNT and the GetOrCreate, so `+ 1` would under-count.
-        // A re-query against the conversation row gives the truthful state.
-        var usedAfter = await db.CoachMessages.AsNoTracking()
-            .CountAsync(
-                m => m.ConversationId == conversation.Id && m.Role == "user",
-                ct);
-        var capsAfter = new CoachCapsDto(
-            Used: usedAfter,
-            Limit: capLimit,
-            CapReached: usedAfter >= capLimit);
+        // Re-resolve (not `usedBefore + 1`): under the documented concurrent-
+        // first-POST race a second winner could have inserted its own row, and
+        // for the Pro pooled form the count spans analyses — a truthful re-read
+        // is the only correct source (review-fix P2 carried forward).
+        var capAfter = await capService.ResolveAsync(userId, analysisId, ct);
 
         return Results.Ok(new CreateCoachMessageResponse(
-            conversation.Id, userRow.Id, assistantRow.Id, capsAfter));
+            conversation.Id, userRow.Id, assistantRow.Id, capService.ToDto(capAfter)));
     }
 
     // GET /api/coach/{analysisId}/conversation
@@ -238,16 +232,19 @@ public static class CoachConversationEndpoints
         Guid analysisId,
         ClaimsPrincipal currentUser,
         AppDbContext db,
-        IOptions<CoachCapsOptions> capsOptions,
+        CoachCapService capService,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
-        var capLimit = capsOptions.Value.FreeFollowups;
 
         // Ownership gate — same projection pattern as VerdictEndpoints.
         var owns = await db.Analyses.AsNoTracking()
             .AnyAsync(a => a.Id == analysisId && a.UserId == userId, ct);
         if (!owns) return Results.NotFound();
+
+        // Story 2.6: tier-aware cap (per-analysis free / pooled-monthly pro /
+        // unlimited credits). Resolve once; reused for both empty + hydrated.
+        var cap = await capService.ResolveAsync(userId, analysisId, ct);
 
         var conversation = await db.Conversations.AsNoTracking()
             .FirstOrDefaultAsync(c => c.AnalysisId == analysisId && c.UserId == userId, ct);
@@ -258,7 +255,7 @@ public static class CoachConversationEndpoints
                 Guid.Empty,
                 analysisId,
                 Array.Empty<CoachMessageDto>(),
-                new CoachCapsDto(Used: 0, Limit: capLimit, CapReached: false)));
+                capService.ToDto(cap)));
         }
 
         var rows = await db.CoachMessages.AsNoTracking()
@@ -278,24 +275,11 @@ public static class CoachConversationEndpoints
                 m.CompletedAt))
             .ToList();
 
-        // Story 1.9: count user messages in this conversation for the
-        // caps chip — single source of truth, no frontend arithmetic.
-        // review-fix P4 — count via a separate db CountAsync (mirrors the
-        // PostMessage path) instead of counting from the just-loaded DTO
-        // list. Two parallel counting strategies for the same quantity
-        // would silently desync under any future pagination/filter change
-        // to the messages projection. The COUNT is a single index seek.
-        var used = await db.CoachMessages.AsNoTracking()
-            .CountAsync(
-                m => m.ConversationId == conversation.Id && m.Role == "user",
-                ct);
-        var caps = new CoachCapsDto(
-            Used: used,
-            Limit: capLimit,
-            CapReached: used >= capLimit);
-
+        // Story 2.6: the caps chip is whatever CoachCapService resolved above
+        // (tier-aware: per-analysis count for free, pooled-monthly for pro,
+        // unlimited for credits) — single source of truth, no frontend math.
         return Results.Ok(new CoachConversationDto(
-            conversation.Id, analysisId, messages, caps));
+            conversation.Id, analysisId, messages, capService.ToDto(cap)));
     }
 
     // Story 1.5 code review B-H1: race-safe get-or-create on

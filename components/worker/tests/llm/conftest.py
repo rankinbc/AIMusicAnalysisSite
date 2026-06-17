@@ -37,12 +37,18 @@ def _reset_breaker_and_stub_spend(monkeypatch):
     """Story 1.4: reset breaker state per-test and stub the DB-side spend
     aggregator so unit tests stay ``DATABASE_URL``-free. Tests that want a
     specific tier spend can override the stub via monkeypatch.setattr.
+
+    Story 2.6: also stub the feature_flags ceiling override to ``None`` so the
+    SPEND-guard ceilings stay purely env/``configure()``-driven here, hermetic
+    against the module-level flag cache (its own coverage lives in
+    tests/test_feature_flags.py + tests/test_budget_flag_override.py).
     """
     budget.reset_breaker_state()
     monkeypatch.setattr(
         budget, "_aggregate_tier_spend",
         lambda tier, *, include_all_tiers=False: Decimal("0"),
     )
+    monkeypatch.setattr(budget, "_ceiling_override", lambda _flag_name: None)
     yield
     budget.reset_breaker_state()
 

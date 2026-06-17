@@ -120,6 +120,10 @@ builder.Services.AddScoped<CreditLedgerService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<EntitlementService>();
 
+// Story 2.6 — tier-aware coach cap resolver (COUNT guard half of the two-guard
+// model). Depends on EntitlementService + AppDbContext, so scoped.
+builder.Services.AddScoped<CoachCapService>();
+
 // Story 1.9: per-analysis free-tier coach follow-up cap. Fail-fast at startup
 // on a non-positive value — a zero cap would make the product unusable and we
 // don't want a config typo to ship silently.

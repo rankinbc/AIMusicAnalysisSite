@@ -17,13 +17,21 @@ public sealed record CoachMessageDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset? CompletedAt);
 
-// Story 1.9 / UX-DR16: per-analysis follow-up cap state. `CapReached` is
-// server-computed (single source of truth — if the formula changes in
-// story 2.6 we don't have a frontend that disagrees). The free-tier
-// specialization of UX-DR16 grammar `{used} of {limit} follow-ups · this
-// analysis` is owned by the frontend; story 2.6 will add `Tier` / `ResetsAt`
-// fields for the Pro-per-month form.
-public sealed record CoachCapsDto(int Used, int Limit, bool CapReached);
+// Story 1.9 / UX-DR16 + Story 2.6 / FR15: coach follow-up cap state. `CapReached`
+// is server-computed (single source of truth — the frontend never re-derives it).
+// `Scope` tells the frontend which UX-DR16 grammar to render:
+//   "analysis"  → free tier, per-analysis: "{used} of {limit} follow-ups · this analysis"
+//   "month"     → pro tier, pooled monthly: "{used} of {limit} this month" (resets `ResetsAt`)
+//   "unlimited" → credits/unlimited: no chip / "unlimited" copy
+// `ResetsAt` is the UTC instant the pooled allowance resets (first of next month);
+// null for the per-analysis and unlimited scopes. Both fields are additive — older
+// clients that read only Used/Limit/CapReached keep working.
+public sealed record CoachCapsDto(
+    int Used,
+    int Limit,
+    bool CapReached,
+    string Scope = "analysis",
+    DateTimeOffset? ResetsAt = null);
 
 public sealed record CoachConversationDto(
     Guid ConversationId,

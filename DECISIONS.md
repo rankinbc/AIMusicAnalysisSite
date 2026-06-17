@@ -64,3 +64,58 @@ Decisions made while implementing "Paid Jobs Never Starve" (server-only queue sp
 - **BFF integration tests are Postgres-gated** via `PostgresReachable()`. I started
   `docker compose up -d postgres redis` and confirmed real execution (242 users written to the test
   DB; the new `DispatchQueueRoutingTests` + `DispatchEntitlementGateTests` ran for real, 11 passed).
+
+---
+
+# Story 2.6 — Tier-Aware Coach Caps
+
+## Pre-existing infra found (built into 2.4)
+- `feature_flags` table + `EntitlementService.GetFlagsAsync()` (60s `IMemoryCache`) ALREADY exist on the
+  BFF. Seeded flags: `free_analyses_per_month`, `coach_free_followups`, `history_depth_free`,
+  `history_depth_credits`. 2.4 explicitly deferred `coach_pro_monthly` to 2.6 (2.4 file, out-of-scope §).
+- 2.4 metered ONLY `analysis` usage_events; coach was never metered. The two-guard SPEND side
+  (gateway per-tier monthly USD ceiling) lives in `worker/app/llm/budget.py` reading env settings.
+
+## Decisions
+
+1. **Pro pooled monthly cap source = `usage_events` (type `coach_message`, `billing_period`).** The BFF now
+   writes a `coach_message` usage_event in the SAME `SaveChanges` as the user/assistant coach rows
+   (mirrors how analysis dispatch writes its usage_event — 2.4). Pro pool `used` = COUNT of those events
+   in the current `YYYY-MM`. Rationale: architecture line 93 says "Pro coach pool computed per period from
+   [usage_events]"; this also completes the coach-metering the broader epic wording implies. Alternative
+   (count coach_messages rows joined to conversations by created_at) was rejected — usage_events is the
+   period-scoped meter of record and keeps the Usage page (2.8) consistent.
+
+2. **Free per-analysis cap source unchanged (count user coach_messages in THIS conversation), but the LIMIT
+   now derives from the entitlement resolver** (`coach_free_followups` feature flag), NOT
+   `IOptions<CoachCapsOptions>` (AC2). The `CoachCapsOptions` class + its Program registration are kept
+   (CoachCapsOptionsTests still binds it directly) but the endpoint no longer reads it — vestigial config.
+
+3. **Tier-aware logic lives in a new scoped `CoachCapService`** (depends on `EntitlementService` +
+   `AppDbContext`), used by BOTH `PostMessage` (gate) and `GetConversation` (chip). Keeps the endpoint thin
+   and the cap math unit-testable. Tier mapping: pro → pooled monthly (`coach_pro_monthly`); free →
+   per-analysis (`coach_free_followups`); credits → unlimited (no gate), consistent with 2.4's
+   `CoachRemaining = int.MaxValue` for credits. Credits coach caps are out of epic scope.
+
+4. **`CoachCapsDto` extended additively with `Scope` ("analysis"|"month"|"unlimited") + `ResetsAt`** (first
+   of next month UTC, only for the monthly/pooled form) so the frontend can pick the FR15 grammar
+   ("{used} of {limit} this month" vs "… · this analysis"). Additive → no wire break; existing tests read
+   only Used/Limit/CapReached. The DTO comment already anticipated these exact fields.
+
+5. **Worker half of AR35 (AC3) = the SPEND ceilings become feature_flags-overridable.** New
+   `worker/app/feature_flags.py` — a 60s-TTL, fail-open cached reader of the SAME `feature_flags` table
+   (SQLAlchemy Core `text()` query via the sync `SessionFactory`; no new shared ORM model → no migration
+   coupling). `budget.py` resolves each per-tier + global monthly USD ceiling from feature_flags
+   (`llm_budget_{free,pro,global}_usd`), falling back to env settings on any miss. This is a genuine,
+   tested worker consumption of feature_flags AND it stays squarely inside the SPEND guard (AC4: BFF gates
+   COUNT, gateway gates SPEND — both now operator-tunable via the one table, hot-reloaded in ≤60s).
+   `None`-check (not truthiness) so an operator can set a ceiling to `0` to hard-stop a tier.
+   `tests/llm/conftest.py` stubs `budget._ceiling_override → None` so the SPEND-guard unit tests stay
+   hermetic and env-driven regardless of the module-level flag cache.
+
+6. **`coach_pro_monthly` default seeded as `300`** (≈10 coach messages/day for Pro). No canonical number in
+   epics/architecture; operator-tunable via feature_flags. Budget flags seeded equal to env defaults
+   (5/100/1000) so seeding changes NO behavior, only makes them live-tunable.
+
+7. **New migration `AddCoachAndBudgetFlags`** seeds the four new flags with `INSERT … ON CONFLICT DO
+   NOTHING` (idempotent, mirrors the 2.4 flag seed). Does NOT edit the already-applied 2.4 migration.

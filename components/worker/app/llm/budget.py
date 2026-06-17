@@ -140,6 +140,40 @@ def _aggregate_tier_spend(tier: str, *, include_all_tiers: bool = False) -> Deci
         return Decimal("0")
 
 
+# ── operator-tunable ceilings (feature_flags override, story 2.6 / AR35) ─────
+
+
+def _ceiling_override(flag_name: str) -> Decimal | None:
+    """Operator override of a monthly USD ceiling from the ``feature_flags``
+    table (hot-reloaded ~60 s — the worker half of AR35). Returns ``None`` on any
+    miss/parse-failure/DB error so the caller falls back to the env default.
+
+    Isolated in its own function so the LLM unit tests (``tests/llm``) can stub it
+    to ``None`` and stay hermetically env-driven regardless of the flag cache.
+    """
+    from app.feature_flags import get_flag_decimal  # noqa: PLC0415 — lazy
+
+    return get_flag_decimal(flag_name, None)
+
+
+def _tier_ceiling(tier: str, settings: Any) -> Decimal:
+    """Per-tier monthly ceiling: feature_flags override else env settings.
+    None-check (not truthiness) so an operator can set ``0`` to hard-stop a tier."""
+    if tier == "free":
+        override = _ceiling_override("llm_budget_free_usd")
+        return override if override is not None else settings.llm_budget_free_usd
+    if tier == "pro":
+        override = _ceiling_override("llm_budget_pro_usd")
+        return override if override is not None else settings.llm_budget_pro_usd
+    # Unknown/None tier → operator global hard floor.
+    return _global_ceiling(settings)
+
+
+def _global_ceiling(settings: Any) -> Decimal:
+    override = _ceiling_override("llm_budget_global_usd")
+    return override if override is not None else settings.llm_budget_global_usd
+
+
 # ── public guard ────────────────────────────────────────────────────────────
 
 
@@ -165,10 +199,10 @@ def check_budget(*, tier: str | None, purpose: str, user_id: Any | None) -> None
             f"provider unavailable (consecutive_errors={_breaker.consecutive_errors})",
         )
 
-    # 2. Per-tier monthly ceiling.
+    # 2. Per-tier monthly ceiling (feature_flags override → env default, AR35).
     effective_tier = tier or settings.llm_default_tier
     tier_spent = _aggregate_tier_spend(effective_tier)
-    tier_cap = settings.tier_ceiling(effective_tier)
+    tier_cap = _tier_ceiling(effective_tier, settings)
     if tier_spent >= tier_cap:
         logger.warning(
             "tier budget EXCEEDED tier=%s spent=$%s ceiling=$%s",
@@ -180,9 +214,9 @@ def check_budget(*, tier: str | None, purpose: str, user_id: Any | None) -> None
             f"ceiling=${_fmt_money(tier_cap)}",
         )
 
-    # 3. Global operator hard cap (sum across all tiers).
+    # 3. Global operator hard cap (sum across all tiers; AR35-overridable).
     global_spent = _aggregate_tier_spend(effective_tier, include_all_tiers=True)
-    global_cap = settings.llm_budget_global_usd
+    global_cap = _global_ceiling(settings)
     if global_spent >= global_cap:
         logger.warning(
             "global budget EXCEEDED spent=$%s ceiling=$%s",
