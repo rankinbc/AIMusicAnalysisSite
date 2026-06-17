@@ -540,6 +540,33 @@ export interface JobSummaryDto {
   failedAt: string | null;
 }
 
+// ── .als project awareness ─────────────────────────────────────────────────
+// The client parses a dropped .als into this map and POSTs it with the upload;
+// the BFF stores it verbatim and returns it on the results DTO. Mirrors the
+// producer type in features/upload/alsPreview.ts (AlsProjectJson). Kept here so
+// the api layer owns its own wire contract.
+export interface AlsProjectTrack {
+  index: number;
+  name: string;
+  type: 'audio' | 'midi';
+  color: number | null;
+  devices: string[];
+}
+
+export interface AlsProjectJson {
+  schemaVersion: number;
+  source: string;
+  tempo: number | null;
+  timeSignature: string;
+  timeSignatureNumerator: number;
+  timeSignatureDenominator: number;
+  abletonVersion: string | null;
+  trackCount: number;
+  tracks: AlsProjectTrack[];
+  devices: string[];
+  plugins: string[];
+}
+
 export interface JobResultsDto {
   jobId: string;
   analysisId: string;
@@ -548,6 +575,9 @@ export interface JobResultsDto {
   songName: string | null;
   finalJson: unknown;
   shareToken: string | null;
+  // Stored client-parsed Ableton project map ("project awareness"), surfaced for
+  // the results Project view. Null when no .als project JSON was uploaded.
+  alsProject?: AlsProjectJson | null;
 }
 
 // ── final_json typed view (narrowed at the Results page boundary) ──────────

@@ -32,6 +32,44 @@ export interface AlsPreview {
   abletonVersion: string | null;
 }
 
+/** One track in the persisted project map (see {@link AlsProjectJson}). */
+export interface AlsProjectTrack {
+  /** Position among audio+MIDI tracks in document order (0-based). */
+  index: number;
+  name: string;
+  type: 'audio' | 'midi';
+  /** Raw Ableton palette colour index, or null when absent. */
+  color: number | null;
+  /** Unique device/plugin names on this track's own device chain. */
+  devices: string[];
+}
+
+/**
+ * The structured project map persisted alongside the analysis ("project
+ * awareness"). Parsed client-side from a dropped `.als` and POSTed with the
+ * upload; the BFF stores it verbatim on `song_versions.als_project_json`. See
+ * DECISIONS.md (D6–D9). A superset of {@link AlsPreview} — the drag-time panel
+ * is derived from it via {@link alsPreviewFromProject}.
+ */
+export interface AlsProjectJson {
+  schemaVersion: 1;
+  source: 'client-als-preview';
+  tempo: number | null;
+  timeSignature: string;
+  timeSignatureNumerator: number;
+  timeSignatureDenominator: number;
+  abletonVersion: string | null;
+  trackCount: number;
+  tracks: AlsProjectTrack[];
+  devices: string[];
+  plugins: string[];
+}
+
+// Payload guards (DoS / oversized-project): keep the stored JSON bounded. The
+// BFF additionally caps the serialized size.
+const MAX_PROJECT_TRACKS = 250;
+const MAX_DEVICES_PER_TRACK = 64;
+
 /** A function that turns an XML string into a DOM Document. */
 export type DomParse = (xml: string) => Document;
 
@@ -182,43 +220,97 @@ function extractTrackNames(doc: Document, tag: 'AudioTrack' | 'MidiTrack', label
   return descendants(doc, tag).map((el, i) => extractTrackName(el, `${label} ${i + 1}`));
 }
 
-function extractDevices(doc: Document): { devices: string[]; plugins: string[] } {
+/** Friendly name + plugin-ness for one device element (any <Devices> child). */
+function deviceEntry(dev: Element): { name: string; isPlugin: boolean } {
+  const tag = dev.tagName;
+  const userName = valueAttr(directChild(dev, 'UserName'))?.trim() || '';
+
+  if (tag === 'PluginDevice') {
+    const plugName =
+      valueAttr(firstDescendant(dev, 'PlugName')) ??
+      // AU plugins store their name under AuPluginInfo/Name.
+      valueAttr(directChild(firstDescendant(dev, 'AuPluginInfo') ?? dev, 'Name'));
+    return { name: userName || plugName || 'Unknown Plugin', isPlugin: true };
+  }
+
+  if (tag === 'MxDeviceAudioEffect' || tag === 'MxDeviceMidi' || tag === 'MxDeviceInstrument') {
+    const ref = valueAttr(firstDescendant(dev, 'Path'));
+    const base = ref ? ref.split(/[\\/]/).pop()!.replace(/\.amxd$/i, '') : tag;
+    return { name: userName || base, isPlugin: false };
+  }
+
+  // Native Ableton device.
+  const friendly = NATIVE_DEVICE_NAMES[tag] ?? prettifyTag(tag);
+  return { name: userName || friendly, isPlugin: false };
+}
+
+function extractDevices(root: ParentNode): { devices: string[]; plugins: string[] } {
   // Walk every <Devices> container's direct children. Iterating all containers
   // (including those nested inside racks) and deduping by name gives a complete
   // "what's in this project" list — good enough for a drag-time preview.
   const devices = new Set<string>();
   const plugins = new Set<string>();
 
-  for (const container of descendants(doc, 'Devices')) {
+  for (const container of descendants(root, 'Devices')) {
     for (const dev of Array.from(container.children)) {
-      const tag = dev.tagName;
-      const userName = valueAttr(directChild(dev, 'UserName'))?.trim() || '';
-
-      if (tag === 'PluginDevice') {
-        const plugName =
-          valueAttr(firstDescendant(dev, 'PlugName')) ??
-          // AU plugins store their name under AuPluginInfo/Name.
-          valueAttr(directChild(firstDescendant(dev, 'AuPluginInfo') ?? dev, 'Name'));
-        const name = userName || plugName || 'Unknown Plugin';
-        plugins.add(name);
-        devices.add(name);
-        continue;
-      }
-
-      if (tag === 'MxDeviceAudioEffect' || tag === 'MxDeviceMidi' || tag === 'MxDeviceInstrument') {
-        const ref = valueAttr(firstDescendant(dev, 'Path'));
-        const base = ref ? ref.split(/[\\/]/).pop()!.replace(/\.amxd$/i, '') : tag;
-        devices.add(userName || base);
-        continue;
-      }
-
-      // Native Ableton device.
-      const friendly = NATIVE_DEVICE_NAMES[tag] ?? prettifyTag(tag);
-      devices.add(userName || friendly);
+      const { name, isPlugin } = deviceEntry(dev);
+      devices.add(name);
+      if (isPlugin) plugins.add(name);
     }
   }
 
   return { devices: Array.from(devices), plugins: Array.from(plugins) };
+}
+
+function extractTrackColor(trackEl: Element): number | null {
+  // Mirror als_parser._get_track_color: first <Color Value="…"> in the track.
+  const colorEl = firstDescendant(trackEl, 'Color');
+  const v = valueAttr(colorEl);
+  if (v == null) return null;
+  const n = Number.parseInt(v, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function extractTrackDevices(trackEl: Element): string[] {
+  // The track's own device chain (DeviceChain/.../Devices). Iterating every
+  // <Devices> within the track element also pulls rack contents — fine for a
+  // "what's on this track" read-out. Deduped, capped, in document order.
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const container of descendants(trackEl, 'Devices')) {
+    for (const dev of Array.from(container.children)) {
+      const { name } = deviceEntry(dev);
+      if (seen.has(name)) continue;
+      seen.add(name);
+      out.push(name);
+      if (out.length >= MAX_DEVICES_PER_TRACK) return out;
+    }
+  }
+  return out;
+}
+
+function extractProjectTracks(doc: Document): AlsProjectTrack[] {
+  // Walk <Tracks> children in document order so audio/MIDI interleave the way
+  // they do in the arrangement (the flat audioTracks[]/midiTracks[] used by the
+  // preview lose that ordering). Only Audio/MIDI tracks are producer-meaningful
+  // here — Return/Group/Master tracks are skipped.
+  const container = firstDescendant(doc, 'Tracks');
+  if (!container) return [];
+  const out: AlsProjectTrack[] = [];
+  for (const el of Array.from(container.children)) {
+    const type = el.tagName === 'AudioTrack' ? 'audio' : el.tagName === 'MidiTrack' ? 'midi' : null;
+    if (!type) continue;
+    const index = out.length;
+    out.push({
+      index,
+      name: extractTrackName(el, `${type === 'audio' ? 'Audio' : 'MIDI'} ${index + 1}`),
+      type,
+      color: extractTrackColor(el),
+      devices: extractTrackDevices(el),
+    });
+    if (out.length >= MAX_PROJECT_TRACKS) break;
+  }
+  return out;
 }
 
 function extractVersion(doc: Document): string | null {
@@ -236,7 +328,8 @@ function extractVersion(doc: Document): string | null {
  * Parse a Live Set XML string into a preview. Pure + synchronous so it's
  * unit-testable; `domParse` is injectable for non-browser test environments.
  */
-export function parseAlsXml(xml: string, domParse: DomParse = defaultDomParse): AlsPreview {
+/** Parse + validate a Live Set XML string into a DOM Document, or throw. */
+function toLiveSetDoc(xml: string, domParse: DomParse): Document {
   let doc: Document;
   try {
     doc = domParse(xml);
@@ -254,6 +347,11 @@ export function parseAlsXml(xml: string, domParse: DomParse = defaultDomParse): 
   if (!root || (root.tagName !== 'Ableton' && descendants(doc, 'LiveSet').length === 0)) {
     throw new AlsParseError("This doesn't look like an Ableton Live Set.");
   }
+  return doc;
+}
+
+export function parseAlsXml(xml: string, domParse: DomParse = defaultDomParse): AlsPreview {
+  const doc = toLiveSetDoc(xml, domParse);
 
   const [num, den] = extractTimeSignature(doc);
   const audioTracks = extractTrackNames(doc, 'AudioTrack', 'Audio');
@@ -308,4 +406,62 @@ export async function readAlsXml(file: Blob): Promise<string> {
 export async function parseAlsFile(file: Blob, domParse?: DomParse): Promise<AlsPreview> {
   const xml = await readAlsXml(file);
   return parseAlsXml(xml, domParse);
+}
+
+/**
+ * Parse a Live Set XML string into the persisted {@link AlsProjectJson} project
+ * map (per-track devices + colour, ordered track list). Pure + synchronous;
+ * `domParse` is injectable for non-browser test environments.
+ */
+export function parseAlsProjectXml(
+  xml: string,
+  domParse: DomParse = defaultDomParse,
+): AlsProjectJson {
+  const doc = toLiveSetDoc(xml, domParse);
+  const [num, den] = extractTimeSignature(doc);
+  const tracks = extractProjectTracks(doc);
+  const { devices, plugins } = extractDevices(doc);
+  return {
+    schemaVersion: 1,
+    source: 'client-als-preview',
+    tempo: extractTempo(doc),
+    timeSignature: `${num}/${den}`,
+    timeSignatureNumerator: num,
+    timeSignatureDenominator: den,
+    abletonVersion: extractVersion(doc),
+    trackCount: tracks.length,
+    tracks,
+    devices,
+    plugins,
+  };
+}
+
+/** Read + parse a dropped/picked `.als` File into the project map. */
+export async function parseAlsProjectFile(
+  file: Blob,
+  domParse?: DomParse,
+): Promise<AlsProjectJson> {
+  const xml = await readAlsXml(file);
+  return parseAlsProjectXml(xml, domParse);
+}
+
+/**
+ * Derive the drag-time {@link AlsPreview} from a parsed project map, so the
+ * dialog parses the `.als` exactly once (project → preview) instead of twice.
+ */
+export function alsPreviewFromProject(project: AlsProjectJson): AlsPreview {
+  const audioTracks = project.tracks.filter((t) => t.type === 'audio').map((t) => t.name);
+  const midiTracks = project.tracks.filter((t) => t.type === 'midi').map((t) => t.name);
+  return {
+    tempo: project.tempo,
+    timeSignatureNumerator: project.timeSignatureNumerator,
+    timeSignatureDenominator: project.timeSignatureDenominator,
+    timeSignature: project.timeSignature,
+    audioTracks,
+    midiTracks,
+    trackCount: project.trackCount,
+    devices: project.devices,
+    plugins: project.plugins,
+    abletonVersion: project.abletonVersion,
+  };
 }
