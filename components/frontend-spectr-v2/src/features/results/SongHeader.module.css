@@ -1,0 +1,176 @@
+/* SongHeader — rebuilt to prototype fidelity (cyan palette).
+   Drop-in for src/features/results/SongHeader.module.css */
+
+.header {
+  display: grid;
+  grid-template-columns: 96px 1fr auto;
+  gap: 18px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.cover {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  border-radius: 12px;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 6px 18px -8px rgba(0, 0, 0, 0.6);
+}
+
+.coverBadge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+}
+
+.meta {
+  min-width: 0;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin: 0 0 6px;
+}
+
+.attrs {
+  font-size: 12.5px;
+  color: var(--text-2);
+  letter-spacing: 0.2px;
+  margin: 0;
+}
+
+.inputs {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.inputsLabel {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-right: 2px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--border-2);
+  background: var(--card-2);
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+
+.chip:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--cyan) 40%, var(--border));
+  color: var(--cyan);
+}
+
+.chip[data-present] {
+  color: var(--cyan);
+  border-color: color-mix(in srgb, var(--cyan) 30%, var(--border));
+  background: var(--cyan-dim);
+  cursor: default;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+  min-width: 200px;
+}
+
+.primary,
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  border: 1px solid var(--border-2);
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.primary {
+  background: var(--cyan);
+  color: var(--ink-on-accent);
+  border-color: transparent;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 10px 26px -12px var(--cyan-glow);
+}
+
+.primary:hover {
+  background: var(--accent-bright, var(--cyan));
+}
+
+.secondary {
+  background: var(--card-2);
+  color: var(--text-2);
+}
+
+.secondary:hover {
+  background: var(--card-hover);
+  color: var(--text);
+}
+
+.subtle {
+  opacity: 0.7;
+  font-weight: 400;
+  margin-left: auto;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.primary .subtle {
+  color: var(--ink-on-accent);
+  opacity: 0.6;
+}
+
+@media (max-width: 760px) {
+  .header {
+    grid-template-columns: 84px 1fr;
+  }
+  .cover {
+    width: 84px;
+    height: 84px;
+  }
+  .actions {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    min-width: 0;
+  }
+  .title {
+    font-size: 20px;
+  }
+}

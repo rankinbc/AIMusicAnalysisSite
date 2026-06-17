@@ -5,9 +5,12 @@ from audio_analysis.stems.types import StemProposal, StemRole
 
 def test_classify_stems_separates_roles_by_content(synth_stem_files):
     # Content-only (rename-agnostic): the classifier must separate the four roles
-    # from their sound alone, not their filenames.
+    # from their sound alone. Pass non-keyword names so filename-first can't fire and
+    # the spectral fallback is exercised directly.
     order = ["kick", "bass", "hats", "vocals"]
-    props = classify_stems([synth_stem_files[r] for r in order])
+    props = classify_stems(
+        [synth_stem_files[r] for r in order], names=["s1", "s2", "s3", "s4"]
+    )
     assert all(isinstance(p, StemProposal) for p in props)
     assert props[0].role == StemRole.KICK
     assert props[1].role == StemRole.BASS

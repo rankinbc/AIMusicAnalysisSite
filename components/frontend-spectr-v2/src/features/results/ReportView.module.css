@@ -1,10 +1,13 @@
+/* ReportView — page frame to the design width (1080, not 1360) + rhythm.
+   Drop-in for src/features/results/ReportView.module.css */
+
 .report {
-  max-width: 1360px;
+  max-width: 1080px;
   margin: 0 auto;
-  padding: var(--space-6) var(--space-6) 32px;
+  padding: var(--space-6) var(--space-6) 120px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 0;
 }
 
 .header {
@@ -13,6 +16,7 @@
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+  margin-bottom: 4px;
 }
 
 .backLink {
@@ -28,6 +32,13 @@
 
 .tabBody {
   min-height: 320px;
+}
+
+.noVersion {
+  color: var(--muted);
+  font-size: 14px;
+  padding: 32px 0;
+  text-align: center;
 }
 
 .coachStack {

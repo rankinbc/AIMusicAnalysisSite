@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .coach import generate_coached_fixes
 from .converters import to_wav
+from .recommendations import translation_fixes
 from .schemas import PhaseResult, PipelineResult
 from .scorers.danceability import danceability_score
 from .phases import (
@@ -19,6 +20,7 @@ from .phases import (
     phase5_reference,
     phase6_gap,
     phase7_arrangement,
+    phase9_translation,
 )
 from .phases.phase8_als import analyze_als
 
@@ -32,6 +34,7 @@ PHASE_DEFS = [
     (5, "Reference Comparison"),
     (6, "Gap Analysis"),
     (7, "Arrangement Advice"),
+    (9, "Mix Translation"),
 ]
 
 # Phase-number → display name (phases 1–7; phase 8 is the conditional ALS step).
@@ -101,6 +104,8 @@ def run_single_phase(
                 structure, genre, progress_cb,
                 bpm=bpm, duration_seconds=duration_seconds,
             )
+        elif phase_num == 9:
+            data = phase9_translation.analyze(wav_path, progress_cb)
         else:
             data = {}
 
@@ -164,7 +169,9 @@ def finalize_result(
         genre=str(genre),
     )
 
-    coaching = generate_coached_fixes({**p1, "top_fixes": top_fixes})
+    coaching = generate_coached_fixes(
+        {**p1, "translation": phase_data.get(9, {}), "top_fixes": top_fixes}
+    )
 
     return PipelineResult(
         file_path=str(file_path),
@@ -331,6 +338,11 @@ def _score_to_grade(score: float) -> str:
 
 def _extract_fixes(phase_data: dict) -> list[str]:
     fixes: list[str] = []
+
+    # Priority 0: mix-translation fixes from phase 9 (mono collapse, weak bass
+    # translation, headphone fatigue). These are playback-failure issues, so they
+    # outrank arrangement nits — cap at 2 to leave room for other categories.
+    fixes.extend(translation_fixes(phase_data.get(9))[:2])
 
     # Priority 1: arrangement fixes from phase 7
     arr = phase_data.get(7, {})

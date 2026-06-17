@@ -54,6 +54,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     // Billing (story 2.4 — operator-controlled feature flags)
     public DbSet<FeatureFlag> FeatureFlags => Set<FeatureFlag>();
 
+    // Song tags (private + public, user-defined)
+    public DbSet<SongTag> SongTags => Set<SongTag>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         builder.HasPostgresExtension("pgcrypto");      // gen_random_uuid()
@@ -188,6 +191,21 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         // Story 2.4 — feature_flags: string PK, DB-side updated_at default.
         builder.Entity<FeatureFlag>().HasKey(f => f.Name);
         builder.Entity<FeatureFlag>().Property(f => f.UpdatedAt).HasDefaultValueSql("now()");
+
+        // Song tags — no duplicate tag name per (song, user); fast lookup by song.
+        builder.Entity<SongTag>()
+            .HasIndex(t => new { t.SongId, t.UserId, t.Name })
+            .IsUnique()
+            .HasDatabaseName("uq_song_tags_song_user_name");
+        builder.Entity<SongTag>().HasIndex(t => t.SongId)
+            .HasDatabaseName("ix_song_tags_song_id");
+        builder.Entity<SongTag>().Property(t => t.CreatedAt).HasDefaultValueSql("now()");
+        // FK → songs with cascade delete so tags don't orphan when a song is removed.
+        builder.Entity<SongTag>()
+            .HasOne<Song>()
+            .WithMany()
+            .HasForeignKey(t => t.SongId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // DB-side defaults for *_at timestamp columns.
         // Without these, inserts from outside EF (the Python worker via SQLAlchemy)

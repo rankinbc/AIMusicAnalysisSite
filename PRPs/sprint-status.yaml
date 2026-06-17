@@ -1,5 +1,6 @@
 # generated: 2026-06-12
 # last_updated: 2026-06-16
+# story 2-5 transitioned: backlog → ready-for-dev (create-story workflow, 2026-06-16; tier-routed analyze_audio_job + W1/W2 queue split; re-homes 5 default-queue actors to avoid prod orphaning)
 # project: Spectr
 # story 1-5 transitioned: backlog → ready-for-dev → in-progress → review → done (code-review workflow, 2026-06-15)
 # story 1-6 transitioned: backlog → ready-for-dev → in-progress → review → done (code-review workflow, 2026-06-15)
@@ -79,7 +80,7 @@ development_status:
   2-2-manage-subscription-self-service: done
   2-3-buy-credits-with-append-only-ledger: done
   2-4-server-side-entitlements-and-metering: review
-  2-5-paid-jobs-never-starve: backlog
+  2-5-paid-jobs-never-starve: ready-for-dev
   2-6-tier-aware-coach-caps: backlog
   2-7-cap-hit-upgrade-flow-upgradesheet-and-blurlock: backlog
   2-8-usage-page-with-honest-math: backlog

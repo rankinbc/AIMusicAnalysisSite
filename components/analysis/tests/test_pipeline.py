@@ -244,14 +244,15 @@ class TestPhase5:
 # ---------------------------------------------------------------------------
 
 class TestPipeline:
-    def test_pipeline_returns_all_7_phases(self, tmp_path):
-        """All 7 phases should appear in the result."""
+    def test_pipeline_returns_all_phases(self, tmp_path):
+        """All worker phases (1-7, 9) plus the ALS phase 8 should appear."""
         from audio_analysis import run_pipeline
 
         wav = make_test_wav(tmp_path)
         with patch("audio_analysis.phases.phase4_stems.get_model", return_value=None):
             result = run_pipeline(str(wav))
-        assert len(result["phases"]) == 8
+        assert len(result["phases"]) == 9
+        assert {p["phase"] for p in result["phases"]} == {1, 2, 3, 4, 5, 6, 7, 8, 9}
         assert result["grade"] in ["A", "B", "C", "D", "F"]
 
     def test_phase_failure_does_not_abort_pipeline(self, tmp_path):
@@ -268,12 +269,12 @@ class TestPipeline:
                 result = run_pipeline(str(wav))
 
         phases = result["phases"]
-        assert len(phases) == 8
+        assert len(phases) == 9
         failed = [p for p in phases if p["status"] == "failed"]
         assert any(p["phase"] == 3 for p in failed)
-        # Phases 4-8 still ran regardless of phase 3 failure
+        # Phases 4-9 still ran regardless of phase 3 failure
         later = [p for p in phases if p["phase"] > 3]
-        assert len(later) == 5
+        assert len(later) == 6
 
     def test_pipeline_cleans_up_temp_wav(self, tmp_path):
         """Temporary WAV should be deleted after pipeline completes."""

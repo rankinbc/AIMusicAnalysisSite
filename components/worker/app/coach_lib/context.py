@@ -12,6 +12,7 @@ import logging
 import re
 from typing import Any, Iterable
 
+from ..verdict_lib.input_grounding import grounding_preamble, input_provenance
 from .payload import CoachEvidence
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,12 @@ def build_context_bundle(
         "verdicts": top_verdicts,
         "als_summary": als_summary,
         "conversation_tail": tail,
+        # AR10 grounding: authoritative truth of which inputs the user actually
+        # provided. The flattened analysis carries skipped/failed phase-4/5
+        # scaffolding that a live model otherwise narrates as real stems / a
+        # reference track. The coach must honor this over the raw JSON.
+        "inputs_provided": input_provenance(flattened_analysis),
+        "input_grounding": grounding_preamble(flattened_analysis),
     }
 
 

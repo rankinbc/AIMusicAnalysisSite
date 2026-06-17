@@ -1,14 +1,21 @@
-/* Sits over the spectrum, inset to match .spectrum (left:30 right:8 top/bottom:24). */
-.overlay {
+/* Wrapper sits over the spectrum, inset to match .spectrum
+   (left:30 right:8 top/bottom:24). The SVG fills the wrapper — an <svg> is a
+   replaced element, so position insets alone leave it at its 300×150 intrinsic
+   size (it would stick in the corner); the wrapping <div> honors the insets and
+   the SVG stretches to 100%. */
+.wrap {
   position: absolute;
   left: 30px;
   right: 8px;
   top: 24px;
   bottom: 24px;
   z-index: 4;
+  pointer-events: none;
+}
+.overlay {
   display: block;
-  width: auto;
-  height: auto;
+  width: 100%;
+  height: 100%;
   overflow: visible;
   /* let the spectrum receive nothing; only the handles are interactive */
   pointer-events: none;

@@ -19,7 +19,6 @@ is set but most failures are deterministic).
 """
 from __future__ import annotations
 
-import json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -39,7 +38,9 @@ from .verdict_lib.degraded import (
     run_rule_engine_for_analysis,
     write_degradation_notice,
 )
+from .verdict_lib.dsp_normalize import normalize_dsp_op
 from .verdict_lib.flatten_analysis import flatten
+from .verdict_lib.input_grounding import build_specialist_user_message
 from .verdict_lib.json_extraction import extract_json_object
 from .verdict_lib.prompt_loader import load_prompt, load_prompt_model
 from .verdict_lib.validator import validate_verdict
@@ -59,22 +60,18 @@ RETRY_SUFFIX = (
 )
 
 
-def _build_user_message(analysis: dict[str, Any], focus: str) -> str:
-    return (
-        f"Analyze this mix. Triage focus: {focus}\n\n"
-        f"```json\n{json.dumps(analysis, indent=2, default=str)}\n```\n\n"
-        "Return only the verdicts JSON object as specified in your instructions."
-    )
-
-
 def _hydrate(raw: dict[str, Any], *, track_id: str, slug: str,
              prompt_version: str, model: str) -> VerdictModel:
     body = dict(raw)
     body.setdefault("verdict_id", new_verdict_id())
     fix = body.get("fix")
-    if isinstance(fix, dict) and not fix.get("fix_id"):
+    if isinstance(fix, dict):
         fix = dict(fix)
-        fix["fix_id"] = new_fix_id()
+        chain = fix.get("dsp_chain")
+        if isinstance(chain, list):
+            fix["dsp_chain"] = [normalize_dsp_op(op) for op in chain]
+        if not fix.get("fix_id"):
+            fix["fix_id"] = new_fix_id()
         body["fix"] = fix
     body["track_id"] = track_id
     body["specialist"] = slug
@@ -196,7 +193,7 @@ def run_specialist(analysis_id: str, slug: str, user_id: str) -> None:
     # The gateway owns transport retries + model fallback; the two-attempt
     # loop here is only for a malformed-JSON re-prompt (RETRY_SUFFIX), which
     # is distinct from a transport failure.
-    user_msg = _build_user_message(flattened, focus="")
+    user_msg = build_specialist_user_message(flattened, focus="")
     pinned_model = load_prompt_model(slug)  # None → gateway default
     try:
         caller_id: uuid.UUID | None = uuid.UUID(user_id)

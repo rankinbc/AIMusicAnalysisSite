@@ -113,3 +113,12 @@ components/data/
 # run logs / generated analysis outputs
 *.log.err
 data/output/
+
+# TanStack Router generated cache
+**/.tanstack/
+
+# Generated frontend output artifacts
+output/frontend-spectr-v2/
+
+# Integration-test-generated upload/als staging dirs (per-run GUID folders)
+components/bff/tests/data/audio/

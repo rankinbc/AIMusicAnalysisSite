@@ -62,7 +62,8 @@ function AppLayout() {
 
   const pathname = location.pathname;
   const isLibraryActive = pathname === '/library' || pathname.startsWith('/songs');
-  const isReportActive = pathname.includes('/results/') || pathname === '/report';
+  const isReportActive =
+    pathname === '/reports' || pathname.includes('/results/');
 
   const avatarChar = (user?.email ?? '?').trim().charAt(0).toUpperCase() || '?';
 
@@ -78,14 +79,9 @@ function AppLayout() {
         </Link>
 
         <nav className={s.navTabs}>
-          <button
-            type="button"
-            className={s.navTab}
-            data-active={isReportActive}
-            onClick={() => void navigate({ to: '/library' })}
-          >
+          <Link to="/reports" className={s.navTab} data-active={isReportActive}>
             Report
-          </button>
+          </Link>
           <button type="button" className={s.navTab} data-active={false} disabled>
             Listen
           </button>

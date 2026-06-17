@@ -5,7 +5,10 @@ inputDocuments:
   - '_bmad/knowledge/index.md'
   - '_bmad/knowledge/project-overview.md'
   - 'session: v2 restructure-branch audit (BFF/frontend-spectr-v2/verdict-pipeline findings, 2026-06-12)'
+  - 'PRPs/brainstorming/brainstorming-session-2026-06-16.md (results experience + prescriptive model)'
+  - 'PRPs/results-ui-plan.md (design-ready results UI spec)'
 date: 2026-06-12
+revised: 2026-06-16
 author: Brian Rankin
 ---
 
@@ -136,6 +139,35 @@ Leading indicators: free-analyzer weekly volume (top-of-funnel health), .als-att
 
 ---
 
+## Product Direction Update — 2026-06-16 (results experience + prescriptive model)
+
+> Refines this brief from a results-page brainstorming session (`PRPs/brainstorming/brainstorming-session-2026-06-16.md`); the design-ready UI spec is `PRPs/results-ui-plan.md`. **Where this section conflicts with text above, this section governs.**
+
+**Strategic sharpening — the moat is Analysis → AI prescription.** We can't out-measure established analyzer/metering tools; the only defensible edge is turning the analysis into *what to do*. Consequence for investment: spend on (a) the quality and structure of the evidence we feed the AI, and (b) the synthesizer that turns it into actions — not on more user-facing meters. The dense analysis is primarily **AI feedstock**, secondarily **credibility**, and rarely the user's action surface.
+
+**The deliverable is a prescription, not a problem list — formalized as Finding → Move → Game Plan:**
+- **Finding** (diagnosis) — from the existing pipeline (rule_engine + measured data + specialist verdicts).
+- **Move** (prescription) — a structured action object an AI synthesizer emits from a Finding: `{ scope (track/bus/stem, device?, param?), action (directive, target_value?, confidence), rationale, evidence_ref, source, effort, impact, status }`. **Confidence-gated:** exact numbers only when the data backs them; otherwise directional guidance the producer A/Bs on the Listen page (which becomes the test-bench for un-committed Moves).
+- **Game Plan** — the ordered set of Moves the producer commits to. **One struct, three renderers:** in-app web cards, **Markdown export (v1 non-negotiable — the DAW take-away)**, and (later) next-version auto-verify.
+- The `Finding → Move` synthesizer is the one genuinely new build; everything upstream (rule_engine, triage, 27 specialists, validator) already exists.
+
+**Move-specificity scales with input depth** (honest upsell + the credit/depth flywheel): mix-only → *directional* · +reference → *genre-target* · +stems → *stem-specific* · +.als → *device-specific & confident*.
+
+**Results page IA — organize tabs by the user's JOB, not by data source** (replaces Mix / Reference / Arrangement / Raw):
+- **Plan** (hero / default) — one-line Verdict + the ranked Game Plan (⚡ Quick Wins / 🛠 Deeper Work). Each Move card: imperative title, confidence-gated directive, collapsible inline evidence chart, `Audition in Listen` + triage (Add to plan / Trying / Dismiss).
+- **Analysis** — the dense measured dashboard, demoted to credibility/evidence.
+- **Files** — inputs, .als/stems/reference, re-analyze, exports, version list.
+- **Specialists are not a tab:** triage *recommends* a set (not the full 27 roster); running one is a *priced verb inside Plan* that drops new Moves in. **No auto-spend of credits.** The free tier must deliver a useful Plan from rule_engine + measured findings alone (specialists = upgrade, not paywall-to-basics). "Ask the Coach" = a persistent dock anchored on Plan.
+
+**MVP scope deltas vs. the Core Features list below:**
+- **Add:** the `Finding → Move` synthesizer + Game Plan web rendering + **Markdown export**.
+- **Add:** results-page reorganization to the Plan / Analysis / Files IA above (supersedes "report parity with v1 surface" item 7's tab framing — the panels still exist, but live under Analysis as evidence).
+- **Deprioritize:** the **version-delta comparison view** (item 9) — not built and not the hero. The *iteration loop* (re-analyze the next version) remains the core retention behavior and the Success-Metrics KPIs still hold; we simply don't lead the UI with a delta visualization.
+
+**Future surface noted (not MVP) — social / community.** Two ideas worth designing toward without building now: (1) **publish-for-feedback** — a producer flips a version public; others leave timestamped notes/suggestions, incentivized with credits; (2) a **live "DJ room"** — Twitch-style listening with chat, paid effects/avatars, and viewers nudging the EQ as crowd feedback. Cheap future-proofing in the MVP: notes/findings carry `author` + `visibility`; "publish" is a visibility flip on a version; the Listen page is the convergence surface. **Credits are the connective economy** — spend to analyze, earn by reviewing others, spend to publish/DJ — which ties craft, community, and revenue into one flywheel.
+
+---
+
 ## MVP Scope
 
 Base: `restructure` branch (v2 stack — .NET BFF + Dramatiq worker + frontend-spectr-v2; slices 0–3 complete and verified building June 2026). MVP = finish the product surface + add the entire monetization/trust layer. Engine work is mostly done; commerce work is mostly not started.
@@ -153,7 +185,7 @@ Base: `restructure` branch (v2 stack — .NET BFF + Dramatiq worker + frontend-s
 **B. Build for MVP — product completion:**
 7. Report parity with v1 surface: per-stem clash table, arrangement advisor panel, genre radar/gap UI, reference comparison UI, .als analysis panel (backends exist; v2 UI panels missing)
 8. Share page (currently 20% stub) — public report = acquisition surface; screenshot/educator-friendly
-9. Version comparison view (delta between two versions — placeholder today)
+9. Version comparison view (delta between two versions — placeholder today) — **DEPRIORITIZED 2026-06-16** (see Product Direction Update; the iteration loop stays, the delta UI is deferred)
 10. Audio playback on report (player exists in Listen; embed in report)
 11. House + techno genre profiles (beachhead credibility; trance alone is too narrow)
 12. **"Ask the Coach"** — report-anchored chat (BFF coach endpoints + frontend wiring already half-built): context = analysis JSON + verdicts + .als summary; answers grounded in the user's measured values; per-tier message caps (free: 3 follow-ups per analysis; Pro: pooled monthly cap) enforced by the same metering as analyses — keeps the <15%-ARPU LLM guardrail intact

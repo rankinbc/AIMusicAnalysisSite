@@ -88,3 +88,76 @@
   color: var(--muted);
   margin: 0;
 }
+
+/* ── Inputs + actions (results redesign) ─────────────────────────────────── */
+.inputs {
+  margin-bottom: var(--space-6);
+}
+
+.inputsHd {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.sectionLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.sectionSub {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.2px;
+}
+
+.inputList {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.inputRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.inputRow[data-present] {
+  border-color: color-mix(in srgb, var(--cyan) 22%, var(--border));
+}
+
+.inputName {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.parsed {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--cyan);
+  background: var(--cyan-dim);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.fileActions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.downloads {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}

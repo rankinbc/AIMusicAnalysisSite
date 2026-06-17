@@ -42,7 +42,13 @@ def test_classify_stems_writes_detected_roles(monkeypatch):
         StemProposal(Path("1.wav"), StemRole.KICK, 0.7, "spectral: low-band"),
         StemProposal(Path("2.wav"), StemRole.BASS, 0.7, "spectral: sustained"),
     ]
-    monkeypatch.setattr("audio_analysis.stems.classify_stems", lambda paths: props)
+    seen: dict = {}
+
+    def _fake(paths, names=None):
+        seen["names"] = names
+        return props
+
+    monkeypatch.setattr("audio_analysis.stems.classify_stems", _fake)
 
     t.classify_stems(str(uuid.uuid4()))
 
@@ -52,6 +58,8 @@ def test_classify_stems_writes_detected_roles(monkeypatch):
     assert "spectral" in version.stem_paths_raw[0]["evidence"]
     # confirmed_role is the user's job at confirm time — classify must not set it.
     assert version.stem_paths_raw[0]["confirmed_role"] is None
+    # Authoritative export names are forwarded for filename-first classification.
+    assert seen["names"] == ["a.wav", "b.wav"]
 
 
 def test_classify_stems_noop_when_empty(monkeypatch):
@@ -59,6 +67,6 @@ def test_classify_stems_noop_when_empty(monkeypatch):
     monkeypatch.setattr(t.SessionFactory, "begin", lambda: _FakeSession(version))
     # Should not raise and not call the classifier.
     monkeypatch.setattr("audio_analysis.stems.classify_stems",
-                        lambda paths: (_ for _ in ()).throw(AssertionError("should not classify")))
+                        lambda paths, names=None: (_ for _ in ()).throw(AssertionError("should not classify")))
     t.classify_stems(str(uuid.uuid4()))
     assert version.stem_paths_raw == []

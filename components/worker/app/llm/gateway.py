@@ -16,9 +16,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import subprocess
+import tempfile
+import threading
 import time
 from dataclasses import dataclass
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import anthropic
@@ -67,6 +71,11 @@ logger = logging.getLogger(__name__)
 _RETRY_BASE_S = 0.5
 
 _FAKE_MODEL = "fake"
+# DEV-ONLY: model label stamped on rows when USE_CLAUDE_CLI=1 (see settings).
+_CLI_MODEL = "claude-cli"
+# The `claude` CLI is not concurrency-safe (v1 lesson) and the gateway may fan
+# specialists out concurrently — serialize all CLI calls process-wide.
+_cli_lock = threading.Lock()
 
 
 # Exception hierarchy + degradation constants live in errors.py so
@@ -278,6 +287,17 @@ async def complete(
     from . import budget as _budget  # noqa: PLC0415 — deliberate lazy
     _budget.check_budget(tier=effective_tier, purpose=purpose, user_id=user_id)
 
+    if settings.use_claude_cli:
+        # DEV-ONLY subscription path — shells out to the local `claude` CLI.
+        result = await _cli_result(
+            system=system, user=user, purpose=purpose, prompt_slug=prompt_slug,
+            prompt_version=prompt_version, user_id=user_id, tier=effective_tier,
+            correlation_id=correlation_id,
+            timeout_s=settings.llm_timeout_s if timeout_s is None else timeout_s,
+        )
+        _budget.record_outcome(outcome=result.outcome)
+        return result
+
     if settings.llm_fake:
         result = _fake_result(
             purpose=purpose, prompt_slug=prompt_slug, prompt_version=prompt_version,
@@ -394,6 +414,70 @@ def _acquire(g_sem: asyncio.Semaphore, c_sem: asyncio.Semaphore, purpose: str):
                 yield
 
     return _ctx()
+
+
+def _run_claude_cli(*, system: str, user: str, timeout_s: int) -> str:
+    """DEV-ONLY: invoke the local `claude` CLI (subscription auth) and return
+    its stdout text. Ported from the v1 ``CliClient`` — system prompt via a
+    tempfile, user message piped on stdin (Windows arg-length cap). Serialized
+    by ``_cli_lock`` because the CLI is not concurrency-safe.
+    """
+    with _cli_lock:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".md", delete=False, encoding="utf-8"
+        ) as f:
+            f.write(system)
+            system_path = Path(f.name)
+        try:
+            cmd = [
+                "claude", "-p",
+                "--system-prompt-file", str(system_path),
+                "--output-format", "text",
+            ]
+            try:
+                completed = subprocess.run(
+                    cmd, input=user.encode("utf-8"),
+                    capture_output=True, timeout=timeout_s,
+                )
+            except subprocess.TimeoutExpired as e:
+                raise LlmTimeoutError(f"claude CLI exceeded {timeout_s}s") from e
+            except FileNotFoundError as e:
+                raise LlmInvocationError(
+                    "`claude` CLI not found on PATH — install/login Claude Code "
+                    "or unset USE_CLAUDE_CLI."
+                ) from e
+            if completed.returncode != 0:
+                stderr = completed.stderr.decode(errors="replace").strip()
+                raise LlmInvocationError(
+                    f"claude CLI exited {completed.returncode}: {stderr}"
+                )
+            return completed.stdout.decode(errors="replace")
+        finally:
+            system_path.unlink(missing_ok=True)
+
+
+async def _cli_result(
+    *, system: str, user: str, purpose: str, prompt_slug: str | None,
+    prompt_version: str | None, user_id: Any | None, tier: str | None,
+    correlation_id: str | None, timeout_s: int,
+) -> GatewayResult:
+    t0 = time.monotonic()
+    text = await asyncio.to_thread(
+        _run_claude_cli, system=system, user=user, timeout_s=timeout_s
+    )
+    latency_ms = int((time.monotonic() - t0) * 1000)
+    # CLI exposes no token usage → metered as zero (dev-only, see settings).
+    call_id = record_llm_call(
+        user_id=user_id, tier=tier, purpose=purpose, prompt_slug=prompt_slug,
+        prompt_version=prompt_version, model=_CLI_MODEL, input_tokens=0,
+        output_tokens=0, cost_usd=Decimal("0"), latency_ms=latency_ms,
+        outcome="ok", correlation_id=correlation_id,
+    )
+    return GatewayResult(
+        text=text, model=_CLI_MODEL, input_tokens=0, output_tokens=0,
+        cost_usd=Decimal("0"), outcome="ok", latency_ms=latency_ms,
+        llm_call_id=call_id,
+    )
 
 
 def _fake_result(

@@ -1,11 +1,15 @@
-import { Link, Outlet, createFileRoute, useChildMatches } from '@tanstack/react-router';
+import { Link, Outlet, createFileRoute, useChildMatches, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
-import { useSetCurrentVersion, useSong } from '../../api/hooks';
+import { useQueryClient } from '@tanstack/react-query';
+import { useArchiveSong, useDeleteVersion, usePatchVersion, useSetCurrentVersion, useSong } from '../../api/hooks';
 import { CompareDialog } from '../../components/CompareDialog';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { SharePublishDialog } from '../../components/SharePublishDialog';
+import { SongEditDialog } from '../../components/SongEditDialog';
 import { UnifiedUploadDialog } from '../../components/UnifiedUploadDialog';
+import { ReanalyzeWithReferenceDialog } from '../../features/references/ReanalyzeWithReferenceDialog';
 import { CoverArt } from '../../ui/CoverArt';
 import { hueFromId } from '../../ui/hueFromId';
 import { GradePill } from '../../ui/GradePill';
@@ -20,6 +24,7 @@ export const Route = createFileRoute('/_app/songs/$songId')({
 function SongDetailPage() {
   const { songId } = Route.useParams();
   const { data: song, isLoading, error } = useSong(songId);
+  const navigate = useNavigate();
   const [uploadOpen, setUploadOpen] = useState(false);
   const childMatches = useChildMatches();
 
@@ -29,6 +34,12 @@ function SongDetailPage() {
     b: null,
   });
   const [publishOpen, setPublishOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [deleteVersionId, setDeleteVersionId] = useState<string | null>(null);
+  const [refReanalyzeVersionId, setRefReanalyzeVersionId] = useState<string | null>(null);
+  const archive = useArchiveSong();
+
   const openCompare = (a: string | null, b: string | null) => {
     setComparePreset({ a, b });
     setCompareOpen(true);
@@ -108,14 +119,30 @@ function SongDetailPage() {
                   <span className="mono">v{versionCount}</span> current
                 </Pill>
               </div>
+              {song.tags.length > 0 && (
+                <div className={s.heroTags}>
+                  {song.tags.map((t) => (
+                    <span key={t.id} className={`pill ${t.isPublic ? 'cyan' : ''}`}>
+                      {t.name}
+                      {t.isPublic && <span style={{ fontSize: 9, marginLeft: 3, opacity: 0.7 }}>pub</span>}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
             <div className={s.actions}>
+              <button type="button" className="btn ghost sm" onClick={() => setEditOpen(true)}>
+                Edit
+              </button>
+              <button type="button" className="btn ghost sm" onClick={() => setArchiveOpen(true)}>
+                Archive
+              </button>
               <button
                 type="button"
                 className="btn violet sm"
                 onClick={() => {
                   if (!song.latestResult) {
-                    toast.info('Analyze a version first — there’s nothing to share yet.');
+                    toast.info("Analyze a version first — there’s nothing to share yet.");
                     return;
                   }
                   setPublishOpen(true);
@@ -217,6 +244,23 @@ function SongDetailPage() {
                           Report ↗
                         </Link>
                       )}
+                      <EditVersionLabelButton versionId={v.id} currentLabel={v.label} />
+                      <button
+                        type="button"
+                        className={s.resultsLink}
+                        onClick={() => setRefReanalyzeVersionId(v.id)}
+                        title="Re-analyze against a saved reference track"
+                      >
+                        ↺ Reference
+                      </button>
+                      <button
+                        type="button"
+                        className={s.resultsLink}
+                        style={{ color: 'var(--red, #f87171)' }}
+                        onClick={() => setDeleteVersionId(v.id)}
+                      >
+                        Delete
+                      </button>
                     </div>
                   </div>
                 );
@@ -294,6 +338,42 @@ function SongDetailPage() {
           songName={song.name}
         />
       )}
+      <SongEditDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        song={song}
+      />
+      <ConfirmDialog
+        open={archiveOpen}
+        onOpenChange={setArchiveOpen}
+        title="Archive song"
+        description={`Archive "${song.name}"? It will be hidden from your library but not deleted.`}
+        confirmLabel="Archive"
+        onConfirm={async () => {
+          try {
+            await archive.mutateAsync(song.id);
+            toast.success(`"${song.name}" archived`);
+            void navigate({ to: '/library' });
+          } catch {
+            toast.error('Could not archive song');
+          }
+        }}
+        isPending={archive.isPending}
+      />
+      <DeleteVersionDialog
+        versionId={deleteVersionId}
+        songId={song.id}
+        onClose={() => setDeleteVersionId(null)}
+      />
+      {refReanalyzeVersionId && (
+        <ReanalyzeWithReferenceDialog
+          key={refReanalyzeVersionId}
+          versionId={refReanalyzeVersionId}
+          songId={song.id}
+          open={refReanalyzeVersionId !== null}
+          onOpenChange={(v) => { if (!v) setRefReanalyzeVersionId(null); }}
+        />
+      )}
       {latestVersion && null /* suppress unused-var: kept for future audio wiring */}
     </div>
   );
@@ -317,5 +397,102 @@ function MakeCurrentButton({ versionId }: { versionId: string }) {
     >
       {setCurrent.isPending ? '…' : 'Make current'}
     </button>
+  );
+}
+
+function EditVersionLabelButton({
+  versionId,
+  currentLabel,
+}: {
+  versionId: string;
+  currentLabel: string | null;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [label, setLabel] = useState(currentLabel ?? '');
+  const patch = usePatchVersion(versionId);
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        className={s.resultsLink}
+        style={{ color: 'var(--text-2)' }}
+        onClick={() => setEditing(true)}
+      >
+        Edit label
+      </button>
+    );
+  }
+
+  return (
+    <form
+      style={{ display: 'flex', gap: 4 }}
+      onSubmit={async (e) => {
+        e.preventDefault();
+        try {
+          await patch.mutateAsync({ label: label.trim() || null });
+          setEditing(false);
+        } catch {
+          toast.error('Could not update label');
+        }
+      }}
+    >
+      <input
+        autoFocus
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+        maxLength={100}
+        style={{
+          fontSize: 12,
+          padding: '2px 6px',
+          background: 'var(--card-2)',
+          border: '1px solid var(--border)',
+          borderRadius: 4,
+          color: 'var(--text)',
+        }}
+      />
+      <button type="submit" className={s.resultsLink} disabled={patch.isPending}>
+        {patch.isPending ? '…' : 'Save'}
+      </button>
+      <button type="button" className={s.resultsLink} onClick={() => setEditing(false)}>
+        ✕
+      </button>
+    </form>
+  );
+}
+
+function DeleteVersionDialog({
+  versionId,
+  songId,
+  onClose,
+}: {
+  versionId: string | null;
+  songId: string;
+  onClose: () => void;
+}) {
+  const deleteVersion = useDeleteVersion();
+  const qc = useQueryClient();
+
+  return (
+    <ConfirmDialog
+      open={versionId !== null}
+      onOpenChange={(v) => { if (!v) onClose(); }}
+      title="Delete version"
+      description="Delete this version? This cannot be undone and will remove the uploaded file."
+      confirmLabel="Delete"
+      danger
+      onConfirm={async () => {
+        if (!versionId) return;
+        try {
+          await deleteVersion.mutateAsync(versionId);
+          qc.invalidateQueries({ queryKey: ['songs', songId] });
+          toast.success('Version deleted');
+          onClose();
+        } catch {
+          toast.error('Could not delete version');
+        }
+      }}
+      isPending={deleteVersion.isPending}
+    />
   );
 }

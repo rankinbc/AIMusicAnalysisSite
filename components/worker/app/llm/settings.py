@@ -24,6 +24,16 @@ class LlmSettings(BaseSettings):
     # Fake replay (AR41) — no network, no spend. Truthy via env "1"/"true".
     llm_fake: bool = False
 
+    # ── DEV-ONLY temporary escape hatch ────────────────────────────────────
+    # Route LLM calls through the local `claude` CLI subprocess (subscription
+    # auth) instead of the SDK/API key. Ported from the v1 `CliClient` purely
+    # so a developer can eyeball real specialist output locally without an API
+    # key. Token counts/cost are unavailable from the CLI → metered as 0.
+    # NOT for production: the SDK + API-key path is the shipping design (the
+    # whole metering/budget system depends on real token counts). Takes
+    # precedence over llm_fake when both are set.
+    use_claude_cli: bool = False
+
     # Models (NFR24). Operator MUST confirm the exact API model id for their
     # account; these are sensible families and are overridable via env.
     llm_default_model: str = "claude-sonnet-4-5"

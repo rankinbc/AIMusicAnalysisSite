@@ -59,6 +59,7 @@ export const EqCurveOverlay = memo(function EqCurveOverlay() {
   const gridDb = [12, 6, 0, -6, -12];
 
   return (
+    <div className={s.wrap}>
     <svg
       ref={svgRef}
       className={s.overlay}
@@ -102,5 +103,6 @@ export const EqCurveOverlay = memo(function EqCurveOverlay() {
         </>
       )}
     </svg>
+    </div>
   );
 });

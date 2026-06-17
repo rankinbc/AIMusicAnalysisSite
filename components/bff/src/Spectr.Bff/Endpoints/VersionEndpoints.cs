@@ -93,8 +93,11 @@ public static class VersionEndpoints
     }
 
     // ── POST /api/versions/{id}/analyze — re-enqueue audio analysis ─────────
+    // Optional ?referenceId=<guid> drives Phase 5 against a saved library
+    // reference (ownership-validated inside DispatchAnalysisAsync).
     private static async Task<IResult> Reanalyze(
         Guid versionId,
+        [FromQuery] Guid? referenceId,
         ClaimsPrincipal currentUser,
         AppDbContext db,
         IJobQueue queue,
@@ -111,7 +114,7 @@ public static class VersionEndpoints
         ).FirstOrDefaultAsync(ct);
         if (version is null) return Results.NotFound();
 
-        var (jobId, err) = await DispatchAnalysisAsync(userId, versionId, null, db, ents, credits, queue, ct);
+        var (jobId, err) = await DispatchAnalysisAsync(userId, versionId, referenceId, db, ents, credits, queue, ct);
         if (err is not null) return err;
         return Results.Accepted(value: new ReanalyzeResponse(jobId));
     }
@@ -640,12 +643,12 @@ public static class VersionEndpoints
             return Results.BadRequest(new { error = ".als (or gzip-compressed) file required." });
 
         var userId = currentUser.UserId();
-        var version = await (
-            from v in db.SongVersions
-            join s in db.Songs.AsNoTracking() on v.SongId equals s.Id
-            where v.Id == versionId && s.UserId == userId
-            select v
-        ).FirstOrDefaultAsync(ct);
+        // MUST be a tracked query: `db.Songs.AsNoTracking()` in the join would make
+        // the WHOLE query no-tracking, so `version.AlsFilePath = key; SaveChanges()`
+        // below would be silently dropped (the .als file lands in storage but the
+        // column stays null → phase 8 never sees it). Use the tracked OwnedVersion
+        // helper, matching the stems write path.
+        var version = await OwnedVersion(db, versionId, userId, ct);
         if (version is null) return Results.NotFound();
 
         var key = $"audio/als/{versionId}/project{ext}";
@@ -835,7 +838,7 @@ public static class VersionEndpoints
         version.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
 
-        var (jobId, err) = await DispatchAnalysisAsync(userId, versionId, null, db, ents, credits, queue, ct);
+        var (jobId, err) = await DispatchAnalysisAsync(userId, versionId, body.ReferenceId, db, ents, credits, queue, ct);
         if (err is not null) return err;
         return Results.Ok(new ConfirmStemsResponse(versionId, jobId));
     }
@@ -874,6 +877,18 @@ public static class VersionEndpoints
         CancellationToken ct,
         Guid? preallocatedJobId = null)
     {
+        // IDOR guard: a caller-supplied reference must belong to this user.
+        // Centralized here so every dispatch site is covered (AR15 keeps reads out).
+        if (referenceId is not null)
+        {
+            var refOwned = await db.ReferenceTracks
+                .AsNoTracking()
+                .AnyAsync(r => r.Id == referenceId.Value && r.UserId == userId, ct);
+            if (!refOwned)
+                return (Guid.Empty, ErrorEnvelope.Build(404, "reference_not_found",
+                    "Reference track not found."));
+        }
+
         EntitlementsDto ent;
         try
         {

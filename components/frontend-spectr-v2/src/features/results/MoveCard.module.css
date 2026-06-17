@@ -1,0 +1,251 @@
+/* MoveCard — rebuilt to prototype fidelity (kept on the existing cyan palette / --cyan).
+   Drop-in replacement for src/features/results/MoveCard.module.css
+   Same class names as the existing component — no .tsx change needed. */
+
+.move {
+  position: relative;
+  padding: 14px 16px 13px 18px;
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  margin-bottom: 10px;
+  overflow: hidden;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.move:hover {
+  border-color: var(--border-2);
+}
+
+.move[data-committed] {
+  border-color: color-mix(in srgb, var(--green) 45%, var(--border-2));
+  background: color-mix(in srgb, var(--green) 5%, var(--card-2));
+}
+
+.move[data-committed] .title {
+  color: var(--text-2);
+}
+
+/* severity hairline */
+.sevBar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--sev, var(--muted));
+  opacity: 0.9;
+}
+
+.title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.012em;
+  color: var(--text);
+  margin: 0;
+}
+
+/* ── The directive — the hero of the card (tinted box) ───────────────── */
+.directive {
+  margin: 11px 0 0;
+  padding: 12px 13px;
+  border-radius: var(--radius-sm);
+  background: var(--cyan-dim);
+  border: 1px solid color-mix(in srgb, var(--cyan) 18%, transparent);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.arrow {
+  color: var(--cyan);
+  font-weight: 700;
+  margin-right: 6px;
+}
+
+.scope {
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.param {
+  color: var(--text);
+  font-weight: 600;
+  font-size: 12.5px;
+  padding: 0 2px;
+  white-space: nowrap;
+}
+
+/* ── Step list (precise directive) ──────────────────────────────────── */
+.steps {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  margin-top: 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  font-size: 12px;
+}
+
+.stepWhere,
+.stepDetail {
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.015);
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+}
+
+.stepWhere {
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.stepDetail {
+  color: var(--cyan);
+  font-weight: 600;
+  justify-content: flex-end;
+  text-align: right;
+}
+
+/* row separators (each row = 2 spans; border the 3rd child onward) */
+.steps > span:nth-child(n + 3) {
+  border-top: 1px solid var(--border);
+}
+
+/* ── Foot: confidence + source + toggles + actions ──────────────────── */
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.conf {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--cyan);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--cyan) 28%, transparent);
+  background: var(--cyan-dim);
+  letter-spacing: 0.2px;
+}
+
+.source {
+  font-size: 10.5px;
+  color: var(--muted);
+  padding: 3px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.toggles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.toggle {
+  background: none;
+  border: none;
+  padding: 4px 6px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.toggle:hover {
+  color: var(--text-2);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.toggle[aria-expanded='true'] {
+  color: var(--cyan);
+}
+
+.audition {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--cyan);
+  background: var(--cyan-dim);
+  border: 1px solid color-mix(in srgb, var(--cyan) 30%, transparent);
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.audition:hover {
+  background: color-mix(in srgb, var(--cyan) 14%, transparent);
+}
+
+.triage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--card-hover);
+  border: 1px solid var(--border-2);
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.triage:hover {
+  border-color: var(--border-2);
+  background: var(--card-hover);
+}
+
+.triage[data-in] {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+  border-color: color-mix(in srgb, var(--green) 40%, transparent);
+}
+
+/* ── Expandable why / data ──────────────────────────────────────────── */
+.why {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2);
+  margin: 13px 0 0;
+  padding-top: 13px;
+  border-top: 1px solid var(--border);
+}
+
+.data {
+  font-size: 11px;
+  color: var(--text-2);
+  margin: 10px 0 0;
+  padding: 8px 11px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 640px) {
+  .toggles {
+    margin-left: 0;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+}

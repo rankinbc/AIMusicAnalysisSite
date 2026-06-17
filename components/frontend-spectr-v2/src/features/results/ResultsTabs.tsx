@@ -1,123 +1,78 @@
-import { toast } from 'sonner';
-
 import s from './ResultsTabs.module.css';
 
-export type ResultsTabKey =
-  | 'coach'
-  | 'analysis'
-  | 'spectrum'
-  | 'reference'
-  | 'arrangement'
-  | 'raw'
-  | 'files';
+export type ResultsTabKey = 'actions' | 'analysis' | 'files';
 
 interface TabDef {
   id: ResultsTabKey;
   label: string;
+  icon: string;
   badge?: string | number | null;
-  badgeTone?: 'cyan' | 'violet' | 'orange';
   featured?: boolean;
 }
 
 interface ResultsTabsProps {
   current: ResultsTabKey;
   onChange: (id: ResultsTabKey) => void;
-  coachCount: number;
+  /** Number of moves in the plan — small badge on the Actions tab. */
+  moveCount: number;
+  /** Worker phases done / total — small badge on the Analysis tab. */
   phasesDone: number;
   phasesTotal: number;
-  referenceOutOfRange: number;
-  arrangementFlag: boolean;
-  onReanalyze?: () => void;
-  reanalyzing?: boolean;
+  /** Right-side shortcut: jump to the plan + open the export preview. */
+  onGamePlan: () => void;
 }
 
 export function ResultsTabs({
   current,
   onChange,
-  coachCount,
+  moveCount,
   phasesDone,
   phasesTotal,
-  referenceOutOfRange,
-  arrangementFlag,
-  onReanalyze,
-  reanalyzing,
+  onGamePlan,
 }: ResultsTabsProps) {
   const tabs: TabDef[] = [
-    {
-      id: 'coach',
-      label: 'AI Coach',
-      badge: coachCount > 0 ? coachCount : null,
-      badgeTone: 'cyan',
-      featured: true,
-    },
+    { id: 'actions', label: 'Actions', icon: '◎', badge: moveCount > 0 ? moveCount : null, featured: true },
     {
       id: 'analysis',
       label: 'Analysis',
+      icon: '▤',
       badge: phasesTotal > 0 ? `${phasesDone}/${phasesTotal}` : null,
-      badgeTone: 'violet',
     },
-    { id: 'spectrum', label: 'Mix' },
-    {
-      id: 'reference',
-      label: 'Reference',
-      badge: referenceOutOfRange > 0 ? referenceOutOfRange : null,
-      badgeTone: 'orange',
-    },
-    {
-      id: 'arrangement',
-      label: 'Arrangement',
-      badge: arrangementFlag ? '!' : null,
-      badgeTone: 'orange',
-    },
-    { id: 'raw', label: 'Raw' },
-    { id: 'files', label: 'Files' },
+    { id: 'files', label: 'Files', icon: '▥' },
   ];
 
   return (
     <div className={s.strip} role="tablist">
-      {tabs.map((t) => {
-        const active = current === t.id;
-        return (
-          <button
-            key={t.id}
-            type="button"
-            className={s.tab}
-            data-active={active}
-            role="tab"
-            aria-selected={active}
-            onClick={() => onChange(t.id)}
-          >
-            {t.featured && <span className={s.featuredDot} />}
-            <span>{t.label}</span>
-            {t.badge != null && (
-              <span
-                className={s.badge}
-                data-tone={t.badgeTone ?? 'cyan'}
-                data-active={active}
-              >
-                {t.badge}
+      <div className={s.tabs}>
+        {tabs.map((t) => {
+          const active = current === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              className={s.tab}
+              data-active={active}
+              role="tab"
+              aria-selected={active}
+              onClick={() => onChange(t.id)}
+            >
+              {t.featured && <span className={s.featuredDot} />}
+              <span className={s.icon} aria-hidden>
+                {t.icon}
               </span>
-            )}
-          </button>
-        );
-      })}
-      <div className={s.actions}>
-        <button
-          type="button"
-          className="btn sm"
-          onClick={() => toast.info('PDF export not wired yet')}
-        >
-          ⇣ Export PDF
-        </button>
-        <button
-          type="button"
-          className="btn sm primary"
-          onClick={() => onReanalyze?.()}
-          disabled={!onReanalyze || reanalyzing}
-        >
-          ↺ {reanalyzing ? 'Re-analyzing…' : 'Re-analyze'}
-        </button>
+              <span>{t.label}</span>
+              {t.badge != null && (
+                <span className={s.badge} data-active={active}>
+                  {t.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
+      <button type="button" className={s.gamePlan} onClick={onGamePlan}>
+        ⇣ Game Plan
+      </button>
     </div>
   );
 }

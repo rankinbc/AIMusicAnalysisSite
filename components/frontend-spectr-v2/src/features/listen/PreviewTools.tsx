@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 
 import type {
@@ -15,7 +15,6 @@ import {
   WIDTH_DEFAULT,
 } from './useAudioGraph';
 import { LOOP_DEFAULT, type LoopState, type PitchPanelState } from './loop';
-import { PitchPanel } from './PitchPanel';
 import s from './PreviewTools.module.css';
 
 interface PreviewToolsProps {
@@ -59,7 +58,6 @@ export function PreviewTools({
   onLoopChange,
   audioRef,
   currentTime,
-  duration,
   pitch,
   onPitchChange,
 }: PreviewToolsProps) {
@@ -128,603 +126,215 @@ export function PreviewTools({
     graph.resetAll();
   };
 
-  const tool = TOOLS.find((t) => t.id === activeTool);
+  // Per-module summary (live values from the real DSP state) for the rack cards.
+  const moduleView = (id: PreviewTool['id']): ModuleView => {
+    switch (id) {
+      case 'eq': {
+        const band = (lo: number, hi: number) =>
+          eqBands.slice(lo, hi).reduce((a, b) => a + b.gainDb, 0) / Math.max(1, hi - lo);
+        const setGroup = (lo: number, hi: number) => (pct: number) => {
+          const g = Math.round((pct * 24 - 12) * 2) / 2;
+          setEqEnabled(true);
+          setEqBands((bs) => bs.map((b, i) => (i >= lo && i < hi ? { ...b, gainDb: g } : b)));
+        };
+        const knobs: KnobSpec[] = [
+          { label: 'Low', ...fmtDb(band(0, 3)), set: setGroup(0, 3) },
+          { label: 'Mid', ...fmtDb(band(3, 6)), set: setGroup(3, 6) },
+          { label: 'Hi', ...fmtDb(band(6, 8)), set: setGroup(6, 8) },
+        ];
+        return { on: eqEnabled, viz: <EqMiniViz bands={eqBands} acc="#00e5b0" />, knobs, footer: 'Q 1.4', toggle: () => setEqEnabled((v) => !v) };
+      }
+      case 'comp':
+        return {
+          on: comp.enabled,
+          viz: <CompMiniViz />,
+          knobs: [
+            { label: 'Thr', value: comp.thresholdDb.toFixed(0), pct: (comp.thresholdDb + 60) / 60, set: (p) => setComp((c) => ({ ...c, thresholdDb: Math.round(p * 60 - 60) })) },
+            { label: 'Ratio', value: `${comp.ratio.toFixed(0)}:1`, pct: (comp.ratio - 1) / 19, set: (p) => setComp((c) => ({ ...c, ratio: Math.round((1 + p * 19) * 10) / 10 })) },
+            { label: 'Atk', value: comp.attackMs.toFixed(0), pct: comp.attackMs / 250, set: (p) => setComp((c) => ({ ...c, attackMs: Math.round(p * 250) })) },
+          ],
+          footer: 'Threshold · Ratio',
+          toggle: () => setComp((c) => ({ ...c, enabled: !c.enabled })),
+        };
+      case 'sat':
+        return {
+          on: sat.enabled,
+          viz: <SatMiniViz />,
+          knobs: [
+            { label: 'Drive', value: sat.drive.toFixed(2), pct: sat.drive, set: (p) => setSat((c) => ({ ...c, drive: Math.round(p * 100) / 100 })) },
+            { label: 'Mix', value: sat.mix.toFixed(2), pct: sat.mix, set: (p) => setSat((c) => ({ ...c, mix: Math.round(p * 100) / 100 })) },
+          ],
+          footer: '2× OS',
+          toggle: () => setSat((c) => ({ ...c, enabled: !c.enabled })),
+        };
+      case 'ms':
+        return {
+          on: width.enabled,
+          viz: <MsMiniViz />,
+          knobs: [{ label: 'Width', value: `${width.width.toFixed(2)}×`, pct: width.width / 2, set: (p) => setWidth((c) => ({ ...c, width: Math.round(p * 2 * 100) / 100 })) }],
+          footer: `Mono ← ${width.width.toFixed(2)} → Wide`,
+          toggle: () => setWidth((c) => ({ ...c, enabled: !c.enabled })),
+        };
+      case 'lim':
+        return {
+          on: false,
+          disabled: true,
+          viz: <LimMiniViz />,
+          knobs: [
+            { label: 'Ceiling', value: '-1.0', pct: 0.3 },
+            { label: 'Release', value: '--', pct: 0 },
+          ],
+          footer: 'v2.0',
+        };
+      case 'pitch':
+        return {
+          on: pitch.enabled,
+          viz: <PitchMiniViz semitones={pitch.semitones} />,
+          knobs: [
+            { label: 'Semi', value: `${pitch.semitones >= 0 ? '+' : ''}${pitch.semitones}`, pct: (pitch.semitones + 12) / 24, set: (p) => onPitchChange({ ...pitch, semitones: Math.round(p * 24 - 12) }) },
+            { label: 'Cents', value: `${pitch.cents >= 0 ? '+' : ''}${pitch.cents}`, pct: (pitch.cents + 50) / 100, set: (p) => onPitchChange({ ...pitch, cents: Math.round(p * 100 - 50) }) },
+          ],
+          footer: pitch.decoding ? 'Decoding…' : 'Decoded ✓',
+          toggle: () => onPitchChange({ ...pitch, enabled: !pitch.enabled }),
+        };
+      case 'loop': {
+        const loopOn = loop.enabled && loop.inSec != null && loop.outSec != null;
+        return {
+          on: loopOn,
+          viz: <LoopMiniViz />,
+          loopButtons: true,
+          footer: `IN ${loop.inSec != null ? formatTime(loop.inSec) : '—'} OUT ${loop.outSec != null ? formatTime(loop.outSec) : '—'}`,
+          toggle: () => onLoopChange({ ...loop, enabled: !loop.enabled && loop.inSec != null && loop.outSec != null }),
+        };
+      }
+      case 'scope':
+        return { on: false, viz: <ScopeMiniViz />, scopeFader: true, footer: 'Goniometer · Phase' };
+      default:
+        return { on: false, viz: null, knobs: [], footer: '' };
+    }
+  };
 
   return (
     <section className={`card ${s.rail}`}>
-      <header className={s.hd}>
-        <div className={s.title}>
-          <span className="dot" />
-          Preview adjustments
-          {activeCount > 0 && <span className={s.activeCount}>· {activeCount} ON</span>}
+      <header className={s.rackHd}>
+        <div className={s.rackTitle}>
+          <span className={s.led} />
+          Insert rack
         </div>
-        <div className={s.hdActions}>
-          <button
-            type="button"
-            className={s.bypassToggle}
-            data-on={bypass}
-            onClick={() => setBypass((b) => !b)}
-            title="Bypass entire chain"
-          >
-            BYPASS {bypass ? 'ON' : 'OFF'}
-          </button>
-          <button type="button" className={s.bypassToggle} onClick={handleResetAll}>
-            RESET
-          </button>
-        </div>
+        <span className={s.activeCountChip}>
+          {activeCount} on · bypass {bypass ? 'on' : 'off'}
+        </span>
+        <div className={s.rackSpacer} />
+        <span className={s.rackMeta}>Signal: EQ → Comp → Sat → M/S → Lim → Σ</span>
+        <button type="button" className={s.rackToggle} data-on={bypass} onClick={() => setBypass((b) => !b)}>
+          Bypass
+        </button>
+        <button type="button" className={s.rackToggle} onClick={handleResetAll}>
+          Reset
+        </button>
       </header>
 
-      <div className={s.grid}>
+      <div className={s.rackGrid}>
         {TOOLS.map((t) => {
-          const isOn =
-            (t.id === 'eq' && eqEnabled) ||
-            (t.id === 'comp' && comp.enabled) ||
-            (t.id === 'sat' && sat.enabled) ||
-            (t.id === 'ms' && width.enabled) ||
-            (t.id === 'loop' && loop.enabled) ||
-            (t.id === 'pitch' && pitch.enabled);
+          const v = moduleView(t.id);
+          const focused = activeTool === t.id;
+          const cls = [s.module, v.on && s.on, focused && s.focused, v.disabled && s.disabled]
+            .filter(Boolean)
+            .join(' ');
+          const openTool = () => {
+            if (!v.disabled) onActiveToolChange(focused ? null : t.id);
+          };
           return (
-            <button
+            <div
               key={t.id}
-              type="button"
-              className={s.tile}
-              data-active={activeTool === t.id}
-              data-tier={t.tier}
-              data-on={isOn}
-              style={
-                {
-                  ['--tile-color' as string]: t.accent,
-                  ['--tile-bg' as string]: `${t.accent}14`,
-                  ['--tile-border' as string]: `${t.accent}50`,
-                } as CSSProperties
-              }
-              onClick={() => onActiveToolChange(activeTool === t.id ? null : t.id)}
-              disabled={t.tier === 'v2'}
+              role="button"
+              tabIndex={v.disabled ? -1 : 0}
+              className={cls}
+              style={{ ['--acc' as string]: t.accent } as CSSProperties}
+              onClick={openTool}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  openTool();
+                }
+              }}
             >
-              <div className={s.tileTop}>
-                <span className={s.glyph}>{t.glyph}</span>
-                <span className={s.label}>{t.label}</span>
-                {t.tier === 'v2' && <span className={s.tierBadge}>SOON</span>}
-                {isOn && <span className={s.onDot} />}
+              <div className={s.moduleHd}>
+                <span className={s.moduleIcon}>{MODULE_ICON[t.id]}</span>
+                <span className={s.moduleName}>{t.label}</span>
+                {t.tier === 'v2' ? (
+                  <span className={s.moduleSoon}>Soon</span>
+                ) : (
+                  <span className={s.moduleLed} />
+                )}
               </div>
-              <div className={s.sub}>{t.sub}</div>
-            </button>
+              <div className={s.moduleSub}>{t.sub}</div>
+              {v.viz}
+              {v.knobs && (
+                <div className={s.knobRowMini}>
+                  {v.knobs.map((k) => (
+                    <MiniKnob key={k.label} spec={k} acc={t.accent} />
+                  ))}
+                </div>
+              )}
+              {v.loopButtons && (
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button
+                    type="button"
+                    className={s.rackToggle}
+                    style={{ flex: 1, justifyContent: 'center' }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onLoopChange({ ...loop, inSec: currentTime });
+                    }}
+                  >
+                    SET IN
+                  </button>
+                  <button
+                    type="button"
+                    className={s.rackToggle}
+                    style={{ flex: 1, justifyContent: 'center' }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onLoopChange({ ...loop, outSec: currentTime });
+                    }}
+                  >
+                    SET OUT
+                  </button>
+                </div>
+              )}
+              {v.scopeFader && <ScopeMiniFader graph={graph} />}
+              <div className={s.moduleFooter}>
+                <span className={s.moduleSub}>{v.footer}</span>
+                <span
+                  className={s.modulePower}
+                  role={v.toggle ? 'button' : undefined}
+                  tabIndex={v.toggle ? 0 : -1}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    v.toggle?.();
+                  }}
+                  onKeyDown={(e) => {
+                    if (v.toggle && (e.key === 'Enter' || e.key === ' ')) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      v.toggle();
+                    }
+                  }}
+                >
+                  {v.on ? 'On' : 'OFF'}
+                </span>
+              </div>
+            </div>
           );
         })}
       </div>
-
-      {tool && (
-        <div
-          className={s.panel}
-          style={{ ['--panel-accent' as string]: tool.accent } as CSSProperties}
-        >
-          <div className={s.panelHd}>
-            <span className={s.panelTitle}>{tool.label}</span>
-            <button type="button" className={s.smallBtn} onClick={() => onActiveToolChange(null)}>
-              close
-            </button>
-          </div>
-          {tool.id === 'eq' && (
-            <EqControls
-              bands={eqBands}
-              enabled={eqEnabled}
-              onBandsChange={setEqBands}
-              onEnabledChange={setEqEnabled}
-            />
-          )}
-          {tool.id === 'comp' && <CompressorControls state={comp} onChange={setComp} />}
-          {tool.id === 'sat' && <SatControls state={sat} onChange={setSat} />}
-          {tool.id === 'ms' && <WidthControls state={width} onChange={setWidth} />}
-          {tool.id === 'loop' && (
-            <LoopControls
-              state={loop}
-              onChange={onLoopChange}
-              currentTime={currentTime}
-              duration={duration}
-            />
-          )}
-          {tool.id === 'scope' && <ScopeControls graph={graph} />}
-          {tool.id === 'pitch' && (
-            <PitchPanel
-              semitones={pitch.semitones}
-              cents={pitch.cents}
-              enabled={pitch.enabled}
-              decoding={pitch.decoding}
-              decodeError={pitch.decodeError}
-              onSemitonesChange={(st) => onPitchChange({ ...pitch, semitones: st })}
-              onCentsChange={(c) => onPitchChange({ ...pitch, cents: c })}
-              onEnabledChange={(v) => onPitchChange({ ...pitch, enabled: v })}
-            />
-          )}
-          {tool.id === 'lim' && <p className={s.panelEmpty}>Shipping in v2.</p>}
-        </div>
-      )}
     </section>
   );
 }
 
 // ── EQ ──────────────────────────────────────────────────────────────
 
-function EqControls({
-  bands,
-  enabled,
-  onBandsChange,
-  onEnabledChange,
-}: {
-  bands: EqBand[];
-  enabled: boolean;
-  onBandsChange: (b: EqBand[]) => void;
-  onEnabledChange: (v: boolean) => void;
-}) {
-  const setBandGain = (i: number, gainDb: number) => {
-    onBandsChange(bands.map((b, idx) => (idx === i ? { ...b, gainDb } : b)));
-  };
-  return (
-    <>
-      <ToolToggle
-        label="EQ enabled"
-        on={enabled}
-        onChange={onEnabledChange}
-        hint="Boost / cut 8 fixed-frequency bands. Centered Q ≈ 1.4."
-      />
-      <EqCurve bands={bands} />
-      <div className={s.eqBandsRow}>
-        {bands.map((b, i) => (
-          <div key={b.freq} className={s.eqBand}>
-            <span className={s.eqBandGain}>
-              {b.gainDb > 0 ? '+' : ''}
-              {b.gainDb.toFixed(1)}
-            </span>
-            <input
-              type="range"
-              min={-12}
-              max={12}
-              step={0.5}
-              value={b.gainDb}
-              onChange={(e) => setBandGain(i, parseFloat(e.target.value))}
-              className={s.eqSlider}
-              aria-label={`${b.freq} Hz band gain`}
-            />
-            <span className={s.eqBandLabel}>{formatHz(b.freq)}</span>
-          </div>
-        ))}
-      </div>
-    </>
-  );
-}
-
-function EqCurve({ bands }: { bands: EqBand[] }) {
-  // Crude visual: cubic-spline-ish bezier between control points, colored cyan.
-  const W = 600;
-  const H = 110;
-  const padX = 8;
-  const padY = 8;
-  const innerW = W - padX * 2;
-  const innerH = H - padY * 2;
-  const yFor = (db: number) => padY + innerH / 2 - (db / 12) * (innerH / 2);
-  const xs = bands.map((_, i) => padX + (i / (bands.length - 1)) * innerW);
-  const ys = bands.map((b) => yFor(b.gainDb));
-  const path = xs
-    .map((x, i) => `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)},${ys[i].toFixed(1)}`)
-    .join(' ');
-  const fillPath = `${path} L ${xs[xs.length - 1]},${padY + innerH} L ${xs[0]},${padY + innerH} Z`;
-  return (
-    <div className={s.eqWrap}>
-      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-        <line
-          x1={padX}
-          x2={W - padX}
-          y1={H / 2}
-          y2={H / 2}
-          stroke="rgba(255,255,255,0.12)"
-          strokeWidth="1"
-          strokeDasharray="3 4"
-        />
-        <path d={fillPath} fill="var(--cyan)" opacity="0.12" />
-        <path
-          d={path}
-          stroke="var(--cyan)"
-          strokeWidth="2"
-          fill="none"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        {xs.map((x, i) => (
-          <circle
-            key={i}
-            cx={x}
-            cy={ys[i]}
-            r={4}
-            fill="var(--cyan)"
-            stroke="#06151a"
-            strokeWidth="1.5"
-            style={{ filter: 'drop-shadow(0 0 4px var(--cyan))' }}
-          />
-        ))}
-      </svg>
-    </div>
-  );
-}
-
-// ── Compressor ──────────────────────────────────────────────────────
-
-function CompressorControls({
-  state,
-  onChange,
-}: {
-  state: CompressorState;
-  onChange: (next: CompressorState) => void;
-}) {
-  const set = <K extends keyof CompressorState>(k: K, v: CompressorState[K]) =>
-    onChange({ ...state, [k]: v });
-  return (
-    <>
-      <ToolToggle
-        label="Compressor enabled"
-        on={state.enabled}
-        onChange={(v) => set('enabled', v)}
-        hint="DynamicsCompressorNode — threshold + ratio + attack + release."
-      />
-      <div className={s.knobRow}>
-        <Knob
-          label="Threshold"
-          unit="dB"
-          value={state.thresholdDb}
-          min={-60}
-          max={0}
-          step={0.5}
-          onChange={(v) => set('thresholdDb', v)}
-        />
-        <Knob
-          label="Ratio"
-          unit=":1"
-          value={state.ratio}
-          min={1}
-          max={20}
-          step={0.1}
-          onChange={(v) => set('ratio', v)}
-        />
-        <Knob
-          label="Attack"
-          unit="ms"
-          value={state.attackMs}
-          min={0}
-          max={250}
-          step={1}
-          onChange={(v) => set('attackMs', v)}
-        />
-        <Knob
-          label="Release"
-          unit="ms"
-          value={state.releaseMs}
-          min={10}
-          max={1000}
-          step={10}
-          onChange={(v) => set('releaseMs', v)}
-        />
-        <Knob
-          label="Knee"
-          unit="dB"
-          value={state.kneeDb}
-          min={0}
-          max={40}
-          step={1}
-          onChange={(v) => set('kneeDb', v)}
-        />
-        <Knob
-          label="Makeup"
-          unit="dB"
-          value={state.makeupDb}
-          min={0}
-          max={24}
-          step={0.5}
-          onChange={(v) => set('makeupDb', v)}
-        />
-      </div>
-    </>
-  );
-}
-
-// ── Saturation ──────────────────────────────────────────────────────
-
-function SatControls({
-  state,
-  onChange,
-}: {
-  state: SaturationState;
-  onChange: (next: SaturationState) => void;
-}) {
-  return (
-    <>
-      <ToolToggle
-        label="Saturation enabled"
-        on={state.enabled}
-        onChange={(v) => onChange({ ...state, enabled: v })}
-        hint="WaveShaper with a tanh curve. 2× oversampled."
-      />
-      <div className={s.knobRow}>
-        <Knob
-          label="Drive"
-          unit=""
-          value={state.drive}
-          min={0}
-          max={1}
-          step={0.01}
-          onChange={(v) => onChange({ ...state, drive: v })}
-        />
-        <Knob
-          label="Mix"
-          unit=""
-          value={state.mix}
-          min={0}
-          max={1}
-          step={0.01}
-          onChange={(v) => onChange({ ...state, mix: v })}
-        />
-      </div>
-    </>
-  );
-}
-
-// ── M/S Width ───────────────────────────────────────────────────────
-
-function WidthControls({
-  state,
-  onChange,
-}: {
-  state: WidthState;
-  onChange: (next: WidthState) => void;
-}) {
-  return (
-    <>
-      <ToolToggle
-        label="M/S Width enabled"
-        on={state.enabled}
-        onChange={(v) => onChange({ ...state, enabled: v })}
-        hint="0 = mono · 1 = identity · 2 = exaggerated sides"
-      />
-      <div className={s.knobRow}>
-        <Knob
-          label="Width"
-          unit="×"
-          value={state.width}
-          min={0}
-          max={2}
-          step={0.01}
-          onChange={(v) => onChange({ ...state, width: v })}
-        />
-      </div>
-    </>
-  );
-}
-
-// ── Loop ────────────────────────────────────────────────────────────
-
-function LoopControls({
-  state,
-  onChange,
-  currentTime,
-  duration,
-}: {
-  state: LoopState;
-  onChange: (next: LoopState) => void;
-  currentTime: number;
-  duration: number;
-}) {
-  const setIn = () => onChange({ ...state, inSec: currentTime });
-  const setOut = () => onChange({ ...state, outSec: currentTime });
-  const clear = () => onChange({ ...LOOP_DEFAULT });
-  return (
-    <>
-      <ToolToggle
-        label="Loop enabled"
-        on={state.enabled && state.inSec != null && state.outSec != null}
-        onChange={(v) =>
-          onChange({ ...state, enabled: v && state.inSec != null && state.outSec != null })
-        }
-        hint="Lock playback to a section. Set in/out points at current time."
-      />
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button type="button" className={s.smallBtn} onClick={setIn}>
-          Set IN @ {formatTime(currentTime)}
-        </button>
-        <button type="button" className={s.smallBtn} onClick={setOut}>
-          Set OUT @ {formatTime(currentTime)}
-        </button>
-        <button type="button" className={s.smallBtn} onClick={clear}>
-          Clear
-        </button>
-      </div>
-      <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: 'var(--muted)' }}>
-        IN: {state.inSec != null ? formatTime(state.inSec) : '—'} · OUT:{' '}
-        {state.outSec != null ? formatTime(state.outSec) : '—'} · Length:{' '}
-        {state.inSec != null && state.outSec != null
-          ? formatTime(state.outSec - state.inSec)
-          : '—'}{' '}
-        / {formatTime(duration)}
-      </div>
-    </>
-  );
-}
-
-// ── Scope (goniometer + correlation) ────────────────────────────────
-
-function ScopeControls({ graph }: { graph: AudioGraphHandle }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [correlation, setCorrelation] = useState(0);
-
-  useEffect(() => {
-    let raf = 0;
-    const draw = () => {
-      const canvas = canvasRef.current;
-      if (!canvas) {
-        raf = requestAnimationFrame(draw);
-        return;
-      }
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        raf = requestAnimationFrame(draw);
-        return;
-      }
-      const frame = graph.readFrame();
-      setCorrelation(frame.correlation);
-
-      const w = canvas.width;
-      const h = canvas.height;
-      ctx.fillStyle = 'rgba(7, 10, 18, 0.4)';
-      ctx.fillRect(0, 0, w, h);
-
-      // Reference cross lines (mid/side axes — rotated 45°)
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(w, h);
-      ctx.moveTo(w, 0);
-      ctx.lineTo(0, h);
-      ctx.stroke();
-
-      const cx = w / 2;
-      const cy = h / 2;
-      const radius = Math.min(cx, cy) * 0.85;
-
-      // Plot L+R as Lissajous: rotated 45° so mono = vertical line.
-      ctx.fillStyle = 'rgba(0, 229, 176, 0.8)';
-      const L = frame.scopeL;
-      const R = frame.scopeR;
-      for (let i = 0; i < L.length; i += 8) {
-        // Convert (L,R) → mid/side after a 45° rotation:
-        //   x = (L - R) * sin45 = side
-        //   y = -(L + R) * cos45 = -mid (negative because canvas Y grows downward)
-        const x = (L[i] - R[i]) * 0.7071 * radius;
-        const y = -(L[i] + R[i]) * 0.7071 * radius;
-        ctx.fillRect(cx + x - 0.5, cy + y - 0.5, 1.5, 1.5);
-      }
-      raf = requestAnimationFrame(draw);
-    };
-    raf = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(raf);
-  }, [graph]);
-
-  const corrPct = ((correlation + 1) / 2) * 100;
-  const corrColor =
-    correlation < 0 ? 'var(--red)' : correlation < 0.3 ? 'var(--yellow)' : 'var(--cyan)';
-
-  return (
-    <div className={s.scope}>
-      <canvas ref={canvasRef} width={130} height={130} className={s.scopeCanvas} />
-      <div className={s.corrColumn}>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            fontFamily: 'JetBrains Mono, monospace',
-            fontSize: 11,
-            color: 'var(--muted)',
-          }}
-        >
-          <span>L/R correlation</span>
-          <span style={{ color: corrColor, fontWeight: 700 }}>{correlation.toFixed(2)}</span>
-        </div>
-        <div className={s.corrBar}>
-          <div
-            className={s.corrDot}
-            style={{ left: `${corrPct}%`, background: corrColor, boxShadow: `0 0 6px ${corrColor}` }}
-          />
-        </div>
-        <div
-          style={{
-            fontFamily: 'JetBrains Mono, monospace',
-            fontSize: 10,
-            color: 'var(--muted)',
-            lineHeight: 1.5,
-          }}
-        >
-          ⟵ Out of phase · Mono · In phase ⟶
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Shared primitives ───────────────────────────────────────────────
-
-function Knob({
-  label,
-  unit,
-  value,
-  min,
-  max,
-  step,
-  onChange,
-}: {
-  label: string;
-  unit: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <div className={s.knob}>
-      <span className={s.knobLabel}>{label}</span>
-      <span className={s.knobValue}>
-        {value.toFixed(step < 1 ? 2 : 0)}
-        {unit && <span style={{ color: 'var(--muted)', marginLeft: 3 }}>{unit}</span>}
-      </span>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        className={s.knobInput}
-        aria-label={label}
-      />
-    </div>
-  );
-}
-
-function ToolToggle({
-  label,
-  on,
-  onChange,
-  hint,
-}: {
-  label: string;
-  on: boolean;
-  onChange: (v: boolean) => void;
-  hint?: string;
-}) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-      <div>
-        <div style={{ fontSize: 12, fontWeight: 700 }}>{label}</div>
-        {hint && (
-          <div className={s.panelSub} style={{ marginTop: 2, fontSize: 11 }}>
-            {hint}
-          </div>
-        )}
-      </div>
-      <button
-        type="button"
-        className={s.bypassToggle}
-        data-on={on}
-        onClick={() => onChange(!on)}
-        style={on ? { color: 'var(--cyan)', borderColor: 'rgba(0,229,176,0.4)', background: 'rgba(0,229,176,0.06)' } : undefined}
-      >
-        {on ? 'ON' : 'OFF'}
-      </button>
-    </div>
-  );
-}
-
-function formatHz(hz: number): string {
-  if (hz >= 1000) return `${(hz / 1000).toFixed(hz % 1000 === 0 ? 0 : 1)}k`;
-  return String(hz);
-}
 
 function formatTime(sec: number): string {
   if (!Number.isFinite(sec) || sec < 0) return '0:00';
@@ -732,4 +342,313 @@ function formatTime(sec: number): string {
   const m = Math.floor(total / 60);
   const s = total % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+// ── Insert-rack module cards (design handoff) ────────────────────────────────
+
+interface KnobSpec {
+  label: string;
+  value: string;
+  pct: number;
+  /** Apply a new 0..1 position back to the underlying DSP param. Omit = read-only. */
+  set?: (pct: number) => void;
+}
+interface ModuleView {
+  on: boolean;
+  disabled?: boolean;
+  viz: React.ReactNode;
+  knobs?: KnobSpec[];
+  loopButtons?: boolean;
+  scopeFader?: boolean;
+  footer: string;
+  toggle?: () => void;
+}
+
+function fmtDb(g: number): { value: string; pct: number } {
+  return { value: `${g > 0 ? '+' : ''}${g.toFixed(1)}`, pct: (g + 12) / 24 };
+}
+
+function KnobArc({ pct, acc }: { pct: number; acc: string }) {
+  const p = Math.max(0, Math.min(1, pct));
+  const cx = 15;
+  const cy = 15;
+  const r = 11;
+  const polar = (a: number): [number, number] => [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+  const startAng = (-135 * Math.PI) / 180;
+  const endAng = ((-135 + 270 * p) * Math.PI) / 180;
+  const fullEndAng = (135 * Math.PI) / 180;
+  const [sx, sy] = polar(startAng);
+  const [ex, ey] = polar(endAng);
+  const [fx, fy] = polar(fullEndAng);
+  const largeFg = 270 * p > 180 ? 1 : 0;
+  const tx1 = cx + 6 * Math.cos(endAng);
+  const ty1 = cy + 6 * Math.sin(endAng);
+  const tx2 = cx + 10 * Math.cos(endAng);
+  const ty2 = cy + 10 * Math.sin(endAng);
+  return (
+    <svg viewBox="0 0 30 30">
+      <path
+        d={`M ${sx.toFixed(2)} ${sy.toFixed(2)} A ${r} ${r} 0 1 1 ${fx.toFixed(2)} ${fy.toFixed(2)}`}
+        fill="none"
+        stroke="rgba(255,255,255,0.08)"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      {p > 0 && (
+        <path
+          d={`M ${sx.toFixed(2)} ${sy.toFixed(2)} A ${r} ${r} 0 ${largeFg} 1 ${ex.toFixed(2)} ${ey.toFixed(2)}`}
+          fill="none"
+          stroke={acc}
+          strokeWidth="2"
+          strokeLinecap="round"
+          style={{ filter: `drop-shadow(0 0 3px ${acc}80)` }}
+        />
+      )}
+      <circle cx={cx} cy={cy} r="5.5" fill="#0a1020" stroke="rgba(255,255,255,0.14)" strokeWidth="0.6" />
+      <line
+        x1={tx1.toFixed(2)}
+        y1={ty1.toFixed(2)}
+        x2={tx2.toFixed(2)}
+        y2={ty2.toFixed(2)}
+        stroke={acc}
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function MiniKnob({ spec, acc }: { spec: KnobSpec; acc: string }) {
+  const draggable = Boolean(spec.set);
+
+  // Vertical drag: up = increase. Full 0..1 sweep over ~150px. Tracked on window
+  // so the drag survives the pointer leaving the small knob hit-area.
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (!spec.set) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const set = spec.set;
+    const startY = e.clientY;
+    const startPct = spec.pct;
+    const move = (ev: PointerEvent) => {
+      const next = Math.max(0, Math.min(1, startPct + (startY - ev.clientY) / 150));
+      set(next);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (!spec.set) return;
+    const step = e.shiftKey ? 0.1 : 1 / 50;
+    if (e.key === 'ArrowUp' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      e.stopPropagation();
+      spec.set(Math.min(1, spec.pct + step));
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      e.stopPropagation();
+      spec.set(Math.max(0, spec.pct - step));
+    }
+  };
+
+  return (
+    <div className={s.miniKnob}>
+      <span className={s.miniKnobValue}>{spec.value}</span>
+      <div
+        className={`${s.knobVisual}${draggable ? ` ${s.knobDraggable}` : ''}`}
+        onPointerDown={onPointerDown}
+        onClick={draggable ? (e) => e.stopPropagation() : undefined}
+        onKeyDown={onKeyDown}
+        role={draggable ? 'slider' : undefined}
+        tabIndex={draggable ? 0 : undefined}
+        aria-label={draggable ? spec.label : undefined}
+        aria-valuemin={draggable ? 0 : undefined}
+        aria-valuemax={draggable ? 100 : undefined}
+        aria-valuenow={draggable ? Math.round(spec.pct * 100) : undefined}
+      >
+        <KnobArc pct={spec.pct} acc={acc} />
+      </div>
+      <span className={s.miniKnobLabel}>{spec.label}</span>
+    </div>
+  );
+}
+
+// Module header icons (inline SVG, accent-tinted by the card).
+const MODULE_ICON: Record<PreviewTool['id'], React.ReactNode> = {
+  eq: (
+    <svg width="14" height="14" viewBox="0 0 24 16" fill="none">
+      <path d="M1 8 C3 8 4 5 7 4.5 C10 4 12 4 14 6 C16 8 18 5 21 5.5 C22 5.7 23 7 23 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="7" cy="4.5" r="1.1" fill="currentColor" />
+      <circle cx="14" cy="6" r="1.1" fill="currentColor" />
+      <circle cx="21" cy="5.5" r="1.1" fill="currentColor" />
+    </svg>
+  ),
+  comp: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+      <line x1="3" y1="21" x2="21" y2="3" stroke="currentColor" opacity="0.3" strokeWidth="1.2" strokeDasharray="2 2" />
+      <path d="M3 21 L11 13 L21 9" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" fill="none" />
+    </svg>
+  ),
+  sat: (
+    <svg width="14" height="14" viewBox="0 0 24 12" fill="none">
+      <path d="M1 6 C3 1, 5 1, 6 6 C7 11, 11 11, 12 6 C13 1, 17 1, 18 6 C19 11, 21 11, 23 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" fill="none" />
+    </svg>
+  ),
+  ms: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+      <line x1="12" y1="3" x2="12" y2="21" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M4 12 L8 8 M4 12 L8 16 M4 12 L12 12 M20 12 L16 8 M20 12 L16 16 M20 12 L12 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </svg>
+  ),
+  lim: (
+    <svg width="14" height="14" viewBox="0 0 24 16" fill="none">
+      <line x1="1" y1="3" x2="23" y2="3" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M1 14 L3 8 L5 3 L7 11 L9 5 L11 3 L13 9 L15 4 L17 3 L19 7 L21 3 L23 14" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+    </svg>
+  ),
+  pitch: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <path d="M6 2 V14 M10 2 V14 M3 5.5 H13 M3 10.5 H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  ),
+  loop: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+      <path d="M5 12 A7 7 0 1 1 12 19" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" fill="none" />
+      <path d="M12 19 L9 16 M12 19 L9 22" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      <line x1="3" y1="4" x2="3" y2="10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <line x1="21" y1="4" x2="21" y2="10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  ),
+  scope: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M4 4 L20 20 M4 20 L20 4" stroke="currentColor" strokeWidth="0.8" opacity="0.5" />
+    </svg>
+  ),
+};
+
+function EqMiniViz({ bands, acc }: { bands: EqBand[]; acc: string }) {
+  const n = bands.length;
+  const yFor = (g: number) => 15 - Math.max(-1, Math.min(1, g / 12)) * 10;
+  const pts = bands.map((b, i) => [(i / (n - 1)) * 100, yFor(b.gainDb)] as const);
+  const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(0)},${p[1].toFixed(1)}`).join(' ');
+  const fill = `${line} L100,30 L0,30 Z`;
+  return (
+    <svg className={s.miniViz} viewBox="0 0 100 30" preserveAspectRatio="none">
+      <line x1="0" x2="100" y1="15" y2="15" stroke="rgba(255,255,255,0.1)" strokeWidth="0.6" strokeDasharray="2 2" />
+      <path d={fill} fill={acc} opacity="0.16" />
+      <path d={line} fill="none" stroke={acc} strokeWidth="1.4" />
+    </svg>
+  );
+}
+function CompMiniViz() {
+  return (
+    <svg className={s.miniViz} viewBox="0 0 100 30" preserveAspectRatio="none">
+      <line x1="0" x2="100" y1="15" y2="15" stroke="rgba(255,255,255,0.08)" strokeWidth="0.6" />
+      <line x1="50" x2="50" y1="0" y2="30" stroke="rgba(251,191,36,0.4)" strokeWidth="0.8" strokeDasharray="1 2" />
+      <path d="M0,28 L50,15 L100,9" fill="none" stroke="#fbbf24" strokeWidth="1.4" />
+      <path d="M0,28 L100,1" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="0.8" strokeDasharray="2 2" />
+    </svg>
+  );
+}
+function SatMiniViz() {
+  const bars = [
+    [6, 6, 22, 0.85], [20, 14, 14, 0.7], [34, 10, 18, 0.8], [48, 20, 8, 0.55],
+    [62, 17, 11, 0.6], [76, 22, 6, 0.45], [90, 24, 4, 0.35],
+  ];
+  return (
+    <svg className={s.miniViz} viewBox="0 0 100 30" preserveAspectRatio="none">
+      <line x1="0" x2="100" y1="28" y2="28" stroke="rgba(255,255,255,0.08)" strokeWidth="0.6" />
+      {bars.map(([x, y, h, o], i) => (
+        <rect key={i} x={x} y={y} width="6" height={h} fill="#fb923c" opacity={o} />
+      ))}
+    </svg>
+  );
+}
+function MsMiniViz() {
+  return (
+    <svg className={s.miniViz} viewBox="0 0 100 30" preserveAspectRatio="none">
+      <line x1="50" x2="50" y1="2" y2="28" stroke="rgba(96,165,250,0.4)" strokeWidth="0.8" strokeDasharray="1 2" />
+      <ellipse cx="50" cy="15" rx="36" ry="11" fill="rgba(96,165,250,0.12)" stroke="#60a5fa" strokeWidth="1.2" />
+      <circle cx="20" cy="15" r="1.5" fill="#60a5fa" />
+      <circle cx="80" cy="15" r="1.5" fill="#60a5fa" />
+    </svg>
+  );
+}
+function LimMiniViz() {
+  return (
+    <svg className={s.miniViz} viewBox="0 0 100 30" preserveAspectRatio="none">
+      <line x1="0" x2="100" y1="6" y2="6" stroke="#f43f5e" strokeWidth="1.2" />
+      <path d="M0,26 L8,14 L16,6 L24,18 L32,8 L40,6 L48,15 L56,6 L64,11 L72,6 L80,17 L88,6 L100,22" fill="none" stroke="rgba(244,63,94,0.5)" strokeWidth="1.2" />
+    </svg>
+  );
+}
+function PitchMiniViz({ semitones }: { semitones: number }) {
+  const x = 50 + Math.max(-12, Math.min(12, semitones)) * (44 / 12);
+  return (
+    <svg className={s.miniViz} viewBox="0 0 100 30" preserveAspectRatio="none">
+      <rect x="0" y="6" width="100" height="18" fill="rgba(255,255,255,0.04)" />
+      <g fill="rgba(167,139,250,0.6)">
+        <rect x="8" y="6" width="6" height="11" />
+        <rect x="20" y="6" width="6" height="11" />
+        <rect x="40" y="6" width="6" height="11" />
+        <rect x="52" y="6" width="6" height="11" />
+        <rect x="64" y="6" width="6" height="11" />
+        <rect x="84" y="6" width="6" height="11" />
+      </g>
+      <line x1={x} x2={x} y1="2" y2="28" stroke="#00f3bd" strokeWidth="1.2" />
+    </svg>
+  );
+}
+function LoopMiniViz() {
+  return (
+    <svg className={s.miniViz} viewBox="0 0 100 30" preserveAspectRatio="none">
+      <line x1="0" x2="100" y1="15" y2="15" stroke="rgba(255,255,255,0.08)" strokeWidth="0.8" />
+      <rect x="38" y="6" width="24" height="18" fill="rgba(167,139,250,0.18)" stroke="#a78bfa" strokeWidth="1" />
+      <text x="50" y="20" fontFamily="JetBrains Mono" fontSize="6.5" fill="#a78bfa" textAnchor="middle" fontWeight="700">
+        A → B
+      </text>
+    </svg>
+  );
+}
+function ScopeMiniViz() {
+  return (
+    <svg className={s.miniViz} viewBox="0 0 100 30" preserveAspectRatio="xMidYMid meet">
+      <line x1="0" x2="100" y1="15" y2="15" stroke="rgba(255,255,255,0.06)" strokeWidth="0.6" />
+      <line x1="50" x2="50" y1="0" y2="30" stroke="rgba(255,255,255,0.06)" strokeWidth="0.6" />
+      <ellipse cx="50" cy="15" rx="6" ry="10" fill="none" stroke="#34d399" strokeWidth="1.1" opacity="0.7" />
+      <ellipse cx="50" cy="15" rx="3" ry="13" fill="none" stroke="#34d399" strokeWidth="1" opacity="0.5" />
+    </svg>
+  );
+}
+function ScopeMiniFader({ graph }: { graph: AudioGraphHandle }) {
+  const [corr, setCorr] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      const next = graph.readFrame().correlation;
+      // Skip the state update when the value is effectively unchanged (paused or
+      // steady) so React bails the re-render instead of churning at 60fps forever.
+      setCorr((prev) => (Math.abs(prev - next) < 0.005 ? prev : next));
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [graph]);
+  const pct = ((corr + 1) / 2) * 100;
+  return (
+    <div className={s.miniKnob} style={{ flex: 2 }}>
+      <span className={s.miniKnobValue}>{corr.toFixed(2)}</span>
+      <div className={s.miniFader}>
+        <div className={s.miniFaderFill} style={{ width: `${pct}%`, background: '#34d399' }} />
+        <div className={s.miniFaderThumb} style={{ left: `${pct}%`, background: '#34d399' }} />
+      </div>
+      <span className={s.miniKnobLabel}>Correlation L/R</span>
+    </div>
+  );
 }

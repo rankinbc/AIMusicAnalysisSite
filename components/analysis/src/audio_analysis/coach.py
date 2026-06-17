@@ -32,6 +32,19 @@ COACH_TEMPLATES = {
         "on Bluetooth speakers or club PAs in mono. Check for phase issues on widened elements, "
         "especially in the sub and low-mid range."
     ),
+    "mono_collapse": (
+        "Your mix is close to collapsing in mono ({measured:.0f}% compatibility). Before this "
+        "touches a club PA or a phone speaker, pull back any stereo widening below ~300 Hz and "
+        "check for an inverted channel — this is the first thing a mastering engineer would flag."
+    ),
+    "bass_translation_weak": (
+        "The low end won't read on laptop or phone speakers. Add some 100–300 Hz harmonics to your "
+        "sub/bass (a touch of saturation works) so the groove still lands on small systems."
+    ),
+    "headphone_fatigue": (
+        "Your stereo image is wide enough to feel disorienting on headphones. Narrow the extreme "
+        "sides or add a little crossfeed so it stays comfortable on cans."
+    ),
     "generic": "{description}",
 }
 
@@ -71,6 +84,22 @@ def generate_coached_fixes(analysis: dict) -> dict:
         fixes.append(COACH_TEMPLATES["mono_compatibility_low"].format(
             measured=mono * 100
         ))
+
+    # Phase 9 (Mix Translation) headline issues — translation sub-dict is folded
+    # in by finalize_result. Scores here are 0–100 (analyzer scale), not 0–1.
+    translation = analysis.get("translation") or {}
+    surround = translation.get("surround") or {}
+    playback = translation.get("playback") or {}
+
+    surround_mono = surround.get("mono_compatibility")
+    if isinstance(surround_mono, (int, float)) and surround_mono < 40:
+        fixes.append(COACH_TEMPLATES["mono_collapse"].format(measured=surround_mono))
+
+    if playback.get("bass_translation") == "weak":
+        fixes.append(COACH_TEMPLATES["bass_translation_weak"])
+
+    if playback.get("crossfeed_safe") is False:
+        fixes.append(COACH_TEMPLATES["headphone_fatigue"])
 
     # Fall back to raw top_fixes if nothing matched
     if not fixes:

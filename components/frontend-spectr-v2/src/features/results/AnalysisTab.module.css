@@ -585,3 +585,47 @@
     width: 100%;
   }
 }
+
+/* ── Demoted chart dashboard (the evidence behind the plan) ──────────────── */
+.intro {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2);
+  max-width: 64ch;
+  margin: 0 0 var(--space-5);
+}
+
+.dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.chartCard {
+  padding: var(--space-5);
+}
+
+.chartHd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.areaChip {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: var(--cyan);
+  background: var(--cyan-dim);
+  border: 1px solid color-mix(in srgb, var(--cyan) 30%, transparent);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}

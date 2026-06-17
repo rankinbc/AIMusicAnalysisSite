@@ -1,10 +1,10 @@
-import { useMemo, useRef, useState, useCallback } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { toast } from 'sonner';
 
 import { ApiError } from '../../api/fetcher';
 import { extractApiError } from '../../api/error-utils';
-import { useReanalyzeVersion, useVerdicts } from '../../api/hooks';
+import { useReanalyzeVersion, useVerdicts, useVersionFiles } from '../../api/hooks';
 import {
   isFinalJson,
   type FinalJson,
@@ -16,21 +16,16 @@ import {
   type Phase6Data,
   type Phase7Data,
   type Phase8Data,
+  type Phase9Data,
 } from '../../api/types';
+import { AnalysisCompleteModal } from './AnalysisCompleteModal';
 import { AnalysisTab } from './AnalysisTab';
-import { ArrangementTab } from './ArrangementTab';
-import { CoachChat } from './CoachChat';
 import { FilesTab } from './FilesTab';
-import { SPECIALIST_CATALOG } from './helpers/specialists';
-import { RawTab } from './RawTab';
-import { ReferenceTab } from './ReferenceTab';
+import { GamePlan } from './GamePlan';
+import { buildMoves } from './move-model';
 import { ResultsTabs, type ResultsTabKey } from './ResultsTabs';
-import { SpectrumTab } from './SpectrumTab';
-import { VerdictHero } from './VerdictHero';
-import { VerdictsPanel } from './VerdictsPanel';
+import { SongHeader, type SongHeaderInputs } from './SongHeader';
 import s from './ReportView.module.css';
-
-const SPECIALIST_CATALOG_SIZE = SPECIALIST_CATALOG.length;
 
 interface ReportViewProps {
   results: JobResultsDto;
@@ -46,40 +41,59 @@ export function ReportView({ results, songId }: ReportViewProps) {
   const phase6 = pickPhaseData<Phase6Data>(fj, 6);
   const phase7 = pickPhaseData<Phase7Data>(fj, 7);
   const phase8 = pickPhaseData<Phase8Data>(fj, 8);
+  const phase9 = pickPhaseData<Phase9Data>(fj, 9);
 
-  const [tab, setTab] = useState<ResultsTabKey>('coach');
+  const [tab, setTab] = useState<ResultsTabKey>('actions');
+  const trackName = results.songName ?? 'Untitled';
 
-  // Pull verdicts here too so the tab badge reflects live count without
-  // mounting VerdictsPanel on tabs other than `coach`. Polling is owned by
-  // VerdictsPanel itself, so we pass an empty optimistic set.
+  // Verdicts are the AI-Move source + CoachChat grounding. Shared query cache
+  // with GamePlan/VerdictsPanel (keyed by jobId) — single fetch.
   const emptySetRef = useRef<ReadonlySet<string>>(new Set<string>());
   const { data: verdictsData } = useVerdicts(results.jobId, {
     enabled: true,
     optimisticRunning: emptySetRef.current,
   });
+  const verdicts = useMemo(() => verdictsData?.verdicts ?? [], [verdictsData]);
 
-  const coachCount = useMemo(
-    () =>
-      (verdictsData?.verdicts ?? []).filter(
-        (v) => !v.userState.dismissed && !v.userState.applied,
-      ).length,
-    [verdictsData],
+  const moves = useMemo(
+    () => buildMoves({ verdicts, topFixes: fj.top_fixes, coachedFixes: fj.coached_fixes }),
+    [verdicts, fj.top_fixes, fj.coached_fixes],
   );
 
-  // Tab denominator matches the curated Analysis-tab pipeline: worker phases
-  // + 4 virtual rows (AI specialists, stems, reference, .als).
-  const workerOk = (fj.phases ?? []).filter((p) => p.status === 'ok').length;
-  const specialistsCached = (verdictsData?.specialists ?? []).filter(
-    (sp) => sp.status === 'cached' || sp.status === 'failed',
-  ).length;
-  const allSpecialistsRun =
-    specialistsCached > 0 && specialistsCached >= SPECIALIST_CATALOG_SIZE;
-  const phasesDone = workerOk + (allSpecialistsRun ? 1 : 0);
-  const phasesTotal = (fj.phases ?? []).length + 4;
+  // Which inputs the analysis ran on — drives the header chips + DepthBanner.
+  const { data: filesData } = useVersionFiles(results.versionId ?? '');
+  const inputs: SongHeaderInputs = useMemo(() => {
+    const files = filesData?.files ?? [];
+    return {
+      mix: files.some((f) => f.type === 'mix') || files.length === 0,
+      stems: files.some((f) => f.type === 'stem') || Boolean(phase4?.stems),
+      als: files.some((f) => f.type === 'als') || Boolean(phase8),
+      reference: files.some((f) => f.type === 'reference') || Boolean(phase6?.gaps),
+    };
+  }, [filesData, phase4, phase8, phase6]);
 
-  // Re-analyze: fire the same dramatiq actor as a fresh upload and navigate
-  // to the new job's results page. The current report stays mounted until
-  // navigation completes (no flash of stale data).
+  const phasesDone = (fj.phases ?? []).filter((p) => p.status === 'ok').length;
+  const phasesTotal = (fj.phases ?? []).length;
+
+  // "Analysis complete" teaser modal — shown once per job.
+  const seenKey = `analysisModalSeen:${results.jobId}`;
+  const [showModal, setShowModal] = useState<boolean>(() => {
+    try {
+      return typeof sessionStorage !== 'undefined' && !sessionStorage.getItem(seenKey);
+    } catch {
+      return true;
+    }
+  });
+  const dismissModal = useCallback(() => {
+    try {
+      sessionStorage.setItem(seenKey, '1');
+    } catch {
+      /* ignore */
+    }
+    setShowModal(false);
+  }, [seenKey]);
+
+  // Re-analyze: fire the same actor as a fresh upload, navigate to the new job.
   const navigate = useNavigate();
   const reanalyze = useReanalyzeVersion(results.versionId ?? '');
   const handleReanalyze = useCallback(() => {
@@ -111,89 +125,99 @@ export function ReportView({ results, songId }: ReportViewProps) {
         <Link to="/songs/$songId" params={{ songId }} className={s.backLink}>
           ← all versions
         </Link>
-        <span className={s.backLink} style={{ marginLeft: 'auto' }}>
-          {results.songName ?? 'Untitled'}
-        </span>
       </header>
 
-      <VerdictHero
-        trackName={results.songName ?? 'Untitled'}
-        grade={fj.grade ?? null}
-        score={fj.overall_score}
-        danceability={fj.danceability_score}
-        phase1={phase1}
-        phase2={phase2}
+      <SongHeader
+        songId={songId}
+        versionId={results.versionId ?? null}
+        trackName={trackName}
+        versionLabel={null}
+        genre={phase2?.genre}
+        bpm={phase1?.bpm}
+        detectedKey={phase1?.detected_key}
+        durationSeconds={phase1?.duration_seconds}
+        inputs={inputs}
+        onAddInputs={() => setTab('files')}
+        onGetFeedback={() =>
+          toast('Publishing to the feed for crowd feedback is coming soon.', { icon: '♺' })
+        }
       />
 
       <ResultsTabs
         current={tab}
         onChange={setTab}
-        coachCount={coachCount}
+        moveCount={moves.length}
         phasesDone={phasesDone}
         phasesTotal={phasesTotal}
-        referenceOutOfRange={
-          phase6?.gaps
-            ? Object.values(phase6.gaps).filter((g) => !g.in_range).length
-            : 0
-        }
-        arrangementFlag={(phase7?.issues?.length ?? 0) > 0}
-        onReanalyze={handleReanalyze}
-        reanalyzing={reanalyze.isPending}
+        onGamePlan={() => setTab('actions')}
       />
 
       <div className={s.tabBody}>
-        {tab === 'coach' && (
-          <div className={s.coachStack}>
-            <CoachChat
-              trackName={results.songName ?? ''}
-              analysisId={results.analysisId}
-              verdicts={verdictsData?.verdicts ?? []}
-              measurementsCount={countMeasurements(fj)}
-            />
-            <VerdictsPanel jobId={results.jobId} hasStems={false} />
-          </div>
+        {tab === 'actions' && (
+          <GamePlan
+            jobId={results.jobId}
+            analysisId={results.analysisId}
+            trackName={trackName}
+            versionId={results.versionId ?? null}
+            moves={moves}
+            verdicts={verdicts}
+            measurementsCount={countMeasurements(fj)}
+            inputs={inputs}
+            onAddInputs={() => setTab('files')}
+          />
         )}
         {tab === 'analysis' && (
           <AnalysisTab
             phases={fj.phases}
-            songName={results.songName ?? 'master.wav'}
+            moves={moves}
+            songName={trackName}
             jobId={results.jobId}
             versionId={results.versionId}
             songId={songId}
-            coachName={fj.coach_name}
-            coachIntro={fj.coach_intro}
-            coachedFixes={fj.coached_fixes}
+            phase1={phase1}
+            phase2={phase2}
+            phase3={phase3}
+            phase4={phase4}
+            phase6={phase6}
+            phase7={phase7}
             phase8={phase8}
+            phase9={phase9}
+            overallScore={fj.overall_score}
             onReanalyze={handleReanalyze}
             reanalyzing={reanalyze.isPending}
           />
         )}
-        {tab === 'spectrum' && (
-          <SpectrumTab
-            bands={phase1?.bands}
-            phase1={phase1}
-            phase3={phase3}
-            phase4={phase4}
-          />
-        )}
-        {tab === 'reference' && (
-          <ReferenceTab
-            genre={phase2?.genre}
-            score={fj.overall_score}
-            phase6={phase6}
-          />
-        )}
-        {tab === 'arrangement' && <ArrangementTab phase7={phase7} />}
-        {tab === 'raw' && <RawTab rawJson={results.finalJson} />}
         {tab === 'files' && results.versionId && (
-          <FilesTab versionId={results.versionId} />
+          <FilesTab
+            versionId={results.versionId}
+            inputs={inputs}
+            onAddInputs={() => setTab('files')}
+            onReanalyze={handleReanalyze}
+            reanalyzing={reanalyze.isPending}
+          />
         )}
         {tab === 'files' && !results.versionId && (
-          <div style={{ color: 'var(--muted)', fontSize: 14, padding: '32px 0', textAlign: 'center' }}>
-            No version attached to this analysis.
-          </div>
+          <div className={s.noVersion}>No version attached to this analysis.</div>
         )}
       </div>
+
+      {showModal && (
+        <AnalysisCompleteModal
+          fj={fj}
+          songName={trackName}
+          durationSec={phase1?.duration_seconds}
+          genre={phase2?.genre}
+          versionLabel={undefined}
+          routingPlan={verdictsData?.routing_plan}
+          running={null}
+          onClose={dismissModal}
+          onViewReport={dismissModal}
+          onReanalyze={() => {
+            dismissModal();
+            handleReanalyze();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -202,13 +226,8 @@ function pickPhaseData<T>(fj: FinalJson, phaseNumber: number): T | undefined {
   return fj.phases?.find((p) => p.phase === phaseNumber)?.data as T | undefined;
 }
 
-/** Story 1.8 / Task 3 / AC2 — count of leaf-level keys across the per-phase
- *  `data` objects, capped at 9999. Drives the grounding-scope line in
- *  CoachChat. Code-review P14 — walks one level deeper for object-valued
- *  keys (`phase4.data.band_rms_db` is itself an object of 7 frequency
- *  bands) so the count better reflects the actual measurement surface
- *  area the coach can ground on. Arrays count as 1 (a single ordered
- *  list). */
+/** Count of leaf-level keys across per-phase `data` objects (capped at 9999).
+ *  Drives the grounding-scope line in CoachChat. */
 function countMeasurements(fj: FinalJson): number {
   let count = 0;
   for (const p of fj.phases ?? []) {

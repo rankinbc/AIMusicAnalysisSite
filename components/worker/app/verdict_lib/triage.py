@@ -1,33 +1,12 @@
 from __future__ import annotations
-import json
 from typing import Any
 
 from aimusic_shared.verdicts.models import SpecialistRoutingPlan, Verdict
 
+from .input_grounding import build_triage_user_message
 from .json_extraction import extract_json_object
 from .llm_protocol import LLMCaller
 from .prompt_loader import load_triage
-
-
-def _build_user_message(analysis: dict[str, Any], rule_verdicts: list[Verdict]) -> str:
-    rule_summary = [
-        {
-            "specialist": "rule_engine",
-            "category": v.category,
-            "severity": v.severity,
-            "headline": v.headline,
-        }
-        for v in rule_verdicts
-    ]
-    payload = {
-        "analysis": analysis,
-        "rule_engine_findings": rule_summary,
-    }
-    return (
-        "Triage this mix.\n\n"
-        f"```json\n{json.dumps(payload, indent=2, default=str)}\n```\n\n"
-        "Return only the routing-plan JSON object."
-    )
 
 
 async def run_triage(
@@ -43,7 +22,7 @@ async def run_triage(
     The caller (orchestrator) decides whether to retry or fall back.
     """
     _, system_body = load_triage()
-    user = _build_user_message(analysis, rule_verdicts)
+    user = build_triage_user_message(analysis, rule_verdicts)
     raw = await llm.call(system=system_body, user=user, timeout_s=timeout_s)
     obj = extract_json_object(raw)
     return SpecialistRoutingPlan(**obj)

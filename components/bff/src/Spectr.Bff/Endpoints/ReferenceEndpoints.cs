@@ -48,7 +48,19 @@ public static class ReferenceEndpoints
             .Where(r => r.UserId == userId)
             .OrderByDescending(r => r.CreatedAt)
             .ToListAsync(ct);
-        return Results.Ok(rows.Select(ToDto).ToList());
+
+        // One batched membership lookup, grouped into a per-reference setId list,
+        // so the grid can filter by set without N round-trips.
+        var refIds = rows.Select(r => r.Id).ToHashSet();
+        var membership = (await db.ReferenceSetMembers.AsNoTracking()
+                .Where(m => refIds.Contains(m.ReferenceId))
+                .Select(m => new { m.ReferenceId, m.SetId })
+                .ToListAsync(ct))
+            .GroupBy(m => m.ReferenceId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<Guid>)g.Select(x => x.SetId).ToList());
+
+        return Results.Ok(rows.Select(r =>
+            ToDto(r, membership.TryGetValue(r.Id, out var sids) ? sids : null)).ToList());
     }
 
     private static async Task<IResult> Upload(
@@ -110,7 +122,7 @@ public static class ReferenceEndpoints
         var row = await db.ReferenceTracks.AsNoTracking()
             .FirstOrDefaultAsync(r => r.Id == referenceId && r.UserId == userId, ct);
         if (row is null) return Results.NotFound();
-        return Results.Ok(ToDto(row));
+        return Results.Ok(ToDto(row, await SetIdsForAsync(db, row.Id, ct)));
     }
 
     private static async Task<IResult> Patch(
@@ -142,7 +154,7 @@ public static class ReferenceEndpoints
             row.Tags = body.Tags.Value.GetRawText();
 
         await db.SaveChangesAsync(ct);
-        return Results.Ok(ToDto(row));
+        return Results.Ok(ToDto(row, await SetIdsForAsync(db, row.Id, ct)));
     }
 
     private static async Task<IResult> Delete(
@@ -341,13 +353,21 @@ public static class ReferenceEndpoints
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
-    private static ReferenceDto ToDto(ReferenceTrack r) => new(
+    private static ReferenceDto ToDto(ReferenceTrack r, IReadOnlyList<Guid>? setIds = null) => new(
         r.Id, r.Title, r.Artist, r.Source, r.FilePath, r.Genre,
         r.Bpm, r.DetectedKey, r.DurationSeconds, r.Lufs, r.TruePeakDb,
         r.DynamicRangeLu, r.StereoWidth, r.StereoCorrelation,
         ParseJsonElement(r.BandLevels),
         ParseJsonElement(r.Tags) ?? EmptyArray(),
-        r.Analyzed, r.UsedCount, r.Notes, r.CreatedAt);
+        r.Analyzed, r.UsedCount, r.Notes, r.CreatedAt,
+        setIds ?? Array.Empty<Guid>());
+
+    // Set ids a single reference belongs to (for the patch/get-by-id responses).
+    private static async Task<List<Guid>> SetIdsForAsync(AppDbContext db, Guid referenceId, CancellationToken ct) =>
+        await db.ReferenceSetMembers.AsNoTracking()
+            .Where(m => m.ReferenceId == referenceId)
+            .Select(m => m.SetId)
+            .ToListAsync(ct);
 
     private static JsonElement? ParseJsonElement(string? raw)
     {

@@ -15,6 +15,7 @@ import type {
   CreateNoteRequest,
   CreateReferenceSetRequest,
   CreateSongRequest,
+  CreateTagRequest,
   EntitlementsDto,
   FeedbackKind,
   JobResultsDto,
@@ -29,8 +30,11 @@ import type {
   PatchShareRequest,
   PatchSongRequest,
   PostShareCommentRequest,
+  ReportListResponse,
+  ReportsFilter,
   ShareCommentDto,
   SharedAnalysisDto,
+  TagDto,
   PatchVersionRequest,
   AlsUploadResponse,
   ReanalyzeResponse,
@@ -215,13 +219,16 @@ export function usePatchVersion(versionId: string) {
 }
 
 /** Re-enqueue audio analysis for an existing version. Returns the new
- *  jobId; navigate to `/songs/{songId}/results/{jobId}` to watch it. */
+ *  jobId; navigate to `/songs/{songId}/results/{jobId}` to watch it.
+ *  Pass `{ referenceId }` to drive Phase 5 against a saved library reference. */
 export function useReanalyzeVersion(versionId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () =>
+    mutationFn: (vars?: { referenceId?: string }) =>
       fetcher<ReanalyzeResponse>({
-        url: `/versions/${versionId}/analyze`,
+        url: vars?.referenceId
+          ? `/versions/${versionId}/analyze?referenceId=${encodeURIComponent(vars.referenceId)}`
+          : `/versions/${versionId}/analyze`,
         method: 'POST',
       }),
     onSuccess: () => {
@@ -607,7 +614,10 @@ export function useDeleteReferenceSet() {
   return useMutation({
     mutationFn: (setId: string) =>
       fetcher<void>({ url: `/reference-sets/${setId}`, method: 'DELETE' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['reference-sets'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['reference-sets'] });
+      qc.invalidateQueries({ queryKey: ['references'] });
+    },
   });
 }
 
@@ -620,7 +630,26 @@ export function useAddReferenceToSet() {
         method: 'POST',
         data: { referenceId },
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['reference-sets'] }),
+    onSuccess: () => {
+      // setIds live on the reference rows, so both caches are stale.
+      qc.invalidateQueries({ queryKey: ['reference-sets'] });
+      qc.invalidateQueries({ queryKey: ['references'] });
+    },
+  });
+}
+
+export function useRemoveReferenceFromSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ setId, referenceId }: { setId: string; referenceId: string }) =>
+      fetcher<void>({
+        url: `/reference-sets/${setId}/members/${referenceId}`,
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['reference-sets'] });
+      qc.invalidateQueries({ queryKey: ['references'] });
+    },
   });
 }
 
@@ -723,6 +752,62 @@ export function useCoachView(jobId: string) {
     queryKey: ['coach', jobId],
     queryFn: () => fetcher<CoachViewDto>({ url: `/coach/${jobId}`, method: 'GET' }),
     enabled: Boolean(jobId),
+  });
+}
+
+// ── Song tags ───────────────────────────────────────────────────────────────
+export function useCreateTag(songId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateTagRequest) =>
+      fetcher<TagDto>({ url: `/songs/${songId}/tags`, method: 'POST', data: body }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['songs'] });
+      qc.invalidateQueries({ queryKey: ['songs', songId] });
+    },
+  });
+}
+
+export function useDeleteTag(songId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (tagId: string) =>
+      fetcher<void>({ url: `/songs/${songId}/tags/${tagId}`, method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['songs'] });
+      qc.invalidateQueries({ queryKey: ['songs', songId] });
+    },
+  });
+}
+
+// ── Version delete ───────────────────────────────────────────────────────────
+export function useDeleteVersion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (versionId: string) =>
+      fetcher<void>({ url: `/versions/${versionId}`, method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['songs'] }),
+  });
+}
+
+// ── Reports list ─────────────────────────────────────────────────────────────
+export function useReports(filters: ReportsFilter = {}) {
+  const params = new URLSearchParams();
+  if (filters.songName) params.set('songName', filters.songName);
+  if (filters.tags) params.set('tags', filters.tags);
+  if (filters.genreHint) params.set('genreHint', filters.genreHint);
+  if (filters.startDate) params.set('startDate', filters.startDate);
+  if (filters.endDate) params.set('endDate', filters.endDate);
+  if (filters.page != null) params.set('page', String(filters.page));
+  if (filters.pageSize != null) params.set('pageSize', String(filters.pageSize));
+  const qs = params.toString();
+  return useQuery<ReportListResponse>({
+    queryKey: ['reports', filters],
+    queryFn: () =>
+      fetcher<ReportListResponse>({
+        url: `/reports/${qs ? `?${qs}` : ''}`,
+        method: 'GET',
+      }),
   });
 }
 

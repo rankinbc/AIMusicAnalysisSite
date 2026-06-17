@@ -21,6 +21,8 @@ public static class SongEndpoints
         g.MapPatch("/{songId:guid}", Patch);
         g.MapDelete("/{songId:guid}", Archive);
         g.MapPost("/{songId:guid}/restore", Restore);
+        g.MapPost("/{songId:guid}/tags", AddTag);
+        g.MapDelete("/{songId:guid}/tags/{tagId:guid}", RemoveTag);
 
         return app;
     }
@@ -58,6 +60,13 @@ public static class SongEndpoints
                 .ToListAsync(ct)
             : new List<Analysis>();
 
+        var allTags = await db.SongTags.AsNoTracking()
+            .Where(t => songIds.Contains(t.SongId) && t.UserId == userId)
+            .ToListAsync(ct);
+        var tagsBySong = allTags
+            .GroupBy(t => t.SongId)
+            .ToDictionary(g => g.Key, g => g.Select(t => new TagDto(t.Id, t.Name, t.IsPublic)).ToList());
+
         var dto = songs.Select(s => new SongDto(
             s.Id,
             s.Name,
@@ -66,7 +75,8 @@ public static class SongEndpoints
             s.UpdatedAt,
             s.ArchivedAt,
             versions.Where(v => v.SongId == s.Id).Select(ToVersionDto).ToList(),
-            latest.Where(a => a.SongId == s.Id).Select(ToSummaryDto).FirstOrDefault()
+            latest.Where(a => a.SongId == s.Id).Select(ToSummaryDto).FirstOrDefault(),
+            tagsBySong.TryGetValue(s.Id, out var st) ? (IReadOnlyList<TagDto>)st : Array.Empty<TagDto>()
         )).ToList();
 
         return Results.Ok(dto);
@@ -102,7 +112,7 @@ public static class SongEndpoints
 
         return Results.Created($"/api/songs/{song.Id}",
             new SongDto(song.Id, song.Name, song.GenreHint, song.CreatedAt, song.UpdatedAt,
-                song.ArchivedAt, Array.Empty<VersionDto>(), null));
+                song.ArchivedAt, Array.Empty<VersionDto>(), null, Array.Empty<TagDto>()));
     }
 
     private static async Task<IResult> GetById(
@@ -124,11 +134,15 @@ public static class SongEndpoints
             .Where(a => a.UserId == userId && a.SongId == songId)
             .OrderByDescending(a => a.CreatedAt)
             .FirstOrDefaultAsync(ct);
+        var tags = await db.SongTags.AsNoTracking()
+            .Where(t => t.SongId == songId && t.UserId == userId)
+            .ToListAsync(ct);
 
         return Results.Ok(new SongDto(
             song.Id, song.Name, song.GenreHint, song.CreatedAt, song.UpdatedAt, song.ArchivedAt,
             versions.Select(ToVersionDto).ToList(),
-            latest is null ? null : ToSummaryDto(latest)));
+            latest is null ? null : ToSummaryDto(latest),
+            tags.Select(t => new TagDto(t.Id, t.Name, t.IsPublic)).ToList()));
     }
 
     private static async Task<IResult> Patch(
@@ -198,12 +212,65 @@ public static class SongEndpoints
         return Results.NoContent();
     }
 
+    private static async Task<IResult> AddTag(
+        Guid songId,
+        CreateTagRequest req,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        CancellationToken ct)
+    {
+        var name = req.Name?.Trim() ?? string.Empty;
+        if (name.Length == 0 || name.Length > 64)
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+                { ["name"] = ["Tag name must be 1–64 characters."] });
+
+        var userId = currentUser.UserId();
+        var song = await db.Songs.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == songId && s.UserId == userId, ct);
+        if (song is null) return Results.NotFound();
+
+        var tagCount = await db.SongTags.CountAsync(t => t.SongId == songId && t.UserId == userId, ct);
+        if (tagCount >= 20)
+            return Results.UnprocessableEntity(new { error = "Maximum 20 tags per song." });
+
+        var tag = new SongTag { SongId = songId, UserId = userId, Name = name, IsPublic = req.IsPublic };
+        db.SongTags.Add(tag);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            return Results.Conflict(new { error = "Tag already exists." });
+        }
+
+        return Results.Created($"/api/songs/{songId}/tags/{tag.Id}",
+            new TagDto(tag.Id, tag.Name, tag.IsPublic));
+    }
+
+    private static async Task<IResult> RemoveTag(
+        Guid songId,
+        Guid tagId,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        var tag = await db.SongTags
+            .FirstOrDefaultAsync(t => t.Id == tagId && t.SongId == songId && t.UserId == userId, ct);
+        if (tag is null) return Results.NotFound();
+
+        db.SongTags.Remove(tag);
+        await db.SaveChangesAsync(ct);
+        return Results.NoContent();
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
     private static VersionDto ToVersionDto(SongVersion v) =>
         new(v.Id, v.SongId, v.VersionNumber, v.Label, v.IsCurrent, v.FilePath, v.CreatedAt,
             v.AlsFilePath, v.ReferencePath);
 
-    private static AnalysisSummaryDto ToSummaryDto(Analysis a)
+    internal static AnalysisSummaryDto ToSummaryDto(Analysis a)
     {
         string? grade = null;
         double? score = null;

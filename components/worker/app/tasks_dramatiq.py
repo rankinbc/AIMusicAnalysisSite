@@ -29,6 +29,7 @@ from aimusic_shared.models import (
     JOB_STATUS_PROCESSING,
     Analysis,
     AnalysisJob,
+    ReferenceTrack,
     Song,
     SongVersion,
 )
@@ -122,7 +123,21 @@ def analyze_audio_job(job_id: str) -> None:
         version_id = version.id
         song_id = version.song_id
         song_name = song.name if song is not None else None
+
+        # Reference resolution: a saved library reference (job.reference_id) takes
+        # precedence over the one-off reference uploaded with the version
+        # (version.reference_path). A missing/deleted reference falls back to the
+        # version's one-off path — never crash the job over it. The used_count
+        # bump is deferred to Phase C (on success) so a failed pipeline — or a
+        # dramatiq retry — doesn't permanently inflate the counter.
         reference_path = version.reference_path
+        bump_reference_id: uuid.UUID | None = None
+        if job.reference_id is not None:
+            ref = s.get(ReferenceTrack, job.reference_id)
+            if ref is not None and ref.file_path:
+                reference_path = ref.file_path
+                bump_reference_id = ref.id
+
         als_file_path = version.als_file_path
         stem_paths = version.stem_paths
         stem_mode = version.stem_analysis_mode or "grouped"
@@ -207,6 +222,13 @@ def analyze_audio_job(job_id: str) -> None:
         done.error_message = None
         done.failed_at = None
 
+        # Bump the saved reference's used_count now that the analysis succeeded
+        # (deferred from Phase A so failures/retries don't inflate it).
+        if bump_reference_id is not None:
+            bref = s.get(ReferenceTrack, bump_reference_id)
+            if bref is not None:
+                bref.used_count = (bref.used_count or 0) + 1
+
     _try_write_artifact(job_id, result_dict)
     logger.info("analyze_audio_job: done job=%s", job_id)
 
@@ -241,7 +263,10 @@ def classify_stems(version_id: str) -> None:
             return
 
         abs_paths = [Path((Path(LOCAL_ROOT) / e["path"]).resolve()) for e in entries]
-        proposals = classify_audio(abs_paths)
+        # On-disk paths are UUIDs; pass the authoritative export name so the classifier
+        # can keyword-match (Kick/Snare/Bass/...) before falling back to audio content.
+        names = [e.get("original_filename") or Path(e["path"]).name for e in entries]
+        proposals = classify_audio(abs_paths, names)
 
         updated = []
         for e, prop in zip(entries, proposals):

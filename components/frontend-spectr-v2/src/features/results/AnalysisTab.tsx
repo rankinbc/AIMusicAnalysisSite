@@ -5,27 +5,66 @@ import { toast } from 'sonner';
 import { useState } from 'react';
 
 import { useJob, useRerunPhase, useRunSpecialist, useVerdicts } from '../../api/hooks';
-import type { Phase4Data, Phase8Data, PhaseResult, RoutingPlanEntry } from '../../api/types';
+import type {
+  Phase1Data,
+  Phase2Data,
+  Phase3Data,
+  Phase4Data,
+  Phase6Data,
+  Phase7Data,
+  Phase8Data,
+  Phase9Data,
+  PhaseResult,
+  RoutingPlanEntry,
+} from '../../api/types';
 import { AlsUploadDialog } from '../../components/AlsUploadDialog';
 import { ReferenceUploadDialog } from '../../components/ReferenceUploadDialog';
 import { StemsUploadDialog } from '../../components/StemsUploadDialog';
 import { rerunPhaseFor } from './analysis-tab-helpers';
-import { CoachPanel } from './CoachPanel';
+import { ArrangementTab } from './ArrangementTab';
+import { ReferenceTab } from './ReferenceTab';
+import { SpectrumTab } from './SpectrumTab';
 import { SPECIALIST_CATALOG, specialistLabel } from './helpers/specialists';
+import type { Move } from './move-model';
 import s from './AnalysisTab.module.css';
 
 interface AnalysisTabProps {
   phases: PhaseResult[] | undefined;
+  /** Built moves — drives the "→ used in N moves" chips that tie each chart
+   *  back to the plan. */
+  moves: Move[];
   songName: string;
   jobId: string;
   versionId: string | null;
   songId: string;
-  coachName: string | undefined;
-  coachIntro: string | undefined;
-  coachedFixes: string[] | undefined;
+  phase1: Phase1Data | undefined;
+  phase2: Phase2Data | undefined;
+  phase3: Phase3Data | undefined;
+  phase4: Phase4Data | undefined;
+  phase6: Phase6Data | undefined;
+  phase7: Phase7Data | undefined;
   phase8: Phase8Data | undefined;
+  phase9: Phase9Data | undefined;
+  /** Top-level mix score — fallback for the reference percentile ring when
+   *  phase 6 reference data is absent. */
+  overallScore?: number | undefined;
   onReanalyze?: () => void;
   reanalyzing?: boolean;
+}
+
+/** Count moves whose evidence ties to a chart area, so each section can show a
+ *  "→ used in N moves" chip linking the measurement back to the plan. */
+function movesForArea(moves: Move[], area: 'spectrum' | 'meter' | 'structure'): number {
+  return moves.filter((m) => m.evidence.type === area).length;
+}
+
+function AreaChip({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className={s.areaChip}>
+      → used in {count} move{count === 1 ? '' : 's'}
+    </span>
+  );
 }
 
 type PipelineStatus = 'ok' | 'partial' | 'running' | 'missing' | 'failed' | 'skipped';
@@ -54,14 +93,20 @@ const STATUS_GLYPH: Record<PipelineStatus, string> = {
 
 export function AnalysisTab({
   phases,
+  moves,
   songName,
   jobId,
   versionId,
   songId,
-  coachName,
-  coachIntro,
-  coachedFixes,
+  phase1,
+  phase2,
+  phase3,
+  phase4,
+  phase6,
+  phase7,
   phase8,
+  phase9,
+  overallScore,
   onReanalyze,
   reanalyzing,
 }: AnalysisTabProps) {
@@ -151,6 +196,44 @@ export function AnalysisTab({
   const off = c - pct * c;
 
   return (
+    <>
+      <p className={s.intro}>
+        The measured evidence behind your plan — you don't need to act on it directly; every issue
+        worth fixing is already a Move.
+      </p>
+
+      <div className={s.dashboard}>
+        <section className={`card ${s.chartCard}`}>
+          <div className={s.chartHd}>
+            <span>Mix &amp; spectrum</span>
+            <AreaChip count={movesForArea(moves, 'spectrum') + movesForArea(moves, 'meter')} />
+          </div>
+          <SpectrumTab
+            bands={phase1?.bands}
+            phase1={phase1}
+            phase3={phase3}
+            phase4={phase4}
+            phase9={phase9}
+          />
+        </section>
+
+        <section className={`card ${s.chartCard}`}>
+          <div className={s.chartHd}>
+            <span>Reference &amp; genre</span>
+            <AreaChip count={movesForArea(moves, 'meter')} />
+          </div>
+          <ReferenceTab genre={phase2?.genre} score={overallScore} phase6={phase6} />
+        </section>
+
+        <section className={`card ${s.chartCard}`}>
+          <div className={s.chartHd}>
+            <span>Arrangement</span>
+            <AreaChip count={movesForArea(moves, 'structure')} />
+          </div>
+          <ArrangementTab phase7={phase7} />
+        </section>
+      </div>
+
     <div className={s.layout}>
       <div className={s.left}>
         <section className={`card ${s.summary}`}>
@@ -242,21 +325,6 @@ export function AnalysisTab({
             </div>
           </div>
         </section>
-
-        {(verdictsData?.degradation != null ||
-          coachName ||
-          coachIntro ||
-          (coachedFixes && coachedFixes.length > 0)) && (
-          <section className={`card ${s.coachCard}`}>
-            <div className={s.coachOverline}>Recommended fixes — from initial analysis</div>
-            <CoachPanel
-              name={coachName}
-              intro={coachIntro}
-              fixes={coachedFixes}
-              degraded={verdictsData?.degradation != null}
-            />
-          </section>
-        )}
 
         <AlsHealthCard phase8={phase8} />
 
@@ -407,6 +475,7 @@ export function AnalysisTab({
         </section>
       </aside>
     </div>
+    </>
   );
 }
 

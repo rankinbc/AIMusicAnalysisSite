@@ -216,6 +216,7 @@ api.MapAuthEndpoints();
 api.MapMeEndpoints();
 api.MapSongEndpoints();
 api.MapVersionEndpoints();
+api.MapReportsEndpoints();
 api.MapJobEndpoints();
 api.MapVerdictEndpoints();
 api.MapReportPhaseEndpoints();

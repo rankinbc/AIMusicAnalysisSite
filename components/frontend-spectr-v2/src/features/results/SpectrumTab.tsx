@@ -5,10 +5,12 @@ import type {
   Phase3Data,
   Phase4Clash,
   Phase4Data,
+  Phase9Data,
 } from '../../api/types';
 import { GenreScorePanel } from './GenreScorePanel';
 import { StereoCard } from './StereoCard';
 import { StreamingReadiness } from './StreamingReadiness';
+import { TranslationCard } from './TranslationCard';
 import s from './SpectrumTab.module.css';
 
 interface BandSpec {
@@ -36,9 +38,10 @@ interface SpectrumTabProps {
   phase1: Phase1Data | undefined;
   phase3: Phase3Data | undefined;
   phase4: Phase4Data | undefined;
+  phase9: Phase9Data | undefined;
 }
 
-export function SpectrumTab({ bands, phase1, phase3, phase4 }: SpectrumTabProps) {
+export function SpectrumTab({ bands, phase1, phase3, phase4, phase9 }: SpectrumTabProps) {
   // Normalize each band's value to a 0..1 ratio. Phase 1 emits dB values
   // typically in the -60..0 range; clamp + scale so the chart reads.
   const values = BANDS.map((b) => {
@@ -102,6 +105,8 @@ export function SpectrumTab({ bands, phase1, phase3, phase4 }: SpectrumTabProps)
       <ClashCard phase4={phase4} />
 
       <GenreScorePanel phase3={phase3} />
+
+      <TranslationCard phase9={phase9} />
 
       <div className={s.diagnosticGrid}>
         <StereoCard

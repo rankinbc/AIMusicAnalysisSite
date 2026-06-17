@@ -823,6 +823,49 @@ namespace Spectr.Data.Migrations
                     b.ToTable("songs");
                 });
 
+            modelBuilder.Entity("Spectr.Data.Entities.SongTag", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<bool>("IsPublic")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_public");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("SongId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("song_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SongId")
+                        .HasDatabaseName("ix_song_tags_song_id");
+
+                    b.HasIndex("SongId", "UserId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("uq_song_tags_song_user_name");
+
+                    b.ToTable("song_tags");
+                });
+
             modelBuilder.Entity("Spectr.Data.Entities.SongVersion", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1398,6 +1441,15 @@ namespace Spectr.Data.Migrations
                     b.HasIndex("ReceivedAt");
 
                     b.ToTable("webhook_events");
+                });
+
+            modelBuilder.Entity("Spectr.Data.Entities.SongTag", b =>
+                {
+                    b.HasOne("Spectr.Data.Entities.Song", null)
+                        .WithMany()
+                        .HasForeignKey("SongId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

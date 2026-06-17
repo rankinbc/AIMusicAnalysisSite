@@ -32,8 +32,8 @@ public static class ReportPhaseEndpoints
         // Phase 1 is the only phase every other phase depends on → it's a full
         // re-analyze, not an in-place single-phase re-run. The UI gates which
         // buttons appear (4/5/8 + retry-failed); the server just enforces the range.
-        if (phase < 2 || phase > 8)
-            return Results.BadRequest(new { error = "Phase must be 2–8. Phase 1 is a full re-analyze." });
+        if (phase < 2 || phase > 9)
+            return Results.BadRequest(new { error = "Phase must be 2–9. Phase 1 is a full re-analyze." });
 
         var userId = currentUser.UserId();
         var analysis = await db.Analyses.AsNoTracking()

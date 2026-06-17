@@ -12,6 +12,11 @@ from .types import RoleProposal, StemRole
 _LB = r"(?:^|[\W_\d])"   # left boundary
 _RB = r"(?:[\W_\d]|$)"   # right boundary
 
+# Below this RMS a window is effectively digital silence (the noise/dither floor):
+# a real-content stem sits at ~1e-2+, an empty/unused track export at ~1e-5. Forcing
+# a role on silence is what produced the "everything is hats" misclassification.
+_SILENCE_RMS = 1e-4
+
 
 def _kw(*alternatives: str) -> re.Pattern[str]:
     body = "|".join(alternatives)
@@ -20,9 +25,9 @@ def _kw(*alternatives: str) -> re.Pattern[str]:
 
 KEYWORD_PATTERNS: list[tuple[StemRole, re.Pattern[str]]] = [
     (StemRole.KICK, _kw(r"kick", r"bd", r"bass[\s_-]?drum")),
-    (StemRole.SNARE, _kw(r"snare", r"sd")),
-    (StemRole.HATS, _kw(r"hi[\s_-]?hats?", r"hats?", r"hh")),
-    (StemRole.DRUMS, _kw(r"drums?", r"perc(?:ussion)?", r"beat")),
+    (StemRole.SNARE, _kw(r"snare", r"sd", r"clap", r"rim(?:shot)?")),
+    (StemRole.HATS, _kw(r"hi[\s_-]?hats?", r"hats?", r"hh", r"crash", r"ride", r"cymbals?")),
+    (StemRole.DRUMS, _kw(r"drums?", r"perc(?:ussion)?", r"beat", r"toms?")),
     (StemRole.BASS, _kw(r"bass(?!\s?drum)", r"sub", r"808")),
     (StemRole.VOCALS, _kw(r"vox", r"vocals?", r"lead\s?vox", r"singers?")),
     (StemRole.LEAD, _kw(r"lead", r"melody")),
@@ -99,6 +104,13 @@ def _spectral_classify(audio: np.ndarray, sr: int = 44100) -> RoleProposal:
     (kick) from sustained low-end (bass) via onset rate + percussive ratio + crest —
     the single most important split for producers.
     """
+    # Silence guard: a near-silent window has no instrument to fingerprint — its flat
+    # noise floor spreads across the wide high-frequency bands and would otherwise be
+    # misread as "hats". Return OTHER instead of fabricating a confident role.
+    mono_guard = audio.mean(axis=1) if audio.ndim == 2 else audio
+    rms = float(np.sqrt(np.mean(mono_guard.astype(np.float64) ** 2))) if mono_guard.size else 0.0
+    if rms < _SILENCE_RMS:
+        return RoleProposal(StemRole.OTHER, 0.2, f"spectral: near-silent (rms {rms:.5f})")
     r = _band_energy_ratios(audio, sr)
     f = _features(audio, sr)
     low = r["sub"] + r["bass"]

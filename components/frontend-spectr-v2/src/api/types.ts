@@ -146,6 +146,12 @@ export interface AnalysisSummaryDto {
   score: number | null;
 }
 
+export interface TagDto {
+  id: string;
+  name: string;
+  isPublic: boolean;
+}
+
 export interface SongDto {
   id: string;
   name: string;
@@ -155,6 +161,7 @@ export interface SongDto {
   archivedAt: string | null;
   versions: VersionDto[];
   latestResult: AnalysisSummaryDto | null;
+  tags: TagDto[];
 }
 
 export interface CreateSongRequest {
@@ -165,6 +172,44 @@ export interface CreateSongRequest {
 export interface PatchSongRequest {
   name?: string | null;
   genreHint?: string | null;
+}
+
+export interface CreateTagRequest {
+  name: string;
+  isPublic: boolean;
+}
+
+export interface ReportListItemDto {
+  jobId: string;
+  versionId: string | null;
+  versionNumber: number | null;
+  versionLabel: string | null;
+  songId: string | null;
+  songName: string | null;
+  genreHint: string | null;
+  status: string;
+  grade: string | null;
+  score: number | null;
+  tags: TagDto[];
+  dispatchedAt: string;
+  completedAt: string | null;
+}
+
+export interface ReportListResponse {
+  items: ReportListItemDto[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface ReportsFilter {
+  songName?: string;
+  tags?: string;
+  genreHint?: string;
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  pageSize?: number;
 }
 
 export interface UploadResponse {
@@ -347,6 +392,7 @@ export interface ReferenceDto {
   usedCount: number;
   notes: string | null;
   createdAt: string;
+  setIds: string[];
 }
 
 export interface PatchReferenceRequest {
@@ -704,6 +750,36 @@ export interface Phase8Data {
     pattern: string | null;
     sections: { name: string; start_beat: number; end_beat: number; duration_bars: number }[];
   };
+}
+
+/** Phase 9 — Mix Translation. All scores are 0..100 (analyzer scale, NOT 0..1).
+ *  Every field optional: the phase can fail or skip. */
+export interface Phase9Spatial {
+  height_score?: number;
+  depth_score?: number;
+  width_consistency?: number;
+  analysis?: string[];
+}
+
+export interface Phase9Surround {
+  mono_compatibility?: number;
+  phase_score?: number;
+  is_atmos_ready?: boolean;
+  analysis?: string[];
+}
+
+export interface Phase9Playback {
+  headphone_score?: number;
+  speaker_score?: number;
+  crossfeed_safe?: boolean;
+  bass_translation?: 'good' | 'weak' | 'excessive' | string;
+  analysis?: string[];
+}
+
+export interface Phase9Data {
+  spatial?: Phase9Spatial;
+  surround?: Phase9Surround;
+  playback?: Phase9Playback;
 }
 
 export interface PhaseResult<TData = unknown> {

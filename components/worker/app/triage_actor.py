@@ -26,10 +26,8 @@ BFF can re-enqueue on the next ListVerdicts call.
 """
 from __future__ import annotations
 
-import json
 import logging
 import uuid
-from typing import Any
 
 import dramatiq
 
@@ -44,25 +42,11 @@ from .verdict_lib.degraded import (
     write_degradation_notice,
 )
 from .verdict_lib.flatten_analysis import flatten
+from .verdict_lib.input_grounding import build_triage_user_message
 from .verdict_lib.json_extraction import extract_json_object
 from .verdict_lib.prompt_loader import load_triage, load_triage_model
 
 logger = logging.getLogger(__name__)
-
-
-def _build_user_message(analysis: dict[str, Any]) -> str:
-    # Triage doesn't see rule-engine findings in the worker path — the
-    # legacy api orchestrator passes them in, but the BFF lazy-fire path
-    # never runs the rule engine. Triage's prompt accepts an empty list.
-    payload = {
-        "analysis": analysis,
-        "rule_engine_findings": [],
-    }
-    return (
-        "Triage this mix.\n\n"
-        f"```json\n{json.dumps(payload, indent=2, default=str)}\n```\n\n"
-        "Return only the routing-plan JSON object."
-    )
 
 
 @dramatiq.actor(
@@ -115,7 +99,7 @@ def run_triage(analysis_id: str) -> None:
         return
 
     # ── D: LLM call (via the metered gateway) ──────────────────────────────
-    user_msg = _build_user_message(flattened)
+    user_msg = build_triage_user_message(flattened)
     try:
         result = gateway.complete_sync(
             system=prompt_body,

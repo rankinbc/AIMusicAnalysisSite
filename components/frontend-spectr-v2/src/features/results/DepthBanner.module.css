@@ -1,0 +1,44 @@
+/* DepthBanner — dashed accent banner (cyan palette).
+   Drop-in for src/features/results/DepthBanner.module.css */
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 14px 16px;
+  margin: 14px 0 0;
+  background: var(--cyan-dim);
+  border: 1px dashed color-mix(in srgb, var(--cyan) 35%, var(--border));
+  border-radius: var(--radius-sm);
+}
+
+.icon {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--cyan);
+  background: color-mix(in srgb, var(--cyan) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cyan) 30%, transparent);
+  font-size: 16px;
+}
+
+.text {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.text strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.cta {
+  flex-shrink: 0;
+}

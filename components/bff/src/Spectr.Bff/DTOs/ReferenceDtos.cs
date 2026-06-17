@@ -26,7 +26,8 @@ public sealed record ReferenceDto(
     bool Analyzed,
     int UsedCount,
     string? Notes,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    IReadOnlyList<Guid> SetIds);
 
 public sealed record PatchReferenceRequest(
     string? Title,

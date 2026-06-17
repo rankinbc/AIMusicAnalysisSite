@@ -154,6 +154,25 @@ def stream_complete_sync(
     from . import budget as _budget  # noqa: PLC0415 — deliberate lazy
     _budget.check_budget(tier=effective_tier, purpose=purpose, user_id=user_id)
 
+    if settings.use_claude_cli:
+        # DEV-ONLY subscription path — the `claude` CLI has no incremental
+        # streaming we bridge here, so we run it to completion and re-emit the
+        # reply as chunked deltas so the SSE relay + actor partial-path still
+        # behave normally. Not for production (see settings.use_claude_cli).
+        try:
+            yield from _cli_stream(
+                system=system, user=user, purpose=purpose,
+                prompt_slug=prompt_slug, prompt_version=prompt_version,
+                user_id=user_id, tier=effective_tier,
+                correlation_id=correlation_id, timeout_s=timeout_s,
+                cancel_check=cancel_check,
+            )
+        except Exception:
+            _budget.record_outcome(outcome="error")
+            raise
+        _budget.record_outcome(outcome="ok")
+        return
+
     if settings.llm_fake:
         try:
             yield from _fake_stream(
@@ -293,6 +312,60 @@ def _fake_stream(
             text=full_text, model=_FAKE_MODEL,
             input_tokens=0, output_tokens=0, cost_usd=Decimal("0"),
             outcome="ok", latency_ms=0, llm_call_id=call_id,
+        ),
+    )
+
+
+# ── DEV-ONLY claude-CLI path ─────────────────────────────────────────────────
+
+def _chunk_text(text: str, words_per_chunk: int = 6) -> list[str]:
+    """Split text into a handful of whitespace-preserving chunks so the
+    coach UI renders progressively. Pure presentation — dev-only path."""
+    parts = text.split(" ")
+    if len(parts) <= 1:
+        return [text] if text else []
+    chunks: list[str] = []
+    for i in range(0, len(parts), words_per_chunk):
+        group = parts[i:i + words_per_chunk]
+        # Re-add the space that ``split`` consumed between groups.
+        prefix = "" if i == 0 else " "
+        chunks.append(prefix + " ".join(group))
+    return chunks
+
+
+def _cli_stream(
+    *, system: str, user: str, purpose: str, prompt_slug: str | None,
+    prompt_version: str | None, user_id: Any | None, tier: str | None,
+    correlation_id: str | None, timeout_s: int,
+    cancel_check: Callable[[], bool] | None,
+) -> Iterator[GatewayStreamEvent]:
+    from .gateway import (  # noqa: PLC0415 — late import to avoid cycle
+        _CLI_MODEL, _run_claude_cli, record_llm_call,
+    )
+
+    t0 = time.monotonic()
+    text = _run_claude_cli(system=system, user=user, timeout_s=timeout_s)
+    latency_ms = int((time.monotonic() - t0) * 1000)
+
+    call_id = new_llm_call_id()
+    record_llm_call(
+        user_id=user_id, tier=tier, purpose=purpose, prompt_slug=prompt_slug,
+        prompt_version=prompt_version, model=_CLI_MODEL, input_tokens=0,
+        output_tokens=0, cost_usd=Decimal("0"), latency_ms=latency_ms,
+        outcome="ok", correlation_id=correlation_id, row_id=call_id,
+    )
+
+    for chunk in _chunk_text(text):
+        yield GatewayStreamEvent(kind="delta", text=chunk)
+        if cancel_check is not None and cancel_check():
+            break
+
+    yield GatewayStreamEvent(
+        kind="final", text=text,
+        result=GatewayResultLike(
+            text=text, model=_CLI_MODEL, input_tokens=0, output_tokens=0,
+            cost_usd=Decimal("0"), outcome="ok", latency_ms=latency_ms,
+            llm_call_id=call_id,
         ),
     )
 

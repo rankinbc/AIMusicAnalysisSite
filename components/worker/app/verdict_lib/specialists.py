@@ -1,5 +1,4 @@
 from __future__ import annotations
-import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator
@@ -7,6 +6,7 @@ from typing import Any, AsyncIterator
 from aimusic_shared.verdicts.models import SpecialistRoutingPlan, Verdict
 from aimusic_shared.verdicts.ulid_helpers import new_fix_id, new_verdict_id
 
+from .input_grounding import build_specialist_user_message
 from .json_extraction import extract_json_object
 from .llm_protocol import LLMCaller
 from .prompt_loader import load_prompt
@@ -17,14 +17,6 @@ RETRY_SUFFIX = (
     "\n\n[SYSTEM] Your previous response was not valid JSON. "
     "Respond with ONLY the JSON object — no prose, no code fences."
 )
-
-
-def _build_user_message(analysis: dict[str, Any], focus: str) -> str:
-    return (
-        f"Analyze this mix. Triage focus: {focus}\n\n"
-        f"```json\n{json.dumps(analysis, indent=2, default=str)}\n```\n\n"
-        "Return only the verdicts JSON object as specified in your instructions."
-    )
 
 
 def _hydrate_verdict(
@@ -85,7 +77,7 @@ async def run_one_specialist(
         log.warning("unknown specialist slug %r: %s", slug, e)
         return [], [e]
 
-    user_msg = _build_user_message(analysis, focus)
+    user_msg = build_specialist_user_message(analysis, focus)
     parsed: dict[str, Any] | None = None
     last_err: Exception | None = None
 

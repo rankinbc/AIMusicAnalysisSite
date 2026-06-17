@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'rea
 import { toast } from 'sonner';
 
 import { ApiError, fetcher } from '../api/fetcher';
-import { useEntitlements, useStemProposals } from '../api/hooks';
+import { useEntitlements, useReferences, useStemProposals } from '../api/hooks';
 import { extractApiError } from '../api/error-utils';
 import { STEM_ROLES } from '../api/types';
 import type {
@@ -78,6 +78,8 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
   const [mix, setMix] = useState<File | null>(null);
   const [genre, setGenre] = useState(defaultGenre ?? '');
   const [als, setAls] = useState<File | null>(null);
+  const [refMode, setRefMode] = useState<'upload' | 'library'>('upload');
+  const [pickedReferenceId, setPickedReferenceId] = useState('');
   const [refFile, setRefFile] = useState<File | null>(null);
   const [refTitle, setRefTitle] = useState('');
   const [refArtist, setRefArtist] = useState('');
@@ -94,6 +96,10 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
   const [entExhausted, setEntExhausted] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Reference chosen/created for THIS analysis, carried into the stems-review
+  // confirm step (which dispatches in a later tick than handleSubmit).
+  const resolvedRefIdRef = useRef<string>('');
+  const references = useReferences();
   const fileUpload = useFileUpload();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -125,6 +131,9 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
     setMix(null);
     setGenre(defaultGenre ?? '');
     setAls(null);
+    setRefMode('upload');
+    setPickedReferenceId('');
+    resolvedRefIdRef.current = '';
     setRefFile(null);
     setRefTitle('');
     setRefArtist('');
@@ -209,6 +218,15 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
       return;
     }
     setEntExhausted(false);
+    // A library reference that hasn't finished analyzing can't drive Phase 5 —
+    // block the dispatch fail-fast rather than silently degrading the analysis.
+    if (refMode === 'library' && pickedReferenceId) {
+      const picked = references.data?.find((r) => r.id === pickedReferenceId);
+      if (picked && !picked.analyzed) {
+        toast.error('That reference is still analyzing — pick another or wait for it to finish.');
+        return;
+      }
+    }
     setBusy(true);
     setPhase('uploading');
     try {
@@ -236,8 +254,12 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
         });
       }
 
-      // 3. Reference — independent library track + its own analyzer actor.
-      if (refFile) {
+      // 3. Reference — either a saved library track or a new upload. Either way
+      //    we resolve a referenceId to drive Phase 5 in the single dispatch below.
+      let referenceId = '';
+      if (refMode === 'library') {
+        referenceId = pickedReferenceId;
+      } else if (refFile) {
         setStatus('Uploading reference…');
         const rForm = new FormData();
         rForm.append('file', refFile);
@@ -247,13 +269,17 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
         const ref = await fetcher<ReferenceDto>({ url: '/references/', method: 'POST', body: rForm });
         void fetcher<unknown>({ url: `/references/${ref.id}/analyze`, method: 'POST' }).catch(() => {});
         qc.invalidateQueries({ queryKey: ['references'] });
+        referenceId = ref.id;
       }
+      resolvedRefIdRef.current = referenceId; // carried into the review-confirm step
 
       // 4. The single dispatch.
       if (decideDispatchPath({ hasStems: stemRows.length > 0 }) === 'analyze') {
         setStatus('Starting analysis…');
         const r = await fetcher<ReanalyzeResponse>({
-          url: `/versions/${vid}/analyze`,
+          url: referenceId
+            ? `/versions/${vid}/analyze?referenceId=${encodeURIComponent(referenceId)}`
+            : `/versions/${vid}/analyze`,
           method: 'POST',
         });
         qc.invalidateQueries({ queryKey: ['songs'] });
@@ -288,7 +314,11 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
       const res = await fetcher<ConfirmStemsResponse>({
         url: `/versions/${vid}/stems/confirm`,
         method: 'POST',
-        data: { stems: buildAutoConfirmPayload(classified), mode: 'grouped' },
+        data: {
+          stems: buildAutoConfirmPayload(classified),
+          mode: 'grouped',
+          ...(resolvedRefIdRef.current ? { referenceId: resolvedRefIdRef.current } : {}),
+        },
       });
       qc.invalidateQueries({ queryKey: ['songs'] });
       finishNavigate(mixRes.songId, res.reanalysisJobId);
@@ -322,7 +352,11 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
       const res = await fetcher<ConfirmStemsResponse>({
         url: `/versions/${versionId}/stems/confirm`,
         method: 'POST',
-        data: { stems: payload, mode: perStem ? 'per_stem' : 'grouped' },
+        data: {
+          stems: payload,
+          mode: perStem ? 'per_stem' : 'grouped',
+          ...(resolvedRefIdRef.current ? { referenceId: resolvedRefIdRef.current } : {}),
+        },
       });
       qc.invalidateQueries({ queryKey: ['songs'] });
       finishNavigate(songIdState, res.reanalysisJobId);
@@ -500,15 +534,59 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
 
                   <p className={s.subhead}>Reference track (optional)</p>
                   <label className={f.label}>
-                    Reference audio
-                    <input
-                      type="file"
-                      accept=".wav,.flac,.mp3,audio/*"
-                      onChange={(e) => setRefFile(e.target.files?.[0] ?? null)}
-                      className={s.fileInput}
-                    />
+                    Reference source
+                    <select
+                      value={refMode}
+                      onChange={(e) => {
+                        const next = e.target.value as 'upload' | 'library';
+                        setRefMode(next);
+                        // Clear the opposing mode's selection so a stale file/pick
+                        // doesn't linger when the user switches source.
+                        if (next === 'library') setRefFile(null);
+                        else setPickedReferenceId('');
+                      }}
+                    >
+                      <option value="upload">Upload new</option>
+                      <option value="library">Choose from library</option>
+                    </select>
                   </label>
-                  {refFile && (
+
+                  {refMode === 'library' ? (
+                    references.data && references.data.length > 0 ? (
+                      <label className={f.label}>
+                        Saved reference
+                        <select
+                          value={pickedReferenceId}
+                          onChange={(e) => setPickedReferenceId(e.target.value)}
+                        >
+                          <option value="">— none —</option>
+                          {references.data.map((ref) => (
+                            <option key={ref.id} value={ref.id}>
+                              {ref.title}
+                              {ref.artist ? ` — ${ref.artist}` : ''}
+                              {ref.analyzed ? '' : ' (analyzing…)'}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : (
+                      <p className={s.dropHint}>
+                        No saved references yet. Switch to “Upload new”, or add some in
+                        your library first.
+                      </p>
+                    )
+                  ) : (
+                    <label className={f.label}>
+                      Reference audio
+                      <input
+                        type="file"
+                        accept=".wav,.flac,.mp3,audio/*"
+                        onChange={(e) => setRefFile(e.target.files?.[0] ?? null)}
+                        className={s.fileInput}
+                      />
+                    </label>
+                  )}
+                  {refMode === 'upload' && refFile && (
                     <>
                       <label className={f.label}>
                         Reference title (optional)

@@ -3,11 +3,23 @@ import { useState } from 'react';
 import { getAccessToken } from '../../api/fetcher';
 import { useVersionFiles } from '../../api/hooks';
 import type { VersionFileType } from '../../api/types';
+import type { SongHeaderInputs } from './SongHeader';
 import s from './FilesTab.module.css';
 
 interface FilesTabProps {
   versionId: string;
+  inputs?: SongHeaderInputs;
+  onAddInputs?: () => void;
+  onReanalyze?: () => void;
+  reanalyzing?: boolean;
 }
+
+const INPUT_ROWS: { key: keyof SongHeaderInputs; label: string }[] = [
+  { key: 'mix', label: 'Primary mix' },
+  { key: 'stems', label: 'Stems' },
+  { key: 'als', label: 'Ableton project' },
+  { key: 'reference', label: 'Reference track' },
+];
 
 const TYPE_LABEL: Record<VersionFileType, string> = {
   mix: 'Mix audio',
@@ -59,10 +71,55 @@ async function triggerDownload(apiPath: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export function FilesTab({ versionId }: FilesTabProps) {
+export function FilesTab({
+  versionId,
+  inputs,
+  onAddInputs,
+  onReanalyze,
+  reanalyzing,
+}: FilesTabProps) {
   const { data, isLoading, isError } = useVersionFiles(versionId);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  const inputsHeader = inputs && (
+    <section className={s.inputs}>
+      <div className={s.inputsHd}>
+        <span className={s.sectionLabel}>Inputs</span>
+        <span className={s.sectionSub}>what we analyzed</span>
+      </div>
+      <ul className={s.inputList}>
+        {INPUT_ROWS.map(({ key, label }) => {
+          const present = inputs[key];
+          return (
+            <li key={key} className={s.inputRow} data-present={present || undefined}>
+              <span className={s.inputName}>{label}</span>
+              {present ? (
+                <span className={s.parsed}>✓ analyzed</span>
+              ) : (
+                <button type="button" className="btn sm" onClick={onAddInputs}>
+                  Add
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <div className={s.fileActions}>
+        <button
+          type="button"
+          className="btn primary sm"
+          onClick={() => onReanalyze?.()}
+          disabled={!onReanalyze || reanalyzing}
+        >
+          ↺ {reanalyzing ? 'Re-analyzing…' : 'Re-analyze'}
+        </button>
+        <button type="button" className="btn sm" onClick={onAddInputs}>
+          Add files to deepen
+        </button>
+      </div>
+    </section>
+  );
 
   const handleDownload = async (
     type: VersionFileType,
@@ -81,18 +138,14 @@ export function FilesTab({ versionId }: FilesTabProps) {
     }
   };
 
-  if (isLoading) {
-    return <div className={s.state}>Loading files…</div>;
-  }
-  if (isError || !data) {
-    return <div className={s.state}>Could not load file list.</div>;
-  }
-  if (data.files.length === 0) {
-    return <div className={s.state}>No files associated with this version.</div>;
-  }
-
-  return (
-    <div className={s.root}>
+  const downloads = isLoading ? (
+    <div className={s.state}>Loading files…</div>
+  ) : isError || !data ? (
+    <div className={s.state}>Could not load file list.</div>
+  ) : data.files.length === 0 ? (
+    <div className={s.state}>No downloadable files for this version.</div>
+  ) : (
+    <>
       {downloadError && <div className={s.errorBanner}>{downloadError}</div>}
       <ul className={s.list}>
         {data.files.map((f, i) => {
@@ -131,6 +184,18 @@ export function FilesTab({ versionId }: FilesTabProps) {
       <p className={s.note}>
         Files are stored locally in development. In production, signed URLs expire after 7 days.
       </p>
+    </>
+  );
+
+  return (
+    <div className={s.root}>
+      {inputsHeader}
+      <section className={s.downloads}>
+        <div className={s.inputsHd}>
+          <span className={s.sectionLabel}>Downloads</span>
+        </div>
+        {downloads}
+      </section>
     </div>
   );
 }

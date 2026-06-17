@@ -79,6 +79,7 @@ public sealed record StemProposalsResponse(Guid VersionId, bool Classified, List
 public sealed record ConfirmStemItem(string Id, string ConfirmedRole);
 
 // mode: "grouped" (default) | "per_stem"
-public sealed record ConfirmStemsRequest(List<ConfirmStemItem> Stems, string? Mode);
+// referenceId: optional saved library reference to drive Phase 5.
+public sealed record ConfirmStemsRequest(List<ConfirmStemItem> Stems, string? Mode, Guid? ReferenceId = null);
 
 public sealed record ConfirmStemsResponse(Guid VersionId, Guid ReanalysisJobId);

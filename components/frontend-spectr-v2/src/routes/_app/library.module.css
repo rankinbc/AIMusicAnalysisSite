@@ -6,6 +6,40 @@
   padding: var(--space-6) var(--space-6) 32px;
 }
 
+/* Songs / References section toggle (shell) */
+.modeBar {
+  display: flex;
+  margin-bottom: 18px;
+}
+
+.modeToggle {
+  display: inline-flex;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 3px;
+}
+
+.modeToggleBtn {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  padding: 7px 18px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  transition: background 0.15s, color 0.15s;
+}
+.modeToggleBtn[data-active='true'] {
+  background: var(--card-hover);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
 .header {
   display: flex;
   align-items: flex-start;
@@ -306,4 +340,91 @@
 
 .emptyAction {
   margin-top: var(--space-3);
+}
+
+/* ── Card context menu ─────────────────────────────────────────── */
+
+.titleActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.menuWrap {
+  position: relative;
+}
+
+.menuTrigger {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-2);
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  transition: background 120ms, color 120ms;
+}
+
+.menuTrigger:hover {
+  background: var(--card-2);
+  color: var(--text);
+}
+
+.menuDropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 100;
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  min-width: 120px;
+  overflow: hidden;
+}
+
+.menuItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--text);
+  transition: background 100ms;
+}
+
+.menuItem:hover {
+  background: var(--card);
+}
+
+.menuItemDanger {
+  color: var(--red, #f87171);
+}
+
+/* ── Card tags ──────────────────────────────────────────────────── */
+
+.cardTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.cardTag {
+  font-size: 10px;
+  padding: 1px 5px;
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-2);
+}
+
+.cardTag[data-public='true'] {
+  border-color: var(--cyan);
+  color: var(--cyan);
 }
