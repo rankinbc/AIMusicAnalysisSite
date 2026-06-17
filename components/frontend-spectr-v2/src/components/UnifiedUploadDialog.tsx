@@ -25,6 +25,8 @@ import type {
   StemRole,
 } from '../api/types';
 import { useFileUpload } from '../hooks/useFileUpload';
+import { AlsPreviewPanel } from '../features/upload/AlsPreviewPanel';
+import { AlsParseError, parseAlsFile, type AlsPreview } from '../features/upload/alsPreview';
 import f from '../styles/forms.module.css';
 import { buildConfirmPayload } from './stems-upload-helpers';
 import {
@@ -111,6 +113,10 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
   const [songChoice, setSongChoice] = useState<string>(NEW_SONG);
   const [newSongName, setNewSongName] = useState('');
   const [als, setAls] = useState<File | null>(null);
+  // Client-side .als preview ("we understand your file" trust moment).
+  const [alsPreview, setAlsPreview] = useState<AlsPreview | null>(null);
+  const [alsParsing, setAlsParsing] = useState(false);
+  const [alsPreviewError, setAlsPreviewError] = useState<string | null>(null);
   const [refMode, setRefMode] = useState<'upload' | 'library'>('upload');
   const [pickedReferenceId, setPickedReferenceId] = useState('');
   const [refFile, setRefFile] = useState<File | null>(null);
@@ -160,6 +166,39 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
     );
   }, [proposals.data]);
 
+  // Parse a dropped/picked .als entirely in the browser so we can instantly show
+  // the producer that we "understand" their project — before any upload happens.
+  useEffect(() => {
+    if (!als) {
+      setAlsPreview(null);
+      setAlsPreviewError(null);
+      setAlsParsing(false);
+      return;
+    }
+    let cancelled = false;
+    setAlsPreview(null);
+    setAlsPreviewError(null);
+    setAlsParsing(true);
+    parseAlsFile(als)
+      .then((preview) => {
+        if (!cancelled) setAlsPreview(preview);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setAlsPreviewError(
+          err instanceof AlsParseError
+            ? err.message
+            : "Couldn't read this Ableton project — analysis will still work.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setAlsParsing(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [als]);
+
   const reset = () => {
     stemRows.forEach((r) => URL.revokeObjectURL(r.previewUrl));
     audioRef.current?.pause();
@@ -171,6 +210,9 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
     setNewSongName('');
     setMixDrag(false);
     setAls(null);
+    setAlsPreview(null);
+    setAlsPreviewError(null);
+    setAlsParsing(false);
     setRefMode('upload');
     setPickedReferenceId('');
     resolvedRefIdRef.current = '';
@@ -731,6 +773,13 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                           style={{ display: 'none' }}
                         />
                       </label>
+                    )}
+                    {als && (
+                      <AlsPreviewPanel
+                        preview={alsPreview}
+                        loading={alsParsing}
+                        error={alsPreviewError}
+                      />
                     )}
                   </div>
 

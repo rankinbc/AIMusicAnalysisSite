@@ -330,3 +330,91 @@
   border-color: var(--red, #f04);
   color: var(--red, #f04);
 }
+
+/* ── .als instant preview panel ── */
+.alsPreview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--cyan-dim, var(--border-2));
+  border-radius: var(--radius-sm);
+  background: rgba(0, 200, 255, 0.03);
+}
+
+.alsPreviewHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.alsPreviewTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.alsStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.alsStat b {
+  color: var(--cyan);
+  font-weight: 700;
+}
+
+.alsSectionLabel {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.alsChip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--text-2);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.alsChip.midi {
+  border-color: var(--cyan-dim, var(--border-2));
+  color: var(--text);
+}
+
+.alsChipMore {
+  color: var(--muted);
+  font-size: 11px;
+  align-self: center;
+}
+
+.alsPreviewError {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.alsPreviewLoading {
+  font-size: 12px;
+  color: var(--muted);
+}
