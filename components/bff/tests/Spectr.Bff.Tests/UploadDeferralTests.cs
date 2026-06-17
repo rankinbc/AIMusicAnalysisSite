@@ -17,17 +17,24 @@ namespace Spectr.Bff.Tests;
 // dispatched without standing up a live Redis broker.
 internal sealed class RecordingJobQueue : IJobQueue
 {
+    // Task name only — preserved for the existing ~8 assertions.
     public ConcurrentQueue<string> Calls { get; } = new();
+
+    // Story 2.5: also capture the target queue so dispatch-routing tests can
+    // assert tier → queue. The 2-arg overload records the implicit `default`.
+    public ConcurrentQueue<(string Task, string Queue)> Enqueues { get; } = new();
 
     public Task EnqueueAsync(string taskName, object[] args, CancellationToken ct = default)
     {
         Calls.Enqueue(taskName);
+        Enqueues.Enqueue((taskName, DramatiqQueues.Default));
         return Task.CompletedTask;
     }
 
     public Task EnqueueAsync(string taskName, object[] args, string queueName, CancellationToken ct = default)
     {
         Calls.Enqueue(taskName);
+        Enqueues.Enqueue((taskName, queueName));
         return Task.CompletedTask;
     }
 }

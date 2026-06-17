@@ -45,3 +45,9 @@ from . import triage_actor  # noqa: E402,F401
 from . import reference_analyzer_actor  # noqa: E402,F401
 from . import coach_actor  # noqa: E402,F401
 from . import rerun_phase_actor  # noqa: E402,F401
+
+# Story 2.5 (AR23): the `maintenance` queue carries no actor yet (Epic 3/4 add
+# sweep_retention / send_email). Declare it explicitly so W2's
+# `--queues analysis-free maintenance` whitelist resolves to a live (empty)
+# consumer today rather than an inert entry. Benign: nothing produces to it yet.
+broker.declare_queue("maintenance")

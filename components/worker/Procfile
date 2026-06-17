@@ -3,7 +3,13 @@
 # async client per call/loop — multiple threads sharing a process would reuse a
 # client across event loops. Pin a single worker (CLAUDE.md worker gotcha).
 #
-# Queues: `default` carries analyze_audio_job + verdict pipeline actors;
-# `coach` (story 1.5) carries coach_reply. Story-1.5 dev/CI runs both queues
-# on one process; AR23's W1/W2 split is a production-topology task.
-worker: python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues default coach
+# Queues (AR23, story 2.5): one dev worker drains ALL four queues, so dev
+# behavior is functionally identical to prod (every message gets processed by
+# one process). The W1/W2 split lives in docker/docker-compose.prod.yml.
+#   analysis-paid : pro/credits analysis + all 5 auxiliary actors
+#   analysis-free : free/anon analysis (sole declarer = analyze_audio_job)
+#   coach         : coach_reply
+#   maintenance   : provisioned-but-empty (Epic 3/4 add sweep_retention/send_email)
+# `default` is dropped — no producer remains after story 2.5. If you run against
+# a long-lived dev Redis that may hold stray `default` messages, append `default`.
+worker: python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues coach analysis-paid analysis-free maintenance

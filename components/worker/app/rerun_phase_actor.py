@@ -48,7 +48,7 @@ def _join(rel: str | None) -> str | None:
 
 @dramatiq.actor(
     actor_name="rerun_phase",
-    queue_name="default",
+    queue_name="analysis-paid",  # story 2.5: latency-sensitive secondary op → W1
     max_retries=1,
     time_limit=600_000,  # 10 minutes
 )

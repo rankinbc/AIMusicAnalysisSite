@@ -208,6 +208,7 @@ public static class ReferenceEndpoints
         await queue.EnqueueAsync(
             DramatiqTasks.RunReferenceAnalyzer,
             new object[] { referenceId.ToString() },
+            DramatiqQueues.AnalysisPaid, // story 2.5: low-volume secondary op → W1
             ct);
         return Results.Accepted(value: ToDto(row));
     }

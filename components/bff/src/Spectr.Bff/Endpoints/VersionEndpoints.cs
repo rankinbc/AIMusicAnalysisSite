@@ -779,7 +779,10 @@ public static class VersionEndpoints
     {
         var userId = currentUser.UserId();
         if (!await UserOwnsVersion(db, versionId, userId, ct)) return Results.NotFound();
-        await queue.EnqueueAsync(DramatiqTasks.ClassifyStems, new object[] { versionId.ToString() }, ct);
+        // Story 2.5: paid-feature work → analysis-paid (W1). Free tier has stems=false.
+        await queue.EnqueueAsync(
+            DramatiqTasks.ClassifyStems, new object[] { versionId.ToString() },
+            DramatiqQueues.AnalysisPaid, ct);
         return Results.Accepted(value: new { queued = true });
     }
 
@@ -960,7 +963,21 @@ public static class VersionEndpoints
         }
 
         // Enqueue AFTER transaction commits (AR13: worker reads tier from job row).
-        await queue.EnqueueAsync(DramatiqTasks.AnalyzeAudioJob, new object[] { jobId.ToString() }, ct);
+        // Story 2.5: tier-route so paid/credit jobs never starve behind the free flood.
+        // Route off ent.Tier (the resolver's authoritative value, already in hand) — not a
+        // re-read of job.Tier. analyze_audio_job is consumed from BOTH lanes (W1 + W2); the
+        // queue here is the real router (Dramatiq dispatches by actor_name on arrival).
+        var queueName = ent.Tier switch
+        {
+            "pro"     => DramatiqQueues.AnalysisPaid,
+            "credits" => DramatiqQueues.AnalysisPaid,
+            _         => DramatiqQueues.AnalysisFree, // "free", null, future anonymous
+        };
+        await queue.EnqueueAsync(
+            DramatiqTasks.AnalyzeAudioJob,
+            new object[] { jobId.ToString() },
+            queueName,
+            ct);
         return (jobId, null);
     }
 }

@@ -57,6 +57,7 @@ public static class ReportPhaseEndpoints
         await queue.EnqueueAsync(
             DramatiqTasks.RerunPhase,
             new object[] { rerunJobId.ToString(), analysis.Id.ToString(), phase.ToString() },
+            DramatiqQueues.AnalysisPaid, // story 2.5: latency-sensitive secondary op → W1
             ct);
 
         return Results.Accepted(value: new RerunPhaseResponse(rerunJobId));

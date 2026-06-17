@@ -1,11 +1,11 @@
 # worker
 
 **Purpose**: Dramatiq worker that orchestrates the 7-phase audio analysis pipeline.
-Pulls jobs from a Redis-backed `default` queue, calls `audio_analysis.run_pipeline()`,
-writes the result to the `analyses` table, and flips `analysis_jobs.status` to
-`complete` (or `failed` with `error_message` on exception). Pre-loads the Demucs
-model at worker startup, not per-task. Job state is the single source of truth
-in Postgres — Redis is only the queue medium.
+Pulls jobs from Redis-backed queues (see **Queue topology** below), calls
+`audio_analysis.run_pipeline()`, writes the result to the `analyses` table, and
+flips `analysis_jobs.status` to `complete` (or `failed` with `error_message` on
+exception). Pre-loads the Demucs model at worker startup, not per-task. Job state
+is the single source of truth in Postgres — Redis is only the queue medium.
 
 **Inputs**: file paths in `analysis_jobs.version_id → song_versions.file_path`, resolved against `$STORAGE_LOCAL_ROOT` (default `/data`).
 
@@ -21,6 +21,45 @@ python -m dramatiq app.dramatiq_app
 
 The Procfile is the canonical entrypoint and is wired into the docker-compose
 `worker` service.
+
+## Queue topology (AR23 — story 2.5)
+
+Paying users' analyses must never starve behind the free-tier flood (FR34). The
+guarantee is **structural, by process separation** — two worker pools, not
+intra-worker priority (Dramatiq's `--queues` is an unordered set with no
+cross-queue precedence within one worker).
+
+| Queue           | Actor(s)                                                                                   | Consumed by |
+|-----------------|--------------------------------------------------------------------------------------------|-------------|
+| `analysis-paid` | `run_triage`, `run_specialist`, `run_reference_analyzer`, `classify_stems`, `rerun_phase`  | W1          |
+| `analysis-free` | `analyze_audio_job` *(sole declarer — see below)*                                          | W2          |
+| `coach`         | `coach_reply`                                                                              | W1          |
+| `maintenance`   | *(provisioned-but-empty; Epic 3/4 add `sweep_retention` / `send_email`)*                   | W2          |
+
+- **`analyze_audio_job` is tier-routed by the BFF, not by its decorator.** The BFF
+  enqueues it to `analysis-paid` for pro/credits users and `analysis-free` for
+  free/anonymous (`DispatchAnalysisAsync`). The actor itself **declares**
+  `analysis-free` because it is the *sole declarer* of that queue, and a Dramatiq
+  consumer only attaches to a queue some actor has declared. Dispatch is by
+  `actor_name`, so the one actor is consumed from **both** lanes. Do **not** change
+  its decorator to `analysis-paid` — that would orphan every free job.
+- **No `default` queue in prod.** Nothing enqueues or declares `default` after
+  story 2.5. An enforcement test (`tests/test_actor_queues.py`) asserts this.
+- `maintenance` is explicitly declared in `app/dramatiq_app.py` so W2 gets a live
+  (empty) consumer today; it self-populates when Epic 3/4 add their actors.
+
+### Launch commands
+
+```bash
+# Dev — ONE worker drains all four queues (functionally identical to prod):
+python -m dramatiq app.dramatiq_app --processes 1 --threads 1 \
+    --queues coach analysis-paid analysis-free maintenance   # = the Procfile
+
+# Prod — two pools (W1 paid + coach, W2 free + maintenance):
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up
+#   worker-paid (W1): --queues coach analysis-paid
+#   worker-free (W2): --queues analysis-free maintenance
+```
 
 ## Environment
 

@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 @dramatiq.actor(
     actor_name="run_reference_analyzer",
-    queue_name="default",
+    queue_name="analysis-paid",  # story 2.5: low-volume secondary op → W1
     max_retries=1,
     time_limit=180_000,  # 3 minutes — reference tracks are typically 3-6 min
 )

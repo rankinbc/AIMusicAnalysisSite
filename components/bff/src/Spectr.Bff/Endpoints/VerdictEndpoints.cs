@@ -65,6 +65,7 @@ public static class VerdictEndpoints
                 await queue.EnqueueAsync(
                     DramatiqTasks.RunTriage,
                     new object[] { analysisRow.Id.ToString() },
+                    DramatiqQueues.AnalysisPaid, // story 2.5: interactive LLM work → W1
                     ct);
             }
             catch
@@ -177,6 +178,7 @@ public static class VerdictEndpoints
         await queue.EnqueueAsync(
             DramatiqTasks.RunSpecialist,
             new object[] { analysis.Id.ToString(), specialist, userId.ToString() },
+            DramatiqQueues.AnalysisPaid, // story 2.5: interactive LLM work → W1
             ct);
 
         return Results.Accepted(value: new RunSpecialistResponse("queued"));

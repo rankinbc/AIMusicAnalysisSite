@@ -154,7 +154,7 @@ def _persist_verdict(analysis_id: uuid.UUID, v: VerdictModel) -> None:
 
 @dramatiq.actor(
     actor_name="run_specialist",
-    queue_name="default",
+    queue_name="analysis-paid",  # story 2.5: interactive LLM work → W1
     max_retries=1,
     time_limit=180_000,  # 3 minutes
 )

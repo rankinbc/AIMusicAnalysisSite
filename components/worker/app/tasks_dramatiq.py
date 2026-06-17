@@ -3,7 +3,8 @@
 Replaces the legacy Celery ``run_analysis_pipeline`` task. The wire-format
 contract with the BFF lives in ``components/bff/src/Spectr.Bff/Services/IJobQueue.cs``
 (``DramatiqJobQueue``): the message envelope must match dramatiq's RedisBroker
-format and the actor name must be ``analyze_audio_job`` (queue ``default``).
+format and the actor name must be ``analyze_audio_job`` (declares queue
+``analysis-free``; the BFF tier-routes the actual enqueue — story 2.5).
 
 Job lifecycle:
 
@@ -80,7 +81,14 @@ def _utc_now() -> datetime:
 
 @dramatiq.actor(
     actor_name="analyze_audio_job",
-    queue_name="default",
+    # Story 2.5: MUST be "analysis-free" — this is the SOLE declarer of that queue.
+    # A Dramatiq consumer only attaches to a DECLARED queue; if this declared
+    # "analysis-paid" instead, W2's {analysis-free, maintenance} whitelist would
+    # match nothing and every free job would be orphaned. The BFF tier-routes the
+    # actual enqueue queue (analysis-paid for pro/credits); the actor is consumed
+    # from BOTH lanes regardless, since dispatch is by actor_name. Do NOT "fix"
+    # this to analysis-paid.
+    queue_name="analysis-free",
     max_retries=2,
     time_limit=3_600_000,  # 60 minutes
 )
@@ -235,7 +243,7 @@ def analyze_audio_job(job_id: str) -> None:
 
 @dramatiq.actor(
     actor_name="classify_stems",
-    queue_name="default",
+    queue_name="analysis-paid",  # story 2.5: paid feature (free tier has stems=false) → W1
     max_retries=1,
     time_limit=600_000,  # 10 minutes
 )

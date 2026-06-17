@@ -1,0 +1,65 @@
+# Production worker-topology overlay (AR23 / story 2.5).
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up
+#
+# This overlay proves the AR23 queue split (FR34): two dedicated worker pools so
+# the high-volume free-analysis flood (W2) can never starve paid/credit jobs (W1).
+#
+#   W1 worker-paid : coach, analysis-paid   (paid analysis + coach + all 5 auxiliary actors)
+#   W2 worker-free : analysis-free, maintenance
+#
+# The single dev `worker` service from docker-compose.yml is moved to the
+# `dev-only` profile here so it does NOT start under the prod overlay (only
+# default-profile services start unless --profile dev-only is passed). W1/W2
+# replace it. NB: `deploy.replicas: 0` is NOT used — plain `docker compose up`
+# ignores it (swarm-only); the profile mechanism is honored by compose v2.
+#
+# Scope note: the FULL production stack (caddy/TLS, image registry pull, etc.)
+# is owned by Epic 10 story 10.1. This overlay only ships the queue split and
+# will be folded into 10.1's topology.
+
+services:
+  # Disable the single dev worker under the prod overlay.
+  worker:
+    profiles: ["dev-only"]
+
+  # W1 — paid-priority pool: paid/credit analysis + coach + auxiliary actors.
+  worker-paid:
+    build:
+      context: ../components/worker
+      dockerfile: Dockerfile
+    command: python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues coach analysis-paid
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://spectr:spectr@postgres:5432/spectr"
+      REDIS_URL: "redis://redis:6379/0"
+      TORCH_HOME: "/data/models"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      LLM_FAKE: "${LLM_FAKE:-1}"
+    volumes:
+      - ../data:/data
+      - ../components/analysis:/app/analysis
+      - ../components/shared:/app/shared
+
+  # W2 — free pool: absorbs the free/anon analysis flood + maintenance.
+  worker-free:
+    build:
+      context: ../components/worker
+      dockerfile: Dockerfile
+    command: python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues analysis-free maintenance
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://spectr:spectr@postgres:5432/spectr"
+      REDIS_URL: "redis://redis:6379/0"
+      TORCH_HOME: "/data/models"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      LLM_FAKE: "${LLM_FAKE:-1}"
+    volumes:
+      - ../data:/data
+      - ../components/analysis:/app/analysis
+      - ../components/shared:/app/shared
