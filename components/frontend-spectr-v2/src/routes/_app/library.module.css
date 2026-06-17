@@ -311,30 +311,178 @@
   letter-spacing: 0.06em;
 }
 
-/* Empty state */
+/* List view */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row {
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1.6fr) minmax(0, 1fr) max-content 44px 28px;
+  align-items: center;
+  gap: 16px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.row:hover {
+  background: var(--card-hover);
+  border-color: var(--border-2);
+}
+
+.rowMain {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.rowName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rowName:hover {
+  color: var(--cyan);
+}
+
+.rowSub {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rowMeta {
+  font-size: 11px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.versionStrip {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  overflow: hidden;
+}
+
+.versionChip {
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  border: 1px solid;
+}
+
+.rowGrade {
+  display: flex;
+  justify-content: center;
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 720px) {
+  .row {
+    grid-template-columns: 36px minmax(0, 1fr) max-content 28px;
+  }
+  .rowMeta,
+  .versionStrip {
+    display: none;
+  }
+}
+
+/* Empty state — previews the filled shape, then a single CTA */
 
 .empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-3);
-  padding: 48px var(--space-6);
+  padding: 36px var(--space-6) 48px;
   border: 1px dashed var(--border-2);
   border-radius: var(--radius);
   text-align: center;
   background: rgba(255, 255, 255, 0.01);
 }
 
+.emptyPreview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+  width: 100%;
+  max-width: 760px;
+  margin-bottom: 6px;
+  opacity: 0.5;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, transparent 94%);
+  mask-image: linear-gradient(180deg, #000 0%, transparent 94%);
+}
+
+.ghostCard {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.ghostCover {
+  position: relative;
+}
+
+.ghostBody {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ghostLine {
+  height: 9px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ghostArc {
+  height: 34px;
+  margin: 0 14px 14px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(0, 229, 176, 0.1), rgba(0, 229, 176, 0.02));
+  border: 1px solid var(--border);
+}
+
 .emptyTitle {
   margin: 0;
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
   color: var(--text);
 }
 
 .emptySubtitle {
   margin: 0;
+  max-width: 420px;
   font-size: 12px;
+  line-height: 1.5;
   color: var(--muted);
 }
 

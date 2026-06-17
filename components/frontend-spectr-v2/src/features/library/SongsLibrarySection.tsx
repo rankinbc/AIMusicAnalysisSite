@@ -1,5 +1,5 @@
 import { Link, useNavigate } from '@tanstack/react-router';
-import { useMemo, useState, useRef, type MouseEvent } from 'react';
+import { useEffect, useMemo, useState, useRef, type MouseEvent } from 'react';
 import { toast } from 'sonner';
 
 import { useArchiveSong, useSongs } from '../../api/hooks';
@@ -7,7 +7,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { NewSongDialog } from '../../components/NewSongDialog';
 import { SongEditDialog } from '../../components/SongEditDialog';
 import { UnifiedUploadDialog } from '../../components/UnifiedUploadDialog';
-import { normalizeGrade } from '../results/helpers/grade';
+import { normalizeGrade, gradeColor } from '../results/helpers/grade';
 import { CoverArt } from '../../ui/CoverArt';
 import { hueFromId } from '../../ui/hueFromId';
 import { GradePill } from '../../ui/GradePill';
@@ -187,24 +187,20 @@ export function SongsLibrarySection() {
       </div>
 
       {filtered.length === 0 ? (
-        <div className={s.empty}>
-          <p className={s.emptyTitle}>
-            {list.length === 0 ? 'No songs yet.' : 'No songs match this filter.'}
-          </p>
-          <p className={`mono ${s.emptySubtitle}`}>
-            {list.length === 0
-              ? 'Upload your first track to kick off an analysis.'
-              : 'Try a different filter or upload another track.'}
-          </p>
-          {list.length === 0 && (
-            <button
-              type="button"
-              className={`btn primary ${s.emptyAction}`}
-              onClick={() => setNewSongOpen(true)}
-            >
-              + New song
-            </button>
-          )}
+        <LibraryEmptyState
+          isFirstRun={list.length === 0}
+          onNewSong={() => setNewSongOpen(true)}
+        />
+      ) : view === 'list' ? (
+        <div className={s.list}>
+          {filtered.map((song) => (
+            <SongRow
+              key={song.id}
+              song={song}
+              onEdit={() => setEditSong(song)}
+              onArchive={() => setArchiveSong(song)}
+            />
+          ))}
         </div>
       ) : (
         <div className={s.grid}>
@@ -279,8 +275,6 @@ function SongCard({
   }));
   const grade = song.latestResult?.grade;
   const updated = new Date(song.updatedAt);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
 
   const goToSong = () => {
     void navigate({ to: '/songs/$songId', params: { songId: song.id } });
@@ -351,29 +345,7 @@ function SongCard({
             {song.name}
           </Link>
           <div className={s.titleActions} onClick={stop} onKeyDown={undefined} role="presentation">
-            <div className={s.menuWrap} ref={menuRef}>
-              <button
-                type="button"
-                className={s.menuTrigger}
-                onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
-                aria-label="Song actions"
-              >
-                ⋮
-              </button>
-              {menuOpen && (
-                <div
-                  className={s.menuDropdown}
-                  onMouseLeave={() => setMenuOpen(false)}
-                >
-                  <button type="button" className={s.menuItem} onClick={(e) => { stop(e); setMenuOpen(false); onEdit(); }}>
-                    Edit
-                  </button>
-                  <button type="button" className={`${s.menuItem} ${s.menuItemDanger}`} onClick={(e) => { stop(e); setMenuOpen(false); onArchive(); }}>
-                    Archive
-                  </button>
-                </div>
-              )}
-            </div>
+            <SongMenu onEdit={onEdit} onArchive={onArchive} />
           </div>
         </div>
         <p className={s.cardMeta}>
@@ -403,6 +375,190 @@ function SongCard({
         <span>{formatRelative(updated)}</span>
         <span>{versionCount} v</span>
       </div>
+    </div>
+  );
+}
+
+/** Kebab menu shared by the grid card and list row (Edit / Archive). Owns its
+ *  own open state and closes on outside click. Callers wrap it in a
+ *  click-stopping container so opening the menu never triggers row navigation. */
+function SongMenu({ onEdit, onArchive }: { onEdit: () => void; onArchive: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: globalThis.MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener('mousedown', onClick);
+    return () => window.removeEventListener('mousedown', onClick);
+  }, [open]);
+
+  return (
+    <div className={s.menuWrap} ref={ref}>
+      <button
+        type="button"
+        className={s.menuTrigger}
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        aria-label="Song actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        ⋮
+      </button>
+      {open && (
+        <div className={s.menuDropdown} role="menu">
+          <button
+            type="button"
+            className={s.menuItem}
+            role="menuitem"
+            onClick={(e) => { e.stopPropagation(); setOpen(false); onEdit(); }}
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            className={`${s.menuItem} ${s.menuItemDanger}`}
+            role="menuitem"
+            onClick={(e) => { e.stopPropagation(); setOpen(false); onArchive(); }}
+          >
+            Archive
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Compact grade-chip strip for the list row. Only the latest version carries a
+ *  known grade (from latestResult); earlier versions render as muted markers
+ *  until each has its own analysis. */
+function VersionStrip({ versions, latestGrade }: { versions: SongDto['versions']; latestGrade: string | null }) {
+  return (
+    <div className={s.versionStrip} aria-hidden="true">
+      {versions.map((v, i) => {
+        const isLast = i === versions.length - 1;
+        const grade = isLast ? normalizeGrade(latestGrade) : null;
+        const color = grade ? gradeColor(grade) : 'var(--muted)';
+        return (
+          <span
+            key={v.id}
+            className={`mono ${s.versionChip}`}
+            style={{ color, borderColor: `${color}30`, background: `${color}14` }}
+          >
+            {grade ?? '·'}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+/** List-view row — the same iteration story as the card, laid out horizontally. */
+function SongRow({
+  song,
+  onEdit,
+  onArchive,
+}: {
+  song: SongDto;
+  onEdit: () => void;
+  onArchive: () => void;
+}) {
+  const navigate = useNavigate();
+  const hue = hueFromId(song.id);
+  const versionCount = song.versions.length;
+  const currentVersion = song.versions.find((v) => v.isCurrent) ?? song.versions.at(-1);
+  const grade = song.latestResult?.grade;
+
+  const goToSong = () => {
+    void navigate({ to: '/songs/$songId', params: { songId: song.id } });
+  };
+  const stop = (e: MouseEvent) => e.stopPropagation();
+
+  return (
+    <div
+      className={s.row}
+      onClick={goToSong}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          goToSong();
+        }
+      }}
+    >
+      <CoverArt hue={hue} size="sm" />
+      <div className={s.rowMain}>
+        <Link
+          to="/songs/$songId"
+          params={{ songId: song.id }}
+          className={s.rowName}
+          onClick={stop}
+        >
+          {song.name}
+        </Link>
+        <span className={`mono ${s.rowSub}`}>
+          {versionCount} {versionCount === 1 ? 'version' : 'versions'}
+          {currentVersion ? ` · last v${currentVersion.versionNumber}` : ''}
+          {currentVersion?.label ? ` · ${currentVersion.label}` : ''}
+        </span>
+      </div>
+      <span className={`mono ${s.rowMeta}`}>
+        {[song.genreHint, song.latestResult?.score != null ? `${song.latestResult.score}/100` : null]
+          .filter(Boolean)
+          .join(' · ') || '— no analysis yet'}
+      </span>
+      <VersionStrip versions={song.versions} latestGrade={grade ?? null} />
+      <div className={s.rowGrade}>
+        {grade ? <GradePill grade={grade} size="sm" /> : <span className={`mono ${s.rowSub}`}>—</span>}
+      </div>
+      <div className={s.rowActions} onClick={stop} onKeyDown={undefined} role="presentation">
+        <SongMenu onEdit={onEdit} onArchive={onArchive} />
+      </div>
+    </div>
+  );
+}
+
+/** Designed empty state — previews the filled shape (ghost cards) so a new
+ *  library hints at what it becomes, with a single primary CTA. */
+function LibraryEmptyState({
+  isFirstRun,
+  onNewSong,
+}: {
+  isFirstRun: boolean;
+  onNewSong: () => void;
+}) {
+  return (
+    <div className={s.empty}>
+      <div className={s.emptyPreview} aria-hidden="true">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className={s.ghostCard}>
+            <div className={s.ghostCover}>
+              <CoverArt hue={168 + i * 56} size="fluid" ratio={2.1} />
+            </div>
+            <div className={s.ghostBody}>
+              <div className={s.ghostLine} style={{ width: `${70 - i * 12}%` }} />
+              <div className={s.ghostLine} style={{ width: '40%', opacity: 0.6 }} />
+            </div>
+            <div className={s.ghostArc} />
+          </div>
+        ))}
+      </div>
+      <p className={s.emptyTitle}>
+        {isFirstRun ? 'Your library starts here' : 'No songs match this filter'}
+      </p>
+      <p className={`mono ${s.emptySubtitle}`}>
+        {isFirstRun
+          ? 'Upload a track to get a graded mix report — then watch each version climb the arc.'
+          : 'Try a different filter, or upload another track.'}
+      </p>
+      {isFirstRun && (
+        <button type="button" className={`btn primary ${s.emptyAction}`} onClick={onNewSong}>
+          + New song
+        </button>
+      )}
     </div>
   );
 }
