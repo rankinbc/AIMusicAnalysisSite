@@ -301,6 +301,91 @@
   white-space: nowrap;
 }
 
+/* ── Encouraged .als zone (project awareness) ── */
+.zoneRecommended {
+  padding: 14px;
+  border: 1px solid var(--cyan-dim, var(--border-2));
+  border-radius: var(--radius);
+  background: rgba(0, 200, 255, 0.035);
+}
+
+.recommendedTag {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--cyan);
+  color: #00171f;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.zoneLead {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.zoneLead b {
+  color: var(--text);
+}
+
+.dropZoneAccent {
+  border-color: var(--cyan-dim, var(--border-2));
+  background: rgba(0, 200, 255, 0.04);
+}
+
+/* ── Advanced disclosure (de-emphasized stems) ── */
+.advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 2px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.advancedToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 0;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: color 160ms ease;
+}
+
+.advancedToggle:hover {
+  color: var(--text-2);
+}
+
+.advancedChevron {
+  font-size: 10px;
+}
+
+.advancedHint {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.advancedBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 /* A chosen single file shown after pick (mix / als / reference upload). */
 .fileChip {
   display: flex;

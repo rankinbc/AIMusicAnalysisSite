@@ -26,7 +26,13 @@ import type {
 } from '../api/types';
 import { useFileUpload } from '../hooks/useFileUpload';
 import { AlsPreviewPanel } from '../features/upload/AlsPreviewPanel';
-import { AlsParseError, parseAlsFile, type AlsPreview } from '../features/upload/alsPreview';
+import {
+  AlsParseError,
+  alsPreviewFromProject,
+  parseAlsProjectFile,
+  type AlsPreview,
+  type AlsProjectJson,
+} from '../features/upload/alsPreview';
 import f from '../styles/forms.module.css';
 import { buildConfirmPayload } from './stems-upload-helpers';
 import {
@@ -113,10 +119,15 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
   const [songChoice, setSongChoice] = useState<string>(NEW_SONG);
   const [newSongName, setNewSongName] = useState('');
   const [als, setAls] = useState<File | null>(null);
-  // Client-side .als preview ("we understand your file" trust moment).
+  // Client-side .als parse ("we understand your file" trust moment) — the full
+  // project map is POSTed with the upload (project awareness); the preview panel
+  // is derived from it (single parse).
   const [alsPreview, setAlsPreview] = useState<AlsPreview | null>(null);
+  const [alsProject, setAlsProject] = useState<AlsProjectJson | null>(null);
   const [alsParsing, setAlsParsing] = useState(false);
   const [alsPreviewError, setAlsPreviewError] = useState<string | null>(null);
+  // "Advanced" disclosure for the de-emphasized stems zone (closed by default).
+  const [showStems, setShowStems] = useState(false);
   const [refMode, setRefMode] = useState<'upload' | 'library'>('upload');
   const [pickedReferenceId, setPickedReferenceId] = useState('');
   const [refFile, setRefFile] = useState<File | null>(null);
@@ -171,17 +182,21 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
   useEffect(() => {
     if (!als) {
       setAlsPreview(null);
+      setAlsProject(null);
       setAlsPreviewError(null);
       setAlsParsing(false);
       return;
     }
     let cancelled = false;
     setAlsPreview(null);
+    setAlsProject(null);
     setAlsPreviewError(null);
     setAlsParsing(true);
-    parseAlsFile(als)
-      .then((preview) => {
-        if (!cancelled) setAlsPreview(preview);
+    parseAlsProjectFile(als)
+      .then((project) => {
+        if (cancelled) return;
+        setAlsProject(project);
+        setAlsPreview(alsPreviewFromProject(project));
       })
       .catch((err) => {
         if (cancelled) return;
@@ -211,8 +226,10 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
     setMixDrag(false);
     setAls(null);
     setAlsPreview(null);
+    setAlsProject(null);
     setAlsPreviewError(null);
     setAlsParsing(false);
+    setShowStems(false);
     setRefMode('upload');
     setPickedReferenceId('');
     resolvedRefIdRef.current = '';
@@ -370,12 +387,15 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
       setVersionId(vid);
       setSongIdState(mixRes.songId);
 
-      // 2. .als — attach only.
+      // 2. .als — attach only. Ship the client-parsed project map so the app
+      //    has saved "project awareness" (track/device map) alongside the
+      //    analysis. The worker's phase8 re-parse stays authoritative.
       if (als) {
         setStatus('Attaching project…');
         const alsForm = new FormData();
         alsForm.append('file', als, als.name);
         alsForm.append('analyze', 'false');
+        if (alsProject) alsForm.append('project_json', JSON.stringify(alsProject));
         await fetcher<AlsUploadResponse>({
           url: `/versions/${vid}/als`,
           method: 'POST',
@@ -673,77 +693,18 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                     />
                   )}
 
-                  {/* ── Optional: Stems ── */}
-                  <div className={s.optionGroup}>
+                  {/* ── Encouraged: Ableton project (project-aware analysis) ── */}
+                  <div className={`${s.optionGroup} ${s.zoneRecommended}`}>
                     <div className={s.optionHead}>
-                      <p className={s.subhead}>Stems</p>
-                      <span className={s.benefitChip}>Per-stem balance & clash detection</span>
+                      <p className={s.subhead}>
+                        Ableton project <span className={s.recommendedTag}>Recommended</span>
+                      </p>
+                      <span className={s.benefitChip}>Track &amp; device-specific insights</span>
                     </div>
-                    <label
-                      className={`${s.dropZone} ${dragActive ? s.dropZoneActive : ''}`}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        setDragActive(true);
-                      }}
-                      onDragLeave={() => setDragActive(false)}
-                      onDrop={onStemDrop}
-                    >
-                      <span>Drop stems here, or click to choose</span>
-                      <span className={s.dropHint}>WAV / FLAC · up to {MAX_STEMS} files</span>
-                      <input
-                        type="file"
-                        multiple
-                        accept=".wav,.flac,audio/*"
-                        onChange={(e) => addStemFiles(e.target.files)}
-                        style={{ display: 'none' }}
-                      />
-                    </label>
-                  </div>
-                  {stemRows.length > 0 && (
-                    <div className={s.stemTable}>
-                      {stemRows.map((r) => (
-                        <div key={r.localId} className={s.stemItem}>
-                          <button
-                            type="button"
-                            className={s.playBtn}
-                            onClick={() => togglePlay(r)}
-                            aria-label="Preview stem"
-                          >
-                            {playingId === r.localId ? '❚❚' : '▶'}
-                          </button>
-                          <span className={s.stemName} title={r.file.name}>
-                            {r.file.name}
-                          </span>
-                          <span className={s.stemMeta}>ready</span>
-                          <button
-                            type="button"
-                            className={s.removeBtn}
-                            onClick={() => removeRow(r.localId)}
-                            aria-label="Remove stem"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {stemRows.length > 0 && (
-                    <label className={s.modeRow}>
-                      <input
-                        type="checkbox"
-                        checked={reviewStems}
-                        onChange={(e) => setReviewStems(e.target.checked)}
-                      />
-                      Review stem roles before analyzing
-                    </label>
-                  )}
-
-                  {/* ── Optional: Ableton project ── */}
-                  <div className={s.optionGroup}>
-                    <div className={s.optionHead}>
-                      <p className={s.subhead}>Ableton project</p>
-                      <span className={s.benefitChip}>Arrangement & track-name insights</span>
-                    </div>
+                    <p className={s.zoneLead}>
+                      Drop your <b>.als</b> and SPECTR reads your tracks, devices, tempo and
+                      arrangement — so feedback is tied to your actual project, not just the bounce.
+                    </p>
                     {als ? (
                       <div className={s.fileChip}>
                         <span className={s.stemName} title={als.name}>
@@ -760,7 +721,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                       </div>
                     ) : (
                       <label
-                        className={s.dropZone}
+                        className={`${s.dropZone} ${s.dropZoneAccent}`}
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={onAlsDrop}
                       >
@@ -892,6 +853,87 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                       </label>
                     </>
                   )}
+
+                  {/* ── Advanced (de-emphasized): Stems ── */}
+                  <div className={s.advanced}>
+                    <button
+                      type="button"
+                      className={s.advancedToggle}
+                      aria-expanded={showStems}
+                      onClick={() => setShowStems((v) => !v)}
+                    >
+                      <span className={s.advancedChevron} aria-hidden>
+                        {showStems ? '▾' : '▸'}
+                      </span>
+                      Advanced: add stems
+                      <span className={s.advancedHint}>
+                        {stemRows.length > 0
+                          ? `${stemRows.length} added`
+                          : 'optional · per-stem balance & clash'}
+                      </span>
+                    </button>
+                    {showStems && (
+                      <div className={s.advancedBody}>
+                        <label
+                          className={`${s.dropZone} ${dragActive ? s.dropZoneActive : ''}`}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            setDragActive(true);
+                          }}
+                          onDragLeave={() => setDragActive(false)}
+                          onDrop={onStemDrop}
+                        >
+                          <span>Drop stems here, or click to choose</span>
+                          <span className={s.dropHint}>WAV / FLAC · up to {MAX_STEMS} files</span>
+                          <input
+                            type="file"
+                            multiple
+                            accept=".wav,.flac,audio/*"
+                            onChange={(e) => addStemFiles(e.target.files)}
+                            style={{ display: 'none' }}
+                          />
+                        </label>
+                        {stemRows.length > 0 && (
+                          <div className={s.stemTable}>
+                            {stemRows.map((r) => (
+                              <div key={r.localId} className={s.stemItem}>
+                                <button
+                                  type="button"
+                                  className={s.playBtn}
+                                  onClick={() => togglePlay(r)}
+                                  aria-label="Preview stem"
+                                >
+                                  {playingId === r.localId ? '❚❚' : '▶'}
+                                </button>
+                                <span className={s.stemName} title={r.file.name}>
+                                  {r.file.name}
+                                </span>
+                                <span className={s.stemMeta}>ready</span>
+                                <button
+                                  type="button"
+                                  className={s.removeBtn}
+                                  onClick={() => removeRow(r.localId)}
+                                  aria-label="Remove stem"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {stemRows.length > 0 && (
+                          <label className={s.modeRow}>
+                            <input
+                              type="checkbox"
+                              checked={reviewStems}
+                              onChange={(e) => setReviewStems(e.target.checked)}
+                            />
+                            Review stem roles before analyzing
+                          </label>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </>
               )}
             </div>

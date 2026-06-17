@@ -624,10 +624,15 @@ public static class VersionEndpoints
     //
     // Single .als file. Persists to `song_versions.als_file_path` and kicks
     // off a re-analysis so phase 8 (ALS) populates project-health data.
+    // Cap the client-supplied project JSON so an oversized/abusive payload can't
+    // bloat the row. The frontend caps tracks/devices too; this is the backstop.
+    private const int MaxProjectJsonBytes = 512 * 1024;
+
     private static async Task<IResult> UploadAls(
         Guid versionId,
         [FromForm] IFormFile file,
         [FromForm(Name = "analyze")] bool? analyze,
+        [FromForm(Name = "project_json")] string? projectJson,
         ClaimsPrincipal currentUser,
         AppDbContext db,
         IFileStorage storage,
@@ -641,6 +646,27 @@ public static class VersionEndpoints
         var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
         if (ext != ".als" && ext != ".gz")
             return Results.BadRequest(new { error = ".als (or gzip-compressed) file required." });
+
+        // Validate the optional project map: size-bounded + must parse as a JSON
+        // object. It's client-supplied metadata (project awareness), not trusted
+        // for analysis — the worker's phase8 re-parse stays authoritative.
+        string? normalizedProjectJson = null;
+        if (!string.IsNullOrWhiteSpace(projectJson))
+        {
+            if (System.Text.Encoding.UTF8.GetByteCount(projectJson) > MaxProjectJsonBytes)
+                return Results.BadRequest(new { error = "Project metadata is too large." });
+            try
+            {
+                using var probe = JsonDocument.Parse(projectJson);
+                if (probe.RootElement.ValueKind != JsonValueKind.Object)
+                    return Results.BadRequest(new { error = "project_json must be a JSON object." });
+            }
+            catch (JsonException)
+            {
+                return Results.BadRequest(new { error = "project_json is not valid JSON." });
+            }
+            normalizedProjectJson = projectJson;
+        }
 
         var userId = currentUser.UserId();
         // MUST be a tracked query: `db.Songs.AsNoTracking()` in the join would make
@@ -659,6 +685,7 @@ public static class VersionEndpoints
         }
 
         version.AlsFilePath = key;
+        if (normalizedProjectJson is not null) version.AlsProjectJson = normalizedProjectJson;
         version.UpdatedAt = DateTimeOffset.UtcNow;
 
         // analyze defaults to true (re-run pipeline so phase 8 picks up the .als).

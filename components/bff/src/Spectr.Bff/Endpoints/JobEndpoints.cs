@@ -244,6 +244,26 @@ public static class JobEndpoints
         using var doc = JsonDocument.Parse(row.FinalJson);
         var finalJson = doc.RootElement.Clone();
 
+        // Stored "project awareness" map (client-parsed .als), surfaced for the
+        // results Project view. Looked up off the analysis's version.
+        JsonElement? alsProject = null;
+        if (row.VersionId is Guid vId)
+        {
+            var projectRaw = await db.SongVersions.AsNoTracking()
+                .Where(v => v.Id == vId)
+                .Select(v => v.AlsProjectJson)
+                .FirstOrDefaultAsync(ct);
+            if (!string.IsNullOrEmpty(projectRaw))
+            {
+                try
+                {
+                    using var projDoc = JsonDocument.Parse(projectRaw);
+                    alsProject = projDoc.RootElement.Clone();
+                }
+                catch (JsonException) { /* corrupt stored JSON — omit, don't 500 */ }
+            }
+        }
+
         return Results.Ok(new JobResultsDto(
             row.JobId,
             row.Id,
@@ -251,6 +271,7 @@ public static class JobEndpoints
             row.SongId,
             row.SongName,
             finalJson,
-            row.ShareToken));
+            row.ShareToken,
+            alsProject));
     }
 }

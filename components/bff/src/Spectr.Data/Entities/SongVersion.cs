@@ -30,6 +30,12 @@ public sealed class SongVersion
     [Column("als_file_path"), MaxLength(500)]
     public string? AlsFilePath { get; set; }
 
+    // Client-parsed Ableton project map (track/device awareness) shipped with the
+    // .als upload. Stored verbatim; the worker's phase8 re-parse stays authoritative
+    // for analysis. Shape: see frontend AlsProjectJson (DECISIONS.md D6).
+    [Column("als_project_json", TypeName = "jsonb")]
+    public string? AlsProjectJson { get; set; }
+
     [Column("stem_paths_raw", TypeName = "jsonb")]
     public string? StemPathsRaw { get; set; }
 

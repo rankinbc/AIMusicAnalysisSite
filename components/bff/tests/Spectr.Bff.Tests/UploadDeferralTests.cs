@@ -119,6 +119,54 @@ public sealed class UploadDeferralTests(WebApplicationFactory<Program> factory)
         Assert.Equal(0, await JobCount(version.VersionId));
     }
 
+    [Fact]
+    public async Task UploadAls_WithProjectJson_PersistsAlsProjectColumn()
+    {
+        if (!await PostgresReachable()) { return; }
+
+        var (client, _) = NewClient();
+        await Authenticate(client);
+
+        using var mix = MixForm(analyze: false);
+        var version = (await (await client.PostAsync("/api/versions/", mix))
+            .Content.ReadFromJsonAsync<UploadResponse>())!;
+
+        const string projectJson =
+            "{\"schemaVersion\":1,\"source\":\"client-als-preview\",\"tempo\":128," +
+            "\"tracks\":[{\"index\":0,\"name\":\"Kick\",\"type\":\"audio\",\"color\":13,\"devices\":[\"EQ Eight\"]}]}";
+        using var alsForm = AlsForm(analyze: false);
+        alsForm.Add(new StringContent(projectJson), "project_json");
+        var resp = await client.PostAsync($"/api/versions/{version.VersionId}/als", alsForm);
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+        var stored = await AlsProjectColumn(version.VersionId);
+        Assert.NotNull(stored);
+        using var doc = System.Text.Json.JsonDocument.Parse(stored!);
+        Assert.Equal(128, doc.RootElement.GetProperty("tempo").GetInt32());
+        Assert.Equal("Kick", doc.RootElement.GetProperty("tracks")[0].GetProperty("name").GetString());
+    }
+
+    [Fact]
+    public async Task UploadAls_InvalidProjectJson_Returns400()
+    {
+        if (!await PostgresReachable()) { return; }
+
+        var (client, _) = NewClient();
+        await Authenticate(client);
+
+        using var mix = MixForm(analyze: false);
+        var version = (await (await client.PostAsync("/api/versions/", mix))
+            .Content.ReadFromJsonAsync<UploadResponse>())!;
+
+        using var alsForm = AlsForm(analyze: false);
+        alsForm.Add(new StringContent("not-json"), "project_json");
+        var resp = await client.PostAsync($"/api/versions/{version.VersionId}/als", alsForm);
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+
+        // The .als file write happens after validation, so the column stays null.
+        Assert.Null(await AlsProjectColumn(version.VersionId));
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private static async Task Authenticate(HttpClient client)
@@ -159,6 +207,16 @@ public sealed class UploadDeferralTests(WebApplicationFactory<Program> factory)
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         return await db.AnalysisJobs.CountAsync(j => j.VersionId == versionId);
+    }
+
+    private async Task<string?> AlsProjectColumn(Guid versionId)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        return await db.SongVersions
+            .Where(v => v.Id == versionId)
+            .Select(v => v.AlsProjectJson)
+            .FirstOrDefaultAsync();
     }
 
     private async Task<bool> PostgresReachable()

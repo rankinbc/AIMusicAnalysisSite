@@ -21,6 +21,7 @@ import {
 import { AnalysisCompleteModal } from './AnalysisCompleteModal';
 import { AnalysisTab } from './AnalysisTab';
 import { FilesTab } from './FilesTab';
+import { ProjectTab } from './ProjectTab';
 import { GamePlan } from './GamePlan';
 import { buildMoves } from './move-model';
 import { ResultsTabs, type ResultsTabKey } from './ResultsTabs';
@@ -48,6 +49,11 @@ export function ReportView({ results, songId, tab, onTabChange }: ReportViewProp
   const phase9 = pickPhaseData<Phase9Data>(fj, 9);
 
   const trackName = results.songName ?? 'Untitled';
+
+  // Stored "project awareness" map (client-parsed .als). Drives the Project tab,
+  // which only appears when a project was uploaded.
+  const alsProject = results.alsProject ?? null;
+  const hasProject = Boolean(alsProject);
 
   // Verdicts are the AI-Move source + CoachChat grounding. Shared query cache
   // with GamePlan/VerdictsPanel (keyed by jobId) — single fetch.
@@ -156,6 +162,8 @@ export function ReportView({ results, songId, tab, onTabChange }: ReportViewProp
         moveCount={moves.length}
         phasesDone={phasesDone}
         phasesTotal={phasesTotal}
+        hasProject={hasProject}
+        projectTrackCount={alsProject?.trackCount ?? 0}
         onGamePlan={() => onTabChange('actions')}
       />
 
@@ -193,6 +201,10 @@ export function ReportView({ results, songId, tab, onTabChange }: ReportViewProp
             onReanalyze={handleReanalyze}
             reanalyzing={reanalyze.isPending}
           />
+        )}
+        {tab === 'project' && alsProject && <ProjectTab project={alsProject} />}
+        {tab === 'project' && !alsProject && (
+          <div className={s.noVersion}>No Ableton project was uploaded with this analysis.</div>
         )}
         {tab === 'files' && results.versionId && (
           <FilesTab

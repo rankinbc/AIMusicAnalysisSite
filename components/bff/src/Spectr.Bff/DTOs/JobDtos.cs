@@ -22,7 +22,11 @@ public sealed record JobResultsDto(
     Guid? SongId,
     string? SongName,
     JsonElement FinalJson,
-    string? ShareToken);
+    string? ShareToken,
+    // Client-parsed Ableton project map ("project awareness") stored on the
+    // version, surfaced for the results Project view. Null when no .als project
+    // JSON was uploaded. The worker phase8 parse remains authoritative for analysis.
+    JsonElement? AlsProject = null);
 
 // Lightweight summary used by the jobs-list endpoint. Excludes final_json
 // (potentially several MB) so the list query stays fast.
