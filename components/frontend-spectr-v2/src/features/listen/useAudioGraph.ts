@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 
+import { buildInsertChain, type InsertChain } from './audio/composer';
 import {
   EQ_BANDS_DEFAULT,
   COMPRESSOR_DEFAULT,
@@ -119,46 +120,15 @@ export type PitchEvent =
 interface Nodes {
   ctx: AudioContext;
   source: MediaElementAudioSourceNode;
-  eqFilters: BiquadFilterNode[];
-  compressor: DynamicsCompressorNode;
-  makeup: GainNode;
-  // Saturation: parallel dry+wet
-  satIn: GainNode;
-  satDry: GainNode;
-  satWet: GainNode;
-  satShaper: WaveShaperNode;
-  satMix: GainNode;
-  // Width: split → midGain + sideGain via matrixed gain pairs → merge
-  widthSplitter: ChannelSplitterNode;
-  widthMidL: GainNode;
-  widthMidR: GainNode;
-  widthSideL: GainNode;
-  widthSideR: GainNode;
-  widthMerger: ChannelMergerNode;
-  // Master bypass: dry passthrough lane + processed lane
+  chain: InsertChain;
   masterIn: GainNode;
   masterDry: GainNode;
   masterProcessed: GainNode;
   masterOut: GainNode;
-  // Analysis
   analyserMain: AnalyserNode;
   scopeSplitter: ChannelSplitterNode;
   analyserL: AnalyserNode;
   analyserR: AnalyserNode;
-}
-
-// Tanh saturation curve generator. drive 0 → linear y=x. drive 1 → strong
-// tanh(3x) compression. Plotted in 1024 samples between -1..1.
-function makeSatCurve(drive: number): Float32Array {
-  const n = 1024;
-  const out = new Float32Array(n);
-  const k = 1 + drive * 4;
-  const norm = Math.tanh(k);
-  for (let i = 0; i < n; i += 1) {
-    const x = (i / (n - 1)) * 2 - 1;
-    out[i] = Math.tanh(k * x) / norm;
-  }
-  return out;
 }
 
 const FFT_SIZE = 2048;
@@ -207,51 +177,7 @@ export function useAudioGraph(
 
     const source = ctx.createMediaElementSource(el);
 
-    // ── EQ chain ──
-    const eqFilters = EQ_BANDS_DEFAULT.map((band) => {
-      const f = ctx.createBiquadFilter();
-      f.type = 'peaking';
-      f.frequency.value = band.freq;
-      f.Q.value = 1.4;
-      f.gain.value = 0;
-      return f;
-    });
-
-    // ── Compressor + makeup ──
-    const compressor = ctx.createDynamicsCompressor();
-    compressor.threshold.value = COMPRESSOR_DEFAULT.thresholdDb;
-    compressor.ratio.value = COMPRESSOR_DEFAULT.ratio;
-    compressor.attack.value = COMPRESSOR_DEFAULT.attackMs / 1000;
-    compressor.release.value = COMPRESSOR_DEFAULT.releaseMs / 1000;
-    compressor.knee.value = COMPRESSOR_DEFAULT.kneeDb;
-    const makeup = ctx.createGain();
-    makeup.gain.value = 1;
-
-    // ── Saturation (parallel dry+wet) ──
-    const satIn = ctx.createGain();
-    const satDry = ctx.createGain();
-    const satWet = ctx.createGain();
-    const satShaper = ctx.createWaveShaper();
-    satShaper.curve = makeSatCurve(0);
-    satShaper.oversample = '2x';
-    const satMix = ctx.createGain();
-    satDry.gain.value = 1;
-    satWet.gain.value = 0;
-
-    // ── Width (M/S matrix using channel-level gains) ──
-    // ChannelSplitter → 4 gain nodes form L→M, R→M, L→S, R→S contributions.
-    // Then 4 more gains form M→L, M→R, S→L, -S→R contributions, summed via
-    // ChannelMerger. width param scales the side contribution.
-    const widthSplitter = ctx.createChannelSplitter(2);
-    const widthMidL = ctx.createGain();
-    const widthMidR = ctx.createGain();
-    const widthSideL = ctx.createGain();
-    const widthSideR = ctx.createGain();
-    const widthMerger = ctx.createChannelMerger(2);
-    widthMidL.gain.value = 0.5;
-    widthMidR.gain.value = 0.5;
-    widthSideL.gain.value = 0.5;
-    widthSideR.gain.value = -0.5;
+    const chain = buildInsertChain(ctx);
 
     // ── Master bypass: dry passthrough lane vs processed lane ──
     const masterIn = ctx.createGain();
@@ -274,54 +200,14 @@ export function useAudioGraph(
     analyserR.smoothingTimeConstant = 0;
 
     // ── Wire everything ──
-    // source → masterIn → (dry passthrough) → masterOut
-    //                  → (eq chain → comp → makeup → satIn → satMix
-    //                     → widthMerger via matrix → masterProcessed) → masterOut
-    // masterOut → analyserMain → scopeSplitter → analyserL/R → destination
     source.connect(masterIn);
 
-    // Dry passthrough lane
+    // Dry passthrough lane (master bypass) — unchanged.
     masterIn.connect(masterDry).connect(masterOut);
+    // Processed lane now runs through the composed insert chain.
+    masterIn.connect(chain.input);
+    chain.output.connect(masterProcessed).connect(masterOut);
 
-    // Processed lane
-    let head: AudioNode = masterIn;
-    for (const f of eqFilters) {
-      head.connect(f);
-      head = f;
-    }
-    head.connect(compressor).connect(makeup).connect(satIn);
-
-    // Sat parallel split
-    satIn.connect(satDry).connect(satMix);
-    satIn.connect(satShaper).connect(satWet).connect(satMix);
-
-    // Width M/S matrix.
-    //   merger.input(0) [L_out] = L_in * widthMidL.gain  +  R_in * widthSideL.gain
-    //   merger.input(1) [R_out] = L_in * widthMidR.gain  +  R_in * widthSideR.gain
-    //
-    // At width=1 (identity): widthMidL=1, widthSideL=0, widthMidR=0, widthSideR=1
-    // At width=0 (mono):     all = 0.5
-    // At width=2 (wide):     widthMidL=1.5, widthSideL=-0.5, widthMidR=-0.5, widthSideR=1.5
-    //
-    // applyWidth() owns the formulas; here we just wire the topology and set
-    // identity defaults.
-    satMix.connect(widthSplitter);
-    widthSplitter.connect(widthMidL, 0); // L_in → widthMidL → merger L (output 0)
-    widthSplitter.connect(widthSideL, 1); // R_in → widthSideL → merger L (output 0)
-    widthSplitter.connect(widthMidR, 0); // L_in → widthMidR → merger R (output 1)
-    widthSplitter.connect(widthSideR, 1); // R_in → widthSideR → merger R (output 1)
-    widthMidL.connect(widthMerger, 0, 0);
-    widthSideL.connect(widthMerger, 0, 0);
-    widthMidR.connect(widthMerger, 0, 1);
-    widthSideR.connect(widthMerger, 0, 1);
-    widthMidL.gain.value = 1;
-    widthMidR.gain.value = 0;
-    widthSideL.gain.value = 0;
-    widthSideR.gain.value = 1;
-
-    widthMerger.connect(masterProcessed).connect(masterOut);
-
-    // Master out → analyser chain → destination
     masterOut.connect(analyserMain);
     analyserMain.connect(scopeSplitter);
     scopeSplitter.connect(analyserL, 0);
@@ -331,20 +217,7 @@ export function useAudioGraph(
     return {
       ctx,
       source,
-      eqFilters,
-      compressor,
-      makeup,
-      satIn,
-      satDry,
-      satWet,
-      satShaper,
-      satMix,
-      widthSplitter,
-      widthMidL,
-      widthMidR,
-      widthSideL,
-      widthSideR,
-      widthMerger,
+      chain,
       masterIn,
       masterDry,
       masterProcessed,
@@ -360,46 +233,25 @@ export function useAudioGraph(
   const applyWidth = () => {
     const nodes = nodesRef.current;
     if (!nodes) return;
-    const w = widthStateRef.current.enabled ? widthStateRef.current.width : 1;
-    nodes.widthMidL.gain.value = 0.5 + 0.5 * w;
-    nodes.widthMidR.gain.value = 0.5 - 0.5 * w;
-    nodes.widthSideL.gain.value = 0.5 - 0.5 * w;
-    nodes.widthSideR.gain.value = 0.5 + 0.5 * w;
+    nodes.chain.units.ms.applyParams(widthStateRef.current);
   };
 
   const applyCompressor = () => {
     const nodes = nodesRef.current;
     if (!nodes) return;
-    const c = compStateRef.current;
-    const effective: CompressorState = c.enabled
-      ? c
-      : { ...c, thresholdDb: 0, ratio: 1, makeupDb: 0 };
-    nodes.compressor.threshold.value = effective.thresholdDb;
-    nodes.compressor.ratio.value = effective.ratio;
-    nodes.compressor.attack.value = effective.attackMs / 1000;
-    nodes.compressor.release.value = effective.releaseMs / 1000;
-    nodes.compressor.knee.value = effective.kneeDb;
-    nodes.makeup.gain.value = Math.pow(10, effective.makeupDb / 20);
+    nodes.chain.units.comp.applyParams(compStateRef.current);
   };
 
   const applySaturation = () => {
     const nodes = nodesRef.current;
     if (!nodes) return;
-    const s = satStateRef.current;
-    const drive = s.enabled ? s.drive : 0;
-    const wet = s.enabled ? s.mix : 0;
-    nodes.satShaper.curve = makeSatCurve(drive);
-    nodes.satDry.gain.value = 1 - wet;
-    nodes.satWet.gain.value = wet;
+    nodes.chain.units.sat.applyParams(satStateRef.current);
   };
 
   const applyEq = () => {
     const nodes = nodesRef.current;
     if (!nodes) return;
-    const bands = eqStateRef.current;
-    for (let i = 0; i < nodes.eqFilters.length; i += 1) {
-      nodes.eqFilters[i].gain.value = bands[i]?.gainDb ?? 0;
-    }
+    nodes.chain.units.eq.applyParams({ bands: eqStateRef.current, enabled: true });
   };
 
   const applyMasterBypass = () => {
@@ -439,6 +291,7 @@ export function useAudioGraph(
       } catch {
         /* already disconnected */
       }
+      nodes.chain.dispose();
       void nodes.ctx.close();
       nodesRef.current = null;
     }
