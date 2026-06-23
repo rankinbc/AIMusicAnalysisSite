@@ -1,5 +1,26 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 
+import {
+  EQ_BANDS_DEFAULT,
+  COMPRESSOR_DEFAULT,
+  SATURATION_DEFAULT,
+  WIDTH_DEFAULT,
+  type EqBand,
+  type CompressorState,
+  type SaturationState,
+  type WidthState,
+} from './audio/state';
+
+// Re-export for existing consumers (PreviewTools, route) that import these from
+// useAudioGraph. Single source of truth now lives in audio/state.ts.
+export {
+  EQ_BANDS_DEFAULT,
+  COMPRESSOR_DEFAULT,
+  SATURATION_DEFAULT,
+  WIDTH_DEFAULT,
+} from './audio/state';
+export type { EqBand, CompressorState, SaturationState, WidthState } from './audio/state';
+
 // Web Audio chain that wraps the page's single <audio> element:
 //   source → eq(8 biquads) → compressor → makeupGain → satWet/satDry mix →
 //   channelSplitter → (mid/side matrix via gain ops) → channelMerger →
@@ -15,32 +36,6 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 // AudioContext is created LAZILY on first call to `ensureContext()` because
 // browsers block context creation outside a user gesture (Chrome/Safari).
 // Call ensureContext() from a click handler before doing anything else.
-
-export interface EqBand {
-  freq: number;
-  gainDb: number;
-}
-
-export interface CompressorState {
-  thresholdDb: number;
-  ratio: number;
-  attackMs: number;
-  releaseMs: number;
-  kneeDb: number;
-  makeupDb: number;
-  enabled: boolean;
-}
-
-export interface SaturationState {
-  drive: number; // 0..1
-  mix: number; // 0..1 dry→wet
-  enabled: boolean;
-}
-
-export interface WidthState {
-  width: number; // 0..2 (1 = identity, 0 = mono, 2 = exaggerated)
-  enabled: boolean;
-}
 
 export interface AudioGraphHandle {
   ensureContext: () => AudioContext;
@@ -96,38 +91,6 @@ export interface AudioFrame {
   scopeL: Float32Array;
   scopeR: Float32Array;
 }
-
-export const EQ_BANDS_DEFAULT: ReadonlyArray<EqBand> = [
-  { freq: 60, gainDb: 0 },
-  { freq: 170, gainDb: 0 },
-  { freq: 350, gainDb: 0 },
-  { freq: 700, gainDb: 0 },
-  { freq: 1400, gainDb: 0 },
-  { freq: 3500, gainDb: 0 },
-  { freq: 7000, gainDb: 0 },
-  { freq: 14000, gainDb: 0 },
-];
-
-export const COMPRESSOR_DEFAULT: CompressorState = {
-  thresholdDb: 0,
-  ratio: 1,
-  attackMs: 3,
-  releaseMs: 250,
-  kneeDb: 30,
-  makeupDb: 0,
-  enabled: false,
-};
-
-export const SATURATION_DEFAULT: SaturationState = {
-  drive: 0,
-  mix: 0,
-  enabled: false,
-};
-
-export const WIDTH_DEFAULT: WidthState = {
-  width: 1,
-  enabled: false,
-};
 
 export interface PitchState {
   semitones: number; // -12..12
