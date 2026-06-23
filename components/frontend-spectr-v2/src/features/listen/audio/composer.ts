@@ -57,6 +57,10 @@ export function buildInsertChain(ctx: AudioContext): InsertChain {
     units,
     getOrder: () => [...order],
     reorder: (next: EffectId[]) => {
+      // No-op fast path: same order means nothing to rewire — skip the duck.
+      if (next.length === order.length && next.every((id, i) => id === order[i])) {
+        return;
+      }
       if (!isPermutation(next, order)) {
         throw new Error(`reorder: [${next.join(',')}] is not a permutation of [${order.join(',')}]`);
       }
