@@ -840,13 +840,13 @@ Verified by the **full gate suite + a manual Listen-page smoke test** (graph wir
 - Replace the per-node fields on the returned `Nodes` object with `chain`.
 
 **Changes to the `apply*` helpers (lines 396-447):**
-- `applyEq()` → `nodes.chain.units.eq.applyParams({ bands: eqStateRef.current, enabled: eqEnabledRef.current })`.
-- `applyCompressor()` → `nodes.chain.units.comp.applyParams(compStateRef.current)`.
+- `applyEq()` → `nodes.chain.units.eq.applyParams({ bands: eqStateRef.current, enabled: true })`. **Pass `enabled: true` unconditionally.** The EQ unit's `enabled` flag gates the whole EQ (zeroes gains + wet 0), but the ONLY consumer (`PreviewTools.tsx:75`) drives EQ by pre-gating each band gain itself (`graph.setEqBand(i, eqEnabled ? b.gainDb : 0)`) and never calls the graph's `setEqEnabled`. So the gating already lives in `eqStateRef`'s gain values; the unit must apply them as-is and stay in series (wet 1). Routing enable through the unit flag would leave it `false` forever and silently kill EQ.
+- `applyCompressor()` → `nodes.chain.units.comp.applyParams(compStateRef.current)`. (Comp/Sat/Width DO carry `enabled` from the consumer's mirrored state, so their unit-level gating is correct.)
 - `applySaturation()` → `nodes.chain.units.sat.applyParams(satStateRef.current)`.
 - `applyWidth()` → `nodes.chain.units.ms.applyParams(widthStateRef.current)`.
 - `applyMasterBypass()` unchanged.
-- Add `const eqEnabledRef = useRef(false);`. Today `setEqEnabled(false)` zeroes band gains directly; route enable through the unit instead: `setEqEnabled` sets `eqEnabledRef.current = enabled` then calls `applyEq()`. `setEqBand` still mutates `eqStateRef` then calls `applyEq()`. External behavior identical (EQ off ⇒ flat).
-- `resetAll()` additionally sets `eqEnabledRef.current = false`.
+- **Do NOT add an `eqEnabledRef`.** Keep `setEqEnabled`'s existing handle behavior verbatim (when `enabled=false` it zeroes the band gains in `eqStateRef`, then calls `applyEq()`); keep `setEqBand` verbatim (mutates `eqStateRef[index].gainDb`, then `applyEq()`). This preserves the exact current external behavior.
+- `resetAll()` resets `eqStateRef` to `EQ_BANDS_DEFAULT` as today (no `eqEnabledRef` to reset).
 
 **Stays byte-for-byte:** the pitch BufferSource lane, `readFrame`, `ensureContext`, cleanup, the memoized handle shape, and `makeSatCurve` is now imported (or removed if only the unit uses it — the inline `makeSatCurve` definition in `useAudioGraph` can be deleted since the saturator unit owns it via `dsp/curves`).
 
