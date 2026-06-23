@@ -1,0 +1,32 @@
+/* Story 2.9 — amber dunning banner (UX-DR33). Recoverable state, so amber
+   (--orange), never the critical red. */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 0.75rem);
+  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
+  border: 1px solid var(--orange);
+  background: var(--orange-dim);
+  border-radius: var(--radius, 10px);
+  color: var(--text);
+}
+
+.dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--orange);
+}
+
+.message {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.3;
+}
+
+/* Keep the CTA from shrinking on narrow viewports. */
+.banner :global(.btn) {
+  flex: 0 0 auto;
+}

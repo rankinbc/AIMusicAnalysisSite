@@ -5,13 +5,11 @@ import { toast } from 'sonner';
 
 import { extractApiMessage } from '../../api/error-utils';
 import { ApiError, fetcher } from '../../api/fetcher';
-import type {
-  BillingSummaryResponse,
-  CreatePortalSessionResponse,
-} from '../../api/types';
+import type { BillingSummaryResponse } from '../../api/types';
 import { CancelDialog } from '../../features/billing/CancelDialog';
+import { DunningBanner } from '../../features/billing/DunningBanner';
 import { formatCents } from '../../features/billing/format-price';
-import { isStripeHostedUrl } from '../../features/billing/stripe-url';
+import { useBillingPortal } from '../../features/billing/useBillingPortal';
 import { Pill } from '../../ui/Pill';
 import s from './billingPage.module.css';
 
@@ -35,6 +33,7 @@ function formatDate(iso: string): string {
 
 function BillingPage() {
   const qc = useQueryClient();
+  const portal = useBillingPortal();
   const { data, isLoading } = useQuery<BillingSummaryResponse>({
     queryKey: ['billing', 'me'],
     queryFn: () =>
@@ -64,6 +63,15 @@ function BillingPage() {
         <span className="label">Billing</span>
         <h1 className={s.title}>Your subscription</h1>
       </header>
+
+      {/* Story 2.9 — dunning notice sits above the plan card so the fix
+          action (the portal) is right next to the warning. Renders null
+          unless status === 'past_due'. */}
+      <DunningBanner
+        summary={data}
+        onUpdatePayment={portal.open}
+        pending={portal.pending}
+      />
 
       {data.tier === 'free' && <FreeCard />}
       {data.tier === 'pro' && !data.cancelAtPeriodEnd && (
@@ -113,14 +121,17 @@ interface ActivePlanCardProps {
 
 function ActivePlanCard({ summary, onMutated }: ActivePlanCardProps) {
   const [cancelOpen, setCancelOpen] = useState(false);
-  const [pendingAction, setPendingAction] =
-    useState<'cadence' | 'portal' | null>(null);
+  const [pendingAction, setPendingAction] = useState<'cadence' | null>(null);
+  // Reuse the shared portal opener (same flow as DunningBanner) instead of an
+  // inline copy — one place owns the host-validation + redirect.
+  const portal = useBillingPortal();
+  const busy = pendingAction !== null || portal.pending;
 
   const otherCadence =
     summary.cadence === 'monthly' ? 'annual' : 'monthly';
 
   const handleChangeCadence = async () => {
-    if (pendingAction !== null) return;
+    if (busy) return;
     setPendingAction('cadence');
     try {
       const next = await fetcher<BillingSummaryResponse>({
@@ -134,30 +145,6 @@ function ActivePlanCard({ summary, onMutated }: ActivePlanCardProps) {
       toast.error(
         err instanceof ApiError
           ? extractApiMessage(err.body) ?? 'Could not change cadence.'
-          : 'Network error.',
-      );
-    } finally {
-      setPendingAction(null);
-    }
-  };
-
-  const handlePortal = async () => {
-    if (pendingAction !== null) return;
-    setPendingAction('portal');
-    try {
-      const session = await fetcher<CreatePortalSessionResponse>({
-        url: '/billing/portal',
-        method: 'POST',
-      });
-      if (!isStripeHostedUrl(session.url, 'portal')) {
-        toast.error('Refusing to redirect: URL is not a Stripe billing host.');
-        return;
-      }
-      window.location.assign(session.url);
-    } catch (err) {
-      toast.error(
-        err instanceof ApiError
-          ? extractApiMessage(err.body) ?? 'Could not open the portal.'
           : 'Network error.',
       );
     } finally {
@@ -198,7 +185,7 @@ function ActivePlanCard({ summary, onMutated }: ActivePlanCardProps) {
             type="button"
             className="btn"
             onClick={handleChangeCadence}
-            disabled={pendingAction !== null || summary.cadence === 'unknown'}
+            disabled={busy || summary.cadence === 'unknown'}
           >
             {pendingAction === 'cadence'
               ? 'Switching…'
@@ -207,18 +194,16 @@ function ActivePlanCard({ summary, onMutated }: ActivePlanCardProps) {
           <button
             type="button"
             className="btn"
-            onClick={handlePortal}
-            disabled={pendingAction !== null}
+            onClick={() => void portal.open()}
+            disabled={busy}
           >
-            {pendingAction === 'portal'
-              ? 'Opening…'
-              : 'Manage payment & invoices →'}
+            {portal.pending ? 'Opening…' : 'Manage payment & invoices →'}
           </button>
           <button
             type="button"
             className={`btn ${s.cancelBtn}`}
             onClick={() => setCancelOpen(true)}
-            disabled={pendingAction !== null}
+            disabled={busy}
           >
             Cancel
           </button>

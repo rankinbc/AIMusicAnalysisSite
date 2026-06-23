@@ -9,8 +9,11 @@ import {
 } from '@tanstack/react-router';
 
 import { useAuth } from '../auth/AuthContext';
+import { useEntitlements } from '../api/hooks';
+import { AppDunningNotice } from '../features/billing/AppDunningNotice';
 import { BrandMark } from '../ui/BrandMark';
 import { MiniPlayer } from '../ui/MiniPlayer';
+import { UsageMeter } from '../components/UsageMeter';
 import s from './_app/_appLayout.module.css';
 
 // Authenticated layout. beforeLoad guards on auth — anonymous users get
@@ -31,6 +34,9 @@ export const Route = createFileRoute('/_app')({
 
 function AppLayout() {
   const { user, isLoading, logout } = useAuth();
+  // Story 2.8 — passive analyses meter in the account menu (UX-DR31). Cached
+  // (staleTime 30s); fetch is cheap and shared across product routes.
+  const { data: entitlements } = useEntitlements();
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -161,6 +167,28 @@ function AppLayout() {
                 >
                   Usage
                 </Link>
+                {entitlements && (
+                  <div className={s.avatarMenuMeter}>
+                    {/* Credits is balance-funded, not unlimited — show the
+                        remaining balance instead of the false "Unlimited". */}
+                    {entitlements.tier === 'credits' ? (
+                      <UsageMeter
+                        variant="nav"
+                        label="Credits"
+                        used={entitlements.analysesUsed}
+                        limit={null}
+                        valueText={`${entitlements.analysesRemaining ?? 0} left`}
+                      />
+                    ) : (
+                      <UsageMeter
+                        variant="nav"
+                        label="Analyses"
+                        used={entitlements.analysesUsed}
+                        limit={entitlements.analysesLimit}
+                      />
+                    )}
+                  </div>
+                )}
                 <Link
                   to="/billing"
                   className={s.avatarMenuItem}
@@ -177,6 +205,12 @@ function AppLayout() {
           </div>
         </div>
       </header>
+      {/* Story 2.9 — app-wide dunning notice. Suppressed on /billing, which
+          renders its own DunningBanner next to the fix actions. Renders
+          nothing unless the subscription is past_due. */}
+      {pathname !== '/billing' && (
+        <AppDunningNotice className={s.dunningSlot} />
+      )}
       <main className={s.main}>
         <Outlet />
       </main>

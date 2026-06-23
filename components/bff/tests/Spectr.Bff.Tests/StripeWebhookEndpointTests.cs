@@ -315,6 +315,92 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
         }
     }
 
+    // ── Story 2.9 — dunning retry-date persistence ─────────────────────────
+
+    [Fact]
+    public async Task Webhook_Invoice_Payment_Failed_Stamps_NextPaymentAttempt()
+    {
+        if (!await PostgresReachable()) { return; }
+
+        var factory = BuildConfigured();
+        var client = factory.CreateClient();
+        var userId = await SeedUserWithCustomerIdAsync(factory, "cus_test_001");
+
+        try
+        {
+            // Seed the mirror row first (status active, no retry pending).
+            var createBody = StripeTestUtilities.ReadFixture("subscription_created.json");
+            await PostWebhookAsync(client, createBody,
+                StripeTestUtilities.ComputeSignatureHeader(createBody, StripeTestUtilities.TestWebhookSecret));
+
+            // A failed renewal carries next_payment_attempt — we persist it.
+            var failBody = StripeTestUtilities.ReadFixture("invoice_payment_failed.json");
+            var resp = await PostWebhookAsync(client, failBody,
+                StripeTestUtilities.ComputeSignatureHeader(failBody, StripeTestUtilities.TestWebhookSecret));
+            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var sub = await db.Subscriptions.FirstAsync(s => s.UserId == userId);
+            // 1788393600 = 2026-09-04T00:00:00Z (fixture next_payment_attempt).
+            Assert.Equal(
+                DateTimeOffset.FromUnixTimeSeconds(1788393600),
+                sub.NextPaymentAttempt);
+        }
+        finally
+        {
+            await CleanupAsync(factory, userId, "evt_test_sub_created_001");
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.WebhookEvents
+                .Where(w => w.Id == "evt_test_invoice_failed_001")
+                .ExecuteDeleteAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Webhook_Invoice_Paid_Clears_NextPaymentAttempt()
+    {
+        if (!await PostgresReachable()) { return; }
+
+        var factory = BuildConfigured();
+        var client = factory.CreateClient();
+        var userId = await SeedUserWithCustomerIdAsync(factory, "cus_test_001");
+
+        try
+        {
+            var createBody = StripeTestUtilities.ReadFixture("subscription_created.json");
+            await PostWebhookAsync(client, createBody,
+                StripeTestUtilities.ComputeSignatureHeader(createBody, StripeTestUtilities.TestWebhookSecret));
+
+            // Fail → stamp a retry date.
+            var failBody = StripeTestUtilities.ReadFixture("invoice_payment_failed.json");
+            await PostWebhookAsync(client, failBody,
+                StripeTestUtilities.ComputeSignatureHeader(failBody, StripeTestUtilities.TestWebhookSecret));
+
+            // Pay → recovery clears it (AC #4).
+            var paidBody = StripeTestUtilities.ReadFixture("invoice_paid.json");
+            var resp = await PostWebhookAsync(client, paidBody,
+                StripeTestUtilities.ComputeSignatureHeader(paidBody, StripeTestUtilities.TestWebhookSecret));
+            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var sub = await db.Subscriptions.FirstAsync(s => s.UserId == userId);
+            Assert.Null(sub.NextPaymentAttempt);
+        }
+        finally
+        {
+            await CleanupAsync(factory, userId, "evt_test_sub_created_001");
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.WebhookEvents
+                .Where(w => w.Id == "evt_test_invoice_failed_001"
+                    || w.Id == "evt_test_invoice_paid_001")
+                .ExecuteDeleteAsync();
+        }
+    }
+
     [Fact]
     public async Task Webhook_Unsupported_Event_Type_Is_Recorded_But_Not_Processed()
     {

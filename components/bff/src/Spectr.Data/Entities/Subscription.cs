@@ -48,6 +48,15 @@ public sealed class Subscription
     [Column("cancel_at")]
     public DateTimeOffset? CancelAt { get; set; }
 
+    // Story 2.9 — the Stripe `Invoice.next_payment_attempt` for an open
+    // dunning cycle (the "retrying {day}" date in the amber DunningBanner,
+    // UX-DR33). Set by the invoice.payment_failed webhook; cleared on
+    // invoice.paid or when the subscription returns to active/trialing.
+    // Display-only — entitlement/grace access is gated purely by Status
+    // (past_due keeps Pro), never by this timestamp.
+    [Column("next_payment_attempt")]
+    public DateTimeOffset? NextPaymentAttempt { get; set; }
+
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 

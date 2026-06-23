@@ -105,6 +105,15 @@ public sealed class SubscriptionMirrorService(
             existing.PriceId = priceId;
             existing.CurrentPeriodEnd = periodEnd;
             existing.CancelAt = cancelAt;
+            // Story 2.9 — recovery (AC #4) belt-and-suspenders: a
+            // subscription returning to active/trialing clears any pending
+            // dunning retry date, even if the matching invoice.paid event
+            // wasn't dispatched/matched. Leave it untouched for past_due so
+            // the DunningBanner keeps showing the scheduled retry.
+            if (stripeSub.Status is "active" or "trialing")
+            {
+                existing.NextPaymentAttempt = null;
+            }
             existing.UpdatedAt = DateTimeOffset.UtcNow;
         }
 

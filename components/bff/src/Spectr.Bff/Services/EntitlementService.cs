@@ -107,14 +107,22 @@ public class EntitlementService(
         // 5. Derive tier + entitlements
         if (isPro)
         {
+            // Story 2.8 — pooled monthly coach pool. Single-sourced through
+            // CoachCapService.ResolveProPoolAsync (static, so no DI cycle) so
+            // the usage-page figure can never drift from the send-time gate.
+            var coach = await CoachCapService.ResolveProPoolAsync(
+                db, flagMap, userId, billingPeriod, ct);
             return new EntitlementsDto(
                 AnalysesRemaining: null,
-                CoachRemaining: int.MaxValue,
+                CoachRemaining: Math.Max(0, coach.Limit - coach.Used),
                 StemsEnabled: true,
                 AlsEnabled: true,
                 FullVerdictsEnabled: true,
                 HistoryDepth: null,
-                Tier: "pro");
+                Tier: "pro",
+                Coach: new CoachCapsDto(
+                    coach.Used, coach.Limit, coach.CapReached, coach.Scope, coach.ResetsAt),
+                AnalysesResetsAt: null);
         }
 
         if (balance >= 1)
@@ -126,7 +134,10 @@ public class EntitlementService(
                 AlsEnabled: true,
                 FullVerdictsEnabled: true,
                 HistoryDepth: historyCredits,
-                Tier: "credits");
+                Tier: "credits",
+                Coach: new CoachCapsDto(
+                    0, int.MaxValue, false, CoachCapService.ScopeUnlimited, null),
+                AnalysesResetsAt: null);
         }
 
         // free tier
@@ -140,7 +151,14 @@ public class EntitlementService(
             HistoryDepth: historyFree,
             Tier: "free",
             AnalysesLimit: freeCap,
-            AnalysesUsed: usedThisPeriod);
+            AnalysesUsed: usedThisPeriod,
+            // Per-analysis coach scope: no pooled "used" on the usage page (no
+            // analysis in scope here), so Used=0; the per-analysis gate is still
+            // enforced by CoachCapService at send time.
+            Coach: new CoachCapsDto(
+                0, coachFreeCap, false, CoachCapService.ScopeAnalysis, null),
+            // Free analyses reset on the YYYY-MM billing-period boundary.
+            AnalysesResetsAt: CoachCapService.FirstOfNextMonthUtc());
     }
 
     private static int GetFlag(Dictionary<string, string> flags, string key, int fallback)

@@ -1,4 +1,5 @@
 import { Link, createFileRoute } from '@tanstack/react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
 import { ApiError, fetcher } from '../../api/fetcher';
@@ -29,6 +30,17 @@ export const Route = createFileRoute('/_app/billing/success')({
 
 function BillingSuccessPage() {
   const [state, setState] = useState<'waiting' | 'pro' | 'timeout'>('waiting');
+  const qc = useQueryClient();
+
+  // Story 2.8 / AC3 — a credit-pack purchase lands here too (shared SuccessUrl).
+  // Invalidate the credits balance/ledger + entitlements + honest-math so the
+  // new balance shows inline when the user navigates back to /usage (the
+  // 30s-staleTime credits query would otherwise serve a stale balance).
+  useEffect(() => {
+    void qc.invalidateQueries({ queryKey: ['billing', 'credits'] });
+    void qc.invalidateQueries({ queryKey: ['me', 'entitlements'] });
+    void qc.invalidateQueries({ queryKey: ['me', 'honest-math'] });
+  }, [qc]);
 
   useEffect(() => {
     let elapsed = 0;

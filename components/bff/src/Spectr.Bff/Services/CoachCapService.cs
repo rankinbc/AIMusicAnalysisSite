@@ -27,8 +27,12 @@ public sealed class CoachCapService(AppDbContext db, EntitlementService ents)
     public const string ScopeMonth = "month";
     public const string ScopeUnlimited = "unlimited";
 
-    private const int CoachProMonthlyDefault = 300;
-    private const int CoachFreeFollowupsDefault = 3;
+    // public so EntitlementService (story 2.8) can single-source the same
+    // defaults when it computes the coach pool inline (it must NOT inject
+    // CoachCapService — that would form a DI cycle, since CoachCapService
+    // depends on EntitlementService).
+    public const int CoachProMonthlyDefault = 300;
+    public const int CoachFreeFollowupsDefault = 3;
 
     // Resolve the current cap state for (user, analysis). Pure read.
     public async Task<CoachCapState> ResolveAsync(Guid userId, Guid analysisId, CancellationToken ct)
@@ -38,18 +42,8 @@ public sealed class CoachCapService(AppDbContext db, EntitlementService ents)
         if (ent.Tier == "pro")
         {
             var flags = await ents.GetFlagsAsync(ct);
-            var limit = GetFlag(flags, "coach_pro_monthly", CoachProMonthlyDefault);
             var period = DateTimeOffset.UtcNow.ToString("yyyy-MM");
-            var used = await db.UsageEvents.AsNoTracking()
-                .CountAsync(e => e.UserId == userId
-                    && e.EventType == "coach_message"
-                    && e.BillingPeriod == period, ct);
-            return new CoachCapState(
-                Used: used,
-                Limit: limit,
-                CapReached: used >= limit,
-                Scope: ScopeMonth,
-                ResetsAt: FirstOfNextMonthUtc());
+            return await ResolveProPoolAsync(db, flags, userId, period, ct);
         }
 
         if (ent.Tier == "credits")
@@ -86,9 +80,36 @@ public sealed class CoachCapService(AppDbContext db, EntitlementService ents)
     public CoachCapsDto ToDto(CoachCapState s)
         => new(s.Used, s.Limit, s.CapReached, s.Scope, s.ResetsAt);
 
+    // Single source of the pro pooled-monthly coach count. Both this service's
+    // pre-send gate AND EntitlementService's inline pool (story 2.8) call this
+    // so the two can never drift. Static (takes db) so EntitlementService can
+    // reuse it WITHOUT injecting CoachCapService — that would form a DI cycle
+    // (CoachCapService depends on EntitlementService).
+    public static async Task<CoachCapState> ResolveProPoolAsync(
+        AppDbContext db,
+        Dictionary<string, string> flags,
+        Guid userId,
+        string billingPeriod,
+        CancellationToken ct)
+    {
+        var limit = GetFlag(flags, "coach_pro_monthly", CoachProMonthlyDefault);
+        var used = await db.UsageEvents.AsNoTracking()
+            .CountAsync(e => e.UserId == userId
+                && e.EventType == "coach_message"
+                && e.BillingPeriod == billingPeriod, ct);
+        return new CoachCapState(
+            Used: used,
+            Limit: limit,
+            CapReached: used >= limit,
+            Scope: ScopeMonth,
+            ResetsAt: FirstOfNextMonthUtc());
+    }
+
     // First instant (UTC) of the next calendar month — when a pooled monthly
-    // allowance resets. Matches the YYYY-MM billing-period boundary.
-    private static DateTimeOffset FirstOfNextMonthUtc()
+    // allowance resets. Matches the YYYY-MM billing-period boundary. Public so
+    // EntitlementService (story 2.8) reuses the exact same boundary for both the
+    // coach pool reset and the free-tier analyses reset.
+    public static DateTimeOffset FirstOfNextMonthUtc()
     {
         var now = DateTimeOffset.UtcNow;
         var firstThisMonth = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);

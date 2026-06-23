@@ -18,6 +18,7 @@ public static class MeEndpoints
         g.MapGet("/stats", GetStats);
         g.MapGet("/activity", GetActivity);
         g.MapGet("/entitlements", GetEntitlements);
+        g.MapGet("/honest-math", GetHonestMath);
 
         return app;
     }
@@ -244,6 +245,26 @@ public static class MeEndpoints
         {
             return ErrorEnvelope.Build(503, "entitlements_unavailable",
                 "Entitlement service temporarily unavailable.");
+        }
+    }
+
+    // GET /api/me/honest-math — 90-day credit spend vs Pro-equivalent.
+    // Story 2.8 / FR32 / UX-DR32. Drives the dismissible HonestMathBanner.
+    private static async Task<IResult> GetHonestMath(
+        ClaimsPrincipal currentUser,
+        HonestMathService honestMath,
+        CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        try
+        {
+            var dto = await honestMath.ForAsync(userId, ct);
+            return Results.Ok(dto);
+        }
+        catch (Exception)
+        {
+            return ErrorEnvelope.Build(503, "honest_math_unavailable",
+                "Usage comparison temporarily unavailable.");
         }
     }
 

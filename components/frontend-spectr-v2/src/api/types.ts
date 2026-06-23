@@ -48,6 +48,10 @@ export interface BillingSummaryResponse {
   nextChargeAt: string | null;
   nextChargeCents: number | null;
   currency: string | null;
+  /** Story 2.9 — Stripe retry date (ISO) for an open dunning cycle;
+   *  non-null only when status === 'past_due'. Drives the amber
+   *  DunningBanner "retrying {day}" copy (UX-DR33). */
+  retryAt: string | null;
 }
 
 /** Story 2.2 — POST /api/billing/cancel optional reason. */
@@ -109,6 +113,25 @@ export interface EntitlementsDto {
    *  unlimited (pro/credits). */
   analysesLimit: number | null;
   analysesUsed: number;
+  /** Story 2.8 — coach pool snapshot for the usage page (UX-DR31/UX-DR32).
+   *  Reuses CoachCapsDto (scope ∈ analysis|month|unlimited). Optional: older
+   *  payloads omit it. */
+  coach?: CoachCapsDto | null;
+  /** Story 2.8 — first-of-next-month UTC the free analyses allowance resets;
+   *  null when analyses are unlimited (pro/credits). */
+  analysesResetsAt?: string | null;
+}
+
+/** Story 2.8 — GET /api/me/honest-math. The 90-day "credits vs Pro"
+ *  comparison behind the dismissible HonestMathBanner (UX-DR32). `qualifies`
+ *  is the single server-computed flag the banner keys off. Cents from config
+ *  (AR39). */
+export interface HonestMathDto {
+  qualifies: boolean;
+  creditsSpentCents: number;
+  proEquivalentCents: number;
+  periodDays: number;
+  currency: string;
 }
 
 export interface AuthResponse {
@@ -998,6 +1021,13 @@ export interface CoachCapsDto {
   used: number;
   limit: number;
   capReached: boolean;
+  /** Story 2.6/2.8 — UX-DR16 grammar selector. "analysis" = free per-analysis,
+   *  "month" = pro pooled monthly, "unlimited" = credits. Optional: older
+   *  payloads (and unit fixtures) may omit it. */
+  scope?: 'analysis' | 'month' | 'unlimited';
+  /** ISO-8601 UTC instant the pooled allowance resets; null for the
+   *  per-analysis and unlimited scopes. */
+  resetsAt?: string | null;
 }
 
 export interface CoachConversationDto {

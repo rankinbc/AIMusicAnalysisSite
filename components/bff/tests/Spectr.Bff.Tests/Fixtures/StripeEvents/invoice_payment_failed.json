@@ -1,0 +1,13 @@
+{
+  "id": "evt_test_invoice_failed_001",
+  "object": "event",
+  "type": "invoice.payment_failed",
+  "data": {
+    "object": {
+      "id": "in_test_failed_001",
+      "object": "invoice",
+      "customer": "cus_test_001",
+      "next_payment_attempt": 1788393600
+    }
+  }
+}

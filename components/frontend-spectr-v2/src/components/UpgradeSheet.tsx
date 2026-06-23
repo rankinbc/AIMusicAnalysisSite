@@ -24,8 +24,13 @@ export interface UpgradeGradeChip {
 interface UpgradeSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  analysesUsed: number;
-  analysesLimit: number;
+  /** Cap-hit framing: drives the default title. Ignored when `title` is set. */
+  analysesUsed?: number;
+  analysesLimit?: number;
+  /** Override the cap-hit title (feature-lock / compare framing). */
+  title?: string;
+  /** Override the default description. */
+  description?: string;
   /** The user's own reports this period — their climb. Omit/empty to hide. */
   gradeChips?: UpgradeGradeChip[];
   /** Fired once the tier flips (checkout succeeded) — caller resumes work. */
@@ -49,6 +54,8 @@ export function UpgradeSheet({
   onOpenChange,
   analysesUsed,
   analysesLimit,
+  title,
+  description,
   gradeChips = [],
   onUpgraded,
   onWaitNextMonth,
@@ -104,10 +111,11 @@ export function UpgradeSheet({
         <Dialog.Overlay className={f.dialogOverlay} />
         <Dialog.Content className={`${f.dialogContent} ${s.sheet}`}>
           <Dialog.Title className={f.dialogTitle}>
-            {analysesUsed} of {analysesLimit} free analyses used this month
+            {title ?? `${analysesUsed ?? 0} of ${analysesLimit ?? 0} free analyses used this month`}
           </Dialog.Title>
           <Dialog.Description className={f.dialogDescription}>
-            Upgrade to keep going — or wait for next month. Your work is saved either way.
+            {description ??
+              'Upgrade to keep going — or wait for next month. Your work is saved either way.'}
           </Dialog.Description>
 
           {gradeChips.length > 0 && (

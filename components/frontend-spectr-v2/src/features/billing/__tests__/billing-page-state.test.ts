@@ -17,10 +17,17 @@ function pickCard(summary: BillingSummaryResponse): Card {
   return summary.cancelAtPeriodEnd ? 'canceled' : 'active';
 }
 
+// Story 2.9 — mirrors DunningBanner's render guard. The amber notice shows
+// ONLY during the past_due grace window (UX-DR33); every other state hides it.
+function showsDunning(summary: BillingSummaryResponse): boolean {
+  return summary.status === 'past_due';
+}
+
 const FREE: BillingSummaryResponse = {
   tier: 'free', status: null, cadence: null, priceId: null,
   currentPeriodEnd: null, cancelAt: null, cancelAtPeriodEnd: false,
   nextChargeAt: null, nextChargeCents: null, currency: null,
+  retryAt: null,
 };
 
 const PRO_ACTIVE: BillingSummaryResponse = {
@@ -30,6 +37,7 @@ const PRO_ACTIVE: BillingSummaryResponse = {
   cancelAt: null, cancelAtPeriodEnd: false,
   nextChargeAt: '2026-07-15T00:00:00Z',
   nextChargeCents: 1299, currency: 'USD',
+  retryAt: null,
 };
 
 const PRO_CANCELED: BillingSummaryResponse = {
@@ -75,5 +83,20 @@ describe('Billing page card-selection state machine', () => {
       status: 'canceled',
       cancelAtPeriodEnd: false,
     })).toBe('free');
+  });
+});
+
+describe('Story 2.9 — dunning banner visibility', () => {
+  it('past_due → shows the dunning banner (alongside the active card)', () => {
+    const pastDue = { ...PRO_ACTIVE, status: 'past_due' };
+    expect(showsDunning(pastDue)).toBe(true);
+    expect(pickCard(pastDue)).toBe('active');
+  });
+
+  it('active / trialing / canceled / free → no dunning banner', () => {
+    expect(showsDunning(PRO_ACTIVE)).toBe(false);
+    expect(showsDunning({ ...PRO_ACTIVE, status: 'trialing' })).toBe(false);
+    expect(showsDunning(PRO_CANCELED)).toBe(false);
+    expect(showsDunning(FREE)).toBe(false);
   });
 });

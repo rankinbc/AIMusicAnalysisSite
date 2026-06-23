@@ -121,7 +121,8 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
         string status = "active",
         string priceId = "price_test_monthly",
         DateTimeOffset? cancelAt = null,
-        string itemId = "si_test_001")
+        string itemId = "si_test_001",
+        DateTimeOffset? nextPaymentAttempt = null)
     {
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -140,6 +141,7 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
             PriceId = priceId,
             CurrentPeriodEnd = DateTimeOffset.UtcNow.AddDays(30),
             CancelAt = cancelAt,
+            NextPaymentAttempt = nextPaymentAttempt,
         });
         await db.SaveChangesAsync();
     }
@@ -211,6 +213,44 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
             Assert.Null(body.NextChargeAt);
             Assert.Null(body.NextChargeCents);
             Assert.NotNull(body.CurrentPeriodEnd);
+        }
+        finally { await CleanupAsync(f, userId); }
+    }
+
+    // ── Story 2.9 — dunning retry date round-trips on the summary ──────────
+    [Fact]
+    public async Task GetMe_Pro_PastDue_Returns_RetryAt()
+    {
+        if (!await PostgresReachable()) { return; }
+        var (f, _) = BuildWithFakeStripe();
+        var (client, userId) = await SeedAuthedAsync(f, "billmgr-pastdue");
+        var retry = DateTimeOffset.FromUnixTimeSeconds(1788393600);
+        await SeedSubscriptionAsync(f, userId, status: "past_due", nextPaymentAttempt: retry);
+        try
+        {
+            var resp = await client.GetAsync("/api/billing/me");
+            var body = await resp.Content.ReadFromJsonAsync<BillingSummaryDto>();
+            // past_due keeps the Pro tier (grace window, AC #3) ...
+            Assert.Equal("pro", body!.Tier);
+            Assert.Equal("past_due", body.Status);
+            // ... and surfaces the persisted retry date for the DunningBanner.
+            Assert.Equal(retry, body.RetryAt);
+        }
+        finally { await CleanupAsync(f, userId); }
+    }
+
+    [Fact]
+    public async Task GetMe_Pro_Active_Has_Null_RetryAt()
+    {
+        if (!await PostgresReachable()) { return; }
+        var (f, _) = BuildWithFakeStripe();
+        var (client, userId) = await SeedAuthedAsync(f, "billmgr-noretry");
+        await SeedSubscriptionAsync(f, userId);
+        try
+        {
+            var resp = await client.GetAsync("/api/billing/me");
+            var body = await resp.Content.ReadFromJsonAsync<BillingSummaryDto>();
+            Assert.Null(body!.RetryAt);
         }
         finally { await CleanupAsync(f, userId); }
     }

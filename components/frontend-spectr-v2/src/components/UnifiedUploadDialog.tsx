@@ -147,6 +147,10 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   const [entExhausted, setEntExhausted] = useState(false);
+  // Why the UpgradeSheet opened: 'cap' = free allotment spent (count copy);
+  // 'feature' = a Pro-only input (stems/.als) was clicked. Keeps the sheet copy
+  // from telling a user with analyses left that they're "out of analyses".
+  const [upgradeReason, setUpgradeReason] = useState<'cap' | 'feature'>('cap');
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   // Reference chosen/created for THIS analysis, carried into the stems-review
@@ -338,8 +342,12 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
     // Client-side entitlement gate (gate-BETWEEN, UX-DR38): open the UpgradeSheet
     // BEFORE any pipeline work when the free allotment is spent. The server 409
     // (AR38) below remains the authoritative backstop for races.
-    if (ents.isLoading || !ents.data) return;
+    // Block only while entitlements are still loading (the button is disabled
+    // then too). If the query ERRORED we proceed and let the server 409 be the
+    // backstop — never silently dead-end the button with no data.
+    if (ents.isLoading) return;
     if (ents.data?.analysesRemaining === 0) {
+      setUpgradeReason('cap');
       setEntExhausted(true);
       return;
     }
@@ -491,6 +499,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
         setPhase('form');
         setStatus('');
         setBusy(false);
+        setUpgradeReason('cap');
         setEntExhausted(true);
         return;
       }
@@ -718,7 +727,10 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                     locked={alsLocked}
                     reason="Ableton project analysis is a Pro feature"
                     ctaLabel="Get Pro"
-                    onUnlock={() => setEntExhausted(true)}
+                    onUnlock={() => {
+                      setUpgradeReason('feature');
+                      setEntExhausted(true);
+                    }}
                   >
                   <div className={`${s.optionGroup} ${s.zoneRecommended}`}>
                     <div className={s.optionHead}>
@@ -886,7 +898,10 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                     locked={stemsLocked}
                     reason="Per-stem analysis is a Pro feature"
                     ctaLabel="Get Pro"
-                    onUnlock={() => setEntExhausted(true)}
+                    onUnlock={() => {
+                      setUpgradeReason('feature');
+                      setEntExhausted(true);
+                    }}
                   >
                   <div className={s.advanced}>
                     <button
@@ -994,7 +1009,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
               ) : (
                 <button
                   type="submit"
-                  disabled={!mix || busy}
+                  disabled={!mix || busy || ents.isLoading}
                   className={`${f.button} ${f.buttonPrimary}`}
                 >
                   {busy ? status || 'Working…' : 'Upload & analyze'}
@@ -1015,9 +1030,18 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
       onOpenChange={setEntExhausted}
       analysesUsed={ents.data?.analysesUsed ?? 0}
       analysesLimit={ents.data?.analysesLimit ?? 0}
+      {...(upgradeReason === 'feature'
+        ? {
+            title: 'Stems & Ableton projects are a Pro feature',
+            description:
+              'Upgrade to Pro to unlock per-stem balance, clash detection and project-aware analysis.',
+          }
+        : {})}
       onUpgraded={() => {
         setEntExhausted(false);
-        void runUpload();
+        // A feature-lock upgrade just unlocks the inputs — don't auto-fire the
+        // upload; the cap-hit path resumes the kept mix as before.
+        if (upgradeReason === 'cap') void runUpload();
       }}
     />
     </>

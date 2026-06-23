@@ -1,0 +1,12 @@
+{
+  "id": "evt_test_invoice_paid_001",
+  "object": "event",
+  "type": "invoice.paid",
+  "data": {
+    "object": {
+      "id": "in_test_paid_001",
+      "object": "invoice",
+      "customer": "cus_test_001"
+    }
+  }
+}

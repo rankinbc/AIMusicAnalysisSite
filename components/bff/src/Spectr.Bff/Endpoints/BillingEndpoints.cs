@@ -249,7 +249,11 @@ public static class BillingEndpoints
             cancelAt: sub.CancelAt,
             stripeOpts: stripeOpts.Value,
             pricingOpts: pricingOpts.Value,
-            logger: logger));
+            logger: logger,
+            // Story 2.9 — only the read path carries the persisted dunning
+            // retry date; the write paths (cancel/resub/cadence) project a
+            // freshly-mutated active state with no pending retry.
+            retryAt: sub.NextPaymentAttempt));
     }
 
     private static async Task<IResult> PostCancel(
@@ -582,7 +586,10 @@ public static class BillingEndpoints
         DateTimeOffset? cancelAt,
         StripeOptions stripeOpts,
         PricingDisplayOptions pricingOpts,
-        ILogger<BillingWebhook> logger)
+        ILogger<BillingWebhook> logger,
+        // Story 2.9 — persisted dunning retry date; defaulted so the
+        // write-path callers (cancel/resub/cadence) need no change.
+        DateTimeOffset? retryAt = null)
     {
         var cadence = ResolveCadence(priceId, stripeOpts, logger);
         var tier = AuthEndpoints.ResolveTier(status);
@@ -604,7 +611,8 @@ public static class BillingEndpoints
             CancelAtPeriodEnd: cancelAtPeriodEnd,
             NextChargeAt: cancelAtPeriodEnd ? null : currentPeriodEnd,
             NextChargeCents: cancelAtPeriodEnd ? null : nextChargeCents,
-            Currency: cancelAtPeriodEnd ? null : pricingOpts.Currency);
+            Currency: cancelAtPeriodEnd ? null : pricingOpts.Currency,
+            RetryAt: retryAt);
     }
 
     // Cadence resolution from a Stripe price id. The configured price
@@ -948,7 +956,7 @@ public static class BillingEndpoints
 
         try
         {
-            await DispatchAsync(stripeEvent, mirrorService, credits, cache, logger, ct);
+            await DispatchAsync(stripeEvent, db, mirrorService, credits, cache, logger, ct);
             // review-fix P3 — also clear processing_error on success so
             // a previously-failed event that succeeds on retry leaves
             // no stale error trail.
@@ -983,6 +991,7 @@ public static class BillingEndpoints
 
     private static async Task DispatchAsync(
         Event stripeEvent,
+        AppDbContext db,
         SubscriptionMirrorService mirrorService,
         CreditLedgerService credits,
         IMemoryCache cache,
@@ -1050,10 +1059,53 @@ public static class BillingEndpoints
             case "invoice.paid":
             case "invoice.payment_failed":
             {
-                // Story 2.9 owns dunning UX state. For 2.1 we acknowledge
-                // these events but take no action — the underlying
-                // subscription status change will arrive as a
-                // customer.subscription.updated event anyway.
+                // Story 2.9 — dunning retry-date persistence. The
+                // subscription STATUS still flows through
+                // customer.subscription.updated (and drives entitlement
+                // grace/degradation); these invoice events only carry the
+                // retry schedule we surface in the amber DunningBanner.
+                if (stripeEvent.Data.Object is not Stripe.Invoice invoice)
+                    return;
+
+                // Match the local mirror by customer id — the most stable
+                // linkage. Invoice→subscription pointers moved in the 2024
+                // Stripe API restructure (same restructure that relocated
+                // CurrentPeriodEnd/Price onto SubscriptionItem); customer
+                // id never moved. Tracked lookup (NOT AsNoTracking) so the
+                // SaveChanges below actually persists.
+                if (string.IsNullOrEmpty(invoice.CustomerId))
+                    return;
+
+                var sub = await db.Subscriptions
+                    .FirstOrDefaultAsync(s => s.StripeCustomerId == invoice.CustomerId, ct);
+                if (sub is null)
+                {
+                    // Review-fix (story 2.9) — same trap as P1-B above. An
+                    // invoice.payment_failed can arrive BEFORE the matching
+                    // customer.subscription.created mirror row (Stripe does not
+                    // guarantee event ordering). A silent return would stamp
+                    // processed_at = now() and Stripe never redelivers a 200'd
+                    // event — the retry date is lost forever and the
+                    // DunningBanner is stuck on the generic fallback. Throw so
+                    // the outer handler returns 5xx and Stripe redelivers once
+                    // the mirror row exists.
+                    throw new InvalidOperationException(
+                        $"No subscription mirror for customer on {stripeEvent.Type} (event {stripeEvent.Id}) — likely event-ordering race; retry.");
+                }
+
+                // payment_failed → stamp the next retry date (null once
+                // Stripe Smart Retries are exhausted — the terminal
+                // canceled/unpaid transition then degrades the tier).
+                // paid → recovery: clear any pending retry (AC #4).
+                sub.NextPaymentAttempt =
+                    stripeEvent.Type == "invoice.payment_failed"
+                        && invoice.NextPaymentAttempt is { } retry
+                        ? new DateTimeOffset(
+                            DateTime.SpecifyKind(retry, DateTimeKind.Utc), TimeSpan.Zero)
+                        : null;
+                sub.UpdatedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync(ct);
+                cache.Remove($"ent:{sub.UserId:N}");
                 return;
             }
             default:

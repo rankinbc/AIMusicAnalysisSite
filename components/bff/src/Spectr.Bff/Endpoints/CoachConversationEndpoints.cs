@@ -69,6 +69,7 @@ public static class CoachConversationEndpoints
         AppDbContext db,
         IJobQueue queue,
         CoachCapService capService,
+        EntitlementService ents,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -181,6 +182,12 @@ public static class CoachConversationEndpoints
         });
 
         await db.SaveChangesAsync(ct);
+
+        // The coach_message meter row just landed — the pro pooled-monthly count
+        // baked into the 60s-cached entitlements DTO is now stale. Invalidate so
+        // the usage page reflects the send immediately (the send-time gate above
+        // already counts fresh, so this only fixes the displayed figure).
+        ents.InvalidateAsync(userId);
 
         // Enqueue the worker actor. Story 1.5 code review B-H2: the actor
         // signature is (conversation_id, user_message_id, assistant_message_id)

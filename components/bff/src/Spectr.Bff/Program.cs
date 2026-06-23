@@ -124,6 +124,9 @@ builder.Services.AddScoped<EntitlementService>();
 // model). Depends on EntitlementService + AppDbContext, so scoped.
 builder.Services.AddScoped<CoachCapService>();
 
+// Story 2.8 — usage-page honest-math (90-day credit spend vs Pro-equivalent).
+builder.Services.AddScoped<HonestMathService>();
+
 // Story 1.9: per-analysis free-tier coach follow-up cap. Fail-fast at startup
 // on a non-positive value — a zero cap would make the product unusable and we
 // don't want a config typo to ship silently.

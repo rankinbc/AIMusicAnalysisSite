@@ -210,6 +210,10 @@
   color: var(--text);
 }
 
+.avatarMenuMeter {
+  padding: 6px 10px 8px;
+}
+
 .avatarMenuDivider {
   height: 1px;
   margin: 4px 0;
@@ -218,6 +222,12 @@
 
 .main {
   flex: 1;
+}
+
+/* Story 2.9 — app-wide dunning notice slot (between topnav and main).
+   Pages own their own gutters, so the notice supplies its own here. */
+.dunningSlot {
+  padding: var(--space-4) var(--space-5) 0;
 }
 
 /* Clear the persistent MiniPlayer bar (UX-DR8) — only present ≥768px. */

@@ -231,7 +231,25 @@ that would change their tier (credit spend, sub status change).
   "fullVerdictsEnabled": false,
   "historyDepth": 10,       // null for pro
   "analysesLimit": 3,       // story 2.7 — period cap (null for pro/credits)
-  "analysesUsed": 1         // story 2.7 — consumption; drives the UpgradeSheet header
+  "analysesUsed": 1,        // story 2.7 — consumption; drives the UpgradeSheet header
+  // story 2.8 — usage-page coach pool snapshot (reuses CoachCapsDto).
+  // scope: "analysis" (free, per-analysis) | "month" (pro pooled) | "unlimited" (credits)
+  "coach": { "used": 0, "limit": 3, "capReached": false, "scope": "analysis", "resetsAt": null },
+  "analysesResetsAt": "2026-07-01T00:00:00Z"  // story 2.8 — first-of-next-month UTC (free); null when unlimited
+}
+```
+
+**`GET /api/me/honest-math` (story 2.8):** 90-day credit-spend vs Pro
+comparison behind the dismissible HonestMathBanner. `qualifies` is true when
+the user has spent at least the Pro-equivalent on credit packs in the window.
+Cents from `PricingDisplay` config (AR39).
+```jsonc
+{
+  "qualifies": true,
+  "creditsSpentCents": 7000,    // 90-day credit-PURCHASE rows mapped to pack prices
+  "proEquivalentCents": 3897,   // 3 × ProMonthlyCents
+  "periodDays": 90,
+  "currency": "USD"
 }
 ```
 

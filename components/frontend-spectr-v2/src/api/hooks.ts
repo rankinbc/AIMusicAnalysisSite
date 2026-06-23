@@ -18,6 +18,7 @@ import type {
   CreateTagRequest,
   EntitlementsDto,
   FeedbackKind,
+  HonestMathDto,
   JobResultsDto,
   JobStatusDto,
   JobSummaryDto,
@@ -107,6 +108,16 @@ export function useEntitlements() {
     queryKey: ['me', 'entitlements'],
     queryFn: () => fetcher<EntitlementsDto>({ url: '/me/entitlements', method: 'GET' }),
     staleTime: 30_000,
+  });
+}
+
+/** Story 2.8 — GET /api/me/honest-math — 90-day credit-spend vs Pro comparison
+ *  behind the dismissible HonestMathBanner. Quasi-static; cache a few minutes. */
+export function useHonestMath() {
+  return useQuery<HonestMathDto>({
+    queryKey: ['me', 'honest-math'],
+    queryFn: () => fetcher<HonestMathDto>({ url: '/me/honest-math', method: 'GET' }),
+    staleTime: 5 * 60_000,
   });
 }
 

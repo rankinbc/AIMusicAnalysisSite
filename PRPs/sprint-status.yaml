@@ -48,6 +48,8 @@
 
 generated: 2026-06-12
 last_updated: 2026-06-23
+# story 2-8 transitioned: backlog → ready-for-dev (create-story workflow, 2026-06-23; usage page summary + HonestMathBanner + UsageMeter nav + BFF coach-pool/honest-math surfacing)
+# story 2-9 transitioned: backlog → ready-for-dev (create-story workflow, 2026-06-23; dunning DunningBanner + next_payment_attempt persistence + graceful degradation via existing 2.7 BlurLock + AR15 results-forever)
 project: Spectr
 # (reconciled 2026-06-23 to git truth: 2-4 d9b9128, 2-5 5e8b582, 2-6 0805950 all committed → done. Epic-2 done-line now at 2-6; next = 2-7.)
 # (DRIFT NOTE 2026-06-23: product-fidelity merge (6f55403) landed Epic-5 work out of sprint order — 5.1 (1557764), 5.2/5.3/5.5 (21889ac), 5.9 AC1 (6c933fd) + .als features. Epic-5 statuses NOT yet reconciled here — needs separate pass.)
@@ -85,8 +87,8 @@ development_status:
   2-5-paid-jobs-never-starve: done
   2-6-tier-aware-coach-caps: done
   2-7-cap-hit-upgrade-flow-upgradesheet-and-blurlock: done
-  2-8-usage-page-with-honest-math: backlog
-  2-9-dunning-states-and-graceful-degradation: backlog
+  2-8-usage-page-with-honest-math: done
+  2-9-dunning-states-and-graceful-degradation: done
   2-10-billing-integrity-and-reconciliation: backlog
   epic-2-retrospective: optional
 

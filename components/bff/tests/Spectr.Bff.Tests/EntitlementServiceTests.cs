@@ -98,6 +98,11 @@ public sealed class EntitlementServiceTests
             // Story 2.7 — UpgradeSheet header source: "{used} of {limit}".
             Assert.Equal(3, ent.AnalysesLimit);
             Assert.Equal(0, ent.AnalysesUsed);
+            // Story 2.8 — usage-page coach pool + analyses reset.
+            Assert.NotNull(ent.Coach);
+            Assert.Equal("analysis", ent.Coach!.Scope);
+            Assert.Equal(3, ent.Coach.Limit);
+            Assert.NotNull(ent.AnalysesResetsAt);
         }
         finally { await CleanupAsync(userId); }
     }
@@ -164,6 +169,9 @@ public sealed class EntitlementServiceTests
             Assert.True(ent.AlsEnabled);
             Assert.True(ent.FullVerdictsEnabled);
             Assert.Equal(30, ent.HistoryDepth);
+            // Story 2.8 — credits coach pool is unlimited; no analyses reset.
+            Assert.Equal("unlimited", ent.Coach!.Scope);
+            Assert.Null(ent.AnalysesResetsAt);
         }
         finally { await CleanupAsync(userId); }
     }
@@ -195,6 +203,11 @@ public sealed class EntitlementServiceTests
             Assert.Null(ent.AnalysesRemaining);
             Assert.Null(ent.HistoryDepth);
             Assert.True(ent.StemsEnabled);
+            // Story 2.8 — pro coach pool is pooled monthly with a reset instant;
+            // analyses are unlimited so AnalysesResetsAt stays null.
+            Assert.Equal("month", ent.Coach!.Scope);
+            Assert.NotNull(ent.Coach.ResetsAt);
+            Assert.Null(ent.AnalysesResetsAt);
         }
         finally { await CleanupAsync(userId); }
     }
@@ -300,5 +313,107 @@ public sealed class EntitlementServiceTests
             if (flag is not null) { flag.Value = "3"; await restoreDb.SaveChangesAsync(); }
             await CleanupAsync(userId);
         }
+    }
+
+    // ── Story 2.9 case (h) terminal `canceled` → degrades to free ──────────
+    // AC #2: when Stripe Smart Retries exhaust and the subscription reaches a
+    // terminal state, the tier degrades to Free (no credits on hand).
+    [Fact]
+    public async Task Canceled_NoCredits_DegradesToFree()
+    {
+        if (!await PostgresReachable()) return;
+        var userId = await SeedUserAsync("ent-h");
+        try
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Subscriptions.Add(new Subscription
+            {
+                UserId = userId,
+                StripeCustomerId = "cus_test_h",
+                StripeSubscriptionId = "sub_test_h",
+                Status = "canceled",
+                PriceId = "price_test",
+                CurrentPeriodEnd = DateTimeOffset.UtcNow.AddDays(-1),
+            });
+            await db.SaveChangesAsync();
+
+            var svc = await NewServiceAsync(scope);
+            var ent = await svc.ForAsync(userId, CancellationToken.None);
+            Assert.Equal("free", ent.Tier);
+            // Pro depth locks (the BlurLock-gated inputs) — AC #2.
+            Assert.False(ent.StemsEnabled);
+            Assert.False(ent.AlsEnabled);
+            Assert.False(ent.FullVerdictsEnabled);
+        }
+        finally { await CleanupAsync(userId); }
+    }
+
+    // ── Story 2.9 case (i) terminal `unpaid` → degrades to free ────────────
+    [Fact]
+    public async Task Unpaid_NoCredits_DegradesToFree()
+    {
+        if (!await PostgresReachable()) return;
+        var userId = await SeedUserAsync("ent-i");
+        try
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Subscriptions.Add(new Subscription
+            {
+                UserId = userId,
+                StripeCustomerId = "cus_test_i",
+                StripeSubscriptionId = "sub_test_i",
+                Status = "unpaid",
+                PriceId = "price_test",
+                CurrentPeriodEnd = DateTimeOffset.UtcNow.AddDays(-1),
+            });
+            await db.SaveChangesAsync();
+
+            var svc = await NewServiceAsync(scope);
+            var ent = await svc.ForAsync(userId, CancellationToken.None);
+            Assert.Equal("free", ent.Tier);
+            Assert.False(ent.StemsEnabled);
+        }
+        finally { await CleanupAsync(userId); }
+    }
+
+    // ── Story 2.9 case (j) terminal `canceled` WITH credit balance →
+    // falls through to the credits tier (still no Pro subscription, but the
+    // user retains à-la-carte access — results-forever is unaffected). ─────
+    [Fact]
+    public async Task Canceled_WithCredits_FallsThroughToCredits()
+    {
+        if (!await PostgresReachable()) return;
+        var userId = await SeedUserAsync("ent-j");
+        try
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Subscriptions.Add(new Subscription
+            {
+                UserId = userId,
+                StripeCustomerId = "cus_test_j",
+                StripeSubscriptionId = "sub_test_j",
+                Status = "canceled",
+                PriceId = "price_test",
+                CurrentPeriodEnd = DateTimeOffset.UtcNow.AddDays(-1),
+            });
+            db.CreditLedger.Add(new CreditLedgerEntry
+            {
+                UserId = userId,
+                Amount = 4,
+                Reason = "purchase",
+                Reference = "pi_test_j",
+                IdempotencyKey = $"credits_purchase:evt_{Guid.NewGuid():N}",
+            });
+            await db.SaveChangesAsync();
+
+            var svc = await NewServiceAsync(scope);
+            var ent = await svc.ForAsync(userId, CancellationToken.None);
+            Assert.Equal("credits", ent.Tier);
+            Assert.Equal(4, ent.AnalysesRemaining);
+        }
+        finally { await CleanupAsync(userId); }
     }
 }

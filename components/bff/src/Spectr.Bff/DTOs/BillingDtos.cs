@@ -42,7 +42,12 @@ public sealed record BillingSummaryDto(
     bool CancelAtPeriodEnd,
     DateTimeOffset? NextChargeAt,         // null when CancelAt is set OR Tier == "free"
     int? NextChargeCents,                 // null when Tier == "free" or Cadence == "unknown"
-    string? Currency);
+    string? Currency,
+    // Story 2.9 — Stripe retry date for an open dunning cycle. Non-null only
+    // when Status == "past_due" and a retry is scheduled; drives the amber
+    // DunningBanner "retrying {day}" copy (UX-DR33). Appended (defaulted) so
+    // every existing positional construction stays valid.
+    DateTimeOffset? RetryAt = null);
 
 public sealed record CancelSubscriptionRequest(string? Reason);
 
@@ -101,4 +106,30 @@ public sealed record EntitlementsDto(
     // month" header (UX-DR30). AnalysesLimit is null when unlimited (Pro/credits);
     // the free cap comes from the free_analyses_per_month flag (AR35, never hardcoded).
     int? AnalysesLimit = null,
-    int AnalysesUsed = 0);
+    int AnalysesUsed = 0,
+    // Story 2.8 — the usage page (UX-DR31/UX-DR32) needs the coach pool snapshot
+    // and the analyses reset instant so it can render the
+    // "{used} of {limit} · resets {date}" caps grammar (UX-DR16) without any
+    // tier/date math on the client (AR35). `Coach` reuses the CoachCapsDto shape
+    // (scope ∈ analysis|month|unlimited). `AnalysesResetsAt` = first-of-next-month
+    // UTC on the free tier; null when analyses are unlimited (Pro/credits). Both
+    // additive — older clients ignore them.
+    CoachCapsDto? Coach = null,
+    DateTimeOffset? AnalysesResetsAt = null);
+
+// ── Story 2.8 — usage-page honest math ───────────────────────────────
+/// <summary>
+/// GET /api/me/honest-math — the 90-day "credits vs Pro" comparison behind
+/// the dismissible HonestMathBanner (UX-DR32). `Qualifies` is true only when
+/// the user has spent at least the Pro-equivalent on credit packs in the
+/// window, so the frontend keys the banner off a single server-computed flag.
+/// All cents from config (AR39): `ProEquivalentCents` = PeriodDays/30 months of
+/// `PricingDisplay.ProMonthlyCents`. `CreditsSpentCents` sums the window's
+/// credit-PURCHASE ledger rows mapped to their pack display prices.
+/// </summary>
+public sealed record HonestMathDto(
+    bool Qualifies,
+    int CreditsSpentCents,
+    int ProEquivalentCents,
+    int PeriodDays,
+    string Currency);

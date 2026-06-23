@@ -6,11 +6,14 @@ import { fetcher } from '../../api/fetcher';
 import type { CreditsResponse } from '../../api/types';
 import { BuyCreditsCard } from '../../features/billing/BuyCreditsCard';
 import { CreditLedgerTable } from '../../features/billing/CreditLedgerTable';
+import { HonestMathBanner } from '../../features/billing/HonestMathBanner';
+import { UsageSummary } from '../../features/billing/UsageSummary';
 import { Pill } from '../../ui/Pill';
 import s from './usagePage.module.css';
 
-// Story 2.3 — /_app/usage. Shows credit balance + mono ledger +
-// BuyCreditsCard. UX-DR32 HonestMathBanner deferred to story 2.8.
+// Story 2.3 — /_app/usage. Shows credit balance + mono ledger + BuyCreditsCard.
+// Story 2.8 — adds the UsageSummary (analyses + coach pool, UX-DR32) and the
+// dismissible HonestMathBanner (90-day credits-vs-Pro, UX-DR32).
 
 export const Route = createFileRoute('/_app/usage')({
   component: UsagePage,
@@ -55,10 +58,6 @@ function UsagePage() {
     );
   }
 
-  // TODO(story-2.8): HonestMathBanner (UX-DR32) — "You've spent $X on
-  // credits in 90 days — Pro would've been $Y". Insertion point above
-  // the ledger table once the cost-comparison math is wired up.
-
   return (
     <main className={s.shell}>
       <header className={s.header}>
@@ -70,6 +69,11 @@ function UsagePage() {
           </Pill>
         </div>
       </header>
+
+      <UsageSummary creditBalance={balance} />
+
+      {/* Story 2.8 / UX-DR32 — only renders when the server flags `qualifies`. */}
+      <HonestMathBanner />
 
       <div className={s.grid}>
         <section className={`card ${s.ledgerCard}`}>
