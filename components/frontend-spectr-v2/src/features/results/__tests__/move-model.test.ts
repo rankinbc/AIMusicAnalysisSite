@@ -4,6 +4,7 @@ import type { VerdictDto } from '../../../api/types';
 import {
   buildMoves,
   groupMoves,
+  impactBand,
   isCleanMix,
   moveToMarkdown,
   ruleFixToMove,
@@ -70,6 +71,13 @@ describe('verdictToMove', () => {
     expect(m.verdictId).toBe('v1');
   });
 
+  it('carries impact + AI provenance for the persona chip', () => {
+    const m = verdictToMove(makeVerdict({ priorityScore: 70, specialist: 'low_end' }));
+    expect(m.impact).toBe(70);
+    expect(m.isRule).toBe(false);
+    expect(m.specialist).toBe('low_end');
+  });
+
   it('renders directional (no steps) when the fix has no dsp_chain', () => {
     const m = verdictToMove(makeVerdict({ fix: { target: { name: 'Master bus' } } }));
     expect(m.hasParams).toBe(false);
@@ -101,6 +109,21 @@ describe('ruleFixToMove', () => {
     const m = ruleFixToMove('tighten your low end before the drop', 1);
     expect(m.scope).toBe('');
     expect(m.title).toBe('Tighten your low end before the drop');
+  });
+
+  it('flags rule provenance (RULE chip) with no specialist and a derived impact', () => {
+    const m = ruleFixToMove('Master bus: leave headroom', 0);
+    expect(m.isRule).toBe(true);
+    expect(m.specialist).toBeNull();
+    expect(m.impact).toBeGreaterThan(0);
+  });
+});
+
+describe('impactBand', () => {
+  it('maps a 0..100 score to high/med/low bands', () => {
+    expect(impactBand(82).label).toBe('HIGH IMPACT');
+    expect(impactBand(50).label).toBe('MED IMPACT');
+    expect(impactBand(30).label).toBe('LOW IMPACT');
   });
 });
 

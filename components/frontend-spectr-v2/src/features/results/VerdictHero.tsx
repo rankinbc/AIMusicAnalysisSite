@@ -111,7 +111,7 @@ export function VerdictHero({
 
         <div className={s.right}>
           <div className={s.trackRow}>
-            <div className={s.trackName}>{trackName}</div>
+            <h1 className={s.trackName}>{trackName}</h1>
             {genre && <Pill tone="cyan">{fmtGenre(genre)}</Pill>}
             {bpm != null && (
               <Pill>

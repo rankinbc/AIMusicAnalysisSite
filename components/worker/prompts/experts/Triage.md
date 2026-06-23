@@ -1,5 +1,5 @@
 ---
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Mix Triage Router
@@ -555,5 +555,18 @@ When `phase4.stems.status == "ok"` (the user provided individual stems):
 
 When stems are absent or `phase4.stems.status != "ok"`, do NOT route
 any of those three — they have nothing to operate on.
+
+## ALS-aware specialists (route ONLY when an .als project is present)
+
+When an Ableton `.als` project was provided, `phase8.tracks` is a non-empty list
+and the user message contains an authoritative `ABLETON PROJECT MAP` of every track
+name and its devices:
+- Route `device_chain` so the user gets project-specific, track/device-named advice
+  (e.g. "On 'TRITON Pad', tame the Auto Filter resonance ~250 Hz") instead of
+  role-level advice. Give it a focus referencing the most problematic tracks/devices.
+
+When no `.als` is present (`phase8` absent or `phase8.tracks` empty), do NOT route
+`device_chain` — there is no project map to ground track/device advice on, and the
+router strips it from the plan if routed anyway.
 
 Lower `priority` numbers run first.

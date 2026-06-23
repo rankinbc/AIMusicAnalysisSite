@@ -1,6 +1,7 @@
+import type { ResultsTabKey } from './results-tab-keys';
 import s from './ResultsTabs.module.css';
 
-export type ResultsTabKey = 'actions' | 'analysis' | 'files';
+export type { ResultsTabKey } from './results-tab-keys';
 
 interface TabDef {
   id: ResultsTabKey;
@@ -18,6 +19,10 @@ interface ResultsTabsProps {
   /** Worker phases done / total — small badge on the Analysis tab. */
   phasesDone: number;
   phasesTotal: number;
+  /** Show the Project tab — only when an .als project map was stored. */
+  hasProject: boolean;
+  /** Track count for the Project tab badge. */
+  projectTrackCount: number;
   /** Right-side shortcut: jump to the plan + open the export preview. */
   onGamePlan: () => void;
 }
@@ -28,6 +33,8 @@ export function ResultsTabs({
   moveCount,
   phasesDone,
   phasesTotal,
+  hasProject,
+  projectTrackCount,
   onGamePlan,
 }: ResultsTabsProps) {
   const tabs: TabDef[] = [
@@ -38,6 +45,16 @@ export function ResultsTabs({
       icon: '▤',
       badge: phasesTotal > 0 ? `${phasesDone}/${phasesTotal}` : null,
     },
+    ...(hasProject
+      ? [
+          {
+            id: 'project' as const,
+            label: 'Project',
+            icon: '♫',
+            badge: projectTrackCount > 0 ? projectTrackCount : null,
+          },
+        ]
+      : []),
     { id: 'files', label: 'Files', icon: '▥' },
   ];
 
