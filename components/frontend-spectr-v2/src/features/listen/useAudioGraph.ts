@@ -204,8 +204,8 @@ export function useAudioGraph(
     // Dry passthrough lane (master bypass) — unchanged.
     masterIn.connect(masterDry).connect(masterOut);
     // Processed lane now runs through the composed insert chain.
-    masterIn.connect(chain.input);
-    chain.output.connect(masterProcessed).connect(masterOut);
+    masterIn.connect(chain.chainIn);
+    chain.chainOut.connect(masterProcessed).connect(masterOut);
 
     masterOut.connect(analyserMain);
     analyserMain.connect(scopeSplitter);
