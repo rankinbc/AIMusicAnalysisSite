@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 
 import { buildInsertChain, type InsertChain } from './audio/composer';
+import type { EffectId, EffectMeter } from './audio/EffectUnit';
 import {
+  DEFAULT_ORDER,
   EQ_BANDS_DEFAULT,
   COMPRESSOR_DEFAULT,
   SATURATION_DEFAULT,
@@ -21,6 +23,13 @@ export {
   WIDTH_DEFAULT,
 } from './audio/state';
 export type { EqBand, CompressorState, SaturationState, WidthState } from './audio/state';
+
+export interface EffectParamMap {
+  eq: { bands: EqBand[] };
+  comp: CompressorState;
+  sat: SaturationState;
+  ms: WidthState;
+}
 
 // Web Audio chain that wraps the page's single <audio> element. The processing
 // graph is composed from modular EffectUnits (see audio/composer.ts):
@@ -50,6 +59,11 @@ export interface AudioGraphHandle {
   setSaturation: (state: Partial<SaturationState>) => void;
 
   setWidth: (state: Partial<WidthState>) => void;
+
+  setEffectParams: <K extends EffectId>(id: K, patch: Partial<EffectParamMap[K]>) => void;
+  reorder: (order: EffectId[]) => void;
+  getOrder: () => EffectId[];
+  readEffectMeter: (id: EffectId) => EffectMeter | null;
 
   setMasterBypass: (bypassed: boolean) => void;
   resetAll: () => void;
@@ -258,6 +272,32 @@ export function useAudioGraph(
     if (!nodes) return;
     nodes.masterDry.gain.value = masterBypassRef.current ? 1 : 0;
     nodes.masterProcessed.gain.value = masterBypassRef.current ? 0 : 1;
+  };
+
+  const applyEffectParams = <K extends EffectId>(
+    id: K,
+    patch: Partial<EffectParamMap[K]>,
+  ): void => {
+    switch (id) {
+      case 'eq': {
+        const p = patch as Partial<EffectParamMap['eq']>;
+        if (p.bands) eqStateRef.current = p.bands;
+        applyEq(); // EQ always applies enabled:true (consumer pre-gates band gains)
+        break;
+      }
+      case 'comp':
+        Object.assign(compStateRef.current, patch);
+        applyCompressor();
+        break;
+      case 'sat':
+        Object.assign(satStateRef.current, patch);
+        applySaturation();
+        break;
+      case 'ms':
+        Object.assign(widthStateRef.current, patch);
+        applyWidth();
+        break;
+    }
   };
 
   // Tear down on unmount so AudioContext is released (browsers cap to ~6).
@@ -506,18 +546,13 @@ export function useAudioGraph(
       }
       applyEq();
     },
-    setCompressor: (patch) => {
-      Object.assign(compStateRef.current, patch);
-      applyCompressor();
-    },
-    setSaturation: (patch) => {
-      Object.assign(satStateRef.current, patch);
-      applySaturation();
-    },
-    setWidth: (patch) => {
-      Object.assign(widthStateRef.current, patch);
-      applyWidth();
-    },
+    setCompressor: (patch) => applyEffectParams('comp', patch),
+    setSaturation: (patch) => applyEffectParams('sat', patch),
+    setWidth: (patch) => applyEffectParams('ms', patch),
+    setEffectParams: (id, patch) => applyEffectParams(id, patch),
+    reorder: (order) => nodesRef.current?.chain.reorder(order),
+    getOrder: () => nodesRef.current?.chain.getOrder() ?? [...DEFAULT_ORDER],
+    readEffectMeter: (id) => nodesRef.current?.chain.units[id]?.readMeter?.() ?? null,
     setMasterBypass: (bypassed) => {
       masterBypassRef.current = bypassed;
       applyMasterBypass();
@@ -533,6 +568,7 @@ export function useAudioGraph(
       applySaturation();
       applyWidth();
       applyMasterBypass();
+      nodesRef.current?.chain.reorder([...DEFAULT_ORDER]);
     },
     enterPitchMode: async (audioUrl, fromSeconds) => {
       ensureContext();
