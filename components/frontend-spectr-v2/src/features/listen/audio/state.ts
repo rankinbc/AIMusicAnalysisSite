@@ -65,7 +65,7 @@ export const WIDTH_DEFAULT: WidthState = {
 };
 
 // Phase-1 default insert order. Matches the legacy chain EQ -> Comp -> Sat -> M/S.
-export const DEFAULT_ORDER: EffectId[] = ['eq', 'comp', 'sat', 'ms'];
+export const DEFAULT_ORDER: ReadonlyArray<EffectId> = ['eq', 'comp', 'sat', 'ms'];
 
 export function defaultEqState(): EqState {
   return { bands: EQ_BANDS_DEFAULT.map((b) => ({ ...b })), enabled: false };

@@ -22,21 +22,20 @@ export {
 } from './audio/state';
 export type { EqBand, CompressorState, SaturationState, WidthState } from './audio/state';
 
-// Web Audio chain that wraps the page's single <audio> element:
-//   source → eq(8 biquads) → compressor → makeupGain → satWet/satDry mix →
-//   channelSplitter → (mid/side matrix via gain ops) → channelMerger →
-//   analyserMain (FFT) + analyserL/analyserR (time-domain for scope) →
-//   destination
+// Web Audio chain that wraps the page's single <audio> element. The processing
+// graph is composed from modular EffectUnits (see audio/composer.ts):
+//   source → masterIn → masterDry ───────────────────────────────→ masterOut   (bypass lane)
+//                     → insert chain: EQ → Comp → Sat → M/S        → masterOut
+//                       (buildInsertChain; each unit owns a dry/wet bypass)
+//   masterOut → analyserMain (FFT) + analyserL/analyserR (scope) → destination
 //
-// We build the entire graph up front and keep it always connected. Toggling
-// a tool "off" means setting its parameters to identity values (eq gain 0,
-// comp ratio 1 + threshold 0, sat curve linear, width 1, gain 1). This
-// avoids the audio glitches that come with disconnect/reconnect during
-// playback.
+// Per-unit dry/wet bypass (audio/EffectUnit.ts makeDryWet) means a unit "off" is
+// wet=0 (true dry passthrough), not identity param values. The pitch BufferSource
+// lane and the master-bypass passthrough live OUTSIDE the insert chain.
 //
-// AudioContext is created LAZILY on first call to `ensureContext()` because
-// browsers block context creation outside a user gesture (Chrome/Safari).
-// Call ensureContext() from a click handler before doing anything else.
+// AudioContext is created LAZILY on first ensureContext() because browsers block
+// context creation outside a user gesture (Chrome/Safari). Call ensureContext()
+// from a click handler before doing anything else.
 
 export interface AudioGraphHandle {
   ensureContext: () => AudioContext;
