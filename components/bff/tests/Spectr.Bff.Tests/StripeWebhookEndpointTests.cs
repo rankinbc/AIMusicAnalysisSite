@@ -401,6 +401,122 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
         }
     }
 
+    // ── Story 2.10 AC2 — duplicate event id must be a no-op ───────────────
+    // This is a focused AC2 proof-test. Webhook_Replay_Of_Same_Event_Is_Idempotent
+    // also covers this path but includes response-body assertions; this test
+    // documents the DB-level guarantee explicitly for the billing-integrity story.
+
+    [Fact]
+    public async Task Webhook_DuplicateEventId_IsNoOp()
+    {
+        if (!await PostgresReachable()) { return; }
+
+        const string eventId = "evt_test_sub_created_001";
+        var factory = BuildConfigured();
+        var client = factory.CreateClient();
+        var userId = await SeedUserWithCustomerIdAsync(factory, "cus_test_001");
+
+        try
+        {
+            var body = StripeTestUtilities.ReadFixture("subscription_created.json");
+            var sig = StripeTestUtilities.ComputeSignatureHeader(
+                body, StripeTestUtilities.TestWebhookSecret);
+
+            // First delivery — processed normally.
+            var first = await PostWebhookAsync(client, body, sig);
+            Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+            // Stripe retry — identical event id; must be a no-op.
+            var sig2 = StripeTestUtilities.ComputeSignatureHeader(
+                body, StripeTestUtilities.TestWebhookSecret);
+            var second = await PostWebhookAsync(client, body, sig2);
+            Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            // INSERT … ON CONFLICT (id) DO NOTHING collapses to one row.
+            Assert.Equal(1, await db.WebhookEvents.CountAsync(w => w.Id == eventId));
+            // SubscriptionMirrorService.ApplyAsync called exactly once.
+            Assert.Equal(1, await db.Subscriptions.CountAsync(s => s.UserId == userId));
+        }
+        finally
+        {
+            await CleanupAsync(factory, userId, eventId);
+        }
+    }
+
+    // ── Story 2.10 AC3 — entitlement reconstruction via event replay ───────
+
+    [Fact]
+    public async Task Webhook_Replay_ReconstructsSubscriptionMirror()
+    {
+        if (!await PostgresReachable()) { return; }
+
+        var factory = BuildConfigured();
+        var client = factory.CreateClient();
+        var userId = await SeedUserWithCustomerIdAsync(factory, "cus_test_001");
+
+        try
+        {
+            // 1. Created → active mirror.
+            var createBody = StripeTestUtilities.ReadFixture("subscription_created.json");
+            var createSig = StripeTestUtilities.ComputeSignatureHeader(
+                createBody, StripeTestUtilities.TestWebhookSecret);
+            var resp1 = await PostWebhookAsync(client, createBody, createSig);
+            Assert.Equal(HttpStatusCode.OK, resp1.StatusCode);
+
+            using (var scope = factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var sub = await db.Subscriptions.FirstAsync(s => s.UserId == userId);
+                Assert.Equal("active", sub.Status);
+            }
+
+            // 2. Updated → past_due.
+            var updateBody = StripeTestUtilities.ReadFixture("subscription_updated.json");
+            var updateSig = StripeTestUtilities.ComputeSignatureHeader(
+                updateBody, StripeTestUtilities.TestWebhookSecret);
+            var resp2 = await PostWebhookAsync(client, updateBody, updateSig);
+            Assert.Equal(HttpStatusCode.OK, resp2.StatusCode);
+
+            using (var scope = factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var sub = await db.Subscriptions.FirstAsync(s => s.UserId == userId);
+                Assert.Equal("past_due", sub.Status);
+            }
+
+            // 3. Recovery → active again. Replay from scratch ends here.
+            var recoverBody = StripeTestUtilities.ReadFixture("subscription_recovered.json");
+            var recoverSig = StripeTestUtilities.ComputeSignatureHeader(
+                recoverBody, StripeTestUtilities.TestWebhookSecret);
+            var resp3 = await PostWebhookAsync(client, recoverBody, recoverSig);
+            Assert.Equal(HttpStatusCode.OK, resp3.StatusCode);
+
+            using (var scope = factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var sub = await db.Subscriptions.FirstAsync(s => s.UserId == userId);
+                // Mirror reconstructed to final active state — exactly what
+                // a full Stripe event replay from scratch would produce.
+                Assert.Equal("active", sub.Status);
+                // Still only one mirror row (upsert, not insert).
+                Assert.Equal(1, await db.Subscriptions.CountAsync(s => s.UserId == userId));
+            }
+        }
+        finally
+        {
+            await CleanupAsync(factory, userId, "evt_test_sub_created_001");
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.WebhookEvents
+                .Where(w => w.Id == "evt_test_sub_updated_001"
+                    || w.Id == "evt_test_sub_recovered_001")
+                .ExecuteDeleteAsync();
+        }
+    }
+
     [Fact]
     public async Task Webhook_Unsupported_Event_Type_Is_Recorded_But_Not_Processed()
     {

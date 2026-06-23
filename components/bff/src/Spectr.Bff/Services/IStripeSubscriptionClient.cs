@@ -25,12 +25,19 @@ public interface IStripeSubscriptionClient
         StripeBillingPortalSessionCreateOptions options,
         string idempotencyKey,
         CancellationToken ct);
+
+    // Story 2.10 — read-only lookups for nightly reconciliation. No
+    // IdempotencyKey on GET calls. Returns null when the resource is
+    // gone from Stripe (resource_missing); rethrows any other exception.
+    Task<Subscription?> GetSubscriptionAsync(string subscriptionId, CancellationToken ct);
+    Task<Price?> GetPriceAsync(string priceId, CancellationToken ct);
 }
 
 internal sealed class StripeSubscriptionClient : IStripeSubscriptionClient
 {
     private readonly SubscriptionService _subscriptions = new();
     private readonly StripeBillingPortalSessionService _portal = new();
+    private readonly PriceService _prices = new();
 
     public Task<Subscription> UpdateAsync(
         string subscriptionId,
@@ -51,4 +58,28 @@ internal sealed class StripeSubscriptionClient : IStripeSubscriptionClient
             options,
             new RequestOptions { IdempotencyKey = idempotencyKey },
             cancellationToken: ct);
+
+    public async Task<Subscription?> GetSubscriptionAsync(string subscriptionId, CancellationToken ct)
+    {
+        try
+        {
+            return await _subscriptions.GetAsync(subscriptionId, cancellationToken: ct);
+        }
+        catch (StripeException ex) when (ex.StripeError?.Code == "resource_missing")
+        {
+            return null;
+        }
+    }
+
+    public async Task<Price?> GetPriceAsync(string priceId, CancellationToken ct)
+    {
+        try
+        {
+            return await _prices.GetAsync(priceId, cancellationToken: ct);
+        }
+        catch (StripeException ex) when (ex.StripeError?.Code == "resource_missing")
+        {
+            return null;
+        }
+    }
 }

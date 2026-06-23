@@ -48,6 +48,7 @@
 
 generated: 2026-06-12
 last_updated: 2026-06-23
+# story 2-10 transitioned: backlog → ready-for-dev → in-progress → review → done (2026-06-23; nightly BillingReconciliationService + webhook replay idempotency tests + currency/price drift detection; code-review: 4 patches [sentinel false-positive, PeriodicTimer startup run, subscription-drift tests, per-row error isolation], 154/154 BFF tests). Epic-2 COMPLETE — all 10 stories done.
 # story 2-8 transitioned: backlog → ready-for-dev (create-story workflow, 2026-06-23; usage page summary + HonestMathBanner + UsageMeter nav + BFF coach-pool/honest-math surfacing)
 # story 2-9 transitioned: backlog → ready-for-dev (create-story workflow, 2026-06-23; dunning DunningBanner + next_payment_attempt persistence + graceful degradation via existing 2.7 BlurLock + AR15 results-forever)
 project: Spectr
@@ -79,7 +80,7 @@ development_status:
   1-9-per-analysis-coach-caps: done
   epic-1-retrospective: optional
 
-  epic-2: in-progress
+  epic-2: done
   2-1-subscribe-to-pro-via-stripe-checkout: done
   2-2-manage-subscription-self-service: done
   2-3-buy-credits-with-append-only-ledger: done
@@ -89,7 +90,7 @@ development_status:
   2-7-cap-hit-upgrade-flow-upgradesheet-and-blurlock: done
   2-8-usage-page-with-honest-math: done
   2-9-dunning-states-and-graceful-degradation: done
-  2-10-billing-integrity-and-reconciliation: backlog
+  2-10-billing-integrity-and-reconciliation: done
   epic-2-retrospective: optional
 
   epic-3: backlog

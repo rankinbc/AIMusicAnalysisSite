@@ -338,7 +338,9 @@ def coach_reply(
             # the pending assistant row AND the user row we're answering
             # (Phase C inserts the user question explicitly between
             # delimiters). Last 10 only — context.py caps as well, but
-            # capping at SQL keeps memory bounded.
+            # capping at SQL keeps memory bounded (story 1.5 deferred
+            # follow-up). Fetch newest-first + LIMIT, then reverse to restore
+            # chronological order for the prompt.
             tail_rows = s.execute(
                 select(CoachMessage)
                 .where(
@@ -347,9 +349,13 @@ def coach_reply(
                     CoachMessage.id != uid_msg,
                     CoachMessage.status != "pending",
                 )
-                .order_by(CoachMessage.created_at.asc())
+                .order_by(CoachMessage.created_at.desc())
+                .limit(10)
             ).scalars().all()
-            tail = [{"role": r.role, "body": r.content} for r in tail_rows]
+            tail = [
+                {"role": r.role, "body": r.content}
+                for r in reversed(tail_rows)
+            ]
     except Exception:
         logger.exception("coach_reply Phase A failed for assistant %s",
                          assistant_message_id)

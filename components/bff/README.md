@@ -289,6 +289,30 @@ dotnet user-secrets set Stripe:PriceCreditPack10 price_<10-pack-price-id>
 Without these keys, `POST /billing/checkout/credits` returns
 `{ error: { code: "stripe_not_configured" } }` (503).
 
+### Billing integrity & reconciliation (story 2.10)
+
+`BillingReconciliationService` is a `BackgroundService` (`AddHostedService`)
+that runs a **read-only** drift check once at startup and every 24 h after.
+It never writes to the DB — idempotency is structural. Each run:
+
+- compares every `subscriptions` mirror row against Stripe
+  (`GetSubscriptionAsync`): flags `Status` / `PriceId` mismatches and
+  `CurrentPeriodEnd` drift beyond a 5-minute tolerance. Rows carrying the
+  `SubscriptionMirrorService` far-future sentinel (a webhook that dropped
+  `current_period_end`) are skipped for the period-end check so they don't
+  emit a perpetual false positive.
+- compares each configured Stripe `Price` (`GetPriceAsync`) against
+  `PricingDisplayOptions`: flags currency mismatch (case-insensitive) and
+  unit-amount-cents mismatch.
+
+All drift is emitted as a structured-log **`ReconciliationDrift:`**-prefixed
+`LogWarning` so Epic 10 observability can define one alert rule. A single
+per-subscription Stripe error is logged and the run continues (one bad row
+never aborts the nightly check). Skips entirely when Stripe is not
+configured. Integer-cents enforcement for `credit_ledger.amount` is
+structural (int column + `CHECK amount <> 0`); a full ledger↔Stripe
+payment audit is deferred to Epic 10.
+
 ## Triage routing plan persistence
 
 `Analysis.routing_plan` (jsonb) holds the Triage step output:

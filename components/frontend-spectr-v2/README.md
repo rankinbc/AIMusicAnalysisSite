@@ -167,5 +167,5 @@ npm run lint:css                   # no raw hex in *.module.css
 npm run lint:prices                # no price literals outside config
 npm run lint:fonts                 # no Google Fonts references (story 1.7)
 npm run build                      # production bundle
-npx vitest run                     # current baseline: 163 tests
+npx vitest run                     # current baseline: 353 tests
 ```

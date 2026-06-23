@@ -62,6 +62,15 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
                 Url = "https://billing.stripe.com/p/session/fake",
             });
         }
+
+        // Story 2.10 — read-only lookups not exercised by manage-subscription
+        // tests; return null so the reconciliation service (if it runs during
+        // a test host startup) emits no Stripe calls.
+        public Task<Stripe.Subscription?> GetSubscriptionAsync(string subscriptionId, CancellationToken ct)
+            => Task.FromResult<Stripe.Subscription?>(null);
+
+        public Task<Stripe.Price?> GetPriceAsync(string priceId, CancellationToken ct)
+            => Task.FromResult<Stripe.Price?>(null);
     }
 
     private (WebApplicationFactory<Program> F, RecordingStripeSubscriptionClient Subs)

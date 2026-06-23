@@ -127,6 +127,9 @@ builder.Services.AddScoped<CoachCapService>();
 // Story 2.8 — usage-page honest-math (90-day credit spend vs Pro-equivalent).
 builder.Services.AddScoped<HonestMathService>();
 
+// Story 2.10 — nightly billing reconciliation (read-only drift check).
+builder.Services.AddHostedService<BillingReconciliationService>();
+
 // Story 1.9: per-analysis free-tier coach follow-up cap. Fail-fast at startup
 // on a non-positive value — a zero cap would make the product unusable and we
 // don't want a config typo to ship silently.
