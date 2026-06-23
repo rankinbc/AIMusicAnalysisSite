@@ -29,6 +29,7 @@ import type {
   PatchReferenceRequest,
   PatchShareRequest,
   PatchSongRequest,
+  PlansResponse,
   PostShareCommentRequest,
   ReportListResponse,
   ReportsFilter,
@@ -106,6 +107,16 @@ export function useEntitlements() {
     queryKey: ['me', 'entitlements'],
     queryFn: () => fetcher<EntitlementsDto>({ url: '/me/entitlements', method: 'GET' }),
     staleTime: 30_000,
+  });
+}
+
+/** GET /api/billing/plans — quasi-static display prices (cents). Cached for
+ *  the session so the UpgradeSheet and pricing surfaces don't refetch. */
+export function usePlans() {
+  return useQuery<PlansResponse>({
+    queryKey: ['billing', 'plans'],
+    queryFn: () => fetcher<PlansResponse>({ url: '/billing/plans', method: 'GET' }),
+    staleTime: 5 * 60_000,
   });
 }
 

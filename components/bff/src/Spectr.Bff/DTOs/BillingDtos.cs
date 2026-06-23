@@ -95,4 +95,10 @@ public sealed record EntitlementsDto(
     bool AlsEnabled,
     bool FullVerdictsEnabled,
     int? HistoryDepth,
-    string Tier);
+    string Tier,
+    // Story 2.7 — the period allotment + consumption behind AnalysesRemaining,
+    // surfaced so the UpgradeSheet can render the "{used} of {limit} used this
+    // month" header (UX-DR30). AnalysesLimit is null when unlimited (Pro/credits);
+    // the free cap comes from the free_analyses_per_month flag (AR35, never hardcoded).
+    int? AnalysesLimit = null,
+    int AnalysesUsed = 0);

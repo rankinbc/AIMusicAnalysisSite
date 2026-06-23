@@ -4,7 +4,8 @@ import { toast } from 'sonner';
 
 import { ApiError } from '../../api/fetcher';
 import { extractApiError } from '../../api/error-utils';
-import { useReanalyzeVersion, useVerdicts, useVersionFiles } from '../../api/hooks';
+import { useEntitlements, useReanalyzeVersion, useVerdicts, useVersionFiles } from '../../api/hooks';
+import { UpgradeSheet } from '../../components/UpgradeSheet';
 import {
   isFinalJson,
   type FinalJson,
@@ -105,7 +106,9 @@ export function ReportView({ results, songId, tab, onTabChange }: ReportViewProp
   // Re-analyze: fire the same actor as a fresh upload, navigate to the new job.
   const navigate = useNavigate();
   const reanalyze = useReanalyzeVersion(results.versionId ?? '');
-  const handleReanalyze = useCallback(() => {
+  const ents = useEntitlements();
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const dispatchReanalyze = useCallback(() => {
     if (!results.versionId) {
       toast.error('This analysis is not tied to a version — cannot re-analyze.');
       return;
@@ -119,14 +122,16 @@ export function ReportView({ results, songId, tab, onTabChange }: ReportViewProp
         });
       },
       onError: (err) => {
+        // Cap hit → open the UpgradeSheet (UX-DR30) instead of a dead-end toast.
         if (err instanceof ApiError && extractApiError(err.body).code === 'entitlement_exhausted') {
-          toast.error('You have used all your analyses for this period.');
+          setUpgradeOpen(true);
         } else {
           toast.error(err instanceof Error ? err.message : 'Could not re-analyze');
         }
       },
     });
   }, [results.versionId, reanalyze, navigate, songId]);
+  const handleReanalyze = dispatchReanalyze;
 
   return (
     <div className={s.report}>
@@ -237,6 +242,19 @@ export function ReportView({ results, songId, tab, onTabChange }: ReportViewProp
           }}
         />
       )}
+
+      {/* Cap-hit upgrade moment for re-analyze (UX-DR30). No file to resume here;
+          on a successful upgrade we just re-dispatch the re-analysis. */}
+      <UpgradeSheet
+        open={upgradeOpen}
+        onOpenChange={setUpgradeOpen}
+        analysesUsed={ents.data?.analysesUsed ?? 0}
+        analysesLimit={ents.data?.analysesLimit ?? 0}
+        onUpgraded={() => {
+          setUpgradeOpen(false);
+          dispatchReanalyze();
+        }}
+      />
     </div>
   );
 }

@@ -34,7 +34,9 @@ import {
   type AlsProjectJson,
 } from '../features/upload/alsPreview';
 import f from '../styles/forms.module.css';
+import { BlurLock } from './BlurLock';
 import { buildConfirmPayload } from './stems-upload-helpers';
+import { UpgradeSheet } from './UpgradeSheet';
 import {
   buildAutoConfirmPayload,
   decideDispatchPath,
@@ -333,12 +335,23 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!mix) return;
-    // Client-side entitlement gate (AR38: server is authoritative; this is UI hint only).
+    // Client-side entitlement gate (gate-BETWEEN, UX-DR38): open the UpgradeSheet
+    // BEFORE any pipeline work when the free allotment is spent. The server 409
+    // (AR38) below remains the authoritative backstop for races.
+    if (ents.isLoading || !ents.data) return;
     if (ents.data?.analysesRemaining === 0) {
       setEntExhausted(true);
       return;
     }
     setEntExhausted(false);
+    await runUpload();
+  };
+
+  // The upload pipeline, factored out so the post-checkout resume (AC2) can
+  // re-invoke it with the SAME in-memory `mix` File once the tier flips.
+  const runUpload = async () => {
+    if (busy || phase !== 'form') return;
+    if (!mix) return;
     // A library reference that hasn't finished analyzing can't drive Phase 5 —
     // block the dispatch fail-fast rather than silently degrading the analysis.
     if (refMode === 'library' && pickedReferenceId) {
@@ -516,12 +529,19 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
   };
 
   const classified = proposals.data?.classified ?? false;
+  // Depth gates (UX-DR29). Stems + .als are Pro-tier inputs to a NEW analysis —
+  // gating them here (not delivered reports) keeps results-forever intact (AR15).
+  // Locked only once we positively know the tier lacks the feature.
+  const stemsLocked = ents.data ? !ents.data.stemsEnabled : false;
+  const alsLocked = ents.data ? !ents.data.alsEnabled : false;
 
   return (
+    <>
     <Dialog.Root
       open={open}
       onOpenChange={(next) => {
         if (!next && !busy) reset();
+        if (!next) setEntExhausted(false);
         onOpenChange(next);
       }}
     >
@@ -694,6 +714,12 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                   )}
 
                   {/* ── Encouraged: Ableton project (project-aware analysis) ── */}
+                  <BlurLock
+                    locked={alsLocked}
+                    reason="Ableton project analysis is a Pro feature"
+                    ctaLabel="Get Pro"
+                    onUnlock={() => setEntExhausted(true)}
+                  >
                   <div className={`${s.optionGroup} ${s.zoneRecommended}`}>
                     <div className={s.optionHead}>
                       <p className={s.subhead}>
@@ -743,6 +769,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                       />
                     )}
                   </div>
+                  </BlurLock>
 
                   {/* ── Optional: Reference track ── */}
                   <div className={s.optionHead}>
@@ -855,6 +882,12 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                   )}
 
                   {/* ── Advanced (de-emphasized): Stems ── */}
+                  <BlurLock
+                    locked={stemsLocked}
+                    reason="Per-stem analysis is a Pro feature"
+                    ctaLabel="Get Pro"
+                    onUnlock={() => setEntExhausted(true)}
+                  >
                   <div className={s.advanced}>
                     <button
                       type="button"
@@ -934,17 +967,10 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                       </div>
                     )}
                   </div>
+                  </BlurLock>
                 </>
               )}
             </div>
-
-            {entExhausted && (
-              <p className={s.entExhaustedError} role="alert">
-                You have used all your analyses for this period.{' '}
-                <a href="/_app/usage">View usage</a> or{' '}
-                <a href="/_app/billing">upgrade your plan</a>.
-              </p>
-            )}
 
             {fileUpload.isUploading && (
               <progress value={fileUpload.progress} max={1} className={s.progress} />
@@ -981,5 +1007,19 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+
+    {/* Cap-hit upgrade moment (UX-DR30). Opened by the client pre-check or the
+        server 409 backstop. On a successful upgrade the kept `mix` resumes. */}
+    <UpgradeSheet
+      open={entExhausted}
+      onOpenChange={setEntExhausted}
+      analysesUsed={ents.data?.analysesUsed ?? 0}
+      analysesLimit={ents.data?.analysesLimit ?? 0}
+      onUpgraded={() => {
+        setEntExhausted(false);
+        void runUpload();
+      }}
+    />
+    </>
   );
 }

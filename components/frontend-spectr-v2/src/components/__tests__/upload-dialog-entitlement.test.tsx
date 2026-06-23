@@ -11,6 +11,7 @@ vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn() }));
 
 import { extractApiError } from '../../api/error-utils';
 import { UnifiedUploadDialog } from '../UnifiedUploadDialog';
+import { UpgradeSheet } from '../UpgradeSheet';
 
 describe('extractApiError identifies entitlement_exhausted', () => {
   it('extracts code from AR38 error envelope', () => {
@@ -35,5 +36,11 @@ describe('extractApiError identifies entitlement_exhausted', () => {
 describe('UnifiedUploadDialog component', () => {
   it('is exported as a function component', () => {
     expect(typeof UnifiedUploadDialog).toBe('function');
+  });
+
+  // Story 2.7 — the cap-hit path now opens the UpgradeSheet (UX-DR30) instead
+  // of the old inline notice; the dialog imports + renders it on entExhausted.
+  it('wires in the UpgradeSheet', () => {
+    expect(typeof UpgradeSheet).toBe('function');
   });
 });

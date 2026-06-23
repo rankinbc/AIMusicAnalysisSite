@@ -229,7 +229,9 @@ that would change their tier (credit spend, sub status change).
   "stemsEnabled": false,
   "alsEnabled": false,
   "fullVerdictsEnabled": false,
-  "historyDepth": 10        // null for pro
+  "historyDepth": 10,       // null for pro
+  "analysesLimit": 3,       // story 2.7 — period cap (null for pro/credits)
+  "analysesUsed": 1         // story 2.7 — consumption; drives the UpgradeSheet header
 }
 ```
 

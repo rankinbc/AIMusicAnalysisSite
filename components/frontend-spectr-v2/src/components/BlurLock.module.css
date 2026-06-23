@@ -1,0 +1,51 @@
+/* Story 2.7 / UX-DR29 — one gating wrapper for every depth-gated surface
+   (free-tier stems tab, lapsed-Pro features). Real content stays mounted
+   underneath, blurred + dimmed, so the user sees WHAT they're missing;
+   an overlay carries the one-line reason + a single unlock CTA. */
+
+.wrap {
+  position: relative;
+}
+
+.blurred {
+  filter: blur(6px);
+  opacity: 0.55;
+  user-select: none;
+  pointer-events: none;
+  /* keep the gated content from causing layout shift when it animates */
+  transition: filter 200ms ease, opacity 200ms ease;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: var(--paywall-overlay);
+  border-radius: var(--radius);
+  z-index: 2;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: center;
+  max-width: 320px;
+}
+
+.reason {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blurred {
+    transition: none;
+  }
+}

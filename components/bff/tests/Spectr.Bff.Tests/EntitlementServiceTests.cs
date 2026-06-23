@@ -95,6 +95,9 @@ public sealed class EntitlementServiceTests
             Assert.False(ent.AlsEnabled);
             Assert.False(ent.FullVerdictsEnabled);
             Assert.Equal(10, ent.HistoryDepth);
+            // Story 2.7 — UpgradeSheet header source: "{used} of {limit}".
+            Assert.Equal(3, ent.AnalysesLimit);
+            Assert.Equal(0, ent.AnalysesUsed);
         }
         finally { await CleanupAsync(userId); }
     }
@@ -126,6 +129,9 @@ public sealed class EntitlementServiceTests
             var ent = await svc.ForAsync(userId, CancellationToken.None);
             Assert.Equal("free", ent.Tier);
             Assert.Equal(0, ent.AnalysesRemaining);
+            // Story 2.7 — at the cap, used == limit ("3 of 3 used this month").
+            Assert.Equal(3, ent.AnalysesLimit);
+            Assert.Equal(3, ent.AnalysesUsed);
         }
         finally { await CleanupAsync(userId); }
     }

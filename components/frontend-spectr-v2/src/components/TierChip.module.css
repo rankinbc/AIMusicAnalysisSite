@@ -1,0 +1,24 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+  line-height: 1.4;
+}
+
+.free {
+  color: var(--tier-free);
+}
+
+.pro {
+  color: var(--tier-pro);
+}
+
+.credits {
+  color: var(--tier-credits);
+}

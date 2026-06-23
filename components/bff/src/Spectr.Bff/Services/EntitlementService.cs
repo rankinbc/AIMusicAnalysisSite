@@ -138,7 +138,9 @@ public class EntitlementService(
             AlsEnabled: false,
             FullVerdictsEnabled: false,
             HistoryDepth: historyFree,
-            Tier: "free");
+            Tier: "free",
+            AnalysesLimit: freeCap,
+            AnalysesUsed: usedThisPeriod);
     }
 
     private static int GetFlag(Dictionary<string, string> flags, string key, int fallback)

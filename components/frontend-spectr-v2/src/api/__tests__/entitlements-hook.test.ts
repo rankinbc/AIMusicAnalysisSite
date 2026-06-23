@@ -17,10 +17,13 @@ describe('EntitlementsDto shape', () => {
       fullVerdictsEnabled: false,
       historyDepth: 10,
       tier: 'free',
+      analysesLimit: 3,
+      analysesUsed: 0,
     };
     expect(dto.tier).toBe('free');
     expect(dto.analysesRemaining).toBe(3);
     expect(dto.stemsEnabled).toBe(false);
+    expect(dto.analysesLimit).toBe(3);
   });
 
   it('pro tier has null unlimited fields', () => {
@@ -32,6 +35,8 @@ describe('EntitlementsDto shape', () => {
       fullVerdictsEnabled: true,
       historyDepth: null,
       tier: 'pro',
+      analysesLimit: null,
+      analysesUsed: 0,
     };
     expect(dto.analysesRemaining).toBeNull();
     expect(dto.historyDepth).toBeNull();
@@ -47,6 +52,8 @@ describe('EntitlementsDto shape', () => {
       fullVerdictsEnabled: true,
       historyDepth: 30,
       tier: 'credits',
+      analysesLimit: null,
+      analysesUsed: 0,
     };
     expect(dto.tier).toBe('credits');
     expect(dto.analysesRemaining).toBe(5);

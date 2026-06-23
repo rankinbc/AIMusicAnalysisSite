@@ -104,6 +104,11 @@ export interface EntitlementsDto {
   fullVerdictsEnabled: boolean;
   historyDepth: number | null;
   tier: 'free' | 'credits' | 'pro';
+  /** Story 2.7 — period allotment + consumption for the UpgradeSheet header
+   *  ("{used} of {limit} used this month"). analysesLimit is null when
+   *  unlimited (pro/credits). */
+  analysesLimit: number | null;
+  analysesUsed: number;
 }
 
 export interface AuthResponse {

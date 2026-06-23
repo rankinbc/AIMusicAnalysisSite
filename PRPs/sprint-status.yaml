@@ -47,8 +47,10 @@
 # Build order: E1 -> E2 -> E3 -> E4 -> E5 -> E6 -> E7 -> E8 -> E9 -> E10.
 
 generated: 2026-06-12
-last_updated: 2026-06-16
+last_updated: 2026-06-23
 project: Spectr
+# (reconciled 2026-06-23 to git truth: 2-4 d9b9128, 2-5 5e8b582, 2-6 0805950 all committed → done. Epic-2 done-line now at 2-6; next = 2-7.)
+# (DRIFT NOTE 2026-06-23: product-fidelity merge (6f55403) landed Epic-5 work out of sprint order — 5.1 (1557764), 5.2/5.3/5.5 (21889ac), 5.9 AC1 (6c933fd) + .als features. Epic-5 statuses NOT yet reconciled here — needs separate pass.)
 # (re-updated 2026-06-15: 1-6 → done after code review)
 # (re-updated 2026-06-15: 1-9 → ready-for-dev after create-story; epic 1 still in-progress)
 # (re-updated 2026-06-15: 2-2 → done → in-progress after code review — 30 patches + 3 decisions queued)
@@ -79,10 +81,10 @@ development_status:
   2-1-subscribe-to-pro-via-stripe-checkout: done
   2-2-manage-subscription-self-service: done
   2-3-buy-credits-with-append-only-ledger: done
-  2-4-server-side-entitlements-and-metering: review
-  2-5-paid-jobs-never-starve: ready-for-dev
-  2-6-tier-aware-coach-caps: backlog
-  2-7-cap-hit-upgrade-flow-upgradesheet-and-blurlock: backlog
+  2-4-server-side-entitlements-and-metering: done
+  2-5-paid-jobs-never-starve: done
+  2-6-tier-aware-coach-caps: done
+  2-7-cap-hit-upgrade-flow-upgradesheet-and-blurlock: done
   2-8-usage-page-with-honest-math: backlog
   2-9-dunning-states-and-graceful-degradation: backlog
   2-10-billing-integrity-and-reconciliation: backlog
