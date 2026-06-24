@@ -8,6 +8,12 @@ import {
   COMPRESSOR_DEFAULT,
   SATURATION_DEFAULT,
   WIDTH_DEFAULT,
+  DJFILTER_DEFAULT,
+  DELAY_DEFAULT,
+  REVERB_DEFAULT,
+  PAN_DEFAULT,
+  TREMOLO_DEFAULT,
+  TRIM_DEFAULT,
   type EqBand,
   type CompressorState,
   type SaturationState,
@@ -175,6 +181,12 @@ export function useAudioGraph(
   const compStateRef = useRef<CompressorState>({ ...COMPRESSOR_DEFAULT });
   const satStateRef = useRef<SaturationState>({ ...SATURATION_DEFAULT });
   const widthStateRef = useRef<WidthState>({ ...WIDTH_DEFAULT });
+  const djFilterStateRef = useRef<DjFilterState>({ ...DJFILTER_DEFAULT });
+  const delayStateRef = useRef<DelayState>({ ...DELAY_DEFAULT });
+  const reverbStateRef = useRef<ReverbState>({ ...REVERB_DEFAULT });
+  const panStateRef = useRef<PanState>({ ...PAN_DEFAULT });
+  const tremoloStateRef = useRef<TremoloState>({ ...TREMOLO_DEFAULT });
+  const trimStateRef = useRef<TrimState>({ ...TRIM_DEFAULT });
   const masterBypassRef = useRef(false);
   // ── Pitch (BufferSource) lane ──
   const pitchStateRef = useRef<PitchState>({ ...PITCH_DEFAULT });
@@ -279,6 +291,42 @@ export function useAudioGraph(
     nodes.chain.units.eq.applyParams({ bands: eqStateRef.current, enabled: true });
   };
 
+  const applyDjFilter = () => {
+    const nodes = nodesRef.current;
+    if (!nodes) return;
+    nodes.chain.units.djfilter.applyParams(djFilterStateRef.current);
+  };
+
+  const applyDelay = () => {
+    const nodes = nodesRef.current;
+    if (!nodes) return;
+    nodes.chain.units.delay.applyParams(delayStateRef.current);
+  };
+
+  const applyReverb = () => {
+    const nodes = nodesRef.current;
+    if (!nodes) return;
+    nodes.chain.units.reverb.applyParams(reverbStateRef.current);
+  };
+
+  const applyPan = () => {
+    const nodes = nodesRef.current;
+    if (!nodes) return;
+    nodes.chain.units.pan.applyParams(panStateRef.current);
+  };
+
+  const applyTremolo = () => {
+    const nodes = nodesRef.current;
+    if (!nodes) return;
+    nodes.chain.units.tremolo.applyParams(tremoloStateRef.current);
+  };
+
+  const applyTrim = () => {
+    const nodes = nodesRef.current;
+    if (!nodes) return;
+    nodes.chain.units.trim.applyParams(trimStateRef.current);
+  };
+
   const applyMasterBypass = () => {
     const nodes = nodesRef.current;
     if (!nodes) return;
@@ -308,6 +356,30 @@ export function useAudioGraph(
       case 'ms':
         Object.assign(widthStateRef.current, patch);
         applyWidth();
+        break;
+      case 'djfilter':
+        Object.assign(djFilterStateRef.current, patch);
+        applyDjFilter();
+        break;
+      case 'delay':
+        Object.assign(delayStateRef.current, patch);
+        applyDelay();
+        break;
+      case 'reverb':
+        Object.assign(reverbStateRef.current, patch);
+        applyReverb();
+        break;
+      case 'pan':
+        Object.assign(panStateRef.current, patch);
+        applyPan();
+        break;
+      case 'tremolo':
+        Object.assign(tremoloStateRef.current, patch);
+        applyTremolo();
+        break;
+      case 'trim':
+        Object.assign(trimStateRef.current, patch);
+        applyTrim();
         break;
     }
   };
@@ -574,11 +646,23 @@ export function useAudioGraph(
       compStateRef.current = { ...COMPRESSOR_DEFAULT };
       satStateRef.current = { ...SATURATION_DEFAULT };
       widthStateRef.current = { ...WIDTH_DEFAULT };
+      djFilterStateRef.current = { ...DJFILTER_DEFAULT };
+      delayStateRef.current = { ...DELAY_DEFAULT };
+      reverbStateRef.current = { ...REVERB_DEFAULT };
+      panStateRef.current = { ...PAN_DEFAULT };
+      tremoloStateRef.current = { ...TREMOLO_DEFAULT };
+      trimStateRef.current = { ...TRIM_DEFAULT };
       masterBypassRef.current = false;
       applyEq();
       applyCompressor();
       applySaturation();
       applyWidth();
+      applyDjFilter();
+      applyDelay();
+      applyReverb();
+      applyPan();
+      applyTremolo();
+      applyTrim();
       applyMasterBypass();
       nodesRef.current?.chain.reorder([...DEFAULT_ORDER]);
     },
