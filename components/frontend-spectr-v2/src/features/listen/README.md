@@ -149,6 +149,11 @@ disclosure) = DJ Filter, Delay, Reverb, Pan, Tremolo, Gate, Bitcrusher.
   meters (gate/limiter) post over a `port` ~30 Hz; the unit caches the latest for synchronous reads.
 - `readFrame()` — the visualizer/page-level meters (spectrum, scope, RMS, short-LUFS, true-peak,
   L/R correlation). Poll both in the page's rAF loop.
+- **Ready-made polling hooks** (`meterHooks.ts`, design-agnostic): `useEffectMeter(graph, id)` →
+  live `EffectMeter` for comp/gate/limiter; `useAudioLevels(graph)` →
+  `{ rmsDb, lufsShort, truePeakDb, correlation }`. Both rAF-throttled + change-gated (re-render only
+  on change). For canvas visualizers (spectrum/scope) read `readFrame()` imperatively in your own
+  rAF instead — don't route the reused Float32Array buffers through React state.
 
 ## 8. Behavior preservation (invariant)
 
