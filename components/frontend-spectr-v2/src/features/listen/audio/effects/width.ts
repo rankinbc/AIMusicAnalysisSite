@@ -21,14 +21,14 @@ export function createWidthUnit(ctx: AudioContext): EffectUnit<WidthState> {
   midR.connect(merger, 0, 1);
   sideR.connect(merger, 0, 1);
 
-  const setMatrix = (width: number) => {
-    const g = msGains(width);
+  const setMatrix = (width: number, midGain: number, sideGain: number) => {
+    const g = msGains(width, midGain, sideGain);
     midL.gain.value = g.midL;
     midR.gain.value = g.midR;
     sideL.gain.value = g.sideL;
     sideR.gain.value = g.sideR;
   };
-  setMatrix(1); // identity default
+  setMatrix(1, 1, 1); // identity default
 
   const { input, output, setWet } = makeDryWet(ctx, splitter, merger);
 
@@ -36,12 +36,19 @@ export function createWidthUnit(ctx: AudioContext): EffectUnit<WidthState> {
     id: 'ms',
     input,
     output,
-    applyParams: (state: WidthState) => setMatrix(state.enabled ? state.width : 1),
+    applyParams: (state: WidthState) => {
+      if (!state.enabled) {
+        setMatrix(1, 1, 1);
+        return;
+      }
+      const gM = Math.pow(10, state.midGainDb / 20);
+      const gS = Math.pow(10, state.sideGainDb / 20);
+      const w = state.mono ? 0 : state.width;
+      setMatrix(w, gM, gS);
+    },
     setBypass: (bypassed: boolean) => setWet(bypassed ? 0 : 1),
     dispose: () => {
-      [splitter, midL, midR, sideL, sideR, merger, input, output].forEach((n) =>
-        n.disconnect(),
-      );
+      [splitter, midL, midR, sideL, sideR, merger, input, output].forEach((n) => n.disconnect());
     },
   };
 }
