@@ -1,5 +1,15 @@
 import { makeDryWet, type EffectId, type EffectMeter, type EffectUnit } from './EffectUnit';
 
+// Register the three AudioWorklet processor modules. Vite serves each processor
+// (and its imported pure-math modules) as a separate asset via new URL(...).
+export function registerWorklets(ctx: AudioContext): Promise<void> {
+  return Promise.all([
+    ctx.audioWorklet.addModule(new URL('./dsp/processors/gate.processor.ts', import.meta.url)),
+    ctx.audioWorklet.addModule(new URL('./dsp/processors/bitcrusher.processor.ts', import.meta.url)),
+    ctx.audioWorklet.addModule(new URL('./dsp/processors/limiter.processor.ts', import.meta.url)),
+  ]).then(() => undefined);
+}
+
 // Each side of the materialize duck (down, then up), in seconds.
 const DUCK_SEC = 0.01;
 

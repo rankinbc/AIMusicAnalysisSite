@@ -1,8 +1,11 @@
 // composer.ts
+import { createBitcrusherUnit } from './effects/bitcrusher';
 import { createCompressorUnit } from './effects/compressor';
 import { createDelayUnit } from './effects/delay';
 import { createDjFilterUnit } from './effects/djFilter';
 import { createEqUnit } from './effects/eq';
+import { createGateUnit } from './effects/gate';
+import { createLimiterUnit } from './effects/limiter';
 import { createPanUnit } from './effects/pan';
 import { createReverbUnit } from './effects/reverb';
 import { createSaturatorUnit } from './effects/saturator';
@@ -12,6 +15,7 @@ import { createWidthUnit } from './effects/width';
 import { DEFAULT_ORDER } from './state';
 import { chainLinks, isPermutation, type ChainEndpoint } from './dsp/chainLinks';
 import type { EffectId, EffectUnit } from './EffectUnit';
+import { registerWorklets } from './worklets';
 
 export interface InsertChain {
   chainIn: AudioNode;
@@ -29,13 +33,16 @@ export function buildInsertChain(ctx: AudioContext): InsertChain {
   const units: Record<EffectId, EffectUnit<unknown>> = {
     djfilter: createDjFilterUnit(ctx) as EffectUnit<unknown>,
     eq: createEqUnit(ctx) as EffectUnit<unknown>,
+    gate: createGateUnit(ctx) as EffectUnit<unknown>,
     comp: createCompressorUnit(ctx) as EffectUnit<unknown>,
     sat: createSaturatorUnit(ctx) as EffectUnit<unknown>,
+    bitcrusher: createBitcrusherUnit(ctx) as EffectUnit<unknown>,
     ms: createWidthUnit(ctx) as EffectUnit<unknown>,
     pan: createPanUnit(ctx) as EffectUnit<unknown>,
     tremolo: createTremoloUnit(ctx) as EffectUnit<unknown>,
     delay: createDelayUnit(ctx) as EffectUnit<unknown>,
     reverb: createReverbUnit(ctx) as EffectUnit<unknown>,
+    limiter: createLimiterUnit(ctx) as EffectUnit<unknown>,
     trim: createTrimUnit(ctx) as EffectUnit<unknown>,
   };
   const chainIn = ctx.createGain();
@@ -62,6 +69,15 @@ export function buildInsertChain(ctx: AudioContext): InsertChain {
   };
 
   wire(order); // initial connect in default order
+
+  // Worklet boot: register the processor modules, then swap each worklet unit's
+  // placeholder for its real AudioWorkletNode. Fire-and-forget; on failure the
+  // units stay passthrough placeholders (graceful degradation).
+  void registerWorklets(ctx)
+    .then(() => {
+      (Object.keys(units) as EffectId[]).forEach((id) => units[id].materialize?.());
+    })
+    .catch(() => undefined);
 
   return {
     chainIn,
