@@ -122,3 +122,7 @@ output/frontend-spectr-v2/
 
 # Integration-test-generated upload/als staging dirs (per-run GUID folders)
 components/bff/tests/data/audio/
+
+# SDD scratch (any depth)
+.superpowers/
+**/.superpowers/
