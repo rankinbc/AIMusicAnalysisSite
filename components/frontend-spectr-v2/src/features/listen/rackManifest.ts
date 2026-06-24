@@ -15,10 +15,10 @@
 //   graph.readEffectMeter(id)          // comp | gate | limiter return live data
 //   graph.setMasterBypass(b) / graph.resetAll()
 // EXCEPTIONS:
-//   - 'eq' is driven via setEffectParams('eq', { bands }) with a full EqBand[].
-//     The EQ unit is ALWAYS graph-enabled; there is no unit-level EQ bypass —
-//     "EQ off" = flatten every band gain to 0 dB (what the legacy setEqEnabled(false)
-//     does). Own the band array in the UI and re-apply on enable.
+//   - 'eq' takes a full band array: setEffectParams('eq', { enabled, bands }) where
+//     bands is EqBand[] (each band: type/freq/gainDb/q/enabled). It has a real unit
+//     bypass like the other modules (enabled:false → bypassed). It defaults enabled
+//     with flat bands (transparent). Own the band array in the UI; see EQ_BAND_PARAMS.
 //   - 'pitch' is NOT an insert effect (not in EffectId / not reorderable). Drive it
 //     via the pitch handle methods (enterPitchMode/setPitchDetune/...). It is listed
 //     here only so the UI can lay out a pitch panel.
@@ -136,7 +136,7 @@ export const RACK_MANIFEST: readonly ModuleDescriptor[] = [
     tier: 'mastering',
     hasMix: false,
     hasMeter: false,
-    summary: '8 fully-parametric bands. Drive via setEffectParams("eq",{bands}). No unit bypass — "off" = flatten gains. See EQ_BAND_PARAMS.',
+    summary: '8 fully-parametric bands. Drive via setEffectParams("eq",{enabled,bands}); each band is type/freq/gainDb/q/enabled. Has a unit bypass (defaults enabled, transparent via flat bands). See EQ_BAND_PARAMS.',
     params: EQ_BAND_PARAMS, // applied per band ×8
   },
   {

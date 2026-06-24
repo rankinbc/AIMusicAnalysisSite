@@ -26,7 +26,7 @@ Canonical handle usage:
 - `graph.setMasterBypass(b)`, `graph.resetAll()`, `graph.ensureContext()` (call from the play-button gesture — browser autoplay policy).
 - Pitch lane: `enterPitchMode/exitPitchMode/setPitchDetune/pitch*` — pitch is NOT an insert effect (not in `EffectId`, not reorderable).
 
-**EQ is the one exception to the uniform model.** `EffectParamMap['eq']` is `{ bands: EqBand[] }`, and the EQ unit is ALWAYS graph-enabled — there is no unit-level EQ bypass. Drive it with `setEffectParams('eq', { bands })` (full array; each `EqBand` has `type/freq/gainDb/q/enabled`). Represent "EQ off" by flattening every band gain to 0 dB (what the legacy `setEqEnabled(false)` does; note `setEqEnabled(true)` does NOT restore prior gains — the UI owns its band state and re-applies). Optional future engine cleanup: give EQ a real unit bypass like the other 12.
+**EQ takes a band array** (its one shape difference from the others). `EffectParamMap['eq']` is `{ bands: EqBand[]; enabled: boolean }`. Drive it uniformly: `setEffectParams('eq', { enabled, bands })` where each `EqBand` is `{ type, freq, gainDb, q, enabled }`. `enabled:false` truly bypasses the unit, exactly like every other module (this was fixed — EQ used to be always-on). It defaults `enabled:true` with flat bands (transparent), so the UI owns its band state and re-applies on changes. The legacy `setEqBand(i, gainDb)` / `setEqEnabled(bool)` helpers remain for back-compat but are redundant — prefer `setEffectParams`.
 
 ## Module tiering (primary use = a full mixed song)
 
