@@ -28,7 +28,7 @@ class LimiterProcessor extends AudioWorkletProcessor {
     if (!input || input.length === 0 || !output || output.length === 0) return true;
 
     const chs = output.length;
-    if (this.size === 0) {
+    if (this.size === 0 || this.buf.length < chs) {
       this.size = Math.ceil(MAX_LOOKAHEAD_SEC * sampleRate) + 1;
       this.buf = Array.from({ length: chs }, () => new Float32Array(this.size));
     }
