@@ -14,6 +14,9 @@ import {
   PAN_DEFAULT,
   TREMOLO_DEFAULT,
   TRIM_DEFAULT,
+  GATE_DEFAULT,
+  BITCRUSHER_DEFAULT,
+  LIMITER_DEFAULT,
   type EqBand,
   type CompressorState,
   type SaturationState,
@@ -193,6 +196,9 @@ export function useAudioGraph(
   const panStateRef = useRef<PanState>({ ...PAN_DEFAULT });
   const tremoloStateRef = useRef<TremoloState>({ ...TREMOLO_DEFAULT });
   const trimStateRef = useRef<TrimState>({ ...TRIM_DEFAULT });
+  const gateStateRef = useRef<GateState>({ ...GATE_DEFAULT });
+  const bitcrusherStateRef = useRef<BitcrusherState>({ ...BITCRUSHER_DEFAULT });
+  const limiterStateRef = useRef<LimiterState>({ ...LIMITER_DEFAULT });
   const masterBypassRef = useRef(false);
   // ── Pitch (BufferSource) lane ──
   const pitchStateRef = useRef<PitchState>({ ...PITCH_DEFAULT });
@@ -333,6 +339,24 @@ export function useAudioGraph(
     nodes.chain.units.trim.applyParams(trimStateRef.current);
   };
 
+  const applyGate = () => {
+    const nodes = nodesRef.current;
+    if (!nodes) return;
+    nodes.chain.units.gate.applyParams(gateStateRef.current);
+  };
+
+  const applyBitcrusher = () => {
+    const nodes = nodesRef.current;
+    if (!nodes) return;
+    nodes.chain.units.bitcrusher.applyParams(bitcrusherStateRef.current);
+  };
+
+  const applyLimiter = () => {
+    const nodes = nodesRef.current;
+    if (!nodes) return;
+    nodes.chain.units.limiter.applyParams(limiterStateRef.current);
+  };
+
   const applyMasterBypass = () => {
     const nodes = nodesRef.current;
     if (!nodes) return;
@@ -386,6 +410,18 @@ export function useAudioGraph(
       case 'trim':
         Object.assign(trimStateRef.current, patch);
         applyTrim();
+        break;
+      case 'gate':
+        Object.assign(gateStateRef.current, patch);
+        applyGate();
+        break;
+      case 'bitcrusher':
+        Object.assign(bitcrusherStateRef.current, patch);
+        applyBitcrusher();
+        break;
+      case 'limiter':
+        Object.assign(limiterStateRef.current, patch);
+        applyLimiter();
         break;
     }
   };
@@ -658,6 +694,9 @@ export function useAudioGraph(
       panStateRef.current = { ...PAN_DEFAULT };
       tremoloStateRef.current = { ...TREMOLO_DEFAULT };
       trimStateRef.current = { ...TRIM_DEFAULT };
+      gateStateRef.current = { ...GATE_DEFAULT };
+      bitcrusherStateRef.current = { ...BITCRUSHER_DEFAULT };
+      limiterStateRef.current = { ...LIMITER_DEFAULT };
       masterBypassRef.current = false;
       applyEq();
       applyCompressor();
@@ -669,6 +708,9 @@ export function useAudioGraph(
       applyPan();
       applyTremolo();
       applyTrim();
+      applyGate();
+      applyBitcrusher();
+      applyLimiter();
       applyMasterBypass();
       nodesRef.current?.chain.reorder([...DEFAULT_ORDER]);
     },
