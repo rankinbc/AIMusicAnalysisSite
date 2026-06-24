@@ -183,18 +183,67 @@ export const TREMOLO_DEFAULT: TremoloState = {
 
 export const TRIM_DEFAULT: TrimState = { gainDb: 0, enabled: true };
 
-// Phase-4 default insert order: master design chain minus the three Phase-5
-// worklet slots (gate after eq, bitcrusher after sat, limiter before trim).
+export interface GateState {
+  thresholdDb: number; // -80..0
+  attackMs: number; // 0..50
+  holdMs: number; // 0..500
+  releaseMs: number; // 0..1000
+  floorDb: number; // -80..0
+  enabled: boolean;
+}
+
+export interface BitcrusherState {
+  bitDepth: number; // 1..16
+  downsample: number; // 1..50
+  mix: number; // 0..1
+  enabled: boolean;
+}
+
+export interface LimiterState {
+  ceilingDb: number; // -12..0
+  releaseMs: number; // 1..500
+  lookaheadMs: number; // 0..10
+  enabled: boolean;
+}
+
+export const GATE_DEFAULT: GateState = {
+  thresholdDb: -40,
+  attackMs: 1,
+  holdMs: 10,
+  releaseMs: 100,
+  floorDb: -80,
+  enabled: false,
+};
+
+export const BITCRUSHER_DEFAULT: BitcrusherState = {
+  bitDepth: 16,
+  downsample: 1,
+  mix: 0,
+  enabled: false,
+};
+
+export const LIMITER_DEFAULT: LimiterState = {
+  ceilingDb: -1.0,
+  releaseMs: 50,
+  lookaheadMs: 5,
+  enabled: false,
+};
+
+// Phase-5 default insert order: 13-unit chain with worklets in their
+// master-design slots (gate after eq, bitcrusher after sat, limiter before trim).
 export const DEFAULT_ORDER: ReadonlyArray<EffectId> = [
   'djfilter',
   'eq',
+  'gate',
   'comp',
   'sat',
+  'bitcrusher',
   'ms',
   'pan',
   'tremolo',
   'delay',
   'reverb',
+  'limiter',
   'trim',
 ];
 

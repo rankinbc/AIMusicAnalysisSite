@@ -24,6 +24,9 @@ import {
   type PanState,
   type TremoloState,
   type TrimState,
+  type GateState,
+  type BitcrusherState,
+  type LimiterState,
 } from './audio/state';
 
 // Re-export for existing consumers (PreviewTools, route) that import these from
@@ -47,6 +50,9 @@ export interface EffectParamMap {
   pan: PanState;
   tremolo: TremoloState;
   trim: TrimState;
+  gate: GateState;
+  bitcrusher: BitcrusherState;
+  limiter: LimiterState;
 }
 
 // Web Audio chain that wraps the page's single <audio> element. The processing

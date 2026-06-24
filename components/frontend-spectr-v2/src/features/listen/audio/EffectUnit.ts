@@ -10,7 +10,10 @@ export type EffectId =
   | 'reverb'
   | 'pan'
   | 'tremolo'
-  | 'trim';
+  | 'trim'
+  | 'gate'
+  | 'bitcrusher'
+  | 'limiter';
 
 export interface EffectMeter {
   reductionDb?: number;
@@ -24,6 +27,9 @@ export interface EffectUnit<S> {
   applyParams(state: S): void;
   setBypass(bypassed: boolean): void;
   readMeter?(): EffectMeter;
+  // Worklet units only: build the AudioWorkletNode and swap it in once the
+  // processor module has registered. No-op (absent) on native units.
+  materialize?(): void;
   dispose(): void;
 }
 

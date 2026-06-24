@@ -10,6 +10,9 @@ import {
   PAN_DEFAULT,
   TREMOLO_DEFAULT,
   TRIM_DEFAULT,
+  GATE_DEFAULT,
+  BITCRUSHER_DEFAULT,
+  LIMITER_DEFAULT,
   DEFAULT_ORDER,
 } from './state';
 
@@ -69,18 +72,36 @@ describe('phase-4 module defaults are transparent', () => {
   });
 });
 
-describe('DEFAULT_ORDER (phase 4)', () => {
-  it('is the 10-unit native chain with worklet slots omitted', () => {
+describe('phase-5 worklet defaults are transparent', () => {
+  it('gate/bitcrusher/limiter default disabled', () => {
+    expect(GATE_DEFAULT.enabled).toBe(false);
+    expect(BITCRUSHER_DEFAULT.enabled).toBe(false);
+    expect(LIMITER_DEFAULT.enabled).toBe(false);
+  });
+
+  it('identity-ish numeric defaults (bitcrusher transparent, limiter at -1 dBTP)', () => {
+    expect(BITCRUSHER_DEFAULT.mix).toBe(0);
+    expect(BITCRUSHER_DEFAULT.bitDepth).toBe(16);
+    expect(BITCRUSHER_DEFAULT.downsample).toBe(1);
+    expect(LIMITER_DEFAULT.ceilingDb).toBe(-1.0);
+  });
+});
+
+describe('DEFAULT_ORDER (phase 5)', () => {
+  it('is the 13-unit chain with worklets in their master-design slots', () => {
     expect(DEFAULT_ORDER).toEqual([
       'djfilter',
       'eq',
+      'gate',
       'comp',
       'sat',
+      'bitcrusher',
       'ms',
       'pan',
       'tremolo',
       'delay',
       'reverb',
+      'limiter',
       'trim',
     ]);
   });
