@@ -251,8 +251,9 @@ The only default-enabled unit, but unity at `gainDb:0` → transparent. One
 
 ### `audio/state.ts`
 - Add `export type Division = '1/4' | '1/8' | '1/8.' | '1/8T' | '1/16'`.
-- Add `IrType` and the six state interfaces (above) + their `*_DEFAULT` constants
-  + `default*State()` factory functions (mirroring the existing pattern).
+- Add `IrType` and the six state interfaces (above) + their `*_DEFAULT` constants.
+  (No `default*State()` factories — the existing ones are unused; the hook spreads
+  the `*_DEFAULT` consts directly. YAGNI.)
 - Widen `DEFAULT_ORDER` to
   `['djfilter','eq','comp','sat','ms','pan','tremolo','delay','reverb','trim']`.
 
