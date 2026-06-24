@@ -83,3 +83,30 @@ Native nodes are cheap, but the **reverb convolver** (long IR) and the **limiter
 3. At defaults the page must sound identical to today (the engine is behavior-preserving) — verify nothing regresses.
 
 Deliverable: an approved design, then a working, gates-green Listen-page rack UI wired to the engine handle.
+
+## Fidelity workflow — match the design, don't drift (READ THIS)
+
+Handoffs drift when the implementer works from prose and never *sees* the target or its own rendered output. Do NOT one-shot this from text. Work **visually and iteratively**:
+
+**Use the superpowers `frontend-design` skill** for this work — it is built around design + screenshot iteration. Invoke it.
+
+**0. Capture a style baseline.** Before building, run the app and screenshot the CURRENT Listen page + 2–3 existing pages (login, library, a results page) into `components/frontend-spectr-v2/ui-reference/` (see its README). These define the app's visual language — spacing, tokens, card style, type scale — that the new rack must match. Use the Playwright browser tools (`browser_navigate` → `browser_take_screenshot`).
+
+**1. An image is the source of truth, not this doc.** If a mockup image exists, save it as `ui-reference/mockup.png` and match IT pixel-close. Prose specs are a guide; the rendered result is the acceptance.
+
+**2. The screenshot loop (per component — this is the core).** For each rack card / panel:
+   1. Implement it in the real design system — CSS Modules + `tokens.css` + the global `.card`/`.pill`/`.btn`/`.label`/`.mono` primitives. NO Tailwind, NO generic markup.
+   2. `npm run dev`, then with the Playwright tools `browser_navigate` to a real version's Listen URL.
+   3. `browser_take_screenshot` of the component.
+   4. Compare to the mockup / baseline aesthetic; list the concrete diffs (spacing, color, radius, type, alignment).
+   5. Adjust CSS → re-screenshot → repeat until it matches.
+   
+   Build ONE card to a pixel-match first, lock the pattern, then apply it to the rest.
+
+**3. Match the design SYSTEM, not vibes.** Exact `tokens.css` values (`--color-*`, radii, spacing), the existing component primitives, the existing type scale. "Make it modern" → drift.
+
+**4. Verify against REAL data.** The Listen page needs a logged-in user + a version with audio. Test the layout with a real version (real module counts, meter values, long titles) — not placeholder content.
+
+**5. Acceptance = a side-by-side screenshot match, per component, AND the four gates green** (`tsc -b` / `lint` / `vitest` / `build`). "Looks roughly like the mockup" is NOT done.
+
+The screenshot loop requires the app running (BFF + worker + frontend + a logged-in user + a version with audio — see root `CLAUDE.md` run commands + `docker compose -f docker/docker-compose.yml up -d`). It is the single biggest fidelity lever — it stops the implementer working blind.
