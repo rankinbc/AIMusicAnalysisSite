@@ -20,9 +20,11 @@
 - **No new per-module handle wrappers** (no `setDelay`, etc.). New modules are driven only through the generic `setEffectParams(id, patch)`.
 - **Use DOM ambient types** (`BiquadFilterType`, `OverSampleType`, `OscillatorType`) — never redefine them (Phase-3 regression: a redefined `OverSampleType` shadowed the built-in).
 - **`import type` is mandatory** for type-only imports (`verbatimModuleSyntax`). Import order follows the existing files: by source path, case-insensitive (`../dsp/x`, then `../EffectUnit`, then `../state`).
-- **Web Audio does not run in jsdom.** Only `audio/dsp/*` pure math gets vitest tests. Unit files (AudioNode wiring) are verified by `npx tsc --noEmit` + `npm run build` + the existing vitest suite staying green + a deferred manual browser smoke. Do NOT write jsdom tests for AudioNode code, and do NOT treat the absence of a unit-file test as a defect.
+- **Web Audio does not run in jsdom.** Only `audio/dsp/*` pure math gets vitest tests. Unit files (AudioNode wiring) are verified by the typecheck + the existing vitest suite staying green + a deferred manual browser smoke. Do NOT write jsdom tests for AudioNode code, and do NOT treat the absence of a unit-file test as a defect.
 - **No file over ~500 lines.** Each unit is its own file under `audio/effects/`.
-- **All four gates green at the branch tip before merge** (run from `components/frontend-spectr-v2`): `npx tsc --noEmit` · `npm run lint` (`--max-warnings 0`) · `npx vitest run` · `npm run build`.
+- **TYPECHECK GATE = `npx tsc -b`, NOT `npx tsc --noEmit`.** The root `tsconfig.json` uses project references with `"files": []`, so `tsc --noEmit` checks nothing (no-op that always passes — do not rely on it). The real typecheck is `npx tsc -b`. `npm run build` is `vite build && tsc -b` (vite strips types without checking, so a passing `vite build` proves nothing about types).
+- **Interim typecheck reality (Tasks 2–8):** widening `EffectId` (Task 1) makes `composer.ts`'s `units: Record<EffectId, …>` incomplete until all six factories are registered (Task 9). So from Task 2 through Task 8, `npx tsc -b` reports exactly ONE expected residual error — `composer.ts:23 TS2740` (units map missing keys). That error is fine and is cleared by Task 9. Each task's own new file must introduce NO `tsc -b` error. Do NOT edit `composer.ts` to silence it outside Task 9.
+- **All gates green at the branch tip before merge** (run from `components/frontend-spectr-v2`): `npx tsc -b` · `npm run lint` (`--max-warnings 0`) · `npx vitest run` · `npm run build`.
 
 ---
 
@@ -1153,7 +1155,7 @@ git commit -m "feat(listen): register the six native units in the composer"
 
 - [ ] **Step 1: Extend the state import**
 
-In `useAudioGraph.ts`, replace the `from './audio/state'` import block (lines 5–15) with:
+The six state TYPES (`DjFilterState`…`TrimState`) are ALREADY imported (a prior hotfix widened `EffectParamMap`). This step adds the six `*_DEFAULT` VALUE imports (used by the refs in Step 3). Ensure the `from './audio/state'` import block matches the following exactly:
 
 ```ts
 import {
@@ -1181,9 +1183,9 @@ import {
 } from './audio/state';
 ```
 
-- [ ] **Step 2: Extend `EffectParamMap`**
+- [ ] **Step 2: `EffectParamMap` — ALREADY DONE (verify only)**
 
-Replace the `EffectParamMap` interface (lines 27–32):
+`EffectParamMap` was already widened to all ten ids by the hotfix. Confirm it reads as below and make NO change:
 
 ```ts
 export interface EffectParamMap {
