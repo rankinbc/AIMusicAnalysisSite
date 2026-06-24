@@ -14,6 +14,18 @@ workflow" section of `PRPs/listen-ui-design-prompt.md`).
   - `baseline-results.png` — a results page
   - `baseline-login.png` — the auth screen (type scale / button / token reference)
 - **`mockup*.png`** — the target design(s) for the new rack (from Claude design), if any.
+  The approved rack mockup should be saved as **`mockup-rack.png`**.
+- **`reference-viz-*.png`** — the 7 visualizer-stage effects (top-left stage selector),
+  captured live at 1440×900 with playback active so they show real reactive motion. These
+  are the "listening-room" visuals the new rack must coexist with — match their palette and
+  energy, don't fight them:
+  `reference-viz-eq.png` (8-band EQ overlay + spectrum), `-radial` (radial pulse ring),
+  `-spectro` (spectrogram), `-lights` (flashing color-tile grid), `-bloom` (bloom rings),
+  `-orbit` (orbit), `-info` (song info).
+- **`reference-dj-*.png`** — the DJ-tab laser rig + drop moment (right-rail DJ panel):
+  `reference-dj-laser-{sweep,strobe,flash,beat}.png` (the 4 laser effects, multicolor, over
+  the EQ stage) and `reference-dj-fireworks.png` (the "drop moment" particle burst). The rack
+  redesign shares the page with these — they overlay the visualizer stage during playback.
 
 Commit these — they travel with the repo so any machine / agent has the visual target.
 
