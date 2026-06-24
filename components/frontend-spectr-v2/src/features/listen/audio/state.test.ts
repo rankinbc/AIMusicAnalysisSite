@@ -36,5 +36,6 @@ describe('effect defaults are identity/neutral', () => {
       expect(b.q).toBe(1.4);
       expect(b.enabled).toBe(true);
     }
+    expect(EQ_BANDS_DEFAULT.map((b) => b.freq)).toEqual([60, 170, 350, 700, 1400, 3500, 7000, 14000]);
   });
 });

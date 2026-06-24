@@ -13,8 +13,6 @@ export type BiquadType =
 
 export type SatCurve = 'tanh' | 'softclip' | 'hardclip' | 'arctan' | 'sinefold' | 'tube';
 
-export type OverSampleType = 'none' | '2x' | '4x';
-
 export interface EqBand {
   type: BiquadType;
   freq: number;
