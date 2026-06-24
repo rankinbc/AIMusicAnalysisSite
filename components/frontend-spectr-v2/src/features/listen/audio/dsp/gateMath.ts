@@ -14,7 +14,7 @@ export interface GateParams {
 
 // Detector release per sample: the level follower rises instantly, falls slowly,
 // so brief dips don't chatter the gate.
-const ENV_DECAY = 0.05;
+const ENV_DECAY = 0.999;
 
 export function stepGate(s: GateRtState, x: number, p: GateParams): GateRtState {
   const a = Math.abs(x);
