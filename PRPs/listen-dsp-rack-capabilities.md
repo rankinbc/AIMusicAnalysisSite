@@ -8,11 +8,33 @@ Companion engineering docs: `PRPs/listen-dsp-rack-engine-design.md` (architectur
 
 It enumerates the **complete target control surface** of the Listen page's effects rack after the revamp: every module, every adjustable parameter, its range, default, value formatting, and the interaction model around it. Design the UI to accommodate this whole surface.
 
-Each module/param is tagged with **Availability**:
-- **Live** — shipped now (Phase 1 refactor; the 5 original processors, internals rebuilt; same controls as today).
-- **Planned-Pn** — designed, not yet built (engine Phase n). The UI should account for it so the layout doesn't need re-architecting as phases land.
+> **STATUS (2026-06-24): the ENGINE IS COMPLETE.** All five build phases (1–5) are merged. **Every "Planned-Pn" tag below is now LIVE** — all 13 insert modules, every param, reorder, the worklets (gate/bitcrusher/limiter), and the comp/gate/limiter meter *data* are shipped and gate-green (`tsc -b`/lint/`vitest`/build). The only remaining engine work is Phase 6 (wiring meter *display*), which does NOT block UI design. Treat the whole control surface below as buildable today. The one thing not yet done is a manual browser smoke (`PRPs/listen-smoke-script.md`).
 
-The engine exposes all of this through a stable typed handle; the UI binds to that. Designing against the end-state now is safe — the handle API is the contract.
+Each module/param was tagged with **Availability** during the build-out (**Live** = shipped, **Planned-Pn** = was pending at authoring time). Per the status above, **all are now Live.**
+
+## Engine binding (the contract the UI wires to)
+
+The engine is done and frozen; the UI drives it through the typed `AudioGraphHandle` in `features/listen/useAudioGraph.ts`. Two companion artifacts:
+- **`features/listen/rackManifest.ts`** — machine-readable per-module/param descriptors (control kind, range, step, unit, default, enum options, tier). Map over it to render controls instead of reverse-engineering `state.ts`.
+- **`PRPs/listen-smoke-script.md`** — a browser-console procedure to verify the engine actually works before/while building the UI.
+
+Canonical handle usage:
+- `graph.setEffectParams(id, patch)` — the generic, type-safe driver for ALL 13 modules (`patch` = `Partial<EffectParamMap[id]>`). `setCompressor/setSaturation/setWidth` are exact aliases — prefer `setEffectParams`.
+- `graph.reorder(order)` / `graph.getOrder()` — runtime reorder (click-free; defaults to `DEFAULT_ORDER`).
+- `graph.readEffectMeter(id)` — live meter: `comp` → `{reductionDb}`, `gate` → `{reductionDb, open}`, `limiter` → `{reductionDb}`; all others `null`.
+- `graph.readFrame()` — spectrum / scope / short-LUFS / true-peak / correlation for the visualizers.
+- `graph.setMasterBypass(b)`, `graph.resetAll()`, `graph.ensureContext()` (call from the play-button gesture — browser autoplay policy).
+- Pitch lane: `enterPitchMode/exitPitchMode/setPitchDetune/pitch*` — pitch is NOT an insert effect (not in `EffectId`, not reorderable).
+
+**EQ is the one exception to the uniform model.** `EffectParamMap['eq']` is `{ bands: EqBand[] }`, and the EQ unit is ALWAYS graph-enabled — there is no unit-level EQ bypass. Drive it with `setEffectParams('eq', { bands })` (full array; each `EqBand` has `type/freq/gainDb/q/enabled`). Represent "EQ off" by flattening every band gain to 0 dB (what the legacy `setEqEnabled(false)` does; note `setEqEnabled(true)` does NOT restore prior gains — the UI owns its band state and re-applies). Optional future engine cleanup: give EQ a real unit bypass like the other 12.
+
+## Module tiering (primary use = a full mixed song)
+
+The Listen page is mainly a **mastering / loudness preview** of a finished stereo mix, not a per-stem tool. Tier the UI accordingly — the engine keeps all modules; this is purely UI prominence:
+- **Primary "mastering" rack (surface prominently):** EQ, Compressor, Saturator, M/S Width, **Limiter** (the core "-1 dBTP" loudness preview), Output Trim.
+- **Secondary "creative / per-element" FX (tuck behind a disclosure):** DJ Filter, Delay, Reverb, Stereo Pan, Tremolo/Auto-pan, Gate, Bitcrusher. Less useful on a whole mix (reverb/delay/gate over a full kit muddies it) — keep them fully functional; they shine if a per-stem Listen view is ever added.
+
+`rackManifest.ts` carries a `tier` per module (`MASTERING_IDS` / `CREATIVE_IDS`) so the layout can read it directly.
 
 ## Page context (fixed — not part of this revamp)
 

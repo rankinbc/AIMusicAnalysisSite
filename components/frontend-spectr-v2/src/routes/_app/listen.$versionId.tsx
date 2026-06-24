@@ -153,6 +153,16 @@ function ListenPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const graph = useAudioGraph(audioRef);
 
+  // DEV-ONLY smoke harness: expose the audio-graph handle on window so the engine
+  // can be exercised from the browser console without the full UI. Open the Listen
+  // page for a version with audio, then drive every module per PRPs/listen-smoke-script.md
+  // (e.g. __spectrGraph.ensureContext(); __spectrGraph.setEffectParams('gate',{enabled:true})).
+  // `import.meta.env.DEV` is false in production builds, so this is dead-code-eliminated.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    (window as unknown as { __spectrGraph?: typeof graph }).__spectrGraph = graph;
+  }, [graph]);
+
   // ── Visualizer (StageDisplay) state ──
   const [stage, setStage] = useState<StageId>('eq');
   const [viz, setViz] = useState<VizState>(DEFAULT_VIZ_STATE);
