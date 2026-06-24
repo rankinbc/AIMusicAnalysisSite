@@ -43,7 +43,7 @@ export {
 export type { EqBand, CompressorState, SaturationState, WidthState } from './audio/state';
 
 export interface EffectParamMap {
-  eq: { bands: EqBand[] };
+  eq: { bands: EqBand[]; enabled: boolean };
   comp: CompressorState;
   sat: SaturationState;
   ms: WidthState;
@@ -187,6 +187,7 @@ export function useAudioGraph(
 ): AudioGraphHandle {
   const nodesRef = useRef<Nodes | null>(null);
   const eqStateRef = useRef<EqBand[]>(EQ_BANDS_DEFAULT.map((b) => ({ ...b })));
+  const eqEnabledRef = useRef(true);
   const compStateRef = useRef<CompressorState>({ ...COMPRESSOR_DEFAULT });
   const satStateRef = useRef<SaturationState>({ ...SATURATION_DEFAULT });
   const widthStateRef = useRef<WidthState>({ ...WIDTH_DEFAULT });
@@ -300,7 +301,7 @@ export function useAudioGraph(
   const applyEq = () => {
     const nodes = nodesRef.current;
     if (!nodes) return;
-    nodes.chain.units.eq.applyParams({ bands: eqStateRef.current, enabled: true });
+    nodes.chain.units.eq.applyParams({ bands: eqStateRef.current, enabled: eqEnabledRef.current });
   };
 
   const applyDjFilter = () => {
@@ -372,7 +373,8 @@ export function useAudioGraph(
       case 'eq': {
         const p = patch as Partial<EffectParamMap['eq']>;
         if (p.bands) eqStateRef.current = p.bands;
-        applyEq(); // EQ always applies enabled:true (consumer pre-gates band gains)
+        if (p.enabled !== undefined) eqEnabledRef.current = p.enabled;
+        applyEq();
         break;
       }
       case 'comp':
@@ -666,10 +668,7 @@ export function useAudioGraph(
       applyEq();
     },
     setEqEnabled: (enabled) => {
-      const bands = eqStateRef.current;
-      if (!enabled) {
-        for (const b of bands) b.gainDb = 0;
-      }
+      eqEnabledRef.current = enabled;
       applyEq();
     },
     setCompressor: (patch) => applyEffectParams('comp', patch),
@@ -685,6 +684,7 @@ export function useAudioGraph(
     },
     resetAll: () => {
       eqStateRef.current = EQ_BANDS_DEFAULT.map((b) => ({ ...b }));
+      eqEnabledRef.current = true;
       compStateRef.current = { ...COMPRESSOR_DEFAULT };
       satStateRef.current = { ...SATURATION_DEFAULT };
       widthStateRef.current = { ...WIDTH_DEFAULT };
