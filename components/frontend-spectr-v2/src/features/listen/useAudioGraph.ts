@@ -12,6 +12,12 @@ import {
   type CompressorState,
   type SaturationState,
   type WidthState,
+  type DjFilterState,
+  type DelayState,
+  type ReverbState,
+  type PanState,
+  type TremoloState,
+  type TrimState,
 } from './audio/state';
 
 // Re-export for existing consumers (PreviewTools, route) that import these from
@@ -29,6 +35,12 @@ export interface EffectParamMap {
   comp: CompressorState;
   sat: SaturationState;
   ms: WidthState;
+  djfilter: DjFilterState;
+  delay: DelayState;
+  reverb: ReverbState;
+  pan: PanState;
+  tremolo: TremoloState;
+  trim: TrimState;
 }
 
 // Web Audio chain that wraps the page's single <audio> element. The processing
