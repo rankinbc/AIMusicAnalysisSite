@@ -1,7 +1,13 @@
 // composer.ts
 import { createCompressorUnit } from './effects/compressor';
+import { createDelayUnit } from './effects/delay';
+import { createDjFilterUnit } from './effects/djFilter';
 import { createEqUnit } from './effects/eq';
+import { createPanUnit } from './effects/pan';
+import { createReverbUnit } from './effects/reverb';
 import { createSaturatorUnit } from './effects/saturator';
+import { createTremoloUnit } from './effects/tremolo';
+import { createTrimUnit } from './effects/trim';
 import { createWidthUnit } from './effects/width';
 import { DEFAULT_ORDER } from './state';
 import { chainLinks, isPermutation, type ChainEndpoint } from './dsp/chainLinks';
@@ -21,10 +27,16 @@ const DUCK_SECONDS = 0.01;
 
 export function buildInsertChain(ctx: AudioContext): InsertChain {
   const units: Record<EffectId, EffectUnit<unknown>> = {
+    djfilter: createDjFilterUnit(ctx) as EffectUnit<unknown>,
     eq: createEqUnit(ctx) as EffectUnit<unknown>,
     comp: createCompressorUnit(ctx) as EffectUnit<unknown>,
     sat: createSaturatorUnit(ctx) as EffectUnit<unknown>,
     ms: createWidthUnit(ctx) as EffectUnit<unknown>,
+    pan: createPanUnit(ctx) as EffectUnit<unknown>,
+    tremolo: createTremoloUnit(ctx) as EffectUnit<unknown>,
+    delay: createDelayUnit(ctx) as EffectUnit<unknown>,
+    reverb: createReverbUnit(ctx) as EffectUnit<unknown>,
+    trim: createTrimUnit(ctx) as EffectUnit<unknown>,
   };
   const chainIn = ctx.createGain();
   const chainOut = ctx.createGain();
