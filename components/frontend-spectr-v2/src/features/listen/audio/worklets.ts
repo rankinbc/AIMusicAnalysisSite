@@ -1,12 +1,17 @@
+import gateProcessorUrl from './dsp/processors/gate.processor.ts?worker&url';
+import bitcrusherProcessorUrl from './dsp/processors/bitcrusher.processor.ts?worker&url';
+import limiterProcessorUrl from './dsp/processors/limiter.processor.ts?worker&url';
 import { makeDryWet, type EffectId, type EffectMeter, type EffectUnit } from './EffectUnit';
 
-// Register the three AudioWorklet processor modules. Vite serves each processor
-// (and its imported pure-math modules) as a separate asset via new URL(...).
+// Vite bundles each processor (transpiled, with its pure-math imports inlined)
+// into a standalone asset; ?worker&url yields that asset's URL, which
+// audioWorklet.addModule() loads. A plain new URL('./x.ts', import.meta.url) does
+// NOT transpile — it emits raw TS that addModule rejects at runtime.
 export function registerWorklets(ctx: AudioContext): Promise<void> {
   return Promise.all([
-    ctx.audioWorklet.addModule(new URL('./dsp/processors/gate.processor.ts', import.meta.url)),
-    ctx.audioWorklet.addModule(new URL('./dsp/processors/bitcrusher.processor.ts', import.meta.url)),
-    ctx.audioWorklet.addModule(new URL('./dsp/processors/limiter.processor.ts', import.meta.url)),
+    ctx.audioWorklet.addModule(gateProcessorUrl),
+    ctx.audioWorklet.addModule(bitcrusherProcessorUrl),
+    ctx.audioWorklet.addModule(limiterProcessorUrl),
   ]).then(() => undefined);
 }
 
