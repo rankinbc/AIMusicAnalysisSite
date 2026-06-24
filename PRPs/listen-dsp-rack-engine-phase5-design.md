@@ -57,19 +57,28 @@ placeholders and once materialized), so the chain stays bit-equivalent to today.
 A new module `audio/worklets.ts`:
 
 ```ts
+import gateProcessorUrl from './dsp/processors/gate.processor.ts?worker&url';
+import bitcrusherProcessorUrl from './dsp/processors/bitcrusher.processor.ts?worker&url';
+import limiterProcessorUrl from './dsp/processors/limiter.processor.ts?worker&url';
+
 export function registerWorklets(ctx: AudioContext): Promise<void> {
   return Promise.all([
-    ctx.audioWorklet.addModule(new URL('./dsp/processors/gate.processor.ts', import.meta.url)),
-    ctx.audioWorklet.addModule(new URL('./dsp/processors/bitcrusher.processor.ts', import.meta.url)),
-    ctx.audioWorklet.addModule(new URL('./dsp/processors/limiter.processor.ts', import.meta.url)),
+    ctx.audioWorklet.addModule(gateProcessorUrl),
+    ctx.audioWorklet.addModule(bitcrusherProcessorUrl),
+    ctx.audioWorklet.addModule(limiterProcessorUrl),
   ]).then(() => undefined);
 }
 ```
 
-- Vite 6 serves each processor as a separate module via the
-  `new URL('...', import.meta.url)` form; the processor's imported pure-math
-  modules are bundled into that worklet asset. `npm run build` emits the three
-  worklet chunks (the build gate proves bundling works).
+- **Use Vite's `?worker&url` suffix, NOT `new URL('./x.ts', import.meta.url)`.**
+  A plain `new URL` emits the processor as a RAW, untranspiled `.ts` asset
+  (`data:video/mp2t` / raw TypeScript) that `addModule` rejects at runtime →
+  the boot's `.catch` silently leaves the units as passthrough. `?worker&url`
+  triggers a real transpile + bundle (pure-math imports inlined) and yields the
+  compiled chunk's URL. `vite/client` types resolve the suffix to `string`.
+  `npm run build` emits three separate `*.processor-<hash>.js` chunks — verify by
+  decoding/reading one (it must be compiled JS with `registerProcessor` + inlined
+  math, NOT TS).
 
 ### `ensureContext` stays synchronous
 
@@ -335,11 +344,15 @@ branch tip before merge.
 
 ## Risks
 
-- **Vite worklet bundling** — `new URL('./x.processor.ts', import.meta.url)` +
-  `addModule` is the supported Vite 6 form; the build gate proves the assets
-  emit. A processor that fails to register at runtime degrades to passthrough
-  (caught). This is the single biggest unknown and the reason the manual smoke
-  matters most this phase.
+- **Vite worklet bundling (RESOLVED during impl)** — the plain
+  `new URL('./x.processor.ts', import.meta.url)` form does NOT transpile in this
+  setup; it emits raw TS that `addModule` rejects (caught + decoded during Task
+  10). The working form is `import url from './x.processor.ts?worker&url'`, which
+  transpiles + bundles the pure-math imports into a standalone JS chunk. A
+  processor that still fails to register at runtime degrades to passthrough
+  (caught). The manual smoke still matters most this phase (jsdom can't load
+  worklets), but the decode-of-emitted-chunk check gives high build-time
+  confidence.
 - **Worklet ambient types** — `audioworklet.d.ts` must cover exactly what the
   processors use, or `tsc -b` fails; over-declaring risks masking a real type
   error. Keep it minimal and matched to usage.

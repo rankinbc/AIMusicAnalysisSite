@@ -1188,16 +1188,19 @@ git commit -m "feat(listen): limiter worklet processor + unit"
 
 - [ ] **Step 1: Add `registerWorklets` to `audio/worklets.ts`**
 
-Add at the top of `audio/worklets.ts` (after the existing imports), before `createWorkletEffect`:
+Add the three processor-URL imports at the TOP of `audio/worklets.ts` (with the other imports), and `registerWorklets` after them. Use `?worker&url` — a plain `new URL('./x.ts', import.meta.url)` emits raw untranspiled TS that `addModule` rejects at runtime; `?worker&url` transpiles + bundles the pure-math imports into a standalone JS chunk and yields its URL (`vite/client` types resolve the suffix to `string`):
 
 ```ts
-// Register the three AudioWorklet processor modules. Vite serves each processor
-// (and its imported pure-math modules) as a separate asset via new URL(...).
+import gateProcessorUrl from './dsp/processors/gate.processor.ts?worker&url';
+import bitcrusherProcessorUrl from './dsp/processors/bitcrusher.processor.ts?worker&url';
+import limiterProcessorUrl from './dsp/processors/limiter.processor.ts?worker&url';
+
+// Register the three AudioWorklet processor modules (Vite-bundled standalone JS).
 export function registerWorklets(ctx: AudioContext): Promise<void> {
   return Promise.all([
-    ctx.audioWorklet.addModule(new URL('./dsp/processors/gate.processor.ts', import.meta.url)),
-    ctx.audioWorklet.addModule(new URL('./dsp/processors/bitcrusher.processor.ts', import.meta.url)),
-    ctx.audioWorklet.addModule(new URL('./dsp/processors/limiter.processor.ts', import.meta.url)),
+    ctx.audioWorklet.addModule(gateProcessorUrl),
+    ctx.audioWorklet.addModule(bitcrusherProcessorUrl),
+    ctx.audioWorklet.addModule(limiterProcessorUrl),
   ]).then(() => undefined);
 }
 ```
