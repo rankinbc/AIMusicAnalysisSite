@@ -23,7 +23,14 @@ export function createEqUnit(ctx: AudioContext): EffectUnit<EqState> {
     output,
     applyParams: (state: EqState) => {
       for (let i = 0; i < filters.length; i += 1) {
-        filters[i].gain.value = state.enabled ? state.bands[i]?.gainDb ?? 0 : 0;
+        const band = state.bands[i];
+        if (!band) continue;
+        filters[i].type = band.type;
+        filters[i].frequency.value = band.freq;
+        filters[i].Q.value = band.q;
+        // gain applies to peaking/shelf types only (Web Audio ignores it on
+        // filter types). A disabled band — or disabled unit — flattens to 0 dB.
+        filters[i].gain.value = state.enabled && band.enabled ? band.gainDb : 0;
       }
       setWet(state.enabled ? 1 : 0);
     },
