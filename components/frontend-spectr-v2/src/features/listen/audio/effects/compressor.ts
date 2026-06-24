@@ -19,7 +19,9 @@ export function createCompressorUnit(ctx: AudioContext): EffectUnit<CompressorSt
       compressor.release.value = state.releaseMs / 1000;
       compressor.knee.value = state.kneeDb;
       makeup.gain.value = Math.pow(10, state.makeupDb / 20);
-      setWet(state.enabled ? 1 : 0);
+      // Parallel (New York) compression: wet level = mix. mix 1 = fully
+      // compressed, < 1 blends the un-compressed dry lane back in.
+      setWet(state.enabled ? state.mix : 0);
     },
     setBypass: (bypassed: boolean) => setWet(bypassed ? 0 : 1),
     readMeter: (): EffectMeter => ({ reductionDb: compressor.reduction }),
