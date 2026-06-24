@@ -24,6 +24,8 @@ function shape(curve: SatCurve, x: number, d: number): number {
       return Math.max(-1, Math.min(1, k * x));
     }
     case 'sinefold': {
+      // Wavefolder: at higher drive the sine folds back, so the output need
+      // not reach the rails (it can null or invert at the endpoints) — by design.
       const k = 1 + d * 4;
       return Math.sin((k * Math.PI * x) / 2);
     }
@@ -48,11 +50,12 @@ export function makeSatCurve(
   curve: SatCurve = 'tanh',
   asymmetry = 0,
 ): Float32Array {
+  const asym = Math.max(-1, Math.min(1, asymmetry));
   const n = 1024;
   const out = new Float32Array(n);
   for (let i = 0; i < n; i += 1) {
     const x = (i / (n - 1)) * 2 - 1;
-    const d = Math.max(0, drive * (x >= 0 ? 1 + asymmetry : 1 - asymmetry));
+    const d = Math.max(0, drive * (x >= 0 ? 1 + asym : 1 - asym));
     out[i] = shape(curve, x, d);
   }
   return out;
