@@ -280,11 +280,12 @@ buffer + peak tracking live in the processor.
   return live data once materialized.
 
 > **Interim typecheck (Phase-4 lesson):** widening `EffectId` in Task 1 makes the
-> composer's `units: Record<EffectId, …>` incomplete until Task 9. So from Task 2
-> through Task 8, `npx tsc -b` reports exactly one expected residual error —
-> `composer.ts` units-map missing keys — which Task 9 clears. Each task's own new
-> files must add no error. Do not edit `composer.ts` to silence it outside Task 9.
-> (`npx tsc --noEmit` is a no-op here; the real gate is `npx tsc -b`.)
+> composer's `units: Record<EffectId, …>` incomplete until the composer task. So
+> the interim tasks report exactly one expected residual `npx tsc -b` error —
+> `composer.ts` units-map missing keys — which the composer task clears. Each
+> task's own new files must add no error. Do not edit `composer.ts` to silence it
+> outside the composer task. (`npx tsc --noEmit` is a no-op here; the real gate is
+> `npx tsc -b`. The plan's task numbering is authoritative.)
 
 ---
 
