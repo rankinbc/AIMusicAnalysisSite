@@ -6,6 +6,16 @@ Give this (and the repo) to "Claude design" to design + build the new Listen-pag
 
 You are designing AND implementing the new UI for the **Listen page** of SPECTR — a music-producer web app where users hear their track through a real-time Web Audio DSP "rack." The audio ENGINE is complete, reviewed, and merged; your job is the UI that drives it. Do NOT modify the engine — bind to its typed handle.
 
+## Design direction (decided with the product owner — 2026-06-24, do NOT re-litigate)
+
+These are settled. Treat them as constraints, not open questions:
+
+- **Keep the current "cool" aesthetic.** Match the existing Listen page's dark, neon/glow, visualizer-rich look and `tokens.css` design language. This is an evolution of the current vibe, NOT a restyle. Do not introduce a new visual identity.
+- **Read as a legitimate pro tool.** Within that aesthetic, the rack must feel like a serious, credible mastering/DSP tool a producer would trust (precise controls, real meters, clear signal flow) — not a toy. Legitimacy + the existing cool look together, not one at the expense of the other.
+- **Coexist with "listening-room" features.** The Listen page already hosts experiential features (visualizer stage, laser show, DJ stem deck, notes) and MORE listening-room features are planned. The rack redesign must sit alongside these comfortably and not crowd them out — design the IA so the rack and the listening-room elements share the page.
+- **No mockup image exists — design the look yourself from the aesthetic.** There is no `ui-reference/mockup.png` target. Propose the visual direction (matching the captured baselines) and the layout/IA, show the user 2–3 mockups, and get approval BEFORE building (see Process). The layout/IA choice (pedalboard chain vs channel strip vs tiered dashboard, etc.) is explicitly YOURS to propose — the product owner deferred it to you.
+- **Capture baselines first.** The stack was NOT running when this brief was prepared, so `ui-reference/` has no baselines yet. Bringing the stack up and capturing them (see "Fidelity workflow" step 0) is your first concrete step.
+
 ## Read these first (authoritative, in order)
 
 1. **`components/frontend-spectr-v2/src/features/listen/README.md`** — the living **system guide**: architecture, signal-graph diagram, the EffectUnit/bypass model, composer/reorder, worklet boot, pitch lane, the full handle API, state flow, modules, metering, gotchas, testing. Start here.
