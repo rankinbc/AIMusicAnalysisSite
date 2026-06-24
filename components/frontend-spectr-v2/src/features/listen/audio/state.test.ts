@@ -4,6 +4,13 @@ import {
   EQ_BANDS_DEFAULT,
   SATURATION_DEFAULT,
   WIDTH_DEFAULT,
+  DJFILTER_DEFAULT,
+  DELAY_DEFAULT,
+  REVERB_DEFAULT,
+  PAN_DEFAULT,
+  TREMOLO_DEFAULT,
+  TRIM_DEFAULT,
+  DEFAULT_ORDER,
 } from './state';
 
 describe('effect defaults are identity/neutral', () => {
@@ -37,5 +44,44 @@ describe('effect defaults are identity/neutral', () => {
       expect(b.enabled).toBe(true);
     }
     expect(EQ_BANDS_DEFAULT.map((b) => b.freq)).toEqual([60, 170, 350, 700, 1400, 3500, 7000, 14000]);
+  });
+});
+
+describe('phase-4 module defaults are transparent', () => {
+  it('djfilter/delay/reverb/pan/tremolo default disabled', () => {
+    expect(DJFILTER_DEFAULT.enabled).toBe(false);
+    expect(DELAY_DEFAULT.enabled).toBe(false);
+    expect(REVERB_DEFAULT.enabled).toBe(false);
+    expect(PAN_DEFAULT.enabled).toBe(false);
+    expect(TREMOLO_DEFAULT.enabled).toBe(false);
+  });
+
+  it('trim defaults enabled at unity (0 dB)', () => {
+    expect(TRIM_DEFAULT.enabled).toBe(true);
+    expect(TRIM_DEFAULT.gainDb).toBe(0);
+  });
+
+  it('identity numeric defaults (mix/pan/morph all neutral)', () => {
+    expect(DJFILTER_DEFAULT.morph).toBe(0);
+    expect(PAN_DEFAULT.pan).toBe(0);
+    expect(DELAY_DEFAULT.mix).toBe(0);
+    expect(REVERB_DEFAULT.mix).toBe(0);
+  });
+});
+
+describe('DEFAULT_ORDER (phase 4)', () => {
+  it('is the 10-unit native chain with worklet slots omitted', () => {
+    expect(DEFAULT_ORDER).toEqual([
+      'djfilter',
+      'eq',
+      'comp',
+      'sat',
+      'ms',
+      'pan',
+      'tremolo',
+      'delay',
+      'reverb',
+      'trim',
+    ]);
   });
 });

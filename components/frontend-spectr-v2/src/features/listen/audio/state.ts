@@ -94,8 +94,109 @@ export const WIDTH_DEFAULT: WidthState = {
   enabled: false,
 };
 
-// Phase-1 default insert order. Matches the legacy chain EQ -> Comp -> Sat -> M/S.
-export const DEFAULT_ORDER: ReadonlyArray<EffectId> = ['eq', 'comp', 'sat', 'ms'];
+export type Division = '1/4' | '1/8' | '1/8.' | '1/8T' | '1/16';
+export type IrType = 'room' | 'hall' | 'plate' | 'spring' | 'ambience';
+
+export interface DjFilterState {
+  morph: number; // -1..1, 0 = open
+  resonance: number; // 0.1..20
+  enabled: boolean;
+}
+
+export interface DelayState {
+  sync: boolean;
+  division: Division;
+  timeMs: number; // 1..2000
+  feedback: number; // 0..0.95
+  toneHz: number; // 200..18000
+  pingPong: boolean;
+  mix: number; // 0..1
+  bpm: number; // 40..240
+  enabled: boolean;
+}
+
+export interface ReverbState {
+  ir: IrType;
+  decaySec: number; // 0.2..8
+  preDelayMs: number; // 0..200
+  dampingHz: number; // 1000..18000
+  mix: number; // 0..1
+  enabled: boolean;
+}
+
+export interface PanState {
+  pan: number; // -1..1
+  enabled: boolean;
+}
+
+export interface TremoloState {
+  mode: 'tremolo' | 'autopan';
+  sync: boolean;
+  division: Division;
+  rateHz: number; // 0.1..20
+  depth: number; // 0..1
+  shape: 'sine' | 'triangle' | 'square';
+  bpm: number; // 40..240
+  enabled: boolean;
+}
+
+export interface TrimState {
+  gainDb: number; // -24..+12
+  enabled: boolean;
+}
+
+export const DJFILTER_DEFAULT: DjFilterState = { morph: 0, resonance: 0.7, enabled: false };
+
+export const DELAY_DEFAULT: DelayState = {
+  sync: true,
+  division: '1/8',
+  timeMs: 250,
+  feedback: 0.35,
+  toneHz: 8000,
+  pingPong: false,
+  mix: 0,
+  bpm: 120,
+  enabled: false,
+};
+
+export const REVERB_DEFAULT: ReverbState = {
+  ir: 'hall',
+  decaySec: 2.0,
+  preDelayMs: 20,
+  dampingHz: 8000,
+  mix: 0,
+  enabled: false,
+};
+
+export const PAN_DEFAULT: PanState = { pan: 0, enabled: false };
+
+export const TREMOLO_DEFAULT: TremoloState = {
+  mode: 'tremolo',
+  sync: true,
+  division: '1/8',
+  rateHz: 5,
+  depth: 0.5,
+  shape: 'sine',
+  bpm: 120,
+  enabled: false,
+};
+
+export const TRIM_DEFAULT: TrimState = { gainDb: 0, enabled: true };
+
+// Phase-4 default insert order: master design chain minus the three Phase-5
+// worklet slots (gate after eq, bitcrusher after sat, limiter before trim).
+export const DEFAULT_ORDER: ReadonlyArray<EffectId> = [
+  'djfilter',
+  'eq',
+  'comp',
+  'sat',
+  'ms',
+  'pan',
+  'tremolo',
+  'delay',
+  'reverb',
+  'trim',
+];
 
 export function defaultEqState(): EqState {
   return { bands: EQ_BANDS_DEFAULT.map((b) => ({ ...b })), enabled: false };

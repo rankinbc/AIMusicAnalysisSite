@@ -1,6 +1,16 @@
 import { wetDryGains } from './dsp/mix';
 
-export type EffectId = 'eq' | 'comp' | 'sat' | 'ms';
+export type EffectId =
+  | 'eq'
+  | 'comp'
+  | 'sat'
+  | 'ms'
+  | 'djfilter'
+  | 'delay'
+  | 'reverb'
+  | 'pan'
+  | 'tremolo'
+  | 'trim';
 
 export interface EffectMeter {
   reductionDb?: number;
