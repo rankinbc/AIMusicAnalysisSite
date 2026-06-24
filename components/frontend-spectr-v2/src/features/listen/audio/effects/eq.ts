@@ -1,7 +1,7 @@
 import { makeDryWet, type EffectUnit } from '../EffectUnit';
-import type { EqState } from '../state';
+import { EQ_BANDS_DEFAULT, type EqState } from '../state';
 
-const EQ_FREQS = [60, 170, 350, 700, 1400, 3500, 7000, 14000];
+const EQ_FREQS = EQ_BANDS_DEFAULT.map((b) => b.freq);
 
 export function createEqUnit(ctx: AudioContext): EffectUnit<EqState> {
   const filters = EQ_FREQS.map((freq) => {
