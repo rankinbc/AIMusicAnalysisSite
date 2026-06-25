@@ -410,6 +410,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         builder.Entity<RefreshToken>().Property(t => t.CreatedAt).HasDefaultValueSql("now()");
         builder.Entity<Song>().Property(s => s.CreatedAt).HasDefaultValueSql("now()");
         builder.Entity<Song>().Property(s => s.UpdatedAt).HasDefaultValueSql("now()");
+        // Per-song visibility — NOT NULL, DB default 'private' so existing rows
+        // backfill and direct/worker inserts can't hit a NOT NULL violation.
+        builder.Entity<Song>().Property(s => s.Visibility).HasDefaultValue("private");
         builder.Entity<SongVersion>().Property(v => v.CreatedAt).HasDefaultValueSql("now()");
         builder.Entity<SongVersion>().Property(v => v.UpdatedAt).HasDefaultValueSql("now()");
         builder.Entity<AnalysisJob>().Property(j => j.DispatchedAt).HasDefaultValueSql("now()");

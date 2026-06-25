@@ -11,10 +11,35 @@ public sealed record SongDto(
     DateTimeOffset? ArchivedAt,
     IReadOnlyList<VersionDto> Versions,
     AnalysisSummaryDto? LatestResult,
-    IReadOnlyList<TagDto> Tags);
+    IReadOnlyList<TagDto> Tags,
+    string Visibility,
+    string? Description,
+    string? VisualTemplate,
+    string? VisualPrimary,
+    string? VisualSecondary,
+    string? ReferenceProfileKind,
+    string? ReferenceProfileId);
 
-public sealed record CreateSongRequest(string Name, string? GenreHint);
-public sealed record PatchSongRequest(string? Name, string? GenreHint);
+public sealed record CreateSongRequest(
+    string Name,
+    string? GenreHint,
+    string? Description = null,
+    string? VisualTemplate = null,
+    string? VisualPrimary = null,
+    string? VisualSecondary = null,
+    string? ReferenceProfileKind = null,
+    string? ReferenceProfileId = null);
+
+public sealed record PatchSongRequest(
+    string? Name,
+    string? GenreHint,
+    string? Visibility = null,
+    string? Description = null,
+    string? VisualTemplate = null,
+    string? VisualPrimary = null,
+    string? VisualSecondary = null,
+    string? ReferenceProfileKind = null,
+    string? ReferenceProfileId = null);
 
 public sealed record CreateTagRequest(string Name, bool IsPublic);
 

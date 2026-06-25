@@ -209,6 +209,28 @@ export function useArchiveSong() {
   });
 }
 
+/** Restore an archived song (un-archive). Reversible counterpart to
+ *  `useArchiveSong`. */
+export function useRestoreSong() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (songId: string) =>
+      fetcher<void>({ url: `/songs/${songId}/restore`, method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['songs'] }),
+  });
+}
+
+/** Permanently delete a song and all its versions/analyses (hard delete).
+ *  Distinct from `useArchiveSong` (reversible soft-delete). */
+export function useDeleteSong() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (songId: string) =>
+      fetcher<void>({ url: `/songs/${songId}/permanent`, method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['songs'] }),
+  });
+}
+
 // ── Versions ────────────────────────────────────────────────────────────────
 export function useVersion(versionId: string) {
   return useQuery({

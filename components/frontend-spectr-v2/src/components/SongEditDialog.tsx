@@ -3,7 +3,8 @@ import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { toast } from 'sonner';
 
 import { useCreateTag, useDeleteTag, usePatchSong, useReferenceSets } from '../api/hooks';
-import type { SongDto } from '../api/types';
+import type { SongDto, SongVisibility } from '../api/types';
+import { VIS_META, VIS_ORDER } from '../features/library/library-helpers';
 import f from '../styles/forms.module.css';
 import { SongFields, type SongFieldsValue } from './SongFields';
 import sf from './SongFields.module.css';
@@ -19,6 +20,7 @@ interface Props {
 export function SongEditDialog({ open, onOpenChange, song }: Props) {
   const { data: sets } = useReferenceSets();
   const [value, setValue] = useState<SongFieldsValue>(() => songFieldsFromSong(song, sets ?? []));
+  const [visibility, setVisibility] = useState<SongVisibility>(song.visibility ?? 'private');
   const [tagInput, setTagInput] = useState('');
   const [isPublicTag, setIsPublicTag] = useState(false);
 
@@ -29,7 +31,10 @@ export function SongEditDialog({ open, onOpenChange, song }: Props) {
   // Re-seed when (re)opening or once reference sets resolve (so a set-kind
   // profile shows its name/hue rather than staying blank).
   useEffect(() => {
-    if (open) setValue(songFieldsFromSong(song, sets ?? []));
+    if (open) {
+      setValue(songFieldsFromSong(song, sets ?? []));
+      setVisibility(song.visibility ?? 'private');
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, song.id, sets]);
 
@@ -39,7 +44,7 @@ export function SongEditDialog({ open, onOpenChange, song }: Props) {
     e.preventDefault();
     if (!canSubmit) return;
     try {
-      await patch.mutateAsync(songFieldsToRequest(value));
+      await patch.mutateAsync({ ...songFieldsToRequest(value), visibility });
       toast.success('Saved');
       onOpenChange(false);
     } catch (err) {
@@ -76,6 +81,31 @@ export function SongEditDialog({ open, onOpenChange, song }: Props) {
 
           <form onSubmit={handleSubmit}>
             <SongFields value={value} onChange={setValue} />
+
+            <div className={s.visSection} data-vis={visibility}>
+              <span className={sf.fieldLabel}>Visibility</span>
+              <div className={s.visSeg}>
+                {VIS_ORDER.map((key) => {
+                  const m = VIS_META[key];
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      className={s.visSegBtn}
+                      data-vis={key}
+                      data-on={visibility === key}
+                      onClick={() => setVisibility(key)}
+                    >
+                      <span className={s.visSegTop}>
+                        <span className={s.visSegGlyph}>{m.glyph}</span>
+                        {m.label}
+                      </span>
+                      <span className={s.visSegDesc}>{m.desc}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
             <div className={s.tagSection}>
               <span className={sf.fieldLabel}>Tags</span>

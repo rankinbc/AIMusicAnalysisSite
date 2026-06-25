@@ -110,6 +110,21 @@ class Song(Base):
     default_reference_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         "default_reference_id", UUID(as_uuid=True), nullable=True
     )
+    # ── Library-redesign metadata (TEXT columns; no polymorphic FKs) ──────────
+    description: Mapped[Optional[str]] = mapped_column("description", String(500), nullable=True)
+    visual_template: Mapped[Optional[str]] = mapped_column("visual_template", String(16), nullable=True)
+    visual_primary: Mapped[Optional[str]] = mapped_column("visual_primary", String(40), nullable=True)
+    visual_secondary: Mapped[Optional[str]] = mapped_column("visual_secondary", String(40), nullable=True)
+    reference_profile_kind: Mapped[Optional[str]] = mapped_column(
+        "reference_profile_kind", String(8), nullable=True
+    )
+    reference_profile_id: Mapped[Optional[str]] = mapped_column(
+        "reference_profile_id", String(64), nullable=True
+    )
+    # Per-song visibility. NOT NULL, default 'private'. Values: private, shared, public.
+    visibility: Mapped[str] = mapped_column(
+        "visibility", String(16), nullable=False, server_default="private", default="private"
+    )
     archived_at: Mapped[Optional[datetime]] = mapped_column("archived_at", DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()

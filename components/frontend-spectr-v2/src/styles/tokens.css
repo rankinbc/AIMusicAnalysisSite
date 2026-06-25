@@ -109,4 +109,28 @@
      Dark scrim sitting over --bg; opacity tuned so blurred content underneath
      remains shape-recognisable but unreadable. */
   --paywall-overlay: rgba(7, 10, 18, 0.72);
+
+  /* Per-song visibility state colors (private → shared → public). Library
+     redesign. Defaults resolve per [data-vis] on each surface so badge /
+     filter pill / submenu / segmented control stay in lockstep. Declared
+     GLOBAL so any [data-vis] subtree (incl. body-portaled menus) resolves them. */
+  --vis:     var(--muted);
+  --vis-dim: rgba(100, 116, 139, 0.12);
+  --vis-bd:  rgba(100, 116, 139, 0.4);
+}
+
+[data-vis='private'] {
+  --vis: var(--muted);
+  --vis-dim: rgba(148, 163, 184, 0.12);
+  --vis-bd: rgba(148, 163, 184, 0.34);
+}
+[data-vis='shared'] {
+  --vis: var(--cyan);
+  --vis-dim: rgba(0, 229, 176, 0.12);
+  --vis-bd: rgba(0, 229, 176, 0.36);
+}
+[data-vis='public'] {
+  --vis: var(--violet);
+  --vis-dim: rgba(167, 139, 250, 0.14);
+  --vis-bd: rgba(167, 139, 250, 0.4);
 }
