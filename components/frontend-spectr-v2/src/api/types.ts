@@ -756,6 +756,12 @@ export interface Phase7Data {
   violations?: string[];
   section_count?: number;
   metadata?: Phase7Metadata;
+  /** UI state for the arrangement score:
+   *  - `pending`     — structure detection (allin1) is running in the background;
+   *  - `unavailable` — the detector isn't set up (Docker/image missing);
+   *  - `scored`      — a real arrangement score is present.
+   *  Absent on older analyses. */
+  arrangement_status?: 'pending' | 'unavailable' | 'scored';
 }
 
 /** Phase 8 — Ableton project parse. Only populated when user uploaded .als. */

@@ -39,25 +39,53 @@ const SEVERITY_TONE: Record<string, { bg: string; border: string; glyph: string 
 };
 
 export function ArrangementTab({ phase7 }: ArrangementTabProps) {
-  // Phase 7 may be missing entirely (skipped or failed). Render an empty
-  // state rather than the old hardcoded sample arrangement.
-  if (!phase7 || !phase7.section_scores || phase7.section_scores.length === 0) {
+  // Structure detection (allin1) runs in the background after the fast phases.
+  // While it's in flight, show a "pending" state rather than "no structure".
+  if (phase7?.arrangement_status === 'pending') {
     return (
       <section className={`card ${s.card}`}>
         <div className={s.hd}>
           <span className={s.title}>Arrangement</span>
           <span className={s.score} style={{ color: 'var(--muted)' }}>
-            no structure detected
+            analyzing…
           </span>
         </div>
         <p
           className={s.issueText}
           style={{ margin: 0, color: 'var(--muted)', fontStyle: 'italic' }}
         >
-          Phase 7 (arrangement scan) didn't produce section data for this
-          track. This usually means the structure detector couldn't find
-          clear section boundaries — common on ambient or single-section
-          tracks.
+          Detecting section structure (intro / build / drop / breakdown)… this
+          runs in the background and usually takes under a minute. The
+          arrangement timeline and score will appear here automatically.
+        </p>
+      </section>
+    );
+  }
+
+  // Phase 7 may be missing entirely (skipped or failed), or the detector may be
+  // unavailable. Render an empty state rather than the old hardcoded sample.
+  if (!phase7 || !phase7.section_scores || phase7.section_scores.length === 0) {
+    const unavailable = phase7?.arrangement_status === 'unavailable';
+    return (
+      <section className={`card ${s.card}`}>
+        <div className={s.hd}>
+          <span className={s.title}>Arrangement</span>
+          <span className={s.score} style={{ color: 'var(--muted)' }}>
+            {unavailable ? 'not assessed' : 'no structure detected'}
+          </span>
+        </div>
+        <p
+          className={s.issueText}
+          style={{ margin: 0, color: 'var(--muted)', fontStyle: 'italic' }}
+        >
+          {unavailable
+            ? 'Structure detection is not available on this server, so the ' +
+              'arrangement was not assessed. This is a tooling limitation, not ' +
+              'a problem with your track.'
+            : "Phase 7 (arrangement scan) didn't produce section data for this " +
+              "track. This usually means the structure detector couldn't find " +
+              'clear section boundaries — common on ambient or single-section ' +
+              'tracks.'}
         </p>
       </section>
     );

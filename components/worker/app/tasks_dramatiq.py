@@ -27,6 +27,7 @@ import dramatiq
 from aimusic_shared.models import (
     JOB_STATUS_COMPLETE,
     JOB_STATUS_FAILED,
+    JOB_STATUS_PENDING,
     JOB_STATUS_PROCESSING,
     Analysis,
     AnalysisJob,
@@ -178,6 +179,9 @@ def analyze_audio_job(job_id: str) -> None:
             als_file_path=(str(Path(LOCAL_ROOT) / als_file_path) if als_file_path else None),
             stem_paths=stem_paths,
             stem_mode=stem_mode,
+            # Structure detection (~60-90 s allin1) is deferred off the critical
+            # path; a background `detect_structure_job` fills Phase 7 in after.
+            defer_structure=True,
             progress_cb=_report_progress,
         )
         # The pipeline returns a TypedDict that may contain nested TypedDicts —
@@ -197,6 +201,7 @@ def analyze_audio_job(job_id: str) -> None:
         raise
 
     # ── Phase C — persist Analysis row + flip job to COMPLETE ───────────────
+    analysis_id = uuid.uuid4()
     with SessionFactory.begin() as s:
         done = s.get(AnalysisJob, jid)
         if done is None:
@@ -204,7 +209,7 @@ def analyze_audio_job(job_id: str) -> None:
             raise RuntimeError(f"job {job_id} disappeared between phases")
 
         s.add(Analysis(
-            id=uuid.uuid4(),
+            id=analysis_id,
             job_id=jid,
             user_id=user_id,
             version_id=version_id,
@@ -238,7 +243,44 @@ def analyze_audio_job(job_id: str) -> None:
                 bref.used_count = (bref.used_count or 0) + 1
 
     _try_write_artifact(job_id, result_dict)
+
+    # ── Phase D — kick off background structure detection (fill-in) ──────────
+    # The fast phases are now persisted + the job is COMPLETE. Enqueue the heavy
+    # allin1 step as its own job so Phase 7 fills in later (best-effort: a
+    # failure here never undoes the successful analysis).
+    if version_id is not None:
+        try:
+            _enqueue_structure_detection(user_id, version_id, analysis_id)
+        except Exception:  # pragma: no cover — never fail a done analysis over this
+            logger.warning("could not enqueue structure detection for job=%s", job_id, exc_info=True)
+
     logger.info("analyze_audio_job: done job=%s", job_id)
+
+
+def _enqueue_structure_detection(
+    user_id: uuid.UUID,
+    version_id: uuid.UUID,
+    analysis_id: uuid.UUID,
+) -> None:
+    """Create a lightweight progress-vehicle AnalysisJob + enqueue the
+    ``detect_structure_job`` actor. Imported lazily to avoid an import cycle
+    (structure_actor imports paths from this module)."""
+    from .structure_actor import detect_structure_job
+
+    structure_job_id = uuid.uuid4()
+    with SessionFactory.begin() as s:
+        s.add(AnalysisJob(
+            id=structure_job_id,
+            user_id=user_id,
+            version_id=version_id,
+            status=JOB_STATUS_PENDING,
+            current_phase="queued",
+        ))
+    detect_structure_job.send(str(structure_job_id), str(analysis_id))
+    logger.info(
+        "analyze_audio_job: enqueued structure detection job=%s analysis=%s",
+        structure_job_id, analysis_id,
+    )
 
 
 @dramatiq.actor(

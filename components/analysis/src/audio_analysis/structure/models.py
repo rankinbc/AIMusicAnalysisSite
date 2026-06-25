@@ -1,9 +1,9 @@
 """Structure detection result dataclasses.
 
 Stdlib-only ports of the dataclasses needed by ArrangementScorer.
-The full StructureDetector is *not* ported — Phase 1 already runs
-all_in_one_fix and provides a structure dict; ``phase1_adapter`` converts
-that dict into a typed StructureResult here.
+The full StructureDetector is *not* ported — Phase 1 runs allin1 (in Docker,
+see ``docker_allin1``) and provides a structure dict; ``phase1_adapter``
+converts that dict into a typed StructureResult here.
 """
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ class Section:
 class StructureResult:
     """Complete structure detection result."""
     success: bool
-    detection_method: str       # 'all_in_one_fix', 'librosa_novelty', etc.
+    detection_method: str       # 'allin1-docker', 'librosa_novelty', etc.
     confidence: float           # overall confidence (0-1)
 
     # Tempo and rhythm
@@ -62,6 +62,15 @@ class StructureResult:
     # Track info
     duration_seconds: float
     total_bars: int
+
+    # Availability: False means structure detection could not run (Docker/image
+    # not set up) — distinct from "ran but found no sections". Lets the
+    # arrangement scorer report "not assessed" instead of a failing grade.
+    available: bool = True
+    # Deferred: structure detection was intentionally skipped on the main run and
+    # is being computed by a background job. Implies ``available is False`` for
+    # now, but the scorer renders "pending" rather than "not assessed".
+    deferred: bool = False
 
     # Error info
     error_message: Optional[str] = None

@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 
 from audio_analysis.structure.models import StructureResult, Section, SectionType
-from audio_analysis.structure.arrangement_scorer import ArrangementScorer
+from audio_analysis.structure.arrangement_scorer import ArrangementScorer, IssueSeverity
 from audio_analysis.structure.phase1_adapter import adapt
 
 
@@ -62,28 +62,63 @@ def test_score_with_sections_returns_grade():
 
 
 def test_phase1_adapter_maps_labels():
+    # Real allin1 output: `segments` with start/end in SECONDS and pop labels.
+    # At 128 BPM a bar is 1.875 s, so 60 s == 32 bars.
     structure_dict = {
-        "sections": [
-            {"label": "intro", "start_beat": 0, "end_beat": 128, "energy": 0.5},
-            {"label": "drop", "start_beat": 128, "end_beat": 256, "energy": 0.9},
-            {"label": "outro", "start_beat": 256, "end_beat": 384, "energy": 0.4},
+        "available": True,
+        "bpm": 128.0,
+        "segments": [
+            {"label": "intro", "start": 0.0, "end": 60.0},
+            {"label": "chorus", "start": 60.0, "end": 120.0},
+            {"label": "outro", "start": 120.0, "end": 180.0},
         ],
         "beats": [],
     }
     result = adapt(structure_dict, bpm=128.0, duration_seconds=180.0)
+    assert result.available is True
     assert result.success is True
     assert len(result.sections) == 3
     assert result.sections[0].section_type == SectionType.INTRO
-    assert result.sections[1].section_type == SectionType.DROP
+    assert result.sections[1].section_type == SectionType.DROP   # chorus -> drop
     assert result.sections[2].section_type == SectionType.OUTRO
+    assert result.sections[0].duration_bars == 32                # 60 s @ 128 BPM
+
+
+def test_phase1_adapter_unavailable_is_not_a_failure():
+    # Docker / image not set up: the dict carries available=False + a reason.
+    structure_dict = {
+        "available": False,
+        "reason": "Docker image 'allin1:latest' not found",
+        "segments": [],
+        "beats": [],
+    }
+    result = adapt(structure_dict, bpm=128.0, duration_seconds=180.0)
+    assert result.available is False
+    assert result.success is False
+    assert result.sections == []
+    assert "not found" in (result.error_message or "")
+
+
+def test_score_unavailable_structure_not_assessed():
+    structure = adapt(
+        {"available": False, "reason": "Docker not running", "segments": [], "beats": []},
+        bpm=128.0,
+        duration_seconds=180.0,
+    )
+    result = ArrangementScorer().score(structure)
+    # Not the track's fault: N/A grade, informational only — never CRITICAL "F".
+    assert result.grade == "N/A"
+    assert all(i.severity != IssueSeverity.CRITICAL for i in result.issues)
 
 
 def test_phase7_returns_arrangement_score_shape():
     from audio_analysis.phases.phase7_arrangement import advise
     structure_dict = {
-        "sections": [
-            {"label": "intro", "start_beat": 0, "end_beat": 128},
-            {"label": "drop", "start_beat": 128, "end_beat": 256},
+        "available": True,
+        "bpm": 128.0,
+        "segments": [
+            {"label": "intro", "start": 0.0, "end": 60.0},
+            {"label": "drop", "start": 60.0, "end": 120.0},
         ],
         "beats": [],
     }

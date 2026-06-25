@@ -42,6 +42,14 @@ def advise(
     result["fixes"] = result.get("suggestions", [])
     result["violations"] = [i["message"] for i in result.get("issues", [])]
     result["section_count"] = score.section_count
+    # Explicit state for the UI: "pending" (background detection running),
+    # "unavailable" (detector not set up), or "scored" (real arrangement score).
+    if structure_result.get("deferred"):
+        result["arrangement_status"] = "pending"
+    elif structure_result.get("available") is False:
+        result["arrangement_status"] = "unavailable"
+    else:
+        result["arrangement_status"] = "scored"
     logger.debug(
         "Phase 7: genre=%s grade=%s score=%.1f sections=%d",
         genre, score.grade, score.overall_score, score.section_count,

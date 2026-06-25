@@ -439,12 +439,26 @@ export function useJobs(opts?: { status?: string; limit?: number }) {
   });
 }
 
+/** True while Phase 7's arrangement score is still being filled in by the
+ *  background structure-detection job (allin1). Used to keep polling the report
+ *  until the real score lands. Defensive against the loosely-typed finalJson. */
+function isArrangementPending(results: JobResultsDto | undefined): boolean {
+  const phases = (results?.finalJson as { phases?: Array<{ phase?: number; data?: unknown }> } | undefined)?.phases;
+  const phase7 = phases?.find((p) => p.phase === 7)?.data as
+    | { arrangement_status?: string }
+    | undefined;
+  return phase7?.arrangement_status === 'pending';
+}
+
 export function useJobResults(jobId: string, enabled: boolean) {
   return useQuery<JobResultsDto>({
     queryKey: ['jobs', jobId, 'results'],
     queryFn: () => fetcher<JobResultsDto>({ url: `/jobs/${jobId}/results`, method: 'GET' }),
     enabled: enabled && Boolean(jobId),
     retry: false,
+    // Structure detection runs ~60-90 s after the fast phases land; poll the
+    // report until the deferred Phase 7 fills in, then stop.
+    refetchInterval: (query) => (isArrangementPending(query.state.data) ? 4000 : false),
   });
 }
 
