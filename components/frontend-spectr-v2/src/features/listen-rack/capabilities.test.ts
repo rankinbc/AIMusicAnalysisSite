@@ -51,6 +51,12 @@ describe('view mode', () => {
     expect(c.canUseCoach).toBe(false);
     expect(c.canReact).toBe(false);
   });
+  it('viewer controls their own transport + visuals (not host-bound)', () => {
+    const c = cap('view', ident({ isOwner: false, baseRole: 'reviewer' }), noGrants, access({ role: 'reviewer' }));
+    expect(c.canControlTransport).toBe(true);
+    expect(c.transportFollowsHost).toBe(false);
+    expect(c.canControlVisuals).toBe(true);
+  });
 });
 
 describe('room mode', () => {
