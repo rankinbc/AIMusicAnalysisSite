@@ -139,6 +139,10 @@ builder.Services.AddScoped<INotificationSink, NoOpNotificationSink>();
 builder.Services.AddScoped<IGamePlanSink, NoOpGamePlanSink>();
 builder.Services.AddSingleton<IRateLimiter, RedisRateLimiter>();
 
+// Listen V3 (PRP-1) — no-op generator seam for source=coach/analysis presets
+// (real impl is PRP-8; mirrors the PRP-0 sink convention).
+builder.Services.AddScoped<IPresetGenerator, NoOpPresetGenerator>();
+
 // Story 2.8 — usage-page honest-math (90-day credit spend vs Pro-equivalent).
 builder.Services.AddScoped<HonestMathService>();
 
@@ -256,6 +260,7 @@ api.MapFileEndpoints();
 api.MapCoachEndpoints();
 api.MapCoachConversationEndpoints();
 api.MapCompareEndpoints();
+api.MapRackPresetEndpoints();
 api.MapBillingEndpoints();
 
 app.MapGet("/", () => Results.Json(new { status = "ok", version = "2.0.0" }))

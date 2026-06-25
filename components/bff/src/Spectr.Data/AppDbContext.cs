@@ -33,6 +33,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     // Listen
     public DbSet<SessionNote> SessionNotes => Set<SessionNote>();
 
+    // Listen V3 — rack presets/drafts + viz presets (PRP-1)
+    public DbSet<RackPreset> RackPresets => Set<RackPreset>();
+    public DbSet<RackDraft> RackDrafts => Set<RackDraft>();
+    public DbSet<VizPreset> VizPresets => Set<VizPreset>();
+
     // References + Compare
     public DbSet<ReferenceTrack> ReferenceTracks => Set<ReferenceTrack>();
     public DbSet<ReferenceSet> ReferenceSets => Set<ReferenceSet>();
@@ -205,6 +210,36 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             .HasOne<Song>()
             .WithMany()
             .HasForeignKey(t => t.SongId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Listen V3 (PRP-1) — rack presets/drafts + viz presets.
+        // rack_presets/rack_drafts are VERSION-scoped (owner derives via
+        // song_version -> song -> user; NO user_id). viz_presets are user-scoped.
+        builder.Entity<RackPreset>().ToTable(t => t.HasCheckConstraint(
+            "ck_rack_presets_source", "\"source\" IN ('user','coach','analysis')"));
+        builder.Entity<RackPreset>().Property(p => p.Source).HasDefaultValue("user");
+        builder.Entity<RackPreset>().HasIndex(p => p.SongVersionId)
+            .HasDatabaseName("ix_rack_presets_song_version_id");
+        builder.Entity<RackPreset>().Property(p => p.CreatedAt).HasDefaultValueSql("now()");
+        builder.Entity<RackPreset>().Property(p => p.UpdatedAt).HasDefaultValueSql("now()");
+        builder.Entity<RackPreset>()
+            .HasOne<SongVersion>().WithMany().HasForeignKey(p => p.SongVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // One autosaved draft per version — UNIQUE(song_version_id).
+        builder.Entity<RackDraft>().HasIndex(d => d.SongVersionId).IsUnique()
+            .HasDatabaseName("uq_rack_drafts_song_version_id");
+        builder.Entity<RackDraft>().Property(d => d.UpdatedAt).HasDefaultValueSql("now()");
+        builder.Entity<RackDraft>()
+            .HasOne<SongVersion>().WithMany().HasForeignKey(d => d.SongVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<VizPreset>().HasIndex(v => v.UserId)
+            .HasDatabaseName("ix_viz_presets_user_id");
+        builder.Entity<VizPreset>().Property(v => v.CreatedAt).HasDefaultValueSql("now()");
+        builder.Entity<VizPreset>().Property(v => v.UpdatedAt).HasDefaultValueSql("now()");
+        builder.Entity<VizPreset>()
+            .HasOne<User>().WithMany().HasForeignKey(v => v.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
         // DB-side defaults for *_at timestamp columns.

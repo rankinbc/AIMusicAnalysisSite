@@ -538,6 +538,100 @@ class SessionNote(Base):
     )
 
 
+class RackPreset(Base):
+    # Listen V3 (PRP-1). Version-scoped (owner derives via song_version -> song ->
+    # user; NO user_id). source first-class: 'user' written today; 'coach'/'analysis'
+    # reserved for the future generator. Portable via JSON export/import (no copied_from_id).
+    __tablename__ = "rack_presets"
+    __table_args__ = (
+        CheckConstraint(
+            "\"source\" IN ('user','coach','analysis')", name="ck_rack_presets_source"
+        ),
+        Index("ix_rack_presets_song_version_id", "song_version_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    song_version_id: Mapped[uuid.UUID] = mapped_column(
+        "song_version_id",
+        UUID(as_uuid=True),
+        ForeignKey("song_versions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column("name", String(120), nullable=False)
+    source: Mapped[str] = mapped_column(
+        "source", String(16), nullable=False, server_default="user", default="user"
+    )
+    chain_json: Mapped[Any] = mapped_column("chain_json", JSONB, nullable=False)
+    created_in_session_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "created_in_session_id", UUID(as_uuid=True), nullable=True
+    )
+    via_grant_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "via_grant_id", UUID(as_uuid=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at",
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class RackDraft(Base):
+    # One autosaved working chain per version (UNIQUE song_version_id). Version-scoped.
+    __tablename__ = "rack_drafts"
+    __table_args__ = (
+        UniqueConstraint("song_version_id", name="uq_rack_drafts_song_version_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    song_version_id: Mapped[uuid.UUID] = mapped_column(
+        "song_version_id",
+        UUID(as_uuid=True),
+        ForeignKey("song_versions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    chain_json: Mapped[Any] = mapped_column("chain_json", JSONB, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at",
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class VizPreset(Base):
+    # Saved visualizer "looks" — user-scoped (the sole user-scoped exception).
+    __tablename__ = "viz_presets"
+    __table_args__ = (
+        Index("ix_viz_presets_user_id", "user_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        "user_id",
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column("name", String(120), nullable=False)
+    viz_json: Mapped[Any] = mapped_column("viz_json", JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at",
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
 class ReferenceTrack(Base):
     __tablename__ = "reference_tracks"
 

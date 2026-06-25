@@ -93,6 +93,7 @@ export interface AudioGraphHandle {
   readEffectMeter: (id: EffectId) => EffectMeter | null;
 
   setMasterBypass: (bypassed: boolean) => void;
+  getMasterBypass: () => boolean;
   resetAll: () => void;
 
   // Pitch mode — tempo-safe pitch shift via AudioBufferSourceNode.detune.
@@ -682,6 +683,7 @@ export function useAudioGraph(
       masterBypassRef.current = bypassed;
       applyMasterBypass();
     },
+    getMasterBypass: () => masterBypassRef.current,
     resetAll: () => {
       eqStateRef.current = EQ_BANDS_DEFAULT.map((b) => ({ ...b }));
       eqEnabledRef.current = true;

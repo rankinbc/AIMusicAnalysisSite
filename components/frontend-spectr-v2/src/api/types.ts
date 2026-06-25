@@ -274,6 +274,51 @@ export interface PatchVersionRequest {
   label?: string | null;
 }
 
+// ── Listen V3 — rack presets / drafts / viz presets (PRP-1) ──────────────────
+// `chain` / `viz` are opaque JSON (jsonb) — typed `unknown` here and narrowed to
+// the Listen `Chain` / viz-look shape at the feature layer (same pattern as
+// JobResultsDto.finalJson). source ∈ ('user','coach','analysis'); only 'user' is
+// written today. There is no userId/copiedFromId — version-scoped + JSON export.
+export interface RackPresetDto {
+  id: string;
+  songVersionId: string;
+  name: string;
+  source: string;
+  chain: unknown;
+  createdInSessionId?: string | null;
+  viaGrantId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaveRackPresetRequest {
+  name: string;
+  chain: unknown;
+}
+
+export interface RackDraftDto {
+  songVersionId: string;
+  chain: unknown;
+  updatedAt: string;
+}
+
+export interface UpsertRackDraftRequest {
+  chain: unknown;
+}
+
+export interface VizPresetDto {
+  id: string;
+  name: string;
+  viz: unknown;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaveVizPresetRequest {
+  name: string;
+  viz: unknown;
+}
+
 export interface ReanalyzeResponse {
   jobId: string;
 }
