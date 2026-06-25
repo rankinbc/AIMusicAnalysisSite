@@ -124,6 +124,30 @@ builder.Services.AddScoped<EntitlementService>();
 // model). Depends on EntitlementService + AppDbContext, so scoped.
 builder.Services.AddScoped<CoachCapService>();
 
+// ── Listen V3 · PRP-0 spine primitives ──────────────────────────────────────
+// Durable signed anon identity, opaque-resource-token auth, cross-slice no-op
+// sinks, and a Redis rate limiter. No DB — cookie + Redis + interfaces only.
+// Anon:SigningKey is separate from Jwt:Key and must be stable across restarts.
+builder.Services.AddOptions<AnonOptions>()
+    .Bind(builder.Configuration.GetSection(AnonOptions.SectionName))
+    .Validate(o => !string.IsNullOrWhiteSpace(o.SigningKey),
+        "Anon:SigningKey must be set (separate from Jwt:Key)")
+    .ValidateOnStart();
+builder.Services.AddScoped<AnonIdentity>();
+builder.Services.AddScoped<ResourceTokenAuth>();
+builder.Services.AddScoped<INotificationSink, NoOpNotificationSink>();
+builder.Services.AddScoped<IGamePlanSink, NoOpGamePlanSink>();
+builder.Services.AddSingleton<IRateLimiter, RedisRateLimiter>();
+
+// Listen V3 (PRP-1) — no-op generator seam for source=coach/analysis presets
+// (real impl is PRP-8; mirrors the PRP-0 sink convention).
+builder.Services.AddScoped<IPresetGenerator, NoOpPresetGenerator>();
+
+// Listen V3 (PRP-2) — version-scoped sharing: access resolver + the opaque
+// share-token resolver (plugs into ResourceTokenAuth's ITokenResolver set).
+builder.Services.AddScoped<AccessService>();
+builder.Services.AddScoped<ITokenResolver, ShareTokenResolver>();
+
 // Story 2.8 — usage-page honest-math (90-day credit spend vs Pro-equivalent).
 builder.Services.AddScoped<HonestMathService>();
 
@@ -219,6 +243,10 @@ app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 
+// PRP-0 — resolve/issue the durable anon identity AFTER authentication (so the
+// principal is known) and BEFORE routing (so endpoints can read it).
+app.UseAnonIdentity();
+
 // ── Routes ─────────────────────────────────────────────────────────────────────
 var api = app.MapGroup("/api");
 
@@ -237,6 +265,10 @@ api.MapFileEndpoints();
 api.MapCoachEndpoints();
 api.MapCoachConversationEndpoints();
 api.MapCompareEndpoints();
+api.MapRackPresetEndpoints();
+api.MapVersionShareEndpoints();
+api.MapVersionViewEndpoints();
+api.MapFeedbackEndpoints();
 api.MapBillingEndpoints();
 
 app.MapGet("/", () => Results.Json(new { status = "ok", version = "2.0.0" }))

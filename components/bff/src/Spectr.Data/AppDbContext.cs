@@ -33,6 +33,15 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     // Listen
     public DbSet<SessionNote> SessionNotes => Set<SessionNote>();
 
+    // Listen V3 — rack presets/drafts + viz presets (PRP-1)
+    public DbSet<RackPreset> RackPresets => Set<RackPreset>();
+    public DbSet<RackDraft> RackDrafts => Set<RackDraft>();
+    public DbSet<VizPreset> VizPresets => Set<VizPreset>();
+
+    // Listen V3 — version-scoped sharing + invites (PRP-2)
+    public DbSet<ShareSetting> ShareSettings => Set<ShareSetting>();
+    public DbSet<Invite> Invites => Set<Invite>();
+
     // References + Compare
     public DbSet<ReferenceTrack> ReferenceTracks => Set<ReferenceTrack>();
     public DbSet<ReferenceSet> ReferenceSets => Set<ReferenceSet>();
@@ -42,6 +51,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     // Feedback (Phase 1.5)
     public DbSet<TrackComment> TrackComments => Set<TrackComment>();
     public DbSet<TrackBookmark> TrackBookmarks => Set<TrackBookmark>();
+
+    // Listen V3 — View feedback: reviewer suggestions (PRP-3). Table "suggestions".
+    public DbSet<ReviewerSuggestion> Suggestions => Set<ReviewerSuggestion>();
 
     // Billing (story 2.1)
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
@@ -108,11 +120,57 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             "ck_coach_messages_status",
             "\"status\" IN ('pending','complete','refused','error')"));
 
-        // Polymorphic CHECKs on comments + bookmarks (exactly one target set).
+        // Polymorphic CHECK on comments — PRP-3 swapped this from 2-way to 3-way
+        // (exactly one of {target_share_token, target_published_track,
+        // target_version_id}). Existing share-token rows stay valid. Bookmarks keep
+        // their 2-way CHECK (PRP-6 owns their re-target).
         builder.Entity<TrackComment>().ToTable(t => t.HasCheckConstraint(
             "ck_track_comments_one_target",
-            "(target_share_token IS NOT NULL AND target_published_track IS NULL) "
-            + "OR (target_share_token IS NULL AND target_published_track IS NOT NULL)"));
+            "(CASE WHEN target_share_token IS NOT NULL THEN 1 ELSE 0 END "
+            + "+ CASE WHEN target_published_track IS NOT NULL THEN 1 ELSE 0 END "
+            + "+ CASE WHEN target_version_id IS NOT NULL THEN 1 ELSE 0 END) = 1"));
+        builder.Entity<TrackComment>().ToTable(t => t.HasCheckConstraint(
+            "ck_track_comments_status", "\"status\" IN ('open','resolved','pinned','hidden')"));
+        builder.Entity<TrackComment>().HasIndex(c => c.TargetVersionId)
+            .HasDatabaseName("ix_track_comments_target_version_id");
+        builder.Entity<TrackComment>().HasIndex(c => c.ParentId)
+            .HasDatabaseName("ix_track_comments_parent_id");
+        builder.Entity<TrackComment>()
+            .HasOne<SongVersion>().WithMany().HasForeignKey(c => c.TargetVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
+        // Self-FK NoAction: comments are soft-deleted (deleted_at), never hard-deleted
+        // except via the version cascade (which removes parent + replies together).
+        builder.Entity<TrackComment>()
+            .HasOne<TrackComment>().WithMany().HasForeignKey(c => c.ParentId)
+            .OnDelete(DeleteBehavior.NoAction);
+        builder.Entity<TrackComment>()
+            .HasOne<ReviewerSuggestion>().WithMany().HasForeignKey(c => c.SuggestionId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Reviewer suggestions (PRP-3). Circular nullable FK with track_comments
+        // (suggestion_id ↔ comment_id) — both SetNull, no hard cycle.
+        builder.Entity<ReviewerSuggestion>().ToTable(t => t.HasCheckConstraint(
+            "ck_suggestions_status",
+            "\"status\" IN ('proposed','auditioned','accepted','rejected')"));
+        builder.Entity<ReviewerSuggestion>().HasIndex(s => s.SongVersionId)
+            .HasDatabaseName("ix_suggestions_song_version_id");
+        builder.Entity<ReviewerSuggestion>().HasIndex(s => s.FromUserId)
+            .HasDatabaseName("ix_suggestions_from_user_id");
+        builder.Entity<ReviewerSuggestion>().Property(s => s.CreatedAt).HasDefaultValueSql("now()");
+        builder.Entity<ReviewerSuggestion>()
+            .HasOne<SongVersion>().WithMany().HasForeignKey(s => s.SongVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<ReviewerSuggestion>()
+            .HasOne<User>().WithMany().HasForeignKey(s => s.FromUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+        builder.Entity<ReviewerSuggestion>()
+            .HasOne<TrackComment>().WithMany().HasForeignKey(s => s.CommentId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // PRP-3 credit chain — accepted fork carries provenance back to the suggestion.
+        builder.Entity<RackPreset>()
+            .HasOne<ReviewerSuggestion>().WithMany().HasForeignKey(p => p.FromSuggestionId)
+            .OnDelete(DeleteBehavior.SetNull);
         builder.Entity<TrackBookmark>().ToTable(t => t.HasCheckConstraint(
             "ck_track_bookmarks_one_target",
             "(target_share_token IS NOT NULL AND target_published_track IS NULL) "
@@ -206,6 +264,85 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             .WithMany()
             .HasForeignKey(t => t.SongId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // Listen V3 (PRP-1) — rack presets/drafts + viz presets.
+        // rack_presets/rack_drafts are VERSION-scoped (owner derives via
+        // song_version -> song -> user; NO user_id). viz_presets are user-scoped.
+        builder.Entity<RackPreset>().ToTable(t => t.HasCheckConstraint(
+            "ck_rack_presets_source", "\"source\" IN ('user','coach','analysis')"));
+        builder.Entity<RackPreset>().Property(p => p.Source).HasDefaultValue("user");
+        builder.Entity<RackPreset>().HasIndex(p => p.SongVersionId)
+            .HasDatabaseName("ix_rack_presets_song_version_id");
+        builder.Entity<RackPreset>().Property(p => p.CreatedAt).HasDefaultValueSql("now()");
+        builder.Entity<RackPreset>().Property(p => p.UpdatedAt).HasDefaultValueSql("now()");
+        builder.Entity<RackPreset>()
+            .HasOne<SongVersion>().WithMany().HasForeignKey(p => p.SongVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // One autosaved draft per version — UNIQUE(song_version_id).
+        builder.Entity<RackDraft>().HasIndex(d => d.SongVersionId).IsUnique()
+            .HasDatabaseName("uq_rack_drafts_song_version_id");
+        builder.Entity<RackDraft>().Property(d => d.UpdatedAt).HasDefaultValueSql("now()");
+        builder.Entity<RackDraft>()
+            .HasOne<SongVersion>().WithMany().HasForeignKey(d => d.SongVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<VizPreset>().HasIndex(v => v.UserId)
+            .HasDatabaseName("ix_viz_presets_user_id");
+        builder.Entity<VizPreset>().Property(v => v.CreatedAt).HasDefaultValueSql("now()");
+        builder.Entity<VizPreset>().Property(v => v.UpdatedAt).HasDefaultValueSql("now()");
+        builder.Entity<VizPreset>()
+            .HasOne<User>().WithMany().HasForeignKey(v => v.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Listen V3 (PRP-2) — version-scoped sharing. ADDITIVE: the analysis-scoped
+        // share (analyses.share_token) is untouched. share_settings is 1:1 with a
+        // version (PK = song_version_id, mirrors Subscription). share_token uses a
+        // PLAIN unique index — Postgres treats NULLs as distinct, so many private
+        // (null-token) rows coexist while non-null tokens stay unique (same as
+        // analyses.share_token above).
+        builder.Entity<ShareSetting>().HasKey(s => s.SongVersionId);
+        builder.Entity<ShareSetting>().ToTable(t =>
+        {
+            t.HasCheckConstraint("ck_share_settings_visibility",
+                "\"visibility\" IN ('private','unlisted','public')");
+            t.HasCheckConstraint("ck_share_settings_comments_policy",
+                "\"comments_policy\" IN ('off','link','named')");
+            t.HasCheckConstraint("ck_share_settings_host_policy",
+                "\"session_host_policy\" IN ('owner_only','invited')");
+            t.HasCheckConstraint("ck_share_settings_join_policy",
+                "\"session_join_policy\" IN ('invited','link','public')");
+        });
+        builder.Entity<ShareSetting>().HasIndex(s => s.ShareToken).IsUnique()
+            .HasDatabaseName("uq_share_settings_share_token");
+        builder.Entity<ShareSetting>().Property(s => s.CreatedAt).HasDefaultValueSql("now()");
+        builder.Entity<ShareSetting>().Property(s => s.UpdatedAt).HasDefaultValueSql("now()");
+        builder.Entity<ShareSetting>()
+            .HasOne<SongVersion>().WithMany().HasForeignKey(s => s.SongVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<Invite>().ToTable(t =>
+        {
+            t.HasCheckConstraint("ck_invites_scope", "\"scope\" IN ('version','session')");
+            t.HasCheckConstraint("ck_invites_role", "\"role\" IN ('reviewer','listener','host')");
+            t.HasCheckConstraint("ck_invites_status", "\"status\" IN ('pending','accepted','revoked')");
+        });
+        builder.Entity<Invite>().HasIndex(i => i.Token).IsUnique()
+            .HasDatabaseName("uq_invites_token");
+        builder.Entity<Invite>().HasIndex(i => i.SongVersionId)
+            .HasDatabaseName("ix_invites_song_version_id");
+        builder.Entity<Invite>().HasIndex(i => i.InvitedUserId)
+            .HasDatabaseName("ix_invites_invited_user_id");
+        builder.Entity<Invite>().Property(i => i.CreatedAt).HasDefaultValueSql("now()");
+        builder.Entity<Invite>()
+            .HasOne<SongVersion>().WithMany().HasForeignKey(i => i.SongVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<Invite>()
+            .HasOne<User>().WithMany().HasForeignKey(i => i.CreatedBy)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<Invite>()
+            .HasOne<User>().WithMany().HasForeignKey(i => i.InvitedUserId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         // DB-side defaults for *_at timestamp columns.
         // Without these, inserts from outside EF (the Python worker via SQLAlchemy)

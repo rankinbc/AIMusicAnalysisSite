@@ -538,6 +538,221 @@ class SessionNote(Base):
     )
 
 
+class RackPreset(Base):
+    # Listen V3 (PRP-1). Version-scoped (owner derives via song_version -> song ->
+    # user; NO user_id). source first-class: 'user' written today; 'coach'/'analysis'
+    # reserved for the future generator. Portable via JSON export/import (no copied_from_id).
+    __tablename__ = "rack_presets"
+    __table_args__ = (
+        CheckConstraint(
+            "\"source\" IN ('user','coach','analysis')", name="ck_rack_presets_source"
+        ),
+        Index("ix_rack_presets_song_version_id", "song_version_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    song_version_id: Mapped[uuid.UUID] = mapped_column(
+        "song_version_id",
+        UUID(as_uuid=True),
+        ForeignKey("song_versions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column("name", String(120), nullable=False)
+    source: Mapped[str] = mapped_column(
+        "source", String(16), nullable=False, server_default="user", default="user"
+    )
+    chain_json: Mapped[Any] = mapped_column("chain_json", JSONB, nullable=False)
+    created_in_session_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "created_in_session_id", UUID(as_uuid=True), nullable=True
+    )
+    via_grant_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "via_grant_id", UUID(as_uuid=True), nullable=True
+    )
+    # PRP-3 — provenance when forked by accepting a reviewer suggestion (D4.5).
+    from_suggestion_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "from_suggestion_id",
+        UUID(as_uuid=True),
+        ForeignKey("suggestions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at",
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class RackDraft(Base):
+    # One autosaved working chain per version (UNIQUE song_version_id). Version-scoped.
+    __tablename__ = "rack_drafts"
+    __table_args__ = (
+        UniqueConstraint("song_version_id", name="uq_rack_drafts_song_version_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    song_version_id: Mapped[uuid.UUID] = mapped_column(
+        "song_version_id",
+        UUID(as_uuid=True),
+        ForeignKey("song_versions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    chain_json: Mapped[Any] = mapped_column("chain_json", JSONB, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at",
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class VizPreset(Base):
+    # Saved visualizer "looks" — user-scoped (the sole user-scoped exception).
+    __tablename__ = "viz_presets"
+    __table_args__ = (
+        Index("ix_viz_presets_user_id", "user_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        "user_id",
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column("name", String(120), nullable=False)
+    viz_json: Mapped[Any] = mapped_column("viz_json", JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at",
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class ShareSetting(Base):
+    # Listen V3 (PRP-2). Version-scoped sharing gate bundle, 1:1 with a version
+    # (PK = song_version_id). ADDITIVE — analyses.share_token is untouched.
+    __tablename__ = "share_settings"
+    __table_args__ = (
+        CheckConstraint(
+            "\"visibility\" IN ('private','unlisted','public')",
+            name="ck_share_settings_visibility",
+        ),
+        CheckConstraint(
+            "\"comments_policy\" IN ('off','link','named')",
+            name="ck_share_settings_comments_policy",
+        ),
+        CheckConstraint(
+            "\"session_host_policy\" IN ('owner_only','invited')",
+            name="ck_share_settings_host_policy",
+        ),
+        CheckConstraint(
+            "\"session_join_policy\" IN ('invited','link','public')",
+            name="ck_share_settings_join_policy",
+        ),
+        Index("uq_share_settings_share_token", "share_token", unique=True),
+    )
+
+    song_version_id: Mapped[uuid.UUID] = mapped_column(
+        "song_version_id",
+        UUID(as_uuid=True),
+        ForeignKey("song_versions.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    visibility: Mapped[str] = mapped_column(
+        "visibility", String(12), nullable=False, server_default="private", default="private"
+    )
+    share_token: Mapped[Optional[str]] = mapped_column("share_token", String(36), nullable=True)
+    show_verdicts: Mapped[bool] = mapped_column("show_verdicts", Boolean, nullable=False, default=False)
+    comments_policy: Mapped[str] = mapped_column(
+        "comments_policy", String(8), nullable=False, server_default="link", default="link"
+    )
+    suggestions_allowed: Mapped[bool] = mapped_column(
+        "suggestions_allowed", Boolean, nullable=False, server_default="true", default=True
+    )
+    bookmarking_allowed: Mapped[bool] = mapped_column(
+        "bookmarking_allowed", Boolean, nullable=False, server_default="true", default=True
+    )
+    session_host_policy: Mapped[str] = mapped_column(
+        "session_host_policy", String(12), nullable=False, server_default="owner_only", default="owner_only"
+    )
+    session_join_policy: Mapped[str] = mapped_column(
+        "session_join_policy", String(8), nullable=False, server_default="link", default="link"
+    )
+    enabled_at: Mapped[Optional[datetime]] = mapped_column(
+        "enabled_at", DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at", DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class Invite(Base):
+    # Listen V3 (PRP-2, D6.3). Named, tokenized version invite (session scope
+    # reserved for PRP-4). Accepting binds invited_user_id + flips status.
+    __tablename__ = "invites"
+    __table_args__ = (
+        CheckConstraint("\"scope\" IN ('version','session')", name="ck_invites_scope"),
+        CheckConstraint("\"role\" IN ('reviewer','listener','host')", name="ck_invites_role"),
+        CheckConstraint(
+            "\"status\" IN ('pending','accepted','revoked')", name="ck_invites_status"
+        ),
+        Index("uq_invites_token", "token", unique=True),
+        Index("ix_invites_song_version_id", "song_version_id"),
+        Index("ix_invites_invited_user_id", "invited_user_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scope: Mapped[str] = mapped_column(
+        "scope", String(8), nullable=False, server_default="version", default="version"
+    )
+    song_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "song_version_id",
+        UUID(as_uuid=True),
+        ForeignKey("song_versions.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    session_id: Mapped[Optional[uuid.UUID]] = mapped_column("session_id", UUID(as_uuid=True), nullable=True)
+    invited_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "invited_user_id",
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    invited_email: Mapped[Optional[str]] = mapped_column("invited_email", String(255), nullable=True)
+    invited_handle: Mapped[Optional[str]] = mapped_column("invited_handle", String(32), nullable=True)
+    role: Mapped[str] = mapped_column("role", String(16), nullable=False)
+    token: Mapped[str] = mapped_column("token", String(36), nullable=False)
+    status: Mapped[str] = mapped_column(
+        "status", String(10), nullable=False, server_default="pending", default="pending"
+    )
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        "created_by",
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    accepted_at: Mapped[Optional[datetime]] = mapped_column(
+        "accepted_at", DateTime(timezone=True), nullable=True
+    )
+
+
 class ReferenceTrack(Base):
     __tablename__ = "reference_tracks"
 
@@ -650,14 +865,24 @@ class CompareCache(Base):
 
 
 class TrackComment(Base):
+    # PRP-3 swapped the polymorphic CHECK to 3-way (+ target_version_id) and added
+    # threading (parent_id) + author-owned status. Legacy /share rows (target_share_token)
+    # stay valid; new V3 View comments use target_version_id.
     __tablename__ = "track_comments"
     __table_args__ = (
         CheckConstraint(
-            "(target_share_token IS NOT NULL AND target_published_track IS NULL) "
-            "OR (target_share_token IS NULL AND target_published_track IS NOT NULL)",
+            "(CASE WHEN target_share_token IS NOT NULL THEN 1 ELSE 0 END "
+            "+ CASE WHEN target_published_track IS NOT NULL THEN 1 ELSE 0 END "
+            "+ CASE WHEN target_version_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
             name="ck_track_comments_one_target",
         ),
+        CheckConstraint(
+            "\"status\" IN ('open','resolved','pinned','hidden')",
+            name="ck_track_comments_status",
+        ),
         Index("ix_track_comments_target_share_token", "target_share_token"),
+        Index("ix_track_comments_target_version_id", "target_version_id"),
+        Index("ix_track_comments_parent_id", "parent_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -666,6 +891,27 @@ class TrackComment(Base):
     )
     target_published_track: Mapped[Optional[uuid.UUID]] = mapped_column(
         "target_published_track", UUID(as_uuid=True), nullable=True
+    )
+    target_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "target_version_id",
+        UUID(as_uuid=True),
+        ForeignKey("song_versions.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    parent_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "parent_id",
+        UUID(as_uuid=True),
+        ForeignKey("track_comments.id", ondelete="NO ACTION"),
+        nullable=True,
+    )
+    status: Mapped[str] = mapped_column(
+        "status", String(10), nullable=False, server_default="open", default="open"
+    )
+    suggestion_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "suggestion_id",
+        UUID(as_uuid=True),
+        ForeignKey("suggestions.id", ondelete="SET NULL"),
+        nullable=True,
     )
     author_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         "author_user_id",
@@ -677,12 +923,68 @@ class TrackComment(Base):
         "author_display_name", String(120), nullable=True
     )
     author_ip_hash: Mapped[Optional[bytes]] = mapped_column("author_ip_hash", LargeBinary, nullable=True)
+    # Durable signed-cookie anon id (CONVENTIONS §1); set for anon V3 View comments.
+    author_anon_id: Mapped[Optional[str]] = mapped_column("author_anon_id", String(64), nullable=True)
     timestamp_seconds: Mapped[Optional[float]] = mapped_column("timestamp_seconds", Float, nullable=True)
     body: Mapped[str] = mapped_column("body", String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     deleted_at: Mapped[Optional[datetime]] = mapped_column("deleted_at", DateTime(timezone=True), nullable=True)
+
+
+class ReviewerSuggestion(Base):
+    # PRP-3 (D4.3). Non-owner chain proposal; the chain lives here (chain_json).
+    # A RackPreset materializes only on accept (fork-to-preset) with from_suggestion_id.
+    __tablename__ = "suggestions"
+    __table_args__ = (
+        CheckConstraint(
+            "\"status\" IN ('proposed','auditioned','accepted','rejected')",
+            name="ck_suggestions_status",
+        ),
+        Index("ix_suggestions_song_version_id", "song_version_id"),
+        Index("ix_suggestions_from_user_id", "from_user_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    song_version_id: Mapped[uuid.UUID] = mapped_column(
+        "song_version_id",
+        UUID(as_uuid=True),
+        ForeignKey("song_versions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    from_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "from_user_id",
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    from_display_name: Mapped[Optional[str]] = mapped_column(
+        "from_display_name", String(120), nullable=True
+    )
+    from_anon_id: Mapped[Optional[str]] = mapped_column("from_anon_id", String(64), nullable=True)
+    chain_json: Mapped[Any] = mapped_column("chain_json", JSONB, nullable=False)
+    comment_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "comment_id",
+        UUID(as_uuid=True),
+        ForeignKey("track_comments.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_in_session_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "created_in_session_id", UUID(as_uuid=True), nullable=True
+    )
+    via_grant_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "via_grant_id", UUID(as_uuid=True), nullable=True
+    )
+    status: Mapped[str] = mapped_column(
+        "status", String(10), nullable=False, server_default="proposed", default="proposed"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(
+        "resolved_at", DateTime(timezone=True), nullable=True
+    )
 
 
 class TrackBookmark(Base):

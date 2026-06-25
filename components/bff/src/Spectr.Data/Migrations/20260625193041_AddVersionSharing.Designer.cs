@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Spectr.Data;
@@ -11,9 +12,11 @@ using Spectr.Data;
 namespace Spectr.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260625193041_AddVersionSharing")]
+    partial class AddVersionSharing
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -672,10 +675,6 @@ namespace Spectr.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("created_in_session_id");
 
-                    b.Property<Guid?>("FromSuggestionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("from_suggestion_id");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(120)
@@ -705,8 +704,6 @@ namespace Spectr.Data.Migrations
                         .HasColumnName("via_grant_id");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("FromSuggestionId");
 
                     b.HasIndex("SongVersionId")
                         .HasDatabaseName("ix_rack_presets_song_version_id");
@@ -912,80 +909,6 @@ namespace Spectr.Data.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("refresh_tokens");
-                });
-
-            modelBuilder.Entity("Spectr.Data.Entities.ReviewerSuggestion", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("ChainJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("chain_json");
-
-                    b.Property<Guid?>("CommentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("comment_id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<Guid?>("CreatedInSessionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_in_session_id");
-
-                    b.Property<string>("FromAnonId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("from_anon_id");
-
-                    b.Property<string>("FromDisplayName")
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)")
-                        .HasColumnName("from_display_name");
-
-                    b.Property<Guid?>("FromUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("from_user_id");
-
-                    b.Property<DateTimeOffset?>("ResolvedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("resolved_at");
-
-                    b.Property<Guid>("SongVersionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("song_version_id");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
-                        .HasColumnName("status");
-
-                    b.Property<Guid?>("ViaGrantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("via_grant_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CommentId");
-
-                    b.HasIndex("FromUserId")
-                        .HasDatabaseName("ix_suggestions_from_user_id");
-
-                    b.HasIndex("SongVersionId")
-                        .HasDatabaseName("ix_suggestions_song_version_id");
-
-                    b.ToTable("suggestions", t =>
-                        {
-                            t.HasCheckConstraint("ck_suggestions_status", "\"status\" IN ('proposed','auditioned','accepted','rejected')");
-                        });
                 });
 
             modelBuilder.Entity("Spectr.Data.Entities.SessionNote", b =>
@@ -1412,11 +1335,6 @@ namespace Spectr.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("AuthorAnonId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("author_anon_id");
-
                     b.Property<string>("AuthorDisplayName")
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)")
@@ -1445,20 +1363,6 @@ namespace Spectr.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
-                    b.Property<Guid?>("ParentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("parent_id");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
-                        .HasColumnName("status");
-
-                    b.Property<Guid?>("SuggestionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("suggestion_id");
-
                     b.Property<Guid?>("TargetPublishedTrack")
                         .HasColumnType("uuid")
                         .HasColumnName("target_published_track");
@@ -1468,31 +1372,17 @@ namespace Spectr.Data.Migrations
                         .HasColumnType("character varying(36)")
                         .HasColumnName("target_share_token");
 
-                    b.Property<Guid?>("TargetVersionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("target_version_id");
-
                     b.Property<double?>("TimestampSeconds")
                         .HasColumnType("double precision")
                         .HasColumnName("timestamp_seconds");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ParentId")
-                        .HasDatabaseName("ix_track_comments_parent_id");
-
-                    b.HasIndex("SuggestionId");
-
                     b.HasIndex("TargetShareToken");
-
-                    b.HasIndex("TargetVersionId")
-                        .HasDatabaseName("ix_track_comments_target_version_id");
 
                     b.ToTable("track_comments", t =>
                         {
-                            t.HasCheckConstraint("ck_track_comments_one_target", "(CASE WHEN target_share_token IS NOT NULL THEN 1 ELSE 0 END + CASE WHEN target_published_track IS NOT NULL THEN 1 ELSE 0 END + CASE WHEN target_version_id IS NOT NULL THEN 1 ELSE 0 END) = 1");
-
-                            t.HasCheckConstraint("ck_track_comments_status", "\"status\" IN ('open','resolved','pinned','hidden')");
+                            t.HasCheckConstraint("ck_track_comments_one_target", "(target_share_token IS NOT NULL AND target_published_track IS NULL) OR (target_share_token IS NULL AND target_published_track IS NOT NULL)");
                         });
                 });
 
@@ -1900,30 +1790,6 @@ namespace Spectr.Data.Migrations
 
             modelBuilder.Entity("Spectr.Data.Entities.RackPreset", b =>
                 {
-                    b.HasOne("Spectr.Data.Entities.ReviewerSuggestion", null)
-                        .WithMany()
-                        .HasForeignKey("FromSuggestionId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Spectr.Data.Entities.SongVersion", null)
-                        .WithMany()
-                        .HasForeignKey("SongVersionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Spectr.Data.Entities.ReviewerSuggestion", b =>
-                {
-                    b.HasOne("Spectr.Data.Entities.TrackComment", null)
-                        .WithMany()
-                        .HasForeignKey("CommentId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Spectr.Data.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("FromUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("Spectr.Data.Entities.SongVersion", null)
                         .WithMany()
                         .HasForeignKey("SongVersionId")
@@ -1947,24 +1813,6 @@ namespace Spectr.Data.Migrations
                         .HasForeignKey("SongId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("Spectr.Data.Entities.TrackComment", b =>
-                {
-                    b.HasOne("Spectr.Data.Entities.TrackComment", null)
-                        .WithMany()
-                        .HasForeignKey("ParentId")
-                        .OnDelete(DeleteBehavior.NoAction);
-
-                    b.HasOne("Spectr.Data.Entities.ReviewerSuggestion", null)
-                        .WithMany()
-                        .HasForeignKey("SuggestionId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Spectr.Data.Entities.SongVersion", null)
-                        .WithMany()
-                        .HasForeignKey("TargetVersionId")
-                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("Spectr.Data.Entities.VizPreset", b =>

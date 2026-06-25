@@ -331,6 +331,179 @@ export interface PatchVersionRequest {
   label?: string | null;
 }
 
+// ── Listen V3 — rack presets / drafts / viz presets (PRP-1) ──────────────────
+// `chain` / `viz` are opaque JSON (jsonb) — typed `unknown` here and narrowed to
+// the Listen `Chain` / viz-look shape at the feature layer (same pattern as
+// JobResultsDto.finalJson). source ∈ ('user','coach','analysis'); only 'user' is
+// written today. There is no userId/copiedFromId — version-scoped + JSON export.
+export interface RackPresetDto {
+  id: string;
+  songVersionId: string;
+  name: string;
+  source: string;
+  chain: unknown;
+  createdInSessionId?: string | null;
+  viaGrantId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaveRackPresetRequest {
+  name: string;
+  chain: unknown;
+}
+
+export interface RackDraftDto {
+  songVersionId: string;
+  chain: unknown;
+  updatedAt: string;
+}
+
+export interface UpsertRackDraftRequest {
+  chain: unknown;
+}
+
+export interface VizPresetDto {
+  id: string;
+  name: string;
+  viz: unknown;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaveVizPresetRequest {
+  name: string;
+  viz: unknown;
+}
+
+// ── Listen V3 — version-scoped sharing + access (PRP-2) ──────────────────────
+export interface ShareSettingsDto {
+  versionId: string;
+  visibility: 'private' | 'unlisted' | 'public';
+  shareToken: string | null;
+  showVerdicts: boolean;
+  commentsPolicy: 'off' | 'link' | 'named';
+  suggestionsAllowed: boolean;
+  bookmarkingAllowed: boolean;
+  sessionHostPolicy: 'owner_only' | 'invited';
+  sessionJoinPolicy: 'invited' | 'link' | 'public';
+  enabledAt: string | null;
+}
+
+export interface UpdateShareSettingsRequest {
+  visibility?: 'private' | 'unlisted' | 'public';
+  showVerdicts?: boolean;
+  commentsPolicy?: 'off' | 'link' | 'named';
+  suggestionsAllowed?: boolean;
+  bookmarkingAllowed?: boolean;
+  sessionHostPolicy?: 'owner_only' | 'invited';
+  sessionJoinPolicy?: 'invited' | 'link' | 'public';
+}
+
+export interface RotateTokenResponse {
+  shareToken: string;
+}
+
+export interface GatesDto {
+  canComment: boolean;
+  canSuggest: boolean;
+  canBookmark: boolean;
+}
+
+// The resolution contract the Work/View/Room switcher reads.
+export interface AccessDto {
+  role: 'owner' | 'invited' | 'anon' | 'none';
+  canWork: boolean;
+  canView: boolean;
+  roomHostable: boolean;
+  roomJoinable: boolean;
+  coachAvailable: boolean;
+  gates: GatesDto;
+}
+
+export interface InviteDto {
+  id: string;
+  scope: 'version' | 'session';
+  songVersionId: string | null;
+  role: 'reviewer' | 'listener' | 'host';
+  status: 'pending' | 'accepted' | 'revoked';
+  invitedEmail: string | null;
+  invitedHandle: string | null;
+  token: string;
+  createdAt: string;
+  acceptedAt: string | null;
+}
+
+export interface CreateInviteRequest {
+  role: 'reviewer' | 'listener' | 'host';
+  invitedEmail?: string | null;
+  invitedHandle?: string | null;
+}
+
+export interface VersionViewDto {
+  versionId: string;
+  songName: string;
+  versionNumber: number;
+  visibility: 'private' | 'unlisted' | 'public';
+  showVerdicts: boolean;
+  grade: string | null;
+  score: number | null;
+  gates: GatesDto;
+}
+
+// ── Listen V3 — View feedback: comments + suggestions (PRP-3) ────────────────
+export interface ActorRefDto {
+  type: 'user' | 'anon';
+  userId: string | null;
+  handle: string | null;
+  displayName: string | null;
+  hue: number | null;
+}
+
+export type CommentStatus = 'open' | 'resolved' | 'pinned' | 'hidden';
+
+export interface CommentDto {
+  id: string;
+  targetVersionId: string;
+  parentId: string | null;
+  t: number | null;
+  author: ActorRefDto;
+  body: string;
+  status: CommentStatus;
+  suggestionId: string | null;
+  createdAt: string;
+}
+
+export interface PostCommentRequest {
+  parentId?: string | null;
+  t?: number | null;
+  body: string;
+  authorDisplayName?: string | null;
+}
+
+export interface PatchCommentStatusRequest {
+  status: CommentStatus;
+}
+
+export type SuggestionStatus = 'proposed' | 'auditioned' | 'accepted' | 'rejected';
+
+export interface SuggestionDto {
+  id: string;
+  songVersionId: string;
+  fromActor: ActorRefDto;
+  chain: unknown; // the proposed Chain (narrowed via asChain at the feature layer)
+  commentId: string | null;
+  createdInSessionId: string | null;
+  status: SuggestionStatus;
+  createdAt: string;
+}
+
+export interface CreateSuggestionRequest {
+  commentId?: string | null;
+  chain: unknown;
+  fromDisplayName?: string | null;
+}
+
 export interface ReanalyzeResponse {
   jobId: string;
 }

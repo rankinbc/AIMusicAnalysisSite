@@ -36,6 +36,13 @@ import { InlineRack } from './rackLayouts';
 import { pushFullRack } from './rackBindings';
 import { RightRail, VisualMeters, VisualsPanel } from './rail';
 import { useRackState, type RackPreset } from './rackState';
+import type { Chain } from './chain';
+import type { ModuleState } from './data';
+import {
+  asChain, buildExportEnvelope, parseImportEnvelope, useRackDraft, useRackDraftAutosave,
+  useRackPresets, useSaveRackPreset,
+} from './useRackPresets';
+import { asVizLook, useSaveVizPreset, useVizPresets } from './useVizPresetsServer';
 import { Transport } from './transport';
 import { Coach } from '../../ui/Coach';
 import { Avatar, SegBar } from './ui';
@@ -187,7 +194,6 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
   const [vizPresets, setVizPresets] = useState<VizPreset[]>([]);
 
   const saveVizPreset = useCallback(() => setVizPresets((p) => [...p, { id: Math.random().toString(36).slice(2), name: 'Look ' + (p.length + 1), viz, stages: [...stages], director }]), [viz, stages, director]);
-  const recallVizPreset = useCallback((p: VizPreset) => { setViz(p.viz); setStages([...p.stages]); setDirector(p.director); }, []);
   const randomizeViz = useCallback(() => {
     const pick = <T,>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
     const hues = [165, 280, 30, 210, 320, 100, 50];
@@ -204,6 +210,117 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
   // render-fresh `rs` object in togglePlay's deps).
   const rsRef = useRef(rs);
   rsRef.current = rs;
+
+  // ── Server-backed rack presets + draft + viz looks (PRP-1) ─────────────────
+  // Version-scoped on the real-audio route; the mock demo route stays in-memory
+  // (rs.presets / vizPresets). The live chain is the snapshot we save + autosave.
+  const currentChain = useMemo<Chain>(
+    () => ({ order: rs.order, modules: rs.mod, masterBypass: rs.masterBypass }),
+    [rs.order, rs.mod, rs.masterBypass],
+  );
+  const { data: rackPresetDtos } = useRackPresets(realAudio ? (versionId ?? '') : '');
+  const saveRackPresetMut = useSaveRackPreset(versionId ?? '');
+  const serverRackPresets = useMemo<RackPreset[]>(() => (rackPresetDtos ?? []).flatMap((d) => {
+    const chain = asChain(d.chain);
+    if (!chain) return [];
+    return [{
+      id: d.id, name: d.name, by: d.source, order: chain.order,
+      mod: chain.modules as Record<string, ModuleState>,
+      n: Object.values(chain.modules).filter((s) => s?.enabled).length,
+    }];
+  }), [rackPresetDtos]);
+
+  const { data: vizPresetDtos } = useVizPresets();
+  const saveVizMut = useSaveVizPreset();
+  const serverVizPresets = useMemo<VizPreset[]>(() => (vizPresetDtos ?? []).flatMap((d) => {
+    const look = asVizLook(d.viz);
+    if (!look) return [];
+    return [{ id: d.id, name: d.name, viz: look.viz, stages: look.stages, director: look.director }];
+  }), [vizPresetDtos]);
+
+  // Autosaved draft: restore once when it resolves, then enable debounced autosave.
+  // Gating autosave on `draftRestored` prevents a default-chain autosave from
+  // clobbering the persisted draft before the GET returns.
+  const draftQuery = useRackDraft(realAudio ? (versionId ?? '') : '');
+  const [draftRestored, setDraftRestored] = useState(false);
+  useEffect(() => {
+    if (draftRestored || !realAudio || !draftQuery.isFetched) return;
+    const chain = draftQuery.data ? asChain(draftQuery.data.chain) : null;
+    if (chain) {
+      rsRef.current.recallPreset({
+        id: 'draft', name: 'draft', by: 'you', order: chain.order,
+        mod: chain.modules as Record<string, ModuleState>, n: 0,
+      });
+      rsRef.current.setMasterBypass(chain.masterBypass);
+    }
+    setDraftRestored(true);
+  }, [draftRestored, realAudio, draftQuery.isFetched, draftQuery.data]);
+  useRackDraftAutosave(versionId ?? '', currentChain, realAudio && draftRestored);
+
+  // Unified preset/look handlers — server on the real route, in-memory on mock.
+  const onSaveRackPreset = useCallback(() => {
+    if (realAudio) {
+      saveRackPresetMut.mutate({ name: `Preset ${serverRackPresets.length + 1}`, chain: currentChain });
+    } else {
+      rs.savePreset(roomControl.rackHolder?.handle || 'you');
+    }
+  }, [realAudio, saveRackPresetMut, serverRackPresets.length, currentChain, rs, roomControl.rackHolder]);
+  const onRecallRackPreset = useCallback((id: string) => {
+    if (realAudio) {
+      const dto = rackPresetDtos?.find((x) => x.id === id);
+      const chain = dto ? asChain(dto.chain) : null;
+      if (!dto || !chain) return;
+      rs.recallPreset({
+        id: dto.id, name: dto.name, by: dto.source, order: chain.order,
+        mod: chain.modules as Record<string, ModuleState>, n: 0,
+      });
+      rs.setMasterBypass(chain.masterBypass); // recallPreset alone keeps current bypass
+    } else {
+      const p = rs.presets.find((x) => x.id === id);
+      if (p) rs.recallPreset(p);
+    }
+  }, [realAudio, rackPresetDtos, rs]);
+
+  const onSaveVizLook = useCallback(() => {
+    if (realAudio) {
+      saveVizMut.mutate({ name: `Look ${serverVizPresets.length + 1}`, viz: { viz, stages, director } });
+    } else {
+      saveVizPreset();
+    }
+  }, [realAudio, saveVizMut, serverVizPresets.length, viz, stages, director, saveVizPreset]);
+  const onRecallVizLook = useCallback((id: string) => {
+    const p = (realAudio ? serverVizPresets : vizPresets).find((x) => x.id === id);
+    if (!p) return;
+    setViz(p.viz); setStages([...p.stages]); setDirector(p.director);
+  }, [realAudio, serverVizPresets, vizPresets]);
+  const rackPresetItems = realAudio ? serverRackPresets : rs.presets;
+  const vizPresetItems = realAudio ? serverVizPresets : vizPresets;
+
+  // JSON export/import — the portability path (no server copy). Export downloads
+  // an envelope; import parses + validates it and saves onto THIS owned version.
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const onExportPreset = useCallback(() => {
+    const envelope = buildExportEnvelope(`Preset ${rackPresetItems.length + 1}`, currentChain);
+    const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'rack-preset.json'; a.click();
+    URL.revokeObjectURL(url);
+  }, [rackPresetItems.length, currentChain]);
+  const onImportFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-importing the same file
+    if (!file) return;
+    try {
+      const { name, chain } = parseImportEnvelope(await file.text());
+      saveRackPresetMut.mutate(
+        { name, chain },
+        { onSuccess: () => toast.success(`Imported "${name}".`) },
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Import failed.');
+    }
+  }, [saveRackPresetMut]);
 
   // ── Pitch lane (Phase 2.5): a separate buffer lane (NOT an insert), driven off
   // the rack's pitch module. pitchModeRef = imperative flag for togglePlay/seek;
@@ -520,15 +637,23 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
                   <select
                     value=""
                     onChange={(e) => {
-                      if (bottomView === 'rack') { const p = rs.presets.find((x) => x.id === e.target.value); if (p) rs.recallPreset(p); }
-                      else { const p = vizPresets.find((x) => x.id === e.target.value); if (p) recallVizPreset(p); }
+                      if (!e.target.value) return;
+                      if (bottomView === 'rack') onRecallRackPreset(e.target.value);
+                      else onRecallVizLook(e.target.value);
                     }}
                     className="mono" style={{ fontSize: 10, background: 'var(--card-2)', color: 'var(--text-2)', border: '1px solid var(--border)', borderRadius: 7, padding: '6px 8px' }}
                   >
-                    <option value="">Presets ({(bottomView === 'rack' ? rs.presets : vizPresets).length})</option>
-                    {(bottomView === 'rack' ? rs.presets : vizPresets).map((p: RackPreset | VizPreset) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    <option value="">Presets ({(bottomView === 'rack' ? rackPresetItems : vizPresetItems).length})</option>
+                    {(bottomView === 'rack' ? rackPresetItems : vizPresetItems).map((p: RackPreset | VizPreset) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
-                  <button type="button" onClick={() => (bottomView === 'rack' ? rs.savePreset(roomControl.rackHolder?.handle || 'you') : saveVizPreset())} className="btn sm primary" style={{ fontSize: 10.5 }}>+ Save preset</button>
+                  <button type="button" onClick={() => (bottomView === 'rack' ? onSaveRackPreset() : onSaveVizLook())} className="btn sm primary" style={{ fontSize: 10.5 }}>+ Save preset</button>
+                  {bottomView === 'rack' && realAudio && (
+                    <>
+                      <button type="button" onClick={onExportPreset} className="btn sm ghost" style={{ fontSize: 10.5 }}>↧ Export</button>
+                      <button type="button" onClick={() => importInputRef.current?.click()} className="btn sm ghost" style={{ fontSize: 10.5 }}>↥ Import</button>
+                      <input ref={importInputRef} type="file" accept="application/json,.json" onChange={onImportFile} style={{ display: 'none' }} />
+                    </>
+                  )}
                   {(() => {
                     const ac = bottomView === 'rack' ? roomControl.rackHolder : roomControl.visualsHolder;
                     if (!ac) return null;
