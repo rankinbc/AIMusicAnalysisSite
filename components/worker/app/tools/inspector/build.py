@@ -68,8 +68,9 @@ def build_trace_model(raw: RawTrace) -> dict[str, Any]:
     flat.setdefault("track_id", raw.id)
 
     # Per-rule overlay: fired/not + per-path resolution.
+    _rules_by_name = {f.__name__: f for f in rule_engine._RULES}
     for r in model["rules"]:
-        fn = next(f for f in rule_engine._RULES if f.__name__ == r["name"])
+        fn = _rules_by_name[r["name"]]
         run = run_rule(fn, flat)
         r["fired"] = run["fired"]
         r["error"] = run["error"]

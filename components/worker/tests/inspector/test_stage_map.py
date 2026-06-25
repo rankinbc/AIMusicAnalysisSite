@@ -4,6 +4,7 @@ from app.tools.inspector.stage_map import (
     STAGE_MAP,
     declared_output_paths,
     diff_against_final_json,
+    final_json_output_paths,
     stage_for_path,
 )
 
@@ -26,6 +27,42 @@ def test_declared_outputs_include_known_phase1_metrics():
 def test_stage_for_path_resolves_producer():
     assert stage_for_path("phase1.true_peak_db") == "phase1"
     assert stage_for_path("nonexistent.field") is None
+
+
+def test_diff_does_not_flag_verdict_pipeline_outputs():
+    """Verdict-pipeline outputs must never appear in the phantom list.
+
+    These keys (rule_verdicts, ranked_verdicts, routing_plan.*, specialist_verdicts,
+    validated_verdicts) live in the verdicts table / routing_plan column, NOT in
+    final_json. --validate-map must not report them as phantom when they are absent
+    from a final_json snapshot.
+    """
+    # A minimal but valid final_json with one present phase1 entry.
+    final_json = {
+        "overall_score": 80.0,
+        "grade": "B",
+        "danceability_score": 70,
+        "top_fixes": [],
+        "coach_name": "Coach",
+        "coach_intro": "x",
+        "coached_fixes": [],
+        "file_path": "uploads/track.wav",
+        "phases": [
+            {"phase": 1, "name": "Universal", "data": {
+                "lufs": -9.0, "true_peak_db": -1.0,
+            }},
+        ],
+    }
+    _, phantom = diff_against_final_json(final_json)
+    verdict_pipeline_keys = {
+        "rule_verdicts",
+        "ranked_verdicts",
+        "routing_plan.specialists_to_run",
+        "specialist_verdicts",
+        "validated_verdicts",
+    }
+    flagged = verdict_pipeline_keys & set(phantom)
+    assert not flagged, f"Verdict-pipeline outputs falsely flagged as phantom: {flagged}"
 
 
 def test_diff_flags_stale_and_phantom():

@@ -14,8 +14,8 @@ def test_catalog_mode_writes_html_without_db(tmp_path, monkeypatch):
     assert "Pipeline & rule-system catalog" in out.read_text(encoding="utf-8")
 
 
-def test_validate_map_with_clean_snapshot_returns_zero(tmp_path, monkeypatch):
-    # A snapshot whose only phase1 keys are all declared → no stale/missing.
+def test_validate_map_with_drifting_snapshot_returns_nonzero(tmp_path, monkeypatch):
+    # The sparse snapshot is missing declared phase1 keys so the gate trips.
     import json
     snap = Path(tmp_path) / "snap.json"
     snap.write_text(json.dumps({

@@ -5,6 +5,10 @@
   detection in spec §6.1).
 - `run_rule` re-runs a rule deterministically against a flattened final_json.
 - `resolve_path` reports whether a datapoint is present / null / missing.
+
+Caveat: the AST extractor handles the current rule idioms (simple ``_phase``
+assignment + literal ``Evidence(metric=...)``); it will not capture
+walrus/tuple-unpack binds or non-literal metric values.
 """
 from __future__ import annotations
 

@@ -43,7 +43,7 @@ def _session_factory():
     return SessionFactory
 
 
-def _run_validate(args) -> int:
+def _run_validate(args: argparse.Namespace) -> int:
     if args.snapshot:
         try:
             final_json = json.loads(Path(args.snapshot).read_text(encoding="utf-8"))
