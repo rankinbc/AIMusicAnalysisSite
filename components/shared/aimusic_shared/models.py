@@ -562,11 +562,19 @@ class RackPreset(Base):
         "source", String(16), nullable=False, server_default="user", default="user"
     )
     chain_json: Mapped[Any] = mapped_column("chain_json", JSONB, nullable=False)
+    # PRP-4 — FKs bound now that the room-session + grant tables exist (SET NULL:
+    # deleting a session/grant severs the credit-chain pointer, never the preset).
     created_in_session_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        "created_in_session_id", UUID(as_uuid=True), nullable=True
+        "created_in_session_id",
+        UUID(as_uuid=True),
+        ForeignKey("listening_sessions.id", ondelete="SET NULL"),
+        nullable=True,
     )
     via_grant_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        "via_grant_id", UUID(as_uuid=True), nullable=True
+        "via_grant_id",
+        UUID(as_uuid=True),
+        ForeignKey("control_grants.id", ondelete="SET NULL"),
+        nullable=True,
     )
     # PRP-3 — provenance when forked by accepting a reviewer suggestion (D4.5).
     from_suggestion_id: Mapped[Optional[uuid.UUID]] = mapped_column(
@@ -750,6 +758,94 @@ class Invite(Base):
     )
     accepted_at: Mapped[Optional[datetime]] = mapped_column(
         "accepted_at", DateTime(timezone=True), nullable=True
+    )
+
+
+class ListeningSession(Base):
+    # Listen V3 (PRP-4, D3.1/D3.2). A live Room — JSON-first (mirrors
+    # analyses.final_json): events_json is the Redis WAL flushed ONCE at finalize
+    # by synthesize_recap (the sole flusher); recap_json is the derived recap.
+    __tablename__ = "listening_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "\"status\" IN ('live','ended')", name="ck_listening_sessions_status"
+        ),
+        Index("ix_listening_sessions_song_version_id", "song_version_id"),
+        Index("ix_listening_sessions_host_id", "host_id"),
+        Index("ix_listening_sessions_status", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    song_version_id: Mapped[uuid.UUID] = mapped_column(
+        "song_version_id",
+        UUID(as_uuid=True),
+        ForeignKey("song_versions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    host_id: Mapped[uuid.UUID] = mapped_column(
+        "host_id",
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(
+        "status", String(8), nullable=False, server_default="live", default="live"
+    )
+    started_at: Mapped[datetime] = mapped_column(
+        "started_at", DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    ended_at: Mapped[Optional[datetime]] = mapped_column(
+        "ended_at", DateTime(timezone=True), nullable=True
+    )
+    events_json: Mapped[Optional[Any]] = mapped_column("events_json", JSONB, nullable=True)
+    recap_json: Mapped[Optional[Any]] = mapped_column("recap_json", JSONB, nullable=True)
+
+
+class ControlGrant(Base):
+    # Listen V3 (PRP-4, D3.5/D4.6). The provenance backbone: host delegates
+    # rack|visuals control. FK target for rack_presets.via_grant_id — so it is the
+    # EXCEPTION to JSON-first (written to Postgres immediately). ONE active holder
+    # per (session, scope) via a partial-unique index (created in the EF migration,
+    # not declarable here). anon grantee keys on anonId, not ip_hash.
+    __tablename__ = "control_grants"
+    __table_args__ = (
+        CheckConstraint(
+            "\"scope\" IN ('rack','visuals')", name="ck_control_grants_scope"
+        ),
+        Index("ix_control_grants_session_id", "session_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        "session_id",
+        UUID(as_uuid=True),
+        ForeignKey("listening_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    scope: Mapped[str] = mapped_column("scope", String(8), nullable=False)
+    grantee_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "grantee_user_id",
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    grantee_display_name: Mapped[Optional[str]] = mapped_column(
+        "grantee_display_name", String(120), nullable=True
+    )
+    grantee_anon_id: Mapped[Optional[str]] = mapped_column(
+        "grantee_anon_id", String(64), nullable=True
+    )
+    granted_by: Mapped[uuid.UUID] = mapped_column(
+        "granted_by",
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    granted_at: Mapped[datetime] = mapped_column(
+        "granted_at", DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(
+        "revoked_at", DateTime(timezone=True), nullable=True
     )
 
 
@@ -971,8 +1067,13 @@ class ReviewerSuggestion(Base):
         nullable=True,
     )
     created_in_session_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        "created_in_session_id", UUID(as_uuid=True), nullable=True
+        "created_in_session_id",
+        UUID(as_uuid=True),
+        ForeignKey("listening_sessions.id", ondelete="SET NULL"),
+        nullable=True,
     )
+    # via_grant_id has no FK by design (PRP-4) — it rides onto the adopted
+    # preset's via_grant_id, which IS the FK to control_grants.
     via_grant_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         "via_grant_id", UUID(as_uuid=True), nullable=True
     )

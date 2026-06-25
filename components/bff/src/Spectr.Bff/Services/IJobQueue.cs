@@ -16,6 +16,16 @@ public interface IJobQueue
     // declare `queue_name=<queueName>` in its @dramatiq.actor decorator,
     // and the worker process must subscribe to that queue.
     Task EnqueueAsync(string taskName, object[] args, string queueName, CancellationToken ct = default);
+
+    // PRP-4 (Task 8a): delayed enqueue. Writes the message onto dramatiq's
+    // delay queue `<queueName>.DQ` with `options.eta = now + delay`; the worker's
+    // default-on DelayedMessageMiddleware promotes it to `<queueName>` when eta
+    // passes (NO worker change — the `.DQ` is auto-declared per declared queue).
+    // Used by the Room last-leaver finalize. Best-effort by nature (a lost
+    // delayed message is covered by the lazy-on-read finalize backstop).
+    Task EnqueueDelayedAsync(
+        string taskName, object[] args, string queueName, TimeSpan delay,
+        CancellationToken ct = default);
 }
 
 internal sealed class DramatiqJobQueue(IConfiguration config) : IJobQueue
@@ -28,8 +38,24 @@ internal sealed class DramatiqJobQueue(IConfiguration config) : IJobQueue
     public Task EnqueueAsync(string taskName, object[] args, CancellationToken ct = default)
         => EnqueueAsync(taskName, args, DramatiqQueues.Default, ct);
 
-    public async Task EnqueueAsync(
+    public Task EnqueueAsync(
         string taskName, object[] args, string queueName, CancellationToken ct = default)
+        => EnqueueCoreAsync(taskName, args, queueName, etaMs: null, ct);
+
+    public Task EnqueueDelayedAsync(
+        string taskName, object[] args, string queueName, TimeSpan delay,
+        CancellationToken ct = default)
+    {
+        // Dramatiq routes delayed messages onto `<queue>.DQ` and stamps
+        // options.eta (brokers/redis.py:172-180). The worker's delay-queue
+        // consumer promotes them to the canonical queue once eta passes.
+        var etaMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+            + (long)delay.TotalMilliseconds;
+        return EnqueueCoreAsync(taskName, args, $"{queueName}.DQ", etaMs, ct);
+    }
+
+    private async Task EnqueueCoreAsync(
+        string taskName, object[] args, string queueName, long? etaMs, CancellationToken ct)
     {
         // Dramatiq's RedisBroker (per dispatch.lua "enqueue" branch) uses:
         //   * dramatiq:<queue>.msgs   — HASH: { message_id → JSON payload }
@@ -44,16 +70,22 @@ internal sealed class DramatiqJobQueue(IConfiguration config) : IJobQueue
         var actorMessageId = Guid.NewGuid().ToString();
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
+        // options.eta is only present for delayed messages — matches dramatiq's
+        // own copy() which adds eta exclusively on the delay path.
+        object options = etaMs is long eta
+            ? new { redis_message_id = redisMessageId, eta }
+            // CRITICAL: dramatiq's consumer reads options["redis_message_id"]
+            // during ack/nack/requeue (brokers/redis.py:311). Without it the
+            // worker throws KeyError on every successful or failed message.
+            : new { redis_message_id = redisMessageId };
+
         var envelope = new
         {
             queue_name = queueName,
             actor_name = taskName,
             args,
             kwargs = new { },
-            // CRITICAL: dramatiq's consumer reads options["redis_message_id"]
-            // during ack/nack/requeue (brokers/redis.py:311). Without it the
-            // worker throws KeyError on every successful or failed message.
-            options = new { redis_message_id = redisMessageId },
+            options,
             message_id = actorMessageId,
             message_timestamp = timestamp,
         };

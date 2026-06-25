@@ -148,6 +148,12 @@ builder.Services.AddScoped<IPresetGenerator, NoOpPresetGenerator>();
 builder.Services.AddScoped<AccessService>();
 builder.Services.AddScoped<ITokenResolver, ShareTokenResolver>();
 
+// Listen V3 (PRP-4) — Room sessions: the Redis WAL + pub/sub engine (stateless
+// over the singleton multiplexer) + the session-invite token resolver (sibling
+// of ShareTokenResolver, plugs into ResourceTokenAuth's set).
+builder.Services.AddSingleton<RoomBus>();
+builder.Services.AddScoped<ITokenResolver, SessionTokenResolver>();
+
 // Story 2.8 — usage-page honest-math (90-day credit spend vs Pro-equivalent).
 builder.Services.AddScoped<HonestMathService>();
 
@@ -269,6 +275,7 @@ api.MapRackPresetEndpoints();
 api.MapVersionShareEndpoints();
 api.MapVersionViewEndpoints();
 api.MapFeedbackEndpoints();
+api.MapRoomEndpoints();
 api.MapBillingEndpoints();
 
 app.MapGet("/", () => Results.Json(new { status = "ok", version = "2.0.0" }))

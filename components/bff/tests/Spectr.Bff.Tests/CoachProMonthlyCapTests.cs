@@ -32,6 +32,8 @@ public sealed class CoachProMonthlyCapTests(WebApplicationFactory<Program> facto
             => Task.CompletedTask;
         public Task EnqueueAsync(string taskName, object[] args, string queueName, CancellationToken ct = default)
             => Task.CompletedTask;
+        public Task EnqueueDelayedAsync(string taskName, object[] args, string queueName, TimeSpan delay, CancellationToken ct = default)
+            => Task.CompletedTask;
     }
 
     private (WebApplicationFactory<Program> Factory, HttpClient Client) NewClient()

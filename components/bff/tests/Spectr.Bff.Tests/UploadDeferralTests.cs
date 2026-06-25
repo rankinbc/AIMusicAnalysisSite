@@ -37,6 +37,13 @@ internal sealed class RecordingJobQueue : IJobQueue
         Enqueues.Enqueue((taskName, queueName));
         return Task.CompletedTask;
     }
+
+    public Task EnqueueDelayedAsync(string taskName, object[] args, string queueName, TimeSpan delay, CancellationToken ct = default)
+    {
+        Calls.Enqueue(taskName);
+        Enqueues.Enqueue((taskName, queueName));
+        return Task.CompletedTask;
+    }
 }
 
 // Verifies the unified-upload deferral flag: `analyze=false` creates the version

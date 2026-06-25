@@ -445,6 +445,9 @@ export interface CreateSuggestionRequest {
   commentId?: string | null;
   chain: unknown;
   fromDisplayName?: string | null;
+  // PRP-4 grantee-save: set during a live Room by the rack controller — the
+  // server stamps session provenance + snapshots the room chain (D4.3).
+  sessionId?: string | null;
 }
 
 export interface ReanalyzeResponse {
@@ -1269,4 +1272,115 @@ export interface CoachStreamRefusalPayload {
 export interface CoachStreamErrorPayload {
   code: string;
   message: string;
+}
+
+// ── Listen V3 (PRP-4) — Room sessions ────────────────────────────────────────
+
+export type SessionStatus = 'live' | 'ended';
+export type ControlScope = 'rack' | 'visuals';
+
+export interface RecapMoment {
+  t: number;
+  reactionCount: number;
+  topEmoji: string;
+}
+
+export interface SessionRecap {
+  hottestMoments: RecapMoment[];
+  reactionHistogram: Record<string, number>;
+  peakConcurrency: number;
+  attendance: ActorRefDto[];
+}
+
+export interface SessionDto {
+  id: string;
+  songVersionId: string;
+  hostId: string;
+  status: SessionStatus;
+  startedAt: string;
+  endedAt: string | null;
+  recap: SessionRecap | null;
+}
+
+// id === RackPreset.viaGrantId / Suggestion.viaGrantId on a forked preset (seams §2).
+export interface ControlGrantDto {
+  id: string;
+  sessionId: string;
+  scope: ControlScope;
+  grantee: ActorRefDto;
+  grantedBy: ActorRefDto;
+  revokedAt: string | null;
+}
+
+// The realtime wire union (matches LISTEN_V3_ROOM_UI_SEAMS §1). Every variant
+// carries seq (monotonic) + at (epoch ms); actor is always an ActorRefDto. The
+// SSE `id:` field mirrors `seq` for free resume; t = playhead seconds.
+interface SessionEventBase {
+  seq: number;
+  at: number;
+}
+
+export type SessionEvent =
+  | (SessionEventBase & { type: 'presence'; actor: ActorRefDto; state: 'join' | 'leave' })
+  | (SessionEventBase & { type: 'reaction'; id: string; actor: ActorRefDto; emoji: string; t: number; text?: string | null })
+  | (SessionEventBase & { type: 'status'; actor: ActorRefDto; status: string })
+  | (SessionEventBase & { type: 'chat'; id: string; actor: ActorRefDto; body: string; t: number })
+  | (SessionEventBase & { type: 'grant'; grant: ControlGrantDto })
+  | (SessionEventBase & { type: 'transport'; actor: ActorRefDto; playing: boolean; position: number })
+  | (SessionEventBase & { type: 'visuals'; actor: ActorRefDto; patch: unknown; stages?: string[] | null; director?: string | null })
+  | (SessionEventBase & { type: 'rack'; actor: ActorRefDto; effectId: string; params: Record<string, unknown> });
+
+export type ReactionEvent = Extract<SessionEvent, { type: 'reaction' }>;
+
+// The hydrate `sync` frame — the full current room state a late joiner gets
+// before deltas (seams §1 ⭐). The relay drops buffered deltas with seq <= snapshotSeq.
+export interface RoomSnapshot {
+  chain: unknown | null;
+  transport: { playing: boolean; position: number } | null;
+  visuals: { patch: unknown; stages: string[] | null; director: string | null } | null;
+  roster: ActorRefDto[];
+  feed: ReactionEvent[];
+  snapshotSeq: number;
+}
+
+// ── action request bodies ────────────────────────────────────────────────────
+export interface ReactRequest {
+  emoji: string;
+  t?: number | null;
+  text?: string | null;
+}
+export interface ChatRequest {
+  body: string;
+  t?: number | null;
+}
+export interface RoomStatusRequest {
+  emoji: string;
+}
+export interface TransportRequest {
+  playing: boolean;
+  position: number;
+}
+export interface VisualsRequest {
+  patch?: unknown;
+  stages?: string[] | null;
+  director?: string | null;
+}
+export interface RackRequest {
+  effectId: string;
+  params: Record<string, unknown>;
+}
+export interface GranteeRef {
+  userId?: string | null;
+  anonId?: string | null;
+  displayName?: string | null;
+}
+export interface GrantRequest {
+  scope: ControlScope;
+  grantee: GranteeRef;
+}
+export interface RevokeRequest {
+  scope: ControlScope;
+}
+export interface RecapPublishRequest {
+  momentIds: number[];
 }
