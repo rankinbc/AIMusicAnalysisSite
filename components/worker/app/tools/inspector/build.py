@@ -7,6 +7,7 @@ from app.verdict_lib.flatten_analysis import flatten
 from app.verdict_lib.prompt_loader import SPECIALIST_SLUGS
 from app.verdict_lib import rule_engine
 
+from .diagnosis import analysis_inputs, diagnose_rule, phase_run_states
 from .loader import RawTrace
 from .rule_introspect import read_paths_for_rule, resolve_path, rule_catalog, run_rule
 from .stage_map import STAGE_MAP, declared_output_paths, stage_for_path
@@ -67,14 +68,22 @@ def build_trace_model(raw: RawTrace) -> dict[str, Any]:
     flat = flatten(raw.final_json)
     flat.setdefault("track_id", raw.id)
 
-    # Per-rule overlay: fired/not + per-path resolution.
+    # Per-rule overlay: fired/not + per-path resolution + idle diagnosis.
+    model["inputs"] = analysis_inputs(flat)
+    states = phase_run_states(flat)
     _rules_by_name = {f.__name__: f for f in rule_engine._RULES}
+    summary = {"fired": 0, "in_range": 0, "bug": 0, "input_gated": 0}
     for r in model["rules"]:
         fn = _rules_by_name[r["name"]]
         run = run_rule(fn, flat)
         r["fired"] = run["fired"]
         r["error"] = run["error"]
         r["path_resolution"] = {p: resolve_path(flat, p) for p in r["read_paths"]}
+        diagnosis, reason = diagnose_rule(r, states)
+        r["diagnosis"] = diagnosis
+        r["diagnosis_reason"] = reason
+        summary[diagnosis] = summary.get(diagnosis, 0) + 1
+    model["rule_diagnosis_summary"] = summary
 
     # Header.
     model["header"] = {

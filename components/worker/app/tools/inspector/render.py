@@ -17,6 +17,8 @@ h2{font-size:15px;color:#7ee787;margin:0 0 8px}
 .fired{background:#1f6f3f;color:#d6ffe0}.idle{background:#30363d;color:#9da7b3}
 .missing{background:#7d1f1f;color:#ffd6d6}.null{background:#7d6a1f;color:#fff4d6}
 .present{background:#1f4f7d;color:#d6ecff}
+.bug{background:#8b1a1a;color:#ffdede}.gated{background:#2d333b;color:#adbac7}
+.inrange{background:#22304a;color:#cfe0ff}
 .warn{background:#3d2a00;border:1px solid #9e6a00;color:#ffd98a;padding:10px 12px;border-radius:6px;margin:8px 0}
 table{border-collapse:collapse;width:100%;font-size:13px}
 td,th{border:1px solid #30363d;padding:4px 8px;text-align:left;vertical-align:top}
@@ -51,12 +53,22 @@ def _stage_card(s: dict[str, Any]) -> str:
             f"<p class='narration'>{_e(s['narration'])}</p>{io}</div>")
 
 
+_DX_LABEL = {"bug": "BUG", "input_gated": "input-gated", "in_range": "in-range"}
+_DX_CLASS = {"bug": "bug", "input_gated": "gated", "in_range": "inrange"}
+
+
 def _rule_card(r: dict[str, Any], trace: bool) -> str:
     head = f"<b>{_e(r['name'])}</b>"
+    reason = ""
     if trace:
-        status = 'fired' if r.get('fired') else 'idle'
-        head += (f"<span class='badge {_e(status)}'>"
-                 f"{_e('FIRED' if r.get('fired') else 'idle')}</span>")
+        if r.get("fired"):
+            head += "<span class='badge fired'>FIRED</span>"
+        else:
+            dx = r.get("diagnosis", "idle")
+            head += (f"<span class='badge {_DX_CLASS.get(dx, 'idle')}'>"
+                     f"{_e(_DX_LABEL.get(dx, 'idle'))}</span>")
+            if dx == "bug" and r.get("diagnosis_reason"):
+                reason = f"<p class='narration'>⚠ {_e(r['diagnosis_reason'])}</p>"
     rows = ""
     res = r.get("path_resolution", {}) if trace else {}
     for p in r["read_paths"]:
@@ -68,7 +80,7 @@ def _rule_card(r: dict[str, Any], trace: bool) -> str:
     table = (f"<table><tr><th>reads</th><th>produced by</th><th>value</th></tr>{rows}</table>"
              if r["read_paths"] else "<i>no datapoints extracted</i>")
     doc = f"<p class='narration'>{_e(r['doc'])}</p>" if r.get("doc") else ""
-    return f"<div class='card'>{head}{doc}{table}</div>"
+    return f"<div class='card'>{head}{doc}{reason}{table}</div>"
 
 
 def _section(title: str, body: str) -> str:
@@ -82,8 +94,13 @@ def render_html(model: dict[str, Any]) -> str:
     if trace:
         h = model.get("header", {})
         title = f"Analysis {_e(h.get('id'))} — {_e(h.get('song_name'))}"
+        inp = model.get("inputs", {})
+        inputs_txt = " ".join(
+            f"{k}={'yes' if v else 'no'}" for k, v in inp.items()
+        ) if inp else ""
         sub = (f"job {_e(h.get('job_id'))} · {_e(h.get('created_at'))} · "
-               f"score {_e(h.get('overall_score'))} · grade {_e(h.get('grade'))}")
+               f"score {_e(h.get('overall_score'))} · grade {_e(h.get('grade'))}"
+               + (f"<br>inputs: {_e(inputs_txt)}" if inputs_txt else ""))
         banner = f"<div class='warn'>{_e(_DISCLAIMER)}</div>"
     else:
         title = "Pipeline & rule-system catalog — no analysis"
@@ -117,12 +134,30 @@ def render_html(model: dict[str, Any]) -> str:
     parts.append(_section("Datapoint → consumers",
                           f"<table><tr><th>datapoint</th><th>producer</th><th>consumed by</th></tr>{dc_rows}</table>"))
 
-    gaps = model["static_gaps"]["unmapped_rule_paths"]
-    gap_body = ("".join(f"<div class='card'><code>{_e(g['path'])}</code> read by "
-                        f"<b>{_e(g['rule'])}</b> — no stage emits this; rule can't fire.</div>"
-                        for g in gaps)
-                if gaps else "<i>no unmapped rule read-paths 🎉</i>")
-    parts.append(_section("System audit — gaps", gap_body))
+    if trace:
+        bugs = [r for r in model["rules"] if r.get("diagnosis") == "bug"]
+        gated = [r for r in model["rules"] if r.get("diagnosis") == "input_gated"]
+        bug_body = ("".join(
+            f"<div class='card'><span class='badge bug'>BUG</span> "
+            f"<b>{_e(r['name'])}</b><p class='narration'>{_e(r.get('diagnosis_reason'))}</p></div>"
+            for r in bugs)
+            if bugs else "<i>no rules misreading a populated phase 🎉</i>")
+        parts.append(_section(
+            "System audit — likely rule bugs (field absent from a phase that ran)", bug_body))
+        if gated:
+            gated_body = "".join(
+                f"<div class='card'><span class='badge gated'>input-gated</span> "
+                f"<b>{_e(r['name'])}</b><p class='narration'>{_e(r.get('diagnosis_reason'))}</p></div>"
+                for r in gated)
+            parts.append(_section(
+                "Idle because an optional input was absent (expected, not a bug)", gated_body))
+    else:
+        gaps = model["static_gaps"]["unmapped_rule_paths"]
+        gap_body = ("".join(f"<div class='card'><code>{_e(g['path'])}</code> read by "
+                            f"<b>{_e(g['rule'])}</b> — no stage emits this; rule can't fire.</div>"
+                            for g in gaps)
+                    if gaps else "<i>no unmapped rule read-paths 🎉</i>")
+        parts.append(_section("System audit — gaps", gap_body))
 
     return (f"<!DOCTYPE html><html><head><meta charset='utf-8'>"
             f"<title>{title}</title><style>{_CSS}</style></head>"
