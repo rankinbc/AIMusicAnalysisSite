@@ -40,7 +40,7 @@ export function MiniPlayer() {
     .join(' · ');
 
   const open = () => {
-    void navigate({ to: '/listen/$versionId', params: { versionId: version.id } });
+    void navigate({ to: '/listen-rack/$versionId', params: { versionId: version.id } });
   };
 
   return (

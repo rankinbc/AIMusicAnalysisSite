@@ -1,4 +1,4 @@
-import { Link, createFileRoute } from '@tanstack/react-router';
+import { Link, createFileRoute, redirect } from '@tanstack/react-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { z } from 'zod';
@@ -74,6 +74,12 @@ const search = z.object({
 
 export const Route = createFileRoute('/_app/listen/$versionId')({
   validateSearch: search,
+  // Phase 3 cutover: the canonical Listen page is now /listen-rack. Redirect so
+  // old links/bookmarks land on the new page. The ListenPage component below is
+  // kept (unreachable) only until its stems deck is ported across (fast-follow).
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: '/listen-rack/$versionId', params });
+  },
   component: ListenPage,
 });
 
