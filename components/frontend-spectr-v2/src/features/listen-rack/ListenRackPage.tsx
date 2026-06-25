@@ -12,7 +12,10 @@
  * (rAF + setInterval + fixtures). See PORTING_NOTES.md for the wiring map.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
+import { getAccessToken } from '../../api/fetcher';
+import { useAudioGraph } from '../listen/useAudioGraph';
 import { CoverArt } from '../../ui/CoverArt';
 import {
   MODE_SURFACE_MATRIX, type AccessDto, type ActorRef, type ModeId,
@@ -122,11 +125,39 @@ export interface ListenRackPageProps {
   roomControl: RoomControl;
   onModeChange?: (m: ModeId) => void;
   onGrant?: (scope: 'rack' | 'visuals', actor: ActorRef | null) => void;
+  /** When set, the page plays the real uploaded audio for this version (Phase 1
+   *  port). When omitted, the page runs the mock rAF transport clock (demo route). */
+  versionId?: string;
 }
 
-export function ListenRackPage({ mode, modes, identity, access, roomControl, onModeChange, onGrant }: ListenRackPageProps) {
-  const [playing, setPlaying] = useState(true);
-  const [position, setPosition] = useState(42);
+export function ListenRackPage({ mode, modes, identity, access, roomControl, onModeChange, onGrant, versionId }: ListenRackPageProps) {
+  // ── Real-audio seam (Phase 1) ──
+  // `versionId` present ⇒ real mode: mount <audio> + the page-agnostic audio
+  // graph and drive the transport off the element. Absent ⇒ mock demo clock.
+  const realAudio = versionId != null;
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const graph = useAudioGraph(audioRef);
+  const audioUrl = useMemo(() => {
+    if (!versionId) return null;
+    const token = getAccessToken();
+    if (!token) return null;
+    // Dep is [versionId] ONLY — not the token. A silent refresh rotates the token
+    // but must not recompute this URL, or <audio src> would change and re-mount
+    // the element, resetting currentTime. Mirrors listen.$versionId.tsx.
+    return `/api/versions/${versionId}/audio?t=${encodeURIComponent(token)}`;
+  }, [versionId]);
+
+  // DEV-ONLY smoke harness: expose the rack page's audio-graph handle on window
+  // so the engine can be driven from the console (e.g. __spectrRackGraph
+  // .ensureContext()). Dead-code-eliminated in production builds.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    (window as unknown as { __spectrRackGraph?: typeof graph }).__spectrRackGraph = graph;
+  }, [graph]);
+
+  const [playing, setPlaying] = useState(!realAudio);
+  const [position, setPosition] = useState(realAudio ? 0 : 42);
+  const [duration, setDuration] = useState(realAudio ? 0 : TRACK.durationSec);
   const [director, setDirector] = useState('off');
   const [viz, setViz] = useState<VizState>(DEFAULT_VIZ);
   const [stages, setStages] = useState<string[]>(['eq']);
@@ -173,8 +204,9 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     if (d && d.apply && !d.behaviorOnly) setViz((s) => ({ ...s, ...d.apply }));
   }, []);
 
-  // ── Transport clock (MOCK rAF) — replace with the real player transport ──
+  // ── Transport clock (MOCK rAF) — demo route only; real mode drives off <audio> ──
   useEffect(() => {
+    if (realAudio) return undefined;
     if (!playing) return undefined;
     let raf = 0;
     const start = performance.now();
@@ -187,7 +219,32 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     };
     raf = requestAnimationFrame(f);
     return () => cancelAnimationFrame(raf);
-  }, [playing]);
+  }, [playing, realAudio]);
+
+  // ── Real-audio transport (element-driven). No-op in mock mode (audioRef null). ──
+  // Position is tracked off `timeupdate` and duration off `durationchange` /
+  // `loadedmetadata`, mirroring listen.$versionId.tsx so a token-refresh re-mount
+  // (which can't happen here — see the audioUrl memo) wouldn't jump the playhead.
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return undefined;
+    const onTime = () => setPosition(a.currentTime);
+    const onDur = () => { if (Number.isFinite(a.duration)) setDuration(a.duration); };
+    const onEnd = () => setPlaying(false);
+    const onErr = () => { setPlaying(false); toast.error('Could not load audio. Try refreshing.'); };
+    a.addEventListener('timeupdate', onTime);
+    a.addEventListener('loadedmetadata', onDur);
+    a.addEventListener('durationchange', onDur);
+    a.addEventListener('ended', onEnd);
+    a.addEventListener('error', onErr);
+    return () => {
+      a.removeEventListener('timeupdate', onTime);
+      a.removeEventListener('loadedmetadata', onDur);
+      a.removeEventListener('durationchange', onDur);
+      a.removeEventListener('ended', onEnd);
+      a.removeEventListener('error', onErr);
+    };
+  }, [audioUrl]);
 
   // Per-mode layout defaults (spec §04): Room → full light show + minimal
   // metering; Work/View → rack-first + prominent metering.
@@ -231,6 +288,36 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
 
   useEffect(() => { if (!announcement) return undefined; const t = setTimeout(() => setAnnouncement(null), 4800); return () => clearTimeout(t); }, [announcement]);
 
+  // Transport actions. Real mode operates the <audio> element (ensureContext on
+  // the gesture BEFORE play(), per the autoplay policy); mock mode toggles the
+  // rAF clock. `seek` takes seconds (Transport already converts pct→seconds).
+  const togglePlay = useCallback(() => {
+    if (!realAudio) { setPlaying((p) => !p); return; }
+    const a = audioRef.current;
+    if (!a) return;
+    if (!a.paused) { a.pause(); setPlaying(false); return; }
+    try {
+      graph.ensureContext();
+    } catch (err) {
+      toast.error(`Audio engine failed: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+    a.play()
+      .then(() => setPlaying(true))
+      .catch((err: unknown) => {
+        toast.error(`Playback failed: ${err instanceof Error ? err.message : String(err)}`);
+        setPlaying(false);
+      });
+  }, [realAudio, graph]);
+
+  const seek = useCallback((t: number) => {
+    if (!realAudio) { setPosition(t); return; }
+    const a = audioRef.current;
+    if (!a) return;
+    a.currentTime = t;
+    setPosition(t);
+  }, [realAudio]);
+
   const cap = resolveCapabilities(mode, identity, roomControl, access);
   const rackReadOnly = cap.rackReadOnly;
 
@@ -248,8 +335,8 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
                 director={directorObj} height={440} onDrop={handleDrop} myStatus={myStatus} activeModules={activeModules} />
               <CoachToast msg={announcement} />
               <div style={{ borderTop: '1px solid var(--border)' }}>
-                <Transport track={TRACK} playing={playing} position={position} onTogglePlay={() => setPlaying((p) => !p)}
-                  onSeek={setPosition} notes={TRACK.notes} onNoteClick={(n) => { setActiveNote(n.id); setPosition(n.t); }} activeNote={activeNote} reactions={feed} />
+                <Transport track={TRACK} playing={playing} position={position} duration={duration} onTogglePlay={togglePlay}
+                  onSeek={seek} notes={TRACK.notes} onNoteClick={(n) => { setActiveNote(n.id); seek(n.t); }} activeNote={activeNote} reactions={feed} />
               </div>
             </div>
 
@@ -298,11 +385,15 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
           </div>
 
           <RightRail mode={mode} access={access} cap={cap} rs={rs} track={TRACK} position={position}
-            activeNote={activeNote} onNoteClick={(n) => { setActiveNote(n.id); setPosition(n.t); }} onSeek={setPosition}
+            activeNote={activeNote} onNoteClick={(n) => { setActiveNote(n.id); seek(n.t); }} onSeek={seek}
             onReact={(e) => { setMyStatus(e); spawnReaction(e, 'maek'); }} feed={feed} announce={announce} myStatus={myStatus}
             roomControl={roomControl} onGrant={grantControl} />
         </div>
       </div>
+
+      {audioUrl && (
+        <audio ref={audioRef} src={audioUrl} preload="auto" crossOrigin="anonymous" />
+      )}
     </div>
   );
 }

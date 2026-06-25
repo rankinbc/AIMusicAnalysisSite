@@ -1,27 +1,27 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useMemo, useState } from 'react';
+import { Outlet, createFileRoute, useChildMatches } from '@tanstack/react-router';
 
-import { availableModes, MOCK_ACCESS, type ActorRef, type ModeId } from '../../features/listen-rack/access';
-import { MOCK_IDENTITY, MOCK_ROOM_CONTROL } from '../../features/listen-rack/identity';
 import { ListenRackPage } from '../../features/listen-rack/ListenRackPage';
+import { useMockRoomOrchestration } from '../../features/listen-rack/useMockRoomOrchestration';
 
 /**
- * Listen — Rack & Visuals redesign (design-handoff port).
+ * Listen — Rack & Visuals redesign (design-handoff port), param-less DEMO route.
  *
- * The parent route owns mode + identity + room-control (all mocked here; later
- * GET /access + the PRP-4 room stream). The SegBar inside the page is owner-only
- * (decision B). onGrant mutates the mock RoomControl locally so the host→DJ/VJ
- * delegation flow is demoable without the live session stream.
+ * Runs the mock rAF transport clock over the TRACK fixture — no real audio. The
+ * real-audio page lives at `/listen-rack/$versionId` (Phase 1 port). Because that
+ * versioned route is a path-child of this one, this component renders <Outlet />
+ * when the child is active (same pattern as songs.$songId.tsx); otherwise it
+ * renders the demo.
+ *
+ * Mode + identity + room-control come from useMockRoomOrchestration (all mocked;
+ * later GET /access + the PRP-4 room stream). The SegBar inside the page is
+ * owner-only (decision B). onGrant mutates the mock RoomControl locally so the
+ * host→DJ/VJ delegation flow is demoable without the live session stream.
  */
 function ListenRackRoute() {
-  const access = MOCK_ACCESS;
-  const identity = MOCK_IDENTITY;
-  const modes = useMemo(() => availableModes(access), [access]);
-  const [mode, setMode] = useState<ModeId>(modes[0] ?? 'work');
-  const [roomControl, setRoomControl] = useState(MOCK_ROOM_CONTROL);
-  const onModeChange = identity.isOwner ? setMode : undefined;
-  const onGrant = (scope: 'rack' | 'visuals', actor: ActorRef | null) =>
-    setRoomControl((rc) => (scope === 'rack' ? { ...rc, rackHolder: actor } : { ...rc, visualsHolder: actor }));
+  const childMatches = useChildMatches();
+  const { mode, modes, identity, access, roomControl, onModeChange, onGrant } =
+    useMockRoomOrchestration();
+  if (childMatches.length > 0) return <Outlet />;
   return (
     <ListenRackPage mode={mode} modes={modes} identity={identity} access={access}
       roomControl={roomControl} onGrant={onGrant}
