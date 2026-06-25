@@ -99,4 +99,6 @@ def test_real_contract_loads_and_has_core_leaves():
     assert "phase1.lufs" in c["leaf_paths"]
     assert "phase1.integrated_lufs" not in c["leaf_paths"]
     assert path_resolves("phase1.lufs", c)
-    assert not path_resolves("phase1.crest_factor", c)
+    # crest_factor is now emitted (full-EMIT PRP); integrated_lufs never was.
+    assert path_resolves("phase1.crest_factor", c)
+    assert not path_resolves("phase1.integrated_lufs", c)

@@ -1,5 +1,5 @@
 ---
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Audio Analysis Module: Frequency Balance Specialist
@@ -14,51 +14,54 @@ Analyze the provided audio analysis JSON file to evaluate overall spectral balan
 
 ### Primary Frequency Data
 ```
-audio_analysis.frequency.sub_bass_energy    → Target: 5-10% (20-60Hz)
-audio_analysis.frequency.bass_energy        → Target: 20-30% (60-250Hz)
-audio_analysis.frequency.low_mid_energy     → Target: 10-15% (250-500Hz) — MUD ZONE!
-audio_analysis.frequency.mid_energy         → Target: 20-25% (500-2kHz)
-audio_analysis.frequency.high_mid_energy    → Target: 15-20% (2-6kHz)
-audio_analysis.frequency.high_energy        → Target: 10-15% (6-20kHz)
+phase1.bands.sub_bass           → Relative band level (dB) (20-60Hz)
+phase1.bands.bass               → Relative band level (dB) (60-250Hz)
+phase1.bands.low_mid            → Relative band level (dB) (250-500Hz) — MUD ZONE!
+phase1.bands.mid                → Relative band level (dB) (500-2kHz)
+phase1.bands.upper_mid          → Relative band level (dB) (2-6kHz)
+phase1.bands.air                → Relative band level (dB) (6-20kHz)
 
-audio_analysis.frequency.spectral_centroid_hz    → Brightness indicator
-audio_analysis.frequency.balance_issues[]        → Pre-identified problems
-audio_analysis.frequency.problem_frequencies[]   → Specific Hz ranges flagged
+phase1.spectral_centroid_hz     → Brightness indicator
 ```
+
+All `phase1.bands.*` values are in dB (negative values; higher = more energy in that band).
 
 ### Stem Clash Data (if available)
 ```
-stem_analysis.clashes[]                     → Frequency collisions between elements
-  .stem1, .stem2                            → Which elements clash
-  .frequency_range                          → Exact Hz range (e.g., "100-200Hz")
-  .severity                                 → 'minor', 'moderate', 'severe'
-  .recommendation                           → Suggested fix
+phase4.clashes[]                     → Frequency collisions between elements
+  .stems                             → Which elements clash (array)
+  .frequency_range                   → Exact Hz range (e.g., "100-200Hz")
+  .severity                          → 'minor', 'moderate', 'severe'
 
-stem_analysis.stems[]                       → Per-element frequency info
-  .name                                     → Element name
-  .frequency_profile                        → Energy distribution
-  .dominant_frequencies                     → Peak frequencies for this element
-  .masking_victims[]                        → What this element is masking
+phase4.stems.per_stem                → Per-element frequency info (when stems available)
+  [role].band_energy_db              → Energy distribution per band (dB)
+  [role].rms_db                      → Per-stem RMS level (dB)
+  [role].dominant_frequencies        → Peak frequencies for this element
 ```
+
+Note: when stems are available, also check `phase4.stems.clash_matrix[]` for the full
+stem-vs-stem frequency clash matrix.
 
 ### Section Data (if available)
 ```
-section_analysis.sections[].spectral_centroid_hz → Brightness per section
-section_analysis.all_issues[]               → Look for frequency-related issues
+phase7.issues[]                              → Look for frequency-related issues
 ```
 
 ---
 
 ## Trance Frequency Targets
 
-| Band | Frequency Range | Target Energy | Character |
-|------|-----------------|---------------|-----------|
-| Sub-bass | 20-60Hz | 5-10% | Felt, not heard. Power. |
-| Bass | 60-250Hz | 20-30% | Foundation, weight |
-| Low-mid | 250-500Hz | 10-15% | **MUD ZONE — control this!** |
-| Mid | 500-2kHz | 20-25% | Body, presence, leads |
-| High-mid | 2-6kHz | 15-20% | Clarity, attack, definition |
-| High | 6-20kHz | 10-15% | Air, sparkle, shimmer |
+| Band | Frequency Range | Target Level | Character |
+|------|-----------------|--------------|-----------|
+| Sub-bass | 20-60Hz | Low (felt, not heard) | Felt, not heard. Power. |
+| Bass | 60-250Hz | High (dominant low anchor) | Foundation, weight |
+| Low-mid | 250-500Hz | Moderate-low (**MUD ZONE — control this!**) | **MUD ZONE — control this!** |
+| Mid | 500-2kHz | High (core body band) | Body, presence, leads |
+| Upper-mid | 2-6kHz | Moderate (clarity band) | Clarity, attack, definition |
+| Air | 6-20kHz | Moderate-low (sparkle layer) | Air, sparkle, shimmer |
+
+All `phase1.bands.*` values are in dB (negative; higher = more energy). A band with a notably
+elevated dB level relative to its neighbors indicates excess energy in that range.
 
 ### Spectral Centroid Interpretation
 ```
@@ -71,15 +74,16 @@ section_analysis.all_issues[]               → Look for frequency-related issue
 
 ### Professional Trance Reference
 ```
-A well-balanced trance mix follows approximately:
-- Sub: 8%
-- Bass: 25%
-- Low-mid: 12%
-- Mid: 22%
-- High-mid: 18%
-- High: 15%
+A well-balanced trance mix follows this relative band hierarchy (dB — higher = more energy):
+  mid ≈ bass > upper_mid > sub_bass ≈ low_mid > air
 
-Total should equal 100%. Large deviations indicate imbalance.
+Approximate hierarchy:
+  Bass and mid should be the dominant bands (highest dB)
+  Sub-bass and low_mid should be moderate (controlled — avoid low_mid dominating mid)
+  Upper_mid should sit slightly below mid
+  Air should be the quietest band but clearly present
+
+Large deviations from this hierarchy indicate imbalance.
 ```
 
 ---
@@ -88,14 +92,14 @@ Total should equal 100%. Large deviations indicate imbalance.
 
 | Problem | Detection | Severity |
 |---------|-----------|----------|
-| Severe mud | `low_mid_energy > 22%` | CRITICAL |
-| No low end | `bass_energy < 12%` | SEVERE |
-| Overwhelming bass | `bass_energy > 40%` | SEVERE |
-| Harsh/brittle | `high_mid_energy > 28%` | SEVERE |
-| Dark/muffled | `high_energy < 6%` | MODERATE |
-| Thin mix | `bass_energy < 18%` AND `low_mid_energy < 10%` | MODERATE |
-| Frequency clash | `clashes` with severity "severe" | SEVERE |
-| Missing air | `high_energy < 8%` AND `spectral_centroid < 1500` | MODERATE |
+| Severe mud | `phase1.bands.low_mid > phase1.bands.mid + 3` (low-mid well above mid) | CRITICAL |
+| No low end | `phase1.bands.bass < phase1.bands.mid − 8` (bass much quieter than mid) | SEVERE |
+| Overwhelming bass | `phase1.bands.bass > phase1.bands.mid + 6` (bass dominates mid by >6 dB) | SEVERE |
+| Harsh/brittle | `phase1.bands.upper_mid > phase1.bands.mid + 3` (upper_mid elevated above mid) | SEVERE |
+| Dark/muffled | `phase1.bands.air < phase1.bands.mid − 12` (air very low relative to mid) | MODERATE |
+| Thin mix | `phase1.bands.bass < phase1.bands.mid − 5` AND `phase1.bands.low_mid < phase1.bands.mid − 8` | MODERATE |
+| Frequency clash | `phase4.clashes[]` with severity "severe" | SEVERE |
+| Missing air | `phase1.bands.air < phase1.bands.mid − 10` AND `phase1.spectral_centroid_hz < 1500` | MODERATE |
 
 ---
 
@@ -103,42 +107,34 @@ Total should equal 100%. Large deviations indicate imbalance.
 
 ### Step 1: Check Band Energy Distribution
 ```
-For each frequency band:
-    IF energy significantly above target:
+For each frequency band in phase1.bands.*:
+    IF relative band level (dB) significantly above the balanced hierarchy:
         Flag as buildup/excess
-    IF energy significantly below target:
+    IF significantly below:
         Flag as hole/deficiency
 
 LOW-MID (250-500Hz) is most critical:
-    > 18%: MUD is present
-    > 22%: SEVERE mud — priority fix
+    phase1.bands.low_mid above phase1.bands.mid: MUD is present
+    phase1.bands.low_mid well above phase1.bands.mid (>3 dB): SEVERE mud — priority fix
 ```
 
 ### Step 2: Check Spectral Centroid
 ```
-spectral_centroid indicates overall brightness:
+phase1.spectral_centroid_hz indicates overall brightness:
     < 1500 Hz: Mix needs more high-end presence
     > 3500 Hz: Mix may be harsh or thin
     
-Compare to section data if available:
-    Breakdown should be darker (lower centroid)
-    Drop should be brighter (higher centroid)
+Note: spectral centroid is a whole-track measurement only (phase1.spectral_centroid_hz);
+per-section brightness is not available in the current analysis output.
 ```
 
 ### Step 3: Identify Stem Clashes (if data available)
 ```
-For each clash in stem_analysis.clashes:
-    - Note which elements are fighting
+For each clash in phase4.clashes[]:
+    - Note which elements are fighting (from .stems array)
     - Note the frequency range
     - Determine which element should "win"
     - Recommend cut for the losing element
-```
-
-### Step 4: Check Problem Frequencies
-```
-problem_frequencies array contains specific Hz ranges:
-    - These are resonances, buildups, or harsh spots
-    - Each needs targeted EQ treatment
 ```
 
 ---
@@ -151,13 +147,13 @@ FREQUENCY BALANCE ANALYSIS
 ==========================
 Overall Status: [BALANCED / NEEDS EQ WORK / MAJOR IMBALANCES]
 
-Spectral Distribution:
-  Sub-bass (20-60Hz):   [X]% → [assessment vs 5-10% target]
-  Bass (60-250Hz):      [X]% → [assessment vs 20-30% target]
-  Low-mid (250-500Hz):  [X]% → [assessment vs 10-15% target] ← MUD ZONE
-  Mid (500-2kHz):       [X]% → [assessment vs 20-25% target]
-  High-mid (2-6kHz):    [X]% → [assessment vs 15-20% target]
-  High (6-20kHz):       [X]% → [assessment vs 10-15% target]
+Spectral Distribution (dB — higher = more energy):
+  Sub-bass (20-60Hz):   [X] dB → [assessment: controlled / elevated / low]
+  Bass (60-250Hz):      [X] dB → [assessment: strong / weak / dominant]
+  Low-mid (250-500Hz):  [X] dB → [assessment: controlled / muddy] ← MUD ZONE
+  Mid (500-2kHz):       [X] dB → [assessment: present / scooped / excessive]
+  Upper-mid (2-6kHz):   [X] dB → [assessment: clear / harsh / weak]
+  Air (6-20kHz):        [X] dB → [assessment: bright / dark / balanced]
 
 Spectral Centroid: [X] Hz → [dark/balanced/bright]
 ```
@@ -167,10 +163,10 @@ Spectral Centroid: [X] Hz → [dark/balanced/bright]
 ```
 [SEVERITY] Issue Title
 ─────────────────────────────────
-PROBLEM: [Specific description with percentages/Hz]
+PROBLEM: [Specific description with dB values]
 FREQUENCY RANGE: [Exact Hz]
-CURRENT: [X]%
-TARGET: [Y]%
+CURRENT: [X] dB
+TARGET: [Balanced relative level — see hierarchy above]
 
 FIX:
 
@@ -219,14 +215,14 @@ FIX:
 
 ### Problem: Mix Sounds Muddy
 ```
-SEVERE — Low-mid energy at [X]% (target: 10-15%)
+SEVERE — Low-mid band level elevated (target: moderate, well below mid band level)
 
 WHY THIS MATTERS:
 - 250-500Hz is the "mud zone" where clarity dies
 - Multiple elements pile up: bass harmonics, kick body, pads, synths
 - Results in boomy, undefined, amateur-sounding mix
 
-DETECTION: low_mid_energy > 18% OR balance_issues mentions "mud"
+DETECTION: phase1.bands.low_mid > phase1.bands.mid (low-mid at or above mid level)
 
 FIX:
 
@@ -263,14 +259,14 @@ EQ SETTINGS SUMMARY:
 
 ### Problem: Mix Sounds Harsh
 ```
-SEVERE — High-mid energy at [X]% (target: 15-20%)
+SEVERE — Upper-mid band level elevated (target: slightly below mid band level)
 
 WHY THIS MATTERS:
 - 2-6kHz contains harshness and fatigue frequencies
 - Supersaws, leads, and bright synths pile up here
 - Makes mix painful to listen to at volume
 
-DETECTION: high_mid_energy > 25% OR problem_frequencies in 2-8kHz
+DETECTION: phase1.bands.upper_mid > phase1.bands.mid + 3 (upper_mid well above mid)
 
 FIX:
 
@@ -306,14 +302,14 @@ EQ SETTINGS:
 
 ### Problem: Mix Sounds Thin
 ```
-MODERATE — Bass energy at [X]% (target: 20-30%)
+MODERATE — Bass band level low relative to mid (target: bass should be among the dominant bands)
 
 WHY THIS MATTERS:
 - Low end provides foundation and power
 - Thin mix lacks weight and impact
 - Will sound weak on full-range systems
 
-DETECTION: bass_energy < 18% OR spectral_centroid > 3500Hz
+DETECTION: phase1.bands.bass < phase1.bands.mid − 5 OR phase1.spectral_centroid_hz > 3500
 
 FIX:
 
@@ -348,14 +344,14 @@ EQ SETTINGS:
 
 ### Problem: Mix Sounds Dark/Muffled
 ```
-MODERATE — High energy at [X]% (target: 10-15%), centroid at [Y] Hz
+MODERATE — Air band level low, centroid at [Y] Hz
 
 WHY THIS MATTERS:
 - Lack of high-end makes mix sound dull and distant
 - Modern trance should have air and sparkle
 - Will sound lifeless on playback
 
-DETECTION: high_energy < 8% OR spectral_centroid < 1500Hz
+DETECTION: phase1.bands.air < phase1.bands.mid − 10 OR phase1.spectral_centroid_hz < 1500
 
 FIX:
 
@@ -393,7 +389,7 @@ WHY THIS MATTERS:
 - Frequency buildup causes mud or harshness
 - One element should own each frequency range
 
-DETECTION: stem_analysis.clashes[] with severity "moderate" or "severe"
+DETECTION: phase4.clashes[] with severity "moderate" or "severe"
 
 FIX:
 
@@ -500,9 +496,9 @@ HI-HATS:
 
 ## Priority Rules
 
-1. **CRITICAL**: Severe mud (low-mid > 22%)
-2. **SEVERE**: Major frequency imbalances (any band >10% off target)
-3. **SEVERE**: Harsh high-mids (> 25%)
+1. **CRITICAL**: Severe mud (phase1.bands.low_mid well above mid)
+2. **SEVERE**: Major frequency imbalances (any band greatly misaligned in the hierarchy)
+3. **SEVERE**: Harsh upper-mids (phase1.bands.upper_mid elevated well above mid)
 4. **SEVERE**: Element clashes affecting kick/bass
 5. **MODERATE**: Missing frequencies (thin, dark)
 6. **MINOR**: Fine-tuning and polish
@@ -514,12 +510,12 @@ HI-HATS:
 ```
 [SEVERE] Low-Mid Mud Buildup
 ────────────────────────────
-PROBLEM: Low-mid energy at 24% (target: 10-15%)
+PROBLEM: Low-mid band level elevated above mid (phase1.bands.low_mid notably above phase1.bands.mid).
          This is the #1 cause of muddy, unclear mixes.
          
 FREQUENCY RANGE: 250-500Hz
-CURRENT: 24% energy
-TARGET: 12-15% energy
+CURRENT: phase1.bands.low_mid at [X] dB (above mid band)
+TARGET: Low-mid should be 3-5 dB below mid band level
 
 FIX:
 
@@ -547,7 +543,7 @@ Step 4: Sweep for resonances
   → Cut 3-4dB wherever it sounds worst
 
 EXPECTED RESULT:
-  Low-mid energy drops to 12-15%
+  Low-mid band level drops below mid level
   Bass and kick become clearer
   Overall mix sounds more defined
 ```

@@ -14,33 +14,46 @@ Analyze the provided audio analysis JSON file to evaluate section contrast, ener
 
 ### Section Data (Primary)
 ```
-section_analysis.sections[]                 → List of detected sections
-  .section_type                             → 'intro', 'buildup', 'drop', 'breakdown', 'outro'
-  .start_time                               → Start timestamp (seconds)
-  .end_time                                 → End timestamp (seconds)
-  .avg_rms_db                               → Average energy level
-  .peak_db                                  → Peak level in section
-  .transient_density                        → Activity level (0-1)
-  .spectral_centroid_hz                     → Brightness of section
-  .issues[]                                 → Problems detected in this section
-  .severity_summary                         → 'clean', 'minor', 'moderate', 'severe'
+phase7.section_scores[]                  → List of detected sections
+  .section_type                          → 'intro', 'buildup', 'drop', 'breakdown', 'outro'
+  .start_time                            → Start timestamp (seconds)
+  .end_time                              → End timestamp (seconds)
+  .duration                              → Section duration (seconds)
+  .bars                                  → Number of bars in section
+  .score                                 → Section arrangement quality score
+  .time_range                            → Human-readable time range string
+  .eight_bar_compliant                   → Whether section aligns to 8-bar grid
+  .checks                                → Per-section check results
+  .issues[]                              → Problems detected in this section
 
-section_analysis.all_issues[]               → All timestamped issues
-  .issue_type                               → Type of problem
-  .start_time, .end_time                    → When it occurs
-  .severity                                 → How bad
-  .message                                  → Description
+phase7.issues[]                          → All detected issues
+  .severity                              → How bad
+  .message                               → Description
+  .section                               → Which section this affects
+  .fix_suggestion                        → Recommended fix action
 
-section_analysis.section_summary            → Count of each section type
-section_analysis.worst_section              → Which section needs most work
-section_analysis.clipping_timestamps[]      → Exact times where clipping occurs
+phase7.metadata                          → Track structure summary
+  .total_bars                            → Total bar count
+  .section_count                         → Number of sections detected
+  .detected_tempo                        → BPM
+  .energy_contrast_db                    → Peak-to-trough energy contrast (dB) across sections
+  .has_intro                             → Intro section present
+  .has_buildup                           → Buildup section present
+  .has_drop                              → Drop section present
+  .has_breakdown                         → Breakdown section present
+  .has_outro                             → Outro section present
+
+DERIVE worst_section: phase7.section_scores[] entry with minimum .score value
 ```
 
 ### Supporting Data
 ```
-audio_analysis.dynamics.crest_factor_db     → Overall dynamics
-audio_analysis.transients.attack_quality    → Overall punch quality
-audio_analysis.loudness.integrated_lufs     → Overall loudness
+phase1.crest_factor                      → Overall dynamics (higher = more dynamic headroom)
+DERIVE attack_quality label from phase1.transients.avg_transient_strength:
+    < 0.3  → soft/weak punch
+    0.3–0.7 → punchy
+    > 0.7  → aggressive
+phase1.lufs                              → Overall integrated loudness
 ```
 
 ---
@@ -58,15 +71,18 @@ audio_analysis.loudness.integrated_lufs     → Overall loudness
 [5:30-6:30]  OUTRO         → 16-32 bars, wind down, DJ-friendly
 ```
 
-### Energy Level Targets (RMS relative to drop)
+### Energy Level Targets (relative to drop)
 
-| Section | RMS vs Drop | Transient Density | Character |
-|---------|-------------|-------------------|-----------|
-| Intro | -8 to -12 dB | Low (0.1-0.3) | Atmospheric, anticipation |
-| Buildup | -4 to -8 dB, increasing | Medium→High (0.4-0.7) | Tension, escalation |
-| **Drop** | **0 dB (reference)** | **High (0.7-1.0)** | **Maximum impact** |
-| Breakdown | -6 to -10 dB | Low (0.1-0.3) | Emotional, breathing room |
-| Outro | -8 to -12 dB | Low→None | Wind down |
+| Section | Energy vs Drop | Character |
+|---------|----------------|-----------|
+| Intro | -8 to -12 dB lower | Atmospheric, anticipation |
+| Buildup | -4 to -8 dB, increasing | Tension, escalation |
+| **Drop** | **0 dB (reference)** | **Maximum impact** |
+| Breakdown | -6 to -10 dB lower | Emotional, breathing room |
+| Outro | -8 to -12 dB lower | Wind down |
+
+Use `phase7.metadata.energy_contrast_db` to assess overall peak-to-trough contrast.
+For per-section relative quality, compare `phase7.section_scores[].score` values.
 
 ### Frequency/Brightness Targets
 
@@ -84,14 +100,13 @@ audio_analysis.loudness.integrated_lufs     → Overall loudness
 
 | Problem | Detection | Severity |
 |---------|-----------|----------|
-| Drop weaker than breakdown | Drop RMS ≤ Breakdown RMS | CRITICAL |
-| No section contrast | All sections within 3dB | CRITICAL |
-| Kick in breakdown | High transients in breakdown | SEVERE |
-| Buildup doesn't build | Flat RMS through buildup | SEVERE |
-| Clipping in sections | clipping_timestamps in section | SEVERE |
-| Sections too long | Any section > 2 minutes | MODERATE |
-| Poor transitions | Large energy jumps at boundaries | MODERATE |
-| Intro too boring | Intro > 60s with low activity | MINOR |
+| Drop weaker than breakdown | Drop score ≤ Breakdown score | CRITICAL |
+| No section contrast | energy_contrast_db < 5 | CRITICAL |
+| Kick in breakdown | High-transient issues in breakdown section | SEVERE |
+| Buildup doesn't build | Flat score through buildup | SEVERE |
+| Sections too long | Any section duration > 120 seconds | MODERATE |
+| Poor transitions | Large score jumps at section boundaries | MODERATE |
+| Intro too boring | Intro duration > 60s with low score | MINOR |
 
 ---
 
@@ -99,41 +114,43 @@ audio_analysis.loudness.integrated_lufs     → Overall loudness
 
 ### Step 1: Map All Sections
 ```
-For each section in section_analysis.sections:
-    - Record type, start_time, end_time
-    - Record avg_rms_db, transient_density, spectral_centroid
+For each section in phase7.section_scores[]:
+    - Record section_type, start_time, end_time, duration, bars
+    - Record score (arrangement quality)
+    - Note eight_bar_compliant
     - Note any issues[]
 ```
 
 ### Step 2: Check Section Contrast
 ```
-Find DROP section → This is the reference (0 dB)
+Find DROP section → highest-scoring entry with section_type 'drop' (this is the reference)
+Check phase7.metadata.energy_contrast_db:
+    < 5 dB → CRITICAL: no meaningful energy arc
 
 For each other section:
-    contrast = section_rms - drop_rms
-    
-    Breakdown: Should be -6 to -10 dB below drop
-    Buildup: Should be -4 to -8 dB, INCREASING
-    Intro/Outro: Should be -8 to -12 dB below drop
+    score_gap = drop_score - section_score
+
+    Breakdown: Should have a notably lower score than drop
+    Buildup: Score should be lower than drop but increasing over its span
+    Intro/Outro: Should have the lowest scores (minimal arrangement)
 ```
 
 ### Step 3: Check Transitions
 ```
 At each section boundary:
-    energy_jump = next_section_rms - current_section_rms
-    
-    Into Drop: Should be positive jump (+4 to +8 dB) → IMPACT
+    score_jump = next_section_score - current_section_score
+
+    Into Drop: Should be a sharp positive jump → IMPACT
     Into Breakdown: Can be gradual or sudden negative
     Into Buildup: Should be gradual increase
 ```
 
 ### Step 4: Check Buildup Progression
 ```
-Buildup should show INCREASING energy:
-    - Early buildup: Lower RMS
-    - Late buildup: Higher RMS
-    - Transient density should increase
-    - Spectral centroid should rise (brightness)
+Buildup should show INCREASING arrangement density:
+    - Review phase7.issues[] for any buildup-flagged issues
+    - Check eight_bar_compliant on buildup sections
+    - Score should be lower than drop but trending upward
 ```
 
 ---
@@ -152,9 +169,8 @@ Song Structure:
   Structure: [Intro → Buildup → Drop → Breakdown → etc.]
 
 Energy Flow:
-  Drop level: [X] dB (reference)
-  Contrast range: [Y] dB
-  Worst section: [section name] - [issue]
+  Energy contrast: [phase7.metadata.energy_contrast_db] dB
+  Worst section: [DERIVE: section_type from min-score entry of phase7.section_scores[]] - [issue]
 ```
 
 ### Section Map
@@ -163,15 +179,15 @@ Energy Flow:
 SECTION MAP
 ===========
 
-| # | Section    | Time        | Duration | RMS (dB) | vs Drop | Density | Status |
-|---|------------|-------------|----------|----------|---------|---------|--------|
-| 1 | Intro      | 0:00-0:45   | 45s      | -18      | -8      | 0.2     | ✓ OK   |
-| 2 | Buildup    | 0:45-1:15   | 30s      | -14      | -4      | 0.5     | ✓ OK   |
-| 3 | Drop       | 1:15-2:30   | 75s      | -10      | Ref     | 0.8     | ✓ OK   |
-| 4 | Breakdown  | 2:30-3:30   | 60s      | -12      | -2      | 0.6     | ⚠️ ISSUE |
-| 5 | Buildup 2  | 3:30-4:00   | 30s      | -13      | -3      | 0.6     | ✓ OK   |
-| 6 | Drop 2     | 4:00-5:30   | 90s      | -10      | Ref     | 0.9     | ✓ OK   |
-| 7 | Outro      | 5:30-6:30   | 60s      | -18      | -8      | 0.2     | ✓ OK   |
+| # | Section    | Time        | Duration | Score | 8-bar | Status |
+|---|------------|-------------|----------|-------|-------|--------|
+| 1 | Intro      | 0:00-0:45   | 45s      | 62    | ✓     | ✓ OK   |
+| 2 | Buildup    | 0:45-1:15   | 30s      | 74    | ✓     | ✓ OK   |
+| 3 | Drop       | 1:15-2:30   | 75s      | 91    | ✓     | ✓ OK   |
+| 4 | Breakdown  | 2:30-3:30   | 60s      | 88    | ✓     | ⚠️ ISSUE |
+| 5 | Buildup 2  | 3:30-4:00   | 30s      | 79    | ✓     | ✓ OK   |
+| 6 | Drop 2     | 4:00-5:30   | 90s      | 93    | ✓     | ✓ OK   |
+| 7 | Outro      | 5:30-6:30   | 60s      | 60    | ✓     | ✓ OK   |
 ```
 
 ### Timestamped Issues
@@ -202,8 +218,8 @@ SECTION RECOMMENDATIONS
 INTRO (0:00-0:45)
 ─────────────────
 Current status: [OK / Issue]
-Energy: [X] dB (target: -8 to -12 from drop)
-Density: [X] (target: 0.1-0.3)
+Score: [X] (target: notably below drop score)
+8-bar compliant: [Yes / No]
 
 Issues found:
   → [Issue or "None"]
@@ -216,8 +232,8 @@ Recommendations:
 DROP 1 (1:15-2:30)
 ──────────────────
 Current status: [OK / Issue]
-Energy: [X] dB (reference)
-Density: [X] (target: 0.7-1.0)
+Score: [X] (target: highest score in arrangement)
+8-bar compliant: [Yes / No]
 
 Issues found:
   → [Issue or "None"]
@@ -234,14 +250,15 @@ Recommendations:
 
 ### Problem: Drop Doesn't Hit Hard
 ```
-CRITICAL — Drop RMS at [X] dB, only [Y] dB louder than breakdown
+CRITICAL — Drop score at [X], only [Y] points above breakdown
 
 WHY THIS MATTERS:
 - The drop IS the moment in trance music
 - If the drop doesn't feel powerful, the track fails
 - Contrast creates impact, not absolute loudness
 
-DETECTION: Drop RMS < 4dB louder than breakdown
+DETECTION: Drop section score < 10 points higher than breakdown score,
+           OR phase7.metadata.energy_contrast_db < 4
 
 FIX:
 
@@ -272,14 +289,15 @@ EXPECTED RESULT: Drop will feel 6-8dB louder due to contrast
 
 ### Problem: Breakdown Is Boring/Flat
 ```
-SEVERE — Breakdown at [X] dB, only [Y] dB below drop
+SEVERE — Breakdown score [X], too close to drop score [Y]
 
 WHY THIS MATTERS:
 - Breakdown provides emotional contrast
 - Too similar to drop = no journey
 - Listeners need a moment to breathe
 
-DETECTION: Breakdown RMS within 4dB of drop OR breakdown has high transient_density
+DETECTION: Breakdown section score within 10 points of drop score,
+           OR phase7.issues[] contains a breakdown-flagged issue about high transient density
 
 FIX:
 
@@ -313,14 +331,15 @@ LOCATION: [breakdown timestamp start] to [end]
 
 ### Problem: Buildup Has No Tension
 ```
-SEVERE — Buildup RMS is flat from [X:XX] to [Y:YY]
+SEVERE — Buildup score is flat from [X:XX] to [Y:YY]
 
 WHY THIS MATTERS:
 - Buildup creates anticipation for the drop
 - Flat buildup = weak drop impact
 - Energy MUST increase throughout buildup
 
-DETECTION: Buildup section shows constant RMS instead of increasing
+DETECTION: phase7.issues[] contains a buildup-flagged issue about flat progression,
+           OR buildup section score is not trending upward relative to intro
 
 FIX:
 
@@ -354,51 +373,16 @@ BUILDUP AUTOMATION:
   [buildup end]:       Filter at 8kHz+,  Level 0dB
 ```
 
-### Problem: Clipping in Drop Sections
-```
-SEVERE — Clipping detected at [timestamps within drop]
-
-WHY THIS MATTERS:
-- Drops are loudest, so most likely to clip
-- Clipping = audible distortion
-- Usually one element is too hot
-
-DETECTION: clipping_timestamps fall within drop section boundaries
-
-FIX:
-
-Step 1: Identify the timestamp
-  → Clipping at [X:XX] — this is within Drop 1
-  → Go to this exact position
-
-Step 2: Identify what's loudest at this moment
-  → Usually: Kick + bass + synths all hitting together
-  → Solo elements to find the hottest one
-  
-Step 3: Reduce the culprit
-  → If kick: Reduce kick by 1-2dB
-  → If bass: Check sidechain timing, reduce bass 1-2dB
-  → If layers stacking: Stagger entries slightly
-
-Step 4: Add soft clipper before limiter
-  → Saturator (Soft Clip mode) → Drive 0dB
-  → This catches peaks more gracefully
-
-CLIP LOCATIONS:
-  [X:XX] - In Drop 1, likely kick+bass collision
-  [Y:YY] - In Drop 2, likely same issue
-```
-
 ### Problem: Sections All Sound the Same
 ```
-CRITICAL — Section RMS variance is only [X] dB across entire track
+CRITICAL — phase7.metadata.energy_contrast_db < 5 across entire track
 
 WHY THIS MATTERS:
 - No contrast = no journey
 - Listener fatigue (everything at same energy)
 - Track has no arc or narrative
 
-DETECTION: Max RMS - Min RMS < 5dB across all sections
+DETECTION: phase7.metadata.energy_contrast_db < 5
 
 FIX:
 
@@ -441,7 +425,7 @@ TRANSITION QUALITY CHECKLIST
   Status: [OK / Needs work]
 
 □ Buildup → Drop ([timestamp])
-  Energy change: SHARP increase (+4 to +8dB)
+  Energy change: SHARP increase
   Elements: Kick enters full, bass opens, all layers
   Status: [OK / Needs work]
   
@@ -471,12 +455,11 @@ TRANSITION QUALITY CHECKLIST
 ## Priority Rules
 
 1. **CRITICAL**: Drop weaker than/equal to breakdown
-2. **CRITICAL**: No contrast between sections (<5dB range)
+2. **CRITICAL**: No contrast between sections (energy_contrast_db < 5)
 3. **SEVERE**: Breakdown too full (has kick, same energy as drop)
 4. **SEVERE**: Buildup doesn't escalate
-5. **SEVERE**: Clipping in drop sections
-6. **MODERATE**: Transitions are jarring
-7. **MINOR**: Sections are too long
+5. **MODERATE**: Transitions are jarring
+6. **MINOR**: Sections are too long
 
 ---
 
@@ -485,19 +468,19 @@ TRANSITION QUALITY CHECKLIST
 ```
 [CRITICAL] Drop Lacks Impact — Breakdown Too Full
 ─────────────────────────────────────────────────
-PROBLEM: Breakdown (2:30-3:30) is at -12dB, Drop 1 is at -10dB.
-         Only 2dB difference — drop will feel weak.
+PROBLEM: Breakdown (2:30-3:30) score is 88, Drop 1 score is 91.
+         Only 3-point gap — breakdown is nearly as full as the drop.
          
 LOCATION: Breakdown at 2:30, Drop at 1:15
 
 CURRENT:
-  Drop RMS: -10dB (reference)
-  Breakdown RMS: -12dB (only -2dB below drop)
-  Breakdown transient density: 0.6 (too high — kick still present?)
+  Drop score: 91 (reference — highest)
+  Breakdown score: 88 (only 3 points below drop)
+  phase7.metadata.energy_contrast_db: 2.1 dB (target: ≥ 5 dB)
   
 TARGET:
-  Breakdown should be -6 to -10dB below drop
-  Breakdown transient density: 0.1-0.3
+  Breakdown should score significantly lower than drop
+  energy_contrast_db should be ≥ 5–8 dB
 
 FIX:
 
@@ -514,8 +497,8 @@ At 4:00 (drop 2 start):
   → Add: Impact sample at exact drop timestamp
 
 EXPECTED RESULT:
-  Breakdown RMS will drop to -16 to -18dB
-  Contrast with drop: 6-8dB
+  Breakdown score will fall (less arrangement density)
+  energy_contrast_db will rise to 6–8 dB
   Drop 2 will hit HARD because of contrast
 ```
 

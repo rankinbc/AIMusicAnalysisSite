@@ -14,31 +14,33 @@ Analyze the provided audio analysis JSON file to evaluate trance arrangement str
 
 ### Section Data
 ```
-section_analysis.sections[]                → List of detected sections
+phase7.section_scores[]                    → List of detected sections with scores
   .section_type                            → 'intro', 'buildup', 'drop', 'breakdown', 'outro'
   .start_time, .end_time                   → Section boundaries
-  .avg_rms_db                              → Energy level of section
-  .peak_db                                 → Peak level in section
-  .note_density                            → Notes per beat (if available)
-  .active_tracks                           → Number of active tracks (if available)
+  .score                                   → Quality/energy score for the section (0–100)
+  .bars                                    → Section length in bars
+  .eight_bar_compliant                     → Whether section length is divisible by 8 bars
+  .issues[]                                → Per-section detected problems
 
-section_analysis.all_issues[]              → Pre-identified section problems
-section_analysis.worst_section             → Section needing most attention
+phase7.issues[]                            → Pre-identified section problems
+  .severity                                → Issue severity
+  .message                                 → Issue description
+  .section                                 → Affected section name
+  .fix_suggestion                          → Recommended fix
+
+Worst section: derive as the min-score entry of phase7.section_scores[]
 ```
 
 ### Audio Energy Data
 ```
-audio_analysis.dynamics.dynamic_range_db   → Overall dynamic range
-audio_analysis.dynamics.crest_factor_db    → Peak-to-average ratio
-audio_analysis.frequency.bass_energy       → Low-end presence per section
-
-comparison_result.stem_comparisons[]       → Per-stem metrics for contrast analysis
+phase1.crest_factor                        → Peak-to-average ratio (dynamic range measure)
+phase1.bands.bass                          → Low-end presence (whole-mix)
 ```
 
 ### Tempo & Structure
 ```
-audio_analysis.detected_tempo              → BPM (affects section lengths)
-metadata.duration_seconds                  → Total track length
+phase2.bpm                                 → BPM (affects section lengths)
+phase1.duration_seconds                    → Total track length
 ```
 
 ---
@@ -88,14 +90,14 @@ metadata.duration_seconds                  → Total track length
 
 | Problem | Detection | Severity |
 |---------|-----------|----------|
-| No energy contrast | Energy diff < 2 points between sections | CRITICAL |
-| Drop same energy as breakdown | Drop RMS within 3dB of breakdown | CRITICAL |
-| Breakdown too busy | > 10 active tracks OR > 40% of drop density | SEVERE |
+| No energy contrast | Score diff < 10 points between drop and breakdown in phase7.section_scores[] | CRITICAL |
+| Drop same energy as breakdown | Drop section score within 10 points of breakdown score in phase7.section_scores[] | CRITICAL |
+| Breakdown too busy | phase7.issues[] flags breakdown density / more than expected track activity | SEVERE |
 | Buildup already full | Avg velocity > 80% of drop velocity | SEVERE |
-| No bass contrast | Bass ratio (drop/breakdown) < 1.5 | SEVERE |
-| Section not divisible by 8 bars | Length % 8 != 0 | MODERATE |
-| Buildup too short | < 8 bars (< 14 seconds at 138 BPM) | MODERATE |
-| Flat arrangement | Energy std deviation < 1.5 points | MODERATE |
+| No bass contrast | phase1.bands.bass overall low OR phase7.issues[] flags bass contrast | SEVERE |
+| Section not divisible by 8 bars | phase7.section_scores[].eight_bar_compliant == false | MODERATE |
+| Buildup too short | phase7.section_scores[].bars < 8 for buildup section | MODERATE |
+| Flat arrangement | Score std deviation < 10 points across phase7.section_scores[] | MODERATE |
 | Drop lacks staging | All elements enter simultaneously | MINOR |
 
 ---
@@ -105,7 +107,9 @@ metadata.duration_seconds                  → Total track length
 ### Step 1: Check Section Contrast (MOST CRITICAL)
 
 ```
-Calculate energy ratio: drop_energy / breakdown_energy
+Derive drop_score as the score of the drop entry in phase7.section_scores[]
+Derive breakdown_score as the score of the breakdown entry in phase7.section_scores[]
+Calculate energy ratio: drop_score / breakdown_score
 
 IF ratio < 1.3:
     CRITICAL — Drop will feel weak
@@ -124,7 +128,9 @@ Breakdown MUST have:
   - Reduced track count (4-8 tracks)
   - Focus on mids/highs (pads, melody, vocals)
 
-IF breakdown has full kick or bass:
+Check phase7.issues[] for entries with .section == 'breakdown' flagging kick/bass presence.
+
+IF phase7.issues[] contains breakdown kick or bass flag:
     CRITICAL — Not a proper trance breakdown
 ```
 
@@ -137,11 +143,11 @@ Proper buildup pattern:
   - Velocity peak in FINAL 2 bars
   - Elements held back for drop: full kick, full bass, wide stereo
 
-IF velocity peaks before final 2 bars:
-    MODERATE — Buildup loses tension
-
-IF buildup < 8 bars:
-    MODERATE — Too abrupt for trance
+Check phase7.section_scores[] for buildup entry:
+  IF buildup .bars < 8:
+      MODERATE — Too abrupt for trance
+  IF buildup score peaks before final sub-section:
+      MODERATE — Buildup loses tension
 ```
 
 ### Step 4: Check Drop Impact
@@ -149,7 +155,7 @@ IF buildup < 8 bars:
 ```
 At the drop, these should happen SIMULTANEOUSLY:
   - Kick returns (full weight)
-  - Bass/sub returns (low frequencies restored)
+  - Bass/sub returns (low frequencies restored — check phase1.bands.bass)
   - Stereo width snaps from 40-60% back to 100%
   - Track count jumps from 4-8 to 15-25+
 
@@ -167,14 +173,14 @@ ARRANGEMENT ANALYSIS
 Overall Status: [WEAK / NEEDS WORK / SOLID / PROFESSIONAL]
 
 Section Map:
-  [0:00-1:30] Intro — Energy: 3/9 — [assessment]
-  [1:30-3:00] Buildup — Energy: 5→7/9 — [assessment]
-  [3:00-4:30] Drop — Energy: 9/9 — [assessment]
-  [4:30-5:30] Breakdown — Energy: 3/9 — [assessment]
+  [0:00-1:30] Intro — Score: 30/100 — [assessment]
+  [1:30-3:00] Buildup — Score: 50→70/100 — [assessment]
+  [3:00-4:30] Drop — Score: 90/100 — [assessment]
+  [4:30-5:30] Breakdown — Score: 30/100 — [assessment]
   ...
 
 Contrast Score: [X/10]
-  Drop vs Breakdown: [X dB difference] — [GOOD / WEAK / CRITICAL]
+  Drop vs Breakdown: [X point score difference] — [GOOD / WEAK / CRITICAL]
   Energy curve: [Rising/Falling/Flat]
 ```
 
@@ -208,14 +214,14 @@ EXPECTED RESULT: [What will improve]
 
 ### Problem: Drop Doesn't Hit Hard
 ```
-CRITICAL — Drop energy within 3dB of breakdown
+CRITICAL — Drop energy within 10 points of breakdown in phase7.section_scores[]
 
 WHY THIS MATTERS:
 - The drop IS the payoff in trance music
 - Without contrast, the drop feels anticlimactic
 - Listeners won't feel the "release" of tension
 
-DETECTION: Drop avg_rms_db within 3dB of breakdown avg_rms_db
+DETECTION: drop section score in phase7.section_scores[] within 10 points of breakdown score
 
 FIX:
 
@@ -241,14 +247,14 @@ AUTOMATION TARGETS:
 
 ### Problem: Breakdown Too Busy
 ```
-SEVERE — Breakdown has [X] active tracks (target: 4-8)
+SEVERE — Breakdown density too high (target: 4-8 active tracks)
 
 WHY THIS MATTERS:
 - Busy breakdowns provide no contrast
 - The emotional impact of the drop relies on the breakdown being sparse
 - "Nowhere to go" syndrome — drop can't feel bigger
 
-DETECTION: breakdown_tracks > 10 OR breakdown_tracks > 40% of drop_tracks
+DETECTION: phase7.issues[] contains a breakdown density flag (breakdown_tracks > 10 or breakdown_tracks > 40% of drop_tracks)
 
 FIX:
 
@@ -283,7 +289,7 @@ WHY THIS MATTERS:
 - The drop arrives after the energy has already started declining
 - Feels like "missing the moment"
 
-DETECTION: velocity_peak_position < (buildup_end - 2 bars)
+DETECTION: buildup score in phase7.section_scores[] does not rise monotonically to the drop boundary
 
 FIX:
 
@@ -314,14 +320,14 @@ VELOCITY AUTOMATION:
 
 ### Problem: No Frequency Contrast Between Sections
 ```
-SEVERE — Bass register ratio (drop/breakdown) at [X] (target: ≥2.0)
+SEVERE — Bass register low overall (phase1.bands.bass below threshold) or bass contrast issue in phase7.issues[]
 
 WHY THIS MATTERS:
 - Low frequencies ARE the energy in trance
 - If bass is the same everywhere, there's no "weight" restoration at drop
 - The low end should "fill back in" at the drop
 
-DETECTION: bass_ratio < 1.5
+DETECTION: phase1.bands.bass overall low (< 0.15) and phase7.issues[] contains a bass contrast flag
 
 FIX:
 
@@ -345,20 +351,20 @@ FREQUENCY AUTOMATION:
 
 ### Problem: Section Lengths Not Divisible by 8
 ```
-MODERATE — Section at [timestamp] is [X] bars (not divisible by 8)
+MODERATE — Section at [timestamp] has phase7.section_scores[].eight_bar_compliant == false
 
 WHY THIS MATTERS:
 - Trance is built on 8-bar phrases
 - Odd-length sections feel "off" to the listener
 - DJs expect 8/16/32-bar sections for mixing
 
-DETECTION: section_length % 8 != 0
+DETECTION: phase7.section_scores[].eight_bar_compliant == false for any section
 
 FIX:
 
 Step 1: Identify the odd section
   → Check section boundaries in arrangement view
-  → Verify bar count
+  → Verify bar count via phase7.section_scores[].bars
 
 Step 2: Extend or trim to nearest 8-bar multiple
   → If 12 bars: Extend to 16 or trim to 8
@@ -404,10 +410,10 @@ DROP:
   [ ] Full staging within first 16 bars
 
 OVERALL:
-  [ ] All sections divisible by 8 bars
-  [ ] Clear energy contrast (≥2 points) between sections
-  [ ] Drop energy ≥1.8x breakdown energy
-  [ ] Bass ratio (drop/breakdown) ≥2.0
+  [ ] All sections divisible by 8 bars (phase7.section_scores[].eight_bar_compliant)
+  [ ] Clear score contrast (≥10 points) between sections in phase7.section_scores[]
+  [ ] Drop score ≥1.8x breakdown score in phase7.section_scores[]
+  [ ] Bass presence (phase1.bands.bass) restored at drop
 ```
 
 ---
@@ -429,11 +435,11 @@ OVERALL:
 ```
 [CRITICAL] Drop Has No Impact Compared to Breakdown
 ───────────────────────────────────────────────────
-PROBLEM: Drop RMS is -12.3 dB, Breakdown RMS is -11.8 dB
-         Only 0.5dB difference — drop will feel anticlimactic.
+PROBLEM: Drop section score is 42, Breakdown section score is 40 (phase7.section_scores[])
+         Only 2-point score difference — drop will feel anticlimactic.
 
-CURRENT: Energy contrast 0.5dB
-TARGET: Energy contrast ≥6dB (drop should be 1.8x breakdown)
+CURRENT: Score contrast 2 points
+TARGET: Score contrast ≥18 points (drop should score 1.8x breakdown)
 
 FIX:
 
@@ -451,7 +457,7 @@ Step 3: Filter bass in breakdown
         → Breakdown: Cutoff 250Hz
         → Drop: Cutoff 20kHz (fully open)
 
-EXPECTED RESULT: Drop will now hit with 6-9dB contrast
+EXPECTED RESULT: Drop will now hit with meaningful score contrast
                  Energy level contrast: 4→9 instead of 7→8
 ```
 
@@ -464,7 +470,7 @@ EXPECTED RESULT: Drop will now hit with 6-9dB contrast
 - Don't use odd-length sections — always stick to 8/16/32 bar multiples
 - Don't keep the same bass level throughout — filter or mute it in breakdowns
 - Don't add all drop elements at once — stage them over 8-16 bars (but core elements on beat 1)
-- Don't say "needs more contrast" without specifying EXACT dB or track count targets
+- Don't say "needs more contrast" without specifying EXACT score point or dB targets
 - Don't skip the silence before the drop — the pause is essential for impact
 
 ---

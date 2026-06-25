@@ -14,19 +14,18 @@ Analyze the provided audio analysis JSON file to evaluate mono compatibility and
 
 ### Primary Surround Data
 ```
-audio_analysis.surround.mono_compatibility   → 0-100% how well mix survives mono
-audio_analysis.surround.phase_score          → 0-100% phase coherence rating
-audio_analysis.surround.center_energy        → Energy concentrated in center
-audio_analysis.surround.side_energy          → Energy in stereo sides
-audio_analysis.surround.lfe_content          → Low-frequency energy assessment
-audio_analysis.surround.is_mono_safe         → true/false quick check
+phase9.surround.mono_compatibility   → 0-100% how well mix survives mono
+phase9.surround.phase_score          → 0-100% phase coherence rating
+phase9.surround.is_atmos_ready       → bool: passes Atmos headroom/spatial check (bonus context)
+phase9.surround.analysis[]           → string array: surround analysis notes (bonus context)
+# DERIVED: is_mono_safe ≈ phase9.surround.mono_compatibility >= 70 AND phase9.surround.phase_score >= 70
 ```
 
 ### Supporting Data
 ```
-audio_analysis.stereo.correlation            → -1 to +1 phase correlation
-audio_analysis.stereo.is_mono_compatible     → Quick mono check
-audio_analysis.stereo.phase_safe             → True if correlation > 0
+phase1.stereo_correlation            → -1 to +1 phase correlation
+# DERIVED: is_mono_compatible ≈ phase1.mono_compatibility >= 0.7  (float 0–1, not bool)
+# DERIVED: phase_safe ≈ phase1.stereo_correlation > 0
 ```
 
 ---
@@ -91,39 +90,17 @@ If your mix doesn't work in mono:
          Active cancellation, elements disappear
 ```
 
-### Center vs Side Energy
-```
-TYPICAL HEALTHY DISTRIBUTION:
-─────────────────────────────
-Center energy: 50-70% of total energy
-Side energy: 30-50% of total energy
-
-WHY:
-- Center holds the anchors (kick, bass, lead)
-- Sides hold the width (pads, FX, ambience)
-- Too much side = mono vulnerability
-- Too little side = narrow/boring
-
-IF center_energy > 80%:
-  Mix is too narrow, needs more width
-
-IF side_energy > 50%:
-  Mix may have mono compatibility issues
-  Side content will be reduced in mono
-```
-
 ---
 
 ## Severity Thresholds
 
 | Problem | Detection | Severity |
 |---------|-----------|----------|
-| Mono collapse | `mono_compatibility < 50` | CRITICAL |
-| Phase cancellation | `phase_score < 50` | CRITICAL |
-| Mono issues | `mono_compatibility < 70` | SEVERE |
-| Phase concerns | `phase_score < 70` | MODERATE |
-| High side energy | `side_energy > 55` | WARNING |
-| Not mono safe | `is_mono_safe = false` | SEVERE |
+| Mono collapse | `phase9.surround.mono_compatibility < 50` | CRITICAL |
+| Phase cancellation | `phase9.surround.phase_score < 50` | CRITICAL |
+| Mono issues | `phase9.surround.mono_compatibility < 70` | SEVERE |
+| Phase concerns | `phase9.surround.phase_score < 70` | MODERATE |
+| Not mono safe (derived) | `phase9.surround.mono_compatibility < 70 AND phase9.surround.phase_score < 70` | SEVERE |
 
 ---
 
@@ -131,12 +108,12 @@ IF side_energy > 50%:
 
 ### Step 1: Check Mono Compatibility Score
 ```
-IF mono_compatibility < 50:
+IF phase9.surround.mono_compatibility < 50:
     CRITICAL — Mix will collapse in mono
     Elements will disappear or cancel
     DO NOT release without fixing
 
-IF mono_compatibility < 70:
+IF phase9.surround.mono_compatibility < 70:
     SEVERE — Noticeable mono problems
     Some elements significantly affected
     Should fix before release
@@ -144,34 +121,15 @@ IF mono_compatibility < 70:
 
 ### Step 2: Check Phase Score
 ```
-IF phase_score < 50:
+IF phase9.surround.phase_score < 50:
     CRITICAL — Active phase cancellation
     Content disappearing due to phase issues
+    Confirm with phase1.stereo_correlation < 0
 
-IF phase_score < 70:
+IF phase9.surround.phase_score < 70:
     MODERATE — Phase issues affecting quality
     Check stereo processing and wideners
-```
-
-### Step 3: Analyze Energy Distribution
-```
-IF side_energy > center_energy:
-    Mix is too wide
-    Mono playback will lose significant content
-
-IF center_energy > 80%:
-    Mix is too narrow
-    Not a mono compatibility issue, but boring stereo
-```
-
-### Step 4: Check LFE (Low Frequency) Content
-```
-Low frequencies MUST be mono for:
-  - Club systems
-  - Subwoofers
-  - Phase coherence
-
-Check that bass/sub content is centered
+    Confirm with phase1.stereo_correlation < 0.3
 ```
 
 ---
@@ -185,13 +143,10 @@ SURROUND & MONO COMPATIBILITY ANALYSIS
 Overall Status: [MONO-SAFE / CHECK REQUIRED / CRITICAL ISSUES]
 
 Compatibility Scores:
-  Mono Compatibility: [X]% → [interpretation]
-  Phase Score: [X]% → [interpretation]
-  Is Mono Safe: [Yes/No]
-
-Energy Distribution:
-  Center Energy: [X]%
-  Side Energy: [X]%
+  Mono Compatibility: [X]%  → [interpretation]
+  Phase Score: [X]%         → [interpretation]
+  Stereo Correlation: [X]   → [±1, negative = cancellation]
+  Is Mono Safe: [Yes/No]    → derived: mono_compatibility ≥ 70 AND phase_score ≥ 70
 
 Verdict: [Summary of mono compatibility status]
 ```
@@ -231,7 +186,7 @@ WHY THIS MATTERS:
 - Phone listeners hear a broken track
 - This is a DEALBREAKER for professional release
 
-DETECTION: mono_compatibility < 50 OR is_mono_safe = false
+DETECTION: phase9.surround.mono_compatibility < 50 OR (phase9.surround.mono_compatibility < 70 AND phase9.surround.phase_score < 70)
 
 WHAT'S HAPPENING:
 - Stereo elements are canceling when summed
@@ -276,7 +231,7 @@ Step 6: Check specific elements
   → FX: May have extreme stereo, reduce or check phase
   → Leads: Should be mostly center, reduce stereo content
 
-VERIFY: Mono compatibility should rise above 70%
+VERIFY: phase9.surround.mono_compatibility should rise above 70%
         Play in mono - nothing should disappear
         A/B stereo vs mono - should sound similar
 ```
@@ -291,12 +246,12 @@ WHY THIS MATTERS:
 - Usually affects specific frequencies or elements
 - Creates hollow, thin, or broken sound
 
-DETECTION: phase_score < 50
+DETECTION: phase9.surround.phase_score < 50
 
 WHAT'S HAPPENING:
 - Left and right channels have opposing phase content
 - When summed to mono, they cancel out
-- correlation < 0 means active cancellation
+- phase1.stereo_correlation < 0 means active cancellation
 
 FIX:
 
@@ -331,55 +286,9 @@ Step 5: Fix chorus/flanger
   → Reduce depth or increase rate
   → Or: Use in parallel with dry blend
 
-VERIFY: Phase score should rise above 70%
-        Correlation should be positive (>0.3)
+VERIFY: phase9.surround.phase_score should rise above 70%
+        phase1.stereo_correlation should be positive (>0.3)
         Mono playback should sound full
-```
-
-### Problem: Excessive Side Energy
-```
-SEVERE — Side energy at [X]% (target: 30-50%)
-
-WHY THIS MATTERS:
-- Too much content in the "sides"
-- Mono summing will make mix significantly quieter
-- Side content = L+R difference = canceled in mono
-- Risk of mono compatibility issues
-
-DETECTION: side_energy > 55%
-
-FIX:
-
-Step 1: Identify wide elements
-  → Usually: Pads, reverbs, FX, widened synths
-  → Solo elements and check their width
-
-Step 2: Reduce individual element widths
-  → Pads: Utility → Width: 70-80%
-  → Reverbs: Reduce reverb return width
-  → FX: Check if stereo is necessary
-
-Step 3: Use M/S to control side globally
-  → On master: EQ Eight (M/S mode)
-  → Reduce "S" (Side) channel by 2-3dB
-  → This brings side energy down
-
-Step 4: Move important content to center
-  → Leads should be mostly center
-  → Hooks/main melodies should be centered
-  → Only supporting elements should be wide
-
-Step 5: Check reverb configuration
-  → Reverb often adds lots of side energy
-  → Try narrowing reverb returns (Width: 70%)
-  → Or: Use more mono reverb on key elements
-
-TARGET BALANCE:
-  Center: 55-65%
-  Side: 35-45%
-
-VERIFY: Side energy should drop below 50%
-        Mono compatibility should improve
 ```
 
 ### Problem: Mono Low End Required
@@ -392,7 +301,8 @@ WHY THIS MATTERS:
 - Stereo bass causes phase cancellation in sub range
 - Creates weak, inconsistent low end
 
-DETECTION: LFE has stereo content OR bass stem is not mono
+DETECTION: bass/sub elements are not mono (verify by soloing bass
+           and checking phase1.stereo_correlation near 1.0)
 
 FIX:
 
@@ -420,7 +330,7 @@ Step 3: Check kick mono-ness
   → If using stereo processing, bypass below 200Hz
 
 Step 4: Verify with correlation meter
-  → Solo bass/sub and check correlation
+  → Solo bass/sub and check phase1.stereo_correlation
   → Should be >0.95 (nearly mono)
 
 VERIFY: Low end sounds identical in stereo and mono
@@ -460,13 +370,12 @@ IF SOMETHING DISAPPEARS IN MONO:
 
 ## Priority Rules
 
-1. **CRITICAL**: Mono compatibility <50% - mix collapses
-2. **CRITICAL**: Phase score <50% - active cancellation
-3. **SEVERE**: Mono compatibility <70% - significant issues
-4. **SEVERE**: is_mono_safe = false
-5. **MODERATE**: Phase score <70% - some concerns
-6. **WARNING**: Excessive side energy (>55%)
-7. **INFO**: All other observations
+1. **CRITICAL**: phase9.surround.mono_compatibility < 50 — mix collapses
+2. **CRITICAL**: phase9.surround.phase_score < 50 — active cancellation
+3. **SEVERE**: phase9.surround.mono_compatibility < 70 — significant issues
+4. **SEVERE**: phase9.surround.mono_compatibility < 70 AND phase9.surround.phase_score < 70 (derived: not mono safe)
+5. **MODERATE**: phase9.surround.phase_score < 70 — some concerns
+6. **INFO**: All other observations
 
 ---
 
@@ -478,8 +387,11 @@ IF SOMETHING DISAPPEARS IN MONO:
 PROBLEM: Mono compatibility at 42% (must be >70%)
          Mix will collapse when played on mono systems.
 
-CURRENT: mono_compatibility = 42%, is_mono_safe = false
-TARGET: mono_compatibility > 70%, is_mono_safe = true
+CURRENT: phase9.surround.mono_compatibility = 42%
+         phase9.surround.phase_score = 38%
+         (derived is_mono_safe = false: both scores below 70%)
+TARGET: phase9.surround.mono_compatibility > 70%
+        phase9.surround.phase_score > 70%
 
 IMPACT:
 - Bass will disappear on club subwoofers
@@ -510,7 +422,7 @@ TEST AFTER FIXES:
         → Toggle mono on master
         → Nothing should disappear
         → Overall level drop should be <3dB
-        → Mono compatibility score should be >70%
+        → phase9.surround.mono_compatibility score should be >70%
 ```
 
 ---

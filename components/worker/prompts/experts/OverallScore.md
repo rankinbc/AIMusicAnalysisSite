@@ -6,7 +6,7 @@ version: 1.0.0
 
 ## Your Task
 
-Analyze the provided audio analysis JSON file to interpret the overall mix quality score and identify the most impactful areas for improvement. Your goal is to provide a **prioritized action plan based on the weighted score components** and help achieve professional-grade mix quality.
+Analyze the provided audio analysis JSON file to interpret the overall mix quality score and identify the most impactful areas for improvement. Your goal is to provide a **prioritized action plan based on the component scores** and help achieve professional-grade mix quality.
 
 ---
 
@@ -14,27 +14,23 @@ Analyze the provided audio analysis JSON file to interpret the overall mix quali
 
 ### Primary Overall Score Data
 ```
-audio_analysis.overall_score.overall_score       → 0-100 weighted quality score
-audio_analysis.overall_score.grade               → Letter grade (A, B, C, D, F)
-audio_analysis.overall_score.grade_description   → Human-readable grade meaning
-audio_analysis.overall_score.component_scores    → Individual component scores
-audio_analysis.overall_score.component_weights   → How much each component matters
-audio_analysis.overall_score.weakest_component   → Lowest scoring component
-audio_analysis.overall_score.strongest_component → Highest scoring component
-audio_analysis.overall_score.summary             → Auto-generated summary
+overall_score              → 0-100 weighted quality score (top-level field, not namespace-prefixed)
+grade                      → Letter grade (A, B, C, D, F) (top-level field, not namespace-prefixed)
+grade_description          → DERIVE from grade: A="Release Ready", B="Good Mix – Minor Issues",
+                             C="Work Needed", D="Significant Work Required", F="Fundamental Problems"
+phase3.sub_scores          → Dynamic dict of component scores (keys vary by genre; values 0-100)
+weakest_component          → DERIVE: key with the lowest value in phase3.sub_scores
+strongest_component        → DERIVE: key with the highest value in phase3.sub_scores
 ```
 
 ### Component Score Breakdown
 ```
-component_scores:
-  frequency_balance  → 0-100 (weight: ~20%)
-  dynamics           → 0-100 (weight: ~15%)
-  stereo             → 0-100 (weight: ~15%)
-  loudness           → 0-100 (weight: ~10%)
-  clarity            → 0-100 (weight: ~15%)
-  harmonic           → 0-100 (weight: ~10%)
-  transients         → 0-100 (weight: ~10%)
-  surround           → 0-100 (weight: ~5%)
+phase3.sub_scores is a dynamic dict whose keys depend on the detected genre.
+Typical keys include components such as frequency_balance, dynamics, stereo,
+loudness, clarity, harmonic, transients, and surround, but the exact set is
+not fixed. Iterate all present keys to find the weakest and strongest.
+
+Each value is 0-100 (higher = better).
 ```
 
 ---
@@ -95,78 +91,21 @@ GRADE F (0-39):
 
 ---
 
-## Component Weight Reference
-
-### Default Weights
-```
-COMPONENT WEIGHTS (Total = 100%)
-================================
-
-frequency_balance: 20%  ████████████████████
-  → Most important: Spectral balance defines "pro" sound
-  → Issues: Mud, harshness, thin, boomy
-
-dynamics: 15%           ███████████████
-  → Punch, energy, dynamic range
-  → Issues: Over-compressed, flat, lifeless
-
-stereo: 15%             ███████████████
-  → Width, phase, mono compatibility
-  → Issues: Phase cancellation, too narrow, too wide
-
-clarity: 15%            ███████████████
-  → Element separation, masking
-  → Issues: Elements fighting, muddy, undefined
-
-loudness: 10%           ██████████
-  → LUFS compliance, streaming targets
-  → Issues: Too quiet, too loud, clipping
-
-harmonic: 10%           ██████████
-  → Key detection, harmonic coherence
-  → Issues: Key clashes, unstable key
-
-transients: 10%         ██████████
-  → Attack quality, punch
-  → Issues: Soft attacks, over-compressed transients
-
-surround: 5%            █████
-  → Mono compatibility verification
-  → Issues: Mono collapse, phase issues
-```
-
-### Priority Order for Fixes
-```
-FIX IN THIS ORDER (highest impact first):
-=========================================
-
-1. frequency_balance (20%) - Foundation of pro sound
-2. dynamics (15%) - Energy and punch
-3. stereo (15%) - Width and phase safety
-4. clarity (15%) - Element separation
-5. loudness (10%) - Streaming compliance
-6. harmonic (10%) - Key and harmony
-7. transients (10%) - Attack quality
-8. surround (5%) - Mono safety check
-```
-
----
-
 ## Analysis Steps
 
 ### Step 1: Interpret Overall Score and Grade
 ```
 GRADE A (85-100):
-    Minor polish - look at weakest component for final touches
+    Minor polish - look at argmin of phase3.sub_scores for final touches
 
 GRADE B (70-84):
-    Good foundation - focus on 1-2 weakest components
+    Good foundation - focus on 1-2 lowest-scoring components in phase3.sub_scores
 
 GRADE C (55-69):
-    Multiple issues - prioritize by weight (frequency > dynamics > stereo)
+    Multiple issues - prioritize components in phase3.sub_scores with the largest deficits
 
 GRADE D (40-54):
-    Significant work - start with highest-weight weak components
+    Significant work - start with the most critical weak components in phase3.sub_scores
 
 GRADE F (0-39):
     Fundamental issues - likely phase, loudness, or frequency problems
@@ -175,32 +114,29 @@ GRADE F (0-39):
 
 ### Step 2: Identify Weak Components
 ```
-For each component with score < 70:
+For each key in phase3.sub_scores where value < 70:
     Add to priority fix list
 
 Order by:
-    1. Weight (higher weight = higher priority)
-    2. Score (lower score = higher priority)
-    3. Impact (phase > frequency > dynamics > other)
+    1. Score deficit (lower score = higher priority)
+    2. Impact (phase > frequency > dynamics > other)
 ```
 
 ### Step 3: Calculate Improvement Potential
 ```
-For each weak component:
+For each weak component (key in phase3.sub_scores where value < 70):
     Current score: X
     Target score: 75 (minimum "good")
     Improvement needed: 75 - X
 
-    Weight × Improvement needed = Impact on overall score
-
-    Higher impact = Fix first
+    Higher improvement needed = Fix first
 ```
 
 ### Step 4: Generate Action Plan
 ```
 Create prioritized fix list:
-    1. [Highest impact component] - Current: X, Target: 75+
-    2. [Second highest] - Current: Y, Target: 75+
+    1. [Highest deficit component from phase3.sub_scores] - Current: X, Target: 75+
+    2. [Second highest deficit] - Current: Y, Target: 75+
     3. ...
 
 Include estimated score improvement for each fix.
@@ -214,22 +150,16 @@ Include estimated score improvement for each fix.
 ```
 OVERALL MIX QUALITY ANALYSIS
 ============================
-Overall Score: [X]/100
-Grade: [A/B/C/D/F] - [grade_description]
+Overall Score: [overall_score]/100
+Grade: [grade] - [DERIVE grade_description from grade value]
 
-Component Breakdown:
-  [Component Name]     [Score] [Bar Graph]  [Status]
-  frequency_balance    [XX]    ████████░░   [Good/Needs Work]
-  dynamics             [XX]    ███████░░░   [Good/Needs Work]
-  stereo               [XX]    ██████░░░░   [Good/Needs Work]
-  clarity              [XX]    █████░░░░░   [Good/Needs Work]
-  loudness             [XX]    ████████░░   [Good/Needs Work]
-  harmonic             [XX]    ███████░░░   [Good/Needs Work]
-  transients           [XX]    ██████░░░░   [Good/Needs Work]
-  surround             [XX]    █████████░   [Good/Needs Work]
+Component Breakdown (from phase3.sub_scores — keys vary by genre):
+  [component_key_1]     [score] [Bar Graph]  [Status]
+  [component_key_2]     [score] [Bar Graph]  [Status]
+  ... (all present keys)
 
-Weakest Component: [X] ([score])
-Strongest Component: [Y] ([score])
+Weakest Component:  [DERIVE: argmin of phase3.sub_scores] ([score])
+Strongest Component: [DERIVE: argmax of phase3.sub_scores] ([score])
 
 Path to Grade [Next Grade]: Fix [component] (+[X] points potential)
 ```
@@ -240,17 +170,15 @@ Path to Grade [Next Grade]: Fix [component] (+[X] points potential)
 PRIORITY FIX ORDER
 ==================
 
-#1: [Component Name] (Current: [X], Target: 75+)
+#1: [Component Name from phase3.sub_scores] (Current: [X], Target: 75+)
 ────────────────────────────────────────────────
-Weight: [X]%
-Potential Impact: +[Y] overall points
 Status: [description]
 
 SPECIFIC FIX:
 → See [SpecialistPrompt.md] for detailed instructions
 → Quick summary: [one-line fix description]
 
-#2: [Component Name] (Current: [X], Target: 75+)
+#2: [Component Name from phase3.sub_scores] (Current: [X], Target: 75+)
 ────────────────────────────────────────────────
 [Same format...]
 ```
@@ -264,7 +192,7 @@ SPECIFIC FIX:
 STATUS: Mix is professional quality
 
 ACTION:
-- Review weakest_component for final polish
+- Review the argmin of phase3.sub_scores (weakest component) for final polish
 - A/B test against reference tracks
 - Minor tweaks only - don't over-process
 - Focus on mastering-level adjustments
@@ -280,7 +208,7 @@ COMMON FINAL TWEAKS:
 STATUS: Good mix, minor issues
 
 ACTION:
-- Identify the 1-2 weakest components
+- Identify the 1-2 lowest scores in phase3.sub_scores
 - Focus improvement there
 - Don't touch what's working
 - Goal: Push weakest areas above 75
@@ -297,9 +225,9 @@ TYPICAL B→A FIXES:
 STATUS: Multiple issues to address
 
 ACTION:
-- Prioritize by weight × score deficit
-- Fix frequency issues first (20% weight)
-- Then dynamics and stereo (15% each)
+- Prioritize by score deficit (largest gap first) across phase3.sub_scores
+- Fix frequency issues first
+- Then dynamics and stereo
 - Work systematically, re-analyze after each fix
 
 TYPICAL C→B FIXES:
@@ -314,7 +242,7 @@ TYPICAL C→B FIXES:
 STATUS: Major issues present
 
 ACTION:
-- Look for critical failures first
+- Look for critical failures in phase3.sub_scores first
 - Phase issues? Fix before anything else
 - Loudness way off? Address early
 - Then work through frequency and dynamics
@@ -332,7 +260,8 @@ TYPICAL D→C FIXES:
 STATUS: Critical issues throughout
 
 ACTION:
-- Check for phase cancellation first
+- Check phase3.sub_scores for the lowest entries first
+- Check for phase cancellation
 - Check for extreme loudness issues
 - Look for frequency disasters (all mud or all harsh)
 - May need to partially or fully remix
@@ -349,7 +278,11 @@ TYPICAL F→D FIXES:
 
 ## Component-Specific Improvement Tips
 
-### Frequency Balance (20% weight)
+These illustrative tips apply to common sub_scores keys. Actual keys present in
+phase3.sub_scores depend on the detected genre — iterate all present keys and
+apply the matching guidance below where a key matches.
+
+### Frequency Balance
 ```
 IF score < 60:
   - Major spectral issues
@@ -363,7 +296,7 @@ IF score 60-74:
   - Check against reference
 ```
 
-### Dynamics (15% weight)
+### Dynamics
 ```
 IF score < 60:
   - Over-compressed or too dynamic
@@ -375,7 +308,7 @@ IF score 60-74:
   - Adjust limiter/compressor settings
 ```
 
-### Stereo (15% weight)
+### Stereo
 ```
 IF score < 60:
   - Phase issues or width problems
@@ -387,7 +320,7 @@ IF score 60-74:
   - Fine-tune panning and width
 ```
 
-### Clarity (15% weight)
+### Clarity
 ```
 IF score < 60:
   - Elements masking each other
@@ -399,7 +332,7 @@ IF score 60-74:
   - EQ carving needed
 ```
 
-### Loudness (10% weight)
+### Loudness
 ```
 IF score < 60:
   - Way off streaming targets
@@ -411,7 +344,7 @@ IF score 60-74:
   - Minor adjustment needed
 ```
 
-### Harmonic (10% weight)
+### Harmonic
 ```
 IF score < 60:
   - Key detection issues
@@ -423,7 +356,7 @@ IF score 60-74:
   - Check layered elements for key
 ```
 
-### Transients (10% weight)
+### Transients
 ```
 IF score < 60:
   - Attack quality issues
@@ -435,7 +368,7 @@ IF score 60-74:
   - Transient shaper adjustment
 ```
 
-### Surround (5% weight)
+### Surround
 ```
 IF score < 60:
   - Mono compatibility issues
@@ -465,9 +398,9 @@ IF score 60-74:
 OVERALL MIX QUALITY ANALYSIS
 ============================
 Overall Score: 62/100
-Grade: C - Decent mix but several issues to address
+Grade: C - Work Needed (multiple issues to address)
 
-Component Breakdown:
+Component Breakdown (phase3.sub_scores):
   frequency_balance    72    ███████░░░   Good
   dynamics             58    █████░░░░░   Needs Work ⚠️
   stereo               68    ██████░░░░   Needs Work
@@ -477,8 +410,8 @@ Component Breakdown:
   transients           52    █████░░░░░   Needs Work ⚠️
   surround             78    ███████░░░   Good
 
-Weakest Component: transients (52)
-Strongest Component: surround (78)
+Weakest Component:  transients (52)  [argmin of phase3.sub_scores]
+Strongest Component: surround (78)   [argmax of phase3.sub_scores]
 
 Path to Grade B: Fix clarity and transients (+8-12 points potential)
 
@@ -488,8 +421,6 @@ PRIORITY FIX ORDER
 
 #1: CLARITY (Current: 54, Target: 75+)
 ──────────────────────────────────────
-Weight: 15%
-Potential Impact: +3.2 overall points
 Status: High masking risk, elements fighting
 
 SPECIFIC FIX:
@@ -499,8 +430,6 @@ SPECIFIC FIX:
 
 #2: TRANSIENTS (Current: 52, Target: 75+)
 ─────────────────────────────────────────
-Weight: 10%
-Potential Impact: +2.3 overall points
 Status: Soft attack quality, lacking punch
 
 SPECIFIC FIX:
@@ -510,8 +439,6 @@ SPECIFIC FIX:
 
 #3: DYNAMICS (Current: 58, Target: 75+)
 ───────────────────────────────────────
-Weight: 15%
-Potential Impact: +2.6 overall points
 Status: Over-compressed, crest factor low
 
 SPECIFIC FIX:
@@ -529,12 +456,12 @@ After fixing these three components:
 
 ## Do NOT Do
 
-- Don't ignore the weakest component - it's dragging your score down
+- Don't ignore the weakest component (argmin of phase3.sub_scores) - it's dragging your score down
 - Don't focus on high-scoring components - they're already fine
-- Don't try to fix everything at once - prioritize by weight
+- Don't try to fix everything at once - prioritize by score deficit
 - Don't expect Grade A on first mix - iterate and improve
 - Don't over-process to chase score - use ears too
-- Don't ignore the grade description - it tells you what's wrong
+- Don't ignore the grade value - it tells you the overall severity level
 
 ---
 

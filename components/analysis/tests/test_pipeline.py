@@ -127,6 +127,67 @@ class TestPhase1:
         assert result["stereo_correlation"] == 1.0
         assert result["stereo_width"] == 0.0
 
+    def test_emits_new_metric_fields(self, tmp_path):
+        """The fields the expert prompts read must all be present and finite."""
+        from audio_analysis.phases import phase1_universal
+
+        wav = make_test_wav(tmp_path)
+        result = phase1_universal.analyze(wav)
+        for key in [
+            "crest_factor",
+            "key_detection_confidence",
+            "spectral_centroid_hz",
+            "spectral_contrast",
+            "spectral_flatness",
+            "loudness_range_lu",
+            "short_term_max_lufs",
+            "momentary_max_lufs",
+        ]:
+            assert key in result, f"Missing key: {key}"
+            assert isinstance(result[key], float)
+            assert np.isfinite(result[key]), f"{key} not finite"
+
+    def test_transients_shape(self, tmp_path):
+        from audio_analysis.phases import phase1_universal
+
+        wav = make_test_wav(tmp_path)
+        t = phase1_universal.analyze(wav)["transients"]
+        assert set(t.keys()) == {
+            "avg_transient_strength",
+            "transient_count",
+            "transients_per_second",
+        }
+        assert isinstance(t["transient_count"], int)
+        assert t["transient_count"] >= 0
+        assert t["transients_per_second"] >= 0.0
+
+    def test_crest_factor_is_peak_minus_rms_db(self, tmp_path):
+        """crest_factor must equal peak_dbfs − 20log10(rms) (rms is linear)."""
+        from audio_analysis.phases import phase1_universal
+
+        wav = make_test_wav(tmp_path)
+        r = phase1_universal.analyze(wav)
+        expected = r["peak_dbfs"] - 20.0 * np.log10(r["rms"] + 1e-9)
+        assert abs(r["crest_factor"] - expected) < 1e-6
+        assert r["crest_factor"] >= 0.0  # peak is never below RMS
+
+    def test_key_confidence_in_unit_range(self, tmp_path):
+        from audio_analysis.phases import phase1_universal
+
+        wav = make_test_wav(tmp_path)
+        conf = phase1_universal.analyze(wav)["key_detection_confidence"]
+        assert 0.0 <= conf <= 1.0
+
+    def test_loudness_windows_not_below_floor(self, tmp_path):
+        """Momentary/short-term maxima should be ≥ the integrated value (a max
+        of windows can't be quieter than the gated whole-track loudness)."""
+        from audio_analysis.phases import phase1_universal
+
+        wav = make_test_wav(tmp_path, duration_s=5.0)
+        r = phase1_universal.analyze(wav)
+        assert r["loudness_range_lu"] >= 0.0
+        assert r["momentary_max_lufs"] >= r["lufs"] - 1.0
+
 
 # ---------------------------------------------------------------------------
 # Phase 2

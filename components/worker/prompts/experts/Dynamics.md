@@ -1,5 +1,5 @@
 ---
-version: 1.0.0
+version: 2.0.0
 ---
 
 # Audio Analysis Module: Dynamics Specialist
@@ -14,34 +14,44 @@ Analyze the provided audio analysis JSON file to evaluate dynamic range, punch, 
 
 ### Primary Dynamics Data
 ```
-audio_analysis.dynamics.peak_db             → Should be around -1 to -3 dBFS
-audio_analysis.dynamics.rms_db              → Average level
-audio_analysis.dynamics.dynamic_range_db    → Peak - RMS difference
-audio_analysis.dynamics.crest_factor_db     → Same as dynamic range
-audio_analysis.dynamics.is_over_compressed  → True = problem!
-audio_analysis.dynamics.crest_interpretation → 'very_dynamic', 'good', 'compressed', 'over_compressed'
+phase1.peak_dbfs                → Should be around -1 to -3 dBFS
+phase1.rms                      → Linear amplitude; RMS in dB = 20·log10(phase1.rms)
+phase1.crest_factor             → Peak − RMS in dB (higher = more dynamic)
+                                   DERIVE is_over_compressed: phase1.crest_factor < 8
+                                   DERIVE interpretation: <4 squashed, 4–8 over-compressed,
+                                   8–14 healthy, 14–22 dynamic, >22 very wide
 ```
 
 ### Transient Data
 ```
-audio_analysis.transients.transient_count       → How many transients detected
-audio_analysis.transients.transients_per_second → Activity/punch density
-audio_analysis.transients.avg_transient_strength → 0-1 scale (higher = punchier)
-audio_analysis.transients.attack_quality        → 'punchy', 'average', 'soft'
+phase1.transients.transient_count           → How many transients detected
+phase1.transients.transients_per_second     → Activity/punch density
+phase1.transients.avg_transient_strength    → 0–1 scale (higher = punchier)
+                                               DERIVE attack_quality label:
+                                                 ≥0.6  → "punchy"
+                                                 0.3–0.6 → "average"
+                                                 <0.3  → "soft"
 ```
 
 ### Section Data (if available)
 ```
-section_analysis.sections[].avg_rms_db      → Energy per section
-section_analysis.sections[].peak_db         → Peak per section
-section_analysis.sections[].transient_density → Punch per section
+phase7.section_scores[].section_type        → Section role (intro, buildup, drop, breakdown, outro)
+phase7.section_scores[].start_time          → Section start (seconds)
+phase7.section_scores[].end_time            → Section end (seconds)
+phase7.section_scores[].score               → Section quality score (0–100)
+phase7.metadata.energy_contrast_db          → Overall energy contrast between sections (dB)
+phase7.metadata.has_drop                    → Boolean: drop section detected
+phase7.metadata.has_breakdown               → Boolean: breakdown section detected
 ```
+
+Note: Per-section RMS and transient-density values are not emitted by the pipeline.
+Use `phase7.metadata.energy_contrast_db` for overall contrast assessment and
+`phase7.section_scores[].section_type` to identify which sections are present.
 
 ### Clipping Data
 ```
-audio_analysis.clipping.has_clipping        → True = pushed too hard
-audio_analysis.clipping.clip_count          → Severity
-audio_analysis.clipping.clip_positions      → Timestamps of clips
+phase1.clipping_detected                    → True = pushed too hard
+phase1.clipped_sample_count                 → Number of clipped samples (severity)
 ```
 
 ---
@@ -52,7 +62,7 @@ audio_analysis.clipping.clip_positions      → Timestamps of clips
 |--------|--------------|--------------|--------------|
 | Crest factor | 8-12 dB | Over-compressed | Too dynamic |
 | Peak level | -3 to -1 dBFS | Too quiet | Clipping risk |
-| Attack quality | "punchy" | Transients squashed | — |
+| Attack quality (derived) | "punchy" | Transients squashed | — |
 | Transient strength | 0.5-0.8 | Weak punch | — |
 
 ### Section Energy Relationships
@@ -64,6 +74,9 @@ Buildup:    -6 to -10 dB, INCREASING toward drop
 Drop:       0 dB (reference / loudest)
 Breakdown:  -6 to -10 dB from drop
 Outro:      -10 to -14 dB from drop
+
+Use phase7.metadata.energy_contrast_db as the overall contrast metric.
+Target: energy_contrast_db ≥ 4 dB (drop measurably louder than surrounding sections).
 ```
 
 ---
@@ -72,13 +85,13 @@ Outro:      -10 to -14 dB from drop
 
 | Problem | Detection | Severity |
 |---------|-----------|----------|
-| Severely over-compressed | `crest_factor_db < 6` | CRITICAL |
-| Over-compressed | `crest_factor_db < 8` or `is_over_compressed = true` | SEVERE |
-| Weak transients | `attack_quality = "soft"` or `avg_transient_strength < 0.3` | SEVERE |
-| Clipping detected | `has_clipping = true` | SEVERE |
-| Excessive clipping | `clip_count > 100` | CRITICAL |
-| Too dynamic | `crest_factor_db > 16` | MODERATE |
-| Sections same energy | Drop RMS ≈ Breakdown RMS | MODERATE |
+| Severely over-compressed | `phase1.crest_factor < 6` | CRITICAL |
+| Over-compressed | `phase1.crest_factor < 8` (derived: is_over_compressed) | SEVERE |
+| Weak transients | `phase1.transients.avg_transient_strength < 0.3` (derived: "soft" attack) | SEVERE |
+| Clipping detected | `phase1.clipping_detected = true` | SEVERE |
+| Excessive clipping | `phase1.clipped_sample_count > 100` | CRITICAL |
+| Too dynamic | `phase1.crest_factor > 16` | MODERATE |
+| Low section contrast | `phase7.metadata.energy_contrast_db < 4` | MODERATE |
 
 ---
 
@@ -86,50 +99,59 @@ Outro:      -10 to -14 dB from drop
 
 ### Step 1: Check Crest Factor
 ```
-IF crest_factor_db < 6:
+Read phase1.crest_factor.
+
+IF phase1.crest_factor < 6:
     CRITICAL — Over-compressed to the point of damage
     Transients are destroyed, mix is lifeless
 
-IF crest_factor_db < 8:
+IF phase1.crest_factor < 8:
     SEVERE — Over-compressed, lacking punch
     Mix will sound flat and fatiguing
 
-IF crest_factor_db 8-12:
+IF phase1.crest_factor 8-12:
     GOOD — Target range for trance
     Punchy but loud
 
-IF crest_factor_db > 16:
+IF phase1.crest_factor > 16:
     MODERATE — Too dynamic for electronic music
     May sound weak compared to other tracks
 ```
 
 ### Step 2: Check Transients
 ```
-IF attack_quality = "soft":
+Read phase1.transients.avg_transient_strength and derive attack_quality:
+  ≥0.6  → "punchy"
+  0.3–0.6 → "average"
+  <0.3  → "soft"
+
+IF derived attack_quality = "soft" (phase1.transients.avg_transient_strength < 0.3):
     Transients are being squashed
     Check compression attack times — they're too fast
     
-IF avg_transient_strength < 0.3:
+IF phase1.transients.avg_transient_strength < 0.3:
     Weak punch — needs transient enhancement or less compression
 ```
 
 ### Step 3: Check for Clipping
 ```
-IF has_clipping = true:
-    Check clip_positions to identify WHEN clipping occurs
-    Usually during drops or kick hits
+Read phase1.clipping_detected.
+
+IF phase1.clipping_detected = true:
+    Clipping is present — check phase1.clipped_sample_count for severity
+    Usually occurs during drops or kick hits
     Need to reduce level or address peaks earlier in chain
 ```
 
 ### Step 4: Check Section Contrast (if data available)
 ```
-Calculate: drop_rms - breakdown_rms
-    
-IF difference < 4 dB:
+Read phase7.metadata.energy_contrast_db (if phase7 data is present).
+
+IF energy_contrast_db < 4:
     Not enough contrast — drop won't hit
     
-IF difference > 10 dB:
-    Breakdown may be too quiet
+IF energy_contrast_db > 10:
+    Breakdown may be too quiet relative to drop
 ```
 
 ---
@@ -146,13 +168,13 @@ Dynamics Measurements:
   Peak level: [X] dBFS → [interpretation]
   RMS level: [X] dBFS → [interpretation]
   Crest factor: [X] dB → [interpretation]
-  Attack quality: [X] → [interpretation]
+  Attack quality: [derived from phase1.transients.avg_transient_strength] → [interpretation]
   Transient strength: [X] → [interpretation]
 
 Section Energy:
-  Drop: [X] dB (reference)
-  Breakdown: [Y] dB ([difference] from drop) → [OK/needs contrast]
-  Buildup: [Z] dB → [builds properly/flat]
+  Energy contrast: [phase7.metadata.energy_contrast_db] dB → [OK/needs contrast]
+  Drop detected: [phase7.metadata.has_drop]
+  Breakdown detected: [phase7.metadata.has_breakdown]
 ```
 
 ### Prioritized Issues
@@ -197,7 +219,7 @@ WHY THIS MATTERS:
 - "Loud but boring" syndrome
 - Everything at the same level = nothing stands out
 
-DETECTION: crest_factor_db < 8 OR is_over_compressed = true
+DETECTION: phase1.crest_factor < 8 (derived is_over_compressed)
 
 FIX:
 
@@ -228,14 +250,14 @@ EXPECTED RESULT: Crest factor should rise to 8-12dB range
 
 ### Problem: Weak Transients / Soft Attack
 ```
-SEVERE — Attack quality is "soft", transient strength at [X]
+SEVERE — Derived attack quality is "soft" (phase1.transients.avg_transient_strength at [X])
 
 WHY THIS MATTERS:
 - Drums don't hit, kick doesn't punch
 - Mix feels weak even at loud levels
 - No excitement or energy
 
-DETECTION: attack_quality = "soft" OR avg_transient_strength < 0.4
+DETECTION: phase1.transients.avg_transient_strength < 0.4 (derived attack_quality: "soft")
 
 FIX:
 
@@ -269,26 +291,25 @@ RECOMMENDED SETTINGS:
 
 ### Problem: Clipping Detected
 ```
-SEVERE — [X] clips detected at [timestamps]
+SEVERE — phase1.clipped_sample_count = [X] clipped samples
 
 WHY THIS MATTERS:
 - Audible distortion artifacts
 - Indicates limiter is being pushed too hard
 - Usually happens during drops when everything peaks together
 
-DETECTION: has_clipping = true with clip_positions
+DETECTION: phase1.clipping_detected = true; severity from phase1.clipped_sample_count
 
 FIX:
 
-Step 1: Note the clip timestamps
-  → [timestamp 1]: [X:XX]
-  → [timestamp 2]: [X:XX]
-  → Go to these positions and identify what's peaking
+Step 1: Identify when clipping occurs
+  → Clipped samples often cluster during drops or kick hits
+  → Listen through the track to locate the loudest moments
 
 Step 2: Reduce the hottest element
   → Usually kick or bass during drops
   → Reduce by 1-2dB
-  → Recheck clip positions
+  → Recheck phase1.clipped_sample_count after export
 
 Step 3: Add soft clipping before limiter
   → Saturator (Ableton): Soft Clip mode, Drive 0dB, Output -1dB
@@ -298,21 +319,18 @@ Step 3: Add soft clipping before limiter
 Step 4: If still clipping, reduce limiter input
   → Reduce master limiter input by 2-3dB
   → Better to be slightly quieter than to clip
-
-CLIP LOCATIONS TO CHECK:
-  [timestamp]: This is in the [drop/buildup/etc] — check [suspected element]
 ```
 
 ### Problem: Drops Don't Hit Hard Enough
 ```
-MODERATE — Drop RMS only [X] dB louder than breakdown
+MODERATE — phase7.metadata.energy_contrast_db only [X] dB
 
 WHY THIS MATTERS:
 - The drop IS the payoff in trance
 - Without contrast, the drop feels weak
 - Even if the drop is loud, it won't FEEL loud without contrast
 
-DETECTION: Section analysis shows drop RMS < 4dB louder than breakdown
+DETECTION: phase7.metadata.energy_contrast_db < 4
 
 FIX:
 
@@ -349,7 +367,7 @@ WHY THIS MATTERS:
 - Streaming loudness will be low
 - Quiet parts may be inaudible in noisy environments
 
-DETECTION: crest_factor_db > 16 OR sections have huge RMS variation
+DETECTION: phase1.crest_factor > 16 OR phase7.metadata.energy_contrast_db is very high
 
 FIX:
 
@@ -363,8 +381,8 @@ Step 2: Add more limiting
   → Target: 4-6dB gain reduction on peaks
   → Watch crest factor — should approach 10-12dB
 
-Step 3: Check section levels
-  → Breakdowns may be too quiet relative to drops
+Step 3: Check section levels via phase7.section_scores[]
+  → Identify breakdown sections and check if they're too quiet
   → Automate volume to bring them up slightly
   → Target: -6 to -8dB from drop (not -12dB)
 
@@ -436,31 +454,35 @@ Target GR: 4-6dB on peaks (not constant!)
 SECTION ENERGY ANALYSIS
 =======================
 
-| Section    | Time        | RMS (dB) | vs Drop | Transients | Status     |
-|------------|-------------|----------|---------|------------|------------|
-| Intro      | 0:00-0:45   | -18      | -8      | Low        | OK         |
-| Buildup    | 0:45-1:15   | -14      | -4      | Rising     | OK         |
-| Drop 1     | 1:15-2:30   | -10      | Ref     | High       | OK         |
-| Breakdown  | 2:30-3:30   | -16      | -6      | Low        | OK         |
-| Buildup 2  | 3:30-4:00   | -13      | -3      | Rising     | OK         |
-| Drop 2     | 4:00-5:30   | -10      | Ref     | High       | OK         |
-| Outro      | 5:30-6:30   | -18      | -8      | Low        | OK         |
+Overall energy contrast (phase7.metadata.energy_contrast_db): [X] dB
+
+| Section    | Time        | Score  | vs Drop | Status     |
+|------------|-------------|--------|---------|------------|
+| Intro      | 0:00-0:45   | [X]    | —       | OK         |
+| Buildup    | 0:45-1:15   | [X]    | —       | OK         |
+| Drop 1     | 1:15-2:30   | [X]    | Ref     | OK         |
+| Breakdown  | 2:30-3:30   | [X]    | —       | OK         |
+| Buildup 2  | 3:30-4:00   | [X]    | —       | OK         |
+| Drop 2     | 4:00-5:30   | [X]    | Ref     | OK         |
+| Outro      | 5:30-6:30   | [X]    | —       | OK         |
+
+(Use phase7.section_scores[].section_type + start_time/end_time to populate the table.)
 
 CONTRAST CHECK:
-  Drop vs Breakdown: 6dB ✓ (target: 4-8dB)
-  Buildup progression: Rising ✓
+  energy_contrast_db: [X] dB ✓ (target: ≥4 dB)
+  Buildup progression: check phase7.section_scores[] for rising scores
 ```
 
 ---
 
 ## Priority Rules
 
-1. **CRITICAL**: Crest factor < 6 (severely over-compressed)
-2. **CRITICAL**: Excessive clipping (> 100 clips)
-3. **SEVERE**: Crest factor < 8 (over-compressed)
-4. **SEVERE**: Weak transients (soft attack quality)
-5. **MODERATE**: Insufficient section contrast
-6. **MODERATE**: Too dynamic (crest > 16)
+1. **CRITICAL**: phase1.crest_factor < 6 (severely over-compressed)
+2. **CRITICAL**: Excessive clipping (phase1.clipped_sample_count > 100)
+3. **SEVERE**: phase1.crest_factor < 8 (over-compressed)
+4. **SEVERE**: Weak transients (phase1.transients.avg_transient_strength < 0.3, derived: "soft" attack)
+5. **MODERATE**: Insufficient section contrast (phase7.metadata.energy_contrast_db < 4)
+6. **MODERATE**: Too dynamic (phase1.crest_factor > 16)
 
 ---
 
@@ -472,8 +494,9 @@ CONTRAST CHECK:
 PROBLEM: Crest factor at 5.8 dB (target: 8-12 dB)
          Mix is severely squashed — kick has no punch, everything is flat.
          
-CURRENT: crest_factor_db = 5.8, attack_quality = "soft"
-TARGET: crest_factor_db = 10-12, attack_quality = "punchy"
+CURRENT: phase1.crest_factor = 5.8, derived attack_quality = "soft"
+         (phase1.transients.avg_transient_strength = 0.2)
+TARGET: phase1.crest_factor = 10-12, derived attack_quality = "punchy"
 
 IMPACT: Your track will sound weak and fatiguing despite being loud.
         The kick doesn't punch, the drop doesn't hit.
@@ -496,7 +519,7 @@ Step 3: Add transient shaping to drums
 
 EXPECTED RESULT:
   Crest factor: 5.8 → 10-12 dB
-  Attack quality: soft → punchy
+  Derived attack quality: soft → punchy
   Mix will sound more alive, kick will hit, drops will impact
 ```
 
@@ -509,7 +532,7 @@ EXPECTED RESULT:
 - Don't chase loudness at the expense of dynamics
 - Don't say "too compressed" — give the EXACT crest factor and targets
 - Don't forget to specify compressor settings (ratio, attack, release)
-- Don't ignore clip timestamps — they tell you WHAT is clipping
+- Don't ignore phase1.clipped_sample_count — it tells you the severity of clipping
 
 ---
 

@@ -1,12 +1,12 @@
 ---
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Audio Analysis Module: Clarity & Spectral Definition Specialist
 
 ## Your Task
 
-Analyze the provided audio analysis JSON file to evaluate spectral clarity, masking risk, and overall tonal definition. Your goal is to identify frequency masking, spectral mud, and clarity issues, and provide **specific EQ carving and separation techniques**.
+Analyze the provided audio analysis JSON file to evaluate spectral clarity, frequency congestion, and overall tonal definition. Your goal is to identify frequency blending, spectral mud, and clarity issues, and provide **specific EQ carving and separation techniques**.
 
 ---
 
@@ -14,85 +14,83 @@ Analyze the provided audio analysis JSON file to evaluate spectral clarity, mask
 
 ### Primary Clarity Data
 ```
-audio_analysis.clarity.clarity_score         → 0-100 overall clarity rating
-audio_analysis.clarity.spectral_contrast     → Difference between peaks and valleys (dB)
-audio_analysis.clarity.spectral_flatness     → 0.0-1.0 (1.0 = noise-like, 0.0 = tonal)
-audio_analysis.clarity.brightness            → Spectral centroid-based brightness value
-audio_analysis.clarity.brightness_category   → 'dark', 'balanced', 'bright', 'harsh'
-audio_analysis.clarity.masking_risk          → 'low', 'moderate', 'high'
-audio_analysis.clarity.issues[]              → Pre-identified clarity problems
-audio_analysis.clarity.recommendations[]     → Suggested fixes
+phase1.spectral_contrast     → Mean difference between spectral peaks and valleys (dB); higher = clearer element separation
+phase1.spectral_flatness     → 0.0–1.0 (0.0 = purely tonal, →1.0 = noise-like); higher = less defined pitch content
+phase1.spectral_centroid_hz  → Spectral centre of mass in Hz; indicates perceived brightness
 ```
+
+NOTE: There is no pre-computed clarity_score or masking_risk field.
+Derive overall clarity quality from `phase1.spectral_contrast` (higher = better separation)
+and `phase1.spectral_flatness` (higher = noisier / less tonal).
+Derive brightness category from `phase1.spectral_centroid_hz`:
+  < 1500 Hz → dark | 1500–3500 Hz → balanced | 3500–5000 Hz → bright | > 5000 Hz → harsh
 
 ### Supporting Data
 ```
-audio_analysis.frequency.spectral_centroid_hz    → Overall brightness indicator
-audio_analysis.frequency.balance_issues[]        → Frequency-related issues
-audio_analysis.frequency.*_energy                → Band energy percentages
+phase1.bands.sub_bass        → Sub-bass band energy (dB)
+phase1.bands.bass            → Bass band energy (dB)
+phase1.bands.low_mid         → Low-mid band energy (dB)
+phase1.bands.mid             → Mid band energy (dB)
+phase1.bands.upper_mid       → Upper-mid band energy (dB)
+phase1.bands.presence        → Presence band energy (dB)
+phase1.bands.air             → Air band energy (dB)
+phase1.spectral_centroid_hz  → Overall brightness indicator
 ```
 
 ---
 
-## Clarity Score Reference
+## Clarity Assessment Reference
 
-### Score Interpretation
-| Score | Rating | Meaning |
-|-------|--------|---------|
-| 85-100 | Excellent | Professional clarity, elements well separated |
-| 70-84 | Good | Minor masking issues, generally clear |
-| 55-69 | Moderate | Noticeable masking, some elements fighting |
-| 40-54 | Poor | Significant masking, muddy or harsh |
-| 0-39 | Very Poor | Severe clarity issues, elements indistinct |
+### Clarity Interpretation (Derived)
+
+Assess clarity from the combination of `phase1.spectral_contrast` and `phase1.spectral_flatness`:
+
+| Spectral Contrast | Flatness | Clarity Rating | Meaning |
+|-------------------|----------|----------------|---------|
+| > 25 dB | < 0.3 | Excellent | Professional clarity, elements well separated |
+| 20–25 dB | < 0.4 | Good | Minor blending issues, generally clear |
+| 15–20 dB | 0.3–0.5 | Moderate | Noticeable blending, some elements fighting |
+| 10–15 dB | 0.4–0.6 | Poor | Significant congestion, muddy or harsh |
+| < 10 dB | > 0.5 | Very Poor | Severe clarity issues, elements indistinct |
 
 ### Spectral Contrast Interpretation
 ```
-Spectral Contrast measures the difference between spectral peaks and valleys.
+phase1.spectral_contrast measures the mean difference between spectral peaks and valleys.
 
-> 25 dB:  Excellent separation - elements clearly distinct
-20-25 dB: Good - well-defined frequency content
-15-20 dB: Moderate - some frequency overlap
-10-15 dB: Poor - significant masking
-< 10 dB:  Very poor - everything blends together
+> 25 dB:  Excellent separation — elements clearly distinct
+20–25 dB: Good — well-defined frequency content
+15–20 dB: Moderate — some frequency overlap
+10–15 dB: Poor — significant congestion
+< 10 dB:  Very poor — everything blends together
 ```
 
 ### Spectral Flatness Interpretation
 ```
+phase1.spectral_flatness: 0.0–1.0
+
 0.0 = Pure tones (very defined pitches)
 0.5 = Mix of tonal and noise content (typical for music)
 1.0 = Pure noise (no tonal content)
 
 For music:
-< 0.2:   Very tonal - might lack texture/air
-0.2-0.4: Good balance - clear pitches with texture
-0.4-0.6: High noise content - might sound washy
-> 0.6:   Noise-heavy - may lack definition
+< 0.2:   Very tonal — might lack texture/air
+0.2–0.4: Good balance — clear pitches with texture
+0.4–0.6: High noise content — might sound washy
+> 0.6:   Noise-heavy — may lack definition
 ```
 
-### Masking Risk Interpretation
+### Brightness Category (Derived from phase1.spectral_centroid_hz)
 ```
-LOW:      Elements occupy distinct frequency spaces
-          Each element can be heard clearly
-
-MODERATE: Some frequency overlap
-          Certain elements may fight for space
-
-HIGH:     Significant frequency overlap
-          Multiple elements competing in same range
-          Mix will sound congested
-```
-
-### Brightness Category
-```
-DARK:     Spectral centroid < 1500 Hz
+DARK:     phase1.spectral_centroid_hz < 1500 Hz
           Mix sounds muffled, lacks presence
 
-BALANCED: Spectral centroid 1500-3500 Hz
+BALANCED: phase1.spectral_centroid_hz 1500–3500 Hz
           Ideal for most genres
 
-BRIGHT:   Spectral centroid 3500-5000 Hz
+BRIGHT:   phase1.spectral_centroid_hz 3500–5000 Hz
           Modern, upfront sound
 
-HARSH:    Spectral centroid > 5000 Hz
+HARSH:    phase1.spectral_centroid_hz > 5000 Hz
           Fatiguing, possibly painful at volume
 ```
 
@@ -102,64 +100,67 @@ HARSH:    Spectral centroid > 5000 Hz
 
 | Problem | Detection | Severity |
 |---------|-----------|----------|
-| Severe masking | `masking_risk = 'high'` | SEVERE |
-| Very low clarity | `clarity_score < 50` | SEVERE |
-| Harsh sound | `brightness_category = 'harsh'` | MODERATE |
-| Dark/muffled | `brightness_category = 'dark'` | MODERATE |
-| Low spectral contrast | `spectral_contrast < 15` | MODERATE |
-| High flatness | `spectral_flatness > 0.5` | MINOR |
+| Very poor clarity | `phase1.spectral_contrast < 10 dB AND phase1.spectral_flatness > 0.5` | SEVERE |
+| Harsh sound | `phase1.spectral_centroid_hz > 5000 Hz` | MODERATE |
+| Dark/muffled | `phase1.spectral_centroid_hz < 1500 Hz` | MODERATE |
+| Low spectral contrast | `phase1.spectral_contrast < 15 dB` | MODERATE |
+| High flatness | `phase1.spectral_flatness > 0.5` | MINOR |
 
 ---
 
 ## Analysis Steps
 
-### Step 1: Check Overall Clarity Score
+### Step 1: Assess Overall Clarity
 ```
-IF clarity_score < 50:
+Derive clarity quality from phase1.spectral_contrast AND phase1.spectral_flatness:
+
+IF phase1.spectral_contrast < 10 AND phase1.spectral_flatness > 0.5:
     SEVERE — Major clarity issues
     Mix will sound muddy, congested, or undefined
 
-IF clarity_score 50-70:
+IF phase1.spectral_contrast < 15 OR phase1.spectral_flatness > 0.5:
     MODERATE — Some clarity work needed
     Specific elements may be fighting
 
-IF clarity_score > 70:
+IF phase1.spectral_contrast >= 20 AND phase1.spectral_flatness < 0.4:
     Good foundation, may need minor polish
 ```
 
-### Step 2: Evaluate Masking Risk
+### Step 2: Evaluate Spectral Contrast and Congestion
 ```
-IF masking_risk = 'high':
-    Multiple elements competing for same frequencies
+IF phase1.spectral_contrast < 15 dB:
+    Elements blend together — frequency separation is poor
     PRIORITY: Carve EQ space for each element
 
-IF masking_risk = 'moderate':
-    Some overlap - identify which elements clash
+IF phase1.spectral_contrast < 20 dB:
+    Some overlap — identify which frequency bands are crowded
     Surgical EQ cuts will help
 ```
 
 ### Step 3: Check Brightness Balance
 ```
-IF brightness_category = 'dark':
-    Add presence (2-5kHz)
-    Add air (10-20kHz)
+Derive brightness category from phase1.spectral_centroid_hz:
+
+IF phase1.spectral_centroid_hz < 1500:   (DARK)
+    Add presence (2–5 kHz)
+    Add air (10–20 kHz)
     Check for excessive low-pass filtering
 
-IF brightness_category = 'harsh':
-    Cut 3-6kHz (presence/sibilance region)
+IF phase1.spectral_centroid_hz > 5000:   (HARSH)
+    Cut 3–6 kHz (presence/sibilance region)
     Use dynamic EQ on harsh elements
     Consider de-essing synths
 ```
 
-### Step 4: Analyze Spectral Contrast
+### Step 4: Analyze Spectral Contrast Detail
 ```
-IF spectral_contrast < 15dB:
+IF phase1.spectral_contrast < 15 dB:
     Elements blend together too much
     Need more EQ separation
     Check compression settings (too much?)
 
-IF spectral_contrast > 30dB:
-    Very separated - might sound disjointed
+IF phase1.spectral_contrast > 30 dB:
+    Very separated — might sound disjointed
     Consider glue compression or saturation
 ```
 
@@ -171,16 +172,15 @@ IF spectral_contrast > 30dB:
 ```
 CLARITY & SPECTRAL DEFINITION ANALYSIS
 ======================================
-Overall Status: [CLEAR / NEEDS WORK / SEVERE MASKING]
+Overall Status: [CLEAR / NEEDS WORK / SEVERE CONGESTION]
 
 Clarity Metrics:
-  Clarity Score: [X]/100 → [excellent/good/moderate/poor]
-  Spectral Contrast: [X] dB → [interpretation]
-  Spectral Flatness: [X] → [interpretation]
+  Spectral Contrast: [X] dB → [interpretation] (higher = better separation)
+  Spectral Flatness: [X] → [interpretation] (lower = more tonal)
+  Derived Clarity: [excellent/good/moderate/poor/very poor]
 
 Tonal Character:
-  Brightness: [X] Hz centroid → [category]
-  Masking Risk: [low/moderate/high]
+  Brightness: [X] Hz centroid → [dark/balanced/bright/harsh]
 
 Verdict: [Summary of clarity status]
 ```
@@ -210,26 +210,26 @@ EXPECTED RESULT: [What will improve]
 
 ## Common Problems & Specific Fixes
 
-### Problem: High Masking Risk (Elements Fighting)
+### Problem: Very Poor Clarity (Congested Mix)
 ```
-SEVERE — Masking risk is HIGH (clarity score: [X])
+SEVERE — Spectral contrast: [X] dB, flatness: [X]
 
 WHY THIS MATTERS:
 - Multiple elements occupy the same frequency space
-- They "mask" each other - neither sounds clear
+- They blend into each other — neither sounds clear
 - Mix sounds congested, undefined, amateur
 - Turning up individual elements doesn't help
 
-DETECTION: masking_risk = 'high' OR clarity_score < 50
+DETECTION: phase1.spectral_contrast < 10 dB AND phase1.spectral_flatness > 0.5
 
 FIX:
 
 Step 1: Identify the clashing elements
   → Most common clashes:
-    - Kick vs Bass: 60-150Hz
-    - Bass vs Pad: 150-400Hz
-    - Lead vs Pad: 500-2000Hz
-    - Lead vs Vocal: 2-4kHz
+    - Kick vs Bass: 60–150 Hz
+    - Bass vs Pad: 150–400 Hz
+    - Lead vs Pad: 500–2000 Hz
+    - Lead vs Vocal: 2–4 kHz
   → Solo elements to hear which occupy same space
 
 Step 2: Decide who "owns" each frequency
@@ -240,33 +240,33 @@ Step 2: Decide who "owns" each frequency
 Step 3: EQ carving technique
   → On the LESS important element:
     - Find its fundamental frequency
-    - Cut 2-4dB with Q=2-3 (narrow)
+    - Cut 2–4 dB with Q=2–3 (narrow)
   → On the MORE important element:
-    - Optionally boost 1-2dB at same frequency
+    - Optionally boost 1–2 dB at same frequency
 
 Step 4: Use complementary EQ
-  → If bass is boosted at 80Hz, cut kick at 80Hz
-  → If lead owns 2kHz, cut pad at 2kHz
+  → If bass is boosted at 80 Hz, cut kick at 80 Hz
+  → If lead owns 2 kHz, cut pad at 2 kHz
   → Create "puzzle pieces" that fit together
 
 SPECIFIC EQ CARVES:
-  Kick vs Bass (60-100Hz):
-    → Cut bass -3dB at kick's fundamental
-    → Cut kick -2dB at bass's fundamental
+  Kick vs Bass (60–100 Hz):
+    → Cut bass -3 dB at kick's fundamental
+    → Cut kick -2 dB at bass's fundamental
     → Both get space to breathe
 
-  Lead vs Pad (1-3kHz):
-    → Cut pad -4dB at 1.5-2kHz (lead's presence)
-    → Boost lead +1dB at 2kHz
+  Lead vs Pad (1–3 kHz):
+    → Cut pad -4 dB at 1.5–2 kHz (lead's presence)
+    → Boost lead +1 dB at 2 kHz
     → Pad fills sides, lead cuts through center
 
-VERIFY: Re-analyze - masking risk should drop
-        Clarity score should improve by 10-20 points
+VERIFY: Re-analyze — spectral_contrast should rise above 15 dB
+        Spectral flatness should drop below 0.4
 ```
 
 ### Problem: Mix Sounds Dark/Muffled
 ```
-MODERATE — Brightness category: DARK (centroid: [X] Hz)
+MODERATE — Brightness: DARK (phase1.spectral_centroid_hz: [X] Hz)
 
 WHY THIS MATTERS:
 - Mix lacks presence and definition
@@ -274,50 +274,50 @@ WHY THIS MATTERS:
 - Won't compete with commercial releases
 - Elements are hidden by excessive low-end
 
-DETECTION: brightness_category = 'dark' OR spectral_centroid < 1500Hz
+DETECTION: phase1.spectral_centroid_hz < 1500 Hz
 
 FIX:
 
 Step 1: Check for excessive low-pass filtering
   → Many synth presets have LP filters engaged
   → Open filters or bypass them
-  → Target cutoff: 10kHz+ for most elements
+  → Target cutoff: 10 kHz+ for most elements
 
-Step 2: Add presence to lead elements (2-5kHz)
+Step 2: Add presence to lead elements (2–5 kHz)
   → On leads: EQ Eight
     Band: Bell
-    Frequency: 3kHz
-    Gain: +2dB
+    Frequency: 3 kHz
+    Gain: +2 dB
     Q: 1.0
 
-Step 3: Add air/sparkle (8-16kHz)
+Step 3: Add air/sparkle (8–16 kHz)
   → On master or synth bus: EQ Eight
     Band: High Shelf
-    Frequency: 10kHz
-    Gain: +2 to +3dB
+    Frequency: 10 kHz
+    Gain: +2 to +3 dB
 
 Step 4: Check hi-hat and cymbal levels
   → Often too quiet in dark mixes
-  → Boost hi-hat bus by 2-3dB
+  → Boost hi-hat bus by 2–3 dB
 
 Step 5: Use exciter for harmonics
-  → Saturator with HP at 5kHz
+  → Saturator with HP at 5 kHz
   → Adds harmonic content to highs
   → Or: Dedicated exciter plugin
 
 EQ SETTINGS SUMMARY:
-  Leads: +2dB at 3kHz, Q=1.0
-  Pads: +2dB shelf at 8kHz
-  Master: +1.5dB shelf at 10kHz
-  Hi-hats: +2dB overall level
+  Leads: +2 dB at 3 kHz, Q=1.0
+  Pads: +2 dB shelf at 8 kHz
+  Master: +1.5 dB shelf at 10 kHz
+  Hi-hats: +2 dB overall level
 
-VERIFY: Spectral centroid should rise to 2000-3000Hz
-        Brightness should read "balanced" or "bright"
+VERIFY: phase1.spectral_centroid_hz should rise to 2000–3000 Hz
+        Brightness should derive as "balanced" or "bright"
 ```
 
 ### Problem: Mix Sounds Harsh
 ```
-MODERATE — Brightness category: HARSH (centroid: [X] Hz)
+MODERATE — Brightness: HARSH (phase1.spectral_centroid_hz: [X] Hz)
 
 WHY THIS MATTERS:
 - Mix is fatiguing to listen to
@@ -325,7 +325,7 @@ WHY THIS MATTERS:
 - Will cause listener to turn down or skip
 - Often from supersaws, bright synths, distortion
 
-DETECTION: brightness_category = 'harsh' OR spectral_centroid > 5000Hz
+DETECTION: phase1.spectral_centroid_hz > 5000 Hz
 
 FIX:
 
@@ -334,23 +334,23 @@ Step 1: Identify harsh elements
   → Solo elements to find the culprits
   → The "sizzle" or "sibilance" that hurts
 
-Step 2: Cut presence region (3-6kHz)
+Step 2: Cut presence region (3–6 kHz)
   → On harsh elements: EQ Eight
     Band: Bell
-    Frequency: 4-5kHz (sweep to find worst spot)
-    Gain: -2 to -4dB
+    Frequency: 4–5 kHz (sweep to find worst spot)
+    Gain: -2 to -4 dB
     Q: 2.0 (fairly narrow)
 
 Step 3: Use dynamic EQ for surgical control
   → EQ Eight band in dynamic mode:
-    Frequency: 4kHz
-    Threshold: -20dB
+    Frequency: 4 kHz
+    Threshold: -20 dB
     Ratio: 2:1
   → Only cuts when harshness exceeds threshold
 
 Step 4: Add warmth to balance
-  → Boost low-mids slightly (200-400Hz)
-  → +1-2dB shelf at 200Hz
+  → Boost low-mids slightly (200–400 Hz)
+  → +1–2 dB shelf at 200 Hz
   → Balances the cut highs with warmth
 
 Step 5: Consider saturation instead of volume
@@ -359,17 +359,17 @@ Step 5: Consider saturation instead of volume
   → Use on master or harsh element groups
 
 EQ SETTINGS:
-  Harsh synths: -3dB at 4kHz, Q=2.0
-  Master (optional): -1dB at 5kHz, Q=0.7
-  Add warmth: +1dB shelf at 200Hz
+  Harsh synths: -3 dB at 4 kHz, Q=2.0
+  Master (optional): -1 dB at 5 kHz, Q=0.7
+  Add warmth: +1 dB shelf at 200 Hz
 
-VERIFY: Brightness should read "balanced" or "bright"
-        Spectral centroid should drop to 2500-4000Hz
+VERIFY: phase1.spectral_centroid_hz should drop to 2500–4000 Hz
+        Brightness should derive as "balanced" or "bright"
 ```
 
 ### Problem: Low Spectral Contrast
 ```
-MODERATE — Spectral contrast at [X] dB (target: >20dB)
+MODERATE — phase1.spectral_contrast at [X] dB (target: >20 dB)
 
 WHY THIS MATTERS:
 - Everything blends together
@@ -377,14 +377,14 @@ WHY THIS MATTERS:
 - Mix sounds "flat" and undefined
 - Usually from over-compression or poor EQ
 
-DETECTION: spectral_contrast < 15dB
+DETECTION: phase1.spectral_contrast < 15 dB
 
 FIX:
 
 Step 1: Check master compression
   → Over-compression kills contrast
   → Reduce ratio or increase threshold
-  → Target: 2-4dB max reduction
+  → Target: 2–4 dB max reduction
 
 Step 2: Check limiter settings
   → Heavy limiting flattens dynamics
@@ -400,16 +400,16 @@ Step 4: Use multiband dynamics
 
 Step 5: Add transient emphasis
   → Transient shaper on drums/percussive elements
-  → Attack +10-20%, Sustain normal
+  → Attack +10–20%, Sustain normal
   → Creates peaks that stand out
 
-VERIFY: Spectral contrast should rise above 18dB
+VERIFY: phase1.spectral_contrast should rise above 18 dB
         Individual elements should be more distinct
 ```
 
 ### Problem: High Spectral Flatness (Washy Sound)
 ```
-MINOR — Spectral flatness at [X] (target: 0.2-0.4)
+MINOR — phase1.spectral_flatness at [X] (target: 0.2–0.4)
 
 WHY THIS MATTERS:
 - Mix has noise-like quality
@@ -417,17 +417,17 @@ WHY THIS MATTERS:
 - Sounds washy or undefined
 - Often from excessive reverb or noise layers
 
-DETECTION: spectral_flatness > 0.5
+DETECTION: phase1.spectral_flatness > 0.5
 
 FIX:
 
 Step 1: Check reverb levels
   → Excessive reverb creates noise-like spectrum
-  → Reduce reverb send levels by 3-6dB
+  → Reduce reverb send levels by 3–6 dB
   → Or: Shorten reverb decay times
 
 Step 2: High-pass reverb returns
-  → EQ on reverb return: HP at 300-400Hz
+  → EQ on reverb return: HP at 300–400 Hz
   → Keeps low end clear and defined
 
 Step 3: Check noise/texture layers
@@ -442,7 +442,7 @@ Step 5: Add tonal elements
   → Clear melodic content balances noise
   → Ensure leads and bass have defined pitch
 
-VERIFY: Spectral flatness should drop below 0.4
+VERIFY: phase1.spectral_flatness should drop below 0.4
         Mix should sound more defined and "focused"
 ```
 
@@ -456,62 +456,63 @@ ELEMENT FREQUENCY OWNERSHIP
 
 Element      | Primary Range | Cut Others Here
 -------------|---------------|----------------
-Sub          | 30-60 Hz      | HP everything else
-Kick         | 50-100 Hz     | Cut bass slightly
-Bass         | 80-200 Hz     | Cut pads/leads here
-Snare        | 150-250 Hz    | Carve around bass
-Lead         | 1-4 kHz       | Cut pads here
+Sub          | 30–60 Hz      | HP everything else
+Kick         | 50–100 Hz     | Cut bass slightly
+Bass         | 80–200 Hz     | Cut pads/leads here
+Snare        | 150–250 Hz    | Carve around bass
+Lead         | 1–4 kHz       | Cut pads here
 Pads         | Fill gaps     | Cut to make room
-Hi-hats      | 8-15 kHz      | Own the highs
-Air/FX       | 10-20 kHz     | Shelf boosts only
+Hi-hats      | 8–15 kHz      | Own the highs
+Air/FX       | 10–20 kHz     | Shelf boosts only
 
 CARVING TECHNIQUE:
   1. Identify two clashing elements
-  2. Find where they overlap (usually 100-500Hz or 1-3kHz)
-  3. Cut the less important element by 2-4dB
-  4. Use Q=2-3 for narrow cuts
-  5. Optionally boost the winner by 1dB
+  2. Find where they overlap (usually 100–500 Hz or 1–3 kHz)
+  3. Cut the less important element by 2–4 dB
+  4. Use Q=2–3 for narrow cuts
+  5. Optionally boost the winner by 1 dB
 ```
 
 ---
 
 ## Priority Rules
 
-1. **SEVERE**: High masking risk - elements fighting
-2. **SEVERE**: Very low clarity score (<50)
-3. **MODERATE**: Harsh brightness - fatiguing sound
-4. **MODERATE**: Dark/muffled - lacks presence
-5. **MODERATE**: Low spectral contrast (<15dB)
-6. **MINOR**: High spectral flatness (>0.5)
+1. **SEVERE**: Very poor clarity — `phase1.spectral_contrast < 10 dB AND phase1.spectral_flatness > 0.5`
+2. **SEVERE**: Critically low spectral contrast alone — `phase1.spectral_contrast < 10 dB`
+3. **MODERATE**: Harsh brightness — fatiguing sound (`phase1.spectral_centroid_hz > 5000 Hz`)
+4. **MODERATE**: Dark/muffled — lacks presence (`phase1.spectral_centroid_hz < 1500 Hz`)
+5. **MODERATE**: Low spectral contrast (`phase1.spectral_contrast < 15 dB`)
+6. **MINOR**: High spectral flatness (`phase1.spectral_flatness > 0.5`)
 
 ---
 
 ## Example Output Snippet
 
 ```
-[SEVERE] High Masking Risk Detected
-───────────────────────────────────
-PROBLEM: Masking risk is HIGH (clarity score: 45/100)
-         Multiple elements competing in the 200-500Hz range.
+[SEVERE] Very Poor Clarity — Congested Mix
+───────────────────────────────────────────
+PROBLEM: Spectral contrast is only 8 dB (phase1.spectral_contrast = 8.2)
+         and flatness is 0.61 (phase1.spectral_flatness = 0.61) — elements
+         are blending heavily in the 200–500 Hz range.
 
-CURRENT: Masking risk = high, clarity = 45
-TARGET: Masking risk = low, clarity > 70
+CURRENT: phase1.spectral_contrast = 8.2 dB, phase1.spectral_flatness = 0.61
+TARGET:  phase1.spectral_contrast > 18 dB, phase1.spectral_flatness < 0.4
 
 IMPACT:
-- Bass and pads are fighting at 200-400Hz
+- Bass and pads are fighting at 200–400 Hz
 - Neither element sounds clear
 - Mix sounds muddy and undefined
 
 FIX:
 
 Step 1: Carve EQ space for bass
-        → On bass: Own the 80-200Hz range
-        → Cut pad -4dB at 250Hz, Q=2
+        → On bass: Own the 80–200 Hz range
+        → Cut pad -4 dB at 250 Hz, Q=2
 
 Step 2: Carve EQ space for pads
-        → On pads: Own the 500-800Hz range
-        → HP pads at 200Hz (remove low content)
-        → Cut -3dB at 300Hz to remove mud
+        → On pads: Own the 500–800 Hz range
+        → HP pads at 200 Hz (remove low content)
+        → Cut -3 dB at 300 Hz to remove mud
 
 Step 3: Verify separation
         → Solo bass + pads together
@@ -519,12 +520,12 @@ Step 3: Verify separation
         → Neither should "swallow" the other
 
 EQ SETTINGS:
-  Bass track: -2dB at 400Hz, Q=1.5
-  Pad track: HP at 200Hz, -4dB at 250Hz, Q=2
+  Bass track: -2 dB at 400 Hz, Q=1.5
+  Pad track: HP at 200 Hz, -4 dB at 250 Hz, Q=2
 
 EXPECTED RESULT:
-  Masking risk drops to moderate/low
-  Clarity score rises to 65+
+  Spectral contrast rises above 15 dB
+  Spectral flatness drops below 0.4
   Both bass and pads clearly audible
 ```
 
@@ -535,7 +536,7 @@ EXPECTED RESULT:
 - Don't give vague advice like "improve clarity" — specify exact Hz and dB
 - Don't treat all elements equally — prioritize what should be heard
 - Don't forget that carving is subtractive — cut before boosting
-- Don't ignore the masking risk flag — it's highly actionable
+- Don't ignore low spectral contrast — it directly signals frequency congestion
 - Don't over-brighten to fix darkness — balance is key
 - Don't EQ in solo — always check in the full mix context
 

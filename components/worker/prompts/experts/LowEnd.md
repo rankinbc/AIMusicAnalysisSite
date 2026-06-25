@@ -14,42 +14,40 @@ Analyze the provided audio analysis JSON file to evaluate the kick, bass, and su
 
 ### Frequency Data
 ```
-audio_analysis.frequency.sub_bass_energy    → Target: 5-10% (20-60Hz)
-audio_analysis.frequency.bass_energy        → Target: 20-30% (60-250Hz)
-audio_analysis.frequency.low_mid_energy     → Target: 10-15% (250-500Hz) — MUD ZONE
-audio_analysis.frequency.spectral_centroid_hz → Overall brightness (low = bass-heavy)
-audio_analysis.frequency.balance_issues     → Pre-identified problems
-audio_analysis.frequency.problem_frequencies → Specific Hz ranges with issues
+phase1.bands.sub_bass        → Band level in dBFS (20–60 Hz). Felt, not heard — keep mono only.
+phase1.bands.bass            → Band level in dBFS (60–250 Hz). Primary kick and bass weight.
+phase1.bands.low_mid         → Band level in dBFS (250–500 Hz) — MUD ZONE. Watch carefully.
+phase1.spectral_centroid_hz  → Overall brightness (low value = bass-heavy mix)
 ```
 
 ### Stereo/Phase Data (Critical for Low End)
 ```
-audio_analysis.stereo.correlation           → MUST be > 0.3 for mono-safe bass
-audio_analysis.stereo.is_mono_compatible    → MUST be true
-audio_analysis.stereo.width_estimate        → Low end should be narrow/mono
+phase1.stereo_correlation   → MUST be > 0.3 for mono-safe bass
+phase1.mono_compatibility   → Float 0.0–1.0; MUST be ≥ 0.7 (< 0.7 = mono-unsafe)
+phase1.stereo_width         → Low end should be narrow; elevated width in bass range = problem
 ```
 
 ### Stem Data (if available)
 ```
-stem_analysis.stems[kick].peak_db           → Kick level
-stem_analysis.stems[kick].frequency_profile → Kick frequency distribution
-stem_analysis.stems[bass].peak_db           → Bass level
-stem_analysis.stems[bass].frequency_profile → Bass frequency distribution
+phase4.stems.per_stem.kick.peak_db                 → Kick level
+phase4.stems.per_stem.kick.dominant_frequencies_hz → Kick dominant frequency peaks
+phase4.stems.per_stem.bass.peak_db                 → Bass level
+phase4.stems.per_stem.bass.dominant_frequencies_hz → Bass dominant frequency peaks
 
-stem_analysis.clashes[]                     → Frequency clashes between elements
-  .stem1, .stem2                            → Which elements clash
-  .frequency_range                          → Exact Hz range
-  .severity                                 → How bad
-  .recommendation                           → Suggested fix
+phase4.clashes[]                             → Frequency clashes between elements
+  .stems                                     → Which elements clash
+  .frequency_range                           → Exact Hz range
+  .severity                                  → How bad
 
-stem_analysis.masking_issues[]              → Where one element hides another
+phase4.stems.clash_matrix[]                  → Per-stem detailed clash matrix
 ```
 
 ### Section Data (if available)
 ```
-section_analysis.sections[].type            → 'drop', 'breakdown', etc.
-section_analysis.sections[].avg_rms_db      → Energy per section
-section_analysis.all_issues[]               → Look for 'low_end_buildup' issues
+phase7.section_scores[].section_type     → 'drop', 'breakdown', etc.
+phase7.section_scores[].score            → Per-section arrangement score
+phase7.metadata.energy_contrast_db       → Track-level drop-vs-breakdown energy contrast (dB)
+phase7.issues[]                          → Look for 'low_end_buildup' issues
 ```
 
 ---
@@ -58,7 +56,7 @@ section_analysis.all_issues[]               → Look for 'low_end_buildup' issue
 
 | Range | Frequency | Target Energy | Role |
 |-------|-----------|---------------|------|
-| Sub-bass | 20-60Hz | 5-10% | Felt, not heard. MONO ONLY. |
+| Sub-bass | 20-60Hz | Moderate dBFS level | Felt, not heard. MONO ONLY. |
 | Kick fundamental | 50-80Hz | Clear, punchy | Should cut through bass |
 | Kick body | 80-150Hz | Controlled | Not boomy |
 | Kick click | 2-5kHz | Present | Definition and attack |
@@ -78,14 +76,14 @@ NEITHER should dominate the other's range
 
 | Problem | Detection | Severity |
 |---------|-----------|----------|
-| Phase cancellation in low end | `correlation < 0` | CRITICAL |
-| Mono compatibility failure | `is_mono_compatible = false` | CRITICAL |
-| Severe bass buildup | `bass_energy > 40%` | CRITICAL |
-| Kick/bass frequency clash | `clashes` in 50-150Hz | SEVERE |
-| Low-mid mud | `low_mid_energy > 20%` | SEVERE |
-| Sub-bass overwhelming | `sub_bass_energy > 15%` | MODERATE |
-| Weak bass | `bass_energy < 15%` | MODERATE |
-| Bass too wide | Stereo bass below 150Hz | MODERATE |
+| Phase cancellation in low end | `phase1.stereo_correlation < 0` | CRITICAL |
+| Mono compatibility failure | `phase1.mono_compatibility < 0.7` | CRITICAL |
+| Severe bass buildup | `phase1.bands.bass` abnormally elevated | CRITICAL |
+| Kick/bass frequency clash | `phase4.clashes[]` in 50–150 Hz | SEVERE |
+| Low-mid mud | `phase1.bands.low_mid` elevated near or above bass band level | SEVERE |
+| Sub-bass overwhelming | `phase1.bands.sub_bass` elevated above target dB range | MODERATE |
+| Weak bass | `phase1.bands.bass` below expected dB range | MODERATE |
+| Bass too wide | `phase1.stereo_width` elevated; `phase1.stereo_correlation` below 0.5 | MODERATE |
 
 ---
 
@@ -93,38 +91,39 @@ NEITHER should dominate the other's range
 
 ### Step 1: Check Mono Compatibility (MOST CRITICAL)
 ```
-IF correlation < 0.3:
+IF phase1.stereo_correlation < 0.3:
     Low end has phase issues
     Will collapse or disappear on club systems and phones
     FIX IMMEDIATELY
 
-IF is_mono_compatible = false:
+IF phase1.mono_compatibility < 0.7:
     Bass is not safe for playback
     MUST address before any other fixes
 ```
 
 ### Step 2: Check Frequency Balance
 ```
-Sub-bass (20-60Hz):
-    Target: 5-10%
-    Too high (>15%): Overwhelming, muddy
-    Too low (<3%): Thin, no weight
+Sub-bass (phase1.bands.sub_bass, 20–60 Hz):
+    Typical target: moderate dBFS level (felt, not heard)
+    Too high: Overwhelming sub presence, muddy mix
+    Too low: Thin, no felt weight
 
-Bass (60-250Hz):
-    Target: 20-30%
-    Too high (>40%): Boomy, masking everything
-    Too low (<15%): Thin, weak low end
+Bass (phase1.bands.bass, 60–250 Hz):
+    Typical target: dominant low-end band in a trance mix
+    Too high (significantly elevated): Boomy, masking kick and mids
+    Too low: Thin, weak low end
 
-Low-mids (250-500Hz):
-    Target: 10-15%
-    Too high (>20%): MUD ZONE — primary cause of unclear mixes
+Low-mids (phase1.bands.low_mid, 250–500 Hz):
+    Should sit ~4–6 dB below bass band level
+    Too high (near or above bass band level): MUD ZONE — primary cause of unclear mixes
 ```
 
 ### Step 3: Check for Clashes
 ```
-Look for clashes in stem_analysis.clashes[] where:
+Look for clashes in phase4.clashes[] where:
     frequency_range includes 50-200Hz
-    stem1 or stem2 is kick or bass
+    stems includes kick or bass
+For per-stem detail, check phase4.stems.clash_matrix[].
 
 Common clash points:
     50-80Hz: Kick fundamental vs sub-bass
@@ -135,9 +134,10 @@ Common clash points:
 ### Step 4: Check Section Differences
 ```
 IF section data available:
-    Drop bass_energy should be significantly higher than breakdown
+    Drop section phase7.section_scores[].score should exceed breakdown score (higher = stronger arrangement)
+    For energy contrast, check phase7.metadata.energy_contrast_db (target > 6 dB for impact)
     Breakdown should have LESS low end (kick usually removed)
-    Check for 'low_end_buildup' issues in breakdowns
+    Check for 'low_end_buildup' issues in phase7.issues[]
 ```
 
 ---
@@ -151,13 +151,13 @@ LOW END ANALYSIS
 Overall Status: [SOLID / NEEDS WORK / CRITICAL ISSUES]
 
 Low End Balance:
-  Sub-bass (20-60Hz): [X]% → [assessment]
-  Bass (60-250Hz): [X]% → [assessment]
-  Low-mids (250-500Hz): [X]% → [assessment] ← MUD ZONE
+  Sub-bass (20–60 Hz, phase1.bands.sub_bass): [X dBFS] → [assessment]
+  Bass (60–250 Hz, phase1.bands.bass): [X dBFS] → [assessment]
+  Low-mids (250–500 Hz, phase1.bands.low_mid): [X dBFS] → [assessment] ← MUD ZONE
 
 Mono Compatibility:
-  Correlation: [X] → [SAFE / AT RISK / CRITICAL]
-  Mono compatible: [Yes/No]
+  Stereo correlation (phase1.stereo_correlation): [X] → [SAFE / AT RISK / CRITICAL]
+  Mono compatible (phase1.mono_compatibility ≥ 0.7): [Yes/No]
   
 Kick/Bass Relationship:
   [Assessment based on clash data]
@@ -201,7 +201,8 @@ WHY THIS MATTERS:
 - Low end sounds muddy and undefined
 - Kick lacks punch, bass lacks weight
 
-DETECTION: Look for clashes in stem_analysis with frequency_range 50-150Hz
+DETECTION: Look for clashes in phase4.clashes[] where frequency_range includes 50-150Hz
+           and stems includes kick or bass
 
 FIX (Choose one or combine):
 
@@ -242,7 +243,7 @@ WHY THIS MATTERS:
 - On phone speakers and laptops, bass will be weak or gone
 - This is a dealbreaker for professional release
 
-DETECTION: correlation < 0.3 OR is_mono_compatible = false
+DETECTION: phase1.stereo_correlation < 0.3 OR phase1.mono_compatibility < 0.7
 
 FIX:
 
@@ -263,24 +264,24 @@ Step 2: Make bass mono below 150Hz
     On bass synth, disable stereo widening/chorus below 150Hz
 
 Step 3: Check for phase issues
-  → If correlation is NEGATIVE, you have inverted phase
+  → If phase1.stereo_correlation is NEGATIVE, you have inverted phase
   → Check layered samples — one may be phase-inverted
   → Use Utility "Phz-L" or "Phz-R" to flip phase and test
 
-VERIFY: After fix, correlation should be > 0.5 in low end
+VERIFY: After fix, phase1.stereo_correlation should be > 0.5 in low end
         Press Mono button — bass should NOT disappear
 ```
 
 ### Problem: Low End Sounds Muddy
 ```
-SEVERE — Low-mid energy at [X]% (target: 10-15%)
+SEVERE — Low-mid band (phase1.bands.low_mid) elevated above expected level
 
 WHY THIS MATTERS:
 - 200-400Hz is the "mud zone" where clarity goes to die
 - Multiple elements pile up here: bass harmonics, kick body, pads, synths
 - Results in undefined, boomy, amateur-sounding low end
 
-DETECTION: low_mid_energy > 20% OR balance_issues mentions "mud"
+DETECTION: phase1.bands.low_mid elevated near or above phase1.bands.bass level
 
 FIX:
 
@@ -313,14 +314,14 @@ EQ SETTINGS SUMMARY:
 
 ### Problem: Sub-Bass Is Overwhelming
 ```
-MODERATE — Sub-bass energy at [X]% (target: 5-10%)
+MODERATE — Sub-bass band (phase1.bands.sub_bass) elevated above target dB level
 
 WHY THIS MATTERS:
 - Too much sub makes the mix sound boomy and undefined
 - Eats up headroom, limits overall loudness
 - Doesn't translate to small speakers (wasted energy)
 
-DETECTION: sub_bass_energy > 15% OR bass_energy > 40%
+DETECTION: phase1.bands.sub_bass abnormally elevated OR phase1.bands.bass abnormally elevated
 
 FIX:
 
@@ -352,7 +353,7 @@ WHY THIS MATTERS:
 - Weak kick = weak track, regardless of other elements
 - Often caused by over-compression or bass masking
 
-DETECTION: transients.attack_quality = "soft" OR kick stem has low peak_db
+DETECTION: phase1.transients.avg_transient_strength below expected OR phase4.stems.per_stem.kick.peak_db low
 
 FIX:
 
@@ -383,14 +384,14 @@ Step 4: EQ for click definition
 
 ### Problem: Drop Has No Impact
 ```
-SEVERE — Section analysis shows drop has similar bass energy to breakdown
+SEVERE — Section analysis shows drop has similar energy to breakdown
 
 WHY THIS MATTERS:
 - The drop IS the payoff in trance music
 - If low end doesn't change, drop feels weak
 - Contrast creates impact
 
-DETECTION: Drop bass_energy within 3dB of breakdown
+DETECTION: phase7.metadata.energy_contrast_db below 3 dB (insufficient drop-vs-breakdown contrast)
 
 FIX:
 
@@ -439,22 +440,22 @@ BASS:
 SUB:
   [ ] High-passed at 25-30Hz (no rumble)
   [ ] Mono (absolutely no stereo)
-  [ ] Not overwhelming (5-10% of spectrum)
+  [ ] Not overwhelming (phase1.bands.sub_bass within expected dB range)
 
 OVERALL:
-  [ ] Correlation > 0.3 (mono compatible)
-  [ ] Low-mid energy < 18% (no mud)
-  [ ] Drop bass > breakdown bass (contrast)
+  [ ] phase1.stereo_correlation > 0.3 AND phase1.mono_compatibility ≥ 0.7 (mono-safe)
+  [ ] phase1.bands.low_mid not elevated above expected (no mud)
+  [ ] phase7.metadata.energy_contrast_db > 6 dB (drop-vs-breakdown contrast)
 ```
 
 ---
 
 ## Priority Rules
 
-1. **CRITICAL**: Phase/mono issues (correlation < 0.3)
+1. **CRITICAL**: Phase/mono issues (phase1.stereo_correlation < 0.3)
 2. **CRITICAL**: Stereo bass below 150Hz
 3. **SEVERE**: Kick/bass frequency clash
-4. **SEVERE**: Low-mid mud (>20% energy)
+4. **SEVERE**: Low-mid mud (phase1.bands.low_mid elevated)
 5. **MODERATE**: Sub-bass balance issues
 6. **MODERATE**: Weak kick punch
 
@@ -468,8 +469,8 @@ OVERALL:
 PROBLEM: Stereo correlation at 0.18 (must be > 0.3)
          Low end will collapse on club systems and phones.
          
-CURRENT: correlation = 0.18
-TARGET: correlation > 0.5
+CURRENT: phase1.stereo_correlation = 0.18
+TARGET: phase1.stereo_correlation > 0.5
 
 FIX:
 

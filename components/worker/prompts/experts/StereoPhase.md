@@ -14,21 +14,25 @@ Analyze the provided audio analysis JSON file to evaluate stereo imaging, width,
 
 ### Primary Stereo Data
 ```
-audio_analysis.stereo.is_stereo             → Should be true for most mixes
-audio_analysis.stereo.correlation           → -1 to +1 scale (CRITICAL!)
-audio_analysis.stereo.width_estimate        → 0-100% stereo width
-audio_analysis.stereo.is_mono_compatible    → MUST be true for release
-audio_analysis.stereo.phase_safe            → True if correlation > 0
-audio_analysis.stereo.width_category        → 'mono', 'narrow', 'good', 'wide', 'very_wide', 'out_of_phase'
-audio_analysis.stereo.issues[]              → Pre-identified problems
+phase1.stereo_width                         → 0.0–1.0 float; > 0 = stereo signal present (DERIVE is_stereo: phase1.stereo_width > 0)
+phase1.stereo_correlation                   → -1 to +1 scale (CRITICAL!)
+phase1.stereo_width                         → 0.0–1.0 stereo width (0.0 = mono, 1.0 = fully wide)
+DERIVE mono_compat_risk: phase1.mono_compatibility < 0.7  → at-risk when true; MUST stay false for release
+DERIVE phase_safe: phase1.stereo_correlation > 0          → phase-safe when true
+DERIVE width_category (in-prompt):
+  - out_of_phase: phase1.stereo_correlation < 0
+  - very_wide:    phase1.stereo_correlation < 0.2  AND phase1.stereo_width > 0.6
+  - wide:         phase1.stereo_correlation < 0.3  AND phase1.stereo_width > 0.4
+  - good:         phase1.stereo_correlation 0.3–0.7
+  - narrow:       phase1.stereo_correlation > 0.7  AND phase1.stereo_width > 0.05
+  - mono:         phase1.stereo_width < 0.05       OR  phase1.stereo_correlation > 0.95
 ```
 
 ### Stem Data (if available)
 ```
-stem_analysis.stems[].is_mono               → Is this stem mono?
-stem_analysis.stems[].panning               → -1.0 (left) to +1.0 (right)
-stem_analysis.stems[].width_estimate        → Per-stem width
-stem_analysis.stems[].correlation           → Per-stem phase coherence
+phase4.stems.per_stem[].is_mono             → Is this stem mono?
+phase4.stems.per_stem[].pan_estimate        → -1.0 (left) to +1.0 (right)
+phase4.stems.per_stem[].stereo_width        → Per-stem width (0.0–1.0)
 ```
 
 ---
@@ -59,13 +63,13 @@ This means: Wide stereo image that survives mono playback
 
 | Problem | Detection | Severity |
 |---------|-----------|----------|
-| Phase cancellation | `correlation < 0` | CRITICAL |
-| Will collapse in mono | `correlation < 0.15` | CRITICAL |
-| Mono compatibility at risk | `is_mono_compatible = false` | CRITICAL |
-| Mix is mono/very narrow | `correlation > 0.9` or `width_category = 'mono'` | SEVERE |
-| Mix is too wide (risky) | `correlation < 0.2` AND `is_mono_compatible = true` | MODERATE |
-| Bass has stereo content | Bass stem `is_mono = false` | SEVERE |
-| No stereo spread | All stems `panning = 0` | MODERATE |
+| Phase cancellation | `phase1.stereo_correlation < 0` | CRITICAL |
+| Will collapse in mono | `phase1.stereo_correlation < 0.15` | CRITICAL |
+| Mono compatibility at risk | `phase1.mono_compatibility < 0.7` | CRITICAL |
+| Mix is mono/very narrow | `phase1.stereo_correlation > 0.9` or `phase1.stereo_width < 0.05` | SEVERE |
+| Mix is too wide (risky) | `phase1.stereo_correlation < 0.2` AND `phase1.mono_compatibility >= 0.7` | MODERATE |
+| Bass has stereo content | Bass `phase4.stems.per_stem[].is_mono = false` | SEVERE |
+| No stereo spread | All `phase4.stems.per_stem[].pan_estimate = 0` | MODERATE |
 
 ---
 
@@ -73,27 +77,27 @@ This means: Wide stereo image that survives mono playback
 
 ### Step 1: Check for Phase Issues (MOST CRITICAL)
 ```
-IF correlation < 0:
+IF phase1.stereo_correlation < 0:
     CRITICAL — Active phase cancellation
     Sound will partially or completely disappear in mono
     FIX IMMEDIATELY before any other work
 
-IF correlation < 0.2 AND is_mono_compatible = false:
+IF phase1.stereo_correlation < 0.2 AND phase1.mono_compatibility < 0.7:
     CRITICAL — Mix will not translate to mono systems
     Club subs, phones, tablets will have issues
 ```
 
 ### Step 2: Evaluate Stereo Width
 ```
-IF correlation > 0.9 OR width_category in ['mono', 'narrow']:
-    Mix is too narrow
+IF phase1.stereo_correlation > 0.9 OR phase1.stereo_width < 0.05:
+    Mix is too narrow (derived width_category: mono/narrow)
     Sounds flat and amateur
     Needs stereo enhancement
 
-IF correlation between 0.3 and 0.7:
+IF phase1.stereo_correlation between 0.3 and 0.7:
     IDEAL — Good stereo width with mono safety
 
-IF correlation < 0.25 AND is_mono_compatible = true:
+IF phase1.stereo_correlation < 0.25 AND phase1.mono_compatibility >= 0.7:
     Very wide but risky
     Verify mono compatibility carefully
 ```
@@ -128,13 +132,13 @@ STEREO & PHASE ANALYSIS
 Overall Status: [PHASE-SAFE / CHECK MONO / CRITICAL PHASE ISSUES]
 
 Stereo Measurements:
-  Correlation: [X] → [interpretation]
-  Width estimate: [X]% → [interpretation]
-  Width category: [X]
+  Correlation (phase1.stereo_correlation): [X] → [interpretation]
+  Width (phase1.stereo_width): [X] → [interpretation]
+  Width category (derived): [mono/narrow/good/wide/very_wide/out_of_phase]
   
 Mono Compatibility:
-  Is mono compatible: [Yes/No]
-  Phase safe: [Yes/No]
+  Mono-compat risk (phase1.mono_compatibility < 0.7): [Yes/No]
+  Phase safe (phase1.stereo_correlation > 0): [Yes/No]
   
 Verdict: [Summary of stereo status]
 ```
@@ -166,7 +170,7 @@ TEST: [How to verify the fix worked]
 
 ### Problem: Phase Cancellation (CRITICAL)
 ```
-CRITICAL — Correlation at [X] (negative = phase cancellation)
+CRITICAL — phase1.stereo_correlation at [X] (negative = phase cancellation)
 
 WHY THIS MATTERS:
 - Parts of your mix will DISAPPEAR in mono
@@ -174,7 +178,7 @@ WHY THIS MATTERS:
 - Phone and tablet speakers will sound wrong
 - This is a DEALBREAKER for professional release
 
-DETECTION: correlation < 0 OR phase_safe = false
+DETECTION: phase1.stereo_correlation < 0
 
 FIX:
 
@@ -199,13 +203,13 @@ Step 3: Check stereo bass/sub
   → Bass with stereo content causes phase issues
   → Make bass mono below 150Hz (see Low End prompt)
 
-VERIFY: After fix, correlation should be positive (> 0)
+VERIFY: After fix, phase1.stereo_correlation should be positive (> 0)
         In mono, nothing should disappear
 ```
 
 ### Problem: Mix Collapses in Mono
 ```
-CRITICAL — is_mono_compatible = false (correlation [X])
+CRITICAL — phase1.mono_compatibility < 0.7 (phase1.stereo_correlation: [X])
 
 WHY THIS MATTERS:
 - Your mix will sound completely different (worse) on:
@@ -215,7 +219,7 @@ WHY THIS MATTERS:
   - Laptop speakers
   - Any "check in mono" scenario
 
-DETECTION: is_mono_compatible = false OR correlation < 0.2
+DETECTION: phase1.mono_compatibility < 0.7 OR phase1.stereo_correlation < 0.2
 
 FIX:
 
@@ -239,13 +243,13 @@ Step 4: Mono the low end
   → Or: EQ Eight (M/S) → High-pass Side at 150Hz
 
 VERIFY: Mono button on master — mix should stay coherent
-        Correlation should rise above 0.3
+        phase1.stereo_correlation should rise above 0.3
 ```
 
 ### Problem: Mix Is Too Narrow (Mono-ish)
 ```
-SEVERE — Correlation at [X] (> 0.85 = too narrow)
-         Width category: [narrow/mono]
+SEVERE — phase1.stereo_correlation at [X] (> 0.85 = too narrow)
+         Width (phase1.stereo_width < 0.1 = mono-ish; derived category: narrow/mono)
 
 WHY THIS MATTERS:
 - Mix sounds flat, boring, amateur
@@ -253,7 +257,7 @@ WHY THIS MATTERS:
 - Elements are all fighting in the center
 - Professional mixes have stereo interest
 
-DETECTION: correlation > 0.85 OR width_category in ['mono', 'narrow']
+DETECTION: phase1.stereo_correlation > 0.85 OR phase1.stereo_width < 0.05
 
 FIX:
 
@@ -290,13 +294,13 @@ RECOMMENDED PANNING:
   Pads           | ±50-80% or stereo widened
   FX/Risers      | ±50-100%
 
-VERIFY: Correlation should drop to 0.4-0.6 range
+VERIFY: phase1.stereo_correlation should drop to 0.4-0.6 range
         Mix should sound wider but still work in mono
 ```
 
 ### Problem: Mix Is Too Wide (Phase Risky)
 ```
-MODERATE — Correlation at [X] (< 0.25 = very wide, risky)
+MODERATE — phase1.stereo_correlation at [X] (< 0.25 = very wide, risky)
 
 WHY THIS MATTERS:
 - While currently mono compatible, you're at the edge
@@ -304,12 +308,12 @@ WHY THIS MATTERS:
 - Some elements may already be partially canceling
 - Wide mixes lose impact in club/PA systems
 
-DETECTION: correlation < 0.25 AND is_mono_compatible = true (but barely)
+DETECTION: phase1.stereo_correlation < 0.25 AND phase1.mono_compatibility >= 0.7 (but barely)
 
 FIX:
 
 Step 1: Identify the widest elements
-  → Check stem data for width_estimate
+  → Check phase4.stems.per_stem for per-stem width
   → Usually: pads, FX, stereo synths
 
 Step 2: Narrow the widest elements slightly
@@ -324,19 +328,19 @@ Step 4: Keep kick, bass, and lead focused
   → These should be center/mono
   → Check they're not contributing to excessive width
 
-TARGET: Correlation between 0.3-0.5 (wide but safe)
+TARGET: phase1.stereo_correlation between 0.3-0.5 (wide but safe)
 ```
 
 ### Problem: Bass Has Stereo Content
 ```
-SEVERE — Bass stem is_mono = false (must be mono below 150Hz)
+SEVERE — phase4.stems.per_stem[bass].is_mono = false (must be mono below 150Hz)
 
 WHY THIS MATTERS:
 - Stereo bass causes phase cancellation in the sub range
 - Club subs are often mono — your bass will be compromised
 - Low frequencies should be identical in L and R channels
 
-DETECTION: Bass stem is_mono = false OR bass correlation < 0.8
+DETECTION: phase4.stems.per_stem[bass].is_mono = false OR phase4.stems.per_stem[bass].stereo_width > 0.1
 
 FIX:
 
@@ -353,7 +357,7 @@ Step 3: You CAN have stereo in bass harmonics
   → But fundamentals MUST be mono
 
 VERIFY: Solo bass, press Mono on Utility — should sound identical
-        Correlation on bass stem should be > 0.9
+        phase4.stems.per_stem[bass].is_mono should be true (or stereo_width < 0.05)
 ```
 
 ---
@@ -400,7 +404,7 @@ Focus the center:
 ## Mono Compatibility Checklist
 
 ```
-[ ] Overall correlation > 0.3
+[ ] phase1.stereo_correlation > 0.3
 [ ] No elements disappear in mono (test with Utility → Mono)
 [ ] Bass is mono below 150Hz
 [ ] Kick is mono
@@ -429,8 +433,8 @@ Focus the center:
 PROBLEM: Stereo correlation at -0.15 (must be positive)
          Active phase cancellation will destroy your mix in mono.
          
-CURRENT: correlation = -0.15
-TARGET: correlation > +0.3
+CURRENT: phase1.stereo_correlation = -0.15
+TARGET: phase1.stereo_correlation > +0.3
 
 RISK: 
 - Bass and possibly other elements will VANISH on club systems
@@ -454,7 +458,7 @@ Step 3: Fix the polarity/phase
         → If it's bass: Add Utility → enable "Bass Mono" at 120Hz
 
 TEST AFTER FIX:
-        → Correlation should be positive (> 0)
+        → phase1.stereo_correlation should be positive (> 0)
         → In mono, nothing should disappear
         → Mix should sound coherent on mono speakers
 ```

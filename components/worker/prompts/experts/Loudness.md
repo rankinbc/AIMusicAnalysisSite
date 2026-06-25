@@ -13,23 +13,22 @@ Analyze the provided audio analysis JSON file to evaluate loudness levels, true 
 ## JSON Fields to Analyze
 
 ```
-audio_analysis.loudness.integrated_lufs     → Main loudness measurement (whole track)
-audio_analysis.loudness.short_term_max_lufs → Loudest 3-second window
-audio_analysis.loudness.momentary_max_lufs  → Loudest moment
-audio_analysis.loudness.loudness_range_lu   → Dynamic loudness variation
-audio_analysis.loudness.true_peak_db        → CRITICAL - must be < -1.0 dBTP
+phase1.lufs                          → Main loudness measurement (whole track)
+phase1.short_term_max_lufs           → Loudest 3-second window
+phase1.momentary_max_lufs            → Loudest moment
+phase1.loudness_range_lu             → Dynamic loudness variation
+phase1.true_peak_db                  → CRITICAL - must be < -1.0 dBTP
 
-audio_analysis.loudness.spotify_diff_db     → Distance from Spotify's -14 LUFS
-audio_analysis.loudness.apple_music_diff_db → Distance from Apple's -16 LUFS
-audio_analysis.loudness.youtube_diff_db     → Distance from YouTube's -14 LUFS
+DERIVE: phase1.lufs − (−14)          → Distance from Spotify's -14 LUFS target (compute inline)
+DERIVE: phase1.lufs − (−16)          → Distance from Apple's -16 LUFS target (compute inline)
+DERIVE: phase1.lufs − (−14)          → Distance from YouTube's -14 LUFS target (compute inline)
 
-audio_analysis.dynamics.peak_db             → Peak level
-audio_analysis.dynamics.rms_db              → Average level
-audio_analysis.dynamics.crest_factor_db     → Dynamic range (peak - RMS)
+phase1.peak_dbfs                     → Peak level
+DERIVE: 20·log10(phase1.rms)         → Average level in dB (phase1.rms is linear amplitude)
+phase1.crest_factor                  → Dynamic range (peak - RMS)
 
-audio_analysis.clipping.has_clipping        → Over-limited?
-audio_analysis.clipping.clip_count          → Severity of clipping
-audio_analysis.clipping.clip_positions      → Timestamps of clips
+phase1.clipping_detected             → Over-limited?
+phase1.clipped_sample_count          → Severity of clipping
 ```
 
 ---
@@ -56,17 +55,17 @@ audio_analysis.clipping.clip_positions      → Timestamps of clips
 
 | Problem | Detection | Severity |
 |---------|-----------|----------|
-| True peak > 0 dBTP | `true_peak_db > 0` | CRITICAL |
-| True peak > -1.0 dBTP | `true_peak_db > -1.0` | SEVERE |
-| Way too loud (will be crushed) | `integrated_lufs > -8` | SEVERE |
-| Too loud for streaming | `integrated_lufs > -11` | MODERATE |
-| Slightly hot | `integrated_lufs > -13` | MINOR |
-| Too quiet | `integrated_lufs < -16` | MODERATE |
-| Way too quiet | `integrated_lufs < -20` | SEVERE |
-| Clipping detected | `has_clipping = true` | SEVERE |
-| Excessive clipping | `clip_count > 100` | CRITICAL |
-| No dynamics (over-compressed) | `crest_factor_db < 6` | SEVERE |
-| Loudness range too wide | `loudness_range_lu > 12` | MODERATE |
+| True peak > 0 dBTP | `phase1.true_peak_db > 0` | CRITICAL |
+| True peak > -1.0 dBTP | `phase1.true_peak_db > -1.0` | SEVERE |
+| Way too loud (will be crushed) | `phase1.lufs > -8` | SEVERE |
+| Too loud for streaming | `phase1.lufs > -11` | MODERATE |
+| Slightly hot | `phase1.lufs > -13` | MINOR |
+| Too quiet | `phase1.lufs < -16` | MODERATE |
+| Way too quiet | `phase1.lufs < -20` | SEVERE |
+| Clipping detected | `phase1.clipping_detected = true` | SEVERE |
+| Excessive clipping | `phase1.clipped_sample_count > 100` | CRITICAL |
+| No dynamics (over-compressed) | `phase1.crest_factor < 6` | SEVERE |
+| Loudness range too wide | `phase1.loudness_range_lu > 12` | MODERATE |
 
 ---
 
@@ -74,37 +73,37 @@ audio_analysis.clipping.clip_positions      → Timestamps of clips
 
 ### Step 1: Check True Peak (MOST CRITICAL)
 ```
-IF true_peak_db > -1.0:
+IF phase1.true_peak_db > -1.0:
     SEVERITY = CRITICAL if > 0, else SEVERE
-    FIX = Reduce output by (true_peak_db - (-1.0)) dB
+    FIX = Reduce output by (phase1.true_peak_db - (-1.0)) dB
 ```
 
 ### Step 2: Check Integrated Loudness
 ```
 Target: -14 LUFS for streaming, -9 LUFS for club
 
-IF integrated_lufs > -11:
+IF phase1.lufs > -11:
     Track will be turned down significantly on streaming
-    Calculate: penalty_db = integrated_lufs - (-14)
+    Calculate: penalty_db = phase1.lufs - (-14)
     
-IF integrated_lufs < -16:
+IF phase1.lufs < -16:
     Track is too quiet, will sound weak
-    Calculate: boost_needed = (-14) - integrated_lufs
+    Calculate: boost_needed = (-14) - phase1.lufs
 ```
 
 ### Step 3: Check for Clipping
 ```
-IF has_clipping AND clip_count > 10:
+IF phase1.clipping_detected AND phase1.clipped_sample_count > 10:
     Limiter is working too hard
     Need to reduce input gain or address peaks earlier in chain
 ```
 
 ### Step 4: Check Dynamic Range
 ```
-IF crest_factor_db < 6:
+IF phase1.crest_factor < 6:
     Over-compressed, no punch
     
-IF crest_factor_db > 14:
+IF phase1.crest_factor > 14:
     Too dynamic for electronic music, may sound weak
     
 TARGET: 8-12 dB crest factor for trance
@@ -198,7 +197,7 @@ FIX:
    
 3. If still exceeding, reduce input gain by [Y] dB
 
-VERIFY: After changes, true_peak_db should read < -1.0 dBTP
+VERIFY: After changes, phase1.true_peak_db should read < -1.0 dBTP
 ```
 
 ### Problem: Track Too Loud for Streaming
@@ -258,7 +257,7 @@ LIMITER ADJUSTMENT:
 
 ### Problem: Clipping from Over-Limiting
 ```
-SEVERE — [X] clips detected at [timestamps]
+SEVERE — [X] clips detected (phase1.clipped_sample_count = [X])
 
 WHY THIS MATTERS:
 - Audible distortion on playback
@@ -274,20 +273,16 @@ FIX:
    
 3. Check which element is causing peaks:
    → Solo kick — is it too hot?
-   → Check timestamps [X, Y, Z] to identify culprit
+   → Reduce input gain until phase1.clipped_sample_count drops to 0
    
 4. If kick is the problem:
    → Reduce kick by 1-2dB
    → Or add transient control to kick bus
-
-CLIP LOCATIONS TO CHECK:
-  [timestamp 1]: Check what's hitting here
-  [timestamp 2]: Check what's hitting here
 ```
 
 ### Problem: No Dynamics (Over-Compressed)
 ```
-SEVERE — Crest factor at [X] dB (target: 8-12 dB)
+SEVERE — Crest factor at [X] dB (phase1.crest_factor = [X])
 
 WHY THIS MATTERS:
 - Track sounds flat, lifeless, fatiguing
@@ -307,8 +302,8 @@ FIX:
    → Master compressor: 1-2dB gain reduction MAX
    → Drum bus: 3-4dB gain reduction MAX
 
-CURRENT: Crest factor [X] dB (over-compressed)
-TARGET: Crest factor 8-12 dB (punchy but loud)
+CURRENT: phase1.crest_factor [X] dB (over-compressed)
+TARGET: phase1.crest_factor 8-12 dB (punchy but loud)
 ```
 
 ---
@@ -377,8 +372,8 @@ PROBLEM: True peak at +0.8 dBTP (exceeds -1.0 limit by 1.8dB)
 IMPACT: Track will clip/distort on Spotify, Apple Music, and YouTube.
         Some platforms may reject the upload entirely.
 
-CURRENT: true_peak_db = +0.8 dBTP
-TARGET: true_peak_db < -1.0 dBTP
+CURRENT: phase1.true_peak_db = +0.8 dBTP
+TARGET: phase1.true_peak_db < -1.0 dBTP
 
 FIX:
 
@@ -393,7 +388,7 @@ Step 2: Reduce limiter ceiling
 Step 3: If still exceeding, reduce input gain by 2dB
 
 VERIFY AFTER FIX:
-  true_peak_db should read between -1.5 and -1.0 dBTP
+  phase1.true_peak_db should read between -1.5 and -1.0 dBTP
 ```
 
 ---

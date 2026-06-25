@@ -9,6 +9,17 @@
     "phase6.gaps"
   ],
   "manual_leaves": [
+    "phase1.crest_factor",
+    "phase1.key_detection_confidence",
+    "phase1.spectral_centroid_hz",
+    "phase1.spectral_contrast",
+    "phase1.spectral_flatness",
+    "phase1.loudness_range_lu",
+    "phase1.short_term_max_lufs",
+    "phase1.momentary_max_lufs",
+    "phase1.transients.avg_transient_strength",
+    "phase1.transients.transient_count",
+    "phase1.transients.transients_per_second",
     "phase2.bpm",
     "phase3.notes[]",
     "phase7.suggestions[]",

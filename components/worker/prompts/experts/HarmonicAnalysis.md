@@ -1,12 +1,12 @@
 ---
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Audio Analysis Module: Harmonic & Key Detection Specialist
 
 ## Your Task
 
-Analyze the provided audio analysis JSON file to evaluate key detection, harmonic content, and key consistency throughout the track. Your goal is to identify the musical key, detect potential key clashes or modulations, and provide **DJ-friendly Camelot notation and mixing recommendations**.
+Analyze the provided audio analysis JSON file to evaluate key detection, harmonic content, and tonal clarity throughout the track. Your goal is to identify the musical key, assess detection confidence, and provide **DJ-friendly Camelot notation and mixing recommendations**.
 
 ---
 
@@ -14,26 +14,20 @@ Analyze the provided audio analysis JSON file to evaluate key detection, harmoni
 
 ### Primary Harmonic Data
 ```
-audio_analysis.harmonic.key                  → Detected key (e.g., "A minor", "C major")
-audio_analysis.harmonic.key_confidence       → 0.0-1.0 confidence score
-audio_analysis.harmonic.camelot_notation     → DJ notation (e.g., "8A", "11B")
-audio_analysis.harmonic.key_consistency      → 0-100% stability across track
-audio_analysis.harmonic.harmonic_complexity  → 0-100 complexity score
-audio_analysis.harmonic.chord_changes_per_minute → Rate of harmonic change
-audio_analysis.harmonic.key_relationship     → Related keys for mixing
-```
-
-### Related Issues
-```
-audio_analysis.overall_issues[]              → Check for 'harmonic' type issues
-audio_analysis.recommendations[]             → Harmonic-related recommendations
+phase1.detected_key                  → Detected key (e.g., "A minor", "C major"); "Unknown" if detection failed
+phase1.key_detection_confidence      → 0.0–1.0 tonal-clarity score (Krumhansl key-profile fit); <0.5 ≈ ambiguous/modal
+DERIVE camelot_notation              → Look up phase1.detected_key in the Key-to-Camelot table below
+DERIVE compatible_keys               → Derive from phase1.detected_key using Camelot adjacency rules below
 ```
 
 ---
 
 ## Key Detection Reference
 
-### Confidence Interpretation
+### Confidence Interpretation (`phase1.key_detection_confidence`)
+
+Score is a Krumhansl key-profile fit (0.0–1.0). Values below 0.5 indicate ambiguous or modal tonality where detection is unreliable.
+
 | Confidence | Status | Meaning |
 |------------|--------|---------|
 | 0.90 - 1.0 | Excellent | Very clear key, reliable detection |
@@ -41,23 +35,6 @@ audio_analysis.recommendations[]             → Harmonic-related recommendation
 | 0.60 - 0.74 | Moderate | Key detected but some uncertainty |
 | 0.40 - 0.59 | Low | Key ambiguous, possibly modal or atonal |
 | 0.0 - 0.39 | Poor | Key unclear, detection unreliable |
-
-### Key Consistency Interpretation
-```
-90-100%: Rock solid key - no modulations
-75-89%:  Mostly stable - brief harmonic variations
-60-74%:  Moderate stability - possible key changes or tensions
-40-59%:  Unstable - multiple key centers or modulations
-<40%:    Very unstable - atonal or complex modulations
-```
-
-### Harmonic Complexity Interpretation
-```
-0-30:    Simple - minimal chord changes, drone-based
-30-50:   Moderate - typical EDM/trance chord progressions
-50-70:   Rich - varied progressions, some substitutions
-70-100:  Complex - jazz-influenced, many key changes
-```
 
 ---
 
@@ -147,11 +124,8 @@ AVOID (unless intentional):
 
 | Problem | Detection | Severity |
 |---------|-----------|----------|
-| Key detection failed | `key = "Unknown"` | MODERATE |
-| Very low confidence | `key_confidence < 0.5` | MODERATE |
-| Extremely low consistency | `key_consistency < 40` | WARNING |
-| Low consistency | `key_consistency < 60` | INFO |
-| Very high complexity | `harmonic_complexity > 80` | INFO |
+| Key detection failed | `phase1.detected_key = "Unknown"` | MODERATE |
+| Very low confidence | `phase1.key_detection_confidence < 0.5` | MODERATE |
 
 ---
 
@@ -159,42 +133,18 @@ AVOID (unless intentional):
 
 ### Step 1: Verify Key Detection
 ```
-IF key = "Unknown" OR key_confidence < 0.5:
+IF phase1.detected_key = "Unknown" OR phase1.key_detection_confidence < 0.5:
     Key detection unreliable
     May indicate: complex harmonics, drone-based track, or atonal content
 
-IF key_confidence >= 0.75:
+IF phase1.key_detection_confidence >= 0.75:
     Key is reliable for DJ mixing purposes
 ```
 
-### Step 2: Evaluate Key Consistency
-```
-IF key_consistency >= 80:
-    Track maintains solid key throughout
-    Safe for DJ mixing - will blend well
-
-IF key_consistency < 60:
-    Track has key changes or clashes
-    Check for intentional modulations vs accidental clashes
-```
-
-### Step 3: Check Harmonic Complexity
-```
-Low complexity (0-30):
-    Minimal harmonic movement - repetitive but stable
-
-Moderate complexity (30-60):
-    Typical for EDM/trance - good balance
-
-High complexity (60+):
-    Rich harmonics - may be harder to mix
-    Consider simpler elements during transitions
-```
-
-### Step 4: Provide DJ Mixing Info
+### Step 2: Provide DJ Mixing Info
 ```
 Always include:
-    - Camelot notation
+    - Camelot notation (derived from phase1.detected_key via the table above)
     - Compatible keys for mixing
     - Energy direction recommendations
 ```
@@ -207,16 +157,11 @@ Always include:
 ```
 HARMONIC & KEY ANALYSIS
 =======================
-Overall Status: [CLEAR KEY / AMBIGUOUS KEY / KEY UNSTABLE]
+Overall Status: [CLEAR KEY / AMBIGUOUS KEY]
 
 Key Detection:
-  Detected Key: [X] → Camelot: [Y]
-  Confidence: [X]% → [excellent/good/moderate/low]
-
-Harmonic Characteristics:
-  Key Consistency: [X]% → [interpretation]
-  Harmonic Complexity: [X]/100 → [simple/moderate/rich/complex]
-  Chord Changes: [X] per minute
+  Detected Key: [phase1.detected_key] → Camelot: [derived from table]
+  Confidence: [phase1.key_detection_confidence × 100]% → [excellent/good/moderate/low]
 
 DJ Mixing Info:
   Compatible Keys: [list 3-4 compatible Camelot codes]
@@ -278,19 +223,19 @@ Step 3: Reduce extreme pitch modulation
   → Reduce depth or sync to musical intervals
 
 VERIFY: Re-analyze after changes
-        Confidence should improve above 0.6
+        phase1.key_detection_confidence should improve above 0.6
 ```
 
 ### Problem: Low Key Confidence
 ```
-MODERATE — Key confidence at [X]% (target: >75%)
+MODERATE — Key confidence at [phase1.key_detection_confidence × 100]% (target: >75%)
 
 WHY THIS MATTERS:
 - Key detection may not be accurate
 - DJ mixing recommendations might be wrong
 - Track may not blend well with others
 
-DETECTION: key_confidence < 0.6
+DETECTION: phase1.key_detection_confidence < 0.6
 
 POSSIBLE CAUSES:
 - Modal ambiguity (track works in multiple keys)
@@ -317,94 +262,16 @@ Step 4: Check tuning reference
   → Ensure all elements use same tuning (A=440Hz)
   → Some samples may be slightly sharp/flat
 
-VERIFY: Key confidence should rise above 0.7
-```
-
-### Problem: Low Key Consistency
-```
-WARNING — Key consistency at [X]% (target: >75%)
-
-WHY THIS MATTERS:
-- Track has harmonic instability
-- May indicate key clashes between elements
-- Or intentional modulations (which is fine)
-- Low consistency makes DJ mixing harder
-
-DETECTION: key_consistency < 70
-
-DETERMINING IF INTENTIONAL:
-- Modulation at section changes = usually intentional
-- Random instability throughout = likely a clash
-
-FIX (if unintentional):
-
-Step 1: Identify the section with different key
-  → Play through track, note where key feels different
-  → Often happens at breakdowns or transitions
-
-Step 2: Check layered elements
-  → Pads and leads from different sources may clash
-  → Ensure all melodic elements are in same key
-
-Step 3: Transpose conflicting elements
-  → Identify which element is "wrong"
-  → Transpose by appropriate interval:
-    - Same key, different octave: +/- 12 semitones
-    - Relative major/minor: +/- 3 semitones
-    - Perfect fifth: +/- 7 semitones
-
-Step 4: Check bass notes
-  → Bass playing wrong root = instant key clash
-  → Ensure bass follows the intended chord progression
-
-VERIFY: Key consistency should rise above 75%
-        Track should feel harmonically stable
-```
-
-### Problem: Very High Harmonic Complexity
-```
-INFO — Harmonic complexity at [X]/100 (typical: 30-50)
-
-WHY THIS MATTERS:
-- Complex harmonics are harder to mix with other tracks
-- May indicate jazz-influenced or progressive style
-- Not necessarily a problem, just be aware
-
-DETECTION: harmonic_complexity > 70
-
-CONSIDERATIONS:
-
-For DJ Mixing:
-  → This track requires careful key matching
-  → Avoid mixing during complex harmonic sections
-  → Transition during simpler sections (intro/outro)
-
-For Production:
-  → If intentional, great - adds musical interest
-  → If unintentional, may indicate clashing elements
-
-TO SIMPLIFY (if desired):
-
-Step 1: Reduce chord extensions
-  → Use triads instead of 7ths/9ths
-  → Remove unnecessary tensions
-
-Step 2: Reduce modulations
-  → Stick to one key center
-  → Remove chromatic passing chords
-
-Step 3: Simplify bass line
-  → Root notes create stability
-  → Reduce chromatic bass movement
+VERIFY: phase1.key_detection_confidence should rise above 0.7
 ```
 
 ---
 
 ## DJ Mixing Recommendations
 
-### Based on Detected Key
+### Based on Detected Key (`phase1.detected_key`)
 ```
-FOR KEY: [Detected Key] → Camelot: [X]
+FOR KEY: [phase1.detected_key] → Camelot: [X] (derived from table above)
 
 SAFE MIXES (same energy):
   → [Camelot Code]: [Key Name] - Perfect harmonic match
@@ -448,50 +315,48 @@ AVOID:
 
 1. **MODERATE**: Key detection failed (Unknown)
 2. **MODERATE**: Very low confidence (<50%)
-3. **WARNING**: Low key consistency (<60%) - possible clashes
-4. **INFO**: Very high complexity (>70) - mixing considerations
-5. **INFO**: All other harmonic observations
+3. **INFO**: All other harmonic observations
 
 ---
 
 ## Example Output Snippet
 
 ```
-[WARNING] Low Key Consistency Detected
+[MODERATE] Low Key Confidence
 ──────────────────────────────────────
-PROBLEM: Key consistency at 58% (target: >75%)
-         Track shows harmonic instability across sections.
+PROBLEM: Key confidence at 63% (target: >75%)
+         Tonal clarity is moderate — key reliability for mixing is limited.
 
-CURRENT: 58% consistency
-TARGET: >75% consistency
+CURRENT: phase1.key_detection_confidence = 0.63
+TARGET: ≥ 0.75
 
 IMPACT:
-- Some sections may not be in the same key
-- Could indicate accidental key clash between elements
-- Or could be intentional modulation
+- DJ mixing recommendations are less reliable at this confidence level
+- Track may not blend cleanly with harmonically adjacent tracks
+- Possible modal ambiguity or dissonant layering between elements
 
 FIX:
 
-Step 1: Identify conflicting sections
-        → Listen through track for "wrong" sounding parts
-        → Note timestamps where key feels different
+Step 1: Check for conflicting elements
+        → Solo each melodic element
+        → Identify any that don't fit the intended key
+        → Transpose conflicting elements
 
-Step 2: Check layered melodic elements
-        → Pads, leads, and bass may be in different keys
-        → Solo each element to identify the clash
+Step 2: Strengthen the root
+        → Add or boost sub-bass on root note
+        → Ensure kick and bass reinforce the key
 
-Step 3: Transpose the conflicting element
-        → If pad is in wrong key, transpose it
-        → Common fixes: +/-3 semitones (relative key)
-                       +/-7 semitones (fifth relationship)
+Step 3: Simplify chord voicings
+        → Remove unnecessary chromatic extensions
+        → Use clearer major/minor triads in key sections
 
-VERIFY: Re-analyze - consistency should rise above 75%
+VERIFY: Re-analyze — phase1.key_detection_confidence should rise above 0.75
 
 ────────────────────────────────────────
 DJ MIXING INFO
 ────────────────────────────────────────
-Key: G minor (Camelot 6A)
-Confidence: 72% (moderate)
+Key: G minor (Camelot 6A)  [derived from phase1.detected_key]
+Confidence: 63% (moderate)
 
 COMPATIBLE KEYS FOR MIXING:
   → 6A (G minor) - Perfect match
@@ -505,7 +370,7 @@ COMPATIBLE KEYS FOR MIXING:
 ## Do NOT Do
 
 - Don't ignore low key confidence - it affects mixing reliability
-- Don't assume key clashes are intentional - verify with client
+- Don't assume key detection is reliable when `phase1.key_detection_confidence < 0.5`
 - Don't provide mixing recommendations without Camelot codes
 - Don't forget relative major/minor as mixing options
 - Don't skip the DJ mixing info - it's highly practical

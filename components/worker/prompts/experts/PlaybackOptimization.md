@@ -14,20 +14,19 @@ Analyze the provided audio analysis JSON file to evaluate how well the mix trans
 
 ### Primary Playback Data
 ```
-audio_analysis.playback.headphone_score      → 0-100 headphone optimization
-audio_analysis.playback.speaker_score        → 0-100 speaker optimization
-audio_analysis.playback.crossfeed_safe       → true/false - not fatiguing on headphones
-audio_analysis.playback.bass_translation     → 'weak', 'balanced', 'excessive'
-audio_analysis.playback.headphone_issues[]   → Specific headphone problems
-audio_analysis.playback.speaker_issues[]     → Specific speaker problems
+phase9.playback.headphone_score      → 0-100 headphone optimization
+phase9.playback.speaker_score        → 0-100 speaker optimization
+phase9.playback.crossfeed_safe       → true/false - not fatiguing on headphones
+phase9.playback.bass_translation     → 'weak', 'balanced', 'excessive'
+phase9.playback.analysis[]           → Specific headphone and speaker problems (combined)
 ```
 
 ### Supporting Data
 ```
-audio_analysis.stereo.correlation            → Affects headphone perception
-audio_analysis.stereo.width_estimate         → Extreme width = headphone fatigue
-audio_analysis.frequency.sub_bass_energy     → Bass translation factor
-audio_analysis.frequency.bass_energy         → Bass translation factor
+phase1.stereo_correlation            → Affects headphone perception
+phase1.stereo_width                  → Extreme width = headphone fatigue
+phase1.bands.sub_bass                → Bass translation factor
+phase1.bands.bass                    → Bass translation factor
 ```
 
 ---

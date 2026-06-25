@@ -25,6 +25,34 @@ _BAND_DEFS = [
 
 _KEY_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
+# Krumhansl-Schmuckler key profiles — used to score how strongly a track's mean
+# chromagram fits ANY major/minor key. The max correlation across all 24
+# rotations is a well-calibrated tonal-clarity confidence (clear tonal material
+# ≈ 0.7–0.9; ambiguous/modal/atonal < 0.5), which the
+# `key_detection_low_confidence` rule thresholds at 0.5.
+_KRUMHANSL_MAJOR = np.array(
+    [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
+)
+_KRUMHANSL_MINOR = np.array(
+    [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]
+)
+
+
+def _key_detection_confidence(chroma_mean: np.ndarray) -> float:
+    """Max Pearson correlation of the chromagram against all 24 Krumhansl key
+    profiles — a 0–1 tonal-clarity score (higher = a clearer single key)."""
+    profiles = [np.roll(_KRUMHANSL_MAJOR, i) for i in range(12)]
+    profiles += [np.roll(_KRUMHANSL_MINOR, i) for i in range(12)]
+    best = 0.0
+    cm = chroma_mean.astype(float)
+    if float(np.std(cm)) < 1e-9:  # flat chroma → no tonal centre
+        return 0.0
+    for prof in profiles:
+        corr = float(np.corrcoef(cm, prof)[0, 1])
+        if np.isfinite(corr) and corr > best:
+            best = corr
+    return float(np.clip(best, 0.0, 1.0))
+
 # Reasons we've already logged for unavailable structure detection, so a run of
 # N tracks against a host with no Docker image logs the cause once, not N times.
 _logged_structure_reasons: set[str] = set()
@@ -46,6 +74,57 @@ def _log_structure_unavailable_once(reason: str) -> None:
     if reason not in _logged_structure_reasons:
         _logged_structure_reasons.add(reason)
         logger.warning("Structure detection unavailable: %s", reason)
+
+
+def _windowed_loudness(
+    y: np.ndarray, sr: int, integrated_lufs: float
+) -> tuple[float, float, float]:
+    """EBU R128 momentary (0.4 s) / short-term (3 s) max loudness + loudness range.
+
+    Returns ``(loudness_range_lu, short_term_max_lufs, momentary_max_lufs)`` in
+    LU / LUFS. Each window class is measured with its own ``pyloudnorm.Meter``
+    whose gating block == the window, so a single window yields that window's
+    gated loudness. Robust to short clips (returns the integrated value, and
+    0.0 LRA, when a class can't be measured) and bounded on long tracks (window
+    count is capped so the per-window K-weighting cost stays a few seconds).
+    """
+    data = y.T.astype(float)  # (samples, channels) for pyloudnorm
+    n = data.shape[0]
+
+    def _series(win_s: float, max_windows: int) -> list[float]:
+        win = int(win_s * sr)
+        if win <= 0 or n < win:
+            return []
+        # Stride so we evaluate at most ``max_windows`` windows regardless of
+        # track length; never finer than 25% of the window.
+        hop = max(int(0.25 * win), (n - win) // max_windows + 1)
+        meter = pyloudnorm.Meter(sr, block_size=win_s)
+        vals: list[float] = []
+        for start in range(0, n - win + 1, hop):
+            try:
+                loud = float(meter.integrated_loudness(data[start : start + win]))
+            except Exception:  # noqa: BLE001 — silent/too-short window; skip it
+                continue
+            if np.isfinite(loud):
+                vals.append(loud)
+        return vals
+
+    momentary = _series(0.4, 300)
+    short_term = _series(3.0, 150)
+    momentary_max = max(momentary) if momentary else integrated_lufs
+    short_term_max = max(short_term) if short_term else integrated_lufs
+
+    # EBU R128 loudness range: P95 − P10 of the gated short-term distribution.
+    lra = 0.0
+    if len(short_term) >= 2:
+        st = np.asarray(short_term)
+        st = st[st > -70.0]  # absolute gate
+        if st.size:
+            gated = st[st > (st.mean() - 20.0)]  # relative gate
+            base = gated if gated.size else st
+            lra = float(np.percentile(base, 95) - np.percentile(base, 10))
+
+    return lra, float(short_term_max), float(momentary_max)
 
 
 def _detect_structure(wav_path: Path) -> dict:
@@ -100,7 +179,10 @@ def analyze(
     Returns:
         dict with keys: lufs, rms, bpm, duration_seconds, bands, stereo_correlation,
         stereo_width, true_peak_db, peak_dbfs, clipping_detected, clipped_sample_count,
-        detected_key, mono_compatibility, low_energy, structure.
+        detected_key, key_detection_confidence, mono_compatibility, low_energy,
+        crest_factor, spectral_centroid_hz, spectral_contrast, spectral_flatness,
+        loudness_range_lu, short_term_max_lufs, momentary_max_lufs, transients
+        (avg_transient_strength / transient_count / transients_per_second), structure.
     """
     # ------------------------------------------------------------------
     # Load audio — librosa returns (channels, samples) float32 when mono=False
@@ -189,6 +271,44 @@ def analyze(
     chroma_mean = chroma.mean(axis=1)
     detected_key = _KEY_NAMES[int(np.argmax(chroma_mean))]
 
+    # Key-detection confidence — Krumhansl key-profile fit (0 = ambiguous/modal/
+    # atonal, →1 = one key clearly dominant).
+    key_detection_confidence = _key_detection_confidence(chroma_mean)
+
+    # ------------------------------------------------------------------
+    # Crest factor (dB) — peak-to-RMS. NOTE: `rms` above is LINEAR amplitude,
+    # so convert it to dBFS before subtracting from the already-dB peak.
+    # ------------------------------------------------------------------
+    rms_dbfs = float(20.0 * np.log10(rms + 1e-9))
+    crest_factor = float(peak_dbfs - rms_dbfs)
+
+    # ------------------------------------------------------------------
+    # Spectral descriptors — brightness (centroid), clarity (contrast/flatness)
+    # ------------------------------------------------------------------
+    spectral_centroid_hz = float(np.mean(librosa.feature.spectral_centroid(y=mono, sr=sr)))
+    spectral_contrast = float(np.mean(librosa.feature.spectral_contrast(y=mono, sr=sr)))
+    spectral_flatness = float(np.mean(librosa.feature.spectral_flatness(y=mono)))
+
+    # ------------------------------------------------------------------
+    # Transients — onset envelope (punch / attack density)
+    # ------------------------------------------------------------------
+    onset_env = librosa.onset.onset_strength(y=mono, sr=sr)
+    onsets = librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr)
+    transients = {
+        "avg_transient_strength": float(np.mean(onset_env)) if onset_env.size else 0.0,
+        "transient_count": int(len(onsets)),
+        "transients_per_second": (
+            float(len(onsets) / duration_seconds) if duration_seconds > 0 else 0.0
+        ),
+    }
+
+    # ------------------------------------------------------------------
+    # Windowed loudness — momentary / short-term maxima + EBU R128 loudness range
+    # ------------------------------------------------------------------
+    loudness_range_lu, short_term_max_lufs, momentary_max_lufs = _windowed_loudness(
+        y, sr, lufs
+    )
+
     # ------------------------------------------------------------------
     # Mono compatibility — ratio of mono-sum RMS to stereo RMS
     # A value close to 1.0 means the mix survives mono well.
@@ -234,7 +354,16 @@ def analyze(
         "clipping_detected": clipping_detected,
         "clipped_sample_count": clipped_sample_count,
         "detected_key": detected_key,
+        "key_detection_confidence": key_detection_confidence,
         "mono_compatibility": mono_compatibility,
         "low_energy": low_energy,
+        "crest_factor": crest_factor,
+        "spectral_centroid_hz": spectral_centroid_hz,
+        "spectral_contrast": spectral_contrast,
+        "spectral_flatness": spectral_flatness,
+        "loudness_range_lu": loudness_range_lu,
+        "short_term_max_lufs": short_term_max_lufs,
+        "momentary_max_lufs": momentary_max_lufs,
+        "transients": transients,
         "structure": structure,
     }

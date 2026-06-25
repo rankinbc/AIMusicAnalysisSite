@@ -1,5 +1,5 @@
 ---
-version: 1.1.0
+version: 2.0.0
 ---
 
 # Mix Triage Router
@@ -18,97 +18,80 @@ You are the **entry point** for the mix analysis system. Your job is to scan the
 
 ## JSON Fields to Scan
 
-### Audio Analysis
+### Phase 1 (Whole-Mix Measurements)
 ```
-audio_analysis.duration_seconds
-audio_analysis.sample_rate
-audio_analysis.channels
-audio_analysis.detected_tempo
+phase1.duration_seconds
 
-audio_analysis.dynamics:
-  - peak_db
-  - rms_db
-  - dynamic_range_db
-  - crest_factor_db
-  - is_over_compressed
+phase1.peak_dbfs
+phase1.rms                     (linear amplitude; RMS in dB = 20·log10(phase1.rms))
+phase1.crest_factor
 
-audio_analysis.frequency:
-  - spectral_centroid_hz
-  - sub_bass_energy
-  - bass_energy
-  - low_mid_energy
-  - mid_energy
-  - high_mid_energy
-  - high_energy
-  - air_energy
-  - balance_issues[]
-  - problem_frequencies[]
+phase1.bands.sub_bass
+phase1.bands.bass
+phase1.bands.low_mid
+phase1.bands.mid
+phase1.bands.upper_mid
+phase1.bands.presence
+phase1.bands.air
+phase1.spectral_centroid_hz
 
-audio_analysis.stereo:
-  - correlation
-  - width_estimate
-  - is_mono_compatible
-  - is_stereo
+phase1.stereo_correlation
+phase1.stereo_width
+phase1.mono_compatibility      (0.0–1.0 float; < 0.7 = poor mono translation)
 
-audio_analysis.loudness:
-  - integrated_lufs
-  - true_peak_db
-  - short_term_max_lufs
+phase1.lufs
+phase1.true_peak_db
+phase1.short_term_max_lufs
+phase1.loudness_range_lu
 
-audio_analysis.transients:
-  - transients_per_second
-  - avg_transient_strength
-  - attack_quality
+phase1.transients.transients_per_second
+phase1.transients.avg_transient_strength
+phase1.transients.transient_count
 
-audio_analysis.clipping:
-  - has_clipping
-  - clip_count
-  - clip_positions[]
+phase1.clipping_detected       (bool)
+phase1.clipped_sample_count
 
-audio_analysis.overall_score (if present):
-  - overall_score
-  - grade
-  - component_scores{}
-  - weakest_component
+phase1.detected_key
+phase1.key_detection_confidence
 ```
 
-### Section Analysis (if present)
+### Phase 2 (Rhythm)
 ```
-section_analysis.sections[]:
+phase2.bpm
+```
+
+### Overall Score and Grade (top-level fields — prose only)
+```
+overall_score   (0–100)
+grade           (A–F)
+```
+
+### Phase 7 — Section Analysis (if present)
+```
+phase7.section_scores[]:
   - section_type
   - start_time, end_time
-  - avg_rms_db
+  - score
   - peak_db
   - transient_density
   - spectral_centroid_hz
   - issues[]
 
-section_analysis.all_issues[]
-section_analysis.clipping_timestamps[]
+phase7.issues[]
 ```
 
-### Stem Analysis (if present)
+### Phase 4 — Stem Analysis (if present)
 ```
-stem_analysis.stems{}:
-  - peak_db, rms_db
-  - frequency_profile
-  - pan_position
+phase4.stems.status            ("ok" or absent/error)
+phase4.stems.per_stem          (dynamic, keyed by stem name)
+phase4.stems.balance_flags[]
+phase4.stems.clash_matrix[]    (per-stem clash variant)
 
-stem_analysis.clashes[]:
+phase4.clashes[]:
   - stem1, stem2
   - frequency_range
   - severity
   - overlap_amount
-
-stem_analysis.masking_issues[]
-```
-
-### Harmonic Analysis (if present)
-```
-audio_analysis.harmonic:
-  - detected_key
-  - key_confidence
-  - camelot_code
 ```
 
 ---
@@ -119,84 +102,84 @@ audio_analysis.harmonic:
 
 | Condition | Severity | Issue |
 |-----------|----------|-------|
-| correlation < 0 | CRITICAL | Phase cancellation - mix will collapse |
-| correlation < 0.3 | CRITICAL | Severe mono compatibility failure |
-| is_mono_compatible = false | SEVERE | Will not translate to mono systems |
-| correlation < 0.5 | MODERATE | Borderline mono compatibility |
+| phase1.stereo_correlation < 0 | CRITICAL | Phase cancellation - mix will collapse |
+| phase1.stereo_correlation < 0.3 | CRITICAL | Severe mono compatibility failure |
+| phase1.mono_compatibility < 0.7 | SEVERE | Will not translate to mono systems |
+| phase1.stereo_correlation < 0.5 | MODERATE | Borderline mono compatibility |
 
 ### LOW END (Category Multiplier: 2.5)
 
 | Condition | Severity | Issue |
 |-----------|----------|-------|
-| bass_energy > 40% | CRITICAL | Severe bass buildup |
-| clashes in 50-150Hz with severity "severe" | SEVERE | Kick/bass collision |
-| clashes in 50-150Hz > 100 count | SEVERE | Excessive low-end masking |
-| low_mid_energy > 22% | CRITICAL | Severe mud |
-| low_mid_energy > 18% | SEVERE | Mud buildup |
-| bass_energy < 15% | SEVERE | Weak low end foundation |
-| sub_bass_energy > 15% | MODERATE | Sub-bass overwhelming |
+| phase1.bands.bass > 40% | CRITICAL | Severe bass buildup |
+| phase4.clashes[] in 50-150Hz with severity "severe" | SEVERE | Kick/bass collision |
+| phase4.clashes[] in 50-150Hz > 100 count | SEVERE | Excessive low-end masking |
+| phase1.bands.low_mid > 22% | CRITICAL | Severe mud |
+| phase1.bands.low_mid > 18% | SEVERE | Mud buildup |
+| phase1.bands.bass < 15% | SEVERE | Weak low end foundation |
+| phase1.bands.sub_bass > 15% | MODERATE | Sub-bass overwhelming |
 
 ### DYNAMICS (Category Multiplier: 2.0)
 
 | Condition | Severity | Issue |
 |-----------|----------|-------|
-| crest_factor_db < 6 | CRITICAL | Severely over-compressed |
-| crest_factor_db < 8 | SEVERE | Over-compressed, lacking punch |
-| is_over_compressed = true | SEVERE | Compression flagged |
-| attack_quality = "soft" | SEVERE | Weak transients |
-| avg_transient_strength < 0.3 | SEVERE | No punch |
-| clip_count > 100 | CRITICAL | Excessive clipping |
-| has_clipping = true | SEVERE | Clipping detected |
-| crest_factor_db > 16 | MODERATE | Too dynamic for trance |
+| phase1.crest_factor < 6 | CRITICAL | Severely over-compressed |
+| phase1.crest_factor < 8 | SEVERE | Over-compressed, lacking punch |
+| phase1.transients.avg_transient_strength < 0.3 | SEVERE | No punch |
+| phase1.clipped_sample_count > 100 | CRITICAL | Excessive clipping |
+| phase1.clipping_detected = true | SEVERE | Clipping detected |
+| phase1.crest_factor > 16 | MODERATE | Too dynamic for trance |
 
 ### SECTIONS (Category Multiplier: 2.0)
 
+> Derive per-section arrangement scores from `phase7.section_scores[].score`; for drop-vs-breakdown energy contrast use `phase7.metadata.energy_contrast_db`.
+
 | Condition | Severity | Issue |
 |-----------|----------|-------|
-| drop_rms <= breakdown_rms | CRITICAL | Drop weaker than breakdown |
+| drop_score <= breakdown_score | CRITICAL | Drop weaker than breakdown |
 | all sections within 3dB | CRITICAL | No section contrast |
 | drop vs breakdown < 6dB | SEVERE | Insufficient contrast |
 | drop vs breakdown < 8dB | MODERATE | Low contrast |
-| buildup RMS flat (not rising) | SEVERE | No tension building |
+| buildup score flat (not rising) | SEVERE | No tension building |
 | kick detected in breakdown | MODERATE | Breakdown too full |
 
 ### FREQUENCY (Category Multiplier: 1.5)
 
 | Condition | Severity | Issue |
 |-----------|----------|-------|
-| low_mid_energy > 22% | CRITICAL | Severe mud (duplicate check) |
-| bass_energy < 12% | SEVERE | No low end |
-| bass_energy > 40% | SEVERE | Overwhelming bass |
-| high_mid_energy > 28% | SEVERE | Harsh/brittle |
-| high_mid_energy > 25% | MODERATE | Approaching harshness |
-| high_energy < 8% AND centroid < 1500 | MODERATE | Dark/muffled |
-| spectral_centroid < 1200 | MODERATE | Very dark mix |
-| spectral_centroid > 3500 | MODERATE | Very bright mix |
+| phase1.bands.low_mid > 22% | CRITICAL | Severe mud (duplicate check) |
+| phase1.bands.bass < 12% | SEVERE | No low end |
+| phase1.bands.bass > 40% | SEVERE | Overwhelming bass |
+| phase1.bands.upper_mid > 28% | SEVERE | Harsh/brittle |
+| phase1.bands.upper_mid > 25% | MODERATE | Approaching harshness |
+| phase1.bands.air < 8% AND phase1.spectral_centroid_hz < 1500 | MODERATE | Dark/muffled |
+| phase1.spectral_centroid_hz < 1200 | MODERATE | Very dark mix |
+| phase1.spectral_centroid_hz > 3500 | MODERATE | Very bright mix |
 
 ### STEREO (Category Multiplier: 1.5)
 
 | Condition | Severity | Issue |
 |-----------|----------|-------|
-| width_estimate < 20% | SEVERE | Mix too narrow |
-| width_estimate > 80% | MODERATE | Mix too wide (check mono) |
-| >80% elements center-panned (from stems) | SEVERE | Poor stereo distribution |
+| phase1.stereo_width < 20% | SEVERE | Mix too narrow |
+| phase1.stereo_width > 80% | MODERATE | Mix too wide (check mono) |
+| >80% elements center-panned (from phase4.stems.per_stem) | SEVERE | Poor stereo distribution |
 
 ### LOUDNESS (Category Multiplier: 1.5)
 
 | Condition | Severity | Issue |
 |-----------|----------|-------|
-| integrated_lufs > -6 | CRITICAL | Way too loud, distorted |
-| integrated_lufs < -16 | SEVERE | Too quiet for streaming |
-| true_peak_db > -0.5 | SEVERE | True peak too hot |
-| true_peak_db > -1.0 | MODERATE | True peak borderline |
-| integrated_lufs deviation from -14 > 4dB | MODERATE | Off streaming target |
+| phase1.lufs > -6 | CRITICAL | Way too loud, distorted |
+| phase1.lufs < -16 | SEVERE | Too quiet for streaming |
+| phase1.true_peak_db > -0.5 | SEVERE | True peak too hot |
+| phase1.true_peak_db > -1.0 | MODERATE | True peak borderline |
+| phase1.lufs deviation from -14 > 4dB | MODERATE | Off streaming target |
 
 ### HARMONIC (Category Multiplier: 1.0)
 
 | Condition | Severity | Issue |
 |-----------|----------|-------|
-| key_confidence < 0.5 | MODERATE | Unstable/unclear key |
-| key_confidence < 0.3 | SEVERE | Key detection failed |
+| phase1.key_detection_confidence < 0.5 | MODERATE | Unstable/unclear key |
+| phase1.key_detection_confidence < 0.3 | SEVERE | Key detection failed |
 
 ---
 
@@ -234,14 +217,14 @@ Score Interpretation:
 
 | Issue Category | Route To | When To Route |
 |----------------|----------|---------------|
-| Phase cancellation, mono collapse | StereoPhase.md | correlation < 0.5 OR is_mono_compatible = false |
+| Phase cancellation, mono collapse | StereoPhase.md | phase1.stereo_correlation < 0.5 OR phase1.mono_compatibility < 0.7 |
 | Kick/bass collision, mud, weak bass | LowEnd.md | Any low-end issue detected |
-| Over-compression, weak transients, clipping | Dynamics.md | crest < 10 OR clipping OR soft attack |
+| Over-compression, weak transients, clipping | Dynamics.md | phase1.crest_factor < 10 OR phase1.clipping_detected = true |
 | Section contrast, arrangement energy | Sections.md | contrast < 8dB OR arrangement issues |
 | Spectral imbalance, harshness, darkness | FrequencyBalance.md | Energy bands off target OR harsh/dark |
 | Stereo width, panning distribution | StereoPhase.md | width issues OR pan distribution issues |
 | Loudness compliance, true peak | Loudness.md | LUFS off target OR true peak issues |
-| Key detection, harmonic issues | HarmonicAnalysis.md | key_confidence < 0.6 |
+| Key detection, harmonic issues | HarmonicAnalysis.md | phase1.key_detection_confidence < 0.6 |
 
 **Priority Order for Routing:**
 1. Phase/Mono issues (ALWAYS first - everything else is meaningless if phase is broken)
@@ -268,10 +251,10 @@ Grade: [X] ([score]/100)
 Duration: [X:XX] | Tempo: [XXX] BPM | Key: [X major/minor]
 
 Loudness:    [X.X] LUFS | True Peak: [X.X] dBTP [status]
-Dynamics:    Crest [X.X] dB [status] | Attack: [quality]
+Dynamics:    Crest [X.X] dB [status]
 Low End:     Bass [XX]% | Sub [XX]% | Low-Mid [XX]% | Correlation [X.XX]
-Frequency:   Centroid [XXXX] Hz | High-Mid [XX]% [status]
-Stereo:      Width [XX]% | Mono Compatible: [Yes/No]
+Frequency:   Centroid [XXXX] Hz | Upper-Mid [XX]% [status]
+Stereo:      Width [XX]% | Mono Compat: [X.XX]
 Sections:    [X] detected | Drop/Breakdown contrast: [X.X] dB [status]
 
 [Add flags: ⚠️ for concerning values, ✓ for good values]
@@ -342,7 +325,7 @@ Sections:    [X] detected | Drop/Breakdown contrast: [X.X] dB [status]
 ## Analysis Steps
 
 ### Step 1: Load and Parse JSON
-- Identify which analysis sections are present (audio, section, stem, harmonic)
+- Identify which analysis sections are present (phase1, phase2, phase7, phase4)
 - Note what data is available for analysis
 
 ### Step 2: Run All Detection Rules
@@ -381,12 +364,12 @@ These issues can be flagged as quick wins (no specialist needed):
 
 | Detection | Quick Win Fix |
 |-----------|---------------|
-| hi-hats panned center (from stems) | Pan to ±20-30% |
+| hi-hats panned center (from phase4.stems.per_stem) | Pan to ±20-30% |
 | ride/cymbal panned center | Pan to ±25-35% |
-| true_peak > -1.0 but < -0.5 | Reduce limiter output 0.5dB |
+| phase1.true_peak_db > -1.0 but < -0.5 | Reduce limiter output 0.5dB |
 | reverb/delay returns not filtered | HP at 150-200Hz |
-| sub_bass_energy slightly high (12-15%) | Gentle HP on non-bass at 40Hz |
-| clipping < 10 instances | Reduce hottest moment by 1dB |
+| phase1.bands.sub_bass slightly high (12-15%) | Gentle HP on non-bass at 40Hz |
+| phase1.clipped_sample_count < 10 | Reduce hottest moment by 1dB |
 
 ---
 
@@ -414,10 +397,10 @@ Grade: C (62/100)
 Duration: 6:32 | Tempo: 138 BPM | Key: A minor
 
 Loudness:    -8.5 LUFS | True Peak: -0.8 dBTP ⚠️
-Dynamics:    Crest 5.8 dB ⚠️ LOW | Attack: soft ⚠️
+Dynamics:    Crest 5.8 dB ⚠️ LOW
 Low End:     Bass 32% | Sub 8% ✓ | Low-Mid 18% ⚠️ | Correlation 0.45
-Frequency:   Centroid 2150 Hz ✓ | High-Mid 19% ✓
-Stereo:      Width 35% | Mono Compatible: Yes ✓
+Frequency:   Centroid 2150 Hz ✓ | Upper-Mid 19% ✓
+Stereo:      Width 35% | Mono Compat: 0.72 ✓
 Sections:    5 detected | Drop/Breakdown contrast: 4.2 dB ⚠️ LOW
 
 ═══════════════════════════════════════════════════════════════
@@ -429,7 +412,7 @@ Sections:    5 detected | Drop/Breakdown contrast: 4.2 dB ⚠️ LOW
    Impact: Low end is muddy, kick lacks definition, bass unclear
 
 #2 [SEVERE] DYNAMICS: Over-compressed
-   Score: 140 | Detected: crest_factor 5.8 dB (target: 10-12 dB)
+   Score: 140 | Detected: phase1.crest_factor 5.8 dB (target: 10-12 dB)
    Impact: Mix sounds flat and lifeless, transients destroyed
 
 #3 [SEVERE] SECTIONS: Insufficient drop impact
@@ -437,11 +420,11 @@ Sections:    5 detected | Drop/Breakdown contrast: 4.2 dB ⚠️ LOW
    Impact: Drops don't hit hard, arrangement feels flat
 
 #4 [SEVERE] DYNAMICS: Weak transients
-   Score: 140 | Detected: attack_quality "soft", strength 0.28
+   Score: 140 | Detected: phase1.transients.avg_transient_strength 0.28
    Impact: Kick and snare lack punch, no impact
 
 #5 [MODERATE] FREQUENCY: Low-mid buildup
-   Score: 60 | Detected: low_mid_energy 18% (target: 10-15%)
+   Score: 60 | Detected: phase1.bands.low_mid 18% (target: 10-15%)
    Impact: Mud masking mid-range clarity
 
 ═══════════════════════════════════════════════════════════════
@@ -456,25 +439,23 @@ Sections:    5 detected | Drop/Breakdown contrast: 4.2 dB ⚠️ LOW
    • Low-mid cleanup (18% - needs reduction to 10-15%)
 
    KEY DATA FOR THIS SPECIALIST:
-   • bass_energy: 32%
-   • low_mid_energy: 18%
-   • sub_bass_energy: 8%
-   • correlation: 0.45
-   • clashes: 847 in 60-150Hz range, severity "severe"
+   • phase1.bands.bass: 32%
+   • phase1.bands.low_mid: 18%
+   • phase1.bands.sub_bass: 8%
+   • phase1.stereo_correlation: 0.45
+   • phase4.clashes[]: 847 entries in 60-150Hz, severity "severe"
 
 2. Dynamics.md [PRIORITY: SEVERE]
    ─────────────────────────────────────
    FOCUS ON:
-   • Master limiter settings (crest 5.8 dB is crushed)
-   • Transient preservation (attack_quality: soft)
+   • Master limiter settings (phase1.crest_factor 5.8 dB is crushed)
+   • Transient preservation (phase1.transients.avg_transient_strength: 0.28)
    • Parallel compression for punch without destroying dynamics
 
    KEY DATA FOR THIS SPECIALIST:
-   • crest_factor_db: 5.8
-   • is_over_compressed: true
-   • attack_quality: soft
-   • avg_transient_strength: 0.28
-   • peak_db: -0.8
+   • phase1.crest_factor: 5.8
+   • phase1.transients.avg_transient_strength: 0.28
+   • phase1.peak_dbfs: -0.8
 
 3. Sections.md [PRIORITY: SEVERE]
    ─────────────────────────────────────
@@ -484,10 +465,10 @@ Sections:    5 detected | Drop/Breakdown contrast: 4.2 dB ⚠️ LOW
    • Buildup energy automation
 
    KEY DATA FOR THIS SPECIALIST:
-   • drop avg_rms_db: -8.2
-   • breakdown avg_rms_db: -12.4
-   • contrast: 4.2 dB
-   • sections detected: intro, buildup, drop, breakdown, outro
+   • phase7.section_scores[] drop score: 58
+   • phase7.section_scores[] breakdown score: 42
+   • phase7.metadata.energy_contrast_db: 4.2
+   • phase7.section_scores[]: intro, buildup, drop, breakdown, outro
 
 ═══════════════════════════════════════════════════════════════
                     QUICK WINS (No Specialist Needed)
@@ -503,8 +484,8 @@ Sections:    5 detected | Drop/Breakdown contrast: 4.2 dB ⚠️ LOW
 ✓ Tempo appropriate for trance (138 BPM)
 ✓ Key detected consistently (A minor, confidence 0.82)
 ✓ Sub-bass level good (8% - not overwhelming)
-✓ High frequencies balanced (high_mid 19%, high 12%)
-✓ Mono compatible (correlation 0.45 - safe)
+✓ High frequencies balanced (upper_mid 19%, air 12%)
+✓ Mono compatible (phase1.stereo_correlation 0.45, phase1.mono_compatibility 0.72 - safe)
 ✓ Spectral centroid balanced (2150 Hz - not dark or harsh)
 ```
 

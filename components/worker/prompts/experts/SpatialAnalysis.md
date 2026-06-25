@@ -14,19 +14,21 @@ Analyze the provided audio analysis JSON file to evaluate the three-dimensional 
 
 ### Primary Spatial Data
 ```
-audio_analysis.spatial.height_score          → 0-100 vertical frequency spread
-audio_analysis.spatial.depth_score           → 0-100 front-to-back dimension
-audio_analysis.spatial.width_consistency     → 0-100 stereo stability over time
-audio_analysis.spatial.perceived_height      → 'low', 'balanced', 'high', 'extreme'
-audio_analysis.spatial.perceived_depth       → 'flat', 'moderate', 'deep', 'cavernous'
-audio_analysis.spatial.spatial_balance       → Overall assessment
+phase9.spatial.height_score          → 0-100 vertical frequency spread
+phase9.spatial.depth_score           → 0-100 front-to-back dimension
+phase9.spatial.width_consistency     → 0-100 stereo stability over time
+DERIVE perceived_height              → classify from phase9.spatial.height_score:
+                                        <45 → 'low', 45–79 → 'balanced', 80–89 → 'high', ≥90 → 'extreme'
+DERIVE perceived_depth               → classify from phase9.spatial.depth_score:
+                                        <45 → 'flat', 45–69 → 'moderate', 70–89 → 'deep', ≥90 → 'cavernous'
+phase9.spatial.analysis[]            → string array of spatial-balance observations
 ```
 
 ### Supporting Data
 ```
-audio_analysis.stereo.correlation            → Stereo width indicator
-audio_analysis.stereo.width_estimate         → 0-100% stereo width
-audio_analysis.frequency.*_energy            → Frequency distribution
+phase1.stereo_correlation                                         → Stereo phase correlation (-1 to +1)
+phase1.stereo_width                                               → 0-100% stereo width
+phase1.bands.{sub_bass,bass,low_mid,mid,upper_mid,presence,air}  → Frequency band distribution
 ```
 
 ---
@@ -121,11 +123,11 @@ Prevents mix from sounding flat
 
 | Problem | Detection | Severity |
 |---------|-----------|----------|
-| Very unstable width | `width_consistency < 50` | SEVERE |
-| Mix is flat/2D | `depth_score < 40` | MODERATE |
-| Extreme height imbalance | `height_score < 40` | MODERATE |
-| Width inconsistency | `width_consistency < 70` | WARNING |
-| Depth issues | `depth_score < 60` | WARNING |
+| Very unstable width | `phase9.spatial.width_consistency < 50` | SEVERE |
+| Mix is flat/2D | `phase9.spatial.depth_score < 40` | MODERATE |
+| Extreme height imbalance | `phase9.spatial.height_score < 40` | MODERATE |
+| Width inconsistency | `phase9.spatial.width_consistency < 70` | WARNING |
+| Depth issues | `phase9.spatial.depth_score < 60` | WARNING |
 
 ---
 
@@ -133,35 +135,35 @@ Prevents mix from sounding flat
 
 ### Step 1: Evaluate Height (Frequency Spread)
 ```
-IF height_score < 50:
+IF phase9.spatial.height_score < 50:
     Mix concentrated in narrow frequency range
-    Check sub-bass, presence, and air frequencies
+    Check phase1.bands.sub_bass, phase1.bands.presence, and phase1.bands.air
 
-IF perceived_height = 'low':
-    Missing high frequencies - add air
-IF perceived_height = 'extreme':
-    Too much high frequency - may be harsh
+IF phase9.spatial.height_score < 45 (DERIVED perceived_height = 'low'):
+    Missing high frequencies - check phase1.bands.air and phase1.bands.presence
+IF phase9.spatial.height_score >= 90 (DERIVED perceived_height = 'extreme'):
+    Too much high frequency energy - may be harsh
 ```
 
 ### Step 2: Evaluate Depth (Front-to-Back)
 ```
-IF depth_score < 50:
+IF phase9.spatial.depth_score < 50:
     Mix sounds flat, two-dimensional
     Need variation in reverb/delay amounts
 
-IF perceived_depth = 'flat':
+IF phase9.spatial.depth_score < 45 (DERIVED perceived_depth = 'flat'):
     All elements at same distance - boring
-IF perceived_depth = 'cavernous':
+IF phase9.spatial.depth_score >= 90 (DERIVED perceived_depth = 'cavernous'):
     Too much reverb - might be washy
 ```
 
 ### Step 3: Evaluate Width Consistency
 ```
-IF width_consistency < 60:
+IF phase9.spatial.width_consistency < 60:
     Stereo image unstable over time
     Check for:
     - Extreme stereo modulation
-    - Phase issues
+    - Phase issues (cross-check phase1.stereo_correlation)
     - Inconsistent panning automation
 ```
 
@@ -190,11 +192,11 @@ Spatial Dimensions:
   Depth (Distance):   [X]/100 → [interpretation]
   Width Stability:    [X]/100 → [interpretation]
 
-Perceived Character:
-  Height feel: [low/balanced/high/extreme]
-  Depth feel: [flat/moderate/deep/cavernous]
+Perceived Character (DERIVED from scores):
+  Height feel: DERIVE from phase9.spatial.height_score (<45→low, 45-79→balanced, 80-89→high, ≥90→extreme)
+  Depth feel:  DERIVE from phase9.spatial.depth_score  (<45→flat, 45-69→moderate, 70-89→deep, ≥90→cavernous)
 
-Spatial Balance: [assessment]
+Spatial Balance: [from phase9.spatial.analysis[] observations]
 ```
 
 ### Prioritized Issues
@@ -232,7 +234,7 @@ WHY THIS MATTERS:
 - No sense of space or environment
 - Sounds amateur and "direct-to-console"
 
-DETECTION: depth_score < 50 OR perceived_depth = 'flat'
+DETECTION: phase9.spatial.depth_score < 50  (DERIVED perceived_depth = 'flat' when score < 45)
 
 FIX:
 
@@ -294,7 +296,7 @@ WHY THIS MATTERS:
 - Sounds unprofessional
 - May indicate phase or automation issues
 
-DETECTION: width_consistency < 60
+DETECTION: phase9.spatial.width_consistency < 60
 
 FIX:
 
@@ -338,10 +340,10 @@ WHY THIS MATTERS:
 - Missing "air" up top or "weight" down low
 - Professional mixes use all frequencies
 
-DETECTION: height_score < 50 OR perceived_height not 'balanced'
+DETECTION: phase9.spatial.height_score < 50  OR  phase9.spatial.height_score >= 85
 
-IF perceived_height = 'low':
-  Mix is bottom/mid-heavy, lacking air
+IF phase9.spatial.height_score < 45 (DERIVED perceived_height = 'low'):
+  Mix is bottom/mid-heavy, lacking air; verify with phase1.bands.air and phase1.bands.presence
 
   FIX:
   Step 1: Add high-frequency content
@@ -359,7 +361,7 @@ IF perceived_height = 'low':
     → Are cymbals/rides audible?
     → Add high percussion if needed
 
-IF perceived_height = 'extreme':
+IF phase9.spatial.height_score >= 90 (DERIVED perceived_height = 'extreme'):
   Mix is too bright/top-heavy
 
   FIX:
@@ -391,7 +393,7 @@ WHY THIS MATTERS:
 - Sounds distant and disconnected
 - Common problem with over-reverbing
 
-DETECTION: perceived_depth = 'cavernous'
+DETECTION: phase9.spatial.depth_score >= 90  (DERIVED perceived_depth = 'cavernous')
 
 FIX:
 
@@ -508,11 +510,11 @@ TECHNIQUE: Width increases from center outward
 
 ## Priority Rules
 
-1. **SEVERE**: Unstable width (<50%) - distracting issue
-2. **MODERATE**: Mix sounds flat (<50 depth) - major character issue
-3. **MODERATE**: Height imbalance (<50) - frequency problem
-4. **WARNING**: Width inconsistency (<70%) - polish issue
-5. **WARNING**: Depth needs work (<65) - minor character issue
+1. **SEVERE**: Unstable width (`phase9.spatial.width_consistency < 50`) - distracting issue
+2. **MODERATE**: Mix sounds flat (`phase9.spatial.depth_score < 50`) - major character issue
+3. **MODERATE**: Height imbalance (`phase9.spatial.height_score < 50`) - frequency problem
+4. **WARNING**: Width inconsistency (`phase9.spatial.width_consistency < 70`) - polish issue
+5. **WARNING**: Depth needs work (`phase9.spatial.depth_score < 65`) - minor character issue
 6. **INFO**: Spatial observations
 
 ---
@@ -525,8 +527,8 @@ TECHNIQUE: Width increases from center outward
 PROBLEM: Depth score at 42/100 (target: >65)
          Mix sounds two-dimensional with no front-to-back space.
 
-CURRENT: Depth = 42, perceived = 'flat'
-TARGET: Depth > 65, perceived = 'moderate' or 'deep'
+CURRENT: phase9.spatial.depth_score = 42 (DERIVED perceived_depth: 'flat' because score < 45)
+TARGET: phase9.spatial.depth_score > 65 (DERIVED perceived_depth: 'moderate' or 'deep')
 
 IMPACT:
 - All elements sound at same distance

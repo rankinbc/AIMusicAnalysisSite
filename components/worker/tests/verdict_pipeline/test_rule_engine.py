@@ -2,12 +2,13 @@
 
 Earlier versions of this file fed payloads using field names the rules read but
 the pipeline never emits (``integrated_lufs``, ``phase2.stereo_correlation``,
-``phase3.low_mid_energy``, ``crest_factor``, ``key_detection_confidence``), so
-the suite was green while the rules were dead in production. The pipeline
-actually emits ``phase1.lufs`` and ``phase1.stereo_correlation`` (verified via
-the pipeline-inspector dev tool against real analyses). These tests use the real
-shape; rules still reading non-emitted fields are marked ``xfail(strict=True)``
-with their tracking PRP so they cannot pass quietly.
+``phase3.low_mid_energy``), so the suite was green while the rules were dead in
+production. The pipeline emits ``phase1.lufs`` / ``phase1.stereo_correlation``
+(Tier-1) and now also ``phase1.crest_factor`` / ``phase1.key_detection_confidence``
+(the prompt-schema-reconciliation full-EMIT PRP), so the dynamics + key rules are
+live and tested for real here. Rules still reading non-emitted fields
+(``phase3.low_mid_energy`` + ``genre_hint``) stay ``xfail(strict=True)`` with
+their tracking PRP so they cannot pass quietly.
 """
 from __future__ import annotations
 
@@ -28,6 +29,8 @@ def _analysis(**phase1_over) -> dict:
         "stereo_correlation": 0.6,
         "peak_dbfs": -2.0,
         "rms": 0.15,
+        "crest_factor": 11.0,
+        "key_detection_confidence": 0.9,
         "duration_seconds": 200,
     }
     p1.update(phase1_over)
@@ -118,25 +121,55 @@ def test_fixed_rule_verdicts_pass_validator():
     assert validate_verdict(sc, a_stereo).ok
 
 
-# ── Deferred dead rules: read datapoints the pipeline never emits. Given a
-#    REAL-shape analysis they cannot fire. xfail(strict=True) documents the gap
-#    and turns red (XPASS) the moment a rule is fixed, forcing the marker's
-#    removal. Tracked in PRPs/rule-engine-tier1-field-fixes.md (Out of Scope).
+# ── Revived rules: now read fields the pipeline emits (phase1.crest_factor,
+#    phase1.key_detection_confidence — full-EMIT PRP). Tested for real: fires +
+#    does-not-fire each, against the real shape.
 
 
-@pytest.mark.xfail(strict=True, reason="excessive_dynamic_range reads "
-                   "phase1.crest_factor — never emitted; PRP Tier-2")
-def test_excessive_dynamic_range():
-    # peak_dbfs/rms imply a very wide crest, but the rule reads phase1.crest_factor.
-    verdicts = evaluate_rules(_analysis(peak_dbfs=-1.0, rms=0.004))
-    assert any(v.category == "dynamics" and v.severity == "minor" for v in verdicts)
+def test_excessive_dynamic_range_fires():
+    verdicts = evaluate_rules(_analysis(crest_factor=24.0))
+    dyn = next(v for v in verdicts if v.category == "dynamics")
+    assert dyn.severity == "minor"
+    assert dyn.evidence[0].metric == "phase1.crest_factor"
 
 
-@pytest.mark.xfail(strict=True, reason="tiny_dynamic_range reads "
-                   "phase1.crest_factor — never emitted; PRP Tier-2")
-def test_tiny_dynamic_range():
-    verdicts = evaluate_rules(_analysis(peak_dbfs=-0.1, rms=0.45))
-    assert any(v.category == "dynamics" and v.severity == "severe" for v in verdicts)
+def test_excessive_dynamic_range_silent_in_range():
+    assert not any(v.category == "dynamics" for v in evaluate_rules(_analysis(crest_factor=11.0)))
+
+
+def test_tiny_dynamic_range_fires():
+    verdicts = evaluate_rules(_analysis(crest_factor=3.0))
+    dyn = next(v for v in verdicts if v.category == "dynamics")
+    assert dyn.severity == "severe"
+    assert dyn.evidence[0].metric == "phase1.crest_factor"
+
+
+def test_tiny_dynamic_range_silent_in_range():
+    assert not any(v.category == "dynamics" for v in evaluate_rules(_analysis(crest_factor=11.0)))
+
+
+def test_key_detection_low_confidence_fires():
+    verdicts = evaluate_rules(_analysis(key_detection_confidence=0.3))
+    harm = next(v for v in verdicts if v.category == "harmonic")
+    assert harm.evidence[0].metric == "phase1.key_detection_confidence"
+
+
+def test_key_detection_low_confidence_silent_when_clear():
+    assert not any(
+        v.category == "harmonic"
+        for v in evaluate_rules(_analysis(key_detection_confidence=0.9))
+    )
+
+
+def test_revived_rule_verdicts_pass_validator():
+    a = _analysis(crest_factor=3.0)
+    dyn = next(v for v in evaluate_rules(a) if v.category == "dynamics")
+    assert validate_verdict(dyn, a).ok
+
+
+# ── Still-deferred dead rules: read phase3.low_mid_energy (absent) + genre_hint
+#    (an input, not an output). xfail(strict=True) turns red the moment they're
+#    fixed. Tracked in PRPs/rule-engine-tier1-field-fixes.md (Out of Scope).
 
 
 @pytest.mark.xfail(strict=True, reason="low_mid_mud_generic reads "
