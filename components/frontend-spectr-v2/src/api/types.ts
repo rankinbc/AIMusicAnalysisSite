@@ -319,6 +319,81 @@ export interface SaveVizPresetRequest {
   viz: unknown;
 }
 
+// ── Listen V3 — version-scoped sharing + access (PRP-2) ──────────────────────
+export interface ShareSettingsDto {
+  versionId: string;
+  visibility: 'private' | 'unlisted' | 'public';
+  shareToken: string | null;
+  showVerdicts: boolean;
+  commentsPolicy: 'off' | 'link' | 'named';
+  suggestionsAllowed: boolean;
+  bookmarkingAllowed: boolean;
+  sessionHostPolicy: 'owner_only' | 'invited';
+  sessionJoinPolicy: 'invited' | 'link' | 'public';
+  enabledAt: string | null;
+}
+
+export interface UpdateShareSettingsRequest {
+  visibility?: 'private' | 'unlisted' | 'public';
+  showVerdicts?: boolean;
+  commentsPolicy?: 'off' | 'link' | 'named';
+  suggestionsAllowed?: boolean;
+  bookmarkingAllowed?: boolean;
+  sessionHostPolicy?: 'owner_only' | 'invited';
+  sessionJoinPolicy?: 'invited' | 'link' | 'public';
+}
+
+export interface RotateTokenResponse {
+  shareToken: string;
+}
+
+export interface GatesDto {
+  canComment: boolean;
+  canSuggest: boolean;
+  canBookmark: boolean;
+}
+
+// The resolution contract the Work/View/Room switcher reads.
+export interface AccessDto {
+  role: 'owner' | 'invited' | 'anon' | 'none';
+  canWork: boolean;
+  canView: boolean;
+  roomHostable: boolean;
+  roomJoinable: boolean;
+  coachAvailable: boolean;
+  gates: GatesDto;
+}
+
+export interface InviteDto {
+  id: string;
+  scope: 'version' | 'session';
+  songVersionId: string | null;
+  role: 'reviewer' | 'listener' | 'host';
+  status: 'pending' | 'accepted' | 'revoked';
+  invitedEmail: string | null;
+  invitedHandle: string | null;
+  token: string;
+  createdAt: string;
+  acceptedAt: string | null;
+}
+
+export interface CreateInviteRequest {
+  role: 'reviewer' | 'listener' | 'host';
+  invitedEmail?: string | null;
+  invitedHandle?: string | null;
+}
+
+export interface VersionViewDto {
+  versionId: string;
+  songName: string;
+  versionNumber: number;
+  visibility: 'private' | 'unlisted' | 'public';
+  showVerdicts: boolean;
+  grade: string | null;
+  score: number | null;
+  gates: GatesDto;
+}
+
 export interface ReanalyzeResponse {
   jobId: string;
 }

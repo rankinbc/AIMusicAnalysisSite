@@ -38,6 +38,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<RackDraft> RackDrafts => Set<RackDraft>();
     public DbSet<VizPreset> VizPresets => Set<VizPreset>();
 
+    // Listen V3 — version-scoped sharing + invites (PRP-2)
+    public DbSet<ShareSetting> ShareSettings => Set<ShareSetting>();
+    public DbSet<Invite> Invites => Set<Invite>();
+
     // References + Compare
     public DbSet<ReferenceTrack> ReferenceTracks => Set<ReferenceTrack>();
     public DbSet<ReferenceSet> ReferenceSets => Set<ReferenceSet>();
@@ -241,6 +245,55 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         builder.Entity<VizPreset>()
             .HasOne<User>().WithMany().HasForeignKey(v => v.UserId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // Listen V3 (PRP-2) — version-scoped sharing. ADDITIVE: the analysis-scoped
+        // share (analyses.share_token) is untouched. share_settings is 1:1 with a
+        // version (PK = song_version_id, mirrors Subscription). share_token uses a
+        // PLAIN unique index — Postgres treats NULLs as distinct, so many private
+        // (null-token) rows coexist while non-null tokens stay unique (same as
+        // analyses.share_token above).
+        builder.Entity<ShareSetting>().HasKey(s => s.SongVersionId);
+        builder.Entity<ShareSetting>().ToTable(t =>
+        {
+            t.HasCheckConstraint("ck_share_settings_visibility",
+                "\"visibility\" IN ('private','unlisted','public')");
+            t.HasCheckConstraint("ck_share_settings_comments_policy",
+                "\"comments_policy\" IN ('off','link','named')");
+            t.HasCheckConstraint("ck_share_settings_host_policy",
+                "\"session_host_policy\" IN ('owner_only','invited')");
+            t.HasCheckConstraint("ck_share_settings_join_policy",
+                "\"session_join_policy\" IN ('invited','link','public')");
+        });
+        builder.Entity<ShareSetting>().HasIndex(s => s.ShareToken).IsUnique()
+            .HasDatabaseName("uq_share_settings_share_token");
+        builder.Entity<ShareSetting>().Property(s => s.CreatedAt).HasDefaultValueSql("now()");
+        builder.Entity<ShareSetting>().Property(s => s.UpdatedAt).HasDefaultValueSql("now()");
+        builder.Entity<ShareSetting>()
+            .HasOne<SongVersion>().WithMany().HasForeignKey(s => s.SongVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<Invite>().ToTable(t =>
+        {
+            t.HasCheckConstraint("ck_invites_scope", "\"scope\" IN ('version','session')");
+            t.HasCheckConstraint("ck_invites_role", "\"role\" IN ('reviewer','listener','host')");
+            t.HasCheckConstraint("ck_invites_status", "\"status\" IN ('pending','accepted','revoked')");
+        });
+        builder.Entity<Invite>().HasIndex(i => i.Token).IsUnique()
+            .HasDatabaseName("uq_invites_token");
+        builder.Entity<Invite>().HasIndex(i => i.SongVersionId)
+            .HasDatabaseName("ix_invites_song_version_id");
+        builder.Entity<Invite>().HasIndex(i => i.InvitedUserId)
+            .HasDatabaseName("ix_invites_invited_user_id");
+        builder.Entity<Invite>().Property(i => i.CreatedAt).HasDefaultValueSql("now()");
+        builder.Entity<Invite>()
+            .HasOne<SongVersion>().WithMany().HasForeignKey(i => i.SongVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<Invite>()
+            .HasOne<User>().WithMany().HasForeignKey(i => i.CreatedBy)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<Invite>()
+            .HasOne<User>().WithMany().HasForeignKey(i => i.InvitedUserId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         // DB-side defaults for *_at timestamp columns.
         // Without these, inserts from outside EF (the Python worker via SQLAlchemy)

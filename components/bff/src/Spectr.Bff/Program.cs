@@ -143,6 +143,11 @@ builder.Services.AddSingleton<IRateLimiter, RedisRateLimiter>();
 // (real impl is PRP-8; mirrors the PRP-0 sink convention).
 builder.Services.AddScoped<IPresetGenerator, NoOpPresetGenerator>();
 
+// Listen V3 (PRP-2) — version-scoped sharing: access resolver + the opaque
+// share-token resolver (plugs into ResourceTokenAuth's ITokenResolver set).
+builder.Services.AddScoped<AccessService>();
+builder.Services.AddScoped<ITokenResolver, ShareTokenResolver>();
+
 // Story 2.8 — usage-page honest-math (90-day credit spend vs Pro-equivalent).
 builder.Services.AddScoped<HonestMathService>();
 
@@ -261,6 +266,8 @@ api.MapCoachEndpoints();
 api.MapCoachConversationEndpoints();
 api.MapCompareEndpoints();
 api.MapRackPresetEndpoints();
+api.MapVersionShareEndpoints();
+api.MapVersionViewEndpoints();
 api.MapBillingEndpoints();
 
 app.MapGet("/", () => Results.Json(new { status = "ok", version = "2.0.0" }))
