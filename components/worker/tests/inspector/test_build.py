@@ -15,11 +15,13 @@ def test_catalog_model_lists_rules_and_specialists():
 
 
 def test_catalog_flags_unmapped_rule_paths_statically():
-    # loudness rules read phase1.integrated_lufs, which no stage declares
-    # (Phase 1 emits phase1.lufs) — must be flagged with no analysis.
+    # The dynamic-range rules read phase1.crest_factor, which no stage emits
+    # (Phase 1 emits peak_dbfs + rms, not crest) — a still-open Tier-2 gap that
+    # must be flagged with no analysis. (The loudness integrated_lufs gap was
+    # fixed in PRP rule-engine-tier1-field-fixes.)
     m = build_catalog_model()
     unmapped = {g["path"] for g in m["static_gaps"]["unmapped_rule_paths"]}
-    assert "phase1.integrated_lufs" in unmapped
+    assert "phase1.crest_factor" in unmapped
 
 
 def test_trace_model_marks_fired_rule_and_header():
@@ -44,9 +46,9 @@ def test_trace_model_marks_fired_rule_and_header():
 
 
 def test_trace_model_diagnoses_misnamed_rule_as_bug():
-    # phase1 ran and is populated, but the loudness rules read
-    # phase1.integrated_lufs (the real field is phase1.lufs) — that's a bug,
-    # not an input-gated idle.
+    # phase1 ran and is populated, but excessive_dynamic_range reads
+    # phase1.crest_factor (never emitted — a Tier-2 gap) — that's a bug, not an
+    # input-gated idle.
     raw = RawTrace(
         id="11111111-1111-1111-1111-111111111111",
         job_id="22222222-2222-2222-2222-222222222222",
@@ -59,8 +61,8 @@ def test_trace_model_diagnoses_misnamed_rule_as_bug():
         verdicts=[],
     )
     m = build_trace_model(raw)
-    loud = next(r for r in m["rules"] if r["name"] == "loudness_too_high_for_streaming")
-    assert loud["diagnosis"] == "bug"
+    dr = next(r for r in m["rules"] if r["name"] == "excessive_dynamic_range")
+    assert dr["diagnosis"] == "bug"
     assert m["inputs"]["music"] is True
     assert m["inputs"]["reference"] is False
     assert m["rule_diagnosis_summary"]["bug"] >= 1

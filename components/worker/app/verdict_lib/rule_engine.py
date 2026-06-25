@@ -150,7 +150,7 @@ def mono_incompatible(analysis: dict[str, Any]) -> Verdict | None:
 @rule
 def loudness_too_high_for_streaming(analysis: dict[str, Any]) -> Verdict | None:
     p1 = _phase(analysis, "phase1")
-    lufs = p1.get("integrated_lufs")
+    lufs = p1.get("lufs")
     if lufs is None or lufs <= -8.0:
         return None
     return _make(
@@ -161,7 +161,7 @@ def loudness_too_high_for_streaming(analysis: dict[str, Any]) -> Verdict | None:
         summary=f"Integrated loudness is {lufs:.1f} LUFS. Spotify normalises to "
                 "-14 LUFS; mastering hotter than -8 burns dynamics for no payoff.",
         evidence=[Evidence(
-            metric="phase1.integrated_lufs",
+            metric="phase1.lufs",
             value=float(lufs),
             expected_range=(-16.0, -8.0),
             label=f"{lufs:.1f} LUFS",
@@ -176,7 +176,7 @@ def loudness_too_high_for_streaming(analysis: dict[str, Any]) -> Verdict | None:
 @rule
 def loudness_too_low_for_streaming(analysis: dict[str, Any]) -> Verdict | None:
     p1 = _phase(analysis, "phase1")
-    lufs = p1.get("integrated_lufs")
+    lufs = p1.get("lufs")
     if lufs is None or lufs >= -20.0:
         return None
     return _make(
@@ -187,7 +187,7 @@ def loudness_too_low_for_streaming(analysis: dict[str, Any]) -> Verdict | None:
         summary=f"Integrated loudness is {lufs:.1f} LUFS — Spotify will push "
                 "the gain up but headroom and noise floor become problems.",
         evidence=[Evidence(
-            metric="phase1.integrated_lufs",
+            metric="phase1.lufs",
             value=float(lufs),
             expected_range=(-20.0, -8.0),
             label=f"{lufs:.1f} LUFS",
@@ -306,8 +306,8 @@ def tiny_dynamic_range(analysis: dict[str, Any]) -> Verdict | None:
 
 @rule
 def stereo_correlation_negative(analysis: dict[str, Any]) -> Verdict | None:
-    p2 = _phase(analysis, "phase2")
-    corr = p2.get("stereo_correlation")
+    p1 = _phase(analysis, "phase1")
+    corr = p1.get("stereo_correlation")
     if corr is None or corr >= -0.1:
         return None
     return _make(
@@ -319,7 +319,7 @@ def stereo_correlation_negative(analysis: dict[str, Any]) -> Verdict | None:
                 "out of phase — this collapses to a hollow mono and sounds "
                 "wrong on most playback chains.",
         evidence=[Evidence(
-            metric="phase2.stereo_correlation",
+            metric="phase1.stereo_correlation",
             value=float(corr),
             expected_range=(0.2, 1.0),
             label=f"{corr:+.2f} (target ≥0.2)",
