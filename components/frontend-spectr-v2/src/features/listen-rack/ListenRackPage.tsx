@@ -15,9 +15,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { CoverArt } from '../../ui/CoverArt';
 import {
-  MODE_SURFACE_MATRIX, type AccessDto, type ModeId,
+  MODE_SURFACE_MATRIX, type AccessDto, type ActorRef, type ModeId,
 } from './access';
-import { type Identity } from './identity';
+import { resolveCapabilities } from './capabilities';
+import { type Identity, type RoomControl } from './identity';
 import {
   DIRECTORS, LASER_EFFECTS, LASER_PATTERNS, MANIFEST_BY_ID, ROOM_LISTENERS, REACTION_EMOJI, TRACK,
   type AnnouncementMsg, type Director, type ModuleManifest, type PresencePopItem,
@@ -118,10 +119,12 @@ export interface ListenRackPageProps {
   modes: ModeId[];
   identity: Identity;
   access: AccessDto;
+  roomControl: RoomControl;
   onModeChange?: (m: ModeId) => void;
+  onGrant?: (scope: 'rack' | 'visuals', actor: ActorRef | null) => void;
 }
 
-export function ListenRackPage({ mode, modes, identity, access, onModeChange }: ListenRackPageProps) {
+export function ListenRackPage({ mode, modes, identity, access, roomControl, onModeChange, onGrant }: ListenRackPageProps) {
   const [playing, setPlaying] = useState(true);
   const [position, setPosition] = useState(42);
   const [director, setDirector] = useState('off');
@@ -134,8 +137,6 @@ export function ListenRackPage({ mode, modes, identity, access, onModeChange }: 
   const [metersOpen, setMetersOpen] = useState(true);
   const [announcement, setAnnouncement] = useState<AnnouncementMsg | null>(null);
   const [myStatus, setMyStatus] = useState('🎧');
-  const [rackController, setRackController] = useState<string | null>(null);
-  const [visualController, setVisualController] = useState<string | null>(null);
   const [bottomView, setBottomView] = useState<'rack' | 'lights'>('rack');
   const [vizPresets, setVizPresets] = useState<VizPreset[]>([]);
 
@@ -160,10 +161,12 @@ export function ListenRackPage({ mode, modes, identity, access, onModeChange }: 
   const modeRef = useRef(mode); modeRef.current = mode;
 
   const announce = useCallback((text: string, title?: string) => setAnnouncement({ id: Math.random().toString(36).slice(2), text, title }), []);
-  const grantControl = useCallback((h: string, scope: 'rack' | 'visuals') => {
-    if (scope === 'visuals') { setVisualController(h); announce(`@${h} can now control the visuals`, 'VISUALS CONTROL'); }
-    else { setRackController(h); announce(`@${h} can now control the rack`, 'RACK CONTROL'); }
-  }, [announce]);
+  const grantControl = useCallback((scope: 'rack' | 'visuals', actor: ActorRef | null) => {
+    onGrant?.(scope, actor);
+    const who = actor ? `@${actor.handle ?? actor.displayName ?? 'someone'}` : 'the host';
+    announce(`${who} can now control the ${scope === 'rack' ? 'rack' : 'visuals'}`,
+      scope === 'rack' ? 'RACK CONTROL' : 'VISUALS CONTROL');
+  }, [onGrant, announce]);
   const chooseDirector = useCallback((id: string) => {
     setDirector(id);
     const d = DIRECTORS.find((x) => x.id === id);
@@ -228,8 +231,8 @@ export function ListenRackPage({ mode, modes, identity, access, onModeChange }: 
 
   useEffect(() => { if (!announcement) return undefined; const t = setTimeout(() => setAnnouncement(null), 4800); return () => clearTimeout(t); }, [announcement]);
 
-  const surface = MODE_SURFACE_MATRIX[mode];
-  const rackReadOnly = surface.rack === 'readonly';
+  const cap = resolveCapabilities(mode, identity, roomControl, access);
+  const rackReadOnly = cap.rackReadOnly;
 
   return (
     <div className="lr-shell">
@@ -266,15 +269,14 @@ export function ListenRackPage({ mode, modes, identity, access, onModeChange }: 
                     <option value="">Presets ({(bottomView === 'rack' ? rs.presets : vizPresets).length})</option>
                     {(bottomView === 'rack' ? rs.presets : vizPresets).map((p: RackPreset | VizPreset) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
-                  <button type="button" onClick={() => (bottomView === 'rack' ? rs.savePreset(rackController || 'you') : saveVizPreset())} className="btn sm primary" style={{ fontSize: 10.5 }}>+ Save preset</button>
+                  <button type="button" onClick={() => (bottomView === 'rack' ? rs.savePreset(roomControl.rackHolder?.handle || 'you') : saveVizPreset())} className="btn sm primary" style={{ fontSize: 10.5 }}>+ Save preset</button>
                   {(() => {
-                    const ac = bottomView === 'rack' ? rackController : visualController;
+                    const ac = bottomView === 'rack' ? roomControl.rackHolder : roomControl.visualsHolder;
                     if (!ac) return null;
-                    const u = ROOM_LISTENERS.find((x) => x.handle === ac);
                     return (
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px', borderRadius: 8, background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.4)' }}>
-                        <Avatar handle={ac} hue={u?.hue || 220} anon={u?.anon} size={20} />
-                        <span className="mono" style={{ fontSize: 9.5, color: 'var(--violet)' }}>{bottomView === 'rack' ? 'rack' : 'visuals'} · @{ac}</span>
+                        <Avatar handle={ac.handle ?? ac.displayName ?? '?'} hue={ac.hue || 220} anon={ac.type === 'anon'} size={20} />
+                        <span className="mono" style={{ fontSize: 9.5, color: 'var(--violet)' }}>{bottomView === 'rack' ? 'rack' : 'visuals'} · @{ac.handle ?? ac.displayName}</span>
                       </div>
                     );
                   })()}
@@ -285,20 +287,20 @@ export function ListenRackPage({ mode, modes, identity, access, onModeChange }: 
                   ? (
                     <div style={{ position: 'relative' }}>
                       <div style={{ pointerEvents: 'none', opacity: 0.9 }}>
-                        <InlineRack rs={rs} playing={playing} controller={rackController} />
+                        <InlineRack rs={rs} playing={playing} controller={roomControl.rackHolder?.handle ?? null} />
                       </div>
                       <div className="mono" style={{ position: 'absolute', top: 12, right: 14, zIndex: 2, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--violet)', padding: '4px 9px', borderRadius: 7, background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.4)' }}>READ-ONLY · FORK TO SUGGEST</div>
                     </div>
                   )
-                  : <InlineRack rs={rs} playing={playing} controller={rackController} />)
+                  : <InlineRack rs={rs} playing={playing} controller={roomControl.rackHolder?.handle ?? null} />)
                 : <VisualsPanel stages={stages} toggleStage={toggleStage} director={director} setDirector={chooseDirector} viz={viz} setViz={setViz} onRandomize={randomizeViz} />}
             </div>
           </div>
 
-          <RightRail mode={mode} access={access} rs={rs} track={TRACK} position={position}
+          <RightRail mode={mode} access={access} cap={cap} rs={rs} track={TRACK} position={position}
             activeNote={activeNote} onNoteClick={(n) => { setActiveNote(n.id); setPosition(n.t); }} onSeek={setPosition}
             onReact={(e) => { setMyStatus(e); spawnReaction(e, 'maek'); }} feed={feed} announce={announce} myStatus={myStatus}
-            rackController={rackController} visualController={visualController} onGrant={grantControl} />
+            roomControl={roomControl} onGrant={grantControl} />
         </div>
       </div>
     </div>

@@ -9,7 +9,7 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 
 import {
-  MOCK_COMMENTS, railTabsFor, type AccessDto, type CommentDto, type ModeId,
+  MOCK_COMMENTS, railTabsFor, type AccessDto, type ActorRef, type CommentDto, type ModeId,
 } from './access';
 import {
   BG_COLORS, DIRECTORS, LASER_EFFECTS, LASER_PATTERNS, PLAN_ITEMS, REACTION_GROUPS,
@@ -17,6 +17,8 @@ import {
 } from './data';
 import { Coach } from '../../ui/Coach';
 import { cssVar, fmtTime, hslToHex } from './helpers';
+import type { CapabilitySet } from './capabilities';
+import { sameActor, type RoomControl } from './identity';
 import type { RackState } from './rackState';
 import { Avatar, HSlider, HueSlider, SelectChip, Switch } from './ui';
 
@@ -323,12 +325,12 @@ function CoachPanel({ rs, announce }: { rs: RackState; announce?: (text: string,
 }
 
 // ── PEOPLE tab — who's in the room + their live state ──────────────────────
-function PeoplePanel({ myStatus, onReact, rackController, visualController, onGrant }: {
+function PeoplePanel({ myStatus, onReact, cap, roomControl, onGrant }: {
   myStatus: string;
   onReact?: (e: string) => void;
-  rackController: string | null;
-  visualController: string | null;
-  onGrant: (handle: string, scope: 'rack' | 'visuals') => void;
+  cap: CapabilitySet;
+  roomControl: RoomControl;
+  onGrant: (scope: 'rack' | 'visuals', actor: ActorRef | null) => void;
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -360,12 +362,21 @@ function PeoplePanel({ myStatus, onReact, rackController, visualController, onGr
             <span className="mono" style={{ fontSize: 11, color: u.you ? 'var(--cyan)' : 'var(--text-2)' }}>{u.anon ? 'anonymous' : '@' + u.handle}</span>
             <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               {u.you && <span className="mono" style={{ fontSize: 8.5, color: 'var(--cyan)', letterSpacing: '0.1em' }}>HOST</span>}
-              {!u.you && (rackController === u.handle
-                ? <span className="mono" style={{ fontSize: 7.5, color: 'var(--violet)', padding: '2px 5px', borderRadius: 5, border: '1px solid rgba(167,139,250,0.4)', background: 'rgba(167,139,250,0.08)' }}>● RACK</span>
-                : <button type="button" onClick={() => onGrant(u.handle, 'rack')} className="btn ghost sm" style={{ fontSize: 8, padding: '3px 6px', color: 'var(--muted)' }}>+ Rack</button>)}
-              {!u.you && (visualController === u.handle
-                ? <span className="mono" style={{ fontSize: 7.5, color: 'var(--cyan)', padding: '2px 5px', borderRadius: 5, border: '1px solid rgba(0,229,176,0.4)', background: 'rgba(0,229,176,0.08)' }}>● VIS</span>
-                : <button type="button" onClick={() => onGrant(u.handle, 'visuals')} className="btn ghost sm" style={{ fontSize: 8, padding: '3px 6px', color: 'var(--muted)' }}>+ Vis</button>)}
+              {!u.you && (() => {
+                const actor: ActorRef = { type: u.anon ? 'anon' : 'user', handle: u.handle, hue: u.hue };
+                const isDJ = sameActor(roomControl.rackHolder, actor);
+                const isVJ = sameActor(roomControl.visualsHolder, actor);
+                return (
+                  <>
+                    {isDJ
+                      ? <span className="mono" style={{ fontSize: 7.5, color: 'var(--violet)', padding: '2px 5px', borderRadius: 5, border: '1px solid rgba(167,139,250,0.4)', background: 'rgba(167,139,250,0.08)' }}>● DJ</span>
+                      : cap.canGrantControl && <button type="button" onClick={() => onGrant('rack', actor)} className="btn ghost sm" style={{ fontSize: 8, padding: '3px 6px', color: 'var(--muted)' }}>+ DJ</button>}
+                    {isVJ
+                      ? <span className="mono" style={{ fontSize: 7.5, color: 'var(--cyan)', padding: '2px 5px', borderRadius: 5, border: '1px solid rgba(0,229,176,0.4)', background: 'rgba(0,229,176,0.08)' }}>● VJ</span>
+                      : cap.canGrantControl && <button type="button" onClick={() => onGrant('visuals', actor)} className="btn ghost sm" style={{ fontSize: 8, padding: '3px 6px', color: 'var(--muted)' }}>+ Vis</button>}
+                  </>
+                );
+              })()}
               <span style={{ fontSize: 14 }} title="current status">{u.you ? myStatus : u.state}</span>
             </span>
           </div>
@@ -570,9 +581,10 @@ const TAB_LABELS: Record<string, string> = {
   coach: 'Coach', plan: 'Plan', comments: 'Comments', people: 'People', chat: 'Chat', stats: 'Stats', notes: 'Notes',
 };
 
-export function RightRail({ mode, access, rs, track, position, activeNote, onNoteClick, onSeek, onReact, feed, announce, myStatus, rackController, visualController, onGrant }: {
+export function RightRail({ mode, access, cap, rs, track, position, activeNote, onNoteClick, onSeek, onReact, feed, announce, myStatus, roomControl, onGrant }: {
   mode: ModeId;
   access: AccessDto;
+  cap: CapabilitySet;
   rs: RackState;
   track: Track;
   position: number;
@@ -583,9 +595,8 @@ export function RightRail({ mode, access, rs, track, position, activeNote, onNot
   feed: ReactionFeedItem[];
   announce: (text: string, title?: string) => void;
   myStatus: string;
-  rackController: string | null;
-  visualController: string | null;
-  onGrant: (handle: string, scope: 'rack' | 'visuals') => void;
+  roomControl: RoomControl;
+  onGrant: (scope: 'rack' | 'visuals', actor: ActorRef | null) => void;
 }) {
   const tabs = railTabsFor(mode, access);
   const [tab, setTab] = useState(tabs[0]);
@@ -605,7 +616,7 @@ export function RightRail({ mode, access, rs, track, position, activeNote, onNot
         {active === 'coach' && <CoachPanel rs={rs} announce={announce} />}
         {active === 'plan' && <PlanPanel rs={rs} announce={announce} />}
         {active === 'comments' && <CommentsPanel access={access} onSeek={onSeek} />}
-        {active === 'people' && <PeoplePanel myStatus={myStatus} onReact={onReact} rackController={rackController} visualController={visualController} onGrant={onGrant} />}
+        {active === 'people' && <PeoplePanel myStatus={myStatus} onReact={onReact} cap={cap} roomControl={roomControl} onGrant={onGrant} />}
         {active === 'chat' && <ChatPanel feed={feed} onReact={onReact} />}
         {active === 'stats' && <StatsPanel track={track} />}
         {active === 'notes' && <NotesPanel track={track} position={position} activeNote={activeNote} onNoteClick={onNoteClick} />}
