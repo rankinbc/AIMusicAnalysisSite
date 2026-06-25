@@ -121,6 +121,13 @@ const FMIN = 20, FMAX = 20000;
 export const freqToX = (hz: number): number => Math.log(hz / FMIN) / Math.log(FMAX / FMIN);
 export const LASER_COLORS = ['#00e5b0', '#a78bfa', '#fb923c', '#f43f5e', '#fbbf24', '#60a5fa', '#34d399', '#f472b6'];
 
+// ── Photosensitivity: cap full-field flash rate at ≤3 Hz (WCAG 2.3.1) ───────
+export const FLASH_HZ_MAX = 3;
+/** Clamp a requested background-flash rate into the safe [0.5, 3] Hz band, so a
+ *  full-field flash can never strobe faster than the photosensitivity threshold. */
+export const safeFlashHz = (hz: number | undefined): number =>
+  Math.min(FLASH_HZ_MAX, Math.max(0.5, hz || 2));
+
 // ── Transport time formatting ───────────────────────────────────────────────
 export const fmtTime = (s: number): string =>
   `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;

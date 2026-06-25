@@ -6,6 +6,8 @@ import {
   freqToX,
   fmtTime,
   nudgeValue,
+  safeFlashHz,
+  FLASH_HZ_MAX,
   LASER_COLORS,
   SECTION_COLORS,
 } from './helpers';
@@ -107,6 +109,21 @@ describe('nudgeValue (keyboard operability for drag controls)', () => {
   it('snaps to the step grid (matches useDragValue rounding)', () => {
     expect(nudgeValue('ArrowUp', 4, { min: 0, max: 10, step: 2 })).toBe(6);
     expect(nudgeValue('ArrowUp', 0, { min: 0, max: 1, step: 0.1 })).toBeCloseTo(0.1, 6);
+  });
+});
+
+describe('safeFlashHz (photosensitivity cap)', () => {
+  it('caps full-field flash rate at the ≤3 Hz threshold', () => {
+    expect(safeFlashHz(8)).toBe(FLASH_HZ_MAX);
+    expect(safeFlashHz(3)).toBe(3);
+    expect(safeFlashHz(2)).toBe(2);
+  });
+  it('keeps a floor so the animation never stalls', () => {
+    expect(safeFlashHz(0.1)).toBe(0.5);
+    expect(safeFlashHz(0)).toBe(2); // 0 is falsy → default 2
+  });
+  it('defaults undefined to a safe mid rate', () => {
+    expect(safeFlashHz(undefined)).toBe(2);
   });
 });
 

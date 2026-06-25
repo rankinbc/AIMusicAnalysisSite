@@ -266,7 +266,7 @@ export function VisualsPanel({ stages, toggleStage, director, setDirector, viz, 
             <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-2)' }}>Flash background</span>
           </div>
           <div style={{ opacity: viz.bgFlash ? 1 : 0.4, pointerEvents: viz.bgFlash ? 'auto' : 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <HSlider label="Flash rate" value={viz.bgFlashHz} min={0.5} max={8} step={0.5} unit="Hz" onChange={(v) => setViz((s) => ({ ...s, bgFlashHz: v }))} />
+            <HSlider label="Flash rate" value={viz.bgFlashHz} min={0.5} max={3} step={0.5} unit="Hz" onChange={(v) => setViz((s) => ({ ...s, bgFlashHz: v }))} />
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}><span className="lr-lc-label">Color</span>{['#ffffff', '#00e5b0', '#a78bfa', '#fb923c', '#f43f5e'].map((c) => (<button type="button" key={c} onClick={() => setViz((s) => ({ ...s, bgFlashColor: c }))} style={{ width: 20, height: 20, borderRadius: 5, background: c, border: viz.bgFlashColor === c ? '2px solid #fff' : '2px solid transparent' }} />))}</div>
           </div>
         </div>
