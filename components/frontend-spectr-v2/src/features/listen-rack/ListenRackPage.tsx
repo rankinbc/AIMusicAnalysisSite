@@ -30,6 +30,7 @@ import {
 import { hslToHex } from './helpers';
 import './listenRack.css';
 import { InlineRack } from './rackLayouts';
+import { pushFullRack } from './rackBindings';
 import { RightRail, VisualMeters, VisualsPanel } from './rail';
 import { useRackState, type RackPreset } from './rackState';
 import { Transport } from './transport';
@@ -184,7 +185,11 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     setViz((v) => ({ ...v, barColor: hslToHex(pick(hues)), bg: hslToHex(pick(hues)), laserEffect: pick(LASER_EFFECTS), laserPattern: pick(LASER_PATTERNS), laserMove: Math.random() < 0.5, laserMono: Math.random() < 0.4, laserColor: hslToHex(pick(hues)), bgFlash: Math.random() < 0.4, bgFlashHz: 1 + Math.floor(Math.random() * 5), bgFlashColor: hslToHex(pick(hues)) }));
   }, []);
 
-  const rs = useRackState();
+  const rs = useRackState(realAudio ? graph : null);
+  // Latest rack snapshot for the first-play full sync (avoids putting the
+  // render-fresh `rs` object in togglePlay's deps).
+  const rsRef = useRef(rs);
+  rsRef.current = rs;
 
   const directorObj: Director | undefined = useMemo(() => DIRECTORS.find((d) => d.id === director), [director]);
   const activeModules: ModuleManifest[] = useMemo(() => rs.order.filter((id) => rs.mod[id].enabled).map((id) => MANIFEST_BY_ID[id]), [rs.order, rs.mod]);
@@ -298,6 +303,9 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     if (!a.paused) { a.pause(); setPlaying(false); return; }
     try {
       graph.ensureContext();
+      // Now that the AudioContext + nodes exist, sync the full rack so any knob
+      // moved (or preset recalled) while paused is reflected before audio starts.
+      pushFullRack(graph, rsRef.current.mod, rsRef.current.order, rsRef.current.masterBypass);
     } catch (err) {
       toast.error(`Audio engine failed: ${err instanceof Error ? err.message : String(err)}`);
       return;
