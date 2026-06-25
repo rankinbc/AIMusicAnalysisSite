@@ -1,0 +1,40 @@
+{
+  "_comment": "Hand-authored supplements to the sample-derived leaf set, sourced from the inspector stage_map + PRPs/detection-prescription-inventory.md. dynamic_prefixes = containers whose dict keys are chosen at runtime (genre/stem-role/band/feature names) and cannot be enumerated; a consumer path under one resolves to the prefix. manual_leaves = real declared pipeline outputs that happened to be empty (empty list/dict) in every committed sample, so they carry no observed leaf. bare_top_level_allowed = non-final_json keys injected into the flattened analysis at runtime (the verdict pipeline sets track_id).",
+  "bare_top_level_allowed": ["track_id"],
+  "dynamic_prefixes": [
+    "phase3.sub_scores",
+    "phase4.stems.per_stem",
+    "phase5.deltas",
+    "phase5.genre_context.checks",
+    "phase6.gaps"
+  ],
+  "manual_leaves": [
+    "phase2.bpm",
+    "phase3.notes[]",
+    "phase7.suggestions[]",
+    "phase7.fixes[]",
+    "phase7.component_scores.structure",
+    "phase7.component_scores.length",
+    "phase7.component_scores.eight_bar",
+    "phase7.component_scores.energy_contrast",
+    "phase7.component_scores.flow",
+    "phase7.section_scores[].section_type",
+    "phase7.section_scores[].start_time",
+    "phase7.section_scores[].end_time",
+    "phase7.section_scores[].duration",
+    "phase7.section_scores[].bars",
+    "phase7.section_scores[].score",
+    "phase7.section_scores[].time_range",
+    "phase7.section_scores[].eight_bar_compliant",
+    "phase7.section_scores[].checks",
+    "phase7.section_scores[].issues",
+    "phase4.stems.balance_flags[].role",
+    "phase4.stems.balance_flags[].metric",
+    "phase4.stems.balance_flags[].observed",
+    "phase4.stems.balance_flags[].expected_range",
+    "phase4.stems.balance_flags[].direction",
+    "phase4.stems.balance_flags[].severity_tier",
+    "phase5.genre_context.preset_name",
+    "phase5.genre_context.genre"
+  ]
+}

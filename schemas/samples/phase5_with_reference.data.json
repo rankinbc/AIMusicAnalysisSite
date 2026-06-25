@@ -1,0 +1,366 @@
+{
+  "per_stem_reference_deltas": [
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB quieter than reference",
+      "metric": "rms_db",
+      "reference_value": -24.17,
+      "role": "kick",
+      "severity_tier": "info",
+      "user_value": -24.17
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB quieter (LUFS) than reference",
+      "metric": "lufs_integrated",
+      "reference_value": -27.67,
+      "role": "kick",
+      "severity_tier": "info",
+      "user_value": -27.67
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0  narrower than reference",
+      "metric": "stereo_width",
+      "reference_value": 0.0,
+      "role": "kick",
+      "severity_tier": "info",
+      "user_value": 0.0
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.sub",
+      "reference_value": 70.58,
+      "role": "kick",
+      "severity_tier": "critical",
+      "user_value": 70.58
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.bass",
+      "reference_value": 69.47,
+      "role": "kick",
+      "severity_tier": "critical",
+      "user_value": 69.47
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.low_mid",
+      "reference_value": 47.9,
+      "role": "kick",
+      "severity_tier": "critical",
+      "user_value": 47.9
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.mid",
+      "reference_value": 33.18,
+      "role": "kick",
+      "severity_tier": "critical",
+      "user_value": 33.18
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.high_mid",
+      "reference_value": 17.51,
+      "role": "kick",
+      "severity_tier": "critical",
+      "user_value": 17.51
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.presence",
+      "reference_value": 3.78,
+      "role": "kick",
+      "severity_tier": "critical",
+      "user_value": 3.78
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.air",
+      "reference_value": -2.2,
+      "role": "kick",
+      "severity_tier": "critical",
+      "user_value": -2.2
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB quieter than reference",
+      "metric": "rms_db",
+      "reference_value": -10.97,
+      "role": "bass",
+      "severity_tier": "info",
+      "user_value": -10.97
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB quieter (LUFS) than reference",
+      "metric": "lufs_integrated",
+      "reference_value": -12.64,
+      "role": "bass",
+      "severity_tier": "info",
+      "user_value": -12.64
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0  narrower than reference",
+      "metric": "stereo_width",
+      "reference_value": 0.0,
+      "role": "bass",
+      "severity_tier": "info",
+      "user_value": 0.0
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.sub",
+      "reference_value": -35.96,
+      "role": "bass",
+      "severity_tier": "critical",
+      "user_value": -35.96
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.bass",
+      "reference_value": 86.69,
+      "role": "bass",
+      "severity_tier": "critical",
+      "user_value": 86.69
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.low_mid",
+      "reference_value": -19.6,
+      "role": "bass",
+      "severity_tier": "critical",
+      "user_value": -19.6
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.mid",
+      "reference_value": -14.64,
+      "role": "bass",
+      "severity_tier": "critical",
+      "user_value": -14.64
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.high_mid",
+      "reference_value": -11.02,
+      "role": "bass",
+      "severity_tier": "critical",
+      "user_value": -11.02
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.presence",
+      "reference_value": -9.5,
+      "role": "bass",
+      "severity_tier": "critical",
+      "user_value": -9.5
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.air",
+      "reference_value": -7.28,
+      "role": "bass",
+      "severity_tier": "critical",
+      "user_value": -7.28
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB quieter than reference",
+      "metric": "rms_db",
+      "reference_value": -34.37,
+      "role": "hats",
+      "severity_tier": "info",
+      "user_value": -34.37
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB quieter (LUFS) than reference",
+      "metric": "lufs_integrated",
+      "reference_value": -31.0,
+      "role": "hats",
+      "severity_tier": "info",
+      "user_value": -31.0
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0  narrower than reference",
+      "metric": "stereo_width",
+      "reference_value": 0.0,
+      "role": "hats",
+      "severity_tier": "info",
+      "user_value": 0.0
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.sub",
+      "reference_value": -12.91,
+      "role": "hats",
+      "severity_tier": "critical",
+      "user_value": -12.91
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.bass",
+      "reference_value": 2.04,
+      "role": "hats",
+      "severity_tier": "critical",
+      "user_value": 2.04
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.low_mid",
+      "reference_value": 18.06,
+      "role": "hats",
+      "severity_tier": "critical",
+      "user_value": 18.06
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.mid",
+      "reference_value": 33.69,
+      "role": "hats",
+      "severity_tier": "critical",
+      "user_value": 33.69
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.high_mid",
+      "reference_value": 47.98,
+      "role": "hats",
+      "severity_tier": "critical",
+      "user_value": 47.98
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.presence",
+      "reference_value": 56.06,
+      "role": "hats",
+      "severity_tier": "critical",
+      "user_value": 56.06
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.air",
+      "reference_value": 61.06,
+      "role": "hats",
+      "severity_tier": "critical",
+      "user_value": 61.06
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB quieter than reference",
+      "metric": "rms_db",
+      "reference_value": -13.47,
+      "role": "vocals",
+      "severity_tier": "info",
+      "user_value": -13.47
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB quieter (LUFS) than reference",
+      "metric": "lufs_integrated",
+      "reference_value": -14.15,
+      "role": "vocals",
+      "severity_tier": "info",
+      "user_value": -14.15
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0  narrower than reference",
+      "metric": "stereo_width",
+      "reference_value": 0.05,
+      "role": "vocals",
+      "severity_tier": "info",
+      "user_value": 0.05
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.sub",
+      "reference_value": -34.56,
+      "role": "vocals",
+      "severity_tier": "critical",
+      "user_value": -34.56
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.bass",
+      "reference_value": 63.79,
+      "role": "vocals",
+      "severity_tier": "critical",
+      "user_value": 63.79
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.low_mid",
+      "reference_value": 81.97,
+      "role": "vocals",
+      "severity_tier": "critical",
+      "user_value": 81.97
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.mid",
+      "reference_value": 80.12,
+      "role": "vocals",
+      "severity_tier": "critical",
+      "user_value": 80.12
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.high_mid",
+      "reference_value": -13.87,
+      "role": "vocals",
+      "severity_tier": "critical",
+      "user_value": -13.87
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.presence",
+      "reference_value": -12.06,
+      "role": "vocals",
+      "severity_tier": "critical",
+      "user_value": -12.06
+    },
+    {
+      "delta": 0.0,
+      "interpretation": "0.0 dB lower than reference",
+      "metric": "band_energy_db.air",
+      "reference_value": -10.87,
+      "role": "vocals",
+      "severity_tier": "critical",
+      "user_value": -10.87
+    }
+  ],
+  "status": "ok",
+  "stem_reference_comparison": "ok"
+}

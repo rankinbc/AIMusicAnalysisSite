@@ -146,6 +146,32 @@ validation, scoring) are recomputed with CURRENT code; LLM stages (triage,
 specialists) are shown from persisted data. See
 `docs/superpowers/specs/2026-06-25-pipeline-inspector-design.md`.
 
+## `final_json` schema contract (drift gate)
+
+`schemas/final_json.contract.json` is the authoritative manifest of every field
+path the analysis pipeline emits, generated from real samples + the stems/
+reference golden snapshots (`schemas/samples/`, `schemas/contract_extras.json`).
+The enforcement lint `tests/test_schema_contract_lints.py` fails CI if any
+consumer — a rule (`rule_engine`), a specialist/Triage prompt
+(`prompts/experts/*.md`), or a test fixture (`tests/.../fixtures/analyses/*.json`)
+— references a path the pipeline does NOT emit. This is the guard against the
+three-schema drift documented in `PRPs/detection-prescription-inventory.md`
+(production `phase1.lufs` vs. dead `phase1.integrated_lufs` / `audio_analysis.*`).
+
+```bash
+# regenerate the manifest after a deliberate pipeline field change
+python -m app.tools.build_schema_contract
+# re-freeze the drift baseline (only when intentionally adding/removing drift)
+python -m app.tools.build_schema_contract --write-baseline
+```
+
+Known-drift is frozen in `schemas/_schema_drift_baseline.json` as a **ratchet**:
+new drift turns CI red, and **fixing** a drift means deleting its baseline line
+(the lint fails if a baselined entry no longer occurs). Never silence a new
+failure by adding to the baseline — fix the consumer or, if the pipeline truly
+emits the field, regenerate the manifest. Design:
+`PRPs/schema-contract-prevention-design.md`.
+
 ---
 
 **To extend this component**: edit `PRPs/source/INITIAL.md` and run `/generate-prp`. Don't modify files here directly for new work — let the PRP drive it.

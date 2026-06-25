@@ -1,0 +1,881 @@
+{
+  "grade": "F",
+  "phases": [
+    {
+      "data": {
+        "bpm": 70.79409246575342,
+        "rms": 0.14877952635288239,
+        "lufs": -13.346396484640366,
+        "bands": {
+          "air": -59.3979606628418,
+          "mid": -38.06654739379883,
+          "bass": -33.37847900390625,
+          "low_mid": -36.69537353515625,
+          "presence": -40.56454849243164,
+          "sub_bass": -25.35187530517578,
+          "upper_mid": -39.713199615478516
+        },
+        "peak_dbfs": -0.09541806976832574,
+        "structure": {
+          "beats": [],
+          "sections": []
+        },
+        "low_energy": 36.17633819580078,
+        "detected_key": "C#",
+        "stereo_width": 0.01599232852458954,
+        "true_peak_db": 0.014713549223441208,
+        "duration_seconds": 510.6383219954649,
+        "clipping_detected": false,
+        "mono_compatibility": 0.9985549426219449,
+        "stereo_correlation": 0.9942303335375867,
+        "clipped_sample_count": 0
+      },
+      "name": "Universal Mix Analysis",
+      "error": null,
+      "phase": 1,
+      "status": "ok"
+    },
+    {
+      "data": {
+        "bpm": 70.79409246575342,
+        "genre": "other",
+        "confidence": 0.5
+      },
+      "name": "Genre Detection",
+      "error": null,
+      "phase": 2,
+      "status": "ok"
+    },
+    {
+      "data": {
+        "genre": "other",
+        "notes": [],
+        "sub_scores": {
+          "stereo_width": 1.279386281967163,
+          "frequency_balance": 82.97695732116699
+        },
+        "total_score": 42.12817180156708
+      },
+      "name": "Genre-Specific Scoring",
+      "error": null,
+      "phase": 3,
+      "status": "ok"
+    },
+    {
+      "data": {
+        "stems": {},
+        "clashes": [
+          {
+            "stems": "low-end buildup",
+            "severity": "high",
+            "frequency_range": "sub-bass / bass (20\u2013200 Hz)"
+          },
+          {
+            "stems": "low-mid congestion",
+            "severity": "high",
+            "frequency_range": "low-mid (200\u2013500 Hz)"
+          }
+        ],
+        "band_energy": {
+          "air": -3.67998220093076,
+          "mid": 15.625946578580589,
+          "bass": 34.96693195367459,
+          "low_mid": 22.316826951998003,
+          "high_mid": 12.274353327278112,
+          "presence": 10.530618635688732,
+          "sub_bass": 31.679530907108674
+        }
+      },
+      "name": "Stem Separation & Clash",
+      "error": null,
+      "phase": 4,
+      "status": "ok"
+    },
+    {
+      "data": {
+        "deltas": {},
+        "status": "skipped",
+        "genre_context": {
+          "genre": "other",
+          "checks": {},
+          "preset_name": "other"
+        }
+      },
+      "name": "Reference Comparison",
+      "error": null,
+      "phase": 5,
+      "status": "ok"
+    },
+    {
+      "data": {
+        "gaps": {},
+        "genre": "other",
+        "percentile": 50.0
+      },
+      "name": "Gap Analysis",
+      "error": null,
+      "phase": 6,
+      "status": "ok"
+    },
+    {
+      "data": {
+        "fixes": [],
+        "grade": "F",
+        "issues": [
+          {
+            "message": "Structure detection failed or no sections found",
+            "section": null,
+            "severity": "CRITICAL",
+            "fix_suggestion": "Ensure audio file is valid and long enough for structure detection"
+          }
+        ],
+        "metadata": {
+          "has_drop": false,
+          "has_intro": false,
+          "has_outro": false,
+          "total_bars": 0,
+          "has_buildup": false,
+          "has_breakdown": false,
+          "section_count": 0,
+          "detected_tempo": null,
+          "energy_contrast_db": null
+        },
+        "flow_score": 0,
+        "violations": [
+          "Structure detection failed or no sections found"
+        ],
+        "suggestions": [],
+        "length_score": 0,
+        "overall_score": 0,
+        "section_count": 0,
+        "section_scores": [],
+        "total_duration": 0.0,
+        "eight_bar_score": 0,
+        "structure_score": 0,
+        "component_scores": {},
+        "energy_contrast_score": 0
+      },
+      "name": "Arrangement Advice",
+      "error": null,
+      "phase": 7,
+      "status": "ok"
+    },
+    {
+      "data": {
+        "spatial": {
+          "analysis": [
+            "Good height perception (64%)",
+            "Good depth perception (50%)",
+            "Unstable stereo image (42%) - stereo width varies significantly"
+          ],
+          "depth_score": 50.288483323120666,
+          "height_score": 64.02054387259534,
+          "width_consistency": 41.925717474124745
+        },
+        "playback": {
+          "analysis": [
+            "Good headphone compatibility (100%)",
+            "Good speaker translation (74%)",
+            "Bass translation should work across most playback systems"
+          ],
+          "speaker_score": 73.69985900819302,
+          "crossfeed_safe": true,
+          "headphone_score": 99.90765271909171,
+          "bass_translation": "good"
+        },
+        "surround": {
+          "analysis": [
+            "Good mono compatibility (100%)",
+            "Good phase coherence (100%)",
+            "Mix is suitable for spatial audio formats (Atmos, Sony 360)"
+          ],
+          "phase_score": 99.71151667687934,
+          "is_atmos_ready": true,
+          "mono_compatibility": 99.71134632347685
+        }
+      },
+      "name": "Mix Translation",
+      "error": null,
+      "phase": 9,
+      "status": "ok"
+    },
+    {
+      "data": {
+        "midi": {
+          "issues": [
+            {
+              "fix": "Delete empty clips or add MIDI content",
+              "clip": "",
+              "type": "empty",
+              "track": "Tamb",
+              "severity": "warning",
+              "description": "Empty MIDI clip '' on track 'Tamb'"
+            },
+            {
+              "fix": "Delete empty clips or add MIDI content",
+              "clip": "TRITON",
+              "type": "empty",
+              "track": "28-TRITON",
+              "severity": "warning",
+              "description": "Empty MIDI clip 'TRITON' on track '28-TRITON'"
+            },
+            {
+              "fix": "Delete empty clips or add MIDI content",
+              "clip": "TRITON 2",
+              "type": "empty",
+              "track": "28-TRITON",
+              "severity": "warning",
+              "description": "Empty MIDI clip 'TRITON 2' on track '28-TRITON'"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "Kick",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "Bass",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "Bass",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "Bass",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "Bass",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "Bass",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "Bass",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "Bass",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "Bass",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "14-MonoPoly",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "14-MonoPoly",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "19-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "14-MonoPoly",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "15-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "15-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "15-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "15-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "15-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "18-ARP_ODYSSEY",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "19-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "18-TRITON 13",
+              "type": "duplicate",
+              "track": "26-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '18-TRITON 13' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "18-TRITON 10",
+              "type": "duplicate",
+              "track": "26-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '18-TRITON 10' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "18-TRITON 13",
+              "type": "duplicate",
+              "track": "23-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '18-TRITON 13' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "18-TRITON 13",
+              "type": "duplicate",
+              "track": "26-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '18-TRITON 13' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "18-TRITON 13",
+              "type": "duplicate",
+              "track": "26-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '18-TRITON 13' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "18-TRITON 15",
+              "type": "duplicate",
+              "track": "26-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '18-TRITON 15' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "18-TRITON 16",
+              "type": "duplicate",
+              "track": "23-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '18-TRITON 16' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "18-TRITON 16",
+              "type": "duplicate",
+              "track": "26-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '18-TRITON 16' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "18-TRITON 15",
+              "type": "duplicate",
+              "track": "26-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '18-TRITON 15' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "18-TRITON 15",
+              "type": "duplicate",
+              "track": "26-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '18-TRITON 15' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "18-TRITON 15",
+              "type": "duplicate",
+              "track": "28-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '18-TRITON 15' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "27-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "28-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "17-TRITON 10",
+              "type": "duplicate",
+              "track": "27-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '17-TRITON 10' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "17-TRITON 10",
+              "type": "duplicate",
+              "track": "28-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '17-TRITON 10' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "17-TRITON 2",
+              "type": "duplicate",
+              "track": "27-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '17-TRITON 2' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "17-TRITON 2",
+              "type": "duplicate",
+              "track": "28-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '17-TRITON 2' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "17-TRITON 2",
+              "type": "duplicate",
+              "track": "27-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '17-TRITON 2' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "17-TRITON 2",
+              "type": "duplicate",
+              "track": "27-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '17-TRITON 2' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "17-TRITON 2",
+              "type": "duplicate",
+              "track": "28-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '17-TRITON 2' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "17-TRITON 2",
+              "type": "duplicate",
+              "track": "28-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '17-TRITON 2' has identical notes to another clip"
+            },
+            {
+              "fix": "Consider consolidating duplicate clips or using linked clips",
+              "clip": "",
+              "type": "duplicate",
+              "track": "27-TRITON",
+              "severity": "suggestion",
+              "description": "Clip '' has identical notes to another clip"
+            },
+            {
+              "fix": "Add MIDI content or delete the track to reduce clutter",
+              "clip": null,
+              "type": "no_content",
+              "track": "Hat",
+              "severity": "suggestion",
+              "description": "Track 'Hat' has no MIDI content"
+            },
+            {
+              "fix": "Add MIDI content or delete the track to reduce clutter",
+              "clip": null,
+              "type": "no_content",
+              "track": "Echo",
+              "severity": "suggestion",
+              "description": "Track 'Echo' has no MIDI content"
+            },
+            {
+              "fix": "Add MIDI content or delete the track to reduce clutter",
+              "clip": null,
+              "type": "no_content",
+              "track": "20-TRITON",
+              "severity": "suggestion",
+              "description": "Track '20-TRITON' has no MIDI content"
+            }
+          ],
+          "empty_clips": 3,
+          "short_clips": 0,
+          "total_clips": 139,
+          "total_notes": 15110,
+          "duplicate_clips": 42,
+          "tracks_without_content": 3
+        },
+        "grade": "A",
+        "tempo": 141.0,
+        "tracks": [
+          {
+            "name": "Sidechain",
+            "type": "midi",
+            "muted": false,
+            "device_count": 1,
+            "disabled_count": 0
+          },
+          {
+            "name": "Kick",
+            "type": "midi",
+            "muted": false,
+            "device_count": 4,
+            "disabled_count": 0
+          },
+          {
+            "name": "Hat",
+            "type": "midi",
+            "muted": true,
+            "device_count": 1,
+            "disabled_count": 0
+          },
+          {
+            "name": "Hat",
+            "type": "midi",
+            "muted": false,
+            "device_count": 4,
+            "disabled_count": 0
+          },
+          {
+            "name": "C Hat",
+            "type": "midi",
+            "muted": false,
+            "device_count": 2,
+            "disabled_count": 0
+          },
+          {
+            "name": "Snare",
+            "type": "midi",
+            "muted": true,
+            "device_count": 3,
+            "disabled_count": 0
+          },
+          {
+            "name": "Clap",
+            "type": "midi",
+            "muted": false,
+            "device_count": 3,
+            "disabled_count": 0
+          },
+          {
+            "name": "misc",
+            "type": "midi",
+            "muted": false,
+            "device_count": 2,
+            "disabled_count": 0
+          },
+          {
+            "name": "Tamb",
+            "type": "midi",
+            "muted": false,
+            "device_count": 2,
+            "disabled_count": 0
+          },
+          {
+            "name": "Crash",
+            "type": "midi",
+            "muted": false,
+            "device_count": 2,
+            "disabled_count": 0
+          },
+          {
+            "name": "Echo",
+            "type": "midi",
+            "muted": false,
+            "device_count": 0,
+            "disabled_count": 0
+          },
+          {
+            "name": "Bass",
+            "type": "midi",
+            "muted": false,
+            "device_count": 7,
+            "disabled_count": 0
+          },
+          {
+            "name": "14-MonoPoly",
+            "type": "midi",
+            "muted": false,
+            "device_count": 6,
+            "disabled_count": 0
+          },
+          {
+            "name": "15-TRITON",
+            "type": "midi",
+            "muted": false,
+            "device_count": 9,
+            "disabled_count": 0
+          },
+          {
+            "name": "16-Polysix",
+            "type": "midi",
+            "muted": false,
+            "device_count": 8,
+            "disabled_count": 0
+          },
+          {
+            "name": "18-ARP_ODYSSEY",
+            "type": "midi",
+            "muted": false,
+            "device_count": 3,
+            "disabled_count": 0
+          },
+          {
+            "name": "19-TRITON",
+            "type": "midi",
+            "muted": false,
+            "device_count": 5,
+            "disabled_count": 0
+          },
+          {
+            "name": "20-TRITON",
+            "type": "midi",
+            "muted": false,
+            "device_count": 6,
+            "disabled_count": 0
+          },
+          {
+            "name": "22-TRITON",
+            "type": "midi",
+            "muted": false,
+            "device_count": 9,
+            "disabled_count": 0
+          },
+          {
+            "name": "23-TRITON",
+            "type": "midi",
+            "muted": false,
+            "device_count": 7,
+            "disabled_count": 0
+          },
+          {
+            "name": "24-TRITON",
+            "type": "midi",
+            "muted": false,
+            "device_count": 5,
+            "disabled_count": 0
+          },
+          {
+            "name": "26-TRITON",
+            "type": "midi",
+            "muted": false,
+            "device_count": 7,
+            "disabled_count": 0
+          },
+          {
+            "name": "27-TRITON",
+            "type": "midi",
+            "muted": true,
+            "device_count": 5,
+            "disabled_count": 0
+          },
+          {
+            "name": "28-TRITON",
+            "type": "midi",
+            "muted": false,
+            "device_count": 6,
+            "disabled_count": 0
+          },
+          {
+            "name": "29-MS-20",
+            "type": "midi",
+            "muted": true,
+            "device_count": 5,
+            "disabled_count": 0
+          },
+          {
+            "name": "A-Reverb",
+            "type": "return",
+            "muted": false,
+            "device_count": 1,
+            "disabled_count": 0
+          },
+          {
+            "name": "B-Delay",
+            "type": "return",
+            "muted": false,
+            "device_count": 1,
+            "disabled_count": 0
+          },
+          {
+            "name": "Drums",
+            "type": "group",
+            "muted": false,
+            "device_count": 0,
+            "disabled_count": 0
+          },
+          {
+            "name": "17-Group",
+            "type": "group",
+            "muted": false,
+            "device_count": 0,
+            "disabled_count": 0
+          },
+          {
+            "name": "21-Group",
+            "type": "group",
+            "muted": false,
+            "device_count": 0,
+            "disabled_count": 0
+          },
+          {
+            "name": "string/pad",
+            "type": "group",
+            "muted": true,
+            "device_count": 0,
+            "disabled_count": 0
+          }
+        ],
+        "arrangement": {
+          "pattern": null,
+          "sections": [
+            {
+              "name": "Part1",
+              "end_beat": 576.0,
+              "start_beat": 384.0,
+              "duration_bars": 48.0
+            },
+            {
+              "name": "   ",
+              "end_beat": 1248.0,
+              "start_beat": 576.0,
+              "duration_bars": 168.0
+            }
+          ],
+          "has_markers": true,
+          "total_sections": 2
+        },
+        "clutter_pct": 0.0,
+        "plugin_list": [
+          "ARP_ODYSSEY",
+          "FabFilter Pro-C 2",
+          "FabFilter Pro-L 2",
+          "FabFilter Pro-Q 3",
+          "MS-20",
+          "MonoPoly",
+          "Polysix",
+          "SPAN",
+          "TRITON"
+        ],
+        "health_score": 85,
+        "total_devices": 114,
+        "time_signature": "4/4",
+        "ableton_version": "Ableton Live 11.3.11",
+        "midi_note_count": 15110,
+        "audio_clip_count": 0,
+        "disabled_devices": 0,
+        "total_chord_count": 2362,
+        "has_humanized_midi": true,
+        "total_duration_seconds": 531.06,
+        "quantization_issues_count": 7311
+      },
+      "name": "ALS Analysis",
+      "error": null,
+      "phase": 8,
+      "status": "ok"
+    }
+  ],
+  "file_path": "<scrubbed>",
+  "top_fixes": [
+    "Stereo image is unstable across the track \u2014 automate width changes deliberately rather than letting it drift.",
+    "EQ clash between low-end buildup: reduce sub-bass / bass (20\u2013200 Hz)",
+    "EQ clash between low-mid congestion: reduce low-mid (200\u2013500 Hz)"
+  ],
+  "coach_name": "Coach",
+  "coach_intro": "Here's what I'd focus on to push this mix forward:",
+  "coached_fixes": [
+    "True peak is hitting 0.0 dBTP. Streaming platforms reject above 0 dBTP; keep it below \u22121.0 dBTP for safety. Back off the ceiling."
+  ],
+  "overall_score": 42.12817180156708,
+  "danceability_score": 20
+}
