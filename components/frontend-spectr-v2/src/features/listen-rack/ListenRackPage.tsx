@@ -15,7 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { getAccessToken } from '../../api/fetcher';
-import { useAudioGraph } from '../listen/useAudioGraph';
+import { useAudioGraph, type AudioFrame } from '../listen/useAudioGraph';
 import { CoverArt } from '../../ui/CoverArt';
 import {
   MODE_SURFACE_MATRIX, type AccessDto, type ActorRef, type ModeId,
@@ -167,6 +167,11 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
   const [pops, setPops] = useState<PresencePopItem[]>([]);
   const [feed, setFeed] = useState<ReactionFeedItem[]>([]);
   const [metersOpen, setMetersOpen] = useState(true);
+  // Real meter frame (Phase 2 Task 2): last AnalyserNode snapshot, throttled to
+  // ~12 Hz so the rail doesn't reconcile at the 60fps draw cadence. null until
+  // the first real frame (and always null on the mock route).
+  const [meterFrame, setMeterFrame] = useState<AudioFrame | null>(null);
+  const lastMeterTsRef = useRef(0);
   const [announcement, setAnnouncement] = useState<AnnouncementMsg | null>(null);
   const [myStatus, setMyStatus] = useState('🎧');
   const [bottomView, setBottomView] = useState<'rack' | 'lights'>('rack');
@@ -250,6 +255,23 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
       a.removeEventListener('error', onErr);
     };
   }, [audioUrl]);
+
+  // ── Real meter loop (Phase 2 Task 2). rAF reads the post-rack AnalyserNode and
+  // publishes a throttled frame to the meter rail. Real mode + playing only. ──
+  useEffect(() => {
+    if (!realAudio || !playing) return undefined;
+    let raf = 0;
+    const draw = () => {
+      const nowMs = performance.now();
+      if (nowMs - lastMeterTsRef.current >= 80) {
+        lastMeterTsRef.current = nowMs;
+        setMeterFrame(graph.readFrame());
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [realAudio, playing, graph]);
 
   // Per-mode layout defaults (spec §04): Room → full light show + minimal
   // metering; Work/View → rack-first + prominent metering.
@@ -338,7 +360,8 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
           <div style={{ minWidth: 0 }}>
             <div className="card" style={{ overflow: 'hidden', position: 'relative' }}>
               <PresencePops items={pops} />
-              <VisualMeters track={TRACK} playing={playing} open={metersOpen} setOpen={setMetersOpen} />
+              <VisualMeters track={TRACK} playing={playing} open={metersOpen} setOpen={setMetersOpen}
+                frame={realAudio ? meterFrame : null} />
               <VizStage playing={playing} stages={stages} setStages={setStages} viz={viz}
                 director={directorObj} height={440} onDrop={handleDrop} myStatus={myStatus} activeModules={activeModules} />
               <CoachToast msg={announcement} />
