@@ -15,8 +15,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { CoverArt } from '../../ui/CoverArt';
 import {
-  availableModes, MODE_SURFACE_MATRIX, MOCK_ACCESS, type ModeId,
+  MODE_SURFACE_MATRIX, type AccessDto, type ModeId,
 } from './access';
+import { type Identity } from './identity';
 import {
   DIRECTORS, LASER_EFFECTS, LASER_PATTERNS, MANIFEST_BY_ID, ROOM_LISTENERS, REACTION_EMOJI, TRACK,
   type AnnouncementMsg, type Director, type ModuleManifest, type PresencePopItem,
@@ -34,9 +35,12 @@ import { VizStage } from './viz';
 
 interface VizPreset { id: string; name: string; viz: VizState; stages: string[]; director: string }
 
-function TrackHeader({ mode, modes, setMode }: { mode: ModeId; modes: ModeId[]; setMode: (m: ModeId) => void }) {
+function TrackHeader({ mode, modes, identity, onModeChange }: {
+  mode: ModeId; modes: ModeId[]; identity: Identity; onModeChange?: (m: ModeId) => void;
+}) {
   const t = TRACK;
   const surface = MODE_SURFACE_MATRIX[mode];
+  const showSwitcher = identity.isOwner && onModeChange && modes.length > 1;
   return (
     <div className="lr-head">
       <CoverArt hue={168} size="md" />
@@ -57,7 +61,10 @@ function TrackHeader({ mode, modes, setMode }: { mode: ModeId; modes: ModeId[]; 
         </div>
       </div>
       <div className="lr-head-actions">
-        <SegBar value={mode} onChange={(id) => setMode(id as ModeId)} options={modes.map((id) => ({ id, label: MODE_SURFACE_MATRIX[id].label }))} accent={surface.accent} />
+        {showSwitcher && (
+          <SegBar value={mode} onChange={(id) => onModeChange(id as ModeId)}
+            options={modes.map((id) => ({ id, label: MODE_SURFACE_MATRIX[id].label }))} accent={surface.accent} />
+        )}
         <button type="button" className="btn primary sm">View Report →</button>
       </div>
     </div>
@@ -106,12 +113,17 @@ function CoachToast({ msg }: { msg: AnnouncementMsg | null }) {
   );
 }
 
-export function ListenRackPage() {
-  const access = MOCK_ACCESS;
-  const modes = useMemo(() => availableModes(access), [access]);
+export interface ListenRackPageProps {
+  mode: ModeId;
+  modes: ModeId[];
+  identity: Identity;
+  access: AccessDto;
+  onModeChange?: (m: ModeId) => void;
+}
+
+export function ListenRackPage({ mode, modes, identity, access, onModeChange }: ListenRackPageProps) {
   const [playing, setPlaying] = useState(true);
   const [position, setPosition] = useState(42);
-  const [mode, setMode] = useState<ModeId>(modes[0] ?? 'work');
   const [director, setDirector] = useState('off');
   const [viz, setViz] = useState<VizState>(DEFAULT_VIZ);
   const [stages, setStages] = useState<string[]>(['eq']);
@@ -222,7 +234,7 @@ export function ListenRackPage() {
   return (
     <div className="lr-shell">
       <div className="lr-page">
-        <TrackHeader mode={mode} modes={modes} setMode={setMode} />
+        <TrackHeader mode={mode} modes={modes} identity={identity} {...(onModeChange ? { onModeChange } : {})} />
 
         <div className="lr-grid">
           <div style={{ minWidth: 0 }}>
