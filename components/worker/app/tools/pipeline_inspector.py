@@ -2,6 +2,7 @@
 
 Trace mode:    python -m app.tools.pipeline_inspector <analysis_id> [--open]
 Catalog mode:  python -m app.tools.pipeline_inspector --catalog [--open]
+List recent:   python -m app.tools.pipeline_inspector --list [--limit N]
 Validate map:  python -m app.tools.pipeline_inspector --validate-map [<analysis_id>|--snapshot FILE]
 
 Catalog + snapshot-validate run with NO database. db_sync is imported lazily,
@@ -73,10 +74,26 @@ def _run_validate(args: argparse.Namespace) -> int:
     return 1
 
 
+def _run_list(limit: int) -> int:
+    from app.tools.inspector.loader import list_recent  # noqa: PLC0415
+    rows = list_recent(_session_factory(), limit)
+    if not rows:
+        print("no analyses found")
+        return 0
+    print(f"{'id':8}  {'gr':2}  {'created':16}  song")
+    for r in rows:
+        created = r["created_at"].strftime("%Y-%m-%d %H:%M") if r["created_at"] else "—"
+        print(f"{r['id'][:8]}  {(r['grade'] or '?'):>2}  {created:16}  {r['song_name'] or ''}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pipeline_inspector")
     parser.add_argument("target", nargs="?", help="analysis id (or unique prefix)")
     parser.add_argument("--catalog", action="store_true", help="render catalog only (no DB)")
+    parser.add_argument("--list", action="store_true", dest="list_recent",
+                        help="list recent analyses (id/grade/date/song) to pick from")
+    parser.add_argument("--limit", type=int, default=20, help="row count for --list (default 20)")
     parser.add_argument("--validate-map", action="store_true", help="check stage map vs a real final_json")
     parser.add_argument("--snapshot", help="path to a final_json for --validate-map")
     parser.add_argument("--out-dir", help="override output directory")
@@ -84,6 +101,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        if args.list_recent:
+            return _run_list(args.limit)
+
         if args.validate_map:
             return _run_validate(args)
 

@@ -50,6 +50,22 @@ def resolve_analysis_id(session_factory, prefix: str) -> str:
     )
 
 
+def list_recent(session_factory, limit: int = 20) -> list[dict[str, Any]]:
+    """Most-recent analyses (newest first) for picking an id to inspect.
+    Returns light dicts: ``id``, ``song_name``, ``created_at``, ``grade``."""
+    with session_factory() as s:
+        rows = s.execute(
+            select(Analysis.id, Analysis.song_name, Analysis.created_at, Analysis.final_json)
+            .order_by(Analysis.created_at.desc())
+            .limit(limit)
+        ).all()
+    out: list[dict[str, Any]] = []
+    for aid, song, created, final_json in rows:
+        grade = final_json.get("grade") if isinstance(final_json, dict) else None
+        out.append({"id": str(aid), "song_name": song, "created_at": created, "grade": grade})
+    return out
+
+
 def load_trace(session_factory, analysis_id: str) -> RawTrace:
     aid = uuid.UUID(analysis_id)
     with session_factory() as s:
