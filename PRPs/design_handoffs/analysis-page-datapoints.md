@@ -14,7 +14,7 @@ The verdict/rule layer reads a **flattened** view where each field is addressed 
 - **Mix only** (every analysis): phases 1, 2, 3, 6, 7, 9 + all top-level fields + phase 4 `band_energy`/`clashes`.
 - **Stems uploaded**: phase 4 `stems.*` (grouped + per-stem) populates.
 - **.als uploaded**: phase 8 + the separate `alsProject` blob on the results DTO.
-- **Reference track / library**: phase 5 + phase 6 `gaps` + `per_stem_reference_deltas`.
+- **Reference profile / genre profile**: phase 6 `gaps` (the comparison engine — drives Tab 5; runs against a user reference profile when attached, else the genre statistical profile). Legacy phase 5 + `per_stem_reference_deltas` are the older single-reference-file path.
 
 ⚠️ **Two different band systems — NOT comparable** (do not diff or share a widget):
 `phase1.bands` and `phase4.band_energy` are separate analyses that merely share 6
@@ -110,12 +110,20 @@ Loudness / peak / dynamics / stereo / spectral — the core meter wall.
 | `sub_scores` | `phase3.sub_scores.*` | dynamic dict — keys vary by genre. Observed: `stereo_width`, `frequency_balance`. |
 | `notes[]` | `phase3.notes` | string[] (often empty) |
 
-### Phase 6 — Gap Analysis vs genre profile (mix only; `gaps` needs a profile)
+### Phase 6 — Gap Analysis vs a profile (mix only; `gaps` needs a profile) → **drives Tab 5**
+Runs **once** against a single effective profile: an attached **user reference
+profile** if present, else the **genre statistical profile** (default fallback).
+This is the engine for the Reference Comparison tab — see Tab 5.
+
 | Field | `flatten` path | Type |
 |---|---|---|
 | `genre` | `phase6.genre` | string |
 | `percentile` | `phase6.percentile` | number 0–100 |
-| `gaps` | `phase6.gaps.*` | dynamic dict keyed by metric name. Each value: `{user_val, genre_mean, genre_std, acceptable_range:[lo,hi], delta, percentile, description, in_range}` (often empty unless a profile matched). |
+| `gaps` | `phase6.gaps.*` | dynamic dict keyed by metric name. Each value: `{user_val, genre_mean, genre_std, acceptable_range:[lo,hi], delta, percentile, description, in_range}` (often empty unless a profile matched). Note: `genre_mean`/`genre_std` are the profile's mean/std regardless of profile kind. |
+| `profile_kind` | `phase6.profile_kind` | `'user'｜'genre'｜'genre_statistical'` — which kind of profile produced the gaps. Drives the Tab 5 chip/label. Absent on older results ⇒ treat as genre. |
+| `profile_name` | `phase6.profile_name` | string — display name (the user profile's name, or the genre name). |
+| `profile_hue` | `phase6.profile_hue` | int｜null — hue for the user-profile chip (null for genre profiles). |
+| `track_count` | `phase6.track_count` | int — how many reference tracks the profile aggregates ("based on N tracks"). |
 
 ### Phase 7 — Arrangement Advice (uses deferred allin1 structure)
 | Field | `flatten` path | Type |
@@ -268,12 +276,24 @@ rejects ±>10% mismatch). This is the link from a problem back to its number.
 
 ---
 
-## TAB 5 — REFERENCE PROFILE COMPARISON (build disabled for now)
+## TAB 5 — REFERENCE PROFILE COMPARISON
 
-Populated only when a reference track / library profile is present (currently
-`status:"skipped"` in all committed samples).
+**Driven by phase 6** (`phase6.gaps` + `profile_*` fields above), which runs once
+against the effective profile (attached **user reference profile** → **genre
+statistical profile** default → none). This is the canonical content of the tab.
+Render the percentile ring + per-metric gap rows (`user_val` vs `genre_mean`,
+`acceptable_range`, `in_range`), labeled with `profile_kind` / `profile_name` /
+`profile_hue` and "based on `track_count` tracks". See `analysis-page-states.md`
+Tab 5 for the no-profile / not-ready / user-vs-genre / re-run-override states.
 
-### Phase 5 — Reference Comparison
+A profile is built/selected from the user's reference library
+(`ReferenceSetDto` = a named set + hue + member count; `ReferenceDto` = one
+analyzed reference track). The BFF aggregates a set's analyzed members into the
+phase-6 `feature_statistics {mean, std}` shape (see the reference-profiles spec).
+
+### Phase 5 — Reference Comparison (LEGACY single-reference-file path; `skipped` by default)
+Not used by the reference-profile feature; retained for the older single-ref
+delta. Stays `status:"skipped"` unless a single reference file is explicitly wired.
 | Field | `flatten` path | Type |
 |---|---|---|
 | `status` | `phase5.status` | `"ok"｜"skipped"｜…` |
