@@ -57,10 +57,20 @@ consolidated list (the data dictionary scatters them across tabs).
 
 ## Tab 5 — Reference Comparison
 
+This tab is **driven by phase 6** (`phase6.gaps`), which runs **once** against a
+single effective profile. The profile source is, in priority order: an attached
+**user reference profile** → the **genre statistical profile** (default fallback) →
+nothing. So the tab is no longer "disabled" — it shows the genre comparison by
+default and the user-profile comparison when one is attached. (Phase 5 — legacy
+single-reference-file delta — is unrelated and stays `skipped`.)
+
 | State | Data signal | Render |
 |---|---|---|
-| **Disabled (now)** | `phase5.status = "skipped"`; no reference wired | "Coming soon" / disabled tab. This is the current default for every report. |
-| **(Future) populated** | `phase5.status = "ok"`, `genre_context.checks` + `per_stem_reference_deltas[]` | Per-metric diff vs reference (build later). |
+| **No profile / no gap data** | `phase6.gaps` empty AND no profile attached (no genre profile matched) | Empty state + CTA to **pick or build a reference profile**. Not a failing grade. |
+| **Genre profile (default)** | `phase6.profile_kind = "genre_statistical"` (or absent); `gaps` populated | Percentile ring + gap rows vs the genre statistical profile (current behavior). Chip labels it as the genre profile. |
+| **User profile attached** | `phase6.profile_kind = "user"`; `profile_name`, `profile_hue`, `track_count` present; `gaps` populated | Same gap rows, labeled with the user profile's **name + hue chip** and "based on N tracks". |
+| **Profile attached but not ready** | profile selected but `track_count = 0` (no analyzed member tracks) | "This profile has no analyzed reference tracks yet" — prompt to analyze its tracks. No gap rows. |
+| **Re-run override active** | a phase-6 re-run compared against a different profile than the song default | Show **which** profile this comparison used (name/source), distinct from the song's default. |
 
 ## Actions section
 
@@ -73,6 +83,6 @@ consolidated list (the data dictionary scatters them across tabs).
 ## Quick design checklist
 - Every tab needs a **loading**, **empty/not-uploaded**, and **failed/skipped** treatment — not just the happy path.
 - The **arrangement** block is async (pending→scored); design the in-place fill.
-- **Reference** is disabled by default today; **Stems** and **.als** are conditional on upload.
+- **Reference (Tab 5)** shows the genre comparison by default and the user-profile comparison when a profile is attached (it is no longer disabled); **Stems** and **.als** are conditional on upload.
 - **Problems** is the tab most affected by tier/budget — design the degraded banner.
 - Don't render a failing grade for *missing* data — use neutral "not assessed".
