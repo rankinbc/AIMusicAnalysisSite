@@ -29,6 +29,26 @@ def test_validate_map_with_drifting_snapshot_returns_nonzero(tmp_path, monkeypat
     assert rc != 0
 
 
+def test_validate_map_in_sync_snapshot_returns_zero(tmp_path):
+    import json
+    # Write a snapshot containing EXACTLY the top-level rollup keys the stage map
+    # declares, with no phases list, so the diff comes back empty (in sync).
+    snap = Path(tmp_path) / "snap.json"
+    snap.write_text(json.dumps({
+        "overall_score": 1,
+        "grade": "F",
+        "top_fixes": [],
+        "danceability_score": 0,
+        "coach_name": "c",
+        "coach_intro": "i",
+        "coached_fixes": [],
+        "file_path": "x.wav",
+    }), encoding="utf-8")
+    rc = main(["--validate-map", "--snapshot", str(snap)])
+    # In-sync snapshot returns 0 and no longer crashes with UnicodeEncodeError.
+    assert rc == 0
+
+
 def test_unknown_arg_combo_errors(tmp_path):
     rc = main(["--validate-map", "--snapshot", str(tmp_path / "nope.json")])
     assert rc != 0

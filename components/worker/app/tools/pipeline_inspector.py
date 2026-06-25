@@ -60,7 +60,7 @@ def _run_validate(args: argparse.Namespace) -> int:
         final_json = load_trace(factory, aid).final_json
     stale_missing, phantom = diff_against_final_json(final_json)
     if not stale_missing and not phantom:
-        print("stage map is in sync with the snapshot ✓")
+        print("stage map is in sync with the snapshot")
         return 0
     if stale_missing:
         print("STALE/MISSING (pipeline emits, map omits):")
