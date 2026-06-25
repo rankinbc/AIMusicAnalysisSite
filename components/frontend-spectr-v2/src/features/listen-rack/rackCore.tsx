@@ -5,7 +5,7 @@
 import { type CSSProperties } from 'react';
 
 import { MANIFEST_BY_ID, type EqBand } from './data';
-import { useFakeGR, type RackState } from './rackState';
+import { useGainReduction, type RackState } from './rackState';
 import { GRMeter, ParamControl } from './ui';
 
 // ── rack chrome: active count + signal flow + A/B + reset + bindings ───────
@@ -68,7 +68,7 @@ export function RichControls({ id, rs, playing, knobSize = 34 }: {
   id: string; rs: RackState; playing: boolean; knobSize?: number;
 }) {
   const m = MANIFEST_BY_ID[id], st = rs.mod[id], on = st.enabled && !rs.masterBypass;
-  const gr = useFakeGR(m.hasMeter ? st.enabled : false, playing, id === 'limiter' ? 4 : id === 'gate' ? 10 : 6);
+  const gr = useGainReduction(rs.graph, id, m.hasMeter ? st.enabled : false, playing, id === 'limiter' ? 4 : id === 'gate' ? 10 : 6);
   if (id === 'eq') return <EqBandEditor bands={st.bands as EqBand[]} setBands={rs.setEqBands} accent={m.accent} dim={!on} />;
   const skip = id === 'delay' ? ['bpm', 'enabled'] : ['enabled'];
   const params = m.params.filter((p) => !skip.includes(p.key));

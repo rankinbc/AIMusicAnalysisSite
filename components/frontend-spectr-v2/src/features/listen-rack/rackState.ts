@@ -1,9 +1,10 @@
 /* SPECTR · Listen rack redesign — rack state hooks (non-component module).
  *
  * SWAP BOUNDARY (see PORTING_NOTES.md):
- *   useRackState → replace internals with the real audio-graph store, keeping
- *     the SAME return shape so the renderers don't change.
- *   useFakeGR   → replace with readEffectMeter(id) for comp/gate/limiter.
+ *   useRackState → real audio-graph store when a graph is supplied (Phase 2),
+ *     keeping the SAME return shape so the renderers don't change.
+ *   useGainReduction → reads readEffectMeter(id) for comp/gate/limiter when a
+ *     graph is present; synthetic fallback on the mock route.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -43,6 +44,9 @@ export interface RackState {
   presets: RackPreset[];
   savePreset: (by: string) => void;
   recallPreset: (pr: RackPreset) => void;
+  /** The live audio graph (Phase 2) when on the real-audio route; null on mock.
+   *  Renderers use it (via useGainReduction) to read real meters. */
+  graph: RackGraphBindings | null;
 }
 
 const cloneDefaults = (): Record<string, ModuleState> => {
@@ -117,25 +121,39 @@ export function useRackState(graph?: RackGraphBindings | null): RackState {
     mod, order, setOrder: reorder, masterBypass, setMasterBypass: setMasterBypassBound,
     selected, setSelected, showBind, setShowBind,
     setParam, setEnabled, setEqBands, reset, applyCoach, activeCount, presets, savePreset, recallPreset,
+    graph: graph ?? null,
   };
 }
 
-// ── fake live gain-reduction for comp/gate/limiter ─────────────────────────
-export function useFakeGR(enabled: boolean, playing: boolean, depth = 6): number {
+// ── live gain-reduction for comp/gate/limiter ──────────────────────────────
+// Real meter (readEffectMeter) when a graph is supplied; synthetic sinusoid
+// fallback for the mock demo route. `depth` only shapes the synthetic curve.
+export function useGainReduction(
+  graph: RackGraphBindings | null | undefined,
+  id: string,
+  enabled: boolean,
+  playing: boolean,
+  depth = 6,
+): number {
   const [gr, setGr] = useState(0);
   useEffect(() => {
     if (!enabled || !playing) { setGr(0); return undefined; }
     let raf = 0;
     const t0 = performance.now();
     const tick = () => {
-      const t = (performance.now() - t0) / 1000;
-      const v = -(depth * (0.5 + 0.5 * Math.abs(Math.sin(t * 2.1)) * (0.6 + 0.4 * Math.sin(t * 5.3))));
-      setGr(Math.round(v * 10) / 10);
+      if (graph && isInsertEffect(id)) {
+        const v = graph.readEffectMeter(id)?.reductionDb;
+        setGr(typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 10) / 10 : 0);
+      } else {
+        const t = (performance.now() - t0) / 1000;
+        const v = -(depth * (0.5 + 0.5 * Math.abs(Math.sin(t * 2.1)) * (0.6 + 0.4 * Math.sin(t * 5.3))));
+        setGr(Math.round(v * 10) / 10);
+      }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [enabled, playing, depth]);
+  }, [graph, id, enabled, playing, depth]);
   return gr;
 }
 
