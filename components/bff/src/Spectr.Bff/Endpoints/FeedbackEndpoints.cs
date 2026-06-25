@@ -161,8 +161,9 @@ public static class FeedbackEndpoints
     }
 
     private static async Task<IResult> InsertSuggestion(
-        AppDbContext db, INotificationSink notif, Guid versionId, AccessDto access,
-        Guid? userId, string? anonId, CreateSuggestionRequest body, CancellationToken ct)
+        AppDbContext db, INotificationSink notif, AccessService accessSvc, RoomBus bus,
+        Guid versionId, AccessDto access, Guid? userId, string? anonId,
+        CreateSuggestionRequest body, CancellationToken ct)
     {
         if (!access.Gates.CanSuggest)
             return ErrorEnvelope.Build(403, "suggest_forbidden", "Suggestions aren't allowed here.");
@@ -180,6 +181,30 @@ public static class FeedbackEndpoints
             FromAnonId = userId is null ? anonId : null,
             FromDisplayName = userId is null ? Trim(body.FromDisplayName) : null,
         };
+
+        // PRP-4 grantee-save (D4.3): a suggestion saved during a LIVE session by
+        // the rack controller carries session provenance, and its chain is the
+        // room's shared chain (exactly what the room was hearing) — not the
+        // client-supplied body — so the cross-author credit chain is lossless.
+        if (body.SessionId is Guid sid)
+        {
+            var role = await accessSvc.ResolveSessionRoleAsync(sid, userId, anonId, ct);
+            var liveForVersion = role.HoldsRack && await db.ListeningSessions.AsNoTracking()
+                .AnyAsync(x => x.Id == sid && x.SongVersionId == versionId && x.Status == "live", ct);
+            if (liveForVersion)
+            {
+                row.CreatedInSessionId = sid;
+                // The active rack grant (grantee path) → via_grant_id; null for the host.
+                row.ViaGrantId = await db.ControlGrants.AsNoTracking()
+                    .Where(g => g.SessionId == sid && g.Scope == "rack" && g.RevokedAt == null
+                        && ((userId != null && g.GranteeUserId == userId)
+                            || (anonId != null && g.GranteeAnonId == anonId)))
+                    .Select(g => (Guid?)g.Id).FirstOrDefaultAsync(ct);
+                var chain = await bus.GetChainOrReconstructAsync(sid);
+                if (chain is not null) row.ChainJson = chain.ToJsonString(RoomBus.Json);
+            }
+        }
+
         db.Suggestions.Add(row);
         // Bidirectional link in the SAME SaveChanges when attached to a comment.
         if (body.CommentId is Guid cid)
@@ -233,12 +258,12 @@ public static class FeedbackEndpoints
 
     private static async Task<IResult> PostSuggestionAuthed(
         Guid versionId, CreateSuggestionRequest body, ClaimsPrincipal user, AppDbContext db,
-        AccessService access, INotificationSink notif, CancellationToken ct)
+        AccessService access, RoomBus bus, INotificationSink notif, CancellationToken ct)
     {
         var userId = user.UserId();
         var acc = await access.ResolveAsync(versionId, userId, viaValidToken: false, ct);
         if (!acc.CanView) return Results.NotFound();
-        return await InsertSuggestion(db, notif, versionId, acc, userId, null, body, ct);
+        return await InsertSuggestion(db, notif, access, bus, versionId, acc, userId, null, body, ct);
     }
 
     // ── comment moderation (owner) + delete (author|owner) ───────────────────
@@ -363,11 +388,11 @@ public static class FeedbackEndpoints
 
     private static async Task<IResult> PostSuggestionAnon(
         string token, CreateSuggestionRequest body, ClaimsPrincipal user, ResourceTokenAuth tokenAuth,
-        AccessService access, AppDbContext db, INotificationSink notif, CancellationToken ct)
+        AccessService access, RoomBus bus, AppDbContext db, INotificationSink notif, CancellationToken ct)
     {
         var hit = await ResolveAnonAsync(token, user, tokenAuth, access, ct);
         if (hit is null) return Results.NotFound();
         var (versionId, userId, anonId, acc) = hit.Value;
-        return await InsertSuggestion(db, notif, versionId, acc, userId, anonId, body, ct);
+        return await InsertSuggestion(db, notif, access, bus, versionId, acc, userId, anonId, body, ct);
     }
 }

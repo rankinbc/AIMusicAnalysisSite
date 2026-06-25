@@ -12,4 +12,5 @@ public static class DramatiqTasks
     public const string RunReferenceAnalyzer = "run_reference_analyzer";
     public const string CoachReply = "coach_reply";
     public const string RerunPhase = "rerun_phase";
+    public const string SynthesizeRecap = "synthesize_recap";
 }

@@ -18,6 +18,7 @@ import app.dramatiq_app  # noqa: E402,F401
 from app.coach_actor import coach_reply  # noqa: E402
 from app.reference_analyzer_actor import run_reference_analyzer  # noqa: E402
 from app.rerun_phase_actor import rerun_phase  # noqa: E402
+from app.recap_actor import synthesize_recap  # noqa: E402
 from app.structure_actor import detect_structure_job  # noqa: E402
 from app.tasks_dramatiq import analyze_audio_job, classify_stems  # noqa: E402
 from app.triage_actor import run_triage  # noqa: E402
@@ -31,6 +32,7 @@ EXPECTED_QUEUES = {
     "run_reference_analyzer": "analysis-paid",
     "rerun_phase": "analysis-paid",
     "detect_structure_job": "analysis-paid",
+    "synthesize_recap": "analysis-paid",
     "coach_reply": "coach",
 }
 
@@ -44,6 +46,7 @@ def test_actor_queue_assignments():
         "run_reference_analyzer": run_reference_analyzer.queue_name,
         "rerun_phase": rerun_phase.queue_name,
         "detect_structure_job": detect_structure_job.queue_name,
+        "synthesize_recap": synthesize_recap.queue_name,
         "coach_reply": coach_reply.queue_name,
     }
     assert actual == EXPECTED_QUEUES

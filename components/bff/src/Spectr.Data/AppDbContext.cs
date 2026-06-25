@@ -55,6 +55,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     // Listen V3 — View feedback: reviewer suggestions (PRP-3). Table "suggestions".
     public DbSet<ReviewerSuggestion> Suggestions => Set<ReviewerSuggestion>();
 
+    // Listen V3 — Room sessions + control grants (PRP-4)
+    public DbSet<ListeningSession> ListeningSessions => Set<ListeningSession>();
+    public DbSet<ControlGrant> ControlGrants => Set<ControlGrant>();
+
     // Billing (story 2.1)
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<WebhookEvent> WebhookEvents => Set<WebhookEvent>();
@@ -342,6 +346,59 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             .OnDelete(DeleteBehavior.Cascade);
         builder.Entity<Invite>()
             .HasOne<User>().WithMany().HasForeignKey(i => i.InvitedUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Listen V3 (PRP-4) — room sessions + control grants. JSON-first:
+        // listening_sessions holds events_json/recap_json (no row-per-event).
+        builder.Entity<ListeningSession>().ToTable(t => t.HasCheckConstraint(
+            "ck_listening_sessions_status", "\"status\" IN ('live','ended')"));
+        builder.Entity<ListeningSession>().Property(s => s.StartedAt).HasDefaultValueSql("now()");
+        builder.Entity<ListeningSession>().HasIndex(s => s.SongVersionId)
+            .HasDatabaseName("ix_listening_sessions_song_version_id");
+        builder.Entity<ListeningSession>().HasIndex(s => s.HostId)
+            .HasDatabaseName("ix_listening_sessions_host_id");
+        builder.Entity<ListeningSession>().HasIndex(s => s.Status)
+            .HasDatabaseName("ix_listening_sessions_status");
+        builder.Entity<ListeningSession>()
+            .HasOne<SongVersion>().WithMany().HasForeignKey(s => s.SongVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
+        // host_id → users: Postgres permits multiple cascade FK paths (the
+        // user→song→version→session path also reaches this row), so Cascade
+        // is safe and means deleting a host removes their hosted sessions.
+        builder.Entity<ListeningSession>()
+            .HasOne<User>().WithMany().HasForeignKey(s => s.HostId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // control_grants — the provenance backbone. ONE active holder per
+        // (session, scope) enforced by a partial-unique index added via raw SQL
+        // in the migration (EF can't express the WHERE-clause fluently).
+        builder.Entity<ControlGrant>().ToTable(t => t.HasCheckConstraint(
+            "ck_control_grants_scope", "\"scope\" IN ('rack','visuals')"));
+        builder.Entity<ControlGrant>().Property(g => g.GrantedAt).HasDefaultValueSql("now()");
+        builder.Entity<ControlGrant>().HasIndex(g => g.SessionId)
+            .HasDatabaseName("ix_control_grants_session_id");
+        builder.Entity<ControlGrant>()
+            .HasOne<ListeningSession>().WithMany().HasForeignKey(g => g.SessionId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<ControlGrant>()
+            .HasOne<User>().WithMany().HasForeignKey(g => g.GranteeUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+        builder.Entity<ControlGrant>()
+            .HasOne<User>().WithMany().HasForeignKey(g => g.GrantedBy)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // The 3 provenance FKs now that the target tables exist (columns were
+        // nullable uuids from PRP-1/3). SetNull on delete — deleting a session
+        // or grant must never delete a producer's adopted preset / suggestion;
+        // it only severs the credit-chain pointer (mirrors from_suggestion_id).
+        builder.Entity<RackPreset>()
+            .HasOne<ListeningSession>().WithMany().HasForeignKey(p => p.CreatedInSessionId)
+            .OnDelete(DeleteBehavior.SetNull);
+        builder.Entity<RackPreset>()
+            .HasOne<ControlGrant>().WithMany().HasForeignKey(p => p.ViaGrantId)
+            .OnDelete(DeleteBehavior.SetNull);
+        builder.Entity<ReviewerSuggestion>()
+            .HasOne<ListeningSession>().WithMany().HasForeignKey(s => s.CreatedInSessionId)
             .OnDelete(DeleteBehavior.SetNull);
 
         // DB-side defaults for *_at timestamp columns.

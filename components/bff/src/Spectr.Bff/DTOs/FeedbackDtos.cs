@@ -42,7 +42,11 @@ public sealed record SuggestionDto(
     string Status,
     DateTimeOffset CreatedAt);
 
+// PRP-4 grantee-save: when SessionId is set + the actor holds the session's rack
+// grant, the suggestion carries created_in_session_id + via_grant_id and its chain
+// is snapshotted from the LIVE room chain (D4.3 cross-author credit chain).
 public sealed record CreateSuggestionRequest(
     Guid? CommentId,
     JsonElement Chain,
-    string? FromDisplayName);   // anon proposer display name
+    string? FromDisplayName,    // anon proposer display name
+    Guid? SessionId = null);

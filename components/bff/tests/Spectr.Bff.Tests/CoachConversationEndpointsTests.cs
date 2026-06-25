@@ -43,6 +43,12 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
             Calls.Add((taskName, args, queueName));
             return Task.CompletedTask;
         }
+
+        public Task EnqueueDelayedAsync(string taskName, object[] args, string queueName, TimeSpan delay, CancellationToken ct = default)
+        {
+            Calls.Add((taskName, args, queueName));
+            return Task.CompletedTask;
+        }
     }
 
     private (WebApplicationFactory<Program> Factory, RecordingJobQueue Queue) BuildWithFakeQueue()
