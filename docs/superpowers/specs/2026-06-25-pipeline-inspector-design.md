@@ -63,6 +63,8 @@ Every stage — in both modes — carries **descriptive narration** explaining w
   - Accepts a full UUID or a unique prefix (resolve via `WHERE id::text LIKE '<prefix>%'`; error if 0 or >1 match).
 - **Run (catalog mode):** `python -m app.tools.pipeline_inspector --catalog [--open]`
   - No `analysis_id`. No DB connection required — renders the static pipeline/rule/specialist map only. Fast, always available, useful for rule-system review independent of any track.
+- **Run (validate map):** `python -m app.tools.pipeline_inspector --validate-map [<analysis_id>]`
+  - Checks the §6 stage map's declared outputs against a real `final_json` and reports drift (see §6.1). Exits non-zero on mismatch so it can gate CI.
 - **Output:**
   - Trace mode → `output/worker/<YYYY-MM-DD>_pipeline_inspector/<short_id>.html`
   - Catalog mode → `output/worker/<YYYY-MM-DD>_pipeline_inspector/_catalog.html`
@@ -98,6 +100,17 @@ A single authored data structure inside the tool — the backbone for descriptiv
 - **`outputs`** — the datapoints it produces (e.g. `phase1.true_peak_db`, `routing_plan.specialists_to_run`).
 
 This map is **authored, not introspected** — phases output dynamic dicts with no typed schema, so the output datapoint list is maintained here (sourced from the pipeline). Accepted drift risk for a dev tool; trace mode cross-checks it against the real `final_json`, and any mismatch is itself surfaced.
+
+### 6.1 Map-freshness validation (guards against drift)
+
+Two layers keep the §6 map honest as the pipeline evolves:
+
+- **`--validate-map` CLI flag** — diffs the map's declared `outputs` against the actual flattened-key set of a real `final_json`. Source of truth: an `analysis_id` if given, else the most recent `analyses` row, else a committed golden snapshot (see below). Prints two lists and exits non-zero if either is non-empty:
+  - **stale/missing** — keys the pipeline emits that the map doesn't declare (map needs updating);
+  - **phantom** — keys the map declares that no real `final_json` contains (map over-claims, or the field was removed).
+- **pytest `test_stage_map_matches_pipeline_outputs`** — the CI form of the same check, run against a **committed golden `final_json` fixture** (reuse the analysis package's existing golden snapshots — CLAUDE.md notes `run_pipeline` output is guarded byte-identical by them, so they're a stable schema reference). The test fails if the map drifts from the snapshot's key set, so a pipeline change that adds/removes a field forces a matching map update in the same PR.
+
+Rule read-paths are deliberately *excluded* from "phantom" detection — a read-path with no producer is a real bug the gap view is meant to surface, not a map error. Only the map's own `outputs` are validated against reality.
 
 **Static gap detection (catalog mode):** cross-reference each rule's read-paths (extracted per §6b) against the union of all `outputs` in the stage map. A read-path that no stage produces ⇒ **"reads a datapoint the pipeline never emits — can't fire"**, detected with zero analyses. This is the static counterpart to trace mode's per-analysis resolution.
 
@@ -153,6 +166,7 @@ This caveat exists because analyses are **not currently versioned** (see §10).
 - **Rule re-runner** — fired vs not-fired; read-path resolution present/null/missing.
 - **Read-path extractor** — given a rule's source, returns the datapoint paths it reads.
 - **Static gap detection (catalog mode)** — a rule reading an unmapped datapoint is flagged with no DB / no analysis.
+- **`test_stage_map_matches_pipeline_outputs`** — the §6 map's declared outputs match a committed golden `final_json` snapshot; drift (stale/missing or phantom keys) fails the test so map updates ride along with pipeline changes (§6.1).
 - **Validator recompute** — downgrade applied; drift detected vs stored.
 - **HTML assembly smoke test** — both modes produce valid HTML containing every expected section heading; no unescaped `final_json` breaking markup.
 - **Catalog mode** — runs with `--catalog`, no DB connection, emits `_catalog.html` with the rule roster + datapoint→consumers table.
