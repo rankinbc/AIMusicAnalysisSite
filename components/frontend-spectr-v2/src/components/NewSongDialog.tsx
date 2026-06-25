@@ -1,9 +1,12 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 
-import f from '../styles/forms.module.css';
 import { useCreateSong } from '../api/hooks';
+import f from '../styles/forms.module.css';
+import { SongFields, type SongFieldsValue } from './SongFields';
+import s from './SongFields.module.css';
+import { emptySongFields, songFieldsToRequest } from './song-fields-helpers';
 
 interface Props {
   open: boolean;
@@ -12,21 +15,28 @@ interface Props {
 }
 
 export function NewSongDialog({ open, onOpenChange, onCreated }: Props) {
-  const [name, setName] = useState('');
-  const [genre, setGenre] = useState('');
+  const [value, setValue] = useState<SongFieldsValue>(emptySongFields);
+  const nameRef = useRef<HTMLInputElement>(null);
   const create = useCreateSong();
+
+  // Re-seed a fresh random visual every time the dialog opens, and focus Name.
+  useEffect(() => {
+    if (open) {
+      setValue(emptySongFields());
+      const t = window.setTimeout(() => nameRef.current?.focus(), 0);
+      return () => window.clearTimeout(t);
+    }
+    return undefined;
+  }, [open]);
+
+  const canSubmit = value.name.trim().length > 0 && !create.isPending;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!canSubmit) return;
     try {
-      const song = await create.mutateAsync({
-        name: name.trim(),
-        genreHint: genre.trim() || null,
-      });
+      const song = await create.mutateAsync(songFieldsToRequest(value));
       toast.success(`Created “${song.name}”`);
-      setName('');
-      setGenre('');
       onCreated?.(song.id);
       onOpenChange(false);
     } catch (err) {
@@ -38,43 +48,26 @@ export function NewSongDialog({ open, onOpenChange, onCreated }: Props) {
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className={f.dialogOverlay} />
-        <Dialog.Content className={f.dialogContent}>
-          <Dialog.Title className={f.dialogTitle}>New song</Dialog.Title>
-          <Dialog.Description className={f.dialogDescription}>
-            Start a song. You can upload its first version after creating it.
-          </Dialog.Description>
-          <form onSubmit={handleSubmit} className={f.field}>
-            <label className={f.label}>
-              Name
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                maxLength={200}
-                className={f.input}
-              />
-            </label>
-            <label className={f.label}>
-              Genre hint <span className={f.hint}>(optional)</span>
-              <input
-                value={genre}
-                onChange={(e) => setGenre(e.target.value)}
-                maxLength={50}
-                className={f.input}
-              />
-            </label>
-            <div className={f.dialogActions}>
+        <Dialog.Content className={s.wideContent} aria-describedby={undefined}>
+          <div className={s.header}>
+            <Dialog.Title className={s.title}>New song</Dialog.Title>
+            <Dialog.Description className={s.desc}>
+              Name it and go — everything else is optional. You can upload its first version right after.
+            </Dialog.Description>
+          </div>
+
+          <form onSubmit={handleSubmit}>
+            <SongFields value={value} onChange={setValue} nameRef={nameRef} />
+
+            <div className={s.actions}>
+              <span className={s.spacer}>Press ⏎ to create</span>
               <Dialog.Close asChild>
-                <button type="button" className={f.button}>
+                <button type="button" className={f.button} disabled={create.isPending}>
                   Cancel
                 </button>
               </Dialog.Close>
-              <button
-                type="submit"
-                disabled={create.isPending}
-                className={`${f.button} ${f.buttonPrimary}`}
-              >
-                {create.isPending ? 'Creating…' : 'Create'}
+              <button type="submit" disabled={!canSubmit} className={`${f.button} ${f.buttonPrimary}`}>
+                {create.isPending ? 'Creating…' : 'Create song'}
               </button>
             </div>
           </form>

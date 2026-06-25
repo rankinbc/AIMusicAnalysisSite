@@ -10,6 +10,7 @@ import { UnifiedUploadDialog } from '../../components/UnifiedUploadDialog';
 import { normalizeGrade, gradeColor } from '../results/helpers/grade';
 import { CoverArt } from '../../ui/CoverArt';
 import { hueFromId } from '../../ui/hueFromId';
+import { visualFromDto } from '../../ui/songVisualModel';
 import { GradePill } from '../../ui/GradePill';
 import { Pill } from '../../ui/Pill';
 import { VersionArc, type VersionArcPoint } from '../../ui/VersionArc';
@@ -306,7 +307,12 @@ function SongCard({
       }}
     >
       <div className={s.cover}>
-        <CoverArt hue={hue} size="fluid" ratio={2.1} />
+        <CoverArt
+          hue={hue}
+          visual={visualFromDto(song.visualTemplate, song.visualPrimary, song.visualSecondary)}
+          size="fluid"
+          ratio={2.1}
+        />
         <div className={s.coverOverlay}>
           <div className={s.coverTop}>
             {grade ? <GradePill grade={grade} size="sm" /> : <span />}
@@ -489,7 +495,11 @@ function SongRow({
         }
       }}
     >
-      <CoverArt hue={hue} size="sm" />
+      <CoverArt
+        hue={hue}
+        visual={visualFromDto(song.visualTemplate, song.visualPrimary, song.visualSecondary)}
+        size="sm"
+      />
       <div className={s.rowMain}>
         <Link
           to="/songs/$songId"

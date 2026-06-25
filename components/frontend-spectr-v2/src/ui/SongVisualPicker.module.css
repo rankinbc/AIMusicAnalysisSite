@@ -1,0 +1,235 @@
+/* Cover-art picker — live preview + template thumbs + swatch rows.
+   Ported from the New Song modal handoff. */
+
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.eyebrow {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ── Live card preview (mirrors the library SongCard) ─────────────────────── */
+.previewWrap {
+  width: 100%;
+}
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.cover {
+  position: relative;
+  aspect-ratio: 2.1;
+}
+.overlay {
+  position: absolute;
+  inset: 0;
+  padding: 10px 11px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: var(--cyan);
+  border: 1px solid rgba(0, 229, 176, 0.32);
+  background: rgba(0, 229, 176, 0.1);
+  backdrop-filter: blur(2px);
+  white-space: nowrap;
+}
+.bottom {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+.wave {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 22px;
+  flex: 1;
+  opacity: 0.8;
+}
+.wave > div {
+  flex: 1;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.55);
+  border-radius: 1px;
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.25);
+}
+.play {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: var(--text);
+  background: rgba(10, 16, 26, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(3px);
+}
+.body {
+  padding: 11px 13px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.name {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.name[data-empty='true'] {
+  color: var(--muted);
+  font-weight: 600;
+}
+.meta {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.foot {
+  margin-top: 2px;
+  padding: 9px 13px 11px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+}
+
+/* ── Controls ─────────────────────────────────────────────────────────────── */
+.controlBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.controlHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tmplGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.tmplThumb {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 4px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+.tmplThumb:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-2);
+}
+.tmplThumb[data-on='true'] {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 1px var(--cyan), 0 0 0 4px var(--cyan-dim);
+}
+.tmplThumbVis {
+  position: relative;
+  aspect-ratio: 1.5;
+  border-radius: 5px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+.tmplThumbLabel {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  text-align: center;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+}
+.tmplThumb[data-on='true'] .tmplThumbLabel {
+  color: var(--text-2);
+}
+
+.shuffle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--cyan);
+  padding: 2px 5px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.shuffle:hover {
+  background: var(--cyan-dim);
+}
+.ico {
+  display: inline-flex;
+  transition: transform 0.45s cubic-bezier(0.3, 0.7, 0.4, 1);
+}
+.shuffle:active .ico {
+  transform: rotate(-180deg);
+}
+
+.swatchRow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 7px;
+}
+.swatch {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 7px;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  transition: transform 0.12s ease;
+}
+.swatch:hover {
+  transform: translateY(-1px);
+}
+.swatch[data-on='true'] {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25), 0 0 0 2px var(--panel-bg), 0 0 0 4px currentColor;
+}

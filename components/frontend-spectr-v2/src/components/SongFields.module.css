@@ -1,0 +1,181 @@
+/* New Song / Edit Song shared field group + a wide dialog content shell. */
+
+/* Wide two-column Radix Dialog.Content (700px). Centered like forms.dialogContent
+   but roomier; used by NewSongDialog + SongEditDialog. */
+.wideContent {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(700px, 94vw);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: var(--space-6);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  z-index: 51;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  animation: songDialogPop 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes songDialogPop {
+  from {
+    transform: translate(-50%, calc(-50% + 8px)) scale(0.98);
+  }
+  to {
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-right: 28px;
+}
+.title {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.desc {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ── Two-column body ──────────────────────────────────────────────────────── */
+.grid {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+.fieldsCol {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+@media (max-width: 560px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Fields ───────────────────────────────────────────────────────────────── */
+.field {
+  display: grid;
+  gap: 7px;
+}
+.fieldLabel {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-2);
+  letter-spacing: 0.04em;
+}
+.req {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  color: var(--cyan);
+  letter-spacing: 0.08em;
+}
+.opt {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+}
+.count {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  color: var(--muted);
+  font-feature-settings: 'tnum' on;
+}
+
+.input {
+  width: 100%;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+.input::placeholder {
+  color: var(--muted);
+}
+.input:focus {
+  outline: none;
+  border-color: var(--cyan);
+  background: var(--card-2);
+  box-shadow: 0 0 0 3px var(--cyan-dim);
+}
+.inputName {
+  font-size: 16px;
+  font-weight: 600;
+  padding: 11px 13px;
+}
+.textarea {
+  resize: vertical;
+  min-height: 64px;
+  line-height: 1.5;
+}
+
+.genreSuggest {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.suggestChip {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.suggestChip:hover {
+  border-color: var(--border-2);
+  color: var(--text);
+}
+.suggestChip[data-on='true'] {
+  color: var(--cyan);
+  border-color: rgba(0, 229, 176, 0.32);
+  background: var(--cyan-dim);
+}
+
+/* ── Actions ──────────────────────────────────────────────────────────────── */
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: 2px;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.spacer {
+  margin-right: auto;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}

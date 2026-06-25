@@ -190,16 +190,73 @@ export interface SongDto {
   versions: VersionDto[];
   latestResult: AnalysisSummaryDto | null;
   tags: TagDto[];
+  // ── New song metadata (see PRPs/design_handoffs/new-song-creation-backend-requirements.md).
+  // All nullable for back-compat; absent visual falls back to hueFromId Aurora in CoverArt.
+  description?: string | null;
+  visualTemplate?: SongVisualTemplate | null;
+  visualPrimary?: string | null; // serialized oklch, e.g. "oklch(0.72 0.19 352)"
+  visualSecondary?: string | null;
+  referenceProfileKind?: ReferenceProfileKind | null;
+  referenceProfileId?: string | null;
 }
 
 export interface CreateSongRequest {
   name: string;
   genreHint?: string | null;
+  description?: string | null;
+  visualTemplate?: SongVisualTemplate | null;
+  visualPrimary?: string | null;
+  visualSecondary?: string | null;
+  referenceProfileKind?: ReferenceProfileKind | null;
+  referenceProfileId?: string | null;
 }
 
 export interface PatchSongRequest {
   name?: string | null;
   genreHint?: string | null;
+  description?: string | null;
+  visualTemplate?: SongVisualTemplate | null;
+  visualPrimary?: string | null;
+  visualSecondary?: string | null;
+  referenceProfileKind?: ReferenceProfileKind | null;
+  referenceProfileId?: string | null;
+}
+
+// ── Song cover-art visual ─────────────────────────────────────────────────────
+export type SongVisualTemplate =
+  | 'aurora'
+  | 'vinyl'
+  | 'spin'
+  | 'eq'
+  | 'skyline'
+  | 'robot'
+  | 'booth'
+  | 'cassette'
+  | 'boombox';
+
+/** A cover color as an OKLCH triple — lets the palette carry vivid AND dark tones. */
+export interface SongVisualColor {
+  l: number;
+  c: number;
+  h: number;
+}
+
+/** The chosen, persisted cover-art visual for a song. */
+export interface SongVisual {
+  template: SongVisualTemplate;
+  primary: SongVisualColor;
+  secondary: SongVisualColor;
+}
+
+// ── Song reference profile (default analysis comparison target) ───────────────
+export type ReferenceProfileKind = 'set' | 'preset';
+
+/** A song's default reference comparison: a user reference set, or a genre preset. */
+export interface SongReferenceProfile {
+  kind: ReferenceProfileKind;
+  id: string;
+  name: string;
+  hue: number;
 }
 
 export interface CreateTagRequest {

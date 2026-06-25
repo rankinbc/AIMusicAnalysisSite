@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { useArchiveSong, useDeleteVersion, usePatchVersion, useSetCurrentVersion, useSong } from '../../api/hooks';
+import { useArchiveSong, useDeleteVersion, usePatchVersion, useReanalyzeVersion, useSetCurrentVersion, useSong } from '../../api/hooks';
 import { CompareDialog } from '../../components/CompareDialog';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { SharePublishDialog } from '../../components/SharePublishDialog';
@@ -12,6 +12,7 @@ import { UnifiedUploadDialog } from '../../components/UnifiedUploadDialog';
 import { ReanalyzeWithReferenceDialog } from '../../features/references/ReanalyzeWithReferenceDialog';
 import { CoverArt } from '../../ui/CoverArt';
 import { hueFromId } from '../../ui/hueFromId';
+import { visualFromDto } from '../../ui/songVisualModel';
 import { GradePill } from '../../ui/GradePill';
 import { Pill } from '../../ui/Pill';
 import { ProgressTimeline, type TimelineVersion } from '../../ui/ProgressTimeline';
@@ -97,7 +98,12 @@ function SongDetailPage() {
       </Link>
 
       <section className={`card ${s.hero}`}>
-        <CoverArt hue={hue} size="fluid" ratio={1} />
+        <CoverArt
+          hue={hue}
+          visual={visualFromDto(song.visualTemplate, song.visualPrimary, song.visualSecondary)}
+          size="fluid"
+          ratio={1}
+        />
         <div className={s.heroMeta}>
           <div className={s.heroTopRow}>
             <div>
@@ -245,6 +251,7 @@ function SongDetailPage() {
                         </Link>
                       )}
                       <EditVersionLabelButton versionId={v.id} currentLabel={v.label} />
+                      <ReanalyzeButton versionId={v.id} songId={song.id} />
                       <button
                         type="button"
                         className={s.resultsLink}
@@ -396,6 +403,35 @@ function MakeCurrentButton({ versionId }: { versionId: string }) {
       }}
     >
       {setCurrent.isPending ? '…' : 'Make current'}
+    </button>
+  );
+}
+
+function ReanalyzeButton({ versionId, songId }: { versionId: string; songId: string }) {
+  const reanalyze = useReanalyzeVersion(versionId);
+  const navigate = useNavigate();
+  return (
+    <button
+      type="button"
+      className={s.resultsLink}
+      disabled={reanalyze.isPending}
+      title="Re-run the full analysis on this version"
+      onClick={(e) => {
+        e.stopPropagation();
+        reanalyze.mutate(undefined, {
+          onSuccess: (res) => {
+            toast.success('Re-analysis started');
+            void navigate({
+              to: '/songs/$songId/results/$jobId',
+              params: { songId, jobId: res.jobId },
+            });
+          },
+          onError: (err) =>
+            toast.error(err instanceof Error ? err.message : 'Could not start re-analysis'),
+        });
+      }}
+    >
+      {reanalyze.isPending ? '…' : '↻ Reanalyze'}
     </button>
   );
 }

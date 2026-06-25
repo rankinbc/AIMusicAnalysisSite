@@ -1,3 +1,11 @@
+.tagSection {
+  display: grid;
+  gap: 7px;
+  margin-top: 18px;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
 .tagInputRow {
   display: flex;
   gap: 8px;

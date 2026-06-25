@@ -1,10 +1,13 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { toast } from 'sonner';
 
-import { useCreateTag, useDeleteTag, usePatchSong } from '../api/hooks';
+import { useCreateTag, useDeleteTag, usePatchSong, useReferenceSets } from '../api/hooks';
 import type { SongDto } from '../api/types';
 import f from '../styles/forms.module.css';
+import { SongFields, type SongFieldsValue } from './SongFields';
+import sf from './SongFields.module.css';
+import { songFieldsFromSong, songFieldsToRequest } from './song-fields-helpers';
 import s from './SongEditDialog.module.css';
 
 interface Props {
@@ -14,8 +17,8 @@ interface Props {
 }
 
 export function SongEditDialog({ open, onOpenChange, song }: Props) {
-  const [name, setName] = useState(song.name);
-  const [genre, setGenre] = useState(song.genreHint ?? '');
+  const { data: sets } = useReferenceSets();
+  const [value, setValue] = useState<SongFieldsValue>(() => songFieldsFromSong(song, sets ?? []));
   const [tagInput, setTagInput] = useState('');
   const [isPublicTag, setIsPublicTag] = useState(false);
 
@@ -23,15 +26,20 @@ export function SongEditDialog({ open, onOpenChange, song }: Props) {
   const createTag = useCreateTag(song.id);
   const deleteTag = useDeleteTag(song.id);
 
+  // Re-seed when (re)opening or once reference sets resolve (so a set-kind
+  // profile shows its name/hue rather than staying blank).
+  useEffect(() => {
+    if (open) setValue(songFieldsFromSong(song, sets ?? []));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, song.id, sets]);
+
+  const canSubmit = value.name.trim().length > 0 && !patch.isPending;
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const trimmedName = name.trim();
-    if (!trimmedName) return;
+    if (!canSubmit) return;
     try {
-      await patch.mutateAsync({
-        name: trimmedName !== song.name ? trimmedName : null,
-        genreHint: genre.trim() || null,
-      });
+      await patch.mutateAsync(songFieldsToRequest(value));
       toast.success('Saved');
       onOpenChange(false);
     } catch (err) {
@@ -61,32 +69,16 @@ export function SongEditDialog({ open, onOpenChange, song }: Props) {
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className={f.dialogOverlay} />
-        <Dialog.Content className={f.dialogContent}>
-          <Dialog.Title className={f.dialogTitle}>Edit song</Dialog.Title>
+        <Dialog.Content className={sf.wideContent} aria-describedby={undefined}>
+          <div className={sf.header}>
+            <Dialog.Title className={sf.title}>Edit song</Dialog.Title>
+          </div>
 
-          <form onSubmit={handleSubmit} className={f.field}>
-            <label className={f.label}>
-              Name
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                maxLength={200}
-                className={f.input}
-              />
-            </label>
-            <label className={f.label}>
-              Genre hint <span className={f.hint}>(optional)</span>
-              <input
-                value={genre}
-                onChange={(e) => setGenre(e.target.value)}
-                maxLength={50}
-                className={f.input}
-              />
-            </label>
+          <form onSubmit={handleSubmit}>
+            <SongFields value={value} onChange={setValue} />
 
-            <div className={f.label}>
-              Tags
+            <div className={s.tagSection}>
+              <span className={sf.fieldLabel}>Tags</span>
               <div className={s.tagInputRow}>
                 <input
                   value={tagInput}
@@ -125,17 +117,13 @@ export function SongEditDialog({ open, onOpenChange, song }: Props) {
               )}
             </div>
 
-            <div className={f.dialogActions}>
+            <div className={sf.actions}>
               <Dialog.Close asChild>
-                <button type="button" className={f.button}>
+                <button type="button" className={f.button} disabled={patch.isPending}>
                   Cancel
                 </button>
               </Dialog.Close>
-              <button
-                type="submit"
-                disabled={patch.isPending}
-                className={`${f.button} ${f.buttonPrimary}`}
-              >
+              <button type="submit" disabled={!canSubmit} className={`${f.button} ${f.buttonPrimary}`}>
                 {patch.isPending ? 'Saving…' : 'Save'}
               </button>
             </div>

@@ -1,9 +1,14 @@
 import type { CSSProperties, ReactNode } from 'react';
 
+import type { SongVisual as SongVisualModel } from '../api/types';
+import { SongVisual } from './SongVisual';
+
 type CoverSize = 'sm' | 'md' | 'lg' | 'fluid';
 
 interface CoverArtProps {
   hue?: number;
+  /** Chosen cover-art template + colors. When present, supersedes `hue`. */
+  visual?: SongVisualModel | null;
   size?: CoverSize;
   children?: ReactNode;
   ratio?: number;
@@ -19,6 +24,7 @@ const sizePx: Record<Exclude<CoverSize, 'fluid'>, number> = {
 
 export function CoverArt({
   hue = 168,
+  visual,
   size = 'md',
   children,
   ratio,
@@ -38,7 +44,11 @@ export function CoverArt({
         flexShrink: 0,
         position: 'relative',
         overflow: 'hidden',
-        background: `
+        // A chosen visual brings its own background; otherwise fall back to the
+        // legacy hue-derived Aurora gradient so existing songs render unchanged.
+        background: visual
+          ? undefined
+          : `
           radial-gradient(ellipse 80% 60% at 30% 30%, oklch(0.72 0.18 ${hue} / 0.7) 0%, transparent 55%),
           radial-gradient(ellipse 70% 80% at 80% 70%, oklch(0.55 0.20 ${(hue + 60) % 360} / 0.55) 0%, transparent 60%),
           linear-gradient(135deg, oklch(0.22 0.04 ${hue}) 0%, oklch(0.14 0.04 ${(hue + 30) % 360}) 100%)
@@ -47,16 +57,20 @@ export function CoverArt({
         ...style,
       }}
     >
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          backgroundImage:
-            'repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 4px)',
-          opacity: 0.4,
-          pointerEvents: 'none',
-        }}
-      />
+      {visual ? (
+        <SongVisual template={visual.template} primary={visual.primary} secondary={visual.secondary} />
+      ) : (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage:
+              'repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 4px)',
+            opacity: 0.4,
+            pointerEvents: 'none',
+          }}
+        />
+      )}
       {children}
     </div>
   );
