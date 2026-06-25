@@ -62,13 +62,29 @@ def detect_structure_job(structure_job_id: str, analysis_id: str) -> None:
     )
 
     # ── Phase A — mark processing + capture inputs ───────────────────────────
+    # A missing job/analysis means a stale or orphaned message (e.g. enqueued
+    # against a DB that's since been reset). It is NOT retryable — no-op so it
+    # doesn't retry-spam. This actor is auto-enqueued, so unlike the
+    # user-initiated rerun_phase actor we never want it to raise on a missing row.
     with SessionFactory.begin() as s:
         job = s.get(AnalysisJob, sjid)
         if job is None:
-            raise ValueError(f"structure job {structure_job_id} not found")
+            logger.warning(
+                "detect_structure_job: structure job %s not found (stale/orphaned "
+                "message) — skipping", structure_job_id,
+            )
+            return
         analysis = s.get(Analysis, aid)
         if analysis is None:
-            raise ValueError(f"analysis {analysis_id} not found")
+            logger.warning(
+                "detect_structure_job: analysis %s not found — marking structure "
+                "job failed", analysis_id,
+            )
+            job.status = JOB_STATUS_FAILED
+            job.error_message = "Analysis not found for structure detection."
+            job.failed_at = _utc_now()
+            job.current_phase = "failed"
+            return
         version = s.get(SongVersion, analysis.version_id) if analysis.version_id else None
 
         job.status = JOB_STATUS_PROCESSING

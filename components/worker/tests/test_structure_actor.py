@@ -93,6 +93,20 @@ def test_detect_structure_failure_marks_job_and_preserves_analysis(monkeypatch):
     assert analysis.final_json == final  # report not corrupted
 
 
+def test_detect_structure_missing_job_is_noop(monkeypatch):
+    # Stale/orphaned message: the structure-job row doesn't exist. Should no-op
+    # (not raise → no pointless retries) and never run allin1.
+    registry = {}  # _FakeSession.get returns None for every model
+    monkeypatch.setattr(st.SessionFactory, "begin", lambda: _FakeSession(registry))
+
+    def must_not_run(*_a, **_k):
+        raise AssertionError("should not run allin1 for a missing structure job")
+
+    monkeypatch.setattr(st, "detect_structure_and_rescore", must_not_run)
+
+    st.detect_structure_job(str(uuid.uuid4()), str(uuid.uuid4()))  # no raise
+
+
 def test_detect_structure_no_audio_marks_failed_without_running(monkeypatch):
     final = {"phases": [], "overall_score": 70.0}
     registry, job, analysis = _registry(final, version=_Version(file_path=None))
