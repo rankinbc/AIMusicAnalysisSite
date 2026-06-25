@@ -33,6 +33,12 @@ If confirmed, these rules **never fire**. Surfacing that is the core value of th
 
 **In scope:** full end-to-end trace — 9 analysis phases + rollups + verdict pipeline (rule engine → triage → specialists → validation → ranked verdicts) + a system-audit gap view.
 
+**Two run modes (see §4):**
+- **Trace mode** — given an `analysis_id`, render the catalog overlaid with that analysis's real values, fired/not-fired, and stored-vs-recomputed drift.
+- **Catalog mode** — given *no* `analysis_id`, render the pipeline's static structure only: every stage's declared datapoints, every rule and the datapoints it consumes (mapped back to the producing phase), and the full specialist roster. This is a standalone map of the rule/datapoint system and can flag mismatches **statically**, with no DB and no analysis required.
+
+Every stage — in both modes — carries **descriptive narration** explaining what it consumes, what it produces, and how that data is used downstream (see §6).
+
 **Out of scope (YAGNI):**
 - Interactive filtering / search.
 - Diffing across multiple analyses.
@@ -52,11 +58,15 @@ If confirmed, these rules **never fire**. Surfacing that is the core value of th
 
 - **Module:** `components/worker/app/tools/pipeline_inspector.py`
   - Lives in `worker/` because it imports `verdict_lib` + `db_sync` (the canonical Python side of the verdict pipeline).
-- **Run:** `python -m app.tools.pipeline_inspector <analysis_id> [--open]`
+- **Run (trace mode):** `python -m app.tools.pipeline_inspector <analysis_id> [--open]`
   - `--open` opens the produced file in the default browser.
   - Accepts a full UUID or a unique prefix (resolve via `WHERE id::text LIKE '<prefix>%'`; error if 0 or >1 match).
-- **Output:** `output/worker/<YYYY-MM-DD>_pipeline_inspector/<short_id>.html`
-  - Per CLAUDE.md output rules; never overwrites a prior run for a different id; same-id re-run overwrites its own file.
+- **Run (catalog mode):** `python -m app.tools.pipeline_inspector --catalog [--open]`
+  - No `analysis_id`. No DB connection required — renders the static pipeline/rule/specialist map only. Fast, always available, useful for rule-system review independent of any track.
+- **Output:**
+  - Trace mode → `output/worker/<YYYY-MM-DD>_pipeline_inspector/<short_id>.html`
+  - Catalog mode → `output/worker/<YYYY-MM-DD>_pipeline_inspector/_catalog.html`
+  - Per CLAUDE.md output rules; never overwrites a prior run for a different id; same-id (or catalog) re-run overwrites its own file.
 - **Self-contained:** inline CSS + minimal vanilla JS, no network calls, no external assets, no build step. Collapsible regions via native `<details>`.
 
 ---
@@ -74,9 +84,26 @@ If confirmed, these rules **never fire**. Surfacing that is the core value of th
 
 DB access via the worker's existing `db_sync` session (sync SQLAlchemy / psycopg2). No new DB columns, no writes.
 
+**Catalog mode** uses **only** the live-import sources (rules, validator, prompt roster) plus the static stage map (§6). It touches **no DB** and needs no `analysis_id`.
+
 ---
 
-## 6. Deterministic re-derivation (no LLM calls)
+## 6. Static stage map (narration + I/O + datapoints)
+
+A single authored data structure inside the tool — the backbone for descriptive text, catalog mode, and static gap detection. One entry per pipeline stage (9 phases, rollups, rule engine, triage, specialists, validation, ranking). Each entry declares:
+
+- **`title`** — display name.
+- **`narration`** — 1–3 sentences in plain language: what this stage *consumes*, what it *produces*, and **how that input/output is used** downstream. (Satisfies the "descriptive text per pipeline" requirement.)
+- **`inputs`** — the datapoints/artifacts it reads (e.g. `phase1.lufs`, the raw WAV, the reference track).
+- **`outputs`** — the datapoints it produces (e.g. `phase1.true_peak_db`, `routing_plan.specialists_to_run`).
+
+This map is **authored, not introspected** — phases output dynamic dicts with no typed schema, so the output datapoint list is maintained here (sourced from the pipeline). Accepted drift risk for a dev tool; trace mode cross-checks it against the real `final_json`, and any mismatch is itself surfaced.
+
+**Static gap detection (catalog mode):** cross-reference each rule's read-paths (extracted per §6b) against the union of all `outputs` in the stage map. A read-path that no stage produces ⇒ **"reads a datapoint the pipeline never emits — can't fire"**, detected with zero analyses. This is the static counterpart to trace mode's per-analysis resolution.
+
+---
+
+## 6b. Deterministic re-derivation (no LLM calls)
 
 - **Flatten** `final_json` → `phaseN` keys.
 - **Re-run every registered rule** → fired (Verdict) / not-fired (None).
@@ -90,16 +117,23 @@ LLM stages (triage, specialists) are **never re-run** — shown from persisted `
 
 ## 7. Page sections
 
-0. **Header** — analysis id, song, job id, created-at, overall score + grade. Input provenance row: mix / stems / reference / .als present?
-1. **Analysis phases 1–9** — per card: phase name, **declared inputs** (from a static dependency map maintained in the tool), status (ok / skipped / failed), key outputs + collapsible raw JSON.
-2. **Rollups** — `overall_score`, `grade`, `danceability_score`, `top_fixes`, `coach_*`.
+Every stage card opens with its **narration** line from the §6 map (consumes → produces → how it's used), shown in **both** modes. Trace-mode-only content (real values, fired/not, drift) is omitted in catalog mode; catalog mode shows the static structure in its place.
+
+0. **Header** —
+   - *Trace mode:* analysis id, song, job id, created-at, overall score + grade; input provenance row (mix / stems / reference / .als present?).
+   - *Catalog mode:* title banner ("Pipeline & rule-system catalog — no analysis"), generated-at, code/version stamps (rule engine version, specialist prompt versions).
+1. **Analysis phases 1–9** — per card: narration; **declared inputs/outputs** (§6). *Trace mode also:* status (ok / skipped / failed), key output values + collapsible raw JSON.
+2. **Rollups** — narration + `overall_score`, `grade`, `danceability_score`, `top_fixes`, `coach_*` (values in trace mode; field list in catalog mode).
 3. **Verdict pipeline:**
-   - **3a. Rule engine** — every registered rule. Per rule: fired/not-fired badge; metric paths read + resolution status (present/null/**missing**); output verdict if fired; collapsible source snippet.
-   - **3b. Triage** — persisted `routing_plan`: `specialists_to_run` (priority + focus), `skip`, `rationale`. If null → "no LLM stage ran for this analysis."
-   - **3c. Specialists** — full roster overlaid: **ran** / **selected-but-empty** / **not-selected**; verdicts for those that ran.
-   - **3d. Validation** — validator re-run over persisted verdicts: downgrades/rejects + stored-vs-recomputed drift.
-   - **3e. Final verdicts** — ranked list from the `verdicts` table.
-4. **System audit (gap view)** — aggregated: rules whose read-paths never resolve ("can't fire on this track"), specialists never selected. The payoff section for rule-system improvement.
+   - **3a. Rule engine** — every registered rule. Per rule, always: narration/docstring; the datapoints it reads + each path's **producing stage** (from §6) or **"unmapped — no stage emits this"**; collapsible source snippet. *Trace mode also:* fired/not-fired badge; per-path resolution (present / null / **missing**); output verdict if fired.
+   - **3b. Triage** — narration. *Trace mode:* persisted `routing_plan` (`specialists_to_run` w/ priority + focus, `skip`, `rationale`; "no LLM stage ran" if null). *Catalog mode:* description of the triage prompt + that it is an LLM routing call (not re-run).
+   - **3c. Specialists** — full roster from `SLUG_TO_FILENAME` (+ prompt version). *Trace mode overlay:* **ran** / **selected-but-empty** / **not-selected**, with verdicts for those that ran. *Catalog mode:* roster + category each covers.
+   - **3d. Validation** — narration. *Trace mode:* validator re-run over persisted verdicts — downgrades/rejects + stored-vs-recomputed drift. *Catalog mode:* description of the validation/scoring rules (metric-path check, section sanity, ALS grounding, moderate-baseline downgrade).
+   - **3e. Final verdicts** — *trace mode only:* ranked list from the `verdicts` table.
+4. **Datapoint → consumers map** — a table keyed by datapoint (every `outputs` entry in §6): which producing stage emits it and which rules/specialists consume it. Makes "this phase output feeds these rules" legible at a glance, and exposes **orphan producers** (emitted, consumed by nothing) and **orphan consumers** (read, produced by nothing). Available in both modes (static); trace mode annotates each datapoint with its actual value.
+5. **System audit (gap view)** — aggregated payoff section, **both modes**:
+   - *Static (both modes):* rules whose read-paths are unmapped ("reads a datapoint the pipeline never emits — can't fire"); specialists in the roster never reachable by any routing rule.
+   - *Trace mode adds:* rules whose paths resolve but stayed in-range; specialists not selected for *this* analysis; stored-vs-recomputed drift summary.
 
 ---
 
@@ -117,8 +151,11 @@ This caveat exists because analyses are **not currently versioned** (see §10).
 
 - **Data loader** — mocked DB row → parsed model; prefix resolution (0 / 1 / many matches).
 - **Rule re-runner** — fired vs not-fired; read-path resolution present/null/missing.
+- **Read-path extractor** — given a rule's source, returns the datapoint paths it reads.
+- **Static gap detection (catalog mode)** — a rule reading an unmapped datapoint is flagged with no DB / no analysis.
 - **Validator recompute** — downgrade applied; drift detected vs stored.
-- **HTML assembly smoke test** — output is valid HTML containing every section heading; no unescaped `final_json` breaking markup.
+- **HTML assembly smoke test** — both modes produce valid HTML containing every expected section heading; no unescaped `final_json` breaking markup.
+- **Catalog mode** — runs with `--catalog`, no DB connection, emits `_catalog.html` with the rule roster + datapoint→consumers table.
 - **Edge case** — analysis with no verdicts and null `routing_plan` renders cleanly.
 - **Failure case** — unknown analysis id → clean, explicit error (no traceback dump).
 
@@ -143,4 +180,5 @@ Minimum bar (CLAUDE.md): one expected-use, one edge, one failure — covered abo
 
 - Assumes `db_sync` is importable and configured via the worker's existing env (`DATABASE_URL` / storage settings). If run outside the worker's environment, the DB connection string must be available the same way the worker resolves it.
 - Assumes `flatten_analysis` produces the `phaseN` keys the rules expect; if rule mismatches are confirmed, the gap view will simply report them (the tool does not adapt rule behavior).
-- Static phase dependency map is maintained inside the tool (small, explicit) rather than introspected — phases are a fixed, well-known set of 9.
+- The §6 stage map (narration + inputs + outputs) is maintained inside the tool (small, explicit) rather than introspected — phases are a fixed, well-known set of 9, and their outputs are dynamic dicts with no typed schema. Map drift is acceptable for a dev tool and is itself surfaced (trace mode cross-checks the map's outputs against the real `final_json`).
+- Catalog mode is intentionally DB-free; if `db_sync` import has heavy side effects at import time, the tool must import the rule/validator/prompt modules without forcing a DB connection (lazy-connect only in trace mode).
