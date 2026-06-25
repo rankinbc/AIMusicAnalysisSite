@@ -27,6 +27,7 @@ class RawTrace:
     verdicts: list[dict[str, Any]]
 
 
+# Hand-maintained subset of aimusic_shared.models.Verdict columns; update here if those change.
 _VERDICT_COLS = (
     "id", "specialist", "prompt_version", "model", "severity", "category",
     "confidence", "priority_score", "headline", "summary", "metric_line",

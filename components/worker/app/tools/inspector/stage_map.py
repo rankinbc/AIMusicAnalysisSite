@@ -21,6 +21,7 @@ class Stage:
     narration: str
     inputs: tuple[str, ...]
     outputs: tuple[str, ...]
+    in_final_json: bool = True
 
 
 STAGE_MAP: list[Stage] = [
@@ -104,6 +105,10 @@ STAGE_MAP: list[Stage] = [
             "phase7.overall_score", "phase7.grade", "phase7.component_scores",
             "phase7.section_scores", "phase7.suggestions", "phase7.fixes",
             "phase7.violations", "phase7.section_count",
+            "phase7.flow_score", "phase7.structure_score",
+            "phase7.energy_contrast_score", "phase7.length_score",
+            "phase7.eight_bar_score", "phase7.metadata", "phase7.issues",
+            "phase7.total_duration",
         ),
     ),
     Stage(
@@ -114,7 +119,15 @@ STAGE_MAP: list[Stage] = [
             "health, device/track summaries, and MIDI findings. Absent otherwise."
         ),
         inputs=("als_file",),
-        outputs=("phase8.health_score", "phase8.tracks", "phase8.midi", "phase8.arrangement"),
+        outputs=(
+            "phase8.health_score", "phase8.tracks", "phase8.midi", "phase8.arrangement",
+            "phase8.tempo", "phase8.grade", "phase8.ableton_version",
+            "phase8.time_signature", "phase8.plugin_list", "phase8.disabled_devices",
+            "phase8.clutter_pct", "phase8.has_humanized_midi",
+            "phase8.quantization_issues_count", "phase8.total_chord_count",
+            "phase8.midi_note_count", "phase8.audio_clip_count",
+            "phase8.total_devices", "phase8.total_duration_seconds",
+        ),
     ),
     Stage(
         key="phase9",
@@ -138,6 +151,7 @@ STAGE_MAP: list[Stage] = [
         outputs=(
             "overall_score", "grade", "top_fixes", "danceability_score",
             "coach_name", "coach_intro", "coached_fixes",
+            "file_path",
         ),
     ),
     Stage(
@@ -150,6 +164,7 @@ STAGE_MAP: list[Stage] = [
         ),
         inputs=("flattened_final_json",),
         outputs=("rule_verdicts",),
+        in_final_json=False,
     ),
     Stage(
         key="triage",
@@ -161,6 +176,7 @@ STAGE_MAP: list[Stage] = [
         ),
         inputs=("flattened_final_json", "rule_verdicts"),
         outputs=("routing_plan.specialists_to_run", "routing_plan.skip", "routing_plan.rationale"),
+        in_final_json=False,
     ),
     Stage(
         key="specialists",
@@ -172,6 +188,7 @@ STAGE_MAP: list[Stage] = [
         ),
         inputs=("flattened_final_json", "routing_plan.specialists_to_run"),
         outputs=("specialist_verdicts",),
+        in_final_json=False,
     ),
     Stage(
         key="validation",
@@ -183,6 +200,7 @@ STAGE_MAP: list[Stage] = [
         ),
         inputs=("specialist_verdicts", "flattened_final_json"),
         outputs=("validated_verdicts",),
+        in_final_json=False,
     ),
     Stage(
         key="ranking",
@@ -193,12 +211,23 @@ STAGE_MAP: list[Stage] = [
         ),
         inputs=("validated_verdicts",),
         outputs=("ranked_verdicts",),
+        in_final_json=False,
     ),
 ]
 
 
 def declared_output_paths() -> set[str]:
     return {p for s in STAGE_MAP for p in s.outputs}
+
+
+def final_json_output_paths() -> set[str]:
+    """Return declared outputs from stages whose data lives in final_json only.
+
+    Verdict-pipeline stages (rule_engine, triage, specialists, validation,
+    ranking) have in_final_json=False; their outputs live in the verdicts table
+    or routing_plan column and must not be compared against final_json.
+    """
+    return {p for s in STAGE_MAP if s.in_final_json for p in s.outputs}
 
 
 def stage_for_path(path: str) -> str | None:
@@ -225,10 +254,15 @@ def _actual_paths(final_json: dict) -> tuple[set[str], set[str]]:
 
 def diff_against_final_json(final_json: dict) -> tuple[list[str], list[str]]:
     declared = declared_output_paths()
+    fj_declared = final_json_output_paths()
     actual, present_phases = _actual_paths(final_json)
+    # stale_missing: pipeline emits a key, but the full map has no entry for it.
     stale_missing = sorted(a for a in actual if a not in declared)
+    # phantom: map declares a final_json key, but the snapshot lacks it.
+    # Uses fj_declared (excludes verdict-pipeline outputs that never appear in
+    # final_json) so verdict-space paths don't false-flag as phantom.
     phantom: list[str] = []
-    for d in sorted(declared):
+    for d in sorted(fj_declared):
         if d in actual:
             continue
         phase = d.split(".")[0] if "." in d and d.startswith("phase") else None
