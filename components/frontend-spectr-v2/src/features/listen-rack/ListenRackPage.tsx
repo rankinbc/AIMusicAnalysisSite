@@ -15,7 +15,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { getAccessToken } from '../../api/fetcher';
+import { useStemProposals } from '../../api/hooks';
 import { useAudioGraph, type AudioFrame } from '../listen/useAudioGraph';
+import { StemDeck, type DeckStem } from '../listen/StemDeck';
+import { useStemEngine } from '../listen/useStemEngine';
 import { CoverArt } from '../../ui/CoverArt';
 import {
   MODE_SURFACE_MATRIX, type AccessDto, type ActorRef, type ModeId,
@@ -180,7 +183,7 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
   const lastMeterTsRef = useRef(0);
   const [announcement, setAnnouncement] = useState<AnnouncementMsg | null>(null);
   const [myStatus, setMyStatus] = useState('🎧');
-  const [bottomView, setBottomView] = useState<'rack' | 'lights'>('rack');
+  const [bottomView, setBottomView] = useState<'rack' | 'lights' | 'stems'>('rack');
   const [vizPresets, setVizPresets] = useState<VizPreset[]>([]);
 
   const saveVizPreset = useCallback(() => setVizPresets((p) => [...p, { id: Math.random().toString(36).slice(2), name: 'Look ' + (p.length + 1), viz, stages: [...stages], director }]), [viz, stages, director]);
@@ -211,6 +214,37 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
   const pitchEnabled = realAudio && !!rs.mod.pitch.enabled;
   const pitchSemitones = Number(rs.mod.pitch.semitones) || 0;
   const pitchCents = Number(rs.mod.pitch.cents) || 0;
+
+  // ── Stem deck (Phase 2.5 parity): real per-stem audio via the stems pipeline,
+  // mutually exclusive with the single-track graph. Real mode only; ported from
+  // listen.$versionId.tsx. ──
+  const { data: stemProposals, isLoading: stemsLoading } = useStemProposals(versionId ?? '', realAudio);
+  const deckStems = useMemo<DeckStem[]>(
+    () => (stemProposals?.stems ?? []).map((st) => ({
+      id: st.id,
+      role: st.confirmedRole ?? st.detectedRole ?? null,
+      filename: st.originalFilename,
+    })),
+    [stemProposals],
+  );
+  const stemEngine = useStemEngine(() => graph.ensureContext());
+  const [stemPlaying, setStemPlaying] = useState(false);
+  const stemUrl = useCallback(
+    (stemId: string) =>
+      `/api/versions/${versionId}/stems/${stemId}/audio?t=${encodeURIComponent(getAccessToken() ?? '')}`,
+    [versionId],
+  );
+  // Entering stem mode pauses the single-track lanes (MediaElement + pitch).
+  const activateStemMode = useCallback(() => {
+    if (pitchModeRef.current && graph.pitchPlaying()) graph.pitchPause();
+    const a = audioRef.current;
+    if (a && !a.paused) a.pause();
+    setPlaying(false);
+  }, [graph]);
+  // Reverse exclusivity: starting the single-track audio stops the stem deck.
+  const stopStems = useCallback(() => {
+    setStemPlaying((prev) => { if (prev) stemEngine.pause(); return false; });
+  }, [stemEngine]);
 
   const directorObj: Director | undefined = useMemo(() => DIRECTORS.find((d) => d.id === director), [director]);
   const activeModules: ModuleManifest[] = useMemo(() => rs.order.filter((id) => rs.mod[id].enabled).map((id) => MANIFEST_BY_ID[id]), [rs.order, rs.mod]);
@@ -416,12 +450,14 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
           toast.error(`Audio engine failed: ${err instanceof Error ? err.message : String(err)}`);
           return;
         }
+        stopStems();
         graph.pitchResume();
         setPlaying(true);
       }
       return;
     }
     if (!a.paused) { a.pause(); setPlaying(false); return; }
+    stopStems();
     try {
       graph.ensureContext();
       // Now that the AudioContext + nodes exist, sync the full rack so any knob
@@ -437,7 +473,7 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
         toast.error(`Playback failed: ${err instanceof Error ? err.message : String(err)}`);
         setPlaying(false);
       });
-  }, [realAudio, graph]);
+  }, [realAudio, graph, stopStems]);
 
   const seek = useCallback((t: number) => {
     if (!realAudio) { setPosition(t); return; }
@@ -476,6 +512,10 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
               <div style={{ display: 'flex', gap: 6, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                 <button type="button" onClick={() => setBottomView('rack')} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 11, fontWeight: 700, padding: '7px 14px', borderRadius: 8, color: bottomView === 'rack' ? '#06151a' : 'var(--muted)', background: bottomView === 'rack' ? 'var(--cyan)' : 'rgba(255,255,255,0.03)', border: '1px solid ' + (bottomView === 'rack' ? 'transparent' : 'var(--border)') }}>▦ RACK</button>
                 <button type="button" onClick={() => setBottomView('lights')} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 11, fontWeight: 700, padding: '7px 14px', borderRadius: 8, color: bottomView === 'lights' ? '#06151a' : 'var(--muted)', background: bottomView === 'lights' ? 'var(--cyan)' : 'rgba(255,255,255,0.03)', border: '1px solid ' + (bottomView === 'lights' ? 'transparent' : 'var(--border)') }}>☀ VISUALS</button>
+                {realAudio && (
+                  <button type="button" onClick={() => setBottomView('stems')} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 11, fontWeight: 700, padding: '7px 14px', borderRadius: 8, color: bottomView === 'stems' ? '#06151a' : 'var(--muted)', background: bottomView === 'stems' ? 'var(--cyan)' : 'rgba(255,255,255,0.03)', border: '1px solid ' + (bottomView === 'stems' ? 'transparent' : 'var(--border)') }}>♫ STEMS</button>
+                )}
+                {bottomView !== 'stems' && (
                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <select
                     value=""
@@ -499,7 +539,7 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
                       </div>
                     );
                   })()}
-                </div>
+                </div>)}
               </div>
               {bottomView === 'rack'
                 ? (rackReadOnly
@@ -512,7 +552,10 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
                     </div>
                   )
                   : <InlineRack rs={rs} playing={playing} controller={roomControl.rackHolder?.handle ?? null} />)
-                : <VisualsPanel stages={stages} toggleStage={toggleStage} director={director} setDirector={chooseDirector} viz={viz} setViz={setViz} onRandomize={randomizeViz} />}
+                : bottomView === 'stems'
+                  ? <StemDeck stems={deckStems} isLoading={stemsLoading} stemUrl={stemUrl} engine={stemEngine}
+                      playing={stemPlaying} onActivate={activateStemMode} onPlayPause={setStemPlaying} />
+                  : <VisualsPanel stages={stages} toggleStage={toggleStage} director={director} setDirector={chooseDirector} viz={viz} setViz={setViz} onRandomize={randomizeViz} />}
             </div>
           </div>
 
