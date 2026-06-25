@@ -1,0 +1,271 @@
+/* SPECTR · Listen rack redesign — page-specific CSS.
+ *
+ * Tokens (--bg, --cyan, …), the `.card/.pill/.btn/.dot/.label/.mono` utilities,
+ * and the pulseGlow / fade-in keyframes already live in styles/tokens.css +
+ * styles/global.css and are reused verbatim. Everything below is unique to the
+ * Listen rack page and is namespaced with an `lr-` prefix so it can never
+ * collide with the global utility layer.
+ *
+ * Ported from PRPs/design_handoffs/design_handoff_listen_rack/src/styles.css.
+ */
+
+/* Custom drag controls (Knob/Fader/HSlider/HueSlider) are role="slider" divs,
+ * so they don't inherit the native button:focus-visible ring from global.css.
+ * Give them the same cyan ring when reached by keyboard (WCAG 2.4.7). */
+.lr-ctl:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* ── Page background wash (scoped to the page shell) ───────────────────────── */
+.lr-shell {
+  min-height: 100%;
+  background-image:
+    radial-gradient(ellipse 90% 45% at 50% -10%, rgba(0, 229, 176, 0.06) 0%, transparent 65%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(167, 139, 250, 0.04) 0%, transparent 60%),
+    linear-gradient(rgba(255, 255, 255, 0.013) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.013) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 48px 48px, 48px 48px;
+  background-attachment: fixed;
+}
+
+/* ── Responsive page shell (quality floor: desktop → mobile) ───────────────── */
+.lr-page {
+  max-width: 1640px;
+  margin: 0 auto;
+  padding: 20px 28px 64px;
+  width: 100%;
+}
+.lr-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 348px;
+  gap: 18px;
+  align-items: start;
+}
+/* Below tablet-portrait the fixed 348px rail crushes the stage/rack — stack it
+   beneath instead of squeezing two columns into a phone width. */
+@media (max-width: 900px) {
+  .lr-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .lr-page { padding: 14px 14px 56px; }
+}
+
+/* Track header: wraps the mode switcher + Report action below the title once the
+   single row no longer fits, rather than shrinking the title to nothing. */
+.lr-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.lr-head-title { flex: 1 1 240px; min-width: 0; }
+.lr-head-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+@media (max-width: 560px) {
+  .lr-head-actions { flex-direction: row; align-items: center; justify-content: space-between; width: 100%; }
+}
+
+/* ── Presence pops + ring pulse (Room reactions on the stage) ──────────────── */
+@keyframes presencePop {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+  12%  { opacity: 1; transform: translate(-50%, -54%) scale(1.12); }
+  24%  { transform: translate(-50%, -50%) scale(1); }
+  72%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -120%) scale(0.92); }
+}
+@keyframes ringPulse {
+  0%   { opacity: 0.85; transform: scale(0.7); }
+  100% { opacity: 0; transform: scale(2.3); }
+}
+
+/* ── Coach "Applied" announcement — streamed text + background flash ───────── */
+.lr-coach-toast {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px;
+  border-radius: 13px;
+  max-width: 520px;
+  background: rgba(7, 10, 18, 0.92);
+  border: 1px solid rgba(0, 229, 176, 0.45);
+  box-shadow: 0 14px 44px -10px rgba(0, 229, 176, 0.5), inset 0 0 22px rgba(0, 229, 176, 0.08);
+  backdrop-filter: blur(12px);
+  animation: lrCoachIn 0.4s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+@keyframes lrCoachIn {
+  from { opacity: 0; transform: translate(-50%, -16px) scale(0.96); }
+  to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+.lr-coach-stream {
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  background: linear-gradient(90deg, #00e5b0, #a78bfa);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.lr-coach-caret {
+  display: inline-block;
+  width: 6px;
+  height: 13px;
+  background: #00e5b0;
+  margin-left: 2px;
+  vertical-align: -2px;
+  border-radius: 1px;
+  animation: lrCaretBlink 0.7s steps(1) infinite;
+}
+@keyframes lrCaretBlink {
+  0%, 50%    { opacity: 1; }
+  51%, 100%  { opacity: 0; }
+}
+.lr-coach-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 28%, rgba(0, 229, 176, 0.22), transparent 62%);
+  animation: lrCoachFlash 0.75s ease-out forwards;
+}
+@keyframes lrCoachFlash {
+  0%   { opacity: 0; }
+  18%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ── Slowly cycling stage background ───────────────────────────────────────── */
+.lr-bg-cycle { animation: lrBgHue 32s linear infinite; }
+@keyframes lrBgHue {
+  from { filter: hue-rotate(0deg); }
+  to   { filter: hue-rotate(360deg); }
+}
+
+/* ── Rack stage — side-scrolling active-device marquee ─────────────────────── */
+.lr-rack-marquee { animation: lrRackScroll 20s linear infinite; padding-left: 5%; }
+@keyframes lrRackScroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+/* ── Background flash overlay (visualizer) ─────────────────────────────────── */
+.lr-bg-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  animation: lrBgFlashKF 0.5s ease-in-out infinite;
+}
+@keyframes lrBgFlashKF {
+  0%, 100% { opacity: 0; }
+  50%      { opacity: 0.55; }
+}
+
+/* ── Rack / visuals-console panel skin ─────────────────────────────────────── */
+.lr-rack-panel {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.18)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.015) 0 1px, transparent 1px 3px),
+    #0b1018 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), inset 0 0 24px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* ── Lighting console (Visuals panel) ──────────────────────────────────────── */
+.lr-lc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(228px, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+.lr-lc-grid > * { min-width: 0; }
+.lr-lc-bay {
+  padding: 11px;
+  border-radius: 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(0, 0, 0, 0.14));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.lr-lc-bay-hd { display: flex; align-items: center; gap: 8px; }
+.lr-lc-label {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 8.5px;
+  letter-spacing: 0.18em;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.lr-lc-led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 7px var(--cyan);
+  flex-shrink: 0;
+}
+.lr-lc-led.off { background: #243044; box-shadow: none; }
+.lr-lc-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  background: linear-gradient(180deg, #121a28, #0b111b);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: all 0.12s;
+}
+.lr-lc-cell.on {
+  border-color: rgba(0, 229, 176, 0.6);
+  background: linear-gradient(180deg, rgba(0, 229, 176, 0.14), rgba(0, 229, 176, 0.04));
+  box-shadow: inset 0 0 10px rgba(0, 229, 176, 0.18), 0 0 8px rgba(0, 229, 176, 0.25);
+}
+
+/* ── Vertical EQ sliders (8-band editor) ───────────────────────────────────── */
+input[type='range'].lr-eq-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+input[type='range'].lr-eq-slider::-webkit-slider-runnable-track {
+  width: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to top, rgba(0, 229, 176, 0.25), rgba(167, 139, 250, 0.25));
+  border: 1px solid var(--border);
+}
+input[type='range'].lr-eq-slider::-moz-range-track {
+  width: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to top, rgba(0, 229, 176, 0.25), rgba(167, 139, 250, 0.25));
+  border: 1px solid var(--border);
+}
+input[type='range'].lr-eq-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 12px;
+  margin-left: -5px;
+  border-radius: 3px;
+  background: var(--eq-accent, var(--cyan));
+  box-shadow: 0 0 8px var(--eq-accent, var(--cyan)), 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+input[type='range'].lr-eq-slider::-moz-range-thumb {
+  width: 16px;
+  height: 12px;
+  border: none;
+  border-radius: 3px;
+  background: var(--eq-accent, var(--cyan));
+  box-shadow: 0 0 8px var(--eq-accent, var(--cyan));
+}
