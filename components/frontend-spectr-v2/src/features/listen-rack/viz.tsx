@@ -11,10 +11,11 @@ import { forwardRef, Fragment, useEffect, useImperativeHandle, useMemo, useRef }
 
 import { CoverArt } from '../../ui/CoverArt';
 import type { AudioFrame } from '../listen/useAudioGraph';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import {
   ROOM_LISTENERS, type Director, type EqBand, type ModuleManifest, type VizState,
 } from './data';
-import { cssVar, freqToX, hslToHex, LASER_COLORS } from './helpers';
+import { cssVar, freqToX, hslToHex, LASER_COLORS, safeFlashHz } from './helpers';
 import { Avatar, ModuleIcon } from './ui';
 
 export interface VizFrame { t: number; spectrum: number[]; energy: number; pulse: number; beat: boolean; flash: number }
@@ -399,6 +400,9 @@ export function VizStage({
   const stageRef2 = useRef(stages); stageRef2.current = stages;
   const onDropRef = useRef(onDrop); onDropRef.current = onDrop;
   const getFrameRef = useRef(getFrame); getFrameRef.current = getFrame;
+  // Photosensitivity: freeze full-field flashes under prefers-reduced-motion.
+  const reduceMotion = useReducedMotion();
+  const reduceMotionRef = useRef(reduceMotion); reduceMotionRef.current = reduceMotion;
 
   // single rAF: compute frame → drive canvas + laser; auto-director cycles stage
   useEffect(() => {
@@ -429,7 +433,11 @@ export function VizStage({
       if (bgLayerRef.current) bgLayerRef.current.style.opacity = viz.bgSync ? (0.4 + f.energy * 0.9).toFixed(2) : '';
       const dropFx = !director || director.id === 'off' ? viz.dropFx : true;
       if (dropFx && now - lastDrop.current > (director && director.id === 'hype' ? 6000 : 9000) && lfo > 0.82) {
-        lastDrop.current = now; fireRef.current?.launch(); f.flash = 1; f.pulse = 1;
+        lastDrop.current = now;
+        // Reduced-motion: skip the fireworks burst + full-field flash; keep the
+        // (subtle) pulse and the presence callback.
+        if (!reduceMotionRef.current) { fireRef.current?.launch(); f.flash = 1; }
+        f.pulse = 1;
         if (onDropRef.current) onDropRef.current();
       }
       if (beat) f.pulse = 1; f.pulse *= 0.86; f.flash *= 0.8;
@@ -470,7 +478,7 @@ export function VizStage({
       const acc = viz.autoColor ? hslToHex((((now / 26) % 360) + (viz.specHue || 165)) % 360) : accentHex;
       stageRef.current?.draw(f, stageRef2.current, acc);
       if (viz.laserOn) {
-        if (viz.laserFlash && now - lastBurst.current > 2400 + Math.random() * 2800) {
+        if (viz.laserFlash && !reduceMotionRef.current && now - lastBurst.current > 2400 + Math.random() * 2800) {
           lastBurst.current = now;
           const k = 3 + Math.floor(Math.random() * 3);
           for (let i = 0; i < k; i++) flashPtsRef.current.push({ x: 0.1 + Math.random() * 0.8, y: 0.1 + Math.random() * 0.66, life: 1, born: now + i * 70 });
@@ -497,7 +505,7 @@ export function VizStage({
   return (
     <div ref={onStageEngine} style={{ position: 'relative', height, overflow: 'hidden', borderRadius: compact ? 0 : 'var(--radius) var(--radius) 0 0', background: 'var(--bg-2)' }}>
       <div ref={bgLayerRef} className={'viz-bg' + (viz.bgAuto ? ' lr-bg-cycle' : '')} style={{ position: 'absolute', inset: 0, background: `radial-gradient(ellipse 95% 85% at 50% 100%, ${cssVar(viz.bg || 'var(--cyan)')}1f, transparent 62%), transparent` }} />
-      {viz.bgFlash && playing && <div className="lr-bg-flash" style={{ background: viz.bgFlashColor, animationDuration: (1 / (viz.bgFlashHz || 2)) + 's' }} />}
+      {viz.bgFlash && playing && !reduceMotion && <div className="lr-bg-flash" style={{ background: viz.bgFlashColor, animationDuration: (1 / safeFlashHz(viz.bgFlashHz)) + 's' }} />}
       {!isInfo && <StageCanvas ref={stageRef} accent={accentHex} />}
       {isRoom && <ListenersStage myStatus={myStatus} />}
       {isDevices && <RackStage modules={activeModules} />}
