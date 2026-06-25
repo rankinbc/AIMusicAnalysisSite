@@ -3,6 +3,10 @@
 **Date:** 2026-06-25
 **Component(s):** `components/frontend-spectr-v2` (primary), `components/bff` (small backend change)
 **Status:** Approved design — ready for implementation plan
+**Design handoff:** `PRPs/design_handoffs/design_handoff_library/` — interactive React prototype
+(`js/library.jsx`, `js/data.jsx`, `js/visuals.jsx`, `styles.css`) that maps file-for-file
+onto `features/library/SongsLibrarySection.tsx`. The build target is parity with this
+prototype. (Its `js/tweaks-panel.jsx` is a prototype-only exploration harness — **do not ship**.)
 
 ## Problem
 
@@ -20,10 +24,14 @@ its versions, and who can see it**, and to add a real **per-song visibility** co
 - Remove grade/score from this page entirely (pill, score text, scored-version arc block, grade filters).
 - New **song-level `visibility`** field (`private` | `shared` | `public`), default `private`.
 - Show visibility as a badge; let the user change it (kebab submenu + edit dialog).
-- Two card action buttons: **Play** (latest version → listening room) and **Report**
-  (latest version's analysis report, only when an analysis exists).
+- Two card action buttons: **Play** (latest version → listening room) and **Analysis
+  Results** (latest version's analysis report, only when an analysis exists).
 - Description peek, tags, and a display-only version-sequence strip on the card.
 - Replace grade filter pills with visibility filter pills.
+- **Tag-refine row** under the visibility pills + clickable card tags (filter by tag,
+  **union/any-match**). *(Decision: union, confirmed 2026-06-25.)*
+- **Hard-delete** a song (permanent, with a confirm dialog) as a new kebab action,
+  alongside the existing reversible Archive. *(Decision: add hard-delete, confirmed 2026-06-25.)*
 
 **Out of scope — deferred to a second spec ("sharing platform")**
 - Public profile pages (`/u/<user>`) listing a user's public songs.
@@ -58,7 +66,14 @@ Final intended meaning (only the field + owner-facing UI are built in this spec)
    it's one of the three; persist via a **tracked** entity lookup (do not introduce
    `AsNoTracking()` in the write path — known EF gotcha where it silently drops the
    update). Existing name/genreHint patch behavior unchanged.
-4. **No `share_token`**, no new endpoints, no access-control changes.
+4. **Hard-delete endpoint.** Add a new endpoint to **permanently** delete a song and
+   its dependents (versions, analyses/jobs, tags, plus any staged/stored audio via
+   `IFileStorage`). The existing `DELETE /api/songs/{id}` is **archive (soft-delete)** —
+   do not repurpose it. Add a distinct route (e.g. `DELETE /api/songs/{id}?hard=true`
+   or `DELETE /api/songs/{id}/permanent`) scoped to the owner (`WHERE user_id = me`).
+   Cascade behavior must be explicit (EF cascade or manual child cleanup) and storage
+   blobs removed. Archive remains the reversible default.
+5. **No `share_token`**, no other new endpoints, no access-control changes.
 
 ## Frontend changes (`frontend-spectr-v2`)
 
@@ -103,17 +118,40 @@ peek, tags, compact version markers, **Report** (conditional) + **Play**, update
 kebab. Grade pill and version grade-strip removed.
 
 ### Kebab menu — `SongMenu`
-`Open · Edit · Visibility ▸ (Private / Shared / Public) · Add version · Archive`.
-- Visibility submenu sets `visibility` via `PATCH`; current value checked/highlighted.
+`Open · Edit · Visibility ▸ (Private / Shared / Public) · Add version · — · Archive/Unarchive · Delete`.
+- **Portaled to `<body>`** with fixed coords from the trigger rect so the card's
+  `overflow: hidden` can't clip it; flips upward near the viewport bottom, the
+  visibility submenu flips sides near an edge; closes on outside-click / Esc / scroll
+  (per the prototype `SongMenu`).
+- Visibility submenu = radio items (Private/Shared/Public) with one-line "who can see it"
+  hints; current value checked. Sets `visibility` via `PATCH`.
+- **Archive** toggles to **Unarchive** for archived rows (reversible).
+- **Delete** is destructive (`menuItem danger`) → opens the confirm dialog (below).
 - No "Copy share link" entry (deferred).
-- `Edit` dialog (`SongEditDialog`) also gains a visibility control next to name/genre/tags.
+- `Edit` dialog (`SongEditDialog`) gains a segmented Private/Shared/Public visibility
+  control next to name/genre. (Tags + cover stay in the full editor, per the prototype.)
+
+### Delete confirm dialog — `DeleteDialog`
+Destructive confirm: titles the song, counts its versions, warns it removes all analysis
+results and **can't be undone**, and points to Archive as the non-destructive alternative.
+Confirm → hard-delete endpoint → invalidate `['songs']` → toast.
 
 ### Filters & header — `SongsLibrarySection`
 - Replace grade filter pills with **visibility filters**: `All · Private · Shared ·
   Public · Archived`. `All` excludes archived (as today); `Archived` shows archived.
-  Each pill shows its count.
+  Each pill shows its count, and the **count recomputes against the active tag filter**
+  so the numbers always match the grid (per prototype `counts` memo).
 - Header stat line ("N songs · M versions · last edit …") unchanged. Sort dropdown
-  and Grid/List toggle unchanged.
+  (recent / name / versions) and Grid/List toggle unchanged.
+
+### Tag-refine row — `SongsLibrarySection`
+- A `tags` refine row under the visibility pills: one chip per unique tag across the
+  active (non-archived) songs, each chip showing how many songs carry it; public tags
+  get a subtle cyan tint (mirrors `Tag.isPublic`). `clear (n)` resets.
+- **Union match:** selecting multiple chips shows songs carrying **any** selected tag.
+- **Card tags are clickable** — clicking a card's tag toggles the same filter and
+  reflects active state. Tracked in component state (`selectedTags: Set<string>`),
+  not the URL, for now.
 
 ## Data flow
 
@@ -136,6 +174,9 @@ job/analysis (`latestResult`).
 - `GET /api/songs` returns `visibility`.
 - `PATCH /api/songs/{id}` updates `visibility`; rejects invalid values; persists
   (tracked lookup) — assert it actually saved.
+- Hard-delete endpoint removes the song + child versions/analyses/tags and the audio
+  blobs; is owner-scoped (a non-owner can't delete); is distinct from archive (archive
+  still only sets `archived_at`).
 
 **Frontend (Vitest + four gates: `tsc --noEmit`, `lint --max-warnings 0`, `build`, `vitest run`)**
 - Card renders the correct badge per visibility value.
@@ -144,8 +185,12 @@ job/analysis (`latestResult`).
 - Description peek truncates and is omitted when empty.
 - Version strip renders markers and is non-interactive (display-only).
 - No grade pill/score anywhere on card or row.
-- Visibility filter pills filter the list; counts correct; Archived behavior preserved.
+- Visibility filter pills filter the list; counts correct (and recompute against the
+  active tag filter); Archived behavior preserved.
 - Kebab visibility submenu issues a `PATCH` with the chosen value.
+- Tag chips + clickable card tags filter by **union**; `clear` resets; counts match grid.
+- Delete opens the confirm dialog; confirming calls the hard-delete endpoint and removes
+  the row; Archive remains a separate reversible action.
 
 ## Open items to resolve during planning
 - **`description` source — RESOLVED.** The New Song modal work added `description`
