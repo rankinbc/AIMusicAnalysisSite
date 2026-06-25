@@ -41,3 +41,26 @@ def test_trace_model_marks_fired_rule_and_header():
     assert fired["clipping_detected"] is True
     assert m["specialist_status"]["loudness"] == "ran"
     assert m["specialist_status"]["dynamics"] == "not_selected"
+
+
+def test_trace_model_diagnoses_misnamed_rule_as_bug():
+    # phase1 ran and is populated, but the loudness rules read
+    # phase1.integrated_lufs (the real field is phase1.lufs) — that's a bug,
+    # not an input-gated idle.
+    raw = RawTrace(
+        id="11111111-1111-1111-1111-111111111111",
+        job_id="22222222-2222-2222-2222-222222222222",
+        song_name="T",
+        created_at=None,
+        final_json={"overall_score": 1.0, "grade": "F", "phases": [
+            {"phase": 1, "data": {"lufs": -13.0, "true_peak_db": -2.0}},
+        ]},
+        routing_plan=None,
+        verdicts=[],
+    )
+    m = build_trace_model(raw)
+    loud = next(r for r in m["rules"] if r["name"] == "loudness_too_high_for_streaming")
+    assert loud["diagnosis"] == "bug"
+    assert m["inputs"]["music"] is True
+    assert m["inputs"]["reference"] is False
+    assert m["rule_diagnosis_summary"]["bug"] >= 1
