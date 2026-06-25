@@ -1,0 +1,139 @@
+{
+  "band_energy": {
+    "air": -66.86,
+    "bass": 41.28,
+    "high_mid": -46.48,
+    "low_mid": -3.85,
+    "mid": -24.02,
+    "presence": -61.41,
+    "sub_bass": 38.47
+  },
+  "clashes": [
+    {
+      "frequency_range": "sub-bass / bass (20\u2013200 Hz)",
+      "severity": "high",
+      "stems": "low-end buildup"
+    },
+    {
+      "frequency_range": "low-mid (200\u2013500 Hz)",
+      "severity": "high",
+      "stems": "low-mid congestion"
+    }
+  ],
+  "stems": {
+    "balance_flags": [],
+    "clash_matrix": [
+      {
+        "band": "bass",
+        "overlap_severity": 0.63,
+        "severity_tier": "warning",
+        "stem_a": "kick",
+        "stem_b": "bass"
+      }
+    ],
+    "mode": "grouped",
+    "per_stem": {
+      "bass": {
+        "band_energy_db": {
+          "air": -7.28,
+          "bass": 86.69,
+          "high_mid": -11.02,
+          "low_mid": -19.6,
+          "mid": -14.64,
+          "presence": -9.5,
+          "sub": -35.96
+        },
+        "dominant_frequencies_hz": [
+          110.0,
+          109.75,
+          110.25
+        ],
+        "duration_s": 4.0,
+        "dynamic_range_db": 3.01,
+        "is_mono": true,
+        "lufs_integrated": -12.64,
+        "pan_estimate": 0.0,
+        "peak_db": -7.96,
+        "rms_db": -10.97,
+        "spectral_centroid_hz": 116.19,
+        "stereo_width": 0.0
+      },
+      "hats": {
+        "band_energy_db": {
+          "air": 61.06,
+          "bass": 2.04,
+          "high_mid": 47.98,
+          "low_mid": 18.06,
+          "mid": 33.69,
+          "presence": 56.06,
+          "sub": -12.91
+        },
+        "dominant_frequencies_hz": [
+          19387.0,
+          19379.0,
+          19395.0
+        ],
+        "duration_s": 4.0,
+        "dynamic_range_db": 29.29,
+        "is_mono": true,
+        "lufs_integrated": -31.0,
+        "pan_estimate": 0.0,
+        "peak_db": -5.08,
+        "rms_db": -34.37,
+        "spectral_centroid_hz": 7458.69,
+        "stereo_width": 0.0
+      },
+      "kick": {
+        "band_energy_db": {
+          "air": -2.2,
+          "bass": 69.47,
+          "high_mid": 17.51,
+          "low_mid": 47.9,
+          "mid": 33.18,
+          "presence": 3.78,
+          "sub": 70.58
+        },
+        "dominant_frequencies_hz": [
+          58.0,
+          60.0,
+          56.0
+        ],
+        "duration_s": 4.0,
+        "dynamic_range_db": 19.53,
+        "is_mono": false,
+        "lufs_integrated": -27.67,
+        "pan_estimate": -0.0,
+        "peak_db": -4.64,
+        "rms_db": -24.17,
+        "spectral_centroid_hz": 8376.03,
+        "stereo_width": 0.0
+      },
+      "vocals": {
+        "band_energy_db": {
+          "air": -10.87,
+          "bass": 63.79,
+          "high_mid": -13.87,
+          "low_mid": 81.97,
+          "mid": 80.12,
+          "presence": -12.06,
+          "sub": -34.56
+        },
+        "dominant_frequencies_hz": [
+          796.5,
+          203.5,
+          797.0
+        ],
+        "duration_s": 4.0,
+        "dynamic_range_db": 3.01,
+        "is_mono": false,
+        "lufs_integrated": -14.15,
+        "pan_estimate": 0.05,
+        "peak_db": -10.46,
+        "rms_db": -13.47,
+        "spectral_centroid_hz": 506.82,
+        "stereo_width": 0.05
+      }
+    },
+    "status": "ok"
+  }
+}

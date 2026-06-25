@@ -9,6 +9,16 @@ from app.tools.inspector.stage_map import (
 )
 
 
+def test_final_json_output_paths_excludes_verdict_space_outputs():
+    # Verdict-pipeline stage outputs live in the verdicts table / routing_plan,
+    # not final_json, so they must be excluded from the freshness diff.
+    fjp = final_json_output_paths()
+    declared = declared_output_paths()
+    assert "phase1.lufs" in fjp
+    for vp in ("rule_verdicts", "ranked_verdicts", "routing_plan.specialists_to_run"):
+        assert vp in declared and vp not in fjp
+
+
 def test_map_covers_all_pipeline_stages():
     keys = {s.key for s in STAGE_MAP}
     for n in range(1, 10):
