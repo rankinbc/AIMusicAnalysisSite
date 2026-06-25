@@ -872,6 +872,31 @@ export interface Phase1Data {
   low_energy?: number;
   bands?: Phase1Bands;
   structure?: { sections?: unknown[]; beats?: unknown[] };
+  // ── full-EMIT metrics (2026-06-25): emitted on every analysis. ──
+  /** dB, peak − RMS. <4 squashed, 8–14 healthy, >22 very wide. */
+  crest_factor?: number;
+  /** 0–1 Krumhansl key-profile fit; <0.5 ≈ ambiguous/modal. */
+  key_detection_confidence?: number;
+  /** Hz — brightness. */
+  spectral_centroid_hz?: number;
+  /** dB mean — clarity/separation. */
+  spectral_contrast?: number;
+  /** 0–1 — tonal↔noisy. */
+  spectral_flatness?: number;
+  /** LU — EBU R128 loudness range. */
+  loudness_range_lu?: number;
+  /** LUFS — loudest 3 s window. */
+  short_term_max_lufs?: number;
+  /** LUFS — loudest 0.4 s window. */
+  momentary_max_lufs?: number;
+  transients?: Phase1Transients;
+}
+
+/** Onset-based transient/punch readout (full-EMIT, 2026-06-25). */
+export interface Phase1Transients {
+  avg_transient_strength?: number;
+  transient_count?: number;
+  transients_per_second?: number;
 }
 
 export interface Phase2Data {
