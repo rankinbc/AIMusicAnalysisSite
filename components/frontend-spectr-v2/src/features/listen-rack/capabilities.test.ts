@@ -33,6 +33,11 @@ describe('work mode', () => {
   it('coach is gated by coachAvailable (X.1)', () => {
     expect(cap('work', ident(), noGrants, access({ coachAvailable: false })).canUseCoach).toBe(false);
   });
+  it('a non-owner in work mode is read-only and cannot edit (defensive — unreachable via availableModes)', () => {
+    const c = cap('work', ident({ isOwner: false }), noGrants, access());
+    expect(c.canEditRack).toBe(false);
+    expect(c.rackReadOnly).toBe(true);
+  });
 });
 
 describe('view mode', () => {

@@ -55,7 +55,7 @@ export function resolveCapabilities(
   if (mode === 'work') {
     return {
       ...base,
-      canEditRack: id.isOwner, rackReadOnly: false,
+      canEditRack: id.isOwner, rackReadOnly: !id.isOwner,
       canControlTransport: true, transportFollowsHost: false,
       canControlVisuals: true,
       canUseCoach: access.coachAvailable,
