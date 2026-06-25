@@ -25,8 +25,72 @@ _BAND_DEFS = [
 
 _KEY_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
+# Reasons we've already logged for unavailable structure detection, so a run of
+# N tracks against a host with no Docker image logs the cause once, not N times.
+_logged_structure_reasons: set[str] = set()
 
-def analyze(wav_path: Path, progress_cb: Callable | None = None) -> dict:
+# Emitted by Phase 1 when structure detection is deferred to a background job
+# (the worker runs the ~60-90 s allin1 step off the critical path). The
+# ``deferred`` flag lets the UI show "analyzing arrangement…" rather than the
+# "not assessed" state used for a genuinely-unavailable detector.
+_DEFERRED_STRUCTURE = {
+    "available": False,
+    "deferred": True,
+    "reason": "Structure detection running in the background",
+    "segments": [],
+    "beats": [],
+}
+
+
+def _log_structure_unavailable_once(reason: str) -> None:
+    if reason not in _logged_structure_reasons:
+        _logged_structure_reasons.add(reason)
+        logger.warning("Structure detection unavailable: %s", reason)
+
+
+def _detect_structure(wav_path: Path) -> dict:
+    """Run allin1 structure detection in Docker and shape the result.
+
+    Returns a dict the Phase-7 adapter consumes. On the happy path::
+
+        {"available": True, "detection_method": "allin1-docker",
+         "bpm": ..., "beats": [...], "downbeats": [...],
+         "segments": [{"label", "start", "end"}, ...]}   # seconds
+
+    When Docker / the image isn't set up, or analysis errors, returns
+    ``{"available": False, "reason": "...", "segments": [], "beats": []}`` —
+    the *cause* is recorded so downstream phases can say "not assessed" rather
+    than punishing the track. The not-installed cause is logged once per run.
+    """
+    # Imported lazily: the analyzer wrapper is stdlib-only, but keeping the
+    # import here mirrors the optional nature of structure detection.
+    from audio_analysis.structure.docker_allin1 import (
+        Allin1Unavailable,
+        DockerAllin1,
+    )
+
+    from audio_analysis.structure.docker_allin1 import structure_dict_from_result
+
+    try:
+        result = DockerAllin1().analyze(wav_path)
+    except Allin1Unavailable as exc:
+        # Expected when the host hasn't built the image / Docker is down.
+        _log_structure_unavailable_once(str(exc))
+        return {"available": False, "reason": str(exc), "segments": [], "beats": []}
+    except Exception as exc:  # noqa: BLE001 — analysis ran but failed; don't crash phase 1
+        reason = f"allin1 analysis error: {exc}"
+        logger.warning("Structure detection failed for %s: %s", wav_path.name, exc)
+        return {"available": False, "reason": reason, "segments": [], "beats": []}
+
+    return structure_dict_from_result(result)
+
+
+def analyze(
+    wav_path: Path,
+    progress_cb: Callable | None = None,
+    *,
+    defer_structure: bool = False,
+) -> dict:
     """Run phase-1 universal analysis on *wav_path*.
 
     Args:
@@ -146,14 +210,16 @@ def analyze(wav_path: Path, progress_cb: Callable | None = None) -> dict:
     low_energy = float(np.sqrt(np.mean(stft_mag[low_band_mask, :] ** 2)))
 
     # ------------------------------------------------------------------
-    # Structure via all-in-one-fix (optional; requires Docker/Linux)
+    # Structure via allin1 (optional; runs in the `allin1:latest` Docker
+    # container — see docker/allin1/. The worker host needs Docker running
+    # and the image built; otherwise structure detection is reported as
+    # unavailable rather than as a per-track failure.)
+    #
+    # When `defer_structure` is set the ~60-90 s allin1 step is skipped here and
+    # run later by a background job (see detect_structure_and_rescore), keeping
+    # the main pipeline off the critical path.
     # ------------------------------------------------------------------
-    try:
-        import all_in_one_fix  # type: ignore[import]
-
-        structure = all_in_one_fix.analyze(str(wav_path))
-    except (ImportError, Exception):
-        structure = {"sections": [], "beats": []}
+    structure = dict(_DEFERRED_STRUCTURE) if defer_structure else _detect_structure(wav_path)
 
     return {
         "lufs": lufs,

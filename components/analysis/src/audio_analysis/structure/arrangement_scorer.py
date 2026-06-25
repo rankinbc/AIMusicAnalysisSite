@@ -274,6 +274,14 @@ class ArrangementScorer:
         Returns:
             ArrangementScore with overall score, component scores, and issues
         """
+        if getattr(structure, "deferred", False):
+            return self._pending_score()
+
+        if not getattr(structure, "available", True):
+            return self._unavailable_score(
+                structure.error_message or "Structure detection unavailable"
+            )
+
         if not structure.success or not structure.sections:
             return self._empty_score("Structure detection failed or no sections found")
 
@@ -364,6 +372,54 @@ class ArrangementScorer:
                 message=reason,
                 section=None,
                 fix="Ensure audio file is valid and long enough for structure detection"
+            )],
+        )
+
+    def _pending_score(self) -> ArrangementScore:
+        """Return a 'pending' score while structure detection runs in the
+        background. Grade ``"…"`` signals to the UI that the real arrangement
+        score is still coming (not a failure, not a final 'not assessed')."""
+        return ArrangementScore(
+            overall_score=0,
+            grade="…",
+            structure_score=0,
+            length_score=0,
+            eight_bar_score=0,
+            energy_contrast_score=0,
+            flow_score=0,
+            issues=[ArrangementIssue(
+                severity=IssueSeverity.SUGGESTION,
+                message="Arrangement analysis in progress — structure detection is "
+                        "running in the background.",
+                section=None,
+                fix="",
+            )],
+        )
+
+    def _unavailable_score(self, reason: str) -> ArrangementScore:
+        """Return a 'not assessed' score when structure detection couldn't run.
+
+        Distinct from :meth:`_empty_score`: this is a tooling limitation (Docker
+        / the allin1 image isn't set up), NOT a flaw in the track. Grade is
+        ``"N/A"`` and the single issue is informational, so the arrangement
+        isn't punished with a failing grade and a critical "fix your track"
+        message it didn't earn.
+        """
+        return ArrangementScore(
+            overall_score=0,
+            grade="N/A",
+            structure_score=0,
+            length_score=0,
+            eight_bar_score=0,
+            energy_contrast_score=0,
+            flow_score=0,
+            issues=[ArrangementIssue(
+                severity=IssueSeverity.SUGGESTION,
+                message=f"Arrangement not assessed — {reason}",
+                section=None,
+                fix="Build the allin1 Docker image (docker build -t allin1:latest "
+                    "docker/allin1) and ensure Docker is running to enable "
+                    "arrangement analysis."
             )],
         )
 

@@ -1,11 +1,33 @@
 # docker
 
-Docker Compose configuration for local development. Wires up PostgreSQL, Redis, and the allin1 structure-detection container.
-
-The allin1 model requires Docker on Windows — NATTEN (its dependency) has no native Windows wheels.
+Docker Compose configuration for local development. Wires up PostgreSQL, Redis,
+the BFF, the worker, and the frontend.
 
 Start all services: `docker compose up -d`
 Stop all services: `docker compose down`
+
+## allin1 structure-detection image (`allin1/`)
+
+Phase 1 runs the `allin1` music-structure analyzer **inside a container**
+(`allin1:latest`) rather than importing it in-process — NATTEN/madmom (its
+deps) have no native Windows wheels and pin an old toolchain. The worker stays
+on the host and calls the container per track via `DockerAllin1`
+(`components/analysis/src/audio_analysis/structure/docker_allin1.py`).
+
+Build the image (CPU; ~10 min first time, downloads PyTorch + builds natten):
+
+```
+docker build -t allin1:latest docker/allin1
+```
+
+It is **not** a compose service — it's a one-shot `docker run` per analysis, so
+the worker host just needs Docker running and the image built. Without it,
+structure detection reports "unavailable" (logged once) and Phase 7 renders
+"not assessed" rather than failing the track.
+
+- **CPU**: ~60-90 s/track. The `docker/allin1/Dockerfile` here is CPU-only.
+- **GPU**: ~10-15 s/track. Build the CUDA variant and set `ALLIN1_USE_GPU=1`
+  (and `ALLIN1_IMAGE` if tagged differently) so the worker passes `--gpus all`.
 
 ## Worker topology: dev vs prod (AR23 — story 2.5)
 
