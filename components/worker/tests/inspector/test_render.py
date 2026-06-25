@@ -35,3 +35,9 @@ def test_render_escapes_dynamic_text():
     out = render_html(model)
     assert "<script>alert(1)</script>" not in out
     assert "&lt;script&gt;" in out
+
+
+def test_catalog_render_has_no_disclaimer_banner():
+    model = build_catalog_model()
+    out = render_html(model)
+    assert "Recomputed with current code" not in out
