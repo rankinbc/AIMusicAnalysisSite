@@ -363,7 +363,8 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
               <VisualMeters track={TRACK} playing={playing} open={metersOpen} setOpen={setMetersOpen}
                 frame={realAudio ? meterFrame : null} />
               <VizStage playing={playing} stages={stages} setStages={setStages} viz={viz}
-                director={directorObj} height={440} onDrop={handleDrop} myStatus={myStatus} activeModules={activeModules} />
+                director={directorObj} height={440} onDrop={handleDrop} myStatus={myStatus} activeModules={activeModules}
+                {...(realAudio ? { getFrame: () => graph.readFrame() } : {})} />
               <CoachToast msg={announcement} />
               <div style={{ borderTop: '1px solid var(--border)' }}>
                 <Transport track={TRACK} playing={playing} position={position} duration={duration} onTogglePlay={togglePlay}
