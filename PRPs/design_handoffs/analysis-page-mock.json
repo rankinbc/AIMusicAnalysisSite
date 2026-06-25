@@ -1,0 +1,217 @@
+{
+  "_comment": "REPRESENTATIVE mock for the Analysis Results page redesign. Mirrors exactly what the page receives: JobResultsDto.finalJson (+ alsProject) and VerdictsListResponse. Field names are the REAL pipeline paths (post-2026-06-25 reconciliation). This shows the FULLY-LOADED state (all tabs populated, stems + .als uploaded, arrangement scored). For empty/loading/degraded/disabled variants see analysis-page-states.md. Loudness/key/band numbers are realistic; values are internally consistent for a grade-B trance track.",
+
+  "finalJson": {
+    "grade": "B",
+    "overall_score": 84,
+    "danceability_score": 78,
+    "coach_name": "Nova",
+    "coach_intro": "Solid groove and a clean low end. Two things between you and an A: tame the 2–4 kHz bite and give the drop more contrast.",
+    "coached_fixes": [
+      "Pull 2 dB at 3.1 kHz on the lead bus — it's masking the vocal.",
+      "Your crest factor is 11.2 dB — healthy. Don't over-limit chasing loudness.",
+      "Breakdown sits only 4 dB below the drop; aim for 6–8 dB of contrast."
+    ],
+    "top_fixes": [
+      "Reduce 2–4 kHz harshness on the lead bus",
+      "Increase drop-vs-breakdown energy contrast",
+      "Trim sub-bass build-up below 40 Hz"
+    ],
+    "file_path": "uploads/demo/track.wav",
+    "phases": [
+      {
+        "phase": 1, "name": "Universal Mix Analysis", "status": "ok",
+        "data": {
+          "lufs": -9.5, "rms": 0.181, "peak_dbfs": -0.3, "true_peak_db": -0.6,
+          "clipping_detected": false, "clipped_sample_count": 0,
+          "mono_compatibility": 0.94, "stereo_width": 0.42, "stereo_correlation": 0.78,
+          "low_energy": 0.21, "bpm": 130.0, "detected_key": "A#",
+          "key_detection_confidence": 0.81, "duration_seconds": 372.4,
+          "bands": {
+            "sub_bass": -22.1, "bass": -18.4, "low_mid": -24.9, "mid": -21.3,
+            "upper_mid": -26.8, "presence": -31.5, "air": -38.2
+          },
+          "crest_factor": 11.2,
+          "spectral_centroid_hz": 2410.0, "spectral_contrast": 18.6, "spectral_flatness": 0.07,
+          "loudness_range_lu": 5.2, "short_term_max_lufs": -7.8, "momentary_max_lufs": -6.9,
+          "transients": {
+            "avg_transient_strength": 0.54, "transient_count": 612, "transients_per_second": 1.64
+          },
+          "structure": { "available": true, "deferred": false }
+        }
+      },
+      {
+        "phase": 2, "name": "Genre Detection", "status": "ok",
+        "data": { "bpm": 130.0, "genre": "trance", "confidence": 0.88 }
+      },
+      {
+        "phase": 3, "name": "Genre-Specific Scoring", "status": "ok",
+        "data": {
+          "genre": "trance", "total_score": 84,
+          "sub_scores": { "stereo_width": 88, "frequency_balance": 81, "low_end": 86, "dynamics": 79 },
+          "notes": ["Kick-bass relationship is clean", "Lead a touch harsh in the 3 kHz region"]
+        }
+      },
+      {
+        "phase": 4, "name": "Stem Separation & Clash", "status": "ok",
+        "data": {
+          "band_energy": {
+            "sub_bass": 31.2, "bass": 35.0, "low_mid": 22.3, "mid": 15.6,
+            "high_mid": 12.3, "presence": 10.5, "air": -3.7
+          },
+          "clashes": [
+            { "stems": "low-end buildup", "frequency_range": "sub-bass / bass (20–200 Hz)", "severity": "moderate" }
+          ],
+          "stems": {
+            "status": "ok", "mode": "grouped",
+            "per_stem": {
+              "kick":   { "lufs_integrated": -12.1, "rms_db": -14.8, "peak_db": -1.2, "dynamic_range_db": 13.6, "band_energy_db": -10.2, "dominant_frequencies_hz": [52, 1800], "spectral_centroid_hz": 980, "stereo_width": 0.02, "pan_estimate": 0.0, "is_mono": true, "duration_s": 372.4 },
+              "bass":   { "lufs_integrated": -11.4, "rms_db": -13.1, "peak_db": -2.0, "dynamic_range_db": 11.1, "band_energy_db": -9.0,  "dominant_frequencies_hz": [62, 124], "spectral_centroid_hz": 320, "stereo_width": 0.05, "pan_estimate": 0.0, "is_mono": true, "duration_s": 372.4 },
+              "lead":   { "lufs_integrated": -10.8, "rms_db": -12.6, "peak_db": -1.5, "dynamic_range_db": 11.1, "band_energy_db": -8.4,  "dominant_frequencies_hz": [3100, 880], "spectral_centroid_hz": 3050, "stereo_width": 0.61, "pan_estimate": -0.05, "is_mono": false, "duration_s": 372.4 },
+              "drums":  { "lufs_integrated": -13.9, "rms_db": -16.2, "peak_db": -3.1, "dynamic_range_db": 13.1, "band_energy_db": -11.5, "dominant_frequencies_hz": [220, 6400], "spectral_centroid_hz": 4200, "stereo_width": 0.48, "pan_estimate": 0.02, "is_mono": false, "duration_s": 372.4 }
+            },
+            "clash_matrix": [
+              { "stem_a": "kick", "stem_b": "bass", "band": "bass", "overlap_severity": 0.63, "severity_tier": "warning" },
+              { "stem_a": "lead", "stem_b": "drums", "band": "high_mid", "overlap_severity": 0.41, "severity_tier": "info" }
+            ],
+            "balance_flags": [
+              { "role": "lead", "metric": "rms_db", "observed": -12.6, "expected_range": [-16.0, -13.0], "direction": "high", "severity_tier": "warning" }
+            ]
+          }
+        }
+      },
+      {
+        "phase": 5, "name": "Reference Comparison", "status": "skipped",
+        "data": { "status": "skipped", "genre_context": { "genre": "trance", "preset_name": "trance", "checks": {} }, "deltas": {} }
+      },
+      {
+        "phase": 6, "name": "Gap Analysis", "status": "ok",
+        "data": {
+          "genre": "trance", "percentile": 72,
+          "gaps": {
+            "lufs": { "user_val": -9.5, "genre_mean": -8.2, "genre_std": 1.4, "acceptable_range": [-10.5, -6.5], "delta": -1.3, "percentile": 60, "description": "Slightly quieter than genre norm", "in_range": true },
+            "crest_factor": { "user_val": 11.2, "genre_mean": 9.0, "genre_std": 1.8, "acceptable_range": [6.0, 12.0], "delta": 2.2, "percentile": 78, "description": "More dynamic than typical", "in_range": true }
+          }
+        }
+      },
+      {
+        "phase": 7, "name": "Arrangement Advice", "status": "ok",
+        "data": {
+          "overall_score": 82, "grade": "B", "total_duration": 372.4, "section_count": 6,
+          "structure_score": 85, "length_score": 90, "eight_bar_score": 80, "energy_contrast_score": 70, "flow_score": 84,
+          "component_scores": { "structure": 85, "length": 90, "eight_bar": 80, "energy_contrast": 70, "flow": 84 },
+          "section_scores": [
+            { "section_type": "intro",     "start_time": 0.0,   "end_time": 30.8,  "duration": 30.8, "bars": 16, "score": 88, "time_range": "0:00–0:30", "eight_bar_compliant": true,  "checks": [], "issues": [] },
+            { "section_type": "buildup",   "start_time": 30.8,  "end_time": 92.3,  "duration": 61.5, "bars": 32, "score": 84, "time_range": "0:30–1:32", "eight_bar_compliant": true,  "checks": [], "issues": [] },
+            { "section_type": "drop",      "start_time": 92.3,  "end_time": 153.8, "duration": 61.5, "bars": 32, "score": 86, "time_range": "1:32–2:33", "eight_bar_compliant": true,  "checks": [], "issues": [] },
+            { "section_type": "breakdown", "start_time": 153.8, "end_time": 215.4, "duration": 61.6, "bars": 32, "score": 72, "time_range": "2:33–3:35", "eight_bar_compliant": true,  "checks": [], "issues": ["Energy only 4 dB below the drop"] },
+            { "section_type": "drop",      "start_time": 215.4, "end_time": 338.5, "duration": 123.1,"bars": 64, "score": 80, "time_range": "3:35–5:38", "eight_bar_compliant": true,  "checks": [], "issues": [] },
+            { "section_type": "outro",     "start_time": 338.5, "end_time": 372.4, "duration": 33.9, "bars": 18, "score": 78, "time_range": "5:38–6:12", "eight_bar_compliant": false, "checks": [], "issues": ["18 bars — not an 8-bar multiple"] }
+          ],
+          "issues": [
+            { "severity": "moderate", "message": "Breakdown-to-drop contrast is low (4 dB)", "section": "breakdown", "fix_suggestion": "Filter/duck the breakdown 3–4 dB to widen the gap" }
+          ],
+          "suggestions": ["Add a riser into the second drop"],
+          "fixes": [], "violations": [],
+          "metadata": {
+            "total_bars": 194, "section_count": 6, "detected_tempo": 130.0, "energy_contrast_db": 4.1,
+            "has_intro": true, "has_buildup": true, "has_drop": true, "has_breakdown": true, "has_outro": true
+          },
+          "arrangement_status": "scored"
+        }
+      },
+      {
+        "phase": 8, "name": "ALS Analysis", "status": "ok",
+        "data": {
+          "health_score": 76, "grade": "B", "tempo": 130.0, "ableton_version": "11.3.13",
+          "time_signature": "4/4", "total_devices": 48, "disabled_devices": 5, "clutter_pct": 10.4,
+          "plugin_list": ["Serum", "FabFilter Pro-Q 3", "Valhalla VintageVerb", "OTT"],
+          "has_humanized_midi": true, "quantization_issues_count": 2,
+          "total_chord_count": 14, "midi_note_count": 2840, "audio_clip_count": 6, "total_duration_seconds": 372.4,
+          "tracks": [
+            { "name": "Kick", "type": "audio", "device_count": 3, "disabled_count": 0, "muted": false },
+            { "name": "Bass", "type": "midi",  "device_count": 5, "disabled_count": 1, "muted": false },
+            { "name": "Lead", "type": "midi",  "device_count": 6, "disabled_count": 2, "muted": false }
+          ],
+          "midi": {
+            "total_clips": 42, "total_notes": 2840, "empty_clips": 1, "short_clips": 3,
+            "duplicate_clips": 4, "tracks_without_content": 0,
+            "issues": [ { "track": "Pad", "clip": "Pad 3", "type": "duplicate", "severity": "minor", "description": "Identical to Pad 2", "fix": "Consolidate or delete" } ]
+          },
+          "arrangement": {
+            "has_markers": true, "total_sections": 6, "pattern": "intro-build-drop-break-drop-outro",
+            "sections": [ { "name": "Intro", "start_beat": 0, "end_beat": 64, "duration_bars": 16 } ]
+          }
+        }
+      },
+      {
+        "phase": 9, "name": "Mix Translation", "status": "ok",
+        "data": {
+          "spatial":  { "height_score": 71, "depth_score": 66, "width_consistency": 82, "analysis": ["Good front-to-back depth", "Highs sit slightly forward"] },
+          "surround": { "mono_compatibility": 94, "phase_score": 88, "is_atmos_ready": false, "analysis": ["Mono-safe", "Not yet Atmos-ready (no height stems)"] },
+          "playback": { "headphone_score": 92, "speaker_score": 80, "crossfeed_safe": true, "bass_translation": "good", "analysis": ["Translates well on headphones and speakers"] }
+        }
+      }
+    ]
+  },
+
+  "alsProject": {
+    "schemaVersion": 1, "source": "demo.als", "tempo": 130.0, "timeSignature": "4/4",
+    "timeSignatureNumerator": 4, "timeSignatureDenominator": 4, "abletonVersion": "11.3.13",
+    "trackCount": 18,
+    "tracks": [
+      { "index": 0, "name": "Kick", "type": "audio", "color": 12, "devices": ["EQ Eight", "Glue Compressor"] },
+      { "index": 1, "name": "Bass", "type": "midi",  "color": 3,  "devices": ["Serum", "Pro-Q 3", "OTT"] }
+    ],
+    "devices": ["EQ Eight", "Glue Compressor", "Serum", "Pro-Q 3", "OTT", "VintageVerb"],
+    "plugins": ["Serum", "FabFilter Pro-Q 3", "Valhalla VintageVerb"]
+  },
+
+  "verdicts": [
+    {
+      "id": "vrd_01", "specialist": "rule_engine", "severity": "severe", "category": "loudness",
+      "confidence": 1.0, "priorityScore": 78, "headline": "True peak −0.6 dBTP — close to the ceiling",
+      "summary": "True peak is −0.6 dBTP. Codec re-encoding can push inter-sample peaks over 0 dBFS on streaming.",
+      "whyItMatters": "Aim for ≤ −1.0 dBTP so Spotify/YouTube re-encoding doesn't introduce distortion.",
+      "evidence": [{ "metric": "phase1.true_peak_db", "value": -0.6, "expected_range": [-6.0, -1.0], "label": "−0.6 dBTP" }],
+      "fix": { "fix_id": "f1", "target": { "type": "master", "name": "Master" }, "section": null,
+        "dsp_chain": [{ "type": "limiter", "params": { "ceiling_db": -1.0, "release_ms": 50 } }],
+        "expected_outcome": "Peaks held at −1.0 dBTP with no audible pumping.", "ableton_hint": { "device": "Limiter" } },
+      "sources": ["rule_engine"], "createdAt": "2026-06-25T18:00:00Z",
+      "userState": { "dismissed": false, "applied": false, "feedback": null }
+    },
+    {
+      "id": "vrd_02", "specialist": "frequency_balance", "severity": "moderate", "category": "frequency_balance",
+      "confidence": 0.84, "priorityScore": 61, "headline": "Lead harsh in the 2–4 kHz region",
+      "summary": "Upper-mid energy on the lead bus is masking the vocal. A surgical cut opens up the mix.",
+      "whyItMatters": "2–4 kHz is where ear fatigue and vocal intelligibility live.",
+      "evidence": [{ "metric": "phase1.bands.upper_mid", "value": -26.8, "expected_range": [-32.0, -28.0], "label": "−26.8 dB upper-mid" }],
+      "fix": { "fix_id": "f2", "target": { "type": "bus", "name": "Lead" }, "section": null,
+        "dsp_chain": [{ "type": "peaking_eq", "params": { "frequency_hz": 3100, "gain_db": -2.0, "q": 1.4 } }],
+        "expected_outcome": "Lead sits back; vocal cuts through without fighting.", "ableton_hint": { "device": "EQ Eight", "band": 4 } },
+      "sources": ["frequency_balance"], "createdAt": "2026-06-25T18:00:00Z",
+      "userState": { "dismissed": false, "applied": false, "feedback": null }
+    },
+    {
+      "id": "vrd_03", "specialist": "rule_engine", "severity": "minor", "category": "dynamics",
+      "confidence": 1.0, "priorityScore": 34, "headline": "Healthy crest factor (11.2 dB)",
+      "summary": "Crest factor 11.2 dB — punchy and dynamic. Don't over-limit chasing loudness.",
+      "whyItMatters": "Preserving transients keeps the kick and snare punchy after streaming normalization.",
+      "evidence": [{ "metric": "phase1.crest_factor", "value": 11.2, "expected_range": [8.0, 14.0], "label": "11.2 dB crest" }],
+      "fix": null, "sources": ["rule_engine"], "createdAt": "2026-06-25T18:00:00Z",
+      "userState": { "dismissed": false, "applied": false, "feedback": null }
+    },
+    {
+      "id": "vrd_04", "specialist": "sections", "severity": "moderate", "category": "section_contrast",
+      "confidence": 0.79, "priorityScore": 58, "headline": "Breakdown lacks contrast vs the drop",
+      "summary": "The breakdown sits only 4 dB below the drop. Trance breakdowns usually drop 6–8 dB for impact.",
+      "whyItMatters": "Without a real dip, the second drop doesn't hit as hard.",
+      "evidence": [{ "metric": "phase7.metadata.energy_contrast_db", "value": 4.1, "expected_range": [6.0, 9.0], "label": "4.1 dB contrast" }],
+      "fix": { "fix_id": "f4", "target": { "type": "bus", "name": "Master" }, "section": { "start_seconds": 153.8, "end_seconds": 215.4 },
+        "dsp_chain": [{ "type": "high_pass", "params": { "frequency_hz": 200, "slope_db": 12, "q": 0.7 } }],
+        "expected_outcome": "Breakdown thins out, making the drop re-entry punch.", "ableton_hint": { "device": "EQ Eight" } },
+      "sources": ["sections"], "createdAt": "2026-06-25T18:00:00Z",
+      "userState": { "dismissed": false, "applied": false, "feedback": null }
+    }
+  ]
+}

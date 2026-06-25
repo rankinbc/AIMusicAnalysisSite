@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SPECTR Listen — Feature Reference</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0e16; --surface:#0e1420; --surface-2:#121a28;
+    --ink:#e9eef5; --ink-2:#b7c1d0; --muted:#7f8c9e; --faint:#5a6678;
+    --cyan:#00e5b0; --violet:#a78bfa; --orange:#fb923c; --rose:#fb7185;
+    --border:rgba(255,255,255,0.09); --border-2:rgba(255,255,255,0.14);
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+    --disp:'Space Grotesk',system-ui,sans-serif;
+    --body:system-ui,-apple-system,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);
+    font-size:14.5px;line-height:1.6;-webkit-font-smoothing:antialiased;}
+  .doc{box-sizing:border-box;max-width:8.5in;margin:0 auto;background:inherit;
+    padding:64px clamp(24px,5vw,0.85in) 96px;}
+  .doc-frame{width:100%;border-collapse:collapse;}
+  .doc-frame td{padding:0;}
+  .hdr-space,.ftr-space{display:none;}
+
+  h1{font-family:var(--disp);font-weight:700;font-size:38px;line-height:1.05;
+    letter-spacing:-0.02em;margin:10px 0 0;text-wrap:balance;}
+  h2{font-family:var(--disp);font-weight:600;font-size:21px;line-height:1.15;
+    letter-spacing:-0.01em;margin:0;text-wrap:balance;}
+  h3{font-family:var(--mono);font-weight:700;font-size:11.5px;letter-spacing:0.13em;
+    text-transform:uppercase;color:var(--cyan);margin:20px 0 9px;}
+  p{margin:0 0 13px;text-wrap:pretty;color:var(--ink-2);}
+  strong{color:var(--ink);font-weight:600;}
+  a{color:var(--cyan);text-decoration:none;}
+  .eyebrow{font-family:var(--mono);font-weight:600;font-size:11px;letter-spacing:0.26em;
+    text-transform:uppercase;color:var(--muted);}
+  .lede{font-size:16.5px;line-height:1.55;color:var(--ink);margin:18px 0 6px;max-width:64ch;}
+  .lede b{color:var(--cyan);font-weight:600;}
+
+  /* section header */
+  .sec{margin:44px 0 0;}
+  .sec-num{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--faint);letter-spacing:0.1em;}
+  .sec-head{display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--border);
+    padding-bottom:11px;margin-bottom:8px;}
+  .sec > p{margin-top:12px;}
+
+  /* feature blocks */
+  .feat{border-left:2px solid var(--border-2);padding:2px 0 2px 16px;margin:14px 0;}
+  .feat .fname{font-family:var(--disp);font-weight:600;font-size:15.5px;color:var(--ink);margin:0 0 2px;}
+  .feat .fdesc{margin:0 0 6px;font-size:13.5px;color:var(--ink-2);}
+  ul{margin:5px 0 10px;padding-left:0;list-style:none;}
+  li{position:relative;padding-left:18px;margin:0 0 5px;color:var(--ink-2);font-size:13.5px;text-wrap:pretty;}
+  li::before{content:"";position:absolute;left:1px;top:8px;width:5px;height:5px;border-radius:50%;background:var(--faint);}
+  li b{color:var(--ink);font-weight:600;}
+  .imp{display:block;font-family:var(--mono);font-size:11px;color:var(--muted);margin:5px 0 2px;
+    padding-left:16px;position:relative;line-height:1.5;}
+  .imp::before{content:"›";position:absolute;left:2px;top:0;color:var(--cyan);font-weight:700;}
+  .imp b{color:var(--ink-2);font-weight:600;}
+
+  /* chips & tags */
+  .chip{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;
+    font-weight:700;letter-spacing:0.1em;text-transform:uppercase;padding:3px 9px;border-radius:999px;border:1px solid;}
+  .chip .d{width:6px;height:6px;border-radius:50%;}
+  .c-work{color:var(--cyan);border-color:rgba(0,229,176,0.4);background:rgba(0,229,176,0.07);}
+  .c-work .d{background:var(--cyan);box-shadow:0 0 6px var(--cyan);}
+  .c-view{color:var(--violet);border-color:rgba(167,139,250,0.4);background:rgba(167,139,250,0.08);}
+  .c-view .d{background:var(--violet);box-shadow:0 0 6px var(--violet);}
+  .c-room{color:var(--orange);border-color:rgba(251,146,60,0.4);background:rgba(251,146,60,0.08);}
+  .c-room .d{background:var(--orange);box-shadow:0 0 6px var(--orange);}
+  .modes{display:inline-flex;gap:6px;margin-left:auto;}
+  .pill{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:0.08em;padding:2px 7px;
+    border-radius:5px;text-transform:uppercase;}
+  .p-w{color:var(--cyan);background:rgba(0,229,176,0.1);}
+  .p-v{color:var(--violet);background:rgba(167,139,250,0.1);}
+  .p-r{color:var(--orange);background:rgba(251,146,60,0.1);}
+
+  /* TOC */
+  .toc{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:18px 22px;margin:26px 0 8px;}
+  .toc h3{margin:0 0 12px;}
+  .toc ol{margin:0;padding:0;list-style:none;columns:2;column-gap:34px;counter-reset:toc;}
+  .toc li{padding-left:30px;margin:0 0 7px;break-inside:avoid;font-size:13px;counter-increment:toc;}
+  .toc li::before{content:counter(toc,decimal-leading-zero);background:none;font-family:var(--mono);
+    font-size:10px;font-weight:700;color:var(--cyan);top:1px;left:0;width:auto;height:auto;border-radius:0;}
+  .toc a{color:var(--ink-2);}
+
+  /* data model card */
+  .data{background:linear-gradient(180deg,rgba(0,229,176,0.05),rgba(0,229,176,0.015));
+    border:1px solid rgba(0,229,176,0.22);border-radius:12px;padding:16px 20px;margin:16px 0;}
+  .data h3{color:var(--cyan);margin-top:2px;}
+  .data pre{font-family:var(--mono);font-size:11.5px;line-height:1.7;color:var(--ink-2);margin:6px 0 0;
+    white-space:pre-wrap;}
+  .data .k{color:var(--cyan);}
+  .data .c{color:var(--faint);}
+
+  /* callout */
+  .callout{background:linear-gradient(180deg,rgba(167,139,250,0.06),rgba(167,139,250,0.02));
+    border:1px solid rgba(167,139,250,0.25);border-radius:12px;padding:16px 22px;margin:16px 0;}
+  .callout h3{color:var(--violet);margin-top:2px;}
+  .callout ol{margin:6px 0 0;padding-left:20px;}
+  .callout li{padding-left:6px;margin-bottom:8px;}
+  .callout li::before{display:none;}
+  .callout li::marker{color:var(--violet);font-family:var(--mono);font-size:11px;}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px 22px;margin:8px 0;}
+  .foot{margin-top:46px;padding-top:16px;border-top:1px solid var(--border);font-family:var(--mono);
+    font-size:11px;color:var(--faint);letter-spacing:0.04em;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+
+  @media (max-width:680px){.toc ol,.grid2{columns:1;grid-template-columns:1fr;} h1{font-size:30px;}}
+
+  @page{size:letter;margin:0;}
+  @media print{
+    html{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    html,body{margin:0;padding:0;}
+    .doc{max-width:none!important;margin:0!important;padding:0 0.7in!important;box-shadow:none!important;}
+    .hdr-space,.ftr-space{display:table-cell;height:0.7in;}
+    h1,h2,h3{break-after:avoid;}
+    .feat,.data,.callout,.toc li,.sec-head,.grid2>*{break-inside:avoid;}
+    p,li{orphans:3;widows:3;}
+  }
+</style>
+</head>
+<body>
+<main class="doc">
+<table class="doc-frame" role="presentation">
+<thead><tr><td class="hdr-space"></td></tr></thead>
+<tbody><tr><td>
+
+  <div class="eyebrow">SPECTR · Listen page · Feature reference</div>
+  <h1>Listen Page —<br>Feature Reference</h1>
+  <p class="lede">A complete catalogue of every feature currently on the Listen page, written as the <b>reference for implementation</b>. Each entry notes what it does, its controls and state, and — where useful — an implementation hint or open question. Mode availability is flagged per feature with <span class="chip c-work" style="padding:1px 7px"><span class="d"></span>W</span> <span class="chip c-view" style="padding:1px 7px"><span class="d"></span>V</span> <span class="chip c-room" style="padding:1px 7px"><span class="d"></span>R</span> tags. Companion to the <em>Three Modes</em> spec.</p>
+
+  <div class="toc">
+    <h3>Contents</h3>
+    <ol>
+      <li><a href="#s1">Page anatomy &amp; layout</a></li>
+      <li><a href="#s2">Track identity &amp; transport</a></li>
+      <li><a href="#s3">Visualizer stage</a></li>
+      <li><a href="#s4">Visuals console</a></li>
+      <li><a href="#s5">The Rack</a></li>
+      <li><a href="#s6">Presets &amp; versions</a></li>
+      <li><a href="#s7">Coach &amp; Plan</a></li>
+      <li><a href="#s8">Presence &amp; people</a></li>
+      <li><a href="#s9">Chat &amp; reactions</a></li>
+      <li><a href="#s10">Comments &amp; feedback</a></li>
+      <li><a href="#s11">Bookmarking</a></li>
+      <li><a href="#s12">Notes</a></li>
+      <li><a href="#s13">Metering &amp; analysis</a></li>
+      <li><a href="#s14">Control granting</a></li>
+      <li><a href="#s15">Modes</a></li>
+      <li><a href="#s16">Permissions &amp; sharing</a></li>
+      <li><a href="#s17">Tweaks panel</a></li>
+      <li><a href="#s18">State &amp; persistence</a></li>
+      <li><a href="#s19">To define</a></li>
+    </ol>
+  </div>
+
+  <!-- 01 -->
+  <div class="sec" id="s1">
+    <div class="sec-head"><span class="sec-num">01</span><h2>Page anatomy &amp; layout</h2></div>
+    <p>The page is a single vertical composition with a persistent right rail. From top to bottom:</p>
+    <ul>
+      <li><b>Header bar</b> — track identity, the mode switcher, and the Coach mascot entry point.</li>
+      <li><b>Visualizer stage</b> — the dominant element; a host-driven canvas that can composite several visual stages.</li>
+      <li><b>Transport + waveform</b> — play controls, scrubbable waveform with markers, time, volume, add-note.</li>
+      <li><b>Bottom module</b> — a single window that toggles between the <b>Rack</b> (▦) and the <b>Visuals console</b> (☀), with a shared header holding the toggle, context presets, and the "controlled by" chip.</li>
+      <li><b>Right rail</b> — stacked panels: Coach, People, Chat, Stats, Notes (composition varies by mode).</li>
+      <li><b>Tweaks panel</b> — floating, host-provided; layout/mode controls for the prototype.</li>
+    </ul>
+    <span class="imp">Canvas is ~1640px wide; the visualizer and rack are the two largest regions. Right rail is fixed-width.</span>
+  </div>
+
+  <!-- 02 -->
+  <div class="sec" id="s2">
+    <div class="sec-head"><span class="sec-num">02</span><h2>Track identity &amp; transport</h2></div>
+
+    <div class="feat">
+      <p class="fname">Track identity</p>
+      <p class="fdesc">Title, artist line, genre, and (planned) version label in the header.</p>
+      <ul>
+        <li>Title (e.g. "Aurora — Final Mix"), with <b>artist sub-line</b>: user-icon avatar + "by Mae Karlsson · @maek".</li>
+        <li>Genre tag below the title.</li>
+      </ul>
+      <span class="imp"><b>Add:</b> a version label (v1/v2/v3) that ties into the versions/presets model — see §6.</span>
+    </div>
+
+    <div class="feat">
+      <p class="fname">Playback transport</p>
+      <ul>
+        <li>Play/pause (large primary), skip back/forward, current/total time.</li>
+        <li><b>Volume</b> control with live readout.</li>
+        <li><b>Add note @ timestamp</b> button anchored to the playhead.</li>
+      </ul>
+      <span class="imp">Host-driven in Room (everyone synced to host clock); local in Work/View.</span>
+    </div>
+
+    <div class="feat">
+      <p class="fname">Waveform scrubber</p>
+      <ul>
+        <li>Scrubbable waveform with a live playhead.</li>
+        <li><b>Markers</b> overlaid: note markers (click to seek), reaction markers.</li>
+      </ul>
+      <span class="imp"><b>Persistence:</b> playback position stored in localStorage; re-read on load.</span>
+    </div>
+  </div>
+
+  <!-- 03 -->
+  <div class="sec" id="s3">
+    <div class="sec-head"><span class="sec-num">03</span><h2>Visualizer stage</h2></div>
+    <p>A host-driven canvas that renders one or more <strong>stages</strong> at once. Stages are multi-select and composite live on a single canvas.</p>
+
+    <div class="feat">
+      <p class="fname">Stages (composable)</p>
+      <p class="fdesc">Toggle any combination — they layer (e.g. EQ spectrum + radial pulse + colored smoke).</p>
+      <ul>
+        <li><b>EQ</b> — spectrum bars with frequency + dB axis measurements.</li>
+        <li><b>Devices</b> — the active rack chain as a looping, side-scrolling marquee of color-coded cards.</li>
+        <li><b>Radial</b>, <b>Orbit</b>, <b>Bloom</b> — geometric reactive forms.</li>
+        <li><b>Smoke</b> — colored volumetric haze.</li>
+        <li><b>Spectrogram</b> — scrolling frequency/time heat.</li>
+        <li><b>Light</b> — the laser rig (see §4).</li>
+        <li><b>Listeners</b> — presence-driven visual.</li>
+        <li><b>Track</b> — track info card.</li>
+      </ul>
+      <span class="imp"><b>State:</b> <b>stages</b> = array of active stage ids. <b>toggleStage(id)</b> adds/removes.</span>
+    </div>
+
+    <div class="feat">
+      <p class="fname">Coach announcement banner</p>
+      <p class="fdesc">When the Coach broadcasts, a banner appears at the top of the visualization with a stage-scoped flash.</p>
+      <span class="imp">Flash is scoped to the stage element only (not the whole page).</span>
+    </div>
+  </div>
+
+  <!-- 04 -->
+  <div class="sec" id="s4">
+    <div class="sec-head"><span class="sec-num">04</span><h2>Visuals console</h2><span class="modes"><span class="pill p-r">Room</span><span class="pill p-v">View*</span></span></div>
+    <p>The bottom module in ☀ mode: a hardware <strong>lighting console</strong> skin — engraved header, status LEDs, screws, and labeled module bays. Header matches the rack (cyan dot + "VISUALS CONSOLE" + live meta + actions). Bays:</p>
+
+    <div class="feat">
+      <p class="fname">Primary actions</p>
+      <ul>
+        <li><b>Sync all to music</b> — master toggle that arms every per-module sync at once.</li>
+        <li><b>Color sync · theme</b> — 3 color swatches that map to spectrum / lasers / background, plus a <b>Sync</b> apply button.</li>
+      </ul>
+    </div>
+
+    <div class="feat">
+      <p class="fname">Stage select</p>
+      <p class="fdesc">Backlit cell buttons, one per stage, with on/off LED; combine multiple. Mirrors the canvas <b>stages</b> state.</p>
+    </div>
+
+    <div class="feat">
+      <p class="fname">Auto program (directors)</p>
+      <p class="fdesc">Preset "programs" that set modules automatically: <b>Manual, Chill, Club, Hype, Pulse, Drift, Strobe, Minimal</b>.</p>
+      <span class="imp"><b>State:</b> <b>director</b> id. Selecting one writes a bundle of viz settings ("sets modules"). Manual = hands-on.</span>
+    </div>
+
+    <div class="feat">
+      <p class="fname">Auto-react to music</p>
+      <ul>
+        <li>Toggle + <b>sensitivity</b> slider. Loud/intense parts add layers and push the lasers; quiet parts strip back to a calm visual.</li>
+      </ul>
+      <span class="imp"><b>State:</b> <b>viz.autoReact</b> (bool) + sensitivity (0–100).</span>
+    </div>
+
+    <div class="feat">
+      <p class="fname">Primary color</p>
+      <p class="fdesc">(Formerly "Spectrum color.") Curated color swatches + a spectrum-hue slider + a per-module <b>SYNC</b> toggle.</p>
+      <span class="imp"><b>State:</b> <b>viz.barColor</b> / <b>viz.specHue</b>, <b>viz.autoColor</b> (sync).</span>
+    </div>
+
+    <div class="feat">
+      <p class="fname">Laser rig</p>
+      <ul>
+        <li><b>Effect</b> (e.g. beat), <b>Pattern</b> (e.g. fan), <b>Intensity</b> slider.</li>
+        <li><b>Roam light source</b> — apex jumps to a new position every couple seconds then holds (moving-head feel).</li>
+        <li>Color / mono color, and a <b>SYNC</b> toggle.</li>
+      </ul>
+      <span class="imp"><b>State:</b> <b>viz.laser*</b> (effect, pattern, intensity, color/hue, mono, roam), <b>viz.laserSync</b>.</span>
+    </div>
+
+    <div class="feat">
+      <p class="fname">Background</p>
+      <ul>
+        <li><b>Flash background</b> toggle + <b>flash rate</b> slider (0.5–8 Hz) + color swatches — strobes the whole stage.</li>
+        <li><b>Cycle</b> toggle (auto-rotate background color) and a <b>SYNC</b> toggle.</li>
+      </ul>
+      <span class="imp"><b>State:</b> <b>viz.bg*</b> (color/hue, flash, flashRate, cycle/auto), <b>viz.bgSync</b>.</span>
+    </div>
+
+    <div class="feat">
+      <p class="fname">FX · moments</p>
+      <p class="fdesc"><b>Sync fireworks to drops</b> — fires a burst FX on detected drops.</p>
+      <span class="imp"><b>State:</b> <b>viz.dropFx</b> (bool).</span>
+    </div>
+
+    <div class="feat">
+      <p class="fname">Per-module sync &amp; Randomize</p>
+      <ul>
+        <li>Laser, Primary color, Background and FX each carry their own <b>SYNC</b> toggle binding them to the music; "Sync all" arms them together.</li>
+        <li><b>Randomize</b> — shuffles the console into a new look in one tap.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 05 -->
+  <div class="sec" id="s5">
+    <div class="sec-head"><span class="sec-num">05</span><h2>The Rack</h2><span class="modes"><span class="pill p-w">Work</span><span class="pill p-r">Room</span></span></div>
+    <p>The audio processing chain — the heart of Work mode. Built from <strong>14 modules</strong> defined in the rack manifest (EQ, Compressor, M/S Width, Limiter, Output Trim, and creative/utility modules).</p>
+
+    <div class="feat">
+      <p class="fname">Module anatomy</p>
+      <ul>
+        <li><b>Enable</b> toggle per module; disabled modules can collapse via "Show inactive".</li>
+        <li><b>Params</b> rendered from the manifest: knobs, bipolar knobs, sliders, toggles, segmented controls, selects — each with range/default/units.</li>
+        <li><b>GR meter</b> (gain reduction) and modulation indicators where relevant.</li>
+      </ul>
+      <span class="imp"><b>Source of truth:</b> rackManifest.ts — module ids, param specs, ranges, defaults. <b>State:</b> rs.mod[id].{enabled, params…}.</span>
+    </div>
+
+    <div class="feat">
+      <p class="fname">Layouts</p>
+      <ul>
+        <li><b>Inline</b> — rich horizontal chain, controls exposed, drag-reorder.</li>
+        <li><b>Console</b> — denser channel-strip view.</li>
+        <li><b>Studio</b> — expandable detailed view.</li>
+      </ul>
+      <span class="imp"><b>State:</b> <b>ia</b> (inline | console | studio), set via Tweaks.</span>
+    </div>
+
+    <div class="feat">
+      <p class="fname">Rack chrome</p>
+      <ul>
+        <li>● <b>INSERT RACK</b> label + live <b>active count</b> + <b>signal-flow</b> readout.</li>
+        <li><b>⌁ Bindings</b> — modulation matrix (params bound to sources).</li>
+        <li><b>A/B Bypass</b> — compare processed vs. bypassed.</li>
+        <li><b>↺ Reset</b> — restore defaults.</li>
+        <li><b>Show inactive</b> — collapse/expand disabled modules.</li>
+      </ul>
+    </div>
+
+    <div class="feat">
+      <p class="fname">Reorder &amp; A/B</p>
+      <ul>
+        <li>Drag to reorder modules in the chain.</li>
+        <li>A/B compare between two saved states.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 06 -->
+  <div class="sec" id="s6">
+    <div class="sec-head"><span class="sec-num">06</span><h2>Presets &amp; versions</h2><span class="modes"><span class="pill p-w">Work</span><span class="pill p-v">View</span><span class="pill p-r">Room</span></span></div>
+    <p>The most tangled area, and the reason for this reference. There are several distinct "preset"-like concepts that need clear separation in the data model:</p>
+
+    <div class="feat">
+      <p class="fname">Track versions</p>
+      <p class="fdesc">A track can have multiple versions (v1 / v2 / v3 …). The header version label selects which is active.</p>
+      <span class="imp"><b>Open:</b> is a version an immutable snapshot of audio + rack, or just a label? See §19.</span>
+    </div>
+
+    <div class="feat">
+      <p class="fname">Rack presets — associated with a version</p>
+      <p class="fdesc">A saved rack state (all module enables + params + order). Per your note, a rack preset is <b>saved against a specific version</b> of the track.</p>
+      <span class="imp"><b>State today:</b> rs.presets[] with recall/save. <b>Needs:</b> a <b>versionId</b> on each preset, and UI to scope the preset list to the active version.</span>
+    </div>
+
+    <div class="feat">
+      <p class="fname">Visual presets</p>
+      <p class="fdesc">A saved snapshot of the whole visuals console (stages + viz settings). Context-aware presets control in the shared header saves/recalls these when in ☀ mode.</p>
+      <span class="imp"><b>State:</b> vizPresets[]; saveVizPreset / recallVizPreset.</span>
+    </div>
+
+    <div class="feat">
+      <p class="fname">Suggested presets (from reviewers)</p>
+      <p class="fdesc">In View, a reviewer can attach a rack preset to a comment as a suggestion; the author can audition and accept it.</p>
+      <span class="imp"><b>Open:</b> accept = full replace vs. cherry-pick modules. Relationship to versions. See §19.</span>
+    </div>
+
+    <div class="feat">
+      <p class="fname">Director presets (built-in)</p>
+      <p class="fdesc">The Auto-Program programs (Chill/Club/Hype…) are read-only built-in visual presets — distinct from user-saved visual presets.</p>
+    </div>
+
+    <div class="data">
+      <h3>Suggested data model</h3>
+      <pre><span class="c">// distinct concepts, related by ids</span>
+Track       { id, title, artist, genre, versions[] }
+Version     { id, label:<span class="k">"v3"</span>, audioRef, createdAt }
+RackPreset  { id, name, versionId, author, chain[], createdAt }
+VizPreset   { id, name, author, stages[], viz{} }
+Suggestion  { id, versionId, fromUser, rackPreset, commentId, status }</pre>
+      <span class="imp"><b>Key relationship:</b> RackPreset.versionId scopes presets to a version; Suggestion wraps a RackPreset proposed by a non-author.</span>
+    </div>
+  </div>
+
+  <!-- 07 -->
+  <div class="sec" id="s7">
+    <div class="sec-head"><span class="sec-num">07</span><h2>Coach &amp; Plan</h2><span class="modes"><span class="pill p-w">Work</span><span class="pill p-v">View*</span></span></div>
+    <div class="feat">
+      <p class="fname">Coach mascot &amp; chat</p>
+      <ul>
+        <li>Animated mascot (domed helmet, neon-green rim, antenna, swept fins, side pods, violet visor, EQ-bar mouth).</li>
+        <li>Chat interface — ask about the mix; the Coach replies with analysis.</li>
+        <li><b>Apply suggestion</b> — inline button on any message proposing a concrete fix; applies it to the rack.</li>
+      </ul>
+    </div>
+    <div class="feat">
+      <p class="fname">Coach announcements</p>
+      <p class="fdesc">The Coach can broadcast to a Room — surfaces as the stage banner (§3) for everyone.</p>
+    </div>
+    <div class="feat">
+      <p class="fname">Plan</p>
+      <p class="fdesc">A ranked list of suggested fixes ("determine improvements"), each applyable.</p>
+    </div>
+  </div>
+
+  <!-- 08 -->
+  <div class="sec" id="s8">
+    <div class="sec-head"><span class="sec-num">08</span><h2>Presence &amp; people</h2><span class="modes"><span class="pill p-r">Room</span></span></div>
+    <div class="feat">
+      <p class="fname">Listener presence</p>
+      <ul>
+        <li>Listener avatars (color hue per user, anon supported) with a live <b>status emoji</b>.</li>
+        <li><b>Status sentiment range</b>, color-coded: Positive 👍🔥🤯😲🙌💜 (green) · Neutral 👀🤔😐 (muted) · Negative 👎😴🥱😬 (red).</li>
+        <li><b>HOST</b> badge on the session host.</li>
+        <li><b>Presence pops</b> on the stage — avatar + emoji + @handle appear transiently.</li>
+      </ul>
+      <span class="imp"><b>State:</b> ROOM_LISTENERS[] (handle, hue, anon, status); myStatus for the local user.</span>
+    </div>
+  </div>
+
+  <!-- 09 -->
+  <div class="sec" id="s9">
+    <div class="sec-head"><span class="sec-num">09</span><h2>Chat &amp; reactions</h2><span class="modes"><span class="pill p-r">Room</span></span></div>
+    <div class="feat">
+      <p class="fname">Live chat</p>
+      <p class="fdesc">Real-time message stream among listeners during a session.</p>
+    </div>
+    <div class="feat">
+      <p class="fname">Reactions</p>
+      <ul>
+        <li>Reaction feed + <b>floating emoji</b> rising over the stage.</li>
+        <li>Reactions are timestamped and can mark the timeline (hottest-moment data).</li>
+      </ul>
+      <span class="imp"><b>State:</b> feed[] of {emoji, user, t}; drives floating emoji + timeline markers + recap.</span>
+    </div>
+  </div>
+
+  <!-- 10 -->
+  <div class="sec" id="s10">
+    <div class="sec-head"><span class="sec-num">10</span><h2>Comments &amp; feedback</h2><span class="modes"><span class="pill p-v">View</span></span></div>
+    <div class="feat">
+      <p class="fname">Timestamped &amp; general comments</p>
+      <ul>
+        <li><b>Timestamped</b> — anchored to a point on the waveform ("vocal too low @ 1:24").</li>
+        <li><b>General</b> — track-level notes not tied to a moment.</li>
+        <li>Author can <b>resolve / pin / hide</b>; visibility to other viewers is uploader-controlled.</li>
+      </ul>
+      <span class="imp"><b>State:</b> comments[] {id, t|null, author, body, status, suggestionId?}.</span>
+    </div>
+    <div class="feat">
+      <p class="fname">Attached suggestions</p>
+      <p class="fdesc">A comment can carry a suggested rack preset (§6) the author can audition.</p>
+    </div>
+  </div>
+
+  <!-- 11 -->
+  <div class="sec" id="s11">
+    <div class="sec-head"><span class="sec-num">11</span><h2>Bookmarking</h2><span class="modes"><span class="pill p-v">View</span></span></div>
+    <div class="feat">
+      <p class="fname">Bookmark track</p>
+      <ul>
+        <li>Save a track to the viewer's library — only if the uploader <b>enables bookmarking</b>.</li>
+        <li>Optionally bookmark a <b>timestamp</b>.</li>
+      </ul>
+      <span class="imp"><b>Open:</b> private save vs. a signal the author sees (who/how many). See §19.</span>
+    </div>
+  </div>
+
+  <!-- 12 -->
+  <div class="sec" id="s12">
+    <div class="sec-head"><span class="sec-num">12</span><h2>Notes</h2><span class="modes"><span class="pill p-w">Work</span></span></div>
+    <div class="feat">
+      <p class="fname">Working notes</p>
+      <ul>
+        <li>Timestamped to-fix markers dropped on the timeline; click a note to seek to it.</li>
+        <li>Add a note at the current playhead from the transport.</li>
+        <li>Saved presets can write a line into Notes (audit trail of what changed).</li>
+      </ul>
+      <span class="imp"><b>State:</b> TRACK.notes[] {id, t, body}; activeNote; private to the author in Work.</span>
+    </div>
+  </div>
+
+  <!-- 13 -->
+  <div class="sec" id="s13">
+    <div class="sec-head"><span class="sec-num">13</span><h2>Metering &amp; analysis</h2><span class="modes"><span class="pill p-w">Work</span><span class="pill p-v">View</span></span></div>
+    <div class="feat">
+      <p class="fname">Meters</p>
+      <p class="fdesc">LUFS-S, True Peak, RMS, correlation; per-module gain-reduction meters in the rack.</p>
+    </div>
+    <div class="feat">
+      <p class="fname">Stats panel</p>
+      <p class="fdesc">Track facts &amp; analysis surfaced in the right rail.</p>
+    </div>
+  </div>
+
+  <!-- 14 -->
+  <div class="sec" id="s14">
+    <div class="sec-head"><span class="sec-num">14</span><h2>Control granting</h2><span class="modes"><span class="pill p-r">Room</span></span></div>
+    <div class="feat">
+      <p class="fname">Independent rack / visuals handoff</p>
+      <ul>
+        <li>The host can grant <b>rack</b> control and <b>visuals</b> control to listeners <b>separately</b> (e.g. @forge → rack, @vela → visuals).</li>
+        <li>A "controlled by" chip in the bottom module shows the active controller per view (rack · @forge / visuals · @vela).</li>
+      </ul>
+      <span class="imp"><b>State:</b> rackController, visualController (handles); onGrant(view, handle).</span>
+    </div>
+  </div>
+
+  <!-- 15 -->
+  <div class="sec" id="s15">
+    <div class="sec-head"><span class="sec-num">15</span><h2>Modes</h2></div>
+    <p>The page resolves into three modes — see the <em>Three Modes</em> spec for the full treatment. In short:</p>
+    <ul>
+      <li><span class="chip c-work"><span class="d"></span>Work</span> &nbsp;solo, private — rack + Coach + metering; social hidden.</li>
+      <li><span class="chip c-view"><span class="d"></span>View</span> &nbsp;async review — comments, suggested presets, bookmarking.</li>
+      <li><span class="chip c-room"><span class="d"></span>Room</span> &nbsp;live session — presence, chat, reactions, full visuals, control handoff.</li>
+    </ul>
+    <span class="imp">The mode switcher replaces today's SOLO ⇄ ROOM control. Per-feature mode tags appear throughout this doc.</span>
+  </div>
+
+  <!-- 16 -->
+  <div class="sec" id="s16">
+    <div class="sec-head"><span class="sec-num">16</span><h2>Permissions &amp; sharing</h2></div>
+    <p>Set by the uploader; these gates decide which features render in View/Room:</p>
+    <div class="grid2">
+      <ul style="margin:0">
+        <li><b>Visibility</b> — Private / Unlisted / Public.</li>
+        <li><b>Comments</b> — on/off + who may comment.</li>
+        <li><b>Suggested presets</b> — allowed or not.</li>
+      </ul>
+      <ul style="margin:0">
+        <li><b>Bookmarking</b> — allowed or not.</li>
+        <li><b>Live sessions</b> — who can host / join a Room.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 17 -->
+  <div class="sec" id="s17">
+    <div class="sec-head"><span class="sec-num">17</span><h2>Tweaks panel</h2></div>
+    <div class="feat">
+      <p class="fname">Prototype tweaks</p>
+      <p class="fdesc">Host-provided floating panel (demo-only, not a shipping feature):</p>
+      <ul>
+        <li><b>Rack layout</b> — inline / console / studio.</li>
+        <li><b>Mode</b> — solo / room (→ to become Work/View/Room).</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 18 -->
+  <div class="sec" id="s18">
+    <div class="sec-head"><span class="sec-num">18</span><h2>State &amp; persistence</h2></div>
+    <p>What the page keeps, and where, for implementation:</p>
+    <ul>
+      <li><b>Playback position</b> — localStorage, re-read on load.</li>
+      <li><b>Rack state</b> — rs.mod[id] (enabled + params + order); presets in rs.presets[].</li>
+      <li><b>Visuals state</b> — stages[] + viz{} object; vizPresets[].</li>
+      <li><b>Social</b> — feed[], comments[], ROOM_LISTENERS[], controllers — host-synced in Room, persisted on the track in View.</li>
+      <li><b>Tweaks</b> — persisted by the host protocol.</li>
+    </ul>
+    <span class="imp"><b>Rule of thumb:</b> Work state is local &amp; private; View state persists on the track; Room state is host-driven &amp; ephemeral (with a recap snapshot).</span>
+  </div>
+
+  <!-- 19 -->
+  <div class="sec" id="s19">
+    <div class="sec-head"><span class="sec-num">19</span><h2>To define</h2></div>
+    <div class="callout">
+      <h3>Decisions before implementation</h3>
+      <ol>
+        <li><b>Version model</b> — is a Version an immutable audio+rack snapshot, or a label over a mutable rack?</li>
+        <li><b>Preset ↔ version binding</b> — do presets always belong to one version, or can they be promoted/copied across versions?</li>
+        <li><b>Suggestion merge</b> — accept = full rack replace vs. cherry-pick modules/params.</li>
+        <li><b>Anon participation</b> — can anonymous viewers comment / suggest / bookmark?</li>
+        <li><b>Bookmark signal</b> — private save vs. visible to author.</li>
+        <li><b>Room recap → View</b> — automatic or opt-in; which moments convert to comments.</li>
+        <li><b>Coach in View</b> — author-only or available to reviewers.</li>
+        <li><b>Notifications</b> — where the author sees new comments/suggestions.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span>SPECTR · Listen page — feature reference</span>
+    <span>Implementation reference · living document</span>
+  </div>
+
+</td></tr></tbody>
+<tfoot><tr><td class="ftr-space"></td></tr></tfoot>
+</table>
+</main>
+</body>
+</html>

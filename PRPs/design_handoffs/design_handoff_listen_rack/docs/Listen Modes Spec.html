@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SPECTR Listen — Three Modes Spec</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0e16; --surface:#0e1420; --surface-2:#121a28;
+    --ink:#e9eef5; --ink-2:#b7c1d0; --muted:#7f8c9e; --faint:#5a6678;
+    --cyan:#00e5b0; --violet:#a78bfa; --orange:#fb923c;
+    --border:rgba(255,255,255,0.09); --border-2:rgba(255,255,255,0.14);
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+    --disp:'Space Grotesk',system-ui,sans-serif;
+    --body:system-ui,-apple-system,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);
+    font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased;}
+  .doc{box-sizing:border-box;max-width:8.5in;margin:0 auto;background:inherit;
+    padding:64px clamp(24px,5vw,0.85in) 96px;}
+  .doc-frame{width:100%;border-collapse:collapse;}
+  .doc-frame td{padding:0;}
+  .hdr-space,.ftr-space{display:none;}
+
+  /* ── type ── */
+  h1{font-family:var(--disp);font-weight:700;font-size:40px;line-height:1.05;
+    letter-spacing:-0.02em;margin:10px 0 0;text-wrap:balance;}
+  h2{font-family:var(--disp);font-weight:600;font-size:23px;line-height:1.15;
+    letter-spacing:-0.01em;margin:0 0 4px;text-wrap:balance;}
+  h3{font-family:var(--mono);font-weight:700;font-size:12px;letter-spacing:0.14em;
+    text-transform:uppercase;color:var(--cyan);margin:22px 0 8px;}
+  p{margin:0 0 14px;text-wrap:pretty;color:var(--ink-2);}
+  strong{color:var(--ink);font-weight:600;}
+  a{color:var(--cyan);text-decoration:none;}
+  .eyebrow{font-family:var(--mono);font-weight:600;font-size:11px;letter-spacing:0.26em;
+    text-transform:uppercase;color:var(--muted);}
+  .lede{font-size:17.5px;line-height:1.55;color:var(--ink);margin:18px 0 6px;max-width:62ch;}
+  .lede b{color:var(--cyan);font-weight:600;}
+  .rule{height:1px;background:var(--border);border:0;margin:30px 0;}
+
+  /* ── section headers ── */
+  .sec{margin:46px 0 0;}
+  .sec-num{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--faint);
+    letter-spacing:0.1em;}
+  .sec-head{display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--border);
+    padding-bottom:12px;margin-bottom:18px;}
+
+  /* ── mode chips ── */
+  .chip{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);
+    font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;
+    padding:4px 11px;border-radius:999px;border:1px solid;}
+  .chip .d{width:7px;height:7px;border-radius:50%;}
+  .c-work{color:var(--cyan);border-color:rgba(0,229,176,0.4);background:rgba(0,229,176,0.07);}
+  .c-work .d{background:var(--cyan);box-shadow:0 0 7px var(--cyan);}
+  .c-view{color:var(--violet);border-color:rgba(167,139,250,0.4);background:rgba(167,139,250,0.08);}
+  .c-view .d{background:var(--violet);box-shadow:0 0 7px var(--violet);}
+  .c-room{color:var(--orange);border-color:rgba(251,146,60,0.4);background:rgba(251,146,60,0.08);}
+  .c-room .d{background:var(--orange);box-shadow:0 0 7px var(--orange);}
+
+  /* ── at-a-glance cards ── */
+  .glance{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:24px 0 8px;}
+  .gcard{background:var(--surface);border:1px solid var(--border);border-top:2px solid;
+    border-radius:12px;padding:18px 17px;}
+  .gcard.w{border-top-color:var(--cyan);}
+  .gcard.v{border-top-color:var(--violet);}
+  .gcard.r{border-top-color:var(--orange);}
+  .gcard h4{font-family:var(--disp);font-weight:600;font-size:18px;margin:12px 0 2px;color:var(--ink);}
+  .gcard .one{font-size:13.5px;color:var(--ink-2);margin:0 0 13px;min-height:42px;}
+  .gcard dl{margin:0;font-size:12px;border-top:1px solid var(--border);padding-top:11px;}
+  .gcard dt{font-family:var(--mono);font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;
+    color:var(--faint);margin-top:8px;}
+  .gcard dt:first-child{margin-top:0;}
+  .gcard dd{margin:1px 0 0;color:var(--ink-2);font-size:12.5px;}
+
+  /* ── deep-dive blocks ── */
+  .deep{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:6px 22px 18px;margin:18px 0;position:relative;overflow:hidden;}
+  .deep::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;}
+  .deep.w::before{background:var(--cyan);}
+  .deep.v::before{background:var(--violet);}
+  .deep.r::before{background:var(--orange);}
+  .deep h3:first-of-type{margin-top:18px;}
+  ul{margin:6px 0 14px;padding-left:0;list-style:none;}
+  li{position:relative;padding-left:20px;margin:0 0 7px;color:var(--ink-2);text-wrap:pretty;}
+  li::before{content:"";position:absolute;left:2px;top:9px;width:6px;height:6px;border-radius:50%;
+    background:var(--faint);}
+  .deep.w li::before{background:rgba(0,229,176,0.7);}
+  .deep.v li::before{background:rgba(167,139,250,0.7);}
+  .deep.r li::before{background:rgba(251,146,60,0.7);}
+  li b{color:var(--ink);font-weight:600;}
+  .lbl{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:0.06em;
+    color:var(--muted);}
+
+  /* ── matrix table ── */
+  .matrix{width:100%;border-collapse:collapse;margin:14px 0 8px;font-size:12.5px;}
+  .matrix th,.matrix td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);
+    vertical-align:top;}
+  .matrix thead th{font-family:var(--mono);font-size:10px;letter-spacing:0.1em;
+    text-transform:uppercase;font-weight:700;border-bottom:1px solid var(--border-2);}
+  .matrix thead th.w{color:var(--cyan);}
+  .matrix thead th.v{color:var(--violet);}
+  .matrix thead th.r{color:var(--orange);}
+  .matrix tbody th{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);
+    letter-spacing:0.02em;white-space:nowrap;width:148px;}
+  .matrix td{color:var(--ink-2);}
+  .matrix tr:nth-child(even) td,.matrix tr:nth-child(even) th{background:rgba(255,255,255,0.014);}
+  .tag{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:0.06em;
+    padding:1px 6px;border-radius:4px;text-transform:uppercase;display:inline-block;margin-bottom:3px;}
+  .t-on{color:var(--cyan);background:rgba(0,229,176,0.1);}
+  .t-off{color:var(--faint);background:rgba(255,255,255,0.04);}
+  .t-mid{color:var(--orange);background:rgba(251,146,60,0.1);}
+
+  /* ── callout ── */
+  .callout{background:linear-gradient(180deg,rgba(167,139,250,0.06),rgba(167,139,250,0.02));
+    border:1px solid rgba(167,139,250,0.25);border-radius:12px;padding:18px 22px;margin:18px 0;}
+  .callout h3{color:var(--violet);margin-top:4px;}
+  .callout ol{margin:6px 0 0;padding-left:20px;}
+  .callout li{padding-left:6px;margin-bottom:9px;}
+  .callout li::before{display:none;}
+  .callout li::marker{color:var(--violet);font-family:var(--mono);font-size:11px;}
+
+  .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0 18px;font-family:var(--mono);
+    font-size:12px;color:var(--ink-2);}
+  .flow .arrow{color:var(--faint);}
+  .flow b{color:var(--ink);}
+
+  .foot{margin-top:48px;padding-top:16px;border-top:1px solid var(--border);
+    font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:0.04em;
+    display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+
+  @media (max-width:680px){
+    .glance{grid-template-columns:1fr;}
+    h1{font-size:32px;}
+  }
+
+  @page{size:letter;margin:0;}
+  @media print{
+    html{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    html,body{margin:0;padding:0;}
+    .doc{max-width:none!important;margin:0!important;padding:0 0.7in!important;box-shadow:none!important;}
+    .hdr-space,.ftr-space{display:table-cell;height:0.7in;}
+    h1,h2,h3,h4{break-after:avoid;}
+    .gcard,.deep,.callout,.matrix tr,.sec-head,.flow{break-inside:avoid;}
+    p,li{orphans:3;widows:3;}
+  }
+</style>
+</head>
+<body>
+<main class="doc">
+<table class="doc-frame" role="presentation">
+<thead><tr><td class="hdr-space"></td></tr></thead>
+<tbody><tr><td>
+
+  <div class="eyebrow">SPECTR · Listen page · Product spec — draft</div>
+  <h1>Three Modes:<br>Work, View, Room</h1>
+  <p class="lede">The Listen page does three different jobs depending on why you opened it. Rather than one crowded surface, it adapts into <b>three modes</b> — a focused workbench, an async review room, and a live session — each exposing only the controls that serve its goal. This document captures the intent and the per-mode differences; a few decisions are deliberately left open at the end.</p>
+
+  <div class="glance">
+    <div class="gcard w">
+      <span class="chip c-work"><span class="d"></span>Work</span>
+      <h4>The workbench</h4>
+      <p class="one">One person improving a track — analyse, tweak the rack, A/B, decide what to fix.</p>
+      <dl>
+        <dt>Who</dt><dd>The author, solo &amp; private</dd>
+        <dt>Tense</dt><dd>"I'm making this better"</dd>
+        <dt>State</dt><dd>Saved as versions/presets</dd>
+      </dl>
+    </div>
+    <div class="gcard v">
+      <span class="chip c-view"><span class="d"></span>View</span>
+      <h4>The review</h4>
+      <p class="one">Someone plays a track — their own or another's — and leaves feedback or suggestions.</p>
+      <dl>
+        <dt>Who</dt><dd>Async viewers &amp; reviewers</dd>
+        <dt>Tense</dt><dd>"Here's what I think"</dd>
+        <dt>State</dt><dd>Comments &amp; suggestions persist</dd>
+      </dl>
+    </div>
+    <div class="gcard r">
+      <span class="chip c-room"><span class="d"></span>Room</span>
+      <h4>The session</h4>
+      <p class="one">Several people listen together live, react in the moment, and feed off the visuals.</p>
+      <dl>
+        <dt>Who</dt><dd>A host + live listeners</dd>
+        <dt>Tense</dt><dd>"We're listening now"</dd>
+        <dt>State</dt><dd>Ephemeral, with a recap</dd>
+      </dl>
+    </div>
+  </div>
+
+  <!-- ── 01 WORK ── -->
+  <div class="sec">
+    <div class="sec-head">
+      <span class="sec-num">01</span>
+      <h2>Work — the workbench</h2>
+    </div>
+    <p>The goal is singular: <strong>figure out how to make the track better, and do it.</strong> Everything social is gone. The page leans all the way into analysis and the rack, with the Coach as a second pair of ears. This is the only mode that is private by default.</p>
+
+    <div class="deep w">
+      <h3>What's front and centre</h3>
+      <ul>
+        <li><b>The rack, full-depth</b> — every module expanded, drag-reorder, ⌁ Bindings, A/B Bypass, Reset. All three layouts (Inline / Console / Studio) available.</li>
+        <li><b>Coach + Plan</b> — ask about the mix, get ranked, applyable fixes ("low end is heavy → try a 2&nbsp;dB cut at 120&nbsp;Hz"). The core "determine improvements" loop lives here.</li>
+        <li><b>Metering &amp; Stats</b> — LUFS-S, True Peak, RMS, correlation kept visible; full track analysis on hand for technical decisions.</li>
+        <li><b>Versions &amp; presets</b> — save the rack state as named iterations and A/B between them or against a reference track.</li>
+        <li><b>Private notes</b> — to-fix markers dropped on the timeline, working notes only the author sees.</li>
+      </ul>
+      <h3>What's hidden or dialled down</h3>
+      <ul>
+        <li><b>Visuals console</b> collapses to a utility monitor (spectrum + meters) — a working scope, not a light show.</li>
+        <li><b>People, live chat, reactions, presence</b> — all absent. No audience.</li>
+        <li>No comments, bookmarks, or control-handoff — there's no one else in the room.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ── 02 VIEW ── -->
+  <div class="sec">
+    <div class="sec-head">
+      <span class="sec-num">02</span>
+      <h2>View — the review</h2>
+    </div>
+    <p>A track gets played back for <strong>feedback</strong>, asynchronously. The viewer might be the author re-listening, or an invited reviewer. The defining surface is the <strong>comment &amp; suggestion layer</strong>, and what's allowed is governed by the uploader's settings.</p>
+
+    <div class="deep v">
+      <h3>Feedback &amp; comments</h3>
+      <ul>
+        <li><b>Timestamped comments</b> — anchored to a point on the waveform/scrubber, so feedback lands exactly where it's about ("vocal sits too low @ 1:24").</li>
+        <li><b>General comments</b> — track-level notes that aren't tied to a moment.</li>
+        <li>Comments are visible to the author and (optionally) other viewers; the author can resolve, pin, or hide.</li>
+      </ul>
+      <h3>Suggested rack presets</h3>
+      <ul>
+        <li>A reviewer can <b>audition the rack locally</b> (their changes never touch the author's master) and attach the result as a <b>suggested preset</b> on a comment — "try this chain."</li>
+        <li>The author can preview a suggestion A/B against their own, then <b>accept</b> it (how a merge works — full replace vs. cherry-pick — is an open question).</li>
+      </ul>
+      <h3>Bookmarking</h3>
+      <ul>
+        <li>If the uploader <b>enables bookmarking</b>, a viewer can save the track (and optionally a timestamp) to their own library.</li>
+        <li>Whether the author sees who bookmarked is a sharing/privacy decision left open below.</li>
+      </ul>
+      <h3>What the viewer sees of the mix</h3>
+      <ul>
+        <li>The author's rack and analysis are <b>visible but read-only</b> until the viewer forks it into a suggestion.</li>
+        <li>Visuals are personal and optional — nothing is synchronised between viewers.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ── 03 ROOM ── -->
+  <div class="sec">
+    <div class="sec-head">
+      <span class="sec-num">03</span>
+      <h2>Room — the session</h2>
+    </div>
+    <p>The party mode: several people listening <strong>live, together</strong>, reacting in the moment. A host drives playback and the visuals for everyone; the room responds. This is where the visuals console becomes the star and feedback is fast and emotional rather than precise.</p>
+
+    <div class="deep r">
+      <h3>Live & shared</h3>
+      <ul>
+        <li><b>One host, many listeners</b> — the host controls transport and the visual show; everyone sees the same stage in sync.</li>
+        <li><b>Presence &amp; status</b> — listener avatars with live status emoji; the host is badged.</li>
+        <li><b>Reactions &amp; chat</b> — a live reaction feed, floating emoji, and presence pops on the stage; a drop triggers a wave of reactions.</li>
+      </ul>
+      <h3>The show</h3>
+      <ul>
+        <li><b>Full visuals console</b> — stages, lasers, colour sync, and the Auto-Program / Auto-React director driving the room hands-free.</li>
+        <li><b>Control handoff</b> — the host can grant <b>rack</b> and <b>visuals</b> control to a listener <b>independently</b> (already built).</li>
+      </ul>
+      <h3>Dialled down</h3>
+      <ul>
+        <li>Coach, Plan and detailed metering recede — this isn't the moment for analysis.</li>
+        <li>The session is <b>ephemeral</b>; an optional <b>recap</b> (reaction timeline, hottest moments) can seed an async View thread afterwards.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ── 04 MATRIX ── -->
+  <div class="sec">
+    <div class="sec-head">
+      <span class="sec-num">04</span>
+      <h2>What changes across modes</h2>
+    </div>
+    <p>The same surfaces exist throughout — each mode shows, hides, or repurposes them. <span class="lbl">Quick read of the system:</span></p>
+    <table class="matrix">
+      <thead>
+        <tr>
+          <th>Surface</th>
+          <th class="w">Work</th>
+          <th class="v">View</th>
+          <th class="r">Room</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><th>Primary focus</th>
+          <td><span class="tag t-on">Rack + Coach</span><br>Analyse &amp; tweak</td>
+          <td><span class="tag t-on">Comments</span><br>Give/get feedback</td>
+          <td><span class="tag t-on">Visuals + people</span><br>Listen together</td></tr>
+        <tr><th>Rack control</th>
+          <td>Full edit, all layouts</td>
+          <td>Read-only; fork to suggest</td>
+          <td>Host-driven; grantable</td></tr>
+        <tr><th>Visuals console</th>
+          <td><span class="tag t-off">Utility monitor</span></td>
+          <td><span class="tag t-mid">Personal, optional</span></td>
+          <td><span class="tag t-on">Full show</span></td></tr>
+        <tr><th>Coach + Plan</th>
+          <td><span class="tag t-on">Primary</span></td>
+          <td><span class="tag t-mid">Reference</span></td>
+          <td><span class="tag t-off">Hidden</span></td></tr>
+        <tr><th>Metering / Stats</th>
+          <td>Prominent</td>
+          <td>Visible (aids feedback)</td>
+          <td>Minimal</td></tr>
+        <tr><th>Presence (People)</th>
+          <td><span class="tag t-off">None</span></td>
+          <td>Commenter list</td>
+          <td><span class="tag t-on">Live</span></td></tr>
+        <tr><th>Chat + reactions</th>
+          <td><span class="tag t-off">None</span></td>
+          <td>Async comment thread</td>
+          <td><span class="tag t-on">Live + floating</span></td></tr>
+        <tr><th>Timestamped comments</th>
+          <td>Private notes only</td>
+          <td><span class="tag t-on">Core feature</span></td>
+          <td>Recap → comments</td></tr>
+        <tr><th>Suggested presets</th>
+          <td>n/a (you're the author)</td>
+          <td><span class="tag t-on">Yes (if enabled)</span></td>
+          <td>Via live handoff</td></tr>
+        <tr><th>Bookmarking</th>
+          <td>n/a</td>
+          <td><span class="tag t-mid">If uploader enables</span></td>
+          <td>Post-session save</td></tr>
+        <tr><th>Persistence</th>
+          <td>Versions &amp; presets</td>
+          <td>Comments persist on track</td>
+          <td><span class="tag t-mid">Ephemeral + recap</span></td></tr>
+        <tr><th>Audience</th>
+          <td>Private (1)</td>
+          <td>Async, shared link</td>
+          <td>Live, multi-user</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── 05 TRANSITIONS ── -->
+  <div class="sec">
+    <div class="sec-head">
+      <span class="sec-num">05</span>
+      <h2>Switching &amp; transitions</h2>
+    </div>
+    <p>The mode switcher replaces today's <span class="lbl">SOLO ⇄ ROOM</span> segmented control in the header — now three segments. Availability is role-gated: <strong>View</strong> needs the track to be shared, <strong>Room</strong> needs you to be host or invited. The modes form a natural lifecycle:</p>
+    <div class="flow">
+      <span class="chip c-work"><span class="d"></span>Work</span>
+      <span class="arrow">— publish for feedback →</span>
+      <span class="chip c-view"><span class="d"></span>View</span>
+      <span class="arrow">— go live →</span>
+      <span class="chip c-room"><span class="d"></span>Room</span>
+      <span class="arrow">— session recap →</span>
+      <span class="chip c-view"><span class="d"></span>View</span>
+    </div>
+    <ul>
+      <li><b>Work → View</b> — the author opens the track to reviewers. Private working notes stay private; the track, analysis and rack become viewable.</li>
+      <li><b>View → Room</b> — a host starts a synchronous session and invited viewers join the live stage.</li>
+      <li><b>Room → View</b> — when the session ends, the live reaction timeline and chat condense into an async thread; the hottest moments become timestamped comments.</li>
+    </ul>
+  </div>
+
+  <!-- ── 06 PERMISSIONS ── -->
+  <div class="sec">
+    <div class="sec-head">
+      <span class="sec-num">06</span>
+      <h2>Uploader permissions &amp; sharing</h2>
+    </div>
+    <p>What a viewer can do in <strong>View</strong> and <strong>Room</strong> is set by the uploader when they share a track. These gates determine which controls even render:</p>
+    <div class="deep v">
+      <ul>
+        <li><b>Visibility</b> — Private (Work only) · Unlisted (link) · Public.</li>
+        <li><b>Comments</b> — on / off, and who may comment (anyone with the link vs. named accounts).</li>
+        <li><b>Suggested presets</b> — allow reviewers to propose rack chains, or not.</li>
+        <li><b>Bookmarking</b> — let viewers save the track to their library, or not.</li>
+        <li><b>Live sessions</b> — who can host a Room and who can join.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ── 07 OPEN QUESTIONS ── -->
+  <div class="sec">
+    <div class="sec-head">
+      <span class="sec-num">07</span>
+      <h2>Deliberately left open</h2>
+    </div>
+    <div class="callout">
+      <h3>Decisions to make later</h3>
+      <ol>
+        <li><b>Suggestion merge model</b> — when an author accepts a suggested preset, is it a full rack replace or a cherry-pick of individual modules/params?</li>
+        <li><b>Coach access in View</b> — can reviewers run the Coach on someone else's track, or is it author-only?</li>
+        <li><b>Anonymous viewers</b> — may anon users leave comments / suggestions / bookmarks, or are those named-account only?</li>
+        <li><b>Bookmark signal</b> — is bookmarking a private save, or does the author see who/how many bookmarked?</li>
+        <li><b>Room recap</b> — automatic or opt-in, and which moments convert into View comments?</li>
+        <li><b>Versions vs. presets</b> — is a saved rack preset the same thing as a track version (v1/v2/v3), or separate concepts that relate?</li>
+        <li><b>Notifications</b> — where and how the author is told about new comments and suggestions.</li>
+        <li><b>Work privacy</b> — does Work ever surface any social signal, or stay strictly private until explicitly published?</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span>SPECTR · Listen page — three-mode model</span>
+    <span>Draft for discussion · not final</span>
+  </div>
+
+</td></tr></tbody>
+<tfoot><tr><td class="ftr-space"></td></tr></tfoot>
+</table>
+</main>
+</body>
+</html>

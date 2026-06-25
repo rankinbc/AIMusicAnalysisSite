@@ -65,10 +65,19 @@ Final intended meaning (only the field + owner-facing UI are built in this spec)
 ### Types & hooks
 - `src/api/types.ts`: `SongDto.visibility: 'private' | 'shared' | 'public'`.
 - `usePatchSong` / edit flow: support sending `visibility`.
+- **Already added by the New Song modal work** (`SongDto` + `CreateSongRequest` +
+  `PatchSongRequest`, all nullable for back-compat): `description`,
+  `visualTemplate` (`SongVisualTemplate`), `visualPrimary` / `visualSecondary`
+  (serialized `oklch(l c h)` strings), `referenceProfileKind` (`'set' | 'preset'`),
+  `referenceProfileId`. This spec only adds `visibility` on top of those.
 
 ### Grid card (the main redesign) — `SongCard` in `SongsLibrarySection.tsx`
 Top-to-bottom:
-- **Cover visual** (existing hue/gradient art).
+- **Cover visual** — the song's chosen, persisted cover art via
+  `<CoverArt visual={visualFromDto(song.visualTemplate, song.visualPrimary,
+  song.visualSecondary)} hue={…} />`. When the song has no stored visual, `CoverArt`
+  falls back to the legacy `hueFromId` Aurora gradient, so existing rows render
+  unchanged. (Already wired on the grid card + row by the New Song modal work.)
   - top-right: **version pill** (`v{latestVersionNumber}`).
   - top-left: **visibility badge** — 🔒 Private / 🔗 Shared / 🌐 Public.
   - overlay: **▶ Play** → plays the **latest version** (highest `versionNumber`) in the
@@ -76,7 +85,7 @@ Top-to-bottom:
 - **Song name** (links to song detail) + **kebab menu**.
 - **Genre** chip (from `genreHint`; hidden if null).
 - **Description peek** — single line, truncated with ellipsis; hidden when empty.
-  *(Requires `description` to be available on the song — see Open Items.)*
+  Reads `song.description` (now persisted via the New Song modal work).
 - **Tags** — up to 4 shown, `+N` overflow (kept from current behavior, incl. the
   per-tag public indicator).
 - **Version sequence strip** — minimal markers `v0 · v1 · v2 · v3` along a track; the
@@ -139,12 +148,14 @@ job/analysis (`latestResult`).
 - Kebab visibility submenu issues a `PATCH` with the chosen value.
 
 ## Open items to resolve during planning
-- **`description` source.** The card description peek needs a `description` on the song.
-  The current `Song` entity / `SongDto` has **no `description` column** (the field exists
-  in the "New song" mockup but isn't persisted). Planning must decide: (a) add a
-  `songs.description` column + DTO/edit wiring as part of this spec, or (b) drop the
-  description peek until a later spec. Recommendation: include `songs.description`
-  (small additive column, mirrors `visibility` work) so the peek is real.
+- **`description` source — RESOLVED.** The New Song modal work added `description`
+  to `SongDto` / `CreateSongRequest` / `PatchSongRequest` and the frontend collects it.
+  ⚠️ The **BFF/worker persistence is still pending** — `songs.description` (and the
+  visual + reference-profile columns) must be added on the `Song` EF entity + shared
+  SQLAlchemy model + a migration. Fold that into this spec's backend change alongside
+  `visibility` (see `PRPs/design_handoffs/new-song-creation-backend-requirements.md`).
+  Until those columns exist the description peek will read empty (frontend falls back
+  gracefully).
 - **Listen-rack play target.** Confirm the exact route/params to open the listen-rack
   page for a specific (latest) version during planning.
 - **Report route.** Confirm the analysis-report route for a version's latest analysis
