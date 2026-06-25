@@ -1,7 +1,7 @@
 # Pipeline Inspector — Design Spec
 
 **Date:** 2026-06-25
-**Status:** Approved (pre-implementation)
+**Status:** Implemented (2026-06-25)
 **Author:** brankin92 + Claude
 **Topic:** A dev/debug tool that renders the full input→output trace of a single analysis, overlaid on the complete catalog of rules and specialists, to find gaps in the rule system.
 

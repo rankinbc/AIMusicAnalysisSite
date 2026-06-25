@@ -129,6 +129,23 @@ components/worker/
     └── …                   # mocks analysis package and DB
 ```
 
+## Pipeline Inspector (dev tool)
+
+Render the full input→output trace of one analysis, overlaid on the catalog of
+all rules + specialists, to find rule-system gaps. Read-only.
+
+    # one analysis (needs DATABASE_URL → Postgres)
+    python -m app.tools.pipeline_inspector <analysis_id|prefix> --open
+    # static catalog, no DB
+    python -m app.tools.pipeline_inspector --catalog --open
+    # check the §6 stage map hasn't drifted from real output
+    python -m app.tools.pipeline_inspector --validate-map <analysis_id|--snapshot FILE>
+
+Output: `output/worker/<date>_pipeline_inspector/`. Deterministic stages (rules,
+validation, scoring) are recomputed with CURRENT code; LLM stages (triage,
+specialists) are shown from persisted data. See
+`docs/superpowers/specs/2026-06-25-pipeline-inspector-design.md`.
+
 ---
 
 **To extend this component**: edit `PRPs/source/INITIAL.md` and run `/generate-prp`. Don't modify files here directly for new work — let the PRP drive it.
