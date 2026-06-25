@@ -124,6 +124,21 @@ builder.Services.AddScoped<EntitlementService>();
 // model). Depends on EntitlementService + AppDbContext, so scoped.
 builder.Services.AddScoped<CoachCapService>();
 
+// ── Listen V3 · PRP-0 spine primitives ──────────────────────────────────────
+// Durable signed anon identity, opaque-resource-token auth, cross-slice no-op
+// sinks, and a Redis rate limiter. No DB — cookie + Redis + interfaces only.
+// Anon:SigningKey is separate from Jwt:Key and must be stable across restarts.
+builder.Services.AddOptions<AnonOptions>()
+    .Bind(builder.Configuration.GetSection(AnonOptions.SectionName))
+    .Validate(o => !string.IsNullOrWhiteSpace(o.SigningKey),
+        "Anon:SigningKey must be set (separate from Jwt:Key)")
+    .ValidateOnStart();
+builder.Services.AddScoped<AnonIdentity>();
+builder.Services.AddScoped<ResourceTokenAuth>();
+builder.Services.AddScoped<INotificationSink, NoOpNotificationSink>();
+builder.Services.AddScoped<IGamePlanSink, NoOpGamePlanSink>();
+builder.Services.AddSingleton<IRateLimiter, RedisRateLimiter>();
+
 // Story 2.8 — usage-page honest-math (90-day credit spend vs Pro-equivalent).
 builder.Services.AddScoped<HonestMathService>();
 
@@ -218,6 +233,10 @@ app.UseSerilogRequestLogging();
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// PRP-0 — resolve/issue the durable anon identity AFTER authentication (so the
+// principal is known) and BEFORE routing (so endpoints can read it).
+app.UseAnonIdentity();
 
 // ── Routes ─────────────────────────────────────────────────────────────────────
 var api = app.MapGroup("/api");
