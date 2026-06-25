@@ -568,6 +568,13 @@ class RackPreset(Base):
     via_grant_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         "via_grant_id", UUID(as_uuid=True), nullable=True
     )
+    # PRP-3 — provenance when forked by accepting a reviewer suggestion (D4.5).
+    from_suggestion_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "from_suggestion_id",
+        UUID(as_uuid=True),
+        ForeignKey("suggestions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -858,14 +865,24 @@ class CompareCache(Base):
 
 
 class TrackComment(Base):
+    # PRP-3 swapped the polymorphic CHECK to 3-way (+ target_version_id) and added
+    # threading (parent_id) + author-owned status. Legacy /share rows (target_share_token)
+    # stay valid; new V3 View comments use target_version_id.
     __tablename__ = "track_comments"
     __table_args__ = (
         CheckConstraint(
-            "(target_share_token IS NOT NULL AND target_published_track IS NULL) "
-            "OR (target_share_token IS NULL AND target_published_track IS NOT NULL)",
+            "(CASE WHEN target_share_token IS NOT NULL THEN 1 ELSE 0 END "
+            "+ CASE WHEN target_published_track IS NOT NULL THEN 1 ELSE 0 END "
+            "+ CASE WHEN target_version_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
             name="ck_track_comments_one_target",
         ),
+        CheckConstraint(
+            "\"status\" IN ('open','resolved','pinned','hidden')",
+            name="ck_track_comments_status",
+        ),
         Index("ix_track_comments_target_share_token", "target_share_token"),
+        Index("ix_track_comments_target_version_id", "target_version_id"),
+        Index("ix_track_comments_parent_id", "parent_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -874,6 +891,27 @@ class TrackComment(Base):
     )
     target_published_track: Mapped[Optional[uuid.UUID]] = mapped_column(
         "target_published_track", UUID(as_uuid=True), nullable=True
+    )
+    target_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "target_version_id",
+        UUID(as_uuid=True),
+        ForeignKey("song_versions.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    parent_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "parent_id",
+        UUID(as_uuid=True),
+        ForeignKey("track_comments.id", ondelete="NO ACTION"),
+        nullable=True,
+    )
+    status: Mapped[str] = mapped_column(
+        "status", String(10), nullable=False, server_default="open", default="open"
+    )
+    suggestion_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "suggestion_id",
+        UUID(as_uuid=True),
+        ForeignKey("suggestions.id", ondelete="SET NULL"),
+        nullable=True,
     )
     author_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         "author_user_id",
@@ -885,12 +923,68 @@ class TrackComment(Base):
         "author_display_name", String(120), nullable=True
     )
     author_ip_hash: Mapped[Optional[bytes]] = mapped_column("author_ip_hash", LargeBinary, nullable=True)
+    # Durable signed-cookie anon id (CONVENTIONS §1); set for anon V3 View comments.
+    author_anon_id: Mapped[Optional[str]] = mapped_column("author_anon_id", String(64), nullable=True)
     timestamp_seconds: Mapped[Optional[float]] = mapped_column("timestamp_seconds", Float, nullable=True)
     body: Mapped[str] = mapped_column("body", String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     deleted_at: Mapped[Optional[datetime]] = mapped_column("deleted_at", DateTime(timezone=True), nullable=True)
+
+
+class ReviewerSuggestion(Base):
+    # PRP-3 (D4.3). Non-owner chain proposal; the chain lives here (chain_json).
+    # A RackPreset materializes only on accept (fork-to-preset) with from_suggestion_id.
+    __tablename__ = "suggestions"
+    __table_args__ = (
+        CheckConstraint(
+            "\"status\" IN ('proposed','auditioned','accepted','rejected')",
+            name="ck_suggestions_status",
+        ),
+        Index("ix_suggestions_song_version_id", "song_version_id"),
+        Index("ix_suggestions_from_user_id", "from_user_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    song_version_id: Mapped[uuid.UUID] = mapped_column(
+        "song_version_id",
+        UUID(as_uuid=True),
+        ForeignKey("song_versions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    from_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "from_user_id",
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    from_display_name: Mapped[Optional[str]] = mapped_column(
+        "from_display_name", String(120), nullable=True
+    )
+    from_anon_id: Mapped[Optional[str]] = mapped_column("from_anon_id", String(64), nullable=True)
+    chain_json: Mapped[Any] = mapped_column("chain_json", JSONB, nullable=False)
+    comment_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "comment_id",
+        UUID(as_uuid=True),
+        ForeignKey("track_comments.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_in_session_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "created_in_session_id", UUID(as_uuid=True), nullable=True
+    )
+    via_grant_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "via_grant_id", UUID(as_uuid=True), nullable=True
+    )
+    status: Mapped[str] = mapped_column(
+        "status", String(10), nullable=False, server_default="proposed", default="proposed"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(
+        "resolved_at", DateTime(timezone=True), nullable=True
+    )
 
 
 class TrackBookmark(Base):

@@ -394,6 +394,59 @@ export interface VersionViewDto {
   gates: GatesDto;
 }
 
+// ── Listen V3 — View feedback: comments + suggestions (PRP-3) ────────────────
+export interface ActorRefDto {
+  type: 'user' | 'anon';
+  userId: string | null;
+  handle: string | null;
+  displayName: string | null;
+  hue: number | null;
+}
+
+export type CommentStatus = 'open' | 'resolved' | 'pinned' | 'hidden';
+
+export interface CommentDto {
+  id: string;
+  targetVersionId: string;
+  parentId: string | null;
+  t: number | null;
+  author: ActorRefDto;
+  body: string;
+  status: CommentStatus;
+  suggestionId: string | null;
+  createdAt: string;
+}
+
+export interface PostCommentRequest {
+  parentId?: string | null;
+  t?: number | null;
+  body: string;
+  authorDisplayName?: string | null;
+}
+
+export interface PatchCommentStatusRequest {
+  status: CommentStatus;
+}
+
+export type SuggestionStatus = 'proposed' | 'auditioned' | 'accepted' | 'rejected';
+
+export interface SuggestionDto {
+  id: string;
+  songVersionId: string;
+  fromActor: ActorRefDto;
+  chain: unknown; // the proposed Chain (narrowed via asChain at the feature layer)
+  commentId: string | null;
+  createdInSessionId: string | null;
+  status: SuggestionStatus;
+  createdAt: string;
+}
+
+export interface CreateSuggestionRequest {
+  commentId?: string | null;
+  chain: unknown;
+  fromDisplayName?: string | null;
+}
+
 export interface ReanalyzeResponse {
   jobId: string;
 }

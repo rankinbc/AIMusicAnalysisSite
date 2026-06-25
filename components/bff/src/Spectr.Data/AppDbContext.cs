@@ -52,6 +52,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<TrackComment> TrackComments => Set<TrackComment>();
     public DbSet<TrackBookmark> TrackBookmarks => Set<TrackBookmark>();
 
+    // Listen V3 — View feedback: reviewer suggestions (PRP-3). Table "suggestions".
+    public DbSet<ReviewerSuggestion> Suggestions => Set<ReviewerSuggestion>();
+
     // Billing (story 2.1)
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<WebhookEvent> WebhookEvents => Set<WebhookEvent>();
@@ -117,11 +120,57 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             "ck_coach_messages_status",
             "\"status\" IN ('pending','complete','refused','error')"));
 
-        // Polymorphic CHECKs on comments + bookmarks (exactly one target set).
+        // Polymorphic CHECK on comments — PRP-3 swapped this from 2-way to 3-way
+        // (exactly one of {target_share_token, target_published_track,
+        // target_version_id}). Existing share-token rows stay valid. Bookmarks keep
+        // their 2-way CHECK (PRP-6 owns their re-target).
         builder.Entity<TrackComment>().ToTable(t => t.HasCheckConstraint(
             "ck_track_comments_one_target",
-            "(target_share_token IS NOT NULL AND target_published_track IS NULL) "
-            + "OR (target_share_token IS NULL AND target_published_track IS NOT NULL)"));
+            "(CASE WHEN target_share_token IS NOT NULL THEN 1 ELSE 0 END "
+            + "+ CASE WHEN target_published_track IS NOT NULL THEN 1 ELSE 0 END "
+            + "+ CASE WHEN target_version_id IS NOT NULL THEN 1 ELSE 0 END) = 1"));
+        builder.Entity<TrackComment>().ToTable(t => t.HasCheckConstraint(
+            "ck_track_comments_status", "\"status\" IN ('open','resolved','pinned','hidden')"));
+        builder.Entity<TrackComment>().HasIndex(c => c.TargetVersionId)
+            .HasDatabaseName("ix_track_comments_target_version_id");
+        builder.Entity<TrackComment>().HasIndex(c => c.ParentId)
+            .HasDatabaseName("ix_track_comments_parent_id");
+        builder.Entity<TrackComment>()
+            .HasOne<SongVersion>().WithMany().HasForeignKey(c => c.TargetVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
+        // Self-FK NoAction: comments are soft-deleted (deleted_at), never hard-deleted
+        // except via the version cascade (which removes parent + replies together).
+        builder.Entity<TrackComment>()
+            .HasOne<TrackComment>().WithMany().HasForeignKey(c => c.ParentId)
+            .OnDelete(DeleteBehavior.NoAction);
+        builder.Entity<TrackComment>()
+            .HasOne<ReviewerSuggestion>().WithMany().HasForeignKey(c => c.SuggestionId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Reviewer suggestions (PRP-3). Circular nullable FK with track_comments
+        // (suggestion_id ↔ comment_id) — both SetNull, no hard cycle.
+        builder.Entity<ReviewerSuggestion>().ToTable(t => t.HasCheckConstraint(
+            "ck_suggestions_status",
+            "\"status\" IN ('proposed','auditioned','accepted','rejected')"));
+        builder.Entity<ReviewerSuggestion>().HasIndex(s => s.SongVersionId)
+            .HasDatabaseName("ix_suggestions_song_version_id");
+        builder.Entity<ReviewerSuggestion>().HasIndex(s => s.FromUserId)
+            .HasDatabaseName("ix_suggestions_from_user_id");
+        builder.Entity<ReviewerSuggestion>().Property(s => s.CreatedAt).HasDefaultValueSql("now()");
+        builder.Entity<ReviewerSuggestion>()
+            .HasOne<SongVersion>().WithMany().HasForeignKey(s => s.SongVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<ReviewerSuggestion>()
+            .HasOne<User>().WithMany().HasForeignKey(s => s.FromUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+        builder.Entity<ReviewerSuggestion>()
+            .HasOne<TrackComment>().WithMany().HasForeignKey(s => s.CommentId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // PRP-3 credit chain — accepted fork carries provenance back to the suggestion.
+        builder.Entity<RackPreset>()
+            .HasOne<ReviewerSuggestion>().WithMany().HasForeignKey(p => p.FromSuggestionId)
+            .OnDelete(DeleteBehavior.SetNull);
         builder.Entity<TrackBookmark>().ToTable(t => t.HasCheckConstraint(
             "ck_track_bookmarks_one_target",
             "(target_share_token IS NOT NULL AND target_published_track IS NULL) "

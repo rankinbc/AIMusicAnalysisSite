@@ -34,12 +34,17 @@ public sealed class RackPreset
     public string ChainJson { get; set; } = "{}";
 
     // Credit-chain provenance (no FK yet — the room-session + grant tables land
-    // in PRP-4; from_suggestion_id is added by PRP-3). Null for plain user saves.
+    // in PRP-4). Null for plain user saves.
     [Column("created_in_session_id")]
     public Guid? CreatedInSessionId { get; set; }
 
     [Column("via_grant_id")]
     public Guid? ViaGrantId { get; set; }
+
+    // Set when this preset was forked by accepting a reviewer suggestion (PRP-3,
+    // D4.5 credit chain → suggestions.from_actor). FK to suggestions.
+    [Column("from_suggestion_id")]
+    public Guid? FromSuggestionId { get; set; }
 
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

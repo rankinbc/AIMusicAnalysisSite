@@ -268,6 +268,7 @@ api.MapCompareEndpoints();
 api.MapRackPresetEndpoints();
 api.MapVersionShareEndpoints();
 api.MapVersionViewEndpoints();
+api.MapFeedbackEndpoints();
 api.MapBillingEndpoints();
 
 app.MapGet("/", () => Results.Json(new { status = "ok", version = "2.0.0" }))
