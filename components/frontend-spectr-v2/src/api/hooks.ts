@@ -456,9 +456,10 @@ export function useJobResults(jobId: string, enabled: boolean) {
     queryFn: () => fetcher<JobResultsDto>({ url: `/jobs/${jobId}/results`, method: 'GET' }),
     enabled: enabled && Boolean(jobId),
     retry: false,
-    // Structure detection runs ~60-90 s after the fast phases land; poll the
-    // report until the deferred Phase 7 fills in, then stop.
-    refetchInterval: (query) => (isArrangementPending(query.state.data) ? 4000 : false),
+    // Structure detection (allin1) runs in the background — ~10-15 s on GPU but
+    // many minutes on CPU for a full-length track. Poll on a relaxed interval
+    // until the deferred Phase 7 fills in, then stop.
+    refetchInterval: (query) => (isArrangementPending(query.state.data) ? 8000 : false),
   });
 }
 

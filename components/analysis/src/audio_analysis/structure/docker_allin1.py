@@ -29,10 +29,25 @@ from typing import List, Optional
 logger = logging.getLogger(__name__)
 
 DEFAULT_IMAGE = "allin1:latest"
+# allin1 runs demucs source-separation first, which is slow on CPU: ~10-20 min
+# for a full-length (5-8 min) track. The old 300 s default silently timed out on
+# real songs → arrangement came back "not assessed". Default generous (30 min)
+# so CPU runs complete; prod on GPU (~10-15 s) can lower it via ALLIN1_TIMEOUT.
+DEFAULT_TIMEOUT_S = 1800
 
 
 def _env_truthy(name: str) -> bool:
     return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
 
 # Python run inside the container. Bypasses the image entrypoint so a CRLF /
 # shell quirk in entrypoint.sh can't break us. allin1 (and its demucs
@@ -116,11 +131,19 @@ class Allin1Unavailable(RuntimeError):
 class DockerAllin1:
     """Run allin1 via ``docker run`` against the ``allin1:latest`` image."""
 
-    def __init__(self, image_name: str | None = None, *, use_gpu: bool | None = None):
+    def __init__(
+        self,
+        image_name: str | None = None,
+        *,
+        use_gpu: bool | None = None,
+        timeout: int | None = None,
+    ):
         # Prod flips GPU on (CUDA image + nvidia-docker → ~10-15s vs ~60-90s CPU)
         # without a code change: ALLIN1_USE_GPU=1, ALLIN1_IMAGE=allin1:gpu.
         self.image_name = image_name or os.getenv("ALLIN1_IMAGE") or DEFAULT_IMAGE
         self.use_gpu = _env_truthy("ALLIN1_USE_GPU") if use_gpu is None else use_gpu
+        # Per-track analysis timeout (seconds). Env-tunable; see DEFAULT_TIMEOUT_S.
+        self.timeout = timeout if timeout is not None else _env_int("ALLIN1_TIMEOUT", DEFAULT_TIMEOUT_S)
 
     # -- availability probes ------------------------------------------------
     @staticmethod
@@ -158,12 +181,16 @@ class DockerAllin1:
             )
 
     # -- analysis -----------------------------------------------------------
-    def analyze(self, audio_path: Path | str, *, timeout: int = 300) -> Allin1Result:
+    def analyze(self, audio_path: Path | str, *, timeout: int | None = None) -> Allin1Result:
         """Analyze *audio_path* and return an :class:`Allin1Result`.
 
+        ``timeout`` (seconds) defaults to the instance's configured timeout
+        (``ALLIN1_TIMEOUT`` env → :data:`DEFAULT_TIMEOUT_S`).
+
         Raises :class:`Allin1Unavailable` if Docker/the image isn't ready, and
-        ``RuntimeError`` if the container ran but the analysis failed.
+        ``RuntimeError`` if the container ran but the analysis failed/timed out.
         """
+        timeout = timeout if timeout is not None else self.timeout
         audio_path = Path(audio_path).resolve()
         if not audio_path.exists():
             raise FileNotFoundError(f"Audio file not found: {audio_path}")

@@ -7,12 +7,39 @@ import subprocess
 import pytest
 
 from audio_analysis.structure.docker_allin1 import (
+    DEFAULT_TIMEOUT_S,
     Allin1Result,
     Allin1Unavailable,
     DockerAllin1,
 )
 
 pytestmark = pytest.mark.uses_docker_wrapper
+
+
+def test_timeout_defaults_generous_and_env_tunable(monkeypatch):
+    monkeypatch.delenv("ALLIN1_TIMEOUT", raising=False)
+    assert DockerAllin1().timeout == DEFAULT_TIMEOUT_S
+    assert DEFAULT_TIMEOUT_S >= 1800  # full-length CPU tracks need >>300 s
+    monkeypatch.setenv("ALLIN1_TIMEOUT", "1200")
+    assert DockerAllin1().timeout == 1200
+    assert DockerAllin1(timeout=42).timeout == 42  # explicit arg wins
+
+
+def test_analyze_uses_instance_timeout(monkeypatch, tmp_path):
+    audio = tmp_path / "song.wav"
+    audio.write_bytes(b"RIFF")
+    seen = {}
+
+    def fake_run(cmd, *, timeout):
+        seen["timeout"] = timeout
+        return _completed(stdout='{"bpm":120,"beats":[],"downbeats":[],"segments":[]}')
+
+    d = DockerAllin1(timeout=999)
+    monkeypatch.setattr(d, "is_docker_available", lambda: True)
+    monkeypatch.setattr(d, "is_image_available", lambda: True)
+    monkeypatch.setattr(DockerAllin1, "_run", staticmethod(fake_run))
+    d.analyze(audio)
+    assert seen["timeout"] == 999
 
 
 def _completed(stdout: str = "", stderr: str = "", returncode: int = 0):

@@ -19,10 +19,22 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import uuid
 from pathlib import Path
 
 import dramatiq
+
+
+def _structure_time_limit_ms() -> int:
+    """Dramatiq hard time limit for the actor — must exceed the allin1 subprocess
+    timeout (ALLIN1_TIMEOUT, default 1800 s) plus merge/write overhead, else
+    dramatiq kills a legitimately-running CPU analysis mid-flight."""
+    try:
+        timeout_s = int(os.getenv("ALLIN1_TIMEOUT", "") or 1800)
+    except ValueError:
+        timeout_s = 1800
+    return (timeout_s + 300) * 1000
 
 from aimusic_shared.models import (
     JOB_STATUS_COMPLETE,
@@ -49,7 +61,9 @@ except ImportError:  # pragma: no cover
     actor_name="detect_structure_job",
     queue_name="analysis-paid",  # story 2.5: secondary op → W1, like rerun_phase
     max_retries=1,
-    time_limit=600_000,  # 10 minutes (CPU allin1 can take ~90 s)
+    # Must exceed the allin1 subprocess timeout — demucs on a full-length CPU
+    # track runs ~10-20 min (see ALLIN1_TIMEOUT). 600 s killed real songs.
+    time_limit=_structure_time_limit_ms(),
 )
 def detect_structure_job(structure_job_id: str, analysis_id: str) -> None:
     if detect_structure_and_rescore is None:

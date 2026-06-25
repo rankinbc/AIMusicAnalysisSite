@@ -25,9 +25,18 @@ the worker host just needs Docker running and the image built. Without it,
 structure detection reports "unavailable" (logged once) and Phase 7 renders
 "not assessed" rather than failing the track.
 
-- **CPU**: ~60-90 s/track. The `docker/allin1/Dockerfile` here is CPU-only.
+- **CPU**: allin1 runs demucs source-separation first → minutes per track, scaling
+  with length (~10-20 min for a full 5-8 min song). The `docker/allin1/Dockerfile`
+  here is CPU-only.
 - **GPU**: ~10-15 s/track. Build the CUDA variant and set `ALLIN1_USE_GPU=1`
   (and `ALLIN1_IMAGE` if tagged differently) so the worker passes `--gpus all`.
+
+**Env knobs** (read by `DockerAllin1` / the `detect_structure_job` actor):
+- `ALLIN1_TIMEOUT` — per-track analysis timeout in seconds (default **1800**).
+  Generous so CPU runs on full-length tracks complete instead of timing out to
+  "not assessed"; the actor's dramatiq time-limit tracks this automatically. Lower
+  it on GPU. (The old hard-coded 300 s silently failed real songs.)
+- `ALLIN1_USE_GPU` / `ALLIN1_IMAGE` — see GPU note above.
 
 ## Worker topology: dev vs prod (AR23 — story 2.5)
 
