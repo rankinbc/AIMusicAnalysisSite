@@ -685,11 +685,16 @@ export interface CreateReferenceSetRequest {
   hue?: number | null;
 }
 
-// Bookmarks — saved pointers to share-links (and, future, Discover tracks).
+// Bookmarks — saved pointers to share-links, Discover tracks, or (PRP-6) a song
+// VERSION, optionally at a moment (t) + with a note.
 export interface BookmarkDto {
   id: string;
   targetShareToken: string | null;
   targetPublishedTrack: string | null;
+  targetVersionId: string | null;
+  t: number | null;
+  note: string | null;
+  identityVisible: boolean;
   title: string | null;
   artist: string | null;
   createdAt: string;
@@ -698,6 +703,23 @@ export interface BookmarkDto {
 export interface CreateBookmarkRequest {
   targetShareToken?: string | null;
   targetPublishedTrack?: string | null;
+  targetVersionId?: string | null;
+  t?: number | null;
+  note?: string | null;
+  identityVisible?: boolean;
+}
+
+// PRP-6 — anon bookmark via the share link (POST /v/{token}/bookmark).
+export interface AnonBookmarkRequest {
+  t?: number | null;
+  note?: string | null;
+}
+
+// PRP-6 — author signal (D5.4): aggregate count (incl. anon, anonymously) + the
+// subset of named bookmarkers who opted into visibility.
+export interface BookmarkSignalDto {
+  count: number;
+  identified: ActorRefDto[];
 }
 
 export interface CompareSideDto {

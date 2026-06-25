@@ -175,10 +175,20 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         builder.Entity<RackPreset>()
             .HasOne<ReviewerSuggestion>().WithMany().HasForeignKey(p => p.FromSuggestionId)
             .OnDelete(DeleteBehavior.SetNull);
+        // PRP-6 swapped this 2-way CHECK → 3-way (exactly one of
+        // {target_share_token, target_published_track, target_version_id}) — the
+        // legacy /share rows (target_share_token set) stay valid. Mirrors the
+        // PRP-3 swap on track_comments.
         builder.Entity<TrackBookmark>().ToTable(t => t.HasCheckConstraint(
             "ck_track_bookmarks_one_target",
-            "(target_share_token IS NOT NULL AND target_published_track IS NULL) "
-            + "OR (target_share_token IS NULL AND target_published_track IS NOT NULL)"));
+            "(CASE WHEN target_share_token IS NOT NULL THEN 1 ELSE 0 END "
+            + "+ CASE WHEN target_published_track IS NOT NULL THEN 1 ELSE 0 END "
+            + "+ CASE WHEN target_version_id IS NOT NULL THEN 1 ELSE 0 END) = 1"));
+        builder.Entity<TrackBookmark>().HasIndex(b => b.TargetVersionId)
+            .HasDatabaseName("ix_track_bookmarks_target_version_id");
+        builder.Entity<TrackBookmark>()
+            .HasOne<SongVersion>().WithMany().HasForeignKey(b => b.TargetVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // Indexes for hot read paths
         builder.Entity<Analysis>().HasIndex(a => a.UserId);

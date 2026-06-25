@@ -1114,28 +1114,52 @@ class ReviewerSuggestion(Base):
 
 
 class TrackBookmark(Base):
+    # Listen V3 (PRP-6). Version-scoped bookmark (+t+note+identity opt-in), anon-capable
+    # (nullable user_id + bookmarker_anon_id, not ip_hash). 3-way polymorphic CHECK
+    # swapped from the original 2-way; legacy /share rows (target_share_token) stay valid.
     __tablename__ = "track_bookmarks"
     __table_args__ = (
         CheckConstraint(
-            "(target_share_token IS NOT NULL AND target_published_track IS NULL) "
-            "OR (target_share_token IS NULL AND target_published_track IS NOT NULL)",
+            "(CASE WHEN target_share_token IS NOT NULL THEN 1 ELSE 0 END "
+            "+ CASE WHEN target_published_track IS NOT NULL THEN 1 ELSE 0 END "
+            "+ CASE WHEN target_version_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
             name="ck_track_bookmarks_one_target",
         ),
         Index("ix_track_bookmarks_user_id", "user_id"),
+        Index("ix_track_bookmarks_target_version_id", "target_version_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         "user_id",
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
     )
     target_share_token: Mapped[Optional[str]] = mapped_column(
         "target_share_token", String(36), nullable=True
     )
     target_published_track: Mapped[Optional[uuid.UUID]] = mapped_column(
         "target_published_track", UUID(as_uuid=True), nullable=True
+    )
+    target_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "target_version_id",
+        UUID(as_uuid=True),
+        ForeignKey("song_versions.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    bookmarker_display_name: Mapped[Optional[str]] = mapped_column(
+        "bookmarker_display_name", String(120), nullable=True
+    )
+    bookmarker_anon_id: Mapped[Optional[str]] = mapped_column(
+        "bookmarker_anon_id", String(64), nullable=True
+    )
+    timestamp_seconds: Mapped[Optional[float]] = mapped_column(
+        "timestamp_seconds", Float, nullable=True
+    )
+    note: Mapped[Optional[str]] = mapped_column("note", String(280), nullable=True)
+    identity_visible: Mapped[bool] = mapped_column(
+        "identity_visible", Boolean, nullable=False, server_default="false", default=False
     )
     created_at: Mapped[datetime] = mapped_column(
         "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
