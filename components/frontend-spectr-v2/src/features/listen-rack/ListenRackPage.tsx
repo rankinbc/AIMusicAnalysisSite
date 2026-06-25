@@ -12,7 +12,13 @@
  * (rAF + setInterval + fixtures). See PORTING_NOTES.md for the wiring map.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
+import { getAccessToken } from '../../api/fetcher';
+import { useStemProposals } from '../../api/hooks';
+import { useAudioGraph, type AudioFrame } from '../listen/useAudioGraph';
+import { StemDeck, type DeckStem } from '../listen/StemDeck';
+import { useStemEngine } from '../listen/useStemEngine';
 import { CoverArt } from '../../ui/CoverArt';
 import {
   MODE_SURFACE_MATRIX, type AccessDto, type ActorRef, type ModeId,
@@ -22,11 +28,12 @@ import { type Identity, type RoomControl } from './identity';
 import {
   DIRECTORS, LASER_EFFECTS, LASER_PATTERNS, MANIFEST_BY_ID, ROOM_LISTENERS, REACTION_EMOJI, TRACK,
   type AnnouncementMsg, type Director, type ModuleManifest, type PresencePopItem,
-  type ReactionFeedItem, type VizState, DEFAULT_VIZ,
+  type ReactionFeedItem, type Track, type VizState, DEFAULT_VIZ,
 } from './data';
 import { hslToHex } from './helpers';
 import './listenRack.css';
 import { InlineRack } from './rackLayouts';
+import { pushFullRack } from './rackBindings';
 import { RightRail, VisualMeters, VisualsPanel } from './rail';
 import { useRackState, type RackPreset } from './rackState';
 import { Transport } from './transport';
@@ -36,10 +43,10 @@ import { VizStage } from './viz';
 
 interface VizPreset { id: string; name: string; viz: VizState; stages: string[]; director: string }
 
-function TrackHeader({ mode, modes, identity, onModeChange }: {
-  mode: ModeId; modes: ModeId[]; identity: Identity; onModeChange?: (m: ModeId) => void;
+function TrackHeader({ track, mode, modes, identity, onModeChange }: {
+  track: Track; mode: ModeId; modes: ModeId[]; identity: Identity; onModeChange?: (m: ModeId) => void;
 }) {
-  const t = TRACK;
+  const t = track;
   const surface = MODE_SURFACE_MATRIX[mode];
   const showSwitcher = identity.isOwner && onModeChange && modes.length > 1;
   return (
@@ -51,11 +58,13 @@ function TrackHeader({ mode, modes, identity, onModeChange }: {
           <span className="dot" style={{ animation: 'pulseGlow 1.6s ease-in-out infinite' }} />
         </div>
         <h1 style={{ fontSize: 23, fontWeight: 800, letterSpacing: '-0.015em', margin: '0 0 3px' }}>{t.name}</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 9 }}>
-          <Avatar handle={t.author} hue={168} size={20} />
-          <span className="mono" style={{ fontSize: 11, color: 'var(--text-2)' }}>by {t.author}</span>
-          <span className="mono" style={{ fontSize: 10.5, color: 'var(--muted)' }}>{t.handle}</span>
-        </div>
+        {t.author && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 9 }}>
+            <Avatar handle={t.author} hue={168} size={20} />
+            <span className="mono" style={{ fontSize: 11, color: 'var(--text-2)' }}>by {t.author}</span>
+            <span className="mono" style={{ fontSize: 10.5, color: 'var(--muted)' }}>{t.handle}</span>
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', alignItems: 'center' }}>
           <span className="pill cyan">{t.genre.name}</span>
           <span className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>{surface.blurb}</span>
@@ -122,11 +131,43 @@ export interface ListenRackPageProps {
   roomControl: RoomControl;
   onModeChange?: (m: ModeId) => void;
   onGrant?: (scope: 'rack' | 'visuals', actor: ActorRef | null) => void;
+  /** When set, the page plays the real uploaded audio for this version (Phase 1
+   *  port). When omitted, the page runs the mock rAF transport clock (demo route). */
+  versionId?: string;
+  /** Real track header/notes/sections/stats (Phase 2.5). Defaults to the TRACK
+   *  fixture for the mock demo route. */
+  track?: Track;
 }
 
-export function ListenRackPage({ mode, modes, identity, access, roomControl, onModeChange, onGrant }: ListenRackPageProps) {
-  const [playing, setPlaying] = useState(true);
-  const [position, setPosition] = useState(42);
+export function ListenRackPage({ mode, modes, identity, access, roomControl, onModeChange, onGrant, versionId, track: trackProp }: ListenRackPageProps) {
+  const track = trackProp ?? TRACK;
+  // ── Real-audio seam (Phase 1) ──
+  // `versionId` present ⇒ real mode: mount <audio> + the page-agnostic audio
+  // graph and drive the transport off the element. Absent ⇒ mock demo clock.
+  const realAudio = versionId != null;
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const graph = useAudioGraph(audioRef);
+  const audioUrl = useMemo(() => {
+    if (!versionId) return null;
+    const token = getAccessToken();
+    if (!token) return null;
+    // Dep is [versionId] ONLY — not the token. A silent refresh rotates the token
+    // but must not recompute this URL, or <audio src> would change and re-mount
+    // the element, resetting currentTime. Mirrors listen.$versionId.tsx.
+    return `/api/versions/${versionId}/audio?t=${encodeURIComponent(token)}`;
+  }, [versionId]);
+
+  // DEV-ONLY smoke harness: expose the rack page's audio-graph handle on window
+  // so the engine can be driven from the console (e.g. __spectrRackGraph
+  // .ensureContext()). Dead-code-eliminated in production builds.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    (window as unknown as { __spectrRackGraph?: typeof graph }).__spectrRackGraph = graph;
+  }, [graph]);
+
+  const [playing, setPlaying] = useState(!realAudio);
+  const [position, setPosition] = useState(realAudio ? 0 : 42);
+  const [duration, setDuration] = useState(realAudio ? 0 : track.durationSec);
   const [director, setDirector] = useState('off');
   const [viz, setViz] = useState<VizState>(DEFAULT_VIZ);
   const [stages, setStages] = useState<string[]>(['eq']);
@@ -135,9 +176,14 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
   const [pops, setPops] = useState<PresencePopItem[]>([]);
   const [feed, setFeed] = useState<ReactionFeedItem[]>([]);
   const [metersOpen, setMetersOpen] = useState(true);
+  // Real meter frame (Phase 2 Task 2): last AnalyserNode snapshot, throttled to
+  // ~12 Hz so the rail doesn't reconcile at the 60fps draw cadence. null until
+  // the first real frame (and always null on the mock route).
+  const [meterFrame, setMeterFrame] = useState<AudioFrame | null>(null);
+  const lastMeterTsRef = useRef(0);
   const [announcement, setAnnouncement] = useState<AnnouncementMsg | null>(null);
   const [myStatus, setMyStatus] = useState('🎧');
-  const [bottomView, setBottomView] = useState<'rack' | 'lights'>('rack');
+  const [bottomView, setBottomView] = useState<'rack' | 'lights' | 'stems'>('rack');
   const [vizPresets, setVizPresets] = useState<VizPreset[]>([]);
 
   const saveVizPreset = useCallback(() => setVizPresets((p) => [...p, { id: Math.random().toString(36).slice(2), name: 'Look ' + (p.length + 1), viz, stages: [...stages], director }]), [viz, stages, director]);
@@ -153,7 +199,52 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     setViz((v) => ({ ...v, barColor: hslToHex(pick(hues)), bg: hslToHex(pick(hues)), laserEffect: pick(LASER_EFFECTS), laserPattern: pick(LASER_PATTERNS), laserMove: Math.random() < 0.5, laserMono: Math.random() < 0.4, laserColor: hslToHex(pick(hues)), bgFlash: Math.random() < 0.4, bgFlashHz: 1 + Math.floor(Math.random() * 5), bgFlashColor: hslToHex(pick(hues)) }));
   }, []);
 
-  const rs = useRackState();
+  const rs = useRackState(realAudio ? graph : null);
+  // Latest rack snapshot for the first-play full sync (avoids putting the
+  // render-fresh `rs` object in togglePlay's deps).
+  const rsRef = useRef(rs);
+  rsRef.current = rs;
+
+  // ── Pitch lane (Phase 2.5): a separate buffer lane (NOT an insert), driven off
+  // the rack's pitch module. pitchModeRef = imperative flag for togglePlay/seek;
+  // pitchActive = reactive flag so effects re-run after the async decode resolves.
+  // Real mode only; mirrors listen.$versionId.tsx (pitch + tempo are coupled). ──
+  const pitchModeRef = useRef(false);
+  const [pitchActive, setPitchActive] = useState(false);
+  const pitchEnabled = realAudio && !!rs.mod.pitch.enabled;
+  const pitchSemitones = Number(rs.mod.pitch.semitones) || 0;
+  const pitchCents = Number(rs.mod.pitch.cents) || 0;
+
+  // ── Stem deck (Phase 2.5 parity): real per-stem audio via the stems pipeline,
+  // mutually exclusive with the single-track graph. Real mode only; ported from
+  // listen.$versionId.tsx. ──
+  const { data: stemProposals, isLoading: stemsLoading } = useStemProposals(versionId ?? '', realAudio);
+  const deckStems = useMemo<DeckStem[]>(
+    () => (stemProposals?.stems ?? []).map((st) => ({
+      id: st.id,
+      role: st.confirmedRole ?? st.detectedRole ?? null,
+      filename: st.originalFilename,
+    })),
+    [stemProposals],
+  );
+  const stemEngine = useStemEngine(() => graph.ensureContext());
+  const [stemPlaying, setStemPlaying] = useState(false);
+  const stemUrl = useCallback(
+    (stemId: string) =>
+      `/api/versions/${versionId}/stems/${stemId}/audio?t=${encodeURIComponent(getAccessToken() ?? '')}`,
+    [versionId],
+  );
+  // Entering stem mode pauses the single-track lanes (MediaElement + pitch).
+  const activateStemMode = useCallback(() => {
+    if (pitchModeRef.current && graph.pitchPlaying()) graph.pitchPause();
+    const a = audioRef.current;
+    if (a && !a.paused) a.pause();
+    setPlaying(false);
+  }, [graph]);
+  // Reverse exclusivity: starting the single-track audio stops the stem deck.
+  const stopStems = useCallback(() => {
+    setStemPlaying((prev) => { if (prev) stemEngine.pause(); return false; });
+  }, [stemEngine]);
 
   const directorObj: Director | undefined = useMemo(() => DIRECTORS.find((d) => d.id === director), [director]);
   const activeModules: ModuleManifest[] = useMemo(() => rs.order.filter((id) => rs.mod[id].enabled).map((id) => MANIFEST_BY_ID[id]), [rs.order, rs.mod]);
@@ -173,21 +264,130 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     if (d && d.apply && !d.behaviorOnly) setViz((s) => ({ ...s, ...d.apply }));
   }, []);
 
-  // ── Transport clock (MOCK rAF) — replace with the real player transport ──
+  // ── Transport clock (MOCK rAF) — demo route only; real mode drives off <audio> ──
   useEffect(() => {
+    if (realAudio) return undefined;
     if (!playing) return undefined;
     let raf = 0;
     const start = performance.now();
     const p0 = posRef.current;
     const f = () => {
       const p = p0 + (performance.now() - start) / 1000;
-      if (p >= TRACK.durationSec) { setPosition(0); setPlaying(false); return; }
+      if (p >= track.durationSec) { setPosition(0); setPlaying(false); return; }
       setPosition(p);
       raf = requestAnimationFrame(f);
     };
     raf = requestAnimationFrame(f);
     return () => cancelAnimationFrame(raf);
-  }, [playing]);
+  }, [playing, realAudio, track]);
+
+  // ── Real-audio transport (element-driven). No-op in mock mode (audioRef null). ──
+  // Position is tracked off `timeupdate` and duration off `durationchange` /
+  // `loadedmetadata`, mirroring listen.$versionId.tsx so a token-refresh re-mount
+  // (which can't happen here — see the audioUrl memo) wouldn't jump the playhead.
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return undefined;
+    const onTime = () => setPosition(a.currentTime);
+    const onDur = () => { if (Number.isFinite(a.duration)) setDuration(a.duration); };
+    const onEnd = () => setPlaying(false);
+    const onErr = () => { setPlaying(false); toast.error('Could not load audio. Try refreshing.'); };
+    a.addEventListener('timeupdate', onTime);
+    a.addEventListener('loadedmetadata', onDur);
+    a.addEventListener('durationchange', onDur);
+    a.addEventListener('ended', onEnd);
+    a.addEventListener('error', onErr);
+    return () => {
+      a.removeEventListener('timeupdate', onTime);
+      a.removeEventListener('loadedmetadata', onDur);
+      a.removeEventListener('durationchange', onDur);
+      a.removeEventListener('ended', onEnd);
+      a.removeEventListener('error', onErr);
+    };
+  }, [audioUrl]);
+
+  // ── Real meter loop (Phase 2 Task 2). rAF reads the post-rack AnalyserNode and
+  // publishes a throttled frame to the meter rail. Real mode + playing only. ──
+  useEffect(() => {
+    if (!realAudio || !playing) return undefined;
+    let raf = 0;
+    const draw = () => {
+      const nowMs = performance.now();
+      if (nowMs - lastMeterTsRef.current >= 80) {
+        lastMeterTsRef.current = nowMs;
+        setMeterFrame(graph.readFrame());
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [realAudio, playing, graph]);
+
+  // Apply detune to the live BufferSource: on enter (pitchActive flips true) and
+  // whenever semitones/cents change while active.
+  useEffect(() => {
+    if (pitchActive) graph.setPitchDetune(pitchSemitones, pitchCents);
+  }, [pitchSemitones, pitchCents, pitchActive, graph]);
+
+  // Enter/exit the pitch buffer lane on the rack's pitch toggle. Decoding the
+  // whole file can take a few seconds on long FLACs.
+  useEffect(() => {
+    let cancelled = false;
+    const a = audioRef.current;
+    if (!realAudio || !a || !audioUrl) return undefined;
+    if (pitchEnabled && !pitchModeRef.current) {
+      const wasPlaying = !a.paused;
+      const startedAt = a.currentTime;
+      a.pause();
+      setPlaying(false);
+      try {
+        graph.ensureContext();
+      } catch (err) {
+        toast.error(`Audio engine failed: ${err instanceof Error ? err.message : String(err)}`);
+        rs.setEnabled('pitch', false);
+        return undefined;
+      }
+      graph
+        .enterPitchMode(audioUrl, startedAt)
+        .then(() => {
+          if (cancelled) return;
+          pitchModeRef.current = true;
+          setPitchActive(true);
+          const bufDur = graph.pitchDuration();
+          if (bufDur > 0) setDuration(bufDur);
+          setPosition(startedAt);
+          if (wasPlaying) { graph.pitchResume(); setPlaying(true); }
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          toast.error(`Pitch decode failed: ${err instanceof Error ? err.message : String(err)}`);
+          rs.setEnabled('pitch', false);
+        });
+    } else if (!pitchEnabled && pitchModeRef.current) {
+      const wasPlaying = graph.pitchPlaying();
+      const pos = graph.exitPitchMode();
+      pitchModeRef.current = false;
+      setPitchActive(false);
+      a.currentTime = pos;
+      setPosition(pos);
+      if (wasPlaying) {
+        a.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+      }
+    }
+    return () => { cancelled = true; };
+    // semitones/cents are intentionally excluded — the detune effect owns those;
+    // re-running here on every knob turn would re-enter pitch mode.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pitchEnabled, audioUrl, realAudio, graph]);
+
+  // Position tick in pitch mode (the BufferSource emits no timeupdate).
+  useEffect(() => {
+    if (!pitchActive) return undefined;
+    let raf = 0;
+    const tick = () => { setPosition(graph.pitchCurrentTime()); raf = requestAnimationFrame(tick); };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [pitchActive, graph]);
 
   // Per-mode layout defaults (spec §04): Room → full light show + minimal
   // metering; Work/View → rack-first + prominent metering.
@@ -231,25 +431,80 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
 
   useEffect(() => { if (!announcement) return undefined; const t = setTimeout(() => setAnnouncement(null), 4800); return () => clearTimeout(t); }, [announcement]);
 
+  // Transport actions. Real mode operates the <audio> element (ensureContext on
+  // the gesture BEFORE play(), per the autoplay policy); mock mode toggles the
+  // rAF clock. `seek` takes seconds (Transport already converts pct→seconds).
+  const togglePlay = useCallback(() => {
+    if (!realAudio) { setPlaying((p) => !p); return; }
+    const a = audioRef.current;
+    if (!a) return;
+    // Pitch mode operates the BufferSource lane, not the <audio> element.
+    if (pitchModeRef.current) {
+      if (graph.pitchPlaying()) {
+        graph.pitchPause();
+        setPlaying(false);
+      } else {
+        try {
+          graph.ensureContext();
+        } catch (err) {
+          toast.error(`Audio engine failed: ${err instanceof Error ? err.message : String(err)}`);
+          return;
+        }
+        stopStems();
+        graph.pitchResume();
+        setPlaying(true);
+      }
+      return;
+    }
+    if (!a.paused) { a.pause(); setPlaying(false); return; }
+    stopStems();
+    try {
+      graph.ensureContext();
+      // Now that the AudioContext + nodes exist, sync the full rack so any knob
+      // moved (or preset recalled) while paused is reflected before audio starts.
+      pushFullRack(graph, rsRef.current.mod, rsRef.current.order, rsRef.current.masterBypass);
+    } catch (err) {
+      toast.error(`Audio engine failed: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+    a.play()
+      .then(() => setPlaying(true))
+      .catch((err: unknown) => {
+        toast.error(`Playback failed: ${err instanceof Error ? err.message : String(err)}`);
+        setPlaying(false);
+      });
+  }, [realAudio, graph, stopStems]);
+
+  const seek = useCallback((t: number) => {
+    if (!realAudio) { setPosition(t); return; }
+    if (pitchModeRef.current) { graph.pitchSeek(t); setPosition(t); return; }
+    const a = audioRef.current;
+    if (!a) return;
+    a.currentTime = t;
+    setPosition(t);
+  }, [realAudio, graph]);
+
   const cap = resolveCapabilities(mode, identity, roomControl, access);
   const rackReadOnly = cap.rackReadOnly;
 
   return (
     <div className="lr-shell">
       <div className="lr-page">
-        <TrackHeader mode={mode} modes={modes} identity={identity} {...(onModeChange ? { onModeChange } : {})} />
+        <TrackHeader track={track} mode={mode} modes={modes} identity={identity} {...(onModeChange ? { onModeChange } : {})} />
 
         <div className="lr-grid">
           <div style={{ minWidth: 0 }}>
             <div className="card" style={{ overflow: 'hidden', position: 'relative' }}>
               <PresencePops items={pops} />
-              <VisualMeters track={TRACK} playing={playing} open={metersOpen} setOpen={setMetersOpen} />
+              <VisualMeters track={track} playing={playing} open={metersOpen} setOpen={setMetersOpen}
+                frame={realAudio ? meterFrame : null} />
               <VizStage playing={playing} stages={stages} setStages={setStages} viz={viz}
-                director={directorObj} height={440} onDrop={handleDrop} myStatus={myStatus} activeModules={activeModules} />
+                director={directorObj} height={440} onDrop={handleDrop} myStatus={myStatus} activeModules={activeModules}
+                {...(realAudio ? { getFrame: () => graph.readFrame() } : {})} />
               <CoachToast msg={announcement} />
               <div style={{ borderTop: '1px solid var(--border)' }}>
-                <Transport track={TRACK} playing={playing} position={position} onTogglePlay={() => setPlaying((p) => !p)}
-                  onSeek={setPosition} notes={TRACK.notes} onNoteClick={(n) => { setActiveNote(n.id); setPosition(n.t); }} activeNote={activeNote} reactions={feed} />
+                <Transport track={track} playing={playing} position={position} duration={duration} onTogglePlay={togglePlay}
+                  onSeek={seek} notes={track.notes} onNoteClick={(n) => { setActiveNote(n.id); seek(n.t); }} activeNote={activeNote} reactions={feed} />
               </div>
             </div>
 
@@ -257,6 +512,10 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
               <div style={{ display: 'flex', gap: 6, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                 <button type="button" onClick={() => setBottomView('rack')} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 11, fontWeight: 700, padding: '7px 14px', borderRadius: 8, color: bottomView === 'rack' ? '#06151a' : 'var(--muted)', background: bottomView === 'rack' ? 'var(--cyan)' : 'rgba(255,255,255,0.03)', border: '1px solid ' + (bottomView === 'rack' ? 'transparent' : 'var(--border)') }}>▦ RACK</button>
                 <button type="button" onClick={() => setBottomView('lights')} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 11, fontWeight: 700, padding: '7px 14px', borderRadius: 8, color: bottomView === 'lights' ? '#06151a' : 'var(--muted)', background: bottomView === 'lights' ? 'var(--cyan)' : 'rgba(255,255,255,0.03)', border: '1px solid ' + (bottomView === 'lights' ? 'transparent' : 'var(--border)') }}>☀ VISUALS</button>
+                {realAudio && (
+                  <button type="button" onClick={() => setBottomView('stems')} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 11, fontWeight: 700, padding: '7px 14px', borderRadius: 8, color: bottomView === 'stems' ? '#06151a' : 'var(--muted)', background: bottomView === 'stems' ? 'var(--cyan)' : 'rgba(255,255,255,0.03)', border: '1px solid ' + (bottomView === 'stems' ? 'transparent' : 'var(--border)') }}>♫ STEMS</button>
+                )}
+                {bottomView !== 'stems' && (
                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <select
                     value=""
@@ -280,7 +539,7 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
                       </div>
                     );
                   })()}
-                </div>
+                </div>)}
               </div>
               {bottomView === 'rack'
                 ? (rackReadOnly
@@ -293,16 +552,23 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
                     </div>
                   )
                   : <InlineRack rs={rs} playing={playing} controller={roomControl.rackHolder?.handle ?? null} />)
-                : <VisualsPanel stages={stages} toggleStage={toggleStage} director={director} setDirector={chooseDirector} viz={viz} setViz={setViz} onRandomize={randomizeViz} />}
+                : bottomView === 'stems'
+                  ? <StemDeck stems={deckStems} isLoading={stemsLoading} stemUrl={stemUrl} engine={stemEngine}
+                      playing={stemPlaying} onActivate={activateStemMode} onPlayPause={setStemPlaying} />
+                  : <VisualsPanel stages={stages} toggleStage={toggleStage} director={director} setDirector={chooseDirector} viz={viz} setViz={setViz} onRandomize={randomizeViz} />}
             </div>
           </div>
 
-          <RightRail mode={mode} access={access} cap={cap} rs={rs} track={TRACK} position={position}
-            activeNote={activeNote} onNoteClick={(n) => { setActiveNote(n.id); setPosition(n.t); }} onSeek={setPosition}
+          <RightRail mode={mode} access={access} cap={cap} rs={rs} track={track} position={position}
+            activeNote={activeNote} onNoteClick={(n) => { setActiveNote(n.id); seek(n.t); }} onSeek={seek}
             onReact={(e) => { setMyStatus(e); spawnReaction(e, 'maek'); }} feed={feed} announce={announce} myStatus={myStatus}
             roomControl={roomControl} onGrant={grantControl} />
         </div>
       </div>
+
+      {audioUrl && (
+        <audio ref={audioRef} src={audioUrl} preload="auto" crossOrigin="anonymous" />
+      )}
     </div>
   );
 }

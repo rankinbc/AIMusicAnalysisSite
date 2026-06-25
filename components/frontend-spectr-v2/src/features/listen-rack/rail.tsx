@@ -16,6 +16,7 @@ import {
   ROOM_LISTENERS, STAGES, type RackPatch, type ReactionFeedItem, type Track, type TrackNote, type VizState,
 } from './data';
 import { Coach } from '../../ui/Coach';
+import type { AudioFrame } from '../listen/useAudioGraph';
 import { cssVar, fmtTime, hslToHex } from './helpers';
 import type { CapabilitySet } from './capabilities';
 import { sameActor, type RoomControl } from './identity';
@@ -93,16 +94,23 @@ function MiniBar({ label, value, fmt, min, max, target, danger, accent = 'var(--
   );
 }
 
-export function VisualMeters({ track, playing, open, setOpen }: {
-  track: Track; playing: boolean; open: boolean; setOpen: (v: boolean) => void;
+export function VisualMeters({ track, playing, open, setOpen, frame }: {
+  track: Track; playing: boolean; open: boolean; setOpen: (v: boolean) => void; frame?: AudioFrame | null;
 }) {
-  const lm = useLiveMeters(track, playing);
-  const corrPct = (lm.corr + 1) / 2;
+  const synthetic = useLiveMeters(track, playing);
+  // Real AnalyserNode frame (Phase 2) when supplied; synthetic fallback on the
+  // mock demo route. Frame levels can be -Infinity in silence — guard display.
+  const lm: LiveMeters = frame
+    ? { lufsS: frame.lufsShort, peak: frame.truePeakDb, corr: frame.correlation, rms: frame.rmsDb }
+    : synthetic;
+  const txt = (v: number) => (Number.isFinite(v) ? v.toFixed(1) : '−∞');
+  const corr = Number.isFinite(lm.corr) ? lm.corr : 0;
+  const corrPct = (corr + 1) / 2;
   if (!open) {
     return (
       <button type="button" onClick={() => setOpen(true)} className="mono" style={{ position: 'absolute', top: 12, right: 12, zIndex: 7, fontSize: 9.5, padding: '6px 10px', borderRadius: 8, background: 'rgba(7,10,18,0.72)', border: '1px solid var(--border)', backdropFilter: 'blur(10px)', color: 'var(--text-2)', display: 'inline-flex', alignItems: 'center', gap: 7 }}>
         <span style={{ width: 6, height: 6, borderRadius: '50%', background: playing ? 'var(--cyan)' : 'var(--muted)', boxShadow: playing ? '0 0 6px var(--cyan)' : 'none' }} />
-        <span style={{ color: 'var(--cyan)', fontWeight: 700 }}>{lm.lufsS.toFixed(1)}</span> LUFS-S ▸
+        <span style={{ color: 'var(--cyan)', fontWeight: 700 }}>{txt(lm.lufsS)}</span> LUFS-S ▸
       </button>
     );
   }
@@ -112,17 +120,17 @@ export function VisualMeters({ track, playing, open, setOpen }: {
         <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.16em', color: 'var(--cyan)', fontWeight: 700 }}>METERING</span>
         <button type="button" onClick={() => setOpen(false)} className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>▾</button>
       </div>
-      <MiniBar label="LUFS-S" value={lm.lufsS} fmt={lm.lufsS.toFixed(1)} min={-36} max={0} target={-14} />
-      <MiniBar label="TRUE PEAK" value={lm.peak} fmt={`${lm.peak.toFixed(1)}`} min={-18} max={0} danger={-1} accent="var(--cyan)" />
-      <MiniBar label="RMS" value={lm.rms} fmt={lm.rms.toFixed(1)} min={-36} max={0} accent="var(--violet)" />
+      <MiniBar label="LUFS-S" value={lm.lufsS} fmt={txt(lm.lufsS)} min={-36} max={0} target={-14} />
+      <MiniBar label="TRUE PEAK" value={lm.peak} fmt={txt(lm.peak)} min={-18} max={0} danger={-1} accent="var(--cyan)" />
+      <MiniBar label="RMS" value={lm.rms} fmt={txt(lm.rms)} min={-36} max={0} accent="var(--violet)" />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <span className="mono" style={{ fontSize: 8, letterSpacing: '0.1em', color: 'var(--muted)' }}>CORR</span>
-          <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: lm.corr < 0 ? 'var(--red)' : 'var(--cyan)' }}>{lm.corr >= 0 ? '+' : ''}{lm.corr.toFixed(2)}</span>
+          <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: corr < 0 ? 'var(--red)' : 'var(--cyan)' }}>{corr >= 0 ? '+' : ''}{corr.toFixed(2)}</span>
         </div>
         <div style={{ position: 'relative', height: 5, background: 'rgba(255,255,255,0.07)', borderRadius: 3 }}>
           <div style={{ position: 'absolute', left: '50%', top: -1, bottom: -1, width: 1, background: 'rgba(255,255,255,0.25)' }} />
-          <div style={{ position: 'absolute', top: '50%', left: `${corrPct * 100}%`, width: 8, height: 8, borderRadius: '50%', transform: 'translate(-50%,-50%)', background: lm.corr < 0 ? 'var(--red)' : 'var(--cyan)', boxShadow: `0 0 6px ${lm.corr < 0 ? 'var(--red)' : 'var(--cyan)'}` }} />
+          <div style={{ position: 'absolute', top: '50%', left: `${corrPct * 100}%`, width: 8, height: 8, borderRadius: '50%', transform: 'translate(-50%,-50%)', background: corr < 0 ? 'var(--red)' : 'var(--cyan)', boxShadow: `0 0 6px ${corr < 0 ? 'var(--red)' : 'var(--cyan)'}` }} />
         </div>
       </div>
     </div>

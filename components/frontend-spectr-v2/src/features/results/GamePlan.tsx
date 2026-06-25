@@ -107,7 +107,7 @@ export function GamePlan({
       toast.error('No version attached — open Listen from the song page.');
       return;
     }
-    void navigate({ to: '/listen/$versionId', params: { versionId } });
+    void navigate({ to: '/listen-rack/$versionId', params: { versionId } });
   }, [navigate, versionId]);
 
   const handleRun = useCallback(

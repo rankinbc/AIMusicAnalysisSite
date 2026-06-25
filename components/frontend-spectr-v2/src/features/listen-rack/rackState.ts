@@ -1,15 +1,20 @@
 /* SPECTR · Listen rack redesign — rack state hooks (non-component module).
  *
  * SWAP BOUNDARY (see PORTING_NOTES.md):
- *   useRackState → replace internals with the real audio-graph store, keeping
- *     the SAME return shape so the renderers don't change.
- *   useFakeGR   → replace with readEffectMeter(id) for comp/gate/limiter.
+ *   useRackState → real audio-graph store when a graph is supplied (Phase 2),
+ *     keeping the SAME return shape so the renderers don't change.
+ *   useGainReduction → reads readEffectMeter(id) for comp/gate/limiter when a
+ *     graph is present; synthetic fallback on the mock route.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   DEFAULT_ORDER, MODULE_DEFAULTS, type EqBand, type ModuleState, type ParamValue, type RackPatch,
 } from './data';
+import {
+  isInsertEffect, pushCoach, pushEnabled, pushEqBands, pushFullRack, pushParam,
+  type RackGraphBindings,
+} from './rackBindings';
 
 export interface RackPreset {
   id: string;
@@ -39,6 +44,9 @@ export interface RackState {
   presets: RackPreset[];
   savePreset: (by: string) => void;
   recallPreset: (pr: RackPreset) => void;
+  /** The live audio graph (Phase 2) when on the real-audio route; null on mock.
+   *  Renderers use it (via useGainReduction) to read real meters. */
+  graph: RackGraphBindings | null;
 }
 
 const cloneDefaults = (): Record<string, ModuleState> => {
@@ -50,7 +58,11 @@ const cloneDefaults = (): Record<string, ModuleState> => {
 };
 
 // ── rack state hook ────────────────────────────────────────────────────────
-export function useRackState(): RackState {
+// `graph` (Phase 2): when supplied (real-audio route), every mutation also pushes
+// to the audio graph so the knob is audible. Omit/null (mock demo route) keeps
+// the rack purely local. The initial full-rack sync runs from the page once the
+// AudioContext exists (first play) — see ListenRackPage.togglePlay.
+export function useRackState(graph?: RackGraphBindings | null): RackState {
   const [mod, setMod] = useState<Record<string, ModuleState>>(cloneDefaults);
   const [order, setOrder] = useState<string[]>([...DEFAULT_ORDER]);
   const [masterBypass, setMasterBypass] = useState(false);
@@ -58,20 +70,38 @@ export function useRackState(): RackState {
   const [showBind, setShowBind] = useState(false);
   const [presets, setPresets] = useState<RackPreset[]>([]);
 
-  const setParam = useCallback((id: string, key: string, val: ParamValue) =>
-    setMod((m) => ({ ...m, [id]: { ...m[id], [key]: val } })), []);
-  const setEnabled = useCallback((id: string, on: boolean) =>
-    setMod((m) => ({ ...m, [id]: { ...m[id], enabled: on } })), []);
-  const setEqBands = useCallback((bands: EqBand[]) =>
-    setMod((m) => ({ ...m, eq: { ...m.eq, bands } })), []);
+  const setParam = useCallback((id: string, key: string, val: ParamValue) => {
+    if (graph) pushParam(graph, id, key, val);
+    setMod((m) => ({ ...m, [id]: { ...m[id], [key]: val } }));
+  }, [graph]);
+  const setEnabled = useCallback((id: string, on: boolean) => {
+    if (graph) pushEnabled(graph, id, on);
+    setMod((m) => ({ ...m, [id]: { ...m[id], enabled: on } }));
+  }, [graph]);
+  const setEqBands = useCallback((bands: EqBand[]) => {
+    if (graph) pushEqBands(graph, bands);
+    setMod((m) => ({ ...m, eq: { ...m.eq, bands } }));
+  }, [graph]);
+  const reorder = useCallback((next: string[]) => {
+    if (graph) graph.reorder(next.filter(isInsertEffect));
+    setOrder(next);
+  }, [graph]);
+  const setMasterBypassBound = useCallback((v: boolean) => {
+    graph?.setMasterBypass(v);
+    setMasterBypass(v);
+  }, [graph]);
   const reset = useCallback(() => {
+    graph?.resetAll();
     setMod(cloneDefaults()); setOrder([...DEFAULT_ORDER]); setMasterBypass(false);
-  }, []);
-  const applyCoach = useCallback((apply: RackPatch) => setMod((m) => {
-    const next = { ...m };
-    Object.keys(apply).forEach((id) => { next[id] = { ...m[id], ...apply[id] } as ModuleState; });
-    return next;
-  }), []);
+  }, [graph]);
+  const applyCoach = useCallback((apply: RackPatch) => {
+    if (graph) pushCoach(graph, apply);
+    setMod((m) => {
+      const next = { ...m };
+      Object.keys(apply).forEach((id) => { next[id] = { ...m[id], ...apply[id] } as ModuleState; });
+      return next;
+    });
+  }, [graph]);
   const savePreset = useCallback((by: string) => setPresets((p) => [...p, {
     id: Math.random().toString(36).slice(2),
     name: `Preset ${p.length + 1}`,
@@ -81,33 +111,49 @@ export function useRackState(): RackState {
     n: Object.values(mod).filter((s) => s.enabled).length,
   }]), [order, mod]);
   const recallPreset = useCallback((pr: RackPreset) => {
+    if (graph) pushFullRack(graph, pr.mod, pr.order, masterBypass);
     setMod(JSON.parse(JSON.stringify(pr.mod)) as Record<string, ModuleState>);
     setOrder([...pr.order]);
-  }, []);
+  }, [graph, masterBypass]);
   const activeCount = Object.values(mod).filter((s) => s.enabled).length;
 
   return {
-    mod, order, setOrder, masterBypass, setMasterBypass, selected, setSelected, showBind, setShowBind,
+    mod, order, setOrder: reorder, masterBypass, setMasterBypass: setMasterBypassBound,
+    selected, setSelected, showBind, setShowBind,
     setParam, setEnabled, setEqBands, reset, applyCoach, activeCount, presets, savePreset, recallPreset,
+    graph: graph ?? null,
   };
 }
 
-// ── fake live gain-reduction for comp/gate/limiter ─────────────────────────
-export function useFakeGR(enabled: boolean, playing: boolean, depth = 6): number {
+// ── live gain-reduction for comp/gate/limiter ──────────────────────────────
+// Real meter (readEffectMeter) when a graph is supplied; synthetic sinusoid
+// fallback for the mock demo route. `depth` only shapes the synthetic curve.
+export function useGainReduction(
+  graph: RackGraphBindings | null | undefined,
+  id: string,
+  enabled: boolean,
+  playing: boolean,
+  depth = 6,
+): number {
   const [gr, setGr] = useState(0);
   useEffect(() => {
     if (!enabled || !playing) { setGr(0); return undefined; }
     let raf = 0;
     const t0 = performance.now();
     const tick = () => {
-      const t = (performance.now() - t0) / 1000;
-      const v = -(depth * (0.5 + 0.5 * Math.abs(Math.sin(t * 2.1)) * (0.6 + 0.4 * Math.sin(t * 5.3))));
-      setGr(Math.round(v * 10) / 10);
+      if (graph && isInsertEffect(id)) {
+        const v = graph.readEffectMeter(id)?.reductionDb;
+        setGr(typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 10) / 10 : 0);
+      } else {
+        const t = (performance.now() - t0) / 1000;
+        const v = -(depth * (0.5 + 0.5 * Math.abs(Math.sin(t * 2.1)) * (0.6 + 0.4 * Math.sin(t * 5.3))));
+        setGr(Math.round(v * 10) / 10);
+      }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [enabled, playing, depth]);
+  }, [graph, id, enabled, playing, depth]);
   return gr;
 }
 

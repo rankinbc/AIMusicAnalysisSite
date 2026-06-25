@@ -72,7 +72,7 @@ export function SongHeader({
       <div className={s.actions}>
         {versionId ? (
           <Link
-            to="/listen/$versionId"
+            to="/listen-rack/$versionId"
             params={{ versionId }}
             className={`btn primary ${s.primary}`}
           >

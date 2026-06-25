@@ -5,11 +5,14 @@ import type { ReactionFeedItem, Track, TrackNote } from './data';
 import { fmtTime } from './helpers';
 
 export function Transport({
-  track, playing, position, onTogglePlay, onSeek, notes, onNoteClick, activeNote, reactions = [],
+  track, playing, position, duration, onTogglePlay, onSeek, notes, onNoteClick, activeNote, reactions = [],
 }: {
   track: Track;
   playing: boolean;
   position: number;
+  /** Real audio duration (seconds). Falls back to the fixture's durationSec
+   *  until the <audio> element reports metadata, or in the mock demo route. */
+  duration?: number;
   onTogglePlay: () => void;
   onSeek: (t: number) => void;
   notes: TrackNote[];
@@ -17,7 +20,7 @@ export function Transport({
   activeNote: string | null;
   reactions?: ReactionFeedItem[];
 }) {
-  const dur = track.durationSec;
+  const dur = duration && duration > 0 ? duration : track.durationSec;
   const pct = position / dur;
 
   const waveform = useMemo(() => {

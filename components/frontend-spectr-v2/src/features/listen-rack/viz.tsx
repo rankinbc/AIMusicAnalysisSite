@@ -10,6 +10,7 @@
 import { forwardRef, Fragment, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 
 import { CoverArt } from '../../ui/CoverArt';
+import type { AudioFrame } from '../listen/useAudioGraph';
 import {
   ROOM_LISTENERS, type Director, type EqBand, type ModuleManifest, type VizState,
 } from './data';
@@ -370,7 +371,7 @@ function RackStage({ modules }: { modules: ModuleManifest[] }) {
 
 // ── The stage ──────────────────────────────────────────────────────────────
 export function VizStage({
-  playing, stages, setStages, viz, director, height = 300, compact = false, onStageEngine, onDrop, myStatus, activeModules,
+  playing, stages, setStages, viz, director, height = 300, compact = false, onStageEngine, onDrop, myStatus, activeModules, getFrame,
 }: {
   playing: boolean;
   stages: string[];
@@ -383,6 +384,9 @@ export function VizStage({
   onDrop?: () => void;
   myStatus: string;
   activeModules: ModuleManifest[];
+  /** Real AnalyserNode frame source (Phase 2 Task 3). When supplied, the spectrum
+   *  bars + energy come from the live mix; absent ⇒ synthetic (mock demo route). */
+  getFrame?: () => AudioFrame | null;
 }) {
   const stageRef = useRef<StageCanvasHandle>(null);
   const laserRef = useRef<LaserFanHandle>(null);
@@ -394,6 +398,7 @@ export function VizStage({
   const accentHex = useMemo(() => cssVar(viz.barColor || 'var(--cyan)'), [viz.barColor]);
   const stageRef2 = useRef(stages); stageRef2.current = stages;
   const onDropRef = useRef(onDrop); onDropRef.current = onDrop;
+  const getFrameRef = useRef(getFrame); getFrameRef.current = getFrame;
 
   // single rAF: compute frame → drive canvas + laser; auto-director cycles stage
   useEffect(() => {
@@ -411,6 +416,16 @@ export function VizStage({
       const dirE = (director && director.id !== 'off' && director.energy != null) ? director.energy / 100 : ((viz && viz.energy != null) ? viz.energy / 100 : 0.5);
       const lfo = 0.5 + 0.5 * Math.sin(now / 2600);
       f.energy = Math.max(0.08, Math.min(1, dirE * 0.7 + lfo * 0.4));
+      // Real audio (Phase 2 Task 3): override the synthetic spectrum + energy from
+      // the live AnalyserNode frame so the bars/laser/bg breathe with the actual
+      // mix. Beat/drop/flash stay synthetic — no new audio-driven full-field flash.
+      const realFrame = getFrameRef.current?.();
+      const hasReal = !!realFrame && realFrame.fftBins.length > 0;
+      if (hasReal && realFrame && realFrame.bandAverages.length > 0) {
+        const ba = realFrame.bandAverages;
+        let s = 0; for (let k = 0; k < ba.length; k++) s += ba[k];
+        f.energy = Math.max(0.08, Math.min(1, (s / ba.length) * 1.5));
+      }
       if (bgLayerRef.current) bgLayerRef.current.style.opacity = viz.bgSync ? (0.4 + f.energy * 0.9).toFixed(2) : '';
       const dropFx = !director || director.id === 'off' ? viz.dropFx : true;
       if (dropFx && now - lastDrop.current > (director && director.id === 'hype' ? 6000 : 9000) && lfo > 0.82) {
@@ -419,10 +434,23 @@ export function VizStage({
       }
       if (beat) f.pulse = 1; f.pulse *= 0.86; f.flash *= 0.8;
       const n = f.spectrum.length;
-      for (let i = 0; i < n; i++) {
-        const tilt = Math.pow(1 - i / n, 0.7);
-        const wob = 0.5 + 0.5 * Math.sin(now / 360 + i * 0.5) * Math.sin(now / 900 + i);
-        f.spectrum[i] = Math.max(0.02, Math.min(1, (tilt * 0.7 + 0.15) * (0.5 + wob * 0.7) * f.energy * (1 + f.pulse * 0.35)));
+      if (hasReal && realFrame) {
+        // Log-spaced down-sample of the real FFT to the bar count (mirrors the
+        // shipping /listen/$versionId draw loop) so bass doesn't dominate.
+        const bins = realFrame.fftBins;
+        const minLog = Math.log10(1), maxLog = Math.log10(bins.length);
+        for (let i = 0; i < n; i++) {
+          const lo = Math.floor(10 ** (minLog + (i / n) * (maxLog - minLog)));
+          const hi = Math.max(lo + 1, Math.floor(10 ** (minLog + ((i + 1) / n) * (maxLog - minLog))));
+          let sum = 0; for (let j = lo; j < hi && j < bins.length; j++) sum += bins[j];
+          f.spectrum[i] = Math.max(0.02, Math.min(1, (sum / Math.max(1, hi - lo)) * 1.4 * (1 + f.pulse * 0.2)));
+        }
+      } else {
+        for (let i = 0; i < n; i++) {
+          const tilt = Math.pow(1 - i / n, 0.7);
+          const wob = 0.5 + 0.5 * Math.sin(now / 360 + i * 0.5) * Math.sin(now / 900 + i);
+          f.spectrum[i] = Math.max(0.02, Math.min(1, (tilt * 0.7 + 0.15) * (0.5 + wob * 0.7) * f.energy * (1 + f.pulse * 0.35)));
+        }
       }
       if (director && director.id !== 'off' && director.stages && director.cycleSec) {
         if (now - autoLast.current > director.cycleSec * 1000) {

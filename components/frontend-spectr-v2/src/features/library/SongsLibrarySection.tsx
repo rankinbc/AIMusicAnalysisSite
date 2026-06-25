@@ -285,7 +285,7 @@ function SongCard({
     e.stopPropagation();
     if (!currentVersion) return;
     void navigate({
-      to: '/listen/$versionId',
+      to: '/listen-rack/$versionId',
       params: { versionId: currentVersion.id },
     });
   };

@@ -1,12 +1,15 @@
-# Listen Page — System Guide
+# Listen — Shared Audio Engine
 
-> **Living document.** This describes how the Listen page + its real-time audio
-> engine work end-to-end, for anyone (incl. Claude design) building on it. Keep it
-> updated as the feature changes — when you alter the engine, the handle, or the
-> rack, update the relevant section here in the same change.
+> **Living document.** `features/listen/` is now the **shared real-time Web Audio
+> engine**: the `useAudioGraph` handle, the modular `EffectUnit` graph (`audio/**`),
+> and the stem deck (`StemDeck` / `useStemEngine` / `stemGains`). The Listen PAGE
+> that consumes it lives in **`features/listen-rack/`** (route
+> `/listen-rack/$versionId`) — the legacy page that used to live here was retired
+> once the new page reached parity. Keep this updated when you change the engine,
+> the handle, or the stem deck.
 >
-> Last updated: 2026-06-24 (engine Phases 1–5 complete; UI revamp pending). Status:
-> the audio **engine is done + frozen**; the **rack UI** is the active redesign.
+> Last updated: 2026-06-25. Status: audio **engine done + frozen**; the V3 page port
+> (`features/listen-rack/`) is **complete** and is the only Listen page.
 
 ---
 
@@ -19,17 +22,16 @@ limiter, output trim) plus a separate pitch lane — while watching live visuali
 (spectrum, scope/goniometer, LUFS/true-peak). It's primarily a **mastering / loudness
 preview** of a finished stereo mix ("what would my track sound like with X").
 
-## 2. Page composition
+## 2. Where it's used
 
-Route: `src/routes/_app/listen.$versionId.tsx` (the page shell + data loading + state).
-It loads the version's analysis results, owns the `<audio>` element, creates the audio
-graph (`const graph = useAudioGraph(audioRef)`), and composes:
-- **Header** — cover/title.
-- **Visualizer stage** — spectrum / radial / spectrogram / laser (driven by `graph.readFrame()` in a rAF loop).
-- **Transport** — play, scrubber (section coloring), volume, timecode, add-note.
-- **The rack** — `features/listen/PreviewTools.tsx` today (the module cards). **This is what the UI redesign replaces.**
-- **Right rail** — meters, issues, DJ stem deck, notes.
-- **Pitch** panel — the separate pitch lane.
+The canonical Listen page is **`features/listen-rack/`** (route
+`src/routes/_app/listen-rack.$versionId.tsx`). That page owns the `<audio>` element,
+creates the graph (`const graph = useAudioGraph(audioRef)`), and composes the header,
+visualizer stage (driven by `graph.readFrame()` in a rAF loop), transport, the rack
+(`InlineRack` bound to the engine via `features/listen-rack/rackBindings.ts`), the
+right rail, the stem deck (`StemDeck`), and the pitch lane. See
+`features/listen-rack/PORTING_NOTES.md` for that page's wiring map. The legacy
+`/listen/$versionId` route now only redirects to `/listen-rack/$versionId`.
 
 ## 3. Audio engine architecture (`features/listen/`)
 
@@ -39,7 +41,7 @@ redesign — drive it through the handle (§4); don't reach into `audio/**`.
 ```
 features/listen/
   useAudioGraph.ts      thin composer hook: boundary nodes + pitch lane + analysers + the public handle
-  rackManifest.ts       UI-handoff: typed per-module/param descriptors (control/range/unit/default/tier)
+  StemDeck.tsx          per-stem DJ deck UI (solo/mute/volume); + useStemEngine.ts / stemGains.ts
   audio/
     EffectUnit.ts       EffectUnit<S> contract + makeDryWet() per-unit dry/wet bypass + EffectId union (13)
     state.ts            per-module param types + neutral defaults + DEFAULT_ORDER (single source of truth)
@@ -135,7 +137,7 @@ defaults `enabled:true` with flat bands (transparent). Own the band array in the
 ## 6. The 13 modules + pitch
 
 Full per-param detail (control kind, range, step, unit, default, enum options, tier):
-- **`rackManifest.ts`** — machine-readable; map over `RACK_MANIFEST` to render controls. `MASTERING_IDS` / `CREATIVE_IDS` give the tiering.
+- **`features/listen-rack/data.ts`** — `RACK_MANIFEST` / `MANIFEST_BY_ID` (typed per-param descriptors) + `MASTERING_IDS` / `CREATIVE_IDS` tiering. (Was `features/listen/rackManifest.ts`; retired into the page feature.)
 - **`PRPs/listen-dsp-rack-capabilities.md`** — human-readable manifest + design notes.
 - **`audio/state.ts`** — the authoritative ranges (comments) + defaults.
 
@@ -149,11 +151,12 @@ disclosure) = DJ Filter, Delay, Reverb, Pan, Tremolo, Gate, Bitcrusher.
   meters (gate/limiter) post over a `port` ~30 Hz; the unit caches the latest for synchronous reads.
 - `readFrame()` — the visualizer/page-level meters (spectrum, scope, RMS, short-LUFS, true-peak,
   L/R correlation). Poll both in the page's rAF loop.
-- **Ready-made polling hooks** (`meterHooks.ts`, design-agnostic): `useEffectMeter(graph, id)` →
-  live `EffectMeter` for comp/gate/limiter; `useAudioLevels(graph)` →
-  `{ rmsDb, lufsShort, truePeakDb, correlation }`. Both rAF-throttled + change-gated (re-render only
-  on change). For canvas visualizers (spectrum/scope) read `readFrame()` imperatively in your own
-  rAF instead — don't route the reused Float32Array buffers through React state.
+- **Consumption pattern** (see `features/listen-rack/`): the page runs one rAF loop reading
+  `graph.readFrame()` (throttled ~80 ms) → meter rail; `useGainReduction(graph, id, …)` in
+  `features/listen-rack/rackState.ts` reads `readEffectMeter` per metered module. For canvas
+  visualizers read `readFrame()` imperatively in your own rAF — don't route the reused
+  Float32Array buffers through React state. (The old design-agnostic `meterHooks.ts` was retired
+  with the legacy page.)
 
 ## 8. Behavior preservation (invariant)
 
@@ -181,8 +184,8 @@ O(1) running-max limiter.
 
 ## 11. Testing
 
-Web Audio / AudioWorklet do NOT run in jsdom. Only `audio/dsp/*` **pure math** is unit-tested
-(vitest, 400+ tests). AudioNode wiring, the composer, the hook, processors, and the worklet boot are
+Web Audio / AudioWorklet do NOT run in jsdom. Only the **pure math** (`audio/dsp/*`, `audio/state`,
+`stemGains`) is unit-tested (vitest). AudioNode wiring, the composer, the hook, processors, and the worklet boot are
 verified by `npx tsc -b` + `npm run build` + a **manual browser smoke** (`PRPs/listen-smoke-script.md` —
 the only real exercise of the runtime; run it before trusting the engine). Gates (from
 `components/frontend-spectr-v2`): `npx tsc -b` (the real typecheck — `tsc --noEmit` is a no-op here),
@@ -194,10 +197,15 @@ the only real exercise of the runtime; run it before trusting the engine). Gates
 - `PRPs/listen-dsp-rack-engine-phase{1..5}.md` + `-design.md` — per-phase plans/specs.
 - `PRPs/listen-dsp-rack-capabilities.md` — UI control-surface manifest + tiering + handle binding.
 - `PRPs/listen-smoke-script.md` — browser smoke procedure.
-- `rackManifest.ts` — typed param descriptors for the UI.
+- `features/listen-rack/data.ts` — typed param descriptors (`RACK_MANIFEST`) for the page UI.
 
 ## Change log
 
+- **2026-06-25** — Listen V3 page port complete; `features/listen-rack/` is the only Listen page
+  and the legacy page was retired. This folder is now the **shared engine** (`useAudioGraph`,
+  `StemDeck`/`useStemEngine`/`stemGains`, `audio/**`) consumed by the page. Deleted the legacy-only
+  UI + helpers, `rackManifest.ts`, and `meterHooks.ts`. Dev console harness on the new page is
+  `window.__spectrRackGraph`.
 - **2026-06-24** — Living doc created. Engine Phases 1–5 complete (13 modules, reorder, worklets,
   meters). EQ given a real unit bypass (now uniform with the other 12). UI-handoff prep added
   (rackManifest, smoke script, dev `window.__spectrGraph` harness). Remaining engine work: Phase 6
