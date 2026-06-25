@@ -23,7 +23,11 @@ export interface RoomControl {
 
 export type SessionHat = 'host' | 'dj' | 'vj' | 'listener';
 
-/** Stable identity key: type-prefixed so a user and an anon never collide. */
+/** Stable identity key: type-prefixed so a user and an anon never collide.
+ * NOTE: the `??` chain prefers `userId` — for a `user` that's the durable key.
+ * An `anon` is expected to carry NO `userId` (only `handle`/`displayName`), so
+ * it keys on those; the `type` prefix is what guarantees user↔anon never match.
+ * If real data ever puts a `userId` on an anon, key by handle/displayName here. */
 function actorKey(a: ActorRef): string {
   return `${a.type}:${a.userId ?? a.handle ?? a.displayName ?? ''}`;
 }
@@ -46,11 +50,18 @@ export function roleLabels(id: Identity, control: RoomControl): string[] {
   return sessionHats(id, control).map((h) => h.toUpperCase());
 }
 
+/**
+ * MOCK — the page's actor owns the version AND hosts the demo Room. `isHost`
+ * is true so the host-centric Room fixture stays coherent: the People panel's
+ * "you" row, "You're hosting", and the +DJ/+Vis grant buttons (gated on
+ * `cap.canGrantControl === isHost`) all line up. A real non-host listener
+ * arrives only with the PRP-4 room stream, which supplies the real Identity.
+ */
 export const MOCK_IDENTITY: Identity = {
   actor: { type: 'user', userId: 'me', handle: 'maek', displayName: 'Mae Karlsson', hue: 168 },
   isOwner: true,
   baseRole: 'owner',
-  isHost: false,
+  isHost: true,
 };
 
 export const MOCK_ROOM_CONTROL: RoomControl = { rackHolder: null, visualsHolder: null };

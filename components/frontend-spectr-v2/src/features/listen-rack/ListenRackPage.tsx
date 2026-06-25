@@ -289,7 +289,7 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
                       <div style={{ pointerEvents: 'none', opacity: 0.9 }}>
                         <InlineRack rs={rs} playing={playing} controller={roomControl.rackHolder?.handle ?? null} />
                       </div>
-                      <div className="mono" style={{ position: 'absolute', top: 12, right: 14, zIndex: 2, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--violet)', padding: '4px 9px', borderRadius: 7, background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.4)' }}>READ-ONLY · FORK TO SUGGEST</div>
+                      <div className="mono" style={{ position: 'absolute', top: 12, right: 14, zIndex: 2, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--violet)', padding: '4px 9px', borderRadius: 7, background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.4)' }}>READ-ONLY{cap.canSuggest ? ' · FORK TO SUGGEST' : ''}</div>
                     </div>
                   )
                   : <InlineRack rs={rs} playing={playing} controller={roomControl.rackHolder?.handle ?? null} />)

@@ -51,9 +51,9 @@ describe('sessionHats / roleLabels', () => {
 });
 
 describe('mock fixtures', () => {
-  it('MOCK_IDENTITY is the owner, not hosting; MOCK_ROOM_CONTROL has no delegates', () => {
+  it('MOCK_IDENTITY owns + hosts the demo room; MOCK_ROOM_CONTROL has no delegates', () => {
     expect(MOCK_IDENTITY.isOwner).toBe(true);
-    expect(MOCK_IDENTITY.isHost).toBe(false);
+    expect(MOCK_IDENTITY.isHost).toBe(true);
     expect(MOCK_ROOM_CONTROL).toEqual({ rackHolder: null, visualsHolder: null });
   });
 });
