@@ -202,6 +202,16 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
   const rsRef = useRef(rs);
   rsRef.current = rs;
 
+  // ── Pitch lane (Phase 2.5): a separate buffer lane (NOT an insert), driven off
+  // the rack's pitch module. pitchModeRef = imperative flag for togglePlay/seek;
+  // pitchActive = reactive flag so effects re-run after the async decode resolves.
+  // Real mode only; mirrors listen.$versionId.tsx (pitch + tempo are coupled). ──
+  const pitchModeRef = useRef(false);
+  const [pitchActive, setPitchActive] = useState(false);
+  const pitchEnabled = realAudio && !!rs.mod.pitch.enabled;
+  const pitchSemitones = Number(rs.mod.pitch.semitones) || 0;
+  const pitchCents = Number(rs.mod.pitch.cents) || 0;
+
   const directorObj: Director | undefined = useMemo(() => DIRECTORS.find((d) => d.id === director), [director]);
   const activeModules: ModuleManifest[] = useMemo(() => rs.order.filter((id) => rs.mod[id].enabled).map((id) => MANIFEST_BY_ID[id]), [rs.order, rs.mod]);
   const posRef = useRef(position); posRef.current = position;
@@ -279,6 +289,72 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     return () => cancelAnimationFrame(raf);
   }, [realAudio, playing, graph]);
 
+  // Apply detune to the live BufferSource: on enter (pitchActive flips true) and
+  // whenever semitones/cents change while active.
+  useEffect(() => {
+    if (pitchActive) graph.setPitchDetune(pitchSemitones, pitchCents);
+  }, [pitchSemitones, pitchCents, pitchActive, graph]);
+
+  // Enter/exit the pitch buffer lane on the rack's pitch toggle. Decoding the
+  // whole file can take a few seconds on long FLACs.
+  useEffect(() => {
+    let cancelled = false;
+    const a = audioRef.current;
+    if (!realAudio || !a || !audioUrl) return undefined;
+    if (pitchEnabled && !pitchModeRef.current) {
+      const wasPlaying = !a.paused;
+      const startedAt = a.currentTime;
+      a.pause();
+      setPlaying(false);
+      try {
+        graph.ensureContext();
+      } catch (err) {
+        toast.error(`Audio engine failed: ${err instanceof Error ? err.message : String(err)}`);
+        rs.setEnabled('pitch', false);
+        return undefined;
+      }
+      graph
+        .enterPitchMode(audioUrl, startedAt)
+        .then(() => {
+          if (cancelled) return;
+          pitchModeRef.current = true;
+          setPitchActive(true);
+          const bufDur = graph.pitchDuration();
+          if (bufDur > 0) setDuration(bufDur);
+          setPosition(startedAt);
+          if (wasPlaying) { graph.pitchResume(); setPlaying(true); }
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          toast.error(`Pitch decode failed: ${err instanceof Error ? err.message : String(err)}`);
+          rs.setEnabled('pitch', false);
+        });
+    } else if (!pitchEnabled && pitchModeRef.current) {
+      const wasPlaying = graph.pitchPlaying();
+      const pos = graph.exitPitchMode();
+      pitchModeRef.current = false;
+      setPitchActive(false);
+      a.currentTime = pos;
+      setPosition(pos);
+      if (wasPlaying) {
+        a.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+      }
+    }
+    return () => { cancelled = true; };
+    // semitones/cents are intentionally excluded — the detune effect owns those;
+    // re-running here on every knob turn would re-enter pitch mode.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pitchEnabled, audioUrl, realAudio, graph]);
+
+  // Position tick in pitch mode (the BufferSource emits no timeupdate).
+  useEffect(() => {
+    if (!pitchActive) return undefined;
+    let raf = 0;
+    const tick = () => { setPosition(graph.pitchCurrentTime()); raf = requestAnimationFrame(tick); };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [pitchActive, graph]);
+
   // Per-mode layout defaults (spec §04): Room → full light show + minimal
   // metering; Work/View → rack-first + prominent metering.
   useEffect(() => {
@@ -328,6 +404,23 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     if (!realAudio) { setPlaying((p) => !p); return; }
     const a = audioRef.current;
     if (!a) return;
+    // Pitch mode operates the BufferSource lane, not the <audio> element.
+    if (pitchModeRef.current) {
+      if (graph.pitchPlaying()) {
+        graph.pitchPause();
+        setPlaying(false);
+      } else {
+        try {
+          graph.ensureContext();
+        } catch (err) {
+          toast.error(`Audio engine failed: ${err instanceof Error ? err.message : String(err)}`);
+          return;
+        }
+        graph.pitchResume();
+        setPlaying(true);
+      }
+      return;
+    }
     if (!a.paused) { a.pause(); setPlaying(false); return; }
     try {
       graph.ensureContext();
@@ -348,11 +441,12 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
 
   const seek = useCallback((t: number) => {
     if (!realAudio) { setPosition(t); return; }
+    if (pitchModeRef.current) { graph.pitchSeek(t); setPosition(t); return; }
     const a = audioRef.current;
     if (!a) return;
     a.currentTime = t;
     setPosition(t);
-  }, [realAudio]);
+  }, [realAudio, graph]);
 
   const cap = resolveCapabilities(mode, identity, roomControl, access);
   const rackReadOnly = cap.rackReadOnly;
