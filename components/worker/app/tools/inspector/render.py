@@ -38,10 +38,6 @@ def _e(x: Any) -> str:
     return html.escape("" if x is None else str(x))
 
 
-def _details(summary: str, body_html: str) -> str:
-    return f"<details><summary>{_e(summary)}</summary>{body_html}</details>"
-
-
 def _json_block(obj: Any) -> str:
     return f"<pre>{_e(json.dumps(obj, indent=2, default=str))}</pre>"
 
@@ -58,15 +54,16 @@ def _stage_card(s: dict[str, Any]) -> str:
 def _rule_card(r: dict[str, Any], trace: bool) -> str:
     head = f"<b>{_e(r['name'])}</b>"
     if trace:
-        head += (f"<span class='badge {'fired' if r.get('fired') else 'idle'}'>"
-                 f"{'FIRED' if r.get('fired') else 'idle'}</span>")
+        status = 'fired' if r.get('fired') else 'idle'
+        head += (f"<span class='badge {_e(status)}'>"
+                 f"{_e('FIRED' if r.get('fired') else 'idle')}</span>")
     rows = ""
     res = r.get("path_resolution", {}) if trace else {}
     for p in r["read_paths"]:
         producer = r["producers"].get(p)
         prod_txt = _e(producer) if producer else "<span class='badge missing'>unmapped</span>"
         state = res.get(p)
-        state_txt = f"<span class='badge {state}'>{_e(state)}</span>" if state else ""
+        state_txt = f"<span class='badge {_e(state)}'>{_e(state)}</span>" if state else ""
         rows += f"<tr><td><code>{_e(p)}</code></td><td>{prod_txt}</td><td>{state_txt}</td></tr>"
     table = (f"<table><tr><th>reads</th><th>produced by</th><th>value</th></tr>{rows}</table>"
              if r["read_paths"] else "<i>no datapoints extracted</i>")
@@ -100,7 +97,7 @@ def render_html(model: dict[str, Any]) -> str:
 
     spec_body = ", ".join(
         f"{_e(slug)}"
-        + (f" <span class='badge {'fired' if model['specialist_status'].get(slug)=='ran' else 'idle'}'>"
+        + (f" <span class='badge {_e('fired' if model['specialist_status'].get(slug)=='ran' else 'idle')}'>"
            f"{_e(model['specialist_status'].get(slug))}</span>" if trace else "")
         for slug in model["specialists"]
     )
