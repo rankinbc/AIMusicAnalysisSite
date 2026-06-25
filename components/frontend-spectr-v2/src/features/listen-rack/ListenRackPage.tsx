@@ -25,7 +25,7 @@ import { type Identity, type RoomControl } from './identity';
 import {
   DIRECTORS, LASER_EFFECTS, LASER_PATTERNS, MANIFEST_BY_ID, ROOM_LISTENERS, REACTION_EMOJI, TRACK,
   type AnnouncementMsg, type Director, type ModuleManifest, type PresencePopItem,
-  type ReactionFeedItem, type VizState, DEFAULT_VIZ,
+  type ReactionFeedItem, type Track, type VizState, DEFAULT_VIZ,
 } from './data';
 import { hslToHex } from './helpers';
 import './listenRack.css';
@@ -40,10 +40,10 @@ import { VizStage } from './viz';
 
 interface VizPreset { id: string; name: string; viz: VizState; stages: string[]; director: string }
 
-function TrackHeader({ mode, modes, identity, onModeChange }: {
-  mode: ModeId; modes: ModeId[]; identity: Identity; onModeChange?: (m: ModeId) => void;
+function TrackHeader({ track, mode, modes, identity, onModeChange }: {
+  track: Track; mode: ModeId; modes: ModeId[]; identity: Identity; onModeChange?: (m: ModeId) => void;
 }) {
-  const t = TRACK;
+  const t = track;
   const surface = MODE_SURFACE_MATRIX[mode];
   const showSwitcher = identity.isOwner && onModeChange && modes.length > 1;
   return (
@@ -55,11 +55,13 @@ function TrackHeader({ mode, modes, identity, onModeChange }: {
           <span className="dot" style={{ animation: 'pulseGlow 1.6s ease-in-out infinite' }} />
         </div>
         <h1 style={{ fontSize: 23, fontWeight: 800, letterSpacing: '-0.015em', margin: '0 0 3px' }}>{t.name}</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 9 }}>
-          <Avatar handle={t.author} hue={168} size={20} />
-          <span className="mono" style={{ fontSize: 11, color: 'var(--text-2)' }}>by {t.author}</span>
-          <span className="mono" style={{ fontSize: 10.5, color: 'var(--muted)' }}>{t.handle}</span>
-        </div>
+        {t.author && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 9 }}>
+            <Avatar handle={t.author} hue={168} size={20} />
+            <span className="mono" style={{ fontSize: 11, color: 'var(--text-2)' }}>by {t.author}</span>
+            <span className="mono" style={{ fontSize: 10.5, color: 'var(--muted)' }}>{t.handle}</span>
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', alignItems: 'center' }}>
           <span className="pill cyan">{t.genre.name}</span>
           <span className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>{surface.blurb}</span>
@@ -129,9 +131,13 @@ export interface ListenRackPageProps {
   /** When set, the page plays the real uploaded audio for this version (Phase 1
    *  port). When omitted, the page runs the mock rAF transport clock (demo route). */
   versionId?: string;
+  /** Real track header/notes/sections/stats (Phase 2.5). Defaults to the TRACK
+   *  fixture for the mock demo route. */
+  track?: Track;
 }
 
-export function ListenRackPage({ mode, modes, identity, access, roomControl, onModeChange, onGrant, versionId }: ListenRackPageProps) {
+export function ListenRackPage({ mode, modes, identity, access, roomControl, onModeChange, onGrant, versionId, track: trackProp }: ListenRackPageProps) {
+  const track = trackProp ?? TRACK;
   // ── Real-audio seam (Phase 1) ──
   // `versionId` present ⇒ real mode: mount <audio> + the page-agnostic audio
   // graph and drive the transport off the element. Absent ⇒ mock demo clock.
@@ -158,7 +164,7 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
 
   const [playing, setPlaying] = useState(!realAudio);
   const [position, setPosition] = useState(realAudio ? 0 : 42);
-  const [duration, setDuration] = useState(realAudio ? 0 : TRACK.durationSec);
+  const [duration, setDuration] = useState(realAudio ? 0 : track.durationSec);
   const [director, setDirector] = useState('off');
   const [viz, setViz] = useState<VizState>(DEFAULT_VIZ);
   const [stages, setStages] = useState<string[]>(['eq']);
@@ -223,13 +229,13 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     const p0 = posRef.current;
     const f = () => {
       const p = p0 + (performance.now() - start) / 1000;
-      if (p >= TRACK.durationSec) { setPosition(0); setPlaying(false); return; }
+      if (p >= track.durationSec) { setPosition(0); setPlaying(false); return; }
       setPosition(p);
       raf = requestAnimationFrame(f);
     };
     raf = requestAnimationFrame(f);
     return () => cancelAnimationFrame(raf);
-  }, [playing, realAudio]);
+  }, [playing, realAudio, track]);
 
   // ── Real-audio transport (element-driven). No-op in mock mode (audioRef null). ──
   // Position is tracked off `timeupdate` and duration off `durationchange` /
@@ -354,21 +360,21 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
   return (
     <div className="lr-shell">
       <div className="lr-page">
-        <TrackHeader mode={mode} modes={modes} identity={identity} {...(onModeChange ? { onModeChange } : {})} />
+        <TrackHeader track={track} mode={mode} modes={modes} identity={identity} {...(onModeChange ? { onModeChange } : {})} />
 
         <div className="lr-grid">
           <div style={{ minWidth: 0 }}>
             <div className="card" style={{ overflow: 'hidden', position: 'relative' }}>
               <PresencePops items={pops} />
-              <VisualMeters track={TRACK} playing={playing} open={metersOpen} setOpen={setMetersOpen}
+              <VisualMeters track={track} playing={playing} open={metersOpen} setOpen={setMetersOpen}
                 frame={realAudio ? meterFrame : null} />
               <VizStage playing={playing} stages={stages} setStages={setStages} viz={viz}
                 director={directorObj} height={440} onDrop={handleDrop} myStatus={myStatus} activeModules={activeModules}
                 {...(realAudio ? { getFrame: () => graph.readFrame() } : {})} />
               <CoachToast msg={announcement} />
               <div style={{ borderTop: '1px solid var(--border)' }}>
-                <Transport track={TRACK} playing={playing} position={position} duration={duration} onTogglePlay={togglePlay}
-                  onSeek={seek} notes={TRACK.notes} onNoteClick={(n) => { setActiveNote(n.id); seek(n.t); }} activeNote={activeNote} reactions={feed} />
+                <Transport track={track} playing={playing} position={position} duration={duration} onTogglePlay={togglePlay}
+                  onSeek={seek} notes={track.notes} onNoteClick={(n) => { setActiveNote(n.id); seek(n.t); }} activeNote={activeNote} reactions={feed} />
               </div>
             </div>
 
@@ -416,7 +422,7 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
             </div>
           </div>
 
-          <RightRail mode={mode} access={access} cap={cap} rs={rs} track={TRACK} position={position}
+          <RightRail mode={mode} access={access} cap={cap} rs={rs} track={track} position={position}
             activeNote={activeNote} onNoteClick={(n) => { setActiveNote(n.id); seek(n.t); }} onSeek={seek}
             onReact={(e) => { setMyStatus(e); spawnReaction(e, 'maek'); }} feed={feed} announce={announce} myStatus={myStatus}
             roomControl={roomControl} onGrant={grantControl} />
