@@ -10,6 +10,11 @@
 
 **Design spec:** `PRPs/listen-v3-identity-capabilities-design.md`
 
+> **Post-ship reconciliation (2026-06-26):** this plan SHIPPED (`src/features/listen-rack/{identity,capabilities}.ts` + tests). Three points where the as-built code diverged from the plan text below — code is authoritative:
+> 1. **`work`-mode `rackReadOnly`** — Step (Task 2) below shows `rackReadOnly: false`; the shipped code is `rackReadOnly: !id.isOwner` (`capabilities.ts:58`). The plan value was a bug. Corrected inline below.
+> 2. **`MOCK_IDENTITY.isHost`** — plan says `false`; shipped is `true` (`identity.ts:64`, with a comment) so the host-centric demo Room fixture stays coherent (People panel "you", "You're hosting", +DJ/+Vis grant buttons all line up). Corrected inline below.
+> 3. **Mock wiring** — Tasks 3–4 describe lifting `mode`/`roomControl` into route-level `useState` in `routes/_app/listen-rack.tsx`. The as-built code centralizes all mocking in a `useMockRoomOrchestration()` hook consumed by the route (`routes/_app/listen-rack.tsx:22`); the route no longer owns the `useState`. Behavior is identical; the code blocks in Tasks 3–4 are kept as historical plan text.
+
 ## Global Constraints
 
 - TypeScript strict + `verbatimModuleSyntax` → type-only imports MUST use `import type`.
@@ -100,7 +105,7 @@ describe('sessionHats / roleLabels', () => {
 describe('mock fixtures', () => {
   it('MOCK_IDENTITY is the owner, not hosting; MOCK_ROOM_CONTROL has no delegates', () => {
     expect(MOCK_IDENTITY.isOwner).toBe(true);
-    expect(MOCK_IDENTITY.isHost).toBe(false);
+    expect(MOCK_IDENTITY.isHost).toBe(true); // as-built: host-centric demo Room fixture (see reconciliation note at top)
     expect(MOCK_ROOM_CONTROL).toEqual({ rackHolder: null, visualsHolder: null });
   });
 });
@@ -167,7 +172,7 @@ export const MOCK_IDENTITY: Identity = {
   actor: { type: 'user', userId: 'me', handle: 'maek', displayName: 'Mae Karlsson', hue: 168 },
   isOwner: true,
   baseRole: 'owner',
-  isHost: false,
+  isHost: true, // as-built: host-centric demo Room fixture (see reconciliation note at top)
 };
 
 export const MOCK_ROOM_CONTROL: RoomControl = { rackHolder: null, visualsHolder: null };
@@ -356,7 +361,7 @@ export function resolveCapabilities(
   if (mode === 'work') {
     return {
       ...base,
-      canEditRack: id.isOwner, rackReadOnly: false,
+      canEditRack: id.isOwner, rackReadOnly: !id.isOwner,
       canControlTransport: true, transportFollowsHost: false,
       canControlVisuals: true,
       canUseCoach: access.coachAvailable,

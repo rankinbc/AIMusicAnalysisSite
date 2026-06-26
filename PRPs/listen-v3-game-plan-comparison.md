@@ -11,6 +11,13 @@ description: |
 
 ---
 
+> **Seam reconciliation (2026-06-26 — READ BEFORE BUILDING):** this PRP is NOT-STARTED, but the upstream `IGamePlanSink` seam already SHIPPED with a different (minimal) shape than the pseudo-code below assumes. Build against the **as-built seam**, not the older inline sketches:
+> - **As-built seam** (`Services/IGamePlanSink.cs`): `Task InsertDrainItemAsync(Guid songVersionId, string source, string refType, string refId, CancellationToken ct = default)` — **minimal**. No `title` / `detail` / `target_change` are passed in. The real PRP-5 sink must **enrich** the item itself: resolve `refType`+`refId` → the chain/title/detail at insert time.
+> - **Real call-site values** (currently feeding the no-op sink):
+>   - accept suggestion → `InsertDrainItemAsync(versionId, "suggestion", "preset", presetId, ct)` (`FeedbackEndpoints.cs:331`) — source is **`"suggestion"`**, NOT `"reviewer"`; refType **`"preset"`**, NOT `"rack_preset"`.
+>   - recap publish → `InsertDrainItemAsync(versionId, "recap", "comment", commentId, ct)` (`RoomEndpoints.cs:552`) — refType **`"comment"`**, NOT `"session"`.
+> - **Implication:** the `source` CHECK enum below must include `"suggestion"` (and reconcile/drop `"reviewer"`). The adopt/fork-preset drain (`source="adopted_preset"`) and the **bookmark→plan drain are NOT wired** — `BookmarkEndpoints` makes no `IGamePlanSink` call. Scope those wirings into this PRP or note them as out-of-scope.
+
 ## Goal
 - **`game_plans`** — per-version (1:1), `{ song_version_id, status }`. "What this mix needs," informing v(n+1).
 - **`game_plan_items`** — the unified drain: `{ game_plan_id, source ∈ {coach,reviewer,analysis,adopted_preset,recap},

@@ -11,6 +11,17 @@ description: |
 
 ---
 
+> **Seam reconciliation (2026-06-26 — READ BEFORE BUILDING):** this PRP is NOT-STARTED, but the upstream `INotificationSink` seam already SHIPPED with a different shape than the `Notify(...)`/`NotifyDigest(...)` pseudo-code below. Build against the **as-built seam** (`Services/INotificationSink.cs`):
+> - `Task NotifyAsync(ActorRef recipient, string eventType, IReadOnlyDictionary<string, object?> data, CancellationToken ct = default)`
+> - `Task NotifyDigestAsync(ActorRef recipient, string digestType, CancellationToken ct = default)`
+> Key drifts from the inline sketch:
+> 1. **Async `Task`**, method names are `NotifyAsync` / `NotifyDigestAsync` (not `void Notify` / `NotifyDigest`).
+> 2. **Recipient is `ActorRef`** (User|Anon, see `Services/ActorRef.cs`), NOT `Guid? recipientUserId`. Anon no-op (D4.5) = check `recipient.Type == ActorType.Anon`.
+> 3. **Payload is `IReadOnlyDictionary<string, object?> data`**, NOT positional `(refType, refId, actor)`. The real impl **unpacks** the dict (e.g. `data["commentId"]`, `data["versionId"]`) into the table columns.
+> 4. `NotifyDigestAsync` takes only `(recipient, digestType)` — **no `versionId`/`actor`**; build the `digest_key` inside the service.
+> - **Real call sites** already feeding the no-op sink (`FeedbackEndpoints.cs`): `NotifyAsync(ActorRef.User(oid), "comment_created", {…}, ct)` (:152), `"suggestion_created"` (:220), `NotifyAsync(ActorRef.User(pu), "suggestion_accepted", {…})` (:333).
+> - **Bookmark digest is NOT wired:** `BookmarkEndpoints` makes no `NotifyDigestAsync` call. PRP-7 must add the `bookmark_digest` call site (or scope it explicitly).
+
 ## Goal
 - **`notifications`** — `{ recipient_user_id, type, ref_type, ref_id, actor_ref, count, read, digest_key, created_at }`.
 - **`INotificationSink`** (real impl replacing the no-op seam from PRP-3/4/6) — `Notify(...)` (per-event) +
@@ -110,9 +121,9 @@ components/frontend-spectr-v2/src/features/...
 //   count (int default 1), read (bool default false), digest_key (varchar128?),
 //   created_at, updated_at.  Index (recipient_user_id, read, created_at); partial-unique(digest_key) WHERE digest_key IS NOT NULL (raw SQL).
 
-interface INotificationSink {
-  void Notify(Guid? recipientUserId, string type, string refType, Guid? refId, ActorRef? actor);            // per-event; null recipient => no-op
-  void NotifyDigest(Guid? recipientUserId, string type, Guid versionId, ActorRef? actor);                   // upsert by digest_key
+interface INotificationSink {   // AS-BUILT (Services/INotificationSink.cs) — supersedes the older Notify/NotifyDigest sketch
+  Task NotifyAsync(ActorRef recipient, string eventType, IReadOnlyDictionary<string, object?> data, CancellationToken ct = default);  // per-event; recipient.Type==Anon => no-op. Unpack data[] into columns.
+  Task NotifyDigestAsync(ActorRef recipient, string digestType, CancellationToken ct = default);            // upsert by digest_key (built inside service)
 }
 ```
 ```text
