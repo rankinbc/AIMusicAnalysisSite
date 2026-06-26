@@ -8,6 +8,7 @@ import { CoachChat } from './CoachChat';
 import { DeepenZone } from './DeepenZone';
 import { DepthBanner } from './DepthBanner';
 import { ExportBar } from './ExportBar';
+import { FixRackPanel } from './FixRackPanel';
 import { MoveCard } from './MoveCard';
 import { VerdictsPanel } from './VerdictsPanel';
 import { groupMoves, isCleanMix, type Move } from './move-model';
@@ -213,6 +214,8 @@ export function GamePlan({
           <VerdictsPanel jobId={jobId} hasStems={inputs.stems} />
         </div>
       )}
+
+      <FixRackPanel jobId={jobId} versionId={versionId} committedCount={committed.length} />
 
       <ExportBar committed={committed} trackName={trackName} />
     </div>

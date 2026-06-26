@@ -1,0 +1,156 @@
+import { useMemo, useState } from 'react';
+import { useNavigate } from '@tanstack/react-router';
+import { useQueryClient } from '@tanstack/react-query';
+
+import { useFixRack, useGenerateFixRack } from '../../api/hooks';
+import { MANIFEST, enabledModuleIds, moduleParams, readFixChain } from './fix-rack-helpers';
+import s from './FixRackPanel.module.css';
+
+// Phase 2 "act on them": committed fixable Moves -> a mastering chain you hear in
+// Listen. POST /reports/{jobId}/fix-rack (202) -> poll GET (204 -> 200 FixRackDto).
+// The chain is byte-identical to the Listen rack's, so "Open in Listen rack" hands
+// it straight over. The change_log / leftover_advice coaching layer is solver-
+// computed but not wired yet — the panel holds its place with a placeholder.
+
+interface Props {
+  jobId: string;
+  versionId: string | null;
+  /** Number of committed moves — gates idle vs empty. */
+  committedCount: number;
+}
+
+export function FixRackPanel({ jobId, versionId, committedCount }: Props) {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const [requested, setRequested] = useState(false);
+  const gen = useGenerateFixRack(jobId);
+  const fixRack = useFixRack(jobId, requested);
+  const rack = fixRack.data ?? null;
+  const enabled = useMemo(() => (rack ? enabledModuleIds(rack.chain) : []), [rack]);
+
+  const generate = () => {
+    void qc.invalidateQueries({ queryKey: ['fix-rack', jobId] });
+    setRequested(true);
+    gen.mutate();
+  };
+  const openInListen = () => {
+    if (versionId) void navigate({ to: '/listen-rack/$versionId', params: { versionId } });
+  };
+
+  // ── empty: nothing committed to apply ──
+  if (committedCount === 0) {
+    return (
+      <div className={`card ${s.panel} ${s.empty}`}>
+        <span className={`${s.icon} ${s.ok}`}>✓</span>
+        <div className={s.body}>
+          <div className={s.title}>Nothing to apply</div>
+          <div className={s.sub}>Commit a fix above and a generated rack shows up here.</div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── ready ──
+  if (rack) {
+    if (enabled.length === 0) {
+      return (
+        <div className={`card ${s.panel} ${s.empty}`}>
+          <span className={`${s.icon} ${s.ok}`}>✓</span>
+          <div className={s.body}>
+            <div className={s.title}>This master is already clean</div>
+            <div className={s.sub}>The solver found no master-rack move to make.</div>
+          </div>
+        </div>
+      );
+    }
+    const chain = readFixChain(rack.chain)!;
+    return (
+      <div className={`card ${s.panel} ${s.ready}`}>
+        <div className={s.head}>
+          <span className={`${s.icon} ${s.done}`}>▣</span>
+          <div className={s.body}>
+            <div className={s.title}>{rack.name}</div>
+            <div className={s.sub}>{enabled.length} modules · from {committedCount} committed moves</div>
+          </div>
+          <div className={s.actions}>
+            <button type="button" className="btn ghost sm" onClick={generate}>Regenerate</button>
+            <button type="button" className="btn primary sm" onClick={openInListen} disabled={!versionId}>
+              Open in Listen rack
+            </button>
+          </div>
+        </div>
+
+        <div className={`mono ${s.chainbar}`}>
+          <span className={s.flowEnd}>in</span>
+          {enabled.map((id) => (
+            <span key={id} className={s.node} style={{ ['--ac' as string]: MANIFEST.get(id)?.accent ?? 'var(--muted)' }}>
+              {MANIFEST.get(id)?.glyph ?? '·'} {MANIFEST.get(id)?.label ?? id}
+            </span>
+          ))}
+          <span className={s.flowEnd}>out</span>
+        </div>
+
+        <div className={s.modules}>
+          {enabled.map((id) => (
+            <div key={id} className={s.mod} style={{ ['--ac' as string]: MANIFEST.get(id)?.accent ?? 'var(--muted)' }}>
+              <div className={s.modHead}>
+                <span className={s.modGlyph}>{MANIFEST.get(id)?.glyph ?? '·'}</span>
+                <span className={s.modLabel}>{MANIFEST.get(id)?.label ?? id}</span>
+                <span className={`${s.dot} ${s.on}`} title="enabled in the chain" />
+              </div>
+              <div className={s.modParams}>
+                {moduleParams(id, chain.modules[id]).map((p, i) => (
+                  <div key={i} className={s.param}>
+                    <span className={s.paramLabel}>{p.label}</span>
+                    <span className={`mono ${s.paramVal}`}>{p.val}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className={s.coach}>
+          <span className={s.coachIc}>✦</span>
+          <div>
+            <div className={s.coachTitle}>Why these settings · what’s left <span className={s.soon}>soon</span></div>
+            <div className={s.sub}>
+              The solver computes a note per module and the problems a master rack can’t fix. That coaching
+              layer isn’t wired to the page yet — this panel is holding its place.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── generating ──
+  if (requested) {
+    return (
+      <div className={`card ${s.panel} ${s.generating}`}>
+        <span className={`${s.icon} ${s.busy}`}>◴</span>
+        <div className={s.body}>
+          <div className={s.title}>Solving your chain…</div>
+          <div className={s.sub}>Ordering modules and dialing settings from your committed moves — this runs on a worker.</div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── idle ──
+  return (
+    <div className={`card ${s.panel} ${s.idle}`}>
+      <span className={s.icon}>▥</span>
+      <div className={s.body}>
+        <div className={s.title}>Generate fix rack</div>
+        <div className={s.sub}>
+          Bundle your committed fixes into a mastering chain you can hear in Listen — built from{' '}
+          <b>{committedCount}</b> {committedCount === 1 ? 'move' : 'moves'}.
+        </div>
+      </div>
+      <button type="button" className="btn primary sm" onClick={generate} disabled={gen.isPending}>
+        ✦ Generate
+      </button>
+    </div>
+  );
+}
