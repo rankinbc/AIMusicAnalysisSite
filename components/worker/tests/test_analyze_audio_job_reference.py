@@ -57,6 +57,8 @@ def harness(monkeypatch):
     monkeypatch.setattr(td, "run_pipeline", fake_run_pipeline)
     monkeypatch.setattr(td, "LOCAL_ROOT", "/root")
     monkeypatch.setattr(td, "_try_write_artifact", lambda *a, **k: None)
+    # Don't decode audio for result images in these unit tests.
+    monkeypatch.setattr(td, "render_analysis_images", lambda *a, **k: {})
     # Keep these reference tests hermetic — don't let Phase C2 hit a real DB.
     monkeypatch.setattr(td, "run_rule_engine_for_analysis", lambda _aid: 0)
 

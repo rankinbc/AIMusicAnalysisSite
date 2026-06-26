@@ -75,6 +75,13 @@ except ImportError:
     logger.warning("audio_analysis not installed — actor will raise on dispatch")
     run_pipeline = None  # type: ignore[assignment]
 
+# Result-image renderer (spectrogram + waveform). Module-level seam so tests can
+# patch it. Optional: a missing import just means no images are produced.
+try:
+    from audio_analysis.viz import render_analysis_images
+except ImportError:
+    render_analysis_images = None  # type: ignore[assignment]
+
 # Deterministic Problem engine, run on every completed analysis (healthy path).
 # Module-level binding so it's a patchable seam in tests.
 from .verdict_lib.degraded import run_rule_engine_for_analysis  # noqa: E402
@@ -195,6 +202,10 @@ def analyze_audio_job(job_id: str) -> None:
         # re-wrap a string in quotes.
         result_dict = json.loads(json.dumps(pipeline_result, default=str))
         logger.info("analyze_audio_job: pipeline complete job=%s", job_id)
+        # Result images (spectrogram + waveform) — rendered outside any DB tx
+        # (CPU work). Best-effort: a failure leaves both paths None and the
+        # analysis still completes.
+        spectrogram_path, waveform_path = _render_and_store_images(job_id, file_abs)
     except Exception as exc:
         logger.exception("analyze_audio_job: FAILED job=%s", job_id)
         with SessionFactory.begin() as s:
@@ -225,6 +236,8 @@ def analyze_audio_job(job_id: str) -> None:
             # Passing a json.dumps()'d string would double-encode.
             final_json=result_dict,
             phase_durations={},
+            spectrogram_image_path=spectrogram_path,
+            waveform_image_path=waveform_path,
             # EF entities set created_at via a C#-side default which doesn't
             # apply when SQLAlchemy inserts. Set it explicitly.
             created_at=_utc_now(),
@@ -379,6 +392,36 @@ def classify_stems(version_id: str) -> None:
         version.stem_paths_raw = updated
 
     logger.info("classify_stems: done version=%s (%d stems)", version_id, len(entries))
+
+
+def _render_and_store_images(job_id: str, file_abs: str) -> tuple[str | None, str | None]:
+    """Render the result spectrogram + waveform and store them under LOCAL_ROOT.
+
+    Keyed by ``job_id`` (``analysis/images/{job_id}/{kind}.webp``) so the BFF —
+    whose ``IFileStorage`` resolves against the SAME ``data/`` root — can serve
+    them by key. Best-effort: any render/IO failure is logged and swallowed so a
+    completed analysis is never undone over a missing image (mirrors
+    ``_try_write_artifact``). Returns ``(spectrogram_key, waveform_key)``; either
+    is ``None`` when unavailable.
+    """
+    if render_analysis_images is None:
+        return None, None
+    try:
+        images = render_analysis_images(file_abs)
+        base = f"analysis/images/{job_id}"
+        out_dir = Path(LOCAL_ROOT) / base
+        out_dir.mkdir(parents=True, exist_ok=True)
+        keys: dict[str, str] = {}
+        for kind in ("spectrogram", "waveform"):
+            data = images.get(kind)
+            if not data:
+                continue
+            (out_dir / f"{kind}.webp").write_bytes(data)
+            keys[kind] = f"{base}/{kind}.webp"
+        return keys.get("spectrogram"), keys.get("waveform")
+    except Exception:  # pragma: no cover — never fail a done analysis over an image
+        logger.warning("image render failed for job=%s", job_id, exc_info=True)
+        return None, None
 
 
 def _try_write_artifact(job_id: str, result_dict: dict) -> None:

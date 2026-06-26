@@ -20,6 +20,7 @@ public static class JobEndpoints
         g.MapGet("/{jobId:guid}", GetStatus);
         g.MapGet("/{jobId:guid}/stream", StreamStatus);
         g.MapGet("/{jobId:guid}/results", GetResults);
+        g.MapGet("/{jobId:guid}/images/{kind}", GetImage);
 
         return app;
     }
@@ -237,6 +238,8 @@ public static class JobEndpoints
                 a.SongName,
                 a.FinalJson,
                 a.ShareToken,
+                a.SpectrogramImagePath,
+                a.WaveformImagePath,
             })
             .FirstOrDefaultAsync(ct);
         if (row is null) return Results.NotFound();
@@ -264,6 +267,13 @@ public static class JobEndpoints
             }
         }
 
+        // Image URLs (no token — the client appends ?t= for the <img> tag).
+        // Only surfaced when the worker actually produced the image.
+        var specUrl = row.SpectrogramImagePath is null
+            ? null : $"/api/jobs/{jobId}/images/spectrogram";
+        var waveUrl = row.WaveformImagePath is null
+            ? null : $"/api/jobs/{jobId}/images/waveform";
+
         return Results.Ok(new JobResultsDto(
             row.JobId,
             row.Id,
@@ -272,6 +282,36 @@ public static class JobEndpoints
             row.SongName,
             finalJson,
             row.ShareToken,
-            alsProject));
+            alsProject,
+            specUrl,
+            waveUrl));
+    }
+
+    // GET /api/jobs/{jobId}/images/{kind}  (kind = spectrogram | waveform)
+    // Streams a server-rendered result image. Accepts auth via header OR ?t=<jwt>
+    // (an <img> tag can't set headers). Owner-scoped; immutable per analysis.
+    private static async Task<IResult> GetImage(
+        Guid jobId,
+        string kind,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        IFileStorage storage,
+        HttpResponse response,
+        CancellationToken ct)
+    {
+        if (kind is not ("spectrogram" or "waveform")) return Results.BadRequest();
+
+        var userId = currentUser.UserId();
+        var key = await db.Analyses.AsNoTracking()
+            .Where(a => a.JobId == jobId && a.UserId == userId)
+            .Select(a => kind == "spectrogram" ? a.SpectrogramImagePath : a.WaveformImagePath)
+            .FirstOrDefaultAsync(ct);
+        if (string.IsNullOrEmpty(key)) return Results.NotFound();
+        if (!await storage.ExistsAsync(key, ct)) return Results.NotFound();
+
+        // Content is immutable for a given analysis — let the browser cache hard.
+        response.Headers.CacheControl = "public, max-age=31536000, immutable";
+        var stream = await storage.OpenReadAsync(key, ct);
+        return Results.File(stream, "image/webp");
     }
 }

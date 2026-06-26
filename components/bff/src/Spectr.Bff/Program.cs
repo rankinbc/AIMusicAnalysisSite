@@ -67,6 +67,15 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     var t = ctx.Request.Query["t"].ToString();
                     if (!string.IsNullOrEmpty(t)) ctx.Token = t;
                 }
+                // Server-rendered result images (spectrogram/waveform) are loaded
+                // by an <img> tag, which likewise can't set an Authorization
+                // header — accept the JWT via ?t= on /api/jobs/{id}/images/{kind}.
+                else if (path.StartsWith("/api/jobs/", StringComparison.OrdinalIgnoreCase)
+                    && path.Contains("/images/", StringComparison.OrdinalIgnoreCase))
+                {
+                    var t = ctx.Request.Query["t"].ToString();
+                    if (!string.IsNullOrEmpty(t)) ctx.Token = t;
+                }
                 return Task.CompletedTask;
             },
         };

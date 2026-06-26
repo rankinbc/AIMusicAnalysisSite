@@ -169,3 +169,57 @@
   white-space: nowrap;
   font-size: 10px;
 }
+
+/* ── Server-rendered result images (spectrogram + waveform) ─────────────── */
+.imageCard {
+  padding: 22px 24px;
+}
+
+/* Spectrogram + its frequency axis sit side by side. */
+.specWrap {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 8px;
+  align-items: stretch;
+}
+
+.freqAxis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-align: right;
+  padding: 2px 0;
+  font-size: 10px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.specImg {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius, 8px);
+  background: #0b0b12;
+}
+
+.waveWrap {
+  /* Align the waveform body with the spectrogram body (skip the axis column). */
+  margin-left: 44px;
+  margin-top: 8px;
+}
+
+.waveImg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.timeAxis {
+  display: flex;
+  justify-content: space-between;
+  margin-left: 44px;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}

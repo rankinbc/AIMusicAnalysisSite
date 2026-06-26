@@ -1,3 +1,6 @@
+import { useState } from 'react';
+
+import { getAccessToken } from '../../api/fetcher';
 import { Pill } from '../../ui/Pill';
 import type {
   Phase1Bands,
@@ -39,9 +42,20 @@ interface SpectrumTabProps {
   phase3: Phase3Data | undefined;
   phase4: Phase4Data | undefined;
   phase9: Phase9Data | undefined;
+  /** Server-rendered result image routes (sans token). Null when not produced. */
+  spectrogramUrl?: string | null | undefined;
+  waveformUrl?: string | null | undefined;
 }
 
-export function SpectrumTab({ bands, phase1, phase3, phase4, phase9 }: SpectrumTabProps) {
+export function SpectrumTab({
+  bands,
+  phase1,
+  phase3,
+  phase4,
+  phase9,
+  spectrogramUrl,
+  waveformUrl,
+}: SpectrumTabProps) {
   // Normalize each band's value to a 0..1 ratio. Phase 1 emits dB values
   // typically in the -60..0 range; clamp + scale so the chart reads.
   const values = BANDS.map((b) => {
@@ -110,6 +124,12 @@ export function SpectrumTab({ bands, phase1, phase3, phase4, phase9 }: SpectrumT
           ))}
         </div>
       </section>
+
+      <SpectrumImages
+        spectrogramUrl={spectrogramUrl}
+        waveformUrl={waveformUrl}
+        durationSeconds={phase1?.duration_seconds}
+      />
 
       <ClashCard phase4={phase4} />
 
@@ -192,6 +212,82 @@ function ClashCard({ phase4 }: ClashCardProps) {
       </table>
     </section>
   );
+}
+
+interface SpectrumImagesProps {
+  spectrogramUrl?: string | null | undefined;
+  waveformUrl?: string | null | undefined;
+  durationSeconds?: number | undefined;
+}
+
+/** Server-rendered spectrogram + waveform images. Pure pixels (no baked axes) —
+ *  we overlay frequency/time tick labels here so they stay theme-aware. The <img>
+ *  can't send an Authorization header, so the access token rides on `?t=`. */
+function SpectrumImages({ spectrogramUrl, waveformUrl, durationSeconds }: SpectrumImagesProps) {
+  const [specOk, setSpecOk] = useState(true);
+  const [waveOk, setWaveOk] = useState(true);
+
+  const withTok = (u: string) => `${u}?t=${encodeURIComponent(getAccessToken() ?? '')}`;
+
+  const showSpec = Boolean(spectrogramUrl) && specOk;
+  const showWave = Boolean(waveformUrl) && waveOk;
+  if (!showSpec && !showWave) return null;
+
+  const endLabel = formatClock(durationSeconds);
+
+  return (
+    <section className={`card ${s.imageCard}`}>
+      <div className={s.hd}>
+        <span className={s.title}>Spectrogram</span>
+        <Pill tone="cyan">full track</Pill>
+      </div>
+
+      {showSpec && (
+        <div className={s.specWrap}>
+          {/* Frequency ticks (log layout, low at the bottom). */}
+          <div className={s.freqAxis} aria-hidden="true">
+            <span>16k</span>
+            <span>4k</span>
+            <span>1k</span>
+            <span>250</span>
+            <span>60</span>
+          </div>
+          <img
+            src={withTok(spectrogramUrl!)}
+            alt="Spectrogram of the full track — frequency content over time"
+            loading="lazy"
+            className={s.specImg}
+            onError={() => setSpecOk(false)}
+          />
+        </div>
+      )}
+
+      {showWave && (
+        <div className={s.waveWrap}>
+          <img
+            src={withTok(waveformUrl!)}
+            alt="Waveform overview of the full track — loudness over time"
+            loading="lazy"
+            className={s.waveImg}
+            onError={() => setWaveOk(false)}
+          />
+        </div>
+      )}
+
+      <div className={s.timeAxis} aria-hidden="true">
+        <span>0:00</span>
+        {endLabel && <span>{endLabel}</span>}
+      </div>
+    </section>
+  );
+}
+
+function formatClock(seconds: number | undefined): string | null {
+  if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return null;
+  const total = Math.round(seconds);
+  const m = Math.floor(total / 60);
+  const sec = total % 60;
+  return `${m}:${sec.toString().padStart(2, '0')}`;
 }
 
 function ClashRow({ clash }: { clash: Phase4Clash }) {

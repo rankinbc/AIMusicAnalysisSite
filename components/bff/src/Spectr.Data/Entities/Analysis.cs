@@ -42,6 +42,15 @@ public sealed class Analysis
     [Column("waveform_peaks_path"), MaxLength(500)]
     public string? WaveformPeaksPath { get; set; }
 
+    // Storage keys for the server-rendered result images (WebP), written by the
+    // worker's analyze_audio_job. Null when rendering was unavailable/failed.
+    // Served by GET /api/jobs/{jobId}/images/{kind}.
+    [Column("spectrogram_image_path"), MaxLength(500)]
+    public string? SpectrogramImagePath { get; set; }
+
+    [Column("waveform_image_path"), MaxLength(500)]
+    public string? WaveformImagePath { get; set; }
+
     // Per-stem analysis output (only present when stems were uploaded).
     [Column("stem_metrics", TypeName = "jsonb")]
     public string? StemMetrics { get; set; }

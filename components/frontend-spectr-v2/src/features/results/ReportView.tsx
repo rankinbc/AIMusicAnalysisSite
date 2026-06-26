@@ -212,6 +212,8 @@ export function ReportView({ results, songId, tab, onTabChange }: ReportViewProp
             overallScore={fj.overall_score}
             onReanalyze={handleReanalyze}
             reanalyzing={reanalyze.isPending}
+            spectrogramUrl={results.spectrogramImageUrl}
+            waveformUrl={results.waveformImageUrl}
           />
         )}
         {tab === 'project' && alsProject && <ProjectTab project={alsProject} />}

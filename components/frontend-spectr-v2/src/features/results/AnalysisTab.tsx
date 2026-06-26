@@ -51,6 +51,9 @@ interface AnalysisTabProps {
   overallScore?: number | undefined;
   onReanalyze?: () => void;
   reanalyzing?: boolean;
+  /** Server-rendered result image routes (sans token). Null when not produced. */
+  spectrogramUrl?: string | null | undefined;
+  waveformUrl?: string | null | undefined;
 }
 
 /** Count moves whose evidence ties to a chart area, so each section can show a
@@ -110,6 +113,8 @@ export function AnalysisTab({
   overallScore,
   onReanalyze,
   reanalyzing,
+  spectrogramUrl,
+  waveformUrl,
 }: AnalysisTabProps) {
   const [referenceDialogOpen, setReferenceDialogOpen] = useState(false);
   const [stemsDialogOpen, setStemsDialogOpen] = useState(false);
@@ -215,6 +220,8 @@ export function AnalysisTab({
             phase3={phase3}
             phase4={phase4}
             phase9={phase9}
+            spectrogramUrl={spectrogramUrl}
+            waveformUrl={waveformUrl}
           />
         </section>
 

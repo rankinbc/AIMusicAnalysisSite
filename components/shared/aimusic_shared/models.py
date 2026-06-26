@@ -252,6 +252,14 @@ class Analysis(Base):
     final_json: Mapped[Any] = mapped_column("final_json", JSONB, nullable=False, default=dict)
     phase_durations: Mapped[Any] = mapped_column("phase_durations", JSONB, nullable=False, default=dict)
     waveform_peaks_path: Mapped[Optional[str]] = mapped_column("waveform_peaks_path", String(500), nullable=True)
+    # Storage keys for the server-rendered result images (WebP), written by
+    # analyze_audio_job. Null when rendering was unavailable/failed.
+    spectrogram_image_path: Mapped[Optional[str]] = mapped_column(
+        "spectrogram_image_path", String(500), nullable=True
+    )
+    waveform_image_path: Mapped[Optional[str]] = mapped_column(
+        "waveform_image_path", String(500), nullable=True
+    )
     stem_metrics: Mapped[Optional[Any]] = mapped_column("stem_metrics", JSONB, nullable=True)
     # Triage routing plan — `{specialists_to_run: [...], skip, rationale,
     # estimated_total_tokens}`. Written by the `run_triage` actor when the

@@ -869,6 +869,14 @@ export interface JobResultsDto {
   // Stored client-parsed Ableton project map ("project awareness"), surfaced for
   // the results Project view. Null when no .als project JSON was uploaded.
   alsProject?: AlsProjectJson | null;
+  // Authenticated routes (sans token) for the server-rendered result images.
+  // Null when the image wasn't produced; the <img> appends `?t=<jwt>`.
+  spectrogramImageUrl?: string | null;
+  waveformImageUrl?: string | null;
+  // Version label/number for the results header. Optional — the BFF may omit
+  // them; the header falls back to null when absent.
+  versionLabel?: string | null;
+  versionNumber?: number | null;
 }
 
 // ── final_json typed view (narrowed at the Results page boundary) ──────────
