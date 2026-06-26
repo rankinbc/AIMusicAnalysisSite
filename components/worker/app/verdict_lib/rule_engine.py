@@ -791,3 +791,93 @@ def width_instability(a: dict[str, Any]) -> Verdict | None:
                            expected_range=(60.0, 100.0), label=f"{wc:.0f}/100")],
         why_it_matters="An unstable image makes the mix feel restless and translates unpredictably across systems.",
     )
+
+
+# ── TIER A — structure + tempo (genre-driven) ────────────────────────────────
+
+_SECTION_FLAG = {
+    "intro": "has_intro", "buildup": "has_buildup", "drop": "has_drop",
+    "breakdown": "has_breakdown", "outro": "has_outro",
+}
+
+
+@single("missing_section", tier="A")
+def missing_section(a: dict[str, Any]) -> Verdict | None:
+    """A genre-required arrangement section is absent (binding A15). Never flags
+    techno (linear_hypnotic) for a missing drop — its required set omits it.
+    Only judged once arrangement detection has actually scored."""
+    p7 = _phase(a, "phase7")
+    if p7.get("arrangement_status") != "scored":
+        return None
+    meta = p7.get("metadata") or {}
+    g = _genre(a)
+    required = G.ppath(g, "arrangement.required_sections", []) or []
+    structure_type = G.ppath(g, "arrangement.structure_type", "")
+    missing = [s for s in required if s in _SECTION_FLAG and not meta.get(_SECTION_FLAG[s], False)]
+    if not missing:
+        return None
+    if structure_type == "breakdown_drop" and "drop" in missing:
+        sev: Severity = "severe"
+        first = "drop"
+    else:
+        sev = "moderate"
+        first = missing[0]
+    sc = meta.get("section_count", 0)
+    return _problem(
+        track_id=_track_id(a), slug="missing_section", severity=sev, category="sections",
+        kind="fault", headline=f"Missing {first} section",
+        summary=f"The {G.resolve_genre(g)} arrangement expects {', '.join(required)}; "
+                f"this track is missing: {', '.join(missing)}.",
+        evidence=[Evidence(metric="phase7.metadata.section_count", value=float(sc),
+                           label=f"no {first} ({sc} sections)")],
+        why_it_matters="A genre-standard arrangement sets listener expectations; a missing key "
+                       "section reads as unfinished.",
+    )
+
+
+@single("eight_bar_violations", tier="A")
+def eight_bar_violations(a: dict[str, Any]) -> Verdict | None:
+    p7 = _phase(a, "phase7")
+    if p7.get("arrangement_status") != "scored":
+        return None
+    score = p7.get("eight_bar_score")
+    if score is None:
+        return None
+    sev = _tiered(score, {"moderate": 50.0, "minor": 70.0}, higher_is_worse=False)
+    if sev is None:
+        return None
+    return _problem(
+        track_id=_track_id(a), slug="eight_bar_violations", severity=sev, category="sections",
+        kind="fault", headline=f"Sections break the 8-bar grid ({score:.0f}/100)",
+        summary=f"Eight-bar compliance is {score:.0f}/100; section lengths aren't landing on "
+                "8/16-bar phrases.",
+        evidence=[Evidence(metric="phase7.eight_bar_score", value=float(score),
+                           expected_range=(70.0, 100.0), label=f"{score:.0f}/100")],
+        why_it_matters="DJ-friendly arrangements phrase in 8s; off-grid sections make beatmatching "
+                       "and mixing awkward.",
+    )
+
+
+@single("bpm_genre_match", tier="A")
+def bpm_genre_match(a: dict[str, Any]) -> Verdict | None:
+    """Soft tempo-vs-genre sanity (binding bpm_genre_match). Never an error —
+    subgenres span wide; suspected."""
+    bpm = _phase(a, "phase1").get("bpm")
+    if bpm is None:
+        return None
+    g = _genre(a)
+    lo = G.ppath(g, "bpm.min")
+    hi = G.ppath(g, "bpm.max")
+    if lo is None or hi is None or lo <= bpm <= hi:
+        return None
+    return _problem(
+        track_id=_track_id(a), slug="bpm_genre_match", severity="minor", category="sections",
+        kind="observation", suspected=True,
+        headline=f"BPM {bpm:.0f} outside {G.resolve_genre(g)} range",
+        summary=f"Tempo {bpm:.0f} is outside the typical {lo:.0f}-{hi:.0f} BPM for "
+                f"{G.resolve_genre(g)}. Subgenres span wide — not an error.",
+        evidence=[Evidence(metric="phase1.bpm", value=float(bpm),
+                           expected_range=(float(lo), float(hi)), label=f"{bpm:.0f} BPM")],
+        why_it_matters="A tempo far outside the genre norm can signal a half/double-time detection "
+                       "or a genre mismatch.",
+    )
