@@ -1,0 +1,46 @@
+"""Router: route each problem to a solver by (category, data_tier), then merge
+(attach validated fixes). Suppression already happened upstream in
+evaluate_problems; the LLM refine stage is out of scope.
+"""
+from __future__ import annotations
+
+from aimusic_shared.verdicts.models import Evidence
+from app.solve_lib import router as Rt
+from app.verdict_lib.rule_engine import _problem
+
+
+def _p(slug, category, *, data_tier="audio_only", fixable=True, metric="phase1.x", value=1.0):
+    return _problem(
+        track_id="t", slug=slug, severity="severe", category=category,
+        headline="h", summary="s", why_it_matters="w", data_tier=data_tier, fixable=fixable,
+        evidence=[Evidence(metric=metric, value=value, label="x")],
+    )
+
+
+def test_route_by_category_and_tier():
+    assert Rt.route(_p("clipping_count", "clipping")) == "clipping"
+    assert Rt.route(_p("mud_buildup", "frequency_balance")) == "frequency_balance"
+    assert Rt.route(_p("over_widened", "stereo_field")) == "stereo_field"
+
+
+def test_route_returns_none_for_unmapped_tier_or_category():
+    assert Rt.route(_p("robotic_velocity", "humanization", data_tier="project_midi")) is None
+    assert Rt.route(_p("stem_clash", "frequency_collision", data_tier="stems")) is None
+
+
+def test_observations_not_routed():
+    assert Rt.route(_p("modal_ambiguity", "harmonic", fixable=False)) is None
+
+
+def test_merge_attaches_validated_fix_only_to_routed():
+    a = {"track_id": "t", "phase1": {"true_peak_db": 0.4}, "phase2": {"genre": "techno"}}
+    clip = _p("true_peak_overshoot", "clipping", metric="phase1.true_peak_db", value=0.4)
+    obs = _p("modal_ambiguity", "harmonic", fixable=False,
+             metric="phase1.true_peak_db", value=0.4)
+
+    out = Rt.merge([clip, obs], a, "techno")
+
+    routed = next(p for p in out if p.category == "clipping")
+    passed = next(p for p in out if p.category == "harmonic")
+    assert routed.fix is not None and routed.fix.dsp_chain[0].type == "limiter"
+    assert passed.fix is None  # observation passes through unsolved
