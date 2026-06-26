@@ -72,3 +72,58 @@ def test_modal_ambiguity_silent_when_no_tonal_centre():
     a = _a({"key_estimate": {"key": "C", "mode": "major", "second_key": "G",
                              "second_mode": "major", "confidence": 0.30, "profile_corrs": corrs}})
     assert RE.modal_ambiguity(a) is None
+
+
+# ── B1 missing_sidechain (conservative; suspected) ───────────────────────────
+
+def _beats(n=20):
+    return [i * 0.42 for i in range(n)]
+
+
+def test_missing_sidechain_fires_on_flat_dense_low_end():
+    a = _a({"loudness_timeline": {"momentary": {"t": _beats(), "lufs": [-9.0] * 20}},
+            "structure": {"beats": _beats()}, "low_energy": 0.5})
+    v = RE.missing_sidechain(a)
+    assert v is not None and v.suspected is True and v.category == "low_end"
+    assert validate_verdict(v, a).ok
+
+
+def test_missing_sidechain_silent_when_pumping():
+    a = _a({"loudness_timeline": {"momentary": {"t": _beats(), "lufs": [-9.0, -15.0] * 10}},
+            "structure": {"beats": _beats()}, "low_energy": 0.5})
+    assert RE.missing_sidechain(a) is None
+
+
+def test_missing_sidechain_silent_without_beats():
+    a = _a({"loudness_timeline": {"momentary": {"t": [], "lufs": [-9.0] * 20}},
+            "structure": {"beats": []}, "low_energy": 0.5})
+    assert RE.missing_sidechain(a) is None
+
+
+# ── C4 untreated_low_end composite ───────────────────────────────────────────
+
+def test_untreated_low_end_fires_and_suppresses_b1():
+    a = _a({"loudness_timeline": {"momentary": {"t": _beats(), "lufs": [-9.0] * 20}},
+            "structure": {"beats": _beats()}, "low_energy": 0.5,
+            "bands": {"bass": -8.0, "sub_bass": -6.0}})
+    out = RE.evaluate_problems(
+        a,
+        singles=[("missing_sidechain", RE.missing_sidechain)],
+        composites=[("untreated_low_end", ["missing_sidechain", "thin_low_end"],
+                     RE.untreated_low_end)],
+    )
+    slugs = {v.problem_id.split(".")[1] for v in out}
+    assert "untreated_low_end" in slugs
+    assert "missing_sidechain" not in slugs  # absorbed by the composite
+    comp = next(v for v in out if v.problem_id.endswith("untreated_low_end.0"))
+    assert comp.suspected is False and comp.severity == "severe"
+    assert validate_verdict(comp, a).ok
+
+
+def test_untreated_low_end_silent_without_b1():
+    a = _a({"low_energy": 0.5, "bands": {"bass": -8.0, "sub_bass": -6.0}})
+    out = RE.evaluate_problems(
+        a, singles=[],
+        composites=[("untreated_low_end", ["missing_sidechain"], RE.untreated_low_end)],
+    )
+    assert out == []

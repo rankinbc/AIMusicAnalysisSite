@@ -558,3 +558,64 @@ def modal_ambiguity(a: dict[str, Any]) -> Verdict | None:
         why_it_matters="An ambiguous tonal centre makes auto key + harmonic-mixing "
                        "labels unreliable; confirm the key by ear.",
     )
+
+
+@single("missing_sidechain", tier="B")
+def missing_sidechain(a: dict[str, Any]) -> Verdict | None:
+    """No sidechain pumping signature on a dense low end. CONSERVATIVE + suspected:
+    the lifted loudness_timeline is full-band 0.4 s momentary, which can't resolve a
+    sub-100 ms kick-duck — robust detection needs a low-band envelope lift (TODO).
+    Until then this fires only on the clear case: flat momentary modulation + dense
+    low end, gated on beats present."""
+    import statistics
+
+    p1 = _phase(a, "phase1")
+    series = ((p1.get("loudness_timeline") or {}).get("momentary") or {}).get("lufs") or []
+    beats = (p1.get("structure") or {}).get("beats") or []
+    low = p1.get("low_energy")
+    if len(series) < 8 or len(beats) < 8 or not low:
+        return None
+    spread = statistics.pstdev(series)
+    if spread > 1.5 or low < 0.2:  # placeholder thresholds — unvalidated (TODO: corpus)
+        return None
+    return _problem(
+        track_id=_track_id(a), slug="missing_sidechain", severity="moderate",
+        category="low_end", kind="observation", suspected=True,
+        headline="No sidechain pumping signature on a dense low end",
+        summary=f"Momentary loudness barely modulates (sigma {spread:.2f} LU) over a dense "
+                "low end — no ducking pattern, so kick and bass may be masking, not pumping.",
+        evidence=[Evidence(metric="phase1.low_energy", value=float(low),
+                           label=f"sigma {spread:.2f} LU, low_energy {low:.2f}")],
+        why_it_matters="In most electronic genres the bass ducks under the kick; without it "
+                       "the low end congests and loses punch.",
+    )
+
+
+@composite("untreated_low_end", suppresses=["missing_sidechain", "thin_low_end"])
+def untreated_low_end(a: dict[str, Any], fired: dict[str, Verdict]) -> Verdict | None:
+    """Routing composite: dense, hot low end with no ducking signature → the fix is
+    sidechain (with stems) or a complementary EQ carve."""
+    if "missing_sidechain" not in fired:
+        return None
+    p1 = _phase(a, "phase1")
+    bass = (p1.get("bands") or {}).get("bass")
+    low = p1.get("low_energy")
+    if bass is None or low is None:
+        return None
+    if not (bass > -12.0 and low > 0.35):  # bands are dB-rel-peak (<=0); "hot" = near 0
+        return None
+    return _problem(
+        track_id=_track_id(a), slug="untreated_low_end", severity="severe", confidence=0.9,
+        category="low_end", kind="fault", suspected=False,
+        headline="Dense low end with no ducking signature",
+        summary="Sub/bass bands are hot, the low end is dense, and there's no sidechain "
+                "pumping — kick and bass are competing untreated.",
+        evidence=[
+            Evidence(metric="phase1.bands.bass", value=float(bass),
+                     expected_range=(-18.0, -12.0), label="bass hot"),
+            Evidence(metric="phase1.low_energy", value=float(low),
+                     expected_range=(0.2, 0.35), label="LF energy high"),
+        ],
+        why_it_matters="A dense low end without ducking congests the mix; the fix is sidechain "
+                       "(with stems) or a complementary EQ carve.",
+    )
