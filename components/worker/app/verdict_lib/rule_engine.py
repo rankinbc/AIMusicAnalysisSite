@@ -1194,3 +1194,187 @@ def thin_and_bright(a: dict[str, Any], fired: dict[str, Verdict]) -> Verdict | N
         why_it_matters="A low-tilt EQ (shelve the top, lift the lows) rebalances the whole "
                        "mix in one move.",
     )
+
+
+# ── TIER S / P — stem + MIDI problems. Data-tier tagged; gated on presence ────
+# S rules need phase4.stems.status == "ok"; P rules need a non-empty phase8.
+# Never grade missing data — absent tier returns None.
+
+_BAND_HZ: dict[str, tuple[float, float]] = {
+    "sub": (20.0, 60.0), "sub_bass": (20.0, 60.0), "bass": (60.0, 200.0),
+    "low_mid": (200.0, 500.0), "mid": (500.0, 2000.0), "upper_mid": (2000.0, 5000.0),
+    "presence": (5000.0, 8000.0), "air": (8000.0, 20000.0),
+}
+_TIER_SEV: dict[str, Severity] = {"critical": "severe", "warning": "moderate"}
+
+
+def _stems_block(a: dict[str, Any]) -> dict[str, Any] | None:
+    """phase4.stems iff it was actually analyzed (status == 'ok'), else None."""
+    stems = _phase(a, "phase4").get("stems") or {}
+    return stems if stems.get("status") == "ok" else None
+
+
+@single("stem_clash", tier="S")
+def stem_clash(a: dict[str, Any]) -> Verdict | None:
+    stems = _stems_block(a)
+    if stems is None:
+        return None
+    worst: dict[str, Any] | None = None
+    for row in stems.get("clash_matrix") or []:
+        tier = row.get("severity_tier")
+        if tier in ("warning", "critical") and (worst is None or tier == "critical"):
+            worst = row
+    if worst is None:
+        return None
+    sev = _TIER_SEV.get(worst.get("severity_tier", "warning"), "moderate")
+    a_s, b_s, band = worst.get("stem_a"), worst.get("stem_b"), worst.get("band")
+    return _problem(
+        track_id=_track_id(a), slug="stem_clash", severity=sev,
+        category="frequency_collision", kind="fault", data_tier="stems",
+        headline=f"Stem clash: {a_s} vs {b_s} ({band})",
+        summary=f"{a_s} and {b_s} overlap in the {band} band - masking that a fix should carve.",
+        evidence=[Evidence(metric="phase4.stems.clash_matrix", value=None,
+                           label=f"{a_s} x {b_s} {band}", stems=[a_s, b_s],
+                           frequency_range_hz=_BAND_HZ.get(band or ""))],
+        why_it_matters="Two stems competing in one band smear definition; carve one to make room.",
+    )
+
+
+@single("stem_balance", tier="S")
+def stem_balance(a: dict[str, Any]) -> Verdict | None:
+    stems = _stems_block(a)
+    if stems is None:
+        return None
+    worst_role: str | None = None
+    worst_sev: Severity | None = None
+    for role, flag in (stems.get("per_stem") or {}).items():
+        sev = _TIER_SEV.get((flag or {}).get("severity_tier") or "")
+        if sev is None:
+            continue
+        if worst_sev is None or sev == "severe":
+            worst_role, worst_sev = role, sev
+    if worst_role is None or worst_sev is None:
+        return None
+    direction = ((stems.get("per_stem") or {}).get(worst_role) or {}).get("direction", "off")
+    return _problem(
+        track_id=_track_id(a), slug="stem_balance", severity=worst_sev,
+        category="gain_staging", kind="fault", data_tier="stems",
+        headline=f"Stem balance: {worst_role} is {direction}",
+        summary=f"The {worst_role} stem sits {direction} relative to the rest of the mix.",
+        evidence=[Evidence(metric="phase4.stems.per_stem", value=None,
+                           label=f"{worst_role} {direction}", stems=[worst_role])],
+        why_it_matters="A mis-balanced stem skews the whole mix; re-gain it before mastering.",
+    )
+
+
+def _vel_severity(vstd: float | None, hscore: Any) -> Severity | None:
+    if vstd is not None and vstd == 0:
+        return "critical"
+    if vstd is not None and vstd < 3:
+        return "severe"
+    if hscore == "robotic":
+        return "severe"
+    return None
+
+
+@single("robotic_velocity", tier="P")
+def robotic_velocity(a: dict[str, Any]) -> Verdict | None:
+    p8 = _phase(a, "phase8")
+    if not p8:
+        return None
+    rank: dict[Severity, int] = {"critical": 4, "severe": 3, "moderate": 2, "minor": 1, "win": 0}
+    worst_name: str | None = None
+    worst_sev: Severity | None = None
+    worst_vstd: float | None = None
+    for name, t in (p8.get("per_track_analysis") or {}).items():
+        vstd = t.get("velocity_std")
+        sev = _vel_severity(vstd, t.get("humanization_score"))
+        if sev is None:
+            continue
+        if worst_sev is None or rank[sev] > rank[worst_sev]:
+            worst_name, worst_sev, worst_vstd = name, sev, vstd
+    if worst_name is None or worst_sev is None:
+        return None
+    if "." not in worst_name and worst_vstd is not None:
+        ev = Evidence(metric=f"phase8.per_track_analysis.{worst_name}.velocity_std",
+                      value=float(worst_vstd), label=f"{worst_name} velocity std {worst_vstd:.1f}")
+    else:
+        ev = Evidence(metric="phase8.per_track_analysis", value=None,
+                      label=f"{worst_name} robotic")
+    return _problem(
+        track_id=_track_id(a), slug="robotic_velocity", severity=worst_sev,
+        category="humanization", kind="fault", data_tier="project_midi", where=None,
+        headline=f"Robotic velocities ({worst_name})",
+        summary=f"{worst_name} has near-zero velocity variation - notes are machine-flat, not played.",
+        evidence=[ev],
+        why_it_matters="Identical velocities read as programmed; humanizing adds groove and life.",
+    )
+
+
+@single("no_headroom", tier="P")
+def no_headroom(a: dict[str, Any]) -> Verdict | None:
+    p8 = _phase(a, "phase8")
+    if not p8:
+        return None
+    vols = [t.get("volume_db") for t in (p8.get("tracks") or [])
+            if not t.get("muted") and t.get("volume_db") is not None]
+    if not vols:
+        return None
+    pct_high = sum(1 for v in vols if v > -1.0) / len(vols)
+    mean = sum(vols) / len(vols)
+    std = (sum((v - mean) ** 2 for v in vols) / len(vols)) ** 0.5 if len(vols) >= 2 else None
+    if not (pct_high > 0.8 or (std is not None and std < 2.0)):
+        return None
+    return _problem(
+        track_id=_track_id(a), slug="no_headroom", severity="moderate",
+        category="gain_staging", kind="fault", data_tier="project_midi",
+        headline="No mix headroom - faders pinned",
+        summary="Most unmuted tracks sit near 0 dB with no gain-staging spread; "
+                "the master bus has no room to breathe.",
+        evidence=[Evidence(metric="phase8.tracks", value=None,
+                           label=f"{pct_high * 100:.0f}% of faders near unity")],
+        why_it_matters="Pinned faders pile gain onto the master; pull tracks down to leave headroom.",
+    )
+
+
+@single("quantization_issues", tier="P")
+def quantization_issues(a: dict[str, Any]) -> Verdict | None:
+    p8 = _phase(a, "phase8")
+    if not p8:
+        return None
+    n = int(p8.get("quantization_issues_count") or 0)
+    if n < 1:
+        return None
+    sev: Severity = "severe" if n > 20 else "moderate"
+    return _problem(
+        track_id=_track_id(a), slug="quantization_issues", severity=sev,
+        category="humanization", kind="fault", data_tier="project_midi",
+        headline=f"Quantization issues ({n})",
+        summary=f"{n} notes sit off-grid in a way that reads as timing error, not groove.",
+        evidence=[Evidence(metric="phase8.quantization_issues_count", value=float(n),
+                           label=f"{n} off-grid notes")],
+        why_it_matters="Sloppy timing muddies transients; quantize or nudge the worst offenders.",
+    )
+
+
+@single("project_clutter", tier="P")
+def project_clutter(a: dict[str, Any]) -> Verdict | None:
+    p8 = _phase(a, "phase8")
+    if not p8:
+        return None
+    pct = p8.get("clutter_pct")
+    if pct is None or pct <= 0.3:
+        return None
+    sev: Severity = "moderate" if pct > 0.5 else "minor"
+    disabled = int(p8.get("disabled_devices") or 0)
+    return _problem(
+        track_id=_track_id(a), slug="project_clutter", severity=sev,
+        category="device_chain", kind="observation", data_tier="project_midi", suspected=True,
+        headline=f"Project clutter ({pct * 100:.0f}% disabled)",
+        summary=f"{pct * 100:.0f}% of devices ({disabled} of them) are disabled - the project "
+                "carries dead weight that obscures the live signal chain.",
+        evidence=[Evidence(metric="phase8.clutter_pct", value=float(pct),
+                           label=f"{disabled} disabled devices")],
+        why_it_matters="A cluttered project is hard to reason about; prune disabled devices to "
+                       "clarify the chain.",
+    )
