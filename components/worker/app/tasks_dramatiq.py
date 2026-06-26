@@ -75,6 +75,10 @@ except ImportError:
     logger.warning("audio_analysis not installed — actor will raise on dispatch")
     run_pipeline = None  # type: ignore[assignment]
 
+# Deterministic Problem engine, run on every completed analysis (healthy path).
+# Module-level binding so it's a patchable seam in tests.
+from .verdict_lib.degraded import run_rule_engine_for_analysis  # noqa: E402
+
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -243,6 +247,16 @@ def analyze_audio_job(job_id: str) -> None:
                 bref.used_count = (bref.used_count or 0) + 1
 
     _try_write_artifact(job_id, result_dict)
+
+    # ── Phase C2 — deterministic Problem engine on the completed analysis ────
+    # Runs on EVERY successful analysis (not just degraded), so every track gets
+    # a de-suppressed, validated Problem list. Idempotent (source-keyed guard)
+    # and best-effort: a failure here never undoes the completed analysis.
+    try:
+        written = run_rule_engine_for_analysis(analysis_id)
+        logger.info("problem engine wrote %d problems for job=%s", written, job_id)
+    except Exception:  # pragma: no cover — never fail a done analysis over this
+        logger.warning("problem engine failed for job=%s", job_id, exc_info=True)
 
     # ── Phase D — kick off background structure detection (fill-in) ──────────
     # The fast phases are now persisted + the job is COMPLETE. Enqueue the heavy

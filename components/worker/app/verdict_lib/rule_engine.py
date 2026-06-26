@@ -16,10 +16,11 @@ Two coexisting paths (additive; legacy retirement deferred):
     rules carry a ``data_tier`` (audio_only / stems / project_midi) and never
     grade absent data (every rule guards its inputs and returns ``None``).
 
-The two-pass engine is LIVE on the degraded/free path (``degraded.py`` calls
-``evaluate_problems``, validates, and persists the Problem columns). Promoting it
-to the healthy (non-degraded) analysis path and retiring the legacy ``@rule`` list
-are the remaining follow-ons.
+The two-pass engine is LIVE on EVERY completed analysis: ``degraded.py`` calls
+``evaluate_problems``, validates, and persists the Problem columns, and
+``tasks_dramatiq.analyze_audio_job`` Phase C2 invokes it on the healthy path too
+(idempotent + best-effort). Retiring the legacy ``@rule`` list is the remaining
+follow-on.
 """
 from __future__ import annotations
 from datetime import datetime, timezone
