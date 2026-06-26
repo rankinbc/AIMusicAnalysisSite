@@ -2,10 +2,11 @@
 // the runtime helpers can be imported by the route's validateSearch without
 // tripping react-refresh's component-only-export rule.
 
-export type ResultsTabKey = 'actions' | 'analysis' | 'project' | 'files';
+export type ResultsTabKey = 'actions' | 'problems' | 'analysis' | 'project' | 'files';
 
 export const RESULTS_TAB_KEYS: readonly ResultsTabKey[] = [
   'actions',
+  'problems',
   'analysis',
   'project',
   'files',
