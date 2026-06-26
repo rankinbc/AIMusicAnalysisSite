@@ -39,6 +39,16 @@ Render, on each `VerdictCard`, mirroring `ProblemsTab.tsx`:
 - [ ] BFF `StreamVerdicts` SSE payload includes `source`/`kind`/`dataTier`/`fixable`/`suspected`.
 - [ ] All four frontend gates pass; `dotnet build` passes for the BFF change.
 
+## Data points & actions (for the design pass)
+
+**Contract:** `VerdictDto` — all fields already present (`types.ts:1232-1239`). No type change.
+**Render (mirror ProblemsTab exactly):** `source` → AI / Measured badge · `kind` → FYI (observation) /
+Data (integrity), none for fault · `suspected` → "Unverified" badge + dashed-border card · `where` →
+section·time chip (reuse `formatWhere`).
+**Actions / buttons:** existing apply / dismiss / feedback unchanged. **GATE the fix CTA off** when
+`!verdict.fixable` OR `verdict.kind === 'observation'` (observations are FYI, not actionable). Keep the
+`headline === 'Specialist failed'` fail-marker path untouched.
+
 ## All Needed Context
 
 ```yaml

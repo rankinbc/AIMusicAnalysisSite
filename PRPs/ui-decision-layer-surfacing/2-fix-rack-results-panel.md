@@ -41,6 +41,17 @@ real rack + real coaching.
 - [ ] (Backend prerequisite) `change_log` + `leftover_advice` persisted by the actor and
       exposed in `FixRackDto`.
 
+## Data points & actions (for the design pass)
+
+**Contract:** `FixRackDto { name, chain (opaque — already carries `ms.monoMakerHz`), createdAt }`
+(`RackPresetDtos.cs:24-26`). `change_log` / `leftover_advice` are NOT in the DTO or `RackPreset`
+entity yet (backend prereq below).
+**Render:** the `ms` mono-maker module + its `monoMakerHz` value in Hz (only when `> 0`); the existing
+rack chain bar + module params; the `change_log` → "What changed" + `leftover_advice` → "What a rack
+can't fix" two-column coaching (*needs the backend prereq*; until then keep the graceful placeholder).
+**Actions / buttons:** "Generate" / "Regenerate" (exist via `useGenerateFixRack` + `useFixRack` poll);
+**"Open in Listen rack"** — load the preset chain into the Listen rack via the existing preset-load path.
+
 ## All Needed Context
 
 ```yaml

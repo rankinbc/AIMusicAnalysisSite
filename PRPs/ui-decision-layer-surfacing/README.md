@@ -33,20 +33,43 @@ and the Fix Rack gained a bass mono-maker:
 | `dataTier` | grouped sections (mix / stems / project) | `problems-helpers.ts:50` |
 | `refines` | child nesting | `problems-helpers.ts:42-54` |
 
-## What these PRPs cover (the gaps)
+## Contracts (already wired end-to-end — the data is there)
 
-1. **`1-verdictcard-decision-fields.md`** — the AI Coach tab's `VerdictCard.tsx`
-   renders NONE of the new fields. Bring it to parity with ProblemsTab so
-   `llm_identifier` + `suspected` findings read consistently. Includes a tiny BFF
-   `StreamVerdicts` SSE-projection fix (the stream omits the new fields).
-2. **`2-fix-rack-results-panel.md`** — surface the new mono-maker module +
-   replace the placeholder coaching panel with the solver's `change_log` /
-   `leftover_advice`. **Backend prerequisite:** the `generate_fix_rack` actor
-   currently persists only `chain_json` — it must also persist change_log +
-   leftover_advice for the DTO to expose them.
-3. **`3-run-trace-diagnostics-viewer.md`** — OPTIONAL / dev-facing. Surface the
-   per-run trace JSON + flow diagram (the run-trace harness writes gzipped JSON
-   under `output/worker/<date>_run-traces/`).
+The BFF + frontend already carry the new fields; most rework is **rendering**, not plumbing.
+
+- **`VerdictsListResponse`** = `{ verdicts: VerdictDto[], specialists: SpecialistStatus[],
+  routing_plan?, degradation? }` (`VerdictDtos.cs:77-85`, `types.ts:1309-1319`).
+- **`VerdictDto`** carries all 8 Problem fields: `source` (rule_engine|llm_identifier),
+  `kind` (fault|observation|integrity), `dataTier` (audio_only|stems|project_midi),
+  `fixable`, `suspected`, `problemId`, `where`, `refines` (`VerdictDtos.cs:13-44`).
+- **`SpecialistStatus`** = `{ slug, status }` (idle|cached|failed; frontend overlays "running").
+- **`FixRackDto`** = `{ name, chain (opaque), createdAt }` (`RackPresetDtos.cs:24-26`). The
+  `chain` already carries `ms.monoMakerHz`. **NOT carried:** `change_log` / `leftover_advice`
+  (solver computes them; the actor + RackPreset don't persist them — see PRP-2's backend prereq).
+- **`DegradationNoticeDto`** = `{ reason, detail?, occurredAt }` (budget/circuit-breaker banner).
+
+## What these PRPs cover (the gaps, priority order)
+
+1. **`1-verdictcard-decision-fields.md`** — the AI Coach tab's `VerdictCard.tsx` renders NONE
+   of the new fields. Bring it to parity with ProblemsTab so `llm_identifier`/`suspected`
+   findings read consistently. **Includes the tiny BFF `StreamVerdicts` SSE-projection fix**
+   (the stream omits `source`/`kind`/`dataTier`/`fixable`/`suspected`).
+2. **`4-specialist-roster-identifiers.md`** — the 3 always-on identifiers
+   (`trance_arrangement`, `section_contrast`, `chord_harmony`) sit in the on-demand specialist
+   roster and show a misleading "Run · N credits" button. Give them a passive "AI judgment ·
+   runs automatically" treatment (no Run, pro-gated).
+3. **`2-fix-rack-results-panel.md`** — surface the mono-maker module + replace the placeholder
+   coaching panel with the solver's `change_log` / `leftover_advice`. **Backend prerequisite:**
+   `generate_fix_rack` persists only `chain_json` — must also persist change_log + leftover_advice.
+4. **`3-run-trace-diagnostics-viewer.md`** — OPTIONAL / dev-facing. Surface the per-run trace
+   JSON + flow diagram (worker writes gzipped JSON under `output/worker/<date>_run-traces/`).
+
+### Minor — verification, not new build
+- **ProblemsTab** is essentially done. Confirm with design: the `where` chip **deep-links** to
+  the waveform/section; the empty-tier **"unlock" affordances** (upload stems / drop `.als`);
+  the fault-only tab count. No rebuild.
+- **GamePlan / MoveCard** are intentionally decision-field-agnostic (Moves drop verdict metadata).
+  Leave them as-is — do NOT thread the new fields through the Move model.
 
 ## Design source of truth
 
