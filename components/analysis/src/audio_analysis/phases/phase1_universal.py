@@ -53,6 +53,47 @@ def _key_detection_confidence(chroma_mean: np.ndarray) -> float:
             best = corr
     return float(np.clip(best, 0.0, 1.0))
 
+
+def _key_estimate(chroma_mean: np.ndarray) -> dict:
+    """Full 24-key Krumhansl readout (B4 lift) — surfaces the correlation vector
+    the confidence calc already computes internally and throws away.
+
+    `key` is the chroma-argmax pitch class (identical to ``detected_key``) and
+    `confidence` matches ``key_detection_confidence`` by construction, so the
+    two existing fields never diverge from this richer estimate. Adds `mode`
+    (major/minor at that key), the second-best key/mode, and the raw 24
+    correlations (12 major rotations C..B, then 12 minor rotations C..B) — the
+    inputs the `modal_ambiguity` rule needs. All values are JSON-safe floats.
+    """
+    cm = chroma_mean.astype(float)
+    key_idx = int(np.argmax(cm))
+    if float(np.std(cm)) < 1e-9:  # flat chroma → no tonal centre
+        return {
+            "key": _KEY_NAMES[key_idx],
+            "mode": "major",
+            "confidence": 0.0,
+            "second_key": _KEY_NAMES[key_idx],
+            "second_mode": "minor",
+            "profile_corrs": [0.0] * 24,
+        }
+    profiles = [np.roll(_KRUMHANSL_MAJOR, i) for i in range(12)]
+    profiles += [np.roll(_KRUMHANSL_MINOR, i) for i in range(12)]
+    corrs: list[float] = []
+    for prof in profiles:
+        c = float(np.corrcoef(cm, prof)[0, 1])
+        corrs.append(c if np.isfinite(c) else 0.0)
+    mode = "major" if corrs[key_idx] >= corrs[key_idx + 12] else "minor"
+    confidence = float(np.clip(max(corrs), 0.0, 1.0))
+    second_idx = int(np.argsort(np.asarray(corrs))[::-1][1])
+    return {
+        "key": _KEY_NAMES[key_idx],
+        "mode": mode,
+        "confidence": confidence,
+        "second_key": _KEY_NAMES[second_idx % 12],
+        "second_mode": "major" if second_idx < 12 else "minor",
+        "profile_corrs": corrs,
+    }
+
 # Reasons we've already logged for unavailable structure detection, so a run of
 # N tracks against a host with no Docker image logs the cause once, not N times.
 _logged_structure_reasons: set[str] = set()
@@ -78,20 +119,23 @@ def _log_structure_unavailable_once(reason: str) -> None:
 
 def _windowed_loudness(
     y: np.ndarray, sr: int, integrated_lufs: float
-) -> tuple[float, float, float]:
-    """EBU R128 momentary (0.4 s) / short-term (3 s) max loudness + loudness range.
+) -> tuple[float, float, float, dict]:
+    """EBU R128 momentary (0.4 s) / short-term (3 s) max loudness + loudness range
+    + the time-aligned loudness timeline (B1 lift).
 
-    Returns ``(loudness_range_lu, short_term_max_lufs, momentary_max_lufs)`` in
-    LU / LUFS. Each window class is measured with its own ``pyloudnorm.Meter``
-    whose gating block == the window, so a single window yields that window's
-    gated loudness. Robust to short clips (returns the integrated value, and
-    0.0 LRA, when a class can't be measured) and bounded on long tracks (window
-    count is capped so the per-window K-weighting cost stays a few seconds).
+    Returns ``(loudness_range_lu, short_term_max_lufs, momentary_max_lufs,
+    timeline)`` in LU / LUFS. ``timeline`` is
+    ``{"momentary": {"t": [s…], "lufs": […]}, "short_term": {…}}`` — the per-window
+    series this used to compute and discard, now surfaced (the inputs the
+    sidechain/pumping rules need). Each window class is measured with its own
+    ``pyloudnorm.Meter`` whose gating block == the window. Robust to short clips
+    (empty series, integrated value, 0.0 LRA) and bounded on long tracks (window
+    count capped, so the series stays small enough for JSONB).
     """
     data = y.T.astype(float)  # (samples, channels) for pyloudnorm
     n = data.shape[0]
 
-    def _series(win_s: float, max_windows: int) -> list[float]:
+    def _series(win_s: float, max_windows: int) -> list[tuple[float, float]]:
         win = int(win_s * sr)
         if win <= 0 or n < win:
             return []
@@ -99,32 +143,45 @@ def _windowed_loudness(
         # track length; never finer than 25% of the window.
         hop = max(int(0.25 * win), (n - win) // max_windows + 1)
         meter = pyloudnorm.Meter(sr, block_size=win_s)
-        vals: list[float] = []
+        out: list[tuple[float, float]] = []
         for start in range(0, n - win + 1, hop):
             try:
                 loud = float(meter.integrated_loudness(data[start : start + win]))
             except Exception:  # noqa: BLE001 — silent/too-short window; skip it
                 continue
             if np.isfinite(loud):
-                vals.append(loud)
-        return vals
+                out.append((float(start / sr), loud))
+        return out
 
     momentary = _series(0.4, 300)
     short_term = _series(3.0, 150)
-    momentary_max = max(momentary) if momentary else integrated_lufs
-    short_term_max = max(short_term) if short_term else integrated_lufs
+    momentary_vals = [v for _, v in momentary]
+    short_term_vals = [v for _, v in short_term]
+    momentary_max = max(momentary_vals) if momentary_vals else integrated_lufs
+    short_term_max = max(short_term_vals) if short_term_vals else integrated_lufs
 
     # EBU R128 loudness range: P95 − P10 of the gated short-term distribution.
     lra = 0.0
-    if len(short_term) >= 2:
-        st = np.asarray(short_term)
+    if len(short_term_vals) >= 2:
+        st = np.asarray(short_term_vals)
         st = st[st > -70.0]  # absolute gate
         if st.size:
             gated = st[st > (st.mean() - 20.0)]  # relative gate
             base = gated if gated.size else st
             lra = float(np.percentile(base, 95) - np.percentile(base, 10))
 
-    return lra, float(short_term_max), float(momentary_max)
+    timeline = {
+        "momentary": {
+            "t": [t for t, _ in momentary],
+            "lufs": momentary_vals,
+        },
+        "short_term": {
+            "t": [t for t, _ in short_term],
+            "lufs": short_term_vals,
+        },
+    }
+
+    return lra, float(short_term_max), float(momentary_max), timeline
 
 
 def _detect_structure(wav_path: Path) -> dict:
@@ -275,6 +332,10 @@ def analyze(
     # atonal, →1 = one key clearly dominant).
     key_detection_confidence = _key_detection_confidence(chroma_mean)
 
+    # Full 24-key Krumhansl readout (B4 lift) — key/mode + second-best + the raw
+    # correlation vector. key/confidence match the two fields above by construction.
+    key_estimate = _key_estimate(chroma_mean)
+
     # ------------------------------------------------------------------
     # Crest factor (dB) — peak-to-RMS. NOTE: `rms` above is LINEAR amplitude,
     # so convert it to dBFS before subtracting from the already-dB peak.
@@ -305,8 +366,8 @@ def analyze(
     # ------------------------------------------------------------------
     # Windowed loudness — momentary / short-term maxima + EBU R128 loudness range
     # ------------------------------------------------------------------
-    loudness_range_lu, short_term_max_lufs, momentary_max_lufs = _windowed_loudness(
-        y, sr, lufs
+    loudness_range_lu, short_term_max_lufs, momentary_max_lufs, loudness_timeline = (
+        _windowed_loudness(y, sr, lufs)
     )
 
     # ------------------------------------------------------------------
@@ -355,6 +416,7 @@ def analyze(
         "clipped_sample_count": clipped_sample_count,
         "detected_key": detected_key,
         "key_detection_confidence": key_detection_confidence,
+        "key_estimate": key_estimate,
         "mono_compatibility": mono_compatibility,
         "low_energy": low_energy,
         "crest_factor": crest_factor,
@@ -364,6 +426,7 @@ def analyze(
         "loudness_range_lu": loudness_range_lu,
         "short_term_max_lufs": short_term_max_lufs,
         "momentary_max_lufs": momentary_max_lufs,
+        "loudness_timeline": loudness_timeline,
         "transients": transients,
         "structure": structure,
     }
