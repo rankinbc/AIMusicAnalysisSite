@@ -222,7 +222,11 @@ def test_run_rule_engine_persists_verdicts(install_fake_sessions):
     assert written >= 1
     assert len(session.added) == written
     for row in session.added:
-        assert row.specialist == "rule_engine"
+        # Two-pass Problem engine: specialist is "rule_engine.<slug>", each row
+        # carries a stable problem_id, and source is rule_engine.
+        assert row.specialist.startswith("rule_engine.")
+        assert row.problem_id  # not None/empty — proves the Problem engine ran
+        assert row.source == "rule_engine"
         assert row.analysis_id == aid
         assert row.severity in {"critical", "severe", "moderate", "minor", "win"}
 
@@ -238,8 +242,9 @@ def test_run_rule_engine_handles_real_pipeline_shape(install_fake_sessions):
     written = degraded.run_rule_engine_for_analysis(aid)
 
     assert written >= 1, "rule engine produced zero verdicts on real pipeline shape — flatten() likely missing"
-    assert any(row.severity == "critical" for row in session.added), (
-        "clipping rule should have fired with severity=critical"
+    slugs = {row.problem_id.split(".")[1] for row in session.added if row.problem_id}
+    assert "clipping_count" in slugs, (
+        "clipping_count Problem should have fired on the real pipeline shape"
     )
 
 

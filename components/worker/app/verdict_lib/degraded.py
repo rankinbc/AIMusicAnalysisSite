@@ -71,11 +71,14 @@ def write_degradation_notice(
 
 
 def run_rule_engine_for_analysis(analysis_id: uuid.UUID) -> int:
-    """Evaluate ``rule_engine.evaluate_rules`` against the analysis and persist
-    any resulting Verdict rows. Returns the count actually written.
+    """Evaluate the two-pass Problem engine (``rule_engine.evaluate_problems``)
+    against the analysis and persist the de-suppressed, validated Problem rows.
+    Returns the count actually written.
 
-    Idempotent — returns 0 without writing if any ``specialist="rule_engine"``
-    row already exists on this analysis.
+    Idempotent — returns 0 without writing if any rule-engine row already exists
+    on this analysis. The guard keys on ``source == "rule_engine"`` (NOT an exact
+    ``specialist`` match): the Problem engine sets ``specialist="rule_engine.<slug>"``,
+    so the old exact match would never see existing rows and would double-insert.
     """
     try:
         from sqlalchemy import select  # noqa: PLC0415
@@ -83,6 +86,7 @@ def run_rule_engine_for_analysis(analysis_id: uuid.UUID) -> int:
         from aimusic_shared.models import Analysis, Verdict as VerdictRow  # noqa: PLC0415
 
         from app.db_sync import SessionFactory  # noqa: PLC0415
+        from app.verdict_lib.validator import validate_verdict  # noqa: PLC0415
 
         with SessionFactory.begin() as s:
             analysis = s.get(Analysis, analysis_id)
@@ -92,7 +96,7 @@ def run_rule_engine_for_analysis(analysis_id: uuid.UUID) -> int:
             existing = s.execute(
                 select(VerdictRow.id)
                 .where(VerdictRow.analysis_id == analysis_id)
-                .where(VerdictRow.specialist == "rule_engine")
+                .where(VerdictRow.source == "rule_engine")
                 .limit(1)
             ).first()
             if existing is not None:
@@ -105,10 +109,19 @@ def run_rule_engine_for_analysis(analysis_id: uuid.UUID) -> int:
             # convention as ``verdict_actor.run_specialist``).
             flattened = flatten(raw_final if isinstance(raw_final, dict) else {})
             flattened.setdefault("track_id", str(analysis.id))
-            verdicts: list[VerdictModel] = rule_engine.evaluate_rules(flattened)
-            for v in verdicts:
-                s.add(_to_row(analysis_id, v))
-            written = len(verdicts)
+            problems: list[VerdictModel] = rule_engine.evaluate_problems(flattened)
+            # Validate each (caps genre-aware severity, recomputes priority_score,
+            # rejects unresolvable-evidence rows) before persisting.
+            written = 0
+            for v in problems:
+                result = validate_verdict(v, flattened)
+                if not result.ok or result.verdict is None:
+                    reason = result.failure.reason if result.failure else "unknown"
+                    logger.warning("rule engine: %s failed validation: %s",
+                                   v.problem_id or v.headline, reason)
+                    continue
+                s.add(_to_row(analysis_id, result.verdict))
+                written += 1
     except Exception:
         logger.exception("rule engine evaluation failed for analysis=%s", analysis_id)
         return 0
