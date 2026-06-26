@@ -1,0 +1,78 @@
+using Microsoft.EntityFrameworkCore;
+using Spectr.Bff.Auth;
+using Spectr.Bff.DTOs;
+using Spectr.Bff.Services;
+using Spectr.Data;
+using System.Security.Claims;
+using System.Text.Json;
+
+namespace Spectr.Bff.Endpoints;
+
+// Deterministic SOLVE: turn an analysis's persisted Problems into a loadable
+// rack preset. On-demand — POST enqueues the `generate_fix_rack` worker actor,
+// which writes a system RackPreset(source='analysis'); GET serves it once ready.
+public static class FixRackEndpoints
+{
+    public static IEndpointRouteBuilder MapFixRackEndpoints(this IEndpointRouteBuilder app)
+    {
+        var g = app.MapGroup("/reports/{jobId:guid}/fix-rack").WithTags("fix-rack").RequireAuthorization();
+        g.MapPost("/", Generate);
+        g.MapGet("/", GetFixRack);
+        return app;
+    }
+
+    // POST /api/reports/{jobId}/fix-rack — enqueue rack generation.
+    private static async Task<IResult> Generate(
+        Guid jobId, ClaimsPrincipal user, AppDbContext db, IJobQueue queue, CancellationToken ct)
+    {
+        var userId = user.UserId();
+        var analysis = await db.Analyses.AsNoTracking()
+            .Where(a => a.JobId == jobId && a.UserId == userId)
+            .Select(a => new { a.Id, a.VersionId })
+            .FirstOrDefaultAsync(ct);
+        if (analysis is null) return Results.NotFound();
+        if (analysis.VersionId is null)
+            return Results.BadRequest(new { error = "Analysis has no song version; cannot attach a rack preset." });
+
+        await queue.EnqueueAsync(
+            DramatiqTasks.GenerateFixRack,
+            new object[] { analysis.Id.ToString() },
+            DramatiqQueues.AnalysisPaid, // story 2.5: secondary op → W1
+            ct);
+
+        return Results.Accepted(value: new { status = "queued" });
+    }
+
+    // GET /api/reports/{jobId}/fix-rack — the generated analysis preset, or 204.
+    private static async Task<IResult> GetFixRack(
+        Guid jobId, ClaimsPrincipal user, AppDbContext db, CancellationToken ct)
+    {
+        var userId = user.UserId();
+        var analysis = await db.Analyses.AsNoTracking()
+            .Where(a => a.JobId == jobId && a.UserId == userId)
+            .Select(a => new { a.VersionId })
+            .FirstOrDefaultAsync(ct);
+        if (analysis is null) return Results.NotFound();
+        if (analysis.VersionId is null) return Results.NoContent();
+
+        var preset = await db.RackPresets.AsNoTracking()
+            .Where(p => p.SongVersionId == analysis.VersionId.Value && p.Source == "analysis")
+            .OrderByDescending(p => p.CreatedAt)
+            .Select(p => new { p.Name, p.ChainJson, p.CreatedAt })
+            .FirstOrDefaultAsync(ct);
+        if (preset is null) return Results.NoContent();
+
+        JsonElement chain;
+        try
+        {
+            using var doc = JsonDocument.Parse(preset.ChainJson);
+            chain = doc.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return Results.NoContent();
+        }
+
+        return Results.Ok(new FixRackDto(preset.Name, chain, preset.CreatedAt));
+    }
+}

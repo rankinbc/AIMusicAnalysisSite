@@ -21,6 +21,10 @@ public sealed record RackPresetDto(
 
 public sealed record SaveRackPresetRequest(string Name, JsonElement Chain);
 
+// The deterministic SOLVE output for an analysis — a system-generated
+// RackPreset(source='analysis') exposed read-only on /reports/{jobId}/fix-rack.
+public sealed record FixRackDto(string Name, JsonElement Chain, DateTimeOffset CreatedAt);
+
 public sealed record RackDraftDto(
     Guid SongVersionId,
     JsonElement Chain,

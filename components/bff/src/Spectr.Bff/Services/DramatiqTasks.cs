@@ -13,4 +13,5 @@ public static class DramatiqTasks
     public const string CoachReply = "coach_reply";
     public const string RerunPhase = "rerun_phase";
     public const string SynthesizeRecap = "synthesize_recap";
+    public const string GenerateFixRack = "generate_fix_rack";
 }

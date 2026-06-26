@@ -263,6 +263,7 @@ api.MapVersionEndpoints();
 api.MapReportsEndpoints();
 api.MapJobEndpoints();
 api.MapVerdictEndpoints();
+api.MapFixRackEndpoints();
 api.MapReportPhaseEndpoints();
 api.MapReferenceEndpoints();
 api.MapShareEndpoints();
