@@ -906,6 +906,11 @@ class ReferenceTrack(Base):
     band_levels: Mapped[Optional[Any]] = mapped_column("band_levels", JSONB, nullable=True)
     tags: Mapped[Any] = mapped_column("tags", JSONB, nullable=False, default=list)
     analyzed: Mapped[bool] = mapped_column("analyzed", Boolean, nullable=False, default=False)
+    # Per-reference analyze lifecycle; analyzed bool stays in sync (true iff "analyzed").
+    analysis_status: Mapped[str] = mapped_column(
+        "analysis_status", String(16), nullable=False, default="pending"
+    )
+    analysis_error: Mapped[Optional[str]] = mapped_column("analysis_error", String, nullable=True)
     used_count: Mapped[int] = mapped_column("used_count", Integer, nullable=False, default=0)
     notes: Mapped[Optional[str]] = mapped_column("notes", String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -926,6 +931,13 @@ class ReferenceSet(Base):
     )
     name: Mapped[str] = mapped_column("name", String(120), nullable=False)
     hue: Mapped[Optional[int]] = mapped_column("hue", SmallInteger, nullable=True)
+    # Cached aggregate (mean±std per metric, phase-6 statistical-profile shape) +
+    # invalidation fingerprint. Worker only reads the resolved profile from the job
+    # payload — it never recomputes these.
+    profile_json: Mapped[Optional[Any]] = mapped_column("profile_json", JSONB, nullable=True)
+    profile_fingerprint: Mapped[Optional[str]] = mapped_column(
+        "profile_fingerprint", String(64), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
     )

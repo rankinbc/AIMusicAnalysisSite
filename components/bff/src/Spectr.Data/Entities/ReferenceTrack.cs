@@ -72,6 +72,14 @@ public sealed class ReferenceTrack
     [Column("analyzed")]
     public bool Analyzed { get; set; }
 
+    // Per-reference analyze lifecycle. "analyzed" bool stays in sync (true iff
+    // status == "analyzed") for the aggregation filter's back-compat.
+    [Column("analysis_status"), MaxLength(16)]
+    public string AnalysisStatus { get; set; } = "pending";  // pending | analyzed | failed
+
+    [Column("analysis_error")]
+    public string? AnalysisError { get; set; }
+
     [Column("used_count")]
     public int UsedCount { get; set; }
 

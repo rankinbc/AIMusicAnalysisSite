@@ -78,7 +78,16 @@ def _analyze_with_profile(
         stats = feature_stats[profile_feat]
         pct = compute_percentile(stats, user_val)
         percentile_scores.append(pct)
-        acc_range = stats.get("acceptable_range", [stats.get("p10"), stats.get("p90")])
+        # Injected user profiles carry only {mean, std} — derive the acceptable
+        # band as mean ± 2·std. Disk genre profiles already carry an explicit
+        # acceptable_range (and p10/p90), so this fallback never fires for them.
+        acc_range = stats.get("acceptable_range")
+        if acc_range is None or acc_range[0] is None or acc_range[1] is None:
+            mean, std = stats.get("mean"), stats.get("std")
+            if mean is not None and std is not None:
+                acc_range = [mean - 2 * std, mean + 2 * std]
+            else:
+                acc_range = [stats.get("p10"), stats.get("p90")]
         gaps[gap_key] = {
             "user_val": round(user_val, 4),
             "genre_mean": round(stats.get("mean", 0.0), 4),
@@ -163,36 +172,69 @@ def analyze(
     genre: str,
     phase1_result: dict,
     progress_cb: Callable | None = None,
+    reference_profile: dict | None = None,
 ) -> dict:
-    """Compare the track's features against the reference profile for *genre*.
+    """Compare the track's features against a reference profile.
 
     Args:
-        wav_path:      Path to the 44100 Hz WAV (available for future use).
-        genre:         Detected genre string from Phase 2.
-        phase1_result: Phase 1 output for the uploaded track.
-        progress_cb:   Optional ``(phase, name, pct)`` progress callback.
+        wav_path:          Path to the 44100 Hz WAV (available for future use).
+        genre:             Detected genre string from Phase 2.
+        phase1_result:     Phase 1 output for the uploaded track.
+        progress_cb:       Optional ``(phase, name, pct)`` progress callback.
+        reference_profile: Optional override (the BFF-resolved profile). A user
+            profile (``{"kind":"user","feature_statistics":…}``) bypasses the disk
+            load; a genre override (``{"kind":"genre","genre":…}``) forces that
+            genre's disk profile. ``None`` ⇒ the unchanged detected-genre path.
 
     Returns:
         dict with keys: genre, percentile, gaps (and profile_source when a
-        statistical profile was used).
+        statistical profile was used). When an override is supplied, also
+        ``profile_kind`` / ``profile_name`` / ``profile_hue`` for the UI. The
+        ``None`` path output is unchanged (golden-snapshot stable).
     """
     from ..genre_profile_loader import load_profile
 
+    # ── Override: injected user profile — bypasses the disk load entirely. ──
+    if (
+        reference_profile is not None
+        and reference_profile.get("kind") == "user"
+        and reference_profile.get("feature_statistics")
+    ):
+        result = _analyze_with_profile(reference_profile, phase1_result)
+        result["profile_kind"] = "user"
+        result["profile_name"] = reference_profile.get("name")
+        result["profile_hue"] = reference_profile.get("hue")
+        return result
+
+    # ── Override: genre preset — force a specific genre's disk profile. ──
+    override_genre: str | None = None
+    if reference_profile is not None and reference_profile.get("kind") == "genre":
+        override_genre = reference_profile.get("genre")
+    effective_genre = override_genre or genre
+
     # Primary path: statistical profile JSON
-    profile = load_profile(genre)
+    profile = load_profile(effective_genre)
     if profile is not None:
         logger.debug(
             "Phase 6: using statistical profile for genre=%s (%d tracks)",
-            genre,
+            effective_genre,
             profile.get("track_count", 0),
         )
-        return _analyze_with_profile(profile, phase1_result)
+        result = _analyze_with_profile(profile, phase1_result)
+    else:
+        # Fallback: per-track phase1 JSON files in the reference library
+        genre_dir = _REFERENCE_LIBRARY / effective_genre
+        if not genre_dir.exists():
+            logger.info("Phase 6: no profile or reference library for genre=%s", effective_genre)
+            result = {"genre": effective_genre, "percentile": 50.0, "gaps": {}}
+        else:
+            logger.debug("Phase 6: falling back to per-track files for genre=%s", effective_genre)
+            result = _analyze_with_per_track_files(effective_genre, genre_dir, phase1_result)
 
-    # Fallback: per-track phase1 JSON files in the reference library
-    genre_dir = _REFERENCE_LIBRARY / genre
-    if not genre_dir.exists():
-        logger.info("Phase 6: no profile or reference library for genre=%s", genre)
-        return {"genre": genre, "percentile": 50.0, "gaps": {}}
-
-    logger.debug("Phase 6: falling back to per-track files for genre=%s", genre)
-    return _analyze_with_per_track_files(genre, genre_dir, phase1_result)
+    # Label ONLY when this was an explicit override — the plain detected-genre
+    # path (reference_profile is None) stays byte-identical for the golden snapshot.
+    if override_genre is not None:
+        result["profile_kind"] = "genre"
+        result["profile_name"] = override_genre
+        result["profile_hue"] = None
+    return result

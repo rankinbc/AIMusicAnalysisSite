@@ -80,11 +80,13 @@ def run_reference_analyzer(reference_id: str) -> None:
         result = phase1_universal.analyze(local_path)
     except Exception as exc:
         logger.exception("phase1 failed for reference=%s: %s", reference_id, exc)
+        _mark_failed(rid, str(exc))
         return
 
     data = result.get("data") if isinstance(result, dict) else None
     if not isinstance(data, dict):
         logger.warning("phase1 produced no data for reference=%s", reference_id)
+        _mark_failed(rid, "phase1 produced no data")
         return
 
     # ── D: persist metrics ─────────────────────────────────────────────────
@@ -111,11 +113,29 @@ def run_reference_analyzer(reference_id: str) -> None:
             if isinstance(bands, dict):
                 ref.band_levels = json.dumps(bands)
             ref.analyzed = True
-    except Exception:
+            ref.analysis_status = "analyzed"
+            ref.analysis_error = None
+    except Exception as exc:
         logger.exception("persist failed for reference=%s", reference_id)
+        _mark_failed(rid, str(exc))
         return
 
     logger.info("run_reference_analyzer done reference=%s", reference_id)
+
+
+def _mark_failed(rid: uuid.UUID, error: str) -> None:
+    """Persist a `failed` status marker so the UI can show a Retry. Best-effort —
+    never raises (mirrors run_specialist's fail-marker)."""
+    try:
+        with SessionFactory.begin() as s:
+            ref = s.get(ReferenceTrack, rid)
+            if ref is None:
+                return
+            ref.analysis_status = "failed"
+            ref.analysis_error = (error or "")[:500]
+            ref.analyzed = False
+    except Exception:
+        logger.exception("could not persist fail marker for reference=%s", rid)
 
 
 def _maybe_float(v) -> float | None:

@@ -52,7 +52,15 @@ def _join(rel: str | None) -> str | None:
     max_retries=1,
     time_limit=600_000,  # 10 minutes
 )
-def rerun_phase(rerun_job_id: str, analysis_id: str, phase: int) -> None:
+def rerun_phase(
+    rerun_job_id: str,
+    analysis_id: str,
+    phase: int,
+    reference_profile: dict | None = None,
+) -> None:
+    # reference_profile: BFF-resolved phase-6 override (4th positional arg, default
+    # None for back-compat with 3-arg callers). kind:"user" carries the embedded
+    # aggregate; kind:"genre" carries the genre; None ⇒ worker uses detected genre.
     if rerun_single_phase is None:
         raise RuntimeError("audio_analysis package not installed in worker environment")
 
@@ -121,6 +129,7 @@ def rerun_phase(rerun_job_id: str, analysis_id: str, phase: int) -> None:
             als_file_path=als_abs,
             stem_paths=stem_paths,
             stem_mode=stem_mode,
+            reference_profile=reference_profile,
             progress_cb=_report_progress,
         )
         # Coerce nested TypedDicts to JSON-safe dict (mirrors analyze_audio_job).

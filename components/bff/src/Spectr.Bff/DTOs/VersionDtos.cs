@@ -25,6 +25,11 @@ public sealed record VersionFileEntry(
 // job to poll; the re-run updates the existing analysis in place.
 public sealed record RerunPhaseResponse(Guid JobId);
 
+// Optional body for a phase-6 re-run override: compare against a chosen profile.
+// kind "user" → setId (aggregate embedded by the server); kind "genre" → preset.
+public sealed record RerunPhaseRequest(ReferenceProfileRef? ReferenceProfile);
+public sealed record ReferenceProfileRef(string Kind, Guid? SetId, string? Preset);
+
 public sealed record VersionFilesResponse(Guid VersionId, List<VersionFileEntry> Files);
 
 // JobId is null when the upload deferred analysis (unified-upload flow uses

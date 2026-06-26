@@ -157,6 +157,9 @@ builder.Services.AddScoped<ITokenResolver, SessionTokenResolver>();
 // Story 2.8 — usage-page honest-math (90-day credit spend vs Pro-equivalent).
 builder.Services.AddScoped<HonestMathService>();
 
+// Reference profiles — lazy fingerprint-cached aggregate over a set's analyzed members.
+builder.Services.AddScoped<ReferenceProfileAggregator>();
+
 // Story 2.10 — nightly billing reconciliation (read-only drift check).
 builder.Services.AddHostedService<BillingReconciliationService>();
 

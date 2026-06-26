@@ -21,6 +21,10 @@ public static class ReferenceEndpoints
         refs.MapPost("/", Upload)
             .DisableAntiforgery()
             .WithMetadata(new RequestSizeLimitAttribute(MaxUploadBytes));
+        refs.MapPost("/batch", UploadBatch)
+            .DisableAntiforgery()
+            .WithMetadata(new RequestSizeLimitAttribute(MaxUploadBytes * 100));
+        refs.MapPost("/analyze", AnalyzeBatch);
         refs.MapGet("/{referenceId:guid}", GetById);
         refs.MapPatch("/{referenceId:guid}", Patch);
         refs.MapDelete("/{referenceId:guid}", Delete);
@@ -28,6 +32,7 @@ public static class ReferenceEndpoints
 
         var sets = app.MapGroup("/reference-sets").WithTags("reference-sets").RequireAuthorization();
         sets.MapGet("/", ListSets);
+        sets.MapGet("/{setId:guid}", GetSetDetail);
         sets.MapPost("/", CreateSet);
         sets.MapPatch("/{setId:guid}", PatchSet);
         sets.MapDelete("/{setId:guid}", DeleteSet);
@@ -213,6 +218,92 @@ public static class ReferenceEndpoints
         return Results.Accepted(value: ToDto(row));
     }
 
+    // Batch upload — drop many reference tracks at once. Each lands as a `pending`
+    // row; analysis is an explicit follow-up (AnalyzeBatch), never auto-enqueued.
+    private static async Task<IResult> UploadBatch(
+        [FromForm] IFormFileCollection files,
+        [FromForm(Name = "genre")] string? genre,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        IFileStorage storage,
+        CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        if (files is null || files.Count == 0)
+            return Results.BadRequest(new { error = "No files." });
+
+        var created = new List<ReferenceTrack>(files.Count);
+        foreach (var file in files)
+        {
+            if (file.Length == 0) continue;
+            if (file.Length > MaxUploadBytes)
+                return Results.BadRequest(new { error = $"'{file.FileName}' exceeds 250 MB limit." });
+
+            var titleClean = (Path.GetFileNameWithoutExtension(file.FileName) ?? "Untitled").Trim();
+            if (string.IsNullOrEmpty(titleClean)) titleClean = "Untitled";
+            if (titleClean.Length > 200) titleClean = titleClean[..200];
+
+            var refId = Guid.NewGuid();
+            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (string.IsNullOrEmpty(ext)) ext = ".bin";
+            var key = $"audio/reference/{refId}/source{ext}";
+            await using (var src = file.OpenReadStream())
+                await storage.WriteAsync(key, src, file.ContentType ?? "application/octet-stream", ct);
+
+            var row = new ReferenceTrack
+            {
+                Id = refId,
+                UserId = userId,
+                Title = titleClean,
+                Genre = string.IsNullOrWhiteSpace(genre) ? null : genre!.Trim(),
+                Source = "file",
+                FilePath = key,
+                AnalysisStatus = "pending",
+            };
+            db.ReferenceTracks.Add(row);
+            created.Add(row);
+        }
+
+        if (created.Count == 0)
+            return Results.BadRequest(new { error = "All files were empty." });
+        await db.SaveChangesAsync(ct);
+        return Results.Created("/api/references", created.Select(r => ToDto(r)).ToList());
+    }
+
+    // Bulk analyze by id — enqueue the reference analyzer for each owned, not-yet-
+    // analyzed reference; resets failed/stale rows to pending first.
+    private static async Task<IResult> AnalyzeBatch(
+        BatchAnalyzeRequest body,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        IJobQueue queue,
+        CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        var idSet = (body.Ids ?? Array.Empty<Guid>()).ToHashSet();
+        if (idSet.Count == 0) return Results.Ok(new { enqueued = 0 });
+
+        // Tracked load (we mutate status) — owner-scoped, skip already-analyzed.
+        var rows = await db.ReferenceTracks
+            .Where(r => r.UserId == userId && idSet.Contains(r.Id)
+                && !r.Analyzed && r.FilePath != null)
+            .ToListAsync(ct);
+        foreach (var r in rows)
+        {
+            r.AnalysisStatus = "pending";
+            r.AnalysisError = null;
+        }
+        await db.SaveChangesAsync(ct);
+
+        foreach (var r in rows)
+            await queue.EnqueueAsync(
+                DramatiqTasks.RunReferenceAnalyzer,
+                new object[] { r.Id.ToString() },
+                DramatiqQueues.AnalysisPaid,
+                ct);
+        return Results.Accepted(value: new { enqueued = rows.Count });
+    }
+
     // ── /reference-sets ─────────────────────────────────────────────────────
     private static async Task<IResult> ListSets(
         ClaimsPrincipal currentUser,
@@ -230,11 +321,55 @@ public static class ReferenceEndpoints
             .GroupBy(m => m.SetId)
             .Select(g => new { SetId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.SetId, x => x.Count, ct);
+        // Analyzed-member count per set (drives "X of Y analyzed" + profile readiness).
+        var analyzedCounts = await db.ReferenceSetMembers.AsNoTracking()
+            .Where(m => ids.Contains(m.SetId))
+            .Join(db.ReferenceTracks.Where(t => t.Analyzed),
+                m => m.ReferenceId, t => t.Id, (m, _) => m.SetId)
+            .GroupBy(s => s)
+            .Select(g => new { SetId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.SetId, x => x.Count, ct);
         var dtos = sets.Select(s => new ReferenceSetDto(
             s.Id, s.Name, s.Hue,
             counts.TryGetValue(s.Id, out var c) ? c : 0,
+            analyzedCounts.TryGetValue(s.Id, out var ac) ? ac : 0,
             s.CreatedAt)).ToList();
         return Results.Ok(dtos);
+    }
+
+    // The profile detail view: the set + its lazily-refreshed aggregate + members.
+    private static async Task<IResult> GetSetDetail(
+        Guid setId,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        ReferenceProfileAggregator aggregator,
+        CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        // Tracked (EnsureFresh may mutate the set's cached aggregate → SaveChanges).
+        var set = await db.ReferenceSets
+            .FirstOrDefaultAsync(s => s.Id == setId && s.UserId == userId, ct);
+        if (set is null) return Results.NotFound();
+
+        var members = await db.ReferenceSetMembers.AsNoTracking()
+            .Where(m => m.SetId == setId)
+            .Join(db.ReferenceTracks, m => m.ReferenceId, t => t.Id, (_, t) => t)
+            .ToListAsync(ct);
+
+        aggregator.EnsureFresh(set, members);
+        await db.SaveChangesAsync(ct);
+
+        var summaries = members
+            .Select(t => new ReferenceSummaryDto(t.Id, t.Title, t.Artist, t.AnalysisStatus, t.AnalysisError))
+            .ToList();
+        var dto = new ReferenceSetDetailDto(
+            set.Id, set.Name, set.Hue,
+            members.Count,
+            ReferenceProfileAggregator.AnalyzedCount(members),
+            ParseJsonElement(set.ProfileJson),
+            summaries,
+            set.CreatedAt);
+        return Results.Ok(dto);
     }
 
     private static async Task<IResult> CreateSet(
@@ -260,7 +395,7 @@ public static class ReferenceEndpoints
         await db.SaveChangesAsync(ct);
         return Results.Created(
             $"/api/reference-sets/{row.Id}",
-            new ReferenceSetDto(row.Id, row.Name, row.Hue, 0, row.CreatedAt));
+            new ReferenceSetDto(row.Id, row.Name, row.Hue, 0, 0, row.CreatedAt));
     }
 
     private static async Task<IResult> PatchSet(
@@ -286,7 +421,11 @@ public static class ReferenceEndpoints
 
         await db.SaveChangesAsync(ct);
         var count = await db.ReferenceSetMembers.CountAsync(m => m.SetId == row.Id, ct);
-        return Results.Ok(new ReferenceSetDto(row.Id, row.Name, row.Hue, count, row.CreatedAt));
+        var analyzedCount = await db.ReferenceSetMembers
+            .Where(m => m.SetId == row.Id)
+            .Join(db.ReferenceTracks.Where(t => t.Analyzed), m => m.ReferenceId, t => t.Id, (m, _) => m)
+            .CountAsync(ct);
+        return Results.Ok(new ReferenceSetDto(row.Id, row.Name, row.Hue, count, analyzedCount, row.CreatedAt));
     }
 
     private static async Task<IResult> DeleteSet(
@@ -360,7 +499,7 @@ public static class ReferenceEndpoints
         r.DynamicRangeLu, r.StereoWidth, r.StereoCorrelation,
         ParseJsonElement(r.BandLevels),
         ParseJsonElement(r.Tags) ?? EmptyArray(),
-        r.Analyzed, r.UsedCount, r.Notes, r.CreatedAt,
+        r.Analyzed, r.AnalysisStatus, r.AnalysisError, r.UsedCount, r.Notes, r.CreatedAt,
         setIds ?? Array.Empty<Guid>());
 
     // Set ids a single reference belongs to (for the patch/get-by-id responses).

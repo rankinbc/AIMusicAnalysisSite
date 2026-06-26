@@ -67,15 +67,31 @@ def compute_percentile(stats: dict, value: float) -> float:
 
     Returns a float in [0, 100].
     """
-    anchors = [
-        (stats.get("min", 0.0), 0.0),
-        (stats.get("p10", 0.0), 10.0),
-        (stats.get("p25", 0.0), 25.0),
-        (stats.get("p50", 0.0), 50.0),
-        (stats.get("p75", 0.0), 75.0),
-        (stats.get("p90", 0.0), 90.0),
-        (stats.get("max", 0.0), 100.0),
-    ]
+    # Injected user profiles carry only {mean, std} (no percentile anchors).
+    # Synthesize Gaussian anchors so the percentile is meaningful. Disk genre
+    # profiles carry explicit p10..p90, so this branch never fires for them.
+    if "p50" not in stats and "mean" in stats and stats.get("std") is not None:
+        mean = stats["mean"]
+        std = stats["std"] or 1e-9
+        anchors = [
+            (mean - 3.0 * std, 0.0),
+            (mean - 1.2816 * std, 10.0),
+            (mean - 0.6745 * std, 25.0),
+            (mean, 50.0),
+            (mean + 0.6745 * std, 75.0),
+            (mean + 1.2816 * std, 90.0),
+            (mean + 3.0 * std, 100.0),
+        ]
+    else:
+        anchors = [
+            (stats.get("min", 0.0), 0.0),
+            (stats.get("p10", 0.0), 10.0),
+            (stats.get("p25", 0.0), 25.0),
+            (stats.get("p50", 0.0), 50.0),
+            (stats.get("p75", 0.0), 75.0),
+            (stats.get("p90", 0.0), 90.0),
+            (stats.get("max", 0.0), 100.0),
+        ]
     if value <= anchors[0][0]:
         return 0.0
     if value >= anchors[-1][0]:

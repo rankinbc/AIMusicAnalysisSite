@@ -53,6 +53,7 @@ def run_single_phase(
     genre_hint: str | None = None,
     stem_mode: str = "grouped",
     defer_structure: bool = False,
+    reference_profile: dict | None = None,
     progress_cb=None,
 ) -> PhaseResult:
     """Run one phase (1–7) against an already-converted WAV and return its
@@ -94,7 +95,8 @@ def run_single_phase(
         elif phase_num == 6:
             genre = phase_data.get(2, {}).get("genre", "other")
             data = phase6_gap.analyze(
-                wav_path, genre, phase_data.get(1, {}), progress_cb
+                wav_path, genre, phase_data.get(1, {}), progress_cb,
+                reference_profile=reference_profile,
             )
         elif phase_num == 7:
             structure = phase_data.get(1, {}).get("structure", {})
@@ -270,6 +272,7 @@ def rerun_single_phase(
     stem_paths: dict | None = None,
     reference_stem_paths: dict | None = None,
     stem_mode: str = "grouped",
+    reference_profile: dict | None = None,
     progress_cb=None,
 ) -> PipelineResult:
     """Re-run a single phase and merge it into *prior_result* in place, re-deriving
@@ -306,6 +309,7 @@ def rerun_single_phase(
                 reference_stem_paths=reference_stem_paths,
                 genre_hint=None,
                 stem_mode=stem_mode,
+                reference_profile=reference_profile,
                 progress_cb=progress_cb,
             )
 
