@@ -315,6 +315,16 @@ class Verdict(Base):
     created_at: Mapped[datetime] = mapped_column(
         "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    # ── IDENTIFY-tier Problem fields (deterministic rule engine) ────────────
+    problem_id: Mapped[Optional[str]] = mapped_column("problem_id", String(80), nullable=True)
+    kind: Mapped[str] = mapped_column("kind", String(20), nullable=False, default="fault")
+    source: Mapped[str] = mapped_column("source", String(20), nullable=False, default="rule_engine")
+    data_tier: Mapped[str] = mapped_column("data_tier", String(20), nullable=False, default="audio_only")
+    fixable: Mapped[bool] = mapped_column("fixable", Boolean, nullable=False, default=True)
+    suspected: Mapped[bool] = mapped_column("suspected", Boolean, nullable=False, default=False)
+    # "where" is a SQL reserved word — SQLAlchemy quotes it. jsonb, nullable.
+    where: Mapped[Optional[Any]] = mapped_column("where", JSONB, nullable=True)
+    refines: Mapped[Optional[str]] = mapped_column("refines", String(80), nullable=True)
 
 
 class VerdictUserState(Base):
