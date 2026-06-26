@@ -27,7 +27,6 @@ import { GamePlan } from './GamePlan';
 import { buildMoves } from './move-model';
 import { ResultsTabs, type ResultsTabKey } from './ResultsTabs';
 import { SongHeader, type SongHeaderInputs } from './SongHeader';
-import { VerdictHero } from './VerdictHero';
 import s from './ReportView.module.css';
 
 interface ReportViewProps {
@@ -141,19 +140,15 @@ export function ReportView({ results, songId, tab, onTabChange }: ReportViewProp
         </Link>
       </header>
 
-      <VerdictHero
-        trackName={trackName}
-        grade={fj.grade}
-        score={fj.overall_score}
-        danceability={fj.danceability_score}
-        phase1={phase1}
-        phase2={phase2}
-      />
-
       <SongHeader
         songId={songId}
         versionId={results.versionId ?? null}
         versionLabel={null}
+        trackName={trackName}
+        genre={phase2?.genre}
+        bpm={phase1?.bpm ?? phase2?.bpm}
+        keyLabel={phase1?.detected_key}
+        durationSeconds={phase1?.duration_seconds}
         inputs={inputs}
         onAddInputs={() => onTabChange('files')}
         onGetFeedback={() =>

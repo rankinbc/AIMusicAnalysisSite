@@ -2,6 +2,7 @@ import { Link } from '@tanstack/react-router';
 
 import { CoverArt } from '../../ui/CoverArt';
 import { hueFromId } from '../../ui/hueFromId';
+import { fmtBpm, fmtDuration, fmtGenre } from './helpers/format';
 import s from './SongHeader.module.css';
 
 export interface SongHeaderInputs {
@@ -11,13 +12,19 @@ export interface SongHeaderInputs {
   reference: boolean;
 }
 
-// Identity (track name, genre, BPM, key, grade) leads the report in
-// VerdictHero. This header is the complementary "what we analyzed + what to do
-// next" strip: cover, the input roster, and the primary actions.
+// The single top strip for the report: song identity (cover + name + the
+// genre/BPM/key/duration line), the input roster we analyzed, and the primary
+// actions. (Grade/score/metric heroes were removed — that data lives in the
+// Analysis tab now.)
 interface SongHeaderProps {
   songId: string;
   versionId: string | null;
   versionLabel: string | null;
+  trackName: string;
+  genre: string | null | undefined;
+  bpm: number | null | undefined;
+  keyLabel: string | null | undefined;
+  durationSeconds: number | null | undefined;
   inputs: SongHeaderInputs;
   /** Jump to the Files tab to attach more inputs / deepen. */
   onAddInputs: () => void;
@@ -36,11 +43,25 @@ export function SongHeader({
   songId,
   versionId,
   versionLabel,
+  trackName,
+  genre,
+  bpm,
+  keyLabel,
+  durationSeconds,
   inputs,
   onAddInputs,
   onGetFeedback,
 }: SongHeaderProps) {
   const hue = hueFromId(versionId ?? songId);
+
+  const metaParts = [
+    'Mix',
+    versionLabel,
+    genre ? fmtGenre(genre) : null,
+    bpm != null ? `${fmtBpm(bpm)} BPM` : null,
+    keyLabel,
+    durationSeconds != null ? fmtDuration(durationSeconds) : null,
+  ].filter((x): x is string => Boolean(x));
 
   return (
     <header className={s.header}>
@@ -49,6 +70,9 @@ export function SongHeader({
       </CoverArt>
 
       <div className={s.meta}>
+        <h1 className={s.title}>{trackName}</h1>
+        <div className={`mono ${s.attrs}`}>{metaParts.join(' · ')}</div>
+
         <div className={s.inputs}>
           <span className={s.inputsLabel}>Analyzed from</span>
           {INPUT_DEFS.map(({ key, label }) => {
