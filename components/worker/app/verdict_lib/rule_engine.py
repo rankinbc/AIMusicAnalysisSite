@@ -477,3 +477,84 @@ def key_detection_low_confidence(analysis: dict[str, Any]) -> Verdict | None:
                        "harmonic-mixing recommendations downstream. A wrong "
                        "key label produces nonsense suggestions.",
     )
+
+
+# ── TIER B — fire from the phase-1 datapoint lifts (final_json schema 2.1.0) ──
+
+
+@single("channel_imbalance", tier="B")
+def channel_imbalance(a: dict[str, Any]) -> Verdict | None:
+    """Sustained L/R level offset (supersedes the weak A14 proxy)."""
+    bal = (_phase(a, "phase1").get("channel_balance") or {}).get("balance_db")
+    if bal is None:
+        return None
+    sev = _tiered(abs(bal), {"severe": 6.0, "moderate": 3.0}, higher_is_worse=True)
+    if sev is None:
+        return None
+    side = "left" if bal > 0 else "right"
+    return _problem(
+        track_id=_track_id(a), slug="channel_imbalance", severity=sev,
+        category="stereo_field", kind="fault",
+        headline=f"Channel imbalance — {side} louder by {abs(bal):.1f} dB",
+        summary=f"The {side} channel runs {abs(bal):.1f} dB hotter; a sustained "
+                "L/R offset pulls the stereo image off-centre.",
+        evidence=[Evidence(metric="phase1.channel_balance.balance_db", value=float(bal),
+                           expected_range=(-3.0, 3.0), label=f"{bal:+.1f} dB")],
+        why_it_matters="A persistent L/R level offset skews the stereo image and "
+                       "usually signals a panning or gain-staging error.",
+    )
+
+
+@single("sub_rumble", tier="B")
+def sub_rumble(a: dict[str, Any]) -> Verdict | None:
+    """Infrasonic energy below ~30 Hz eating limiter headroom."""
+    p1 = _phase(a, "phase1")
+    sub30 = p1.get("sub_30_energy")
+    low = p1.get("low_energy")
+    if sub30 is None or not low:
+        return None
+    ratio = sub30 / low
+    if ratio < 0.35:  # placeholder: a meaningful fraction of the 20-200 Hz low band
+        return None
+    return _problem(
+        track_id=_track_id(a), slug="sub_rumble", severity="minor",
+        category="low_end", kind="fault", suspected=True,
+        headline="Sub-30 Hz rumble wasting headroom",
+        summary=f"Energy below 30 Hz is {ratio * 100:.0f}% of the 20-200 Hz low "
+                "band — mostly inaudible rumble eating limiter headroom.",
+        evidence=[Evidence(metric="phase1.sub_30_energy", value=float(sub30),
+                           frequency_range_hz=(0.0, 30.0),
+                           label=f"{ratio * 100:.0f}% of low band")],
+        why_it_matters="Infrasonic content below ~30 Hz is rarely audible but "
+                       "costs headroom; a steep high-pass recovers it.",
+    )
+
+
+@single("modal_ambiguity", tier="B")
+def modal_ambiguity(a: dict[str, Any]) -> Verdict | None:
+    """Top-two key fits within a small margin — ambiguous tonal centre.
+    Observation only (fixable=False): there's nothing to "fix"."""
+    ke = _phase(a, "phase1").get("key_estimate") or {}
+    corrs = ke.get("profile_corrs")
+    if not corrs or len(corrs) < 2:
+        return None
+    top = sorted(corrs, reverse=True)
+    margin = top[0] - top[1]
+    if top[0] < 0.5 or margin > 0.05:  # no real tonal centre, or one key clearly wins
+        return None
+    conf = ke.get("confidence")
+    if conf is None:
+        return None
+    return _problem(
+        track_id=_track_id(a), slug="modal_ambiguity", severity="moderate",
+        category="harmonic", kind="observation", fixable=False,
+        headline=f"Ambiguous key: {ke.get('key')} {ke.get('mode')} vs "
+                 f"{ke.get('second_key')} {ke.get('second_mode')}",
+        summary=f"The top two key fits are within {margin:.3f}; the track reads as "
+                f"ambiguous between {ke.get('key')} {ke.get('mode')} and "
+                f"{ke.get('second_key')} {ke.get('second_mode')} (often relative major/minor).",
+        evidence=[Evidence(metric="phase1.key_estimate.confidence", value=float(conf),
+                           expected_range=(0.5, 1.0), label=f"top-2 margin {margin:.3f}")],
+        why_it_matters="An ambiguous tonal centre makes auto key + harmonic-mixing "
+                       "labels unreliable; confirm the key by ear.",
+    )
