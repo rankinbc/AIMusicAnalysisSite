@@ -79,4 +79,31 @@ public sealed class Verdict
 
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    // ── IDENTIFY-tier Problem fields (deterministic rule engine) ────────────
+    // Stable "<category>.<slug>.<index>" id; null for legacy/LLM verdicts.
+    [Column("problem_id"), MaxLength(80)]
+    public string? ProblemId { get; set; }
+
+    [Column("kind"), MaxLength(20)]
+    public string Kind { get; set; } = "fault";          // fault|observation|integrity
+
+    [Column("source"), MaxLength(20)]
+    public string Source { get; set; } = "rule_engine";  // rule_engine|llm_identifier
+
+    [Column("data_tier"), MaxLength(20)]
+    public string DataTier { get; set; } = "audio_only"; // audio_only|stems|project_midi
+
+    [Column("fixable")]
+    public bool Fixable { get; set; } = true;
+
+    [Column("suspected")]
+    public bool Suspected { get; set; }                  // placeholder-threshold flag
+
+    // SQL reserved word — Npgsql quotes it. jsonb-as-string, same pattern as Fix.
+    [Column("where", TypeName = "jsonb")]
+    public string? Where { get; set; }                   // {section_type, start_seconds, end_seconds}
+
+    [Column("refines"), MaxLength(80)]
+    public string? Refines { get; set; }                 // parent composite problem_id
 }
