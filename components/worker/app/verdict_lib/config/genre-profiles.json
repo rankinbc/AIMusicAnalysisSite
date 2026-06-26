@@ -1,0 +1,177 @@
+{
+  "$schema_version": "1.0.0",
+  "_meta": {
+    "description": "Per-genre reference values for the MixCoach rule engine. Rules in rule-bindings.json read these by dotted path (e.g. genre_profiles.modern_trance.loudness.club.lufs_target). Tune these numbers without touching engine code.",
+    "generated": "2026-06-25",
+    "source": "Genre reference research report (90s/classic trance, modern trance, techno).",
+    "provenance_legend": {
+      "standard": "Formal standard or published platform target — authoritative.",
+      "rule_of_thumb": "Widely-repeated production/mastering convention, not a formal standard.",
+      "interpolation": "Derived/estimated where sources gave ranges or no direct measurement. Weakest confidence — verify against a measured corpus before treating as hard thresholds."
+    },
+    "all_values_units": {
+      "lufs": "LUFS integrated (ITU-R BS.1770 / EBU R128)",
+      "true_peak_dbtp": "dBTP",
+      "lra_lu": "LU (EBU R128 loudness range)",
+      "crest_db": "dB (peak-to-RMS, approx == DR-database crest)",
+      "plr": "dB (max true peak minus integrated LUFS)",
+      "bpm": "beats per minute",
+      "frequency_hz": "Hz",
+      "duration_seconds": "s"
+    }
+  },
+
+  "_platform_targets": {
+    "_note": "Cross-genre streaming normalization facts. Rules read the streaming master target from here; the per-genre club target lives in each profile. provenance: standard.",
+    "spotify_lufs": -14.0,
+    "spotify_loud_lufs": -11.0,
+    "spotify_quiet_lufs": -19.0,
+    "youtube_lufs": -14.0,
+    "tidal_lufs": -14.0,
+    "amazon_lufs": -14.0,
+    "apple_lufs": -16.0,
+    "deezer_lufs": -15.0,
+    "ebu_r128_broadcast_lufs": -23.0,
+    "recommended_streaming_true_peak_dbtp": -1.0,
+    "hot_master_true_peak_dbtp": -2.0,
+    "hot_master_threshold_lufs": -14.0,
+    "_hot_master_rule": "If integrated louder than hot_master_threshold_lufs, hold true peak at hot_master_true_peak_dbtp to avoid lossy-codec distortion (Spotify guidance). provenance: standard."
+  },
+
+  "genre_profiles": {
+
+    "classic_trance": {
+      "display_name": "90s / Classic Trance (1994–2001)",
+      "_note": "The most dynamic of the three. Tie this profile to original-era pressings, not loud reissues.",
+      "bpm": {
+        "min": 130, "max": 140, "center": 135,
+        "genre_broad_min": 125, "genre_broad_max": 150,
+        "provenance": "standard"
+      },
+      "loudness": {
+        "streaming": { "lufs_target": -14.0, "lufs_tolerance": 1.5, "true_peak_dbtp_max": -1.0, "provenance": "standard" },
+        "club": { "lufs_target": -9.0, "lufs_range": [-10.0, -8.0], "true_peak_dbtp_max": -1.0, "provenance": "interpolation",
+                  "_note": "Original 90s masters predate LUFS metering; estimated from DR10–11 crest data. Weakest loudness figure in the file." }
+      },
+      "dynamics": {
+        "crest_db": { "target": 10.5, "range": [9.0, 12.0], "warn_below": 8.0, "provenance": "rule_of_thumb",
+                      "_note": "Measured DR10–11 from Dynamic Range DB (PvD 'For an Angel' DR10, AvB '76' DR11)." },
+        "lra_lu": { "target": 8.0, "range": [6.0, 10.0], "provenance": "interpolation",
+                    "_note": "Higher than modern due to genuine breakdown↔full-section contrast." },
+        "plr": { "warn_below": 9.0, "provenance": "rule_of_thumb" }
+      },
+      "spectral_tilt": {
+        "brightness_rank": 2,
+        "_note": "Bright/airy supersaws and high-end sheen; kick de-emphasized relative to bassline. Less bright than modern trance, brighter than techno.",
+        "air_emphasis": "high", "low_mid_emphasis": "moderate", "kick_dominance": "low",
+        "provenance": "rule_of_thumb"
+      },
+      "stereo": {
+        "mono_below_hz": 100, "width_character": "wide",
+        "_note": "Wide detuned supersaw fields; keep kick/bass/lead centered.",
+        "provenance": "rule_of_thumb"
+      },
+      "arrangement": {
+        "typical_length_seconds": [360, 540],
+        "phrasing_bars": 8,
+        "required_sections": ["intro", "breakdown", "buildup", "drop", "outro"],
+        "intro_outro_bars": [32, 64],
+        "structure_type": "breakdown_drop",
+        "provenance": "rule_of_thumb"
+      }
+    },
+
+    "modern_trance": {
+      "display_name": "Modern Trance (uplifting / festival / tech-trance)",
+      "bpm": {
+        "min": 136, "max": 142, "center": 139,
+        "progressive_min": 128, "progressive_max": 134, "progressive_center": 132,
+        "provenance": "standard",
+        "_note": "Uplifting signature ~138 BPM. Progressive/melodic strand runs slower; treat as a sub-window."
+      },
+      "loudness": {
+        "streaming": { "lufs_target": -14.0, "lufs_tolerance": 1.5, "true_peak_dbtp_max": -1.0, "provenance": "standard" },
+        "club": { "lufs_target": -7.0, "lufs_range": [-8.0, -6.0], "true_peak_dbtp_max": -1.0, "provenance": "rule_of_thumb",
+                  "_note": "Festival-oriented masters push to the loud end. iZotope top-dance analysis median ~-8.3 LUFS ±1." }
+      },
+      "dynamics": {
+        "crest_db": { "target": 6.5, "range": [5.0, 8.0], "warn_below": 4.5, "provenance": "rule_of_thumb",
+                      "_note": "Measured DR5–7 (AvB 'Intense' DR6, PvD 'Evolution' DR5)." },
+        "lra_lu": { "target": 5.5, "range": [4.0, 7.0], "provenance": "interpolation",
+                    "_note": "Big breakdown raises LRA above straight techno." },
+        "plr": { "warn_below": 8.0, "provenance": "rule_of_thumb" }
+      },
+      "spectral_tilt": {
+        "brightness_rank": 1,
+        "_note": "Brightest of the three — detuned supersaw stacks, leads 1–3.5 kHz, high-shelf air on the sides.",
+        "air_emphasis": "very_high", "low_mid_emphasis": "moderate", "kick_dominance": "low",
+        "provenance": "rule_of_thumb"
+      },
+      "stereo": {
+        "mono_below_hz": 120, "width_character": "widest",
+        "_note": "Armada tutorial uses 120 Hz kick/bass mono crossover. Supersaws must survive mono.",
+        "provenance": "rule_of_thumb"
+      },
+      "arrangement": {
+        "typical_length_seconds": [360, 540],
+        "phrasing_bars": 8,
+        "required_sections": ["intro", "breakdown", "buildup", "drop", "outro"],
+        "intro_outro_bars": [32, 64],
+        "structure_type": "breakdown_drop",
+        "_note": "Lengthy snare-roll foreshadowing before climaxes.",
+        "provenance": "rule_of_thumb"
+      }
+    },
+
+    "techno": {
+      "display_name": "Techno (peak-time / driving, loud club end)",
+      "_note": "Loudest and most static of the three. Dynamics figures are the weakest-sourced in the file — see _meta provenance and verify against measurement.",
+      "bpm": {
+        "min": 128, "max": 135, "center": 132,
+        "genre_broad_min": 125, "genre_broad_max": 150,
+        "hard_techno_min": 140, "hard_techno_max": 150, "hard_techno_center": 145,
+        "melodic_dub_min": 125, "melodic_dub_max": 128, "melodic_dub_center": 126,
+        "provenance": "standard",
+        "_note": "Sources disagree on peak-time center (126–132 vs 132–135); treat 128–135 as the window."
+      },
+      "loudness": {
+        "streaming": { "lufs_target": -14.0, "lufs_tolerance": 1.5, "true_peak_dbtp_max": -1.0, "provenance": "standard" },
+        "club": { "lufs_target": -6.5, "lufs_range": [-7.0, -6.0], "lufs_hot": -5.0, "true_peak_dbtp_max": -1.0, "provenance": "rule_of_thumb",
+                  "_note": "Samplesound techno-mastering guide: -8 to -6 LUFS typical; some tracks reach -5 or louder." }
+      },
+      "dynamics": {
+        "crest_db": { "target": 5.5, "range": [5.0, 7.0], "warn_below": 4.0, "provenance": "interpolation",
+                      "_note": "WEAKEST FIGURE: DR rows for named peak-time artists could not be retrieved; inferred from LUFS/LRA + DR-DB note that dense electronic is normal at DR5." },
+        "lra_lu": { "target": 4.0, "range": [3.0, 5.0], "static_floor": 3.0, "provenance": "rule_of_thumb",
+                    "_note": "Constant-beat material sits ~4 LU regardless of compression; LRA<3 may be inherent, not over-limiting." },
+        "plr": { "warn_below": 7.0, "provenance": "interpolation" }
+      },
+      "spectral_tilt": {
+        "brightness_rank": 3,
+        "_note": "Mid-forward, driving; kick often loudest element; less top-end air than trance.",
+        "air_emphasis": "moderate", "low_mid_emphasis": "high", "kick_dominance": "high",
+        "provenance": "rule_of_thumb"
+      },
+      "stereo": {
+        "mono_below_hz": 100, "width_character": "narrow_centered",
+        "_note": "Tight, mono-robust groove; percussion panned but core kept centered.",
+        "provenance": "rule_of_thumb"
+      },
+      "arrangement": {
+        "typical_length_seconds": [360, 480],
+        "phrasing_bars": 8,
+        "required_sections": ["intro", "breakdown", "outro"],
+        "intro_outro_bars": [16, 64],
+        "structure_type": "linear_hypnotic",
+        "_note": "No euphoric melodic breakdown/drop; evolves by layering and micro-variation.",
+        "provenance": "rule_of_thumb"
+      }
+    }
+  },
+
+  "_tuning_notes": {
+    "build_a_corpus": "Replace interpolation-tagged crest/LRA/tilt numbers with measured medians + p10/p90 from 20–30 pro tracks per genre run through a BS.1770 + DR meter.",
+    "weakest_figures": ["techno.dynamics.crest_db", "techno.dynamics.plr", "classic_trance.loudness.club", "all spectral_tilt (no authoritative per-genre dataset)"],
+    "platform_drift": "If Spotify moves off -14 or a new club-delivery standard emerges, update _platform_targets and each profile's loudness.club."
+  }
+}

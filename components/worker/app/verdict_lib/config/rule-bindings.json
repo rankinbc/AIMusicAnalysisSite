@@ -1,0 +1,176 @@
+{
+  "$schema_version": "1.0.0",
+  "_meta": {
+    "description": "Wires genre-profiles.json values to the rules in rules.md. Each binding tells a rule which profile field to read and at what deviation to fire each severity tier. The engine resolves {genre} to the detected genre (phase2.genre mapped via genre_map) before reading.",
+    "generated": "2026-06-25",
+    "resolution": "Paths are relative to genre-profiles.json. {genre} is substituted at runtime. If the detected genre has no profile, fall back to genre_map.default and lower confidence.",
+    "severity_convention": "Tiers are evaluated worst-first; the first matching tier wins. Absent source field => rule does not fire (never a failing grade for missing data)."
+  },
+
+  "genre_map": {
+    "_note": "phase2.genre emits dnb/trance/house/techno/other. Map to profiles. Trance defaults to modern; a release-year or user hint can route to classic.",
+    "trance": "modern_trance",
+    "techno": "techno",
+    "house": "modern_trance",
+    "dnb": "modern_trance",
+    "other": "modern_trance",
+    "default": "modern_trance",
+    "_classic_trance_override": "Route to classic_trance only on explicit user/era hint; phase 2 cannot distinguish eras."
+  },
+
+  "master_context": {
+    "_note": "Which loudness world to judge against. The app sets this per analysis; rules that test loudness read the matching block.",
+    "modes": ["streaming", "club"],
+    "default": "streaming"
+  },
+
+  "bindings": {
+
+    "A2_loudness_vs_target": {
+      "rule": "A2",
+      "reads_field": "phase1.lufs",
+      "target_path_streaming": "genre_profiles.{genre}.loudness.streaming.lufs_target",
+      "target_path_club": "genre_profiles.{genre}.loudness.club.lufs_target",
+      "tolerance_path": "genre_profiles.{genre}.loudness.streaming.lufs_tolerance",
+      "tiers": [
+        { "severity": "severe",   "when": "abs(value - target) > 6" },
+        { "severity": "moderate", "when": "abs(value - target) > 3" },
+        { "severity": "win",      "when": "abs(value - target) <= tolerance" }
+      ],
+      "_note": "Pick target by master_context. The sign of (value - target) tells the solver too-quiet vs too-loud."
+    },
+
+    "A1_true_peak_overshoot": {
+      "rule": "A1",
+      "reads_field": "phase1.true_peak_db",
+      "ceiling_path": "genre_profiles.{genre}.loudness.{master_context}.true_peak_dbtp_max",
+      "hot_master_rule": {
+        "if_lufs_louder_than": "_platform_targets.hot_master_threshold_lufs",
+        "use_ceiling": "_platform_targets.hot_master_true_peak_dbtp"
+      },
+      "tiers": [
+        { "severity": "severe",   "when": "value > 0.0" },
+        { "severity": "moderate", "when": "value > ceiling + 0.7" },
+        { "severity": "minor",    "when": "value > ceiling" }
+      ]
+    },
+
+    "A3_over_compression": {
+      "rule": "A3",
+      "reads_field": "phase1.loudness_range_lu",
+      "corroborate_field": "phase1.crest_factor",
+      "lra_warn_path": "genre_profiles.{genre}.dynamics.lra_lu.range",
+      "crest_warn_path": "genre_profiles.{genre}.dynamics.crest_db.warn_below",
+      "static_floor_path": "genre_profiles.{genre}.dynamics.lra_lu.static_floor",
+      "tiers": [
+        { "severity": "severe",   "when": "lra < (lra_range_lo - 2) AND crest < crest_warn_below" },
+        { "severity": "moderate", "when": "lra < lra_range_lo OR crest < crest_warn_below" }
+      ],
+      "suspected": true,
+      "_genre_caveat": "For techno, LRA below static_floor (3.0) may be inherent to a constant beat, NOT over-limiting. When {genre}==techno, require crest corroboration before firing and keep suspected:true."
+    },
+
+    "A4_clipping_count": {
+      "rule": "A4",
+      "reads_field": "phase1.clipped_sample_count",
+      "gate_field": "phase1.clipping_detected",
+      "tiers": [
+        { "severity": "severe",   "when": "value > 1000" },
+        { "severity": "moderate", "when": "value > 100" },
+        { "severity": "minor",    "when": "value >= 1" }
+      ]
+    },
+
+    "A5_sub_mono_compatibility": {
+      "rule": "A5",
+      "reads_field": "phase1.mono_compatibility",
+      "tiers": [
+        { "severity": "severe",   "when": "value < 0.4" },
+        { "severity": "moderate", "when": "value < 0.6" }
+      ]
+    },
+
+    "A6_negative_correlation": {
+      "rule": "A6",
+      "reads_field": "phase1.stereo_correlation",
+      "tiers": [
+        { "severity": "severe",   "when": "value < -0.3" },
+        { "severity": "moderate", "when": "value < 0.0" }
+      ]
+    },
+
+    "A7_thin_low_end": {
+      "rule": "A7",
+      "reads_field": "phase1.low_energy",
+      "_note": "Floor is relative to the genre's low-end emphasis. kick_dominance/low_mid_emphasis = high (techno) raise the floor vs trance. Derive a numeric floor from a measured corpus; until then this stays suspected.",
+      "emphasis_path": "genre_profiles.{genre}.spectral_tilt.low_mid_emphasis",
+      "suspected": true
+    },
+
+    "A8_mud_buildup": {
+      "rule": "A8",
+      "reads_fields": ["phase1.bands.low_mid", "phase1.bands.mid"],
+      "test": "low_mid - mid ratio above threshold",
+      "_note": "Threshold is corpus-derived. Techno tolerates more low-mid (low_mid_emphasis=high); trance less. Scale the firing threshold by emphasis."
+    },
+
+    "A9_harsh_upper_mid": {
+      "rule": "A9",
+      "reads_fields": ["phase1.bands.upper_mid", "phase1.spectral_centroid_hz"],
+      "brightness_rank_path": "genre_profiles.{genre}.spectral_tilt.brightness_rank",
+      "suspected": true,
+      "_note": "Brightness is partly genre identity: rank 1 (modern trance) tolerates far more upper-mid/air than rank 3 (techno). Raise the firing ceiling for brighter ranks."
+    },
+
+    "A10_dull_no_air": {
+      "rule": "A10",
+      "reads_fields": ["phase1.bands.air", "phase1.spectral_centroid_hz"],
+      "air_emphasis_path": "genre_profiles.{genre}.spectral_tilt.air_emphasis",
+      "_note": "Inverse of A9: a trance track (air_emphasis very_high) should be flagged dull at a HIGHER air floor than techno (air_emphasis moderate)."
+    },
+
+    "A12_over_widened": {
+      "rule": "A12",
+      "reads_field": "phase1.stereo_width",
+      "width_character_path": "genre_profiles.{genre}.stereo.width_character",
+      "suspected": true,
+      "_note": "Ceiling scales with width_character: 'widest'/'wide' (trance) tolerate more than 'narrow_centered' (techno). An over-width that's normal for trance is a real flag for techno."
+    },
+
+    "A15_missing_section": {
+      "rule": "A15",
+      "reads_fields": ["phase7.metadata.has_drop", "phase7.metadata.has_breakdown", "phase7.metadata.has_buildup"],
+      "required_path": "genre_profiles.{genre}.arrangement.required_sections",
+      "gate": "phase7.arrangement_status == 'scored'",
+      "tiers": [
+        { "severity": "severe",   "when": "structure_type=='breakdown_drop' AND not has_drop" },
+        { "severity": "moderate", "when": "a required section is absent" }
+      ],
+      "_genre_caveat": "Techno is structure_type 'linear_hypnotic' — do NOT flag a missing euphoric drop/breakdown. required_sections for techno omits buildup/drop by design."
+    },
+
+    "bpm_genre_match": {
+      "rule": "(genre sanity, soft)",
+      "reads_field": "phase1.bpm",
+      "range_path": "genre_profiles.{genre}.bpm",
+      "tiers": [
+        { "severity": "minor", "when": "bpm < min OR bpm > max" }
+      ],
+      "suspected": true,
+      "_note": "Soft mismatch warning only — subgenres legitimately span wide (e.g. hard techno 140–150, progressive trance 128–134). Never an error."
+    }
+  },
+
+  "composite_bindings": {
+    "_note": "Tier C composites read the same genre fields. Listed here so the de-suspecting thresholds stay genre-aware.",
+    "C1_loudness_war": {
+      "crest_path": "genre_profiles.{genre}.dynamics.crest_db.warn_below",
+      "lra_path": "genre_profiles.{genre}.dynamics.lra_lu.static_floor",
+      "_note": "C1's hardcoded crest<6/LRA<4 should defer to genre values: a techno crest of 5 is fine, so C1 must use the techno warn_below (4.0), not the generic 6. Prevents false loudness-war flags on genres that are dense by design."
+    },
+    "C7_no_drop_payoff": {
+      "gate": "{genre}.arrangement.structure_type == 'breakdown_drop'",
+      "_note": "Never fires for techno (linear_hypnotic has no drop to pay off)."
+    }
+  }
+}
