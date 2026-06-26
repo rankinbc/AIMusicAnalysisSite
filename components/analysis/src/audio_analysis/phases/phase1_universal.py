@@ -94,6 +94,23 @@ def _key_estimate(chroma_mean: np.ndarray) -> dict:
         "profile_corrs": corrs,
     }
 
+def _channel_balance(y: np.ndarray) -> dict:
+    """Per-channel L/R RMS + signed balance (B5 lift) — the energy datapoint the
+    `channel_imbalance` rule needs (the bare `stereo_correlation` scalar can't see
+    a sustained level imbalance). ``balance_db`` is +ve when the left channel is
+    louder. Mono / single-channel input returns a balanced (0 dB) reading.
+    """
+    if y.ndim > 1 and y.shape[0] >= 2:
+        l_rms = float(np.sqrt(np.mean(y[0] ** 2)))
+        r_rms = float(np.sqrt(np.mean(y[1] ** 2)))
+    else:
+        m = y.squeeze()
+        l_rms = r_rms = float(np.sqrt(np.mean(m ** 2)))
+    l_db = float(20.0 * np.log10(l_rms + 1e-9))
+    r_db = float(20.0 * np.log10(r_rms + 1e-9))
+    return {"l_rms_db": l_db, "r_rms_db": r_db, "balance_db": float(l_db - r_db)}
+
+
 # Reasons we've already logged for unavailable structure detection, so a run of
 # N tracks against a host with no Docker image logs the cause once, not N times.
 _logged_structure_reasons: set[str] = set()
@@ -292,6 +309,9 @@ def analyze(
         stereo_correlation = 1.0
         stereo_width = 0.0
 
+    # Per-channel L/R balance (B5 lift) — energy imbalance the correlation can't see.
+    channel_balance = _channel_balance(y)
+
     # ------------------------------------------------------------------
     # True peak — 4x oversampling to detect inter-sample peaks (dBTP)
     # Falls back to simple peak if scipy is unavailable.
@@ -410,6 +430,7 @@ def analyze(
         "bands": bands,
         "stereo_correlation": stereo_correlation,
         "stereo_width": stereo_width,
+        "channel_balance": channel_balance,
         "true_peak_db": true_peak_db,
         "peak_dbfs": peak_dbfs,
         "clipping_detected": clipping_detected,
