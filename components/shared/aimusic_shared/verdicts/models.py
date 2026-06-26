@@ -24,6 +24,11 @@ DspType = Literal[
 
 FeedbackKind = Literal["helpful", "wrong", "unclear"]
 
+# ── Problem-record taxonomy (IDENTIFY tier) ──
+ProblemSource = Literal["rule_engine", "llm_identifier"]
+DataTier = Literal["audio_only", "stems", "project_midi"]
+ProblemKind = Literal["fault", "observation", "integrity"]
+
 
 class Evidence(BaseModel):
     model_config = ConfigDict(frozen=False, extra="forbid")
@@ -176,6 +181,17 @@ class Verdict(BaseModel):
     sources: list[str]
     user_state: UserState = Field(default_factory=UserState)
     created_at: datetime
+
+    # ── Problem-record fields (IDENTIFY tier). All optional w/ defaults so
+    #    existing constructors + persistence are unaffected. ──
+    problem_id: Optional[str] = None       # STABLE "<category>.<slug>.<index>"
+    kind: ProblemKind = "fault"
+    source: ProblemSource = "rule_engine"
+    data_tier: DataTier = "audio_only"
+    fixable: bool = True
+    suspected: bool = False
+    where: Optional[dict[str, Any]] = None  # {section_type, start_seconds, end_seconds}
+    refines: Optional[str] = None           # parent composite problem_id (set by the refiner)
 
     @field_validator("verdict_id")
     @classmethod
