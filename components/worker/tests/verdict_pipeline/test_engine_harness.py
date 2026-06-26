@@ -55,3 +55,20 @@ def test_evaluate_problems_two_pass_with_suppression():
 
 def test_evaluate_problems_empty_registry_returns_empty():
     assert RE.evaluate_problems({"track_id": "t"}, singles=[], composites=[]) == []
+
+
+# ── Global-registry guard: clean baseline silent, engine alive on faults ─────
+# These run the FULL module registry (every @single + @composite), not an
+# injected set — the production invariant from rules.md: "never emit when in
+# range." If a newly added rule fires on the clean reference, its threshold is
+# wrong, not the fixture.
+
+def test_clean_baseline_emits_no_problems(clean_trance):
+    assert RE.evaluate_problems(clean_trance) == []
+
+
+def test_engine_alive_on_known_faults(clipped_pop):
+    # The clean-baseline guard only means something if the engine isn't dead.
+    slugs = {v.problem_id.split(".")[1]
+             for v in RE.evaluate_problems(clipped_pop)}
+    assert "clipping_count" in slugs and "true_peak_overshoot" in slugs
