@@ -47,6 +47,7 @@ import type {
   ConfirmStemsResponse,
   ReferenceDto,
   ReferenceSetDto,
+  FixRackDto,
   RunSpecialistResponse,
   SongDto,
   UploadResponse,
@@ -322,7 +323,15 @@ export function useStemProposals(versionId: string, enabled: boolean) {
     queryFn: () =>
       fetcher<StemProposalsResponse>({ url: `/versions/${versionId}/stems`, method: 'GET' }),
     enabled: enabled && Boolean(versionId),
-    refetchInterval: (query) => (query.state.data?.classified ? false : 1500),
+    // Poll only while a classify job is genuinely in flight. Stop once the worker
+    // reports classified OR there are no staged stems to classify — otherwise a
+    // version with an empty stem_paths_raw (e.g. the Listen page) polls forever,
+    // since the BFF returns classified=false when entries.Count == 0.
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return 1500;
+      return data.classified || data.stems.length === 0 ? false : 1500;
+    },
     retry: false,
   });
 }
@@ -532,6 +541,29 @@ export function useRunSpecialist(jobId: string) {
         method: 'POST',
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['verdicts', jobId] }),
+  });
+}
+
+/** Dispatch deterministic fix-rack generation (POST → 202 queued). Poll the
+ *  result with `useFixRack`. */
+export function useGenerateFixRack(jobId: string) {
+  return useMutation({
+    mutationFn: () =>
+      fetcher<{ status: string }>({ url: `/reports/${jobId}/fix-rack`, method: 'POST' }),
+  });
+}
+
+/** The generated analysis fix-rack, or `null` until ready. The BFF returns 204
+ *  (→ null) until the worker writes it; this polls every 1.5 s while null.
+ *  Enable it only after `useGenerateFixRack` has been fired. */
+export function useFixRack(jobId: string, enabled: boolean) {
+  return useQuery<FixRackDto | null>({
+    queryKey: ['fix-rack', jobId],
+    queryFn: async () =>
+      (await fetcher<FixRackDto | null>({ url: `/reports/${jobId}/fix-rack`, method: 'GET' })) ?? null,
+    enabled: enabled && Boolean(jobId),
+    refetchInterval: (query) => (query.state.data == null ? 1500 : false),
+    retry: false,
   });
 }
 

@@ -1240,6 +1240,16 @@ export interface SpecialistStatus {
   status: 'idle' | 'cached' | 'failed';
 }
 
+/** The deterministic SOLVE output for an analysis — a system-generated rack
+ *  preset (source='analysis'). `chain` is a Listen-rack Chain `{ order, modules,
+ *  masterBypass }`; narrow it via features/listen-rack `asChain()` before loading.
+ *  GET /reports/{jobId}/fix-rack returns this once generated (204 until then). */
+export interface FixRackDto {
+  name: string;
+  chain: unknown;
+  createdAt: string;
+}
+
 export interface RoutingPlanEntry {
   name: string;
   priority: number;
