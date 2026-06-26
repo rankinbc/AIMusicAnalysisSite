@@ -42,7 +42,7 @@ def _base_chain() -> dict[str, Any]:
 
 
 def _build_eq(pairs: list[_Pair], change_log: list[dict[str, Any]]) -> dict[str, Any]:
-    bands = [
+    bands: list[dict[str, Any]] = [
         {"type": "peaking", "freq": EQ_BANDS[i], "gainDb": 0.0, "q": 1.4, "enabled": False}
         for i in range(len(EQ_BANDS))
     ]
