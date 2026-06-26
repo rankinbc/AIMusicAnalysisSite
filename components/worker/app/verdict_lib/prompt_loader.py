@@ -282,10 +282,12 @@ def load_coach_grounded_model() -> str | None:
 _DEFAULT_IDENTIFIER_DIR = Path(__file__).resolve().parents[2] / "prompts" / "identifiers"
 IDENTIFIER_PROMPTS_DIR = Path(os.environ.get("IDENTIFIER_PROMPTS_DIR") or _DEFAULT_IDENTIFIER_DIR)
 
-# Phase 1 subset = the one genuinely audio-only judge. The .als-gated
-# section_contrast / chord_harmony are deferred pending a grounding check.
+# trance_arrangement = audio-only judge (phase7). section_contrast / chord_harmony
+# are .als-gated (need phase8.midi_analysis, emitted by phase8_als.py).
 IDENTIFIER_SLUG_TO_FILENAME: dict[str, str] = {
     "trance_arrangement": "TranceArrangement",
+    "section_contrast": "SectionContrast",
+    "chord_harmony": "ChordHarmony",
 }
 
 

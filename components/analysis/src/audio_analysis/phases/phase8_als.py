@@ -98,6 +98,34 @@ def analyze_als(als_path: Optional[str]) -> dict:
                 "issues": midi_issues,
             },
             "arrangement": arrangement,
+            # Per-track MIDI analysis (chords, density, velocity) for the LLM
+            # section_contrast / chord_harmony identifiers. Emitted as a LIST (not a
+            # dict) so evidence paths like phase8.midi_analysis[i].chords[j].chord_name
+            # resolve via the validator's array-index path resolution. The chord list
+            # is capped so a busy track doesn't bloat final_json — the identifier reads
+            # the progression shape, not every chord.
+            "midi_analysis": [
+                {
+                    "track_name": ma.track_name,
+                    "note_count": ma.note_count,
+                    "velocity_mean": round(ma.velocity_mean, 1),
+                    "velocity_std": round(ma.velocity_std, 1),
+                    "humanization_score": ma.humanization_score,
+                    "note_density_per_bar": round(ma.note_density_per_bar, 2),
+                    "chord_count": ma.chord_count,
+                    "chords": [
+                        {
+                            "time": round(c.time, 2),
+                            "chord_name": c.chord_name,
+                            "pitches": list(c.pitches),
+                            "duration": round(c.duration, 2),
+                        }
+                        for c in ma.chords[:48]
+                    ],
+                    "swing_ratio": ma.swing_ratio,
+                }
+                for ma in midi_result.per_track_analysis.values()
+            ],
         }
 
         return {"phase": 8, "name": "ALS Analysis", "status": "ok", "data": data, "error": None}

@@ -30,6 +30,21 @@ def _final_json():
     ]}}]}
 
 
+_MIDI_FAKE_JSON = (
+    '{"verdicts":[{"severity":"moderate","category":"chord_harmony","confidence":0.7,'
+    '"headline":"Static harmony","summary":"Lead sits on one chord the whole track.",'
+    '"evidence":[{"metric":"phase8.midi_analysis[0].chord_count","value":1,"label":"1 chord"}],'
+    '"why_it_matters":"No harmonic movement."}]}'
+)
+
+
+def _midi_final_json():
+    return {"phases": [{"phase": 8, "name": "ALS", "data": {"midi_analysis": [
+        {"track_name": "Lead", "chord_count": 1, "note_density_per_bar": 2.0,
+         "chords": [{"chord_name": "Am"}]},
+    ]}}]}
+
+
 # ── gate / eligibility / hydration (DB-free) ─────────────────────────────────
 
 def test_identifiers_enabled_paid_only():
@@ -44,10 +59,21 @@ def test_run_returns_zero_for_free_tier_without_db():
     assert I.run_llm_identifiers_for_analysis(uuid.uuid4(), tier="free", user_id=None) == 0
 
 
-def test_eligible_slugs_gates_on_section_scores():
-    assert I._eligible_slugs({"phase7": {"section_scores": [{"score": 1}]}}) == ["trance_arrangement"]
-    assert I._eligible_slugs({"phase7": {}}) == []
-    assert I._eligible_slugs({}) == []
+def test_eligible_gates_on_data():
+    def slugs(flat):
+        return [s.slug for s in I._eligible(flat)]
+
+    # trance_arrangement (audio-only) needs phase7.section_scores
+    assert slugs({"phase7": {"section_scores": [{"score": 1}]}}) == ["trance_arrangement"]
+    # section_contrast + chord_harmony (.als) need phase8.midi_analysis
+    midi = {"phase8": {"midi_analysis": [{"track_name": "Lead"}]}}
+    assert set(slugs(midi)) == {"section_contrast", "chord_harmony"}
+    # both data present -> all three eligible
+    both = {"phase7": {"section_scores": [{"score": 1}]},
+            "phase8": {"midi_analysis": [{"track_name": "Lead"}]}}
+    assert set(slugs(both)) == {"trance_arrangement", "section_contrast", "chord_harmony"}
+    # nothing -> none
+    assert slugs({}) == []
 
 
 def test_hydrate_identifier_forces_fields():
@@ -60,7 +86,8 @@ def test_hydrate_identifier_forces_fields():
                 "dsp_chain": [], "expected_outcome": "o"},
     }
     v = I._hydrate_identifier(raw, track_id="t", slug="trance_arrangement",
-                              prompt_version="trance_arrangement@1.0.0", model="fake", index=0)
+                              prompt_version="trance_arrangement@1.0.0", model="fake",
+                              index=0, data_tier="audio_only")
     assert v.source == "llm_identifier"
     assert v.fix is None
     assert v.suspected is True
@@ -164,6 +191,20 @@ def test_skips_when_no_section_scores(install, monkeypatch):
     n = I.run_llm_identifiers_for_analysis(aid, tier="pro", user_id=None)
 
     assert n == 0 and calls == []  # no eligible identifier -> no call
+
+
+def test_als_gated_identifiers_run_with_midi(install, monkeypatch):
+    aid = uuid.uuid4()
+    session = install(_analysis(aid, _midi_final_json()))
+    from app.llm import gateway
+    monkeypatch.setattr(gateway, "complete_sync",
+                        lambda **kw: SimpleNamespace(text=_MIDI_FAKE_JSON, model="fake"))
+
+    n = I.run_llm_identifiers_for_analysis(aid, tier="pro", user_id=None)
+
+    assert n == 2  # section_contrast + chord_harmony both run on phase8.midi_analysis
+    assert all(r.source == "llm_identifier" for r in session.added)
+    assert all(r.data_tier == "project_midi" for r in session.added)
 
 
 def test_budget_exceeded_stamps_notice_and_stops(install, monkeypatch):

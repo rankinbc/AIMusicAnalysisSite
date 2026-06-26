@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -31,8 +32,20 @@ from .validator import validate_verdict
 
 logger = logging.getLogger(__name__)
 
-# Phase 1 audio-only identifier roster.
-_AUDIO_ONLY_IDENTIFIERS: tuple[str, ...] = ("trance_arrangement",)
+# Identifier roster. Each carries the data_tier its evidence uses and a gate on the
+# data that must be present — never grade absent data.
+@dataclass(frozen=True)
+class _IdentifierSpec:
+    slug: str
+    data_tier: str   # "audio_only" | "project_midi"
+    requires: str    # "sections" (phase7) | "midi" (phase8.midi_analysis)
+
+
+_IDENTIFIERS: tuple[_IdentifierSpec, ...] = (
+    _IdentifierSpec("trance_arrangement", "audio_only", "sections"),
+    _IdentifierSpec("section_contrast", "project_midi", "midi"),
+    _IdentifierSpec("chord_harmony", "project_midi", "midi"),
+)
 
 
 def identifiers_enabled(tier: str | None) -> bool:
@@ -44,25 +57,30 @@ def identifiers_enabled(tier: str | None) -> bool:
     return tier == "pro"
 
 
-def _eligible_slugs(flattened: dict[str, Any]) -> list[str]:
-    """Which identifiers can run given the data present. ``trance_arrangement``
-    needs a non-empty ``phase7.section_scores`` — never grade absent structure."""
+def _eligible(flattened: dict[str, Any]) -> list[_IdentifierSpec]:
+    """Which identifiers can run given the data present. ``trance_arrangement`` needs
+    ``phase7.section_scores``; the ``.als``-gated ones need ``phase8.midi_analysis``
+    (emitted by phase8_als.py). Never grade absent data."""
     has_sections = bool((flattened.get("phase7") or {}).get("section_scores"))
-    out: list[str] = []
-    for slug in _AUDIO_ONLY_IDENTIFIERS:
-        if slug == "trance_arrangement" and not has_sections:
+    has_midi = bool((flattened.get("phase8") or {}).get("midi_analysis"))
+    out: list[_IdentifierSpec] = []
+    for spec in _IDENTIFIERS:
+        if spec.requires == "sections" and not has_sections:
             continue
-        out.append(slug)
+        if spec.requires == "midi" and not has_midi:
+            continue
+        out.append(spec)
     return out
 
 
 def _hydrate_identifier(
     raw: dict[str, Any], *, track_id: str, slug: str, prompt_version: str,
-    model: str, index: int,
+    model: str, index: int, data_tier: str,
 ) -> Any:
     """Build a Verdict from a raw LLM finding, FORCING the identifier-tier fields
     (architecture §4C): ``source='llm_identifier'``, no fix, suspected (judgment
-    call), audio_only, a stable ``problem_id``, and not master-rack fixable."""
+    call), the spec's ``data_tier``, a stable ``problem_id``, and not master-rack
+    fixable."""
     from aimusic_shared.verdicts.models import Verdict  # noqa: PLC0415
     from aimusic_shared.verdicts.ulid_helpers import new_verdict_id  # noqa: PLC0415
 
@@ -81,8 +99,8 @@ def _hydrate_identifier(
     body["source"] = "llm_identifier"
     body["fix"] = None
     body["suspected"] = True
-    body["data_tier"] = "audio_only"
-    body["fixable"] = False  # no deterministic arrangement solver — advisory
+    body["data_tier"] = data_tier
+    body["fixable"] = False  # no deterministic solver for these judgment calls — advisory
     body.setdefault("kind", "observation")
     category = body.get("category", "trance_arrangement")
     body["problem_id"] = f"{category}.{slug}.{index}"
@@ -136,8 +154,8 @@ def run_llm_identifiers_for_analysis(
         flattened.setdefault("track_id", track_id)
 
         cap = get_llm_settings().max_identifiers_per_analysis
-        slugs = _eligible_slugs(flattened)[:cap]
-        if not slugs:
+        specs = _eligible(flattened)[:cap]
+        if not specs:
             return 0
 
         try:
@@ -146,7 +164,8 @@ def run_llm_identifiers_for_analysis(
             caller_id = None
 
         written = 0
-        for slug in slugs:
+        for spec in specs:
+            slug = spec.slug
             try:
                 version, body = load_identifier_prompt(slug)
             except (KeyError, FileNotFoundError) as exc:
@@ -210,6 +229,7 @@ def run_llm_identifiers_for_analysis(
                     hyd = _hydrate_identifier(
                         raw_v, track_id=track_id, slug=slug,
                         prompt_version=f"{slug}@{version}", model=result.model, index=i,
+                        data_tier=spec.data_tier,
                     )
                 except Exception as exc:
                     logger.info("identifier %s hydrate failed: %s", slug, exc)
