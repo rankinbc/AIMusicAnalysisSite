@@ -185,6 +185,13 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         builder.Entity<Analysis>().HasIndex(a => a.VersionId);
         builder.Entity<Verdict>().HasIndex(v => v.AnalysisId);
         builder.Entity<Verdict>().HasIndex(v => new { v.AnalysisId, v.Specialist });
+        // Problem-tier (IDENTIFY) defaults — backfill legacy rows + safety net for
+        // any insert that doesn't set them (the worker sets them explicitly).
+        builder.Entity<Verdict>().Property(v => v.Kind).HasDefaultValue("fault");
+        builder.Entity<Verdict>().Property(v => v.Source).HasDefaultValue("rule_engine");
+        builder.Entity<Verdict>().Property(v => v.DataTier).HasDefaultValue("audio_only");
+        builder.Entity<Verdict>().Property(v => v.Fixable).HasDefaultValue(true);
+        builder.Entity<Verdict>().Property(v => v.Suspected).HasDefaultValue(false);
         builder.Entity<AnalysisJob>().HasIndex(j => new { j.UserId, j.Status });
         // LLM spend dashboards (Epic 10) query by time and by user.
         builder.Entity<LlmCall>().HasIndex(c => c.CreatedAt);
