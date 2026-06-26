@@ -881,3 +881,150 @@ def bpm_genre_match(a: dict[str, Any]) -> Verdict | None:
         why_it_matters="A tempo far outside the genre norm can signal a half/double-time detection "
                        "or a genre mismatch.",
     )
+
+
+# ── TIER A — tonal / spectral (A7-A12). PLACEHOLDER thresholds, suspected: ───
+# genre-profiles.json carries only QUALITATIVE spectral hints (brightness_rank,
+# width_character, *_emphasis), no firing numbers. These ship suspected=True with
+# documented placeholder bases scaled by the hint, pending a measured corpus
+# (genre-profiles.json::_tuning_notes). Do NOT treat the numbers as validated.
+
+
+@single("thin_low_end", tier="A")
+def thin_low_end(a: dict[str, Any]) -> Verdict | None:
+    low = _phase(a, "phase1").get("low_energy")
+    if low is None or low >= 0.12:  # placeholder floor
+        return None
+    sev: Severity = "severe" if low < 0.06 else "moderate"
+    return _problem(
+        track_id=_track_id(a), slug="thin_low_end", severity=sev, category="low_end",
+        kind="observation", suspected=True, headline=f"Thin low end (LF energy {low:.2f})",
+        summary=f"Low-frequency (20-200 Hz) energy is {low:.2f} - light for most dance genres. "
+                "Placeholder floor pending a corpus.",
+        evidence=[Evidence(metric="phase1.low_energy", value=float(low),
+                           expected_range=(0.12, 0.5), label=f"{low:.2f}")],
+        why_it_matters="A weak low end robs a track of body and club impact.",
+    )
+
+
+@single("mud_buildup", tier="A")
+def mud_buildup(a: dict[str, Any]) -> Verdict | None:
+    bands = _phase(a, "phase1").get("bands") or {}
+    lm, mid = bands.get("low_mid"), bands.get("mid")
+    if lm is None or mid is None:
+        return None
+    diff = lm - mid  # both dB-rel-peak; the difference is normalization-stable
+    if diff <= 3.0:  # placeholder base (genre scaling by low_mid_emphasis TODO)
+        return None
+    sev: Severity = "severe" if diff > 6.0 else "moderate"
+    return _problem(
+        track_id=_track_id(a), slug="mud_buildup", severity=sev, category="frequency_balance",
+        kind="observation", suspected=True, headline=f"Low-mid buildup ({diff:.1f} dB over mid)",
+        summary=f"The 200-500 Hz low-mid sits {diff:.1f} dB above the mid band - the signature of a "
+                "muddy, congested mix.",
+        evidence=[Evidence(metric="phase1.bands.low_mid", value=float(lm),
+                           frequency_range_hz=(200.0, 500.0),
+                           label=f"low-mid {diff:.1f} dB over mid")],
+        why_it_matters="Excess low-mid masks definition; a subtractive cut opens the mix up.",
+    )
+
+
+@single("harsh_upper_mid", tier="A")
+def harsh_upper_mid(a: dict[str, Any]) -> Verdict | None:
+    p1 = _phase(a, "phase1")
+    centroid = p1.get("spectral_centroid_hz")
+    um = (p1.get("bands") or {}).get("upper_mid")
+    if centroid is None and um is None:
+        return None
+    g = _genre(a)
+    rank = G.ppath(g, "spectral.brightness_rank", 2) or 2
+    ceiling = 4000.0 + (3 - rank) * 600.0  # placeholder: brighter genres tolerate more
+    if not ((centroid is not None and centroid > ceiling) or (um is not None and um > -38.0)):
+        return None
+    if centroid is not None:
+        ev = Evidence(metric="phase1.spectral_centroid_hz", value=float(centroid),
+                      expected_range=(1000.0, ceiling), label=f"centroid {centroid:.0f} Hz")
+    else:
+        ev = Evidence(metric="phase1.bands.upper_mid", value=float(um or 0.0),
+                      frequency_range_hz=(2000.0, 5000.0), label="upper-mid hot")
+    return _problem(
+        track_id=_track_id(a), slug="harsh_upper_mid", severity="moderate",
+        category="frequency_balance", kind="observation", suspected=True,
+        headline="Bright / harsh upper mids",
+        summary=f"2-5 kHz content reads hot for {G.resolve_genre(g)} (brightness rank {rank}); can "
+                "fatigue the ear. Placeholder thresholds.",
+        evidence=[ev],
+        why_it_matters="2-5 kHz harshness causes listening fatigue, especially on earbuds.",
+    )
+
+
+@single("dull_no_air", tier="A")
+def dull_no_air(a: dict[str, Any]) -> Verdict | None:
+    p1 = _phase(a, "phase1")
+    air = (p1.get("bands") or {}).get("air")
+    centroid = p1.get("spectral_centroid_hz")
+    if air is None and centroid is None:
+        return None
+    g = _genre(a)
+    rank = G.ppath(g, "spectral.brightness_rank", 2) or 2
+    air_floor = -78.0 + (3 - rank) * 4.0  # placeholder: brighter genres expect more air
+    if not ((air is not None and air < air_floor) or (centroid is not None and centroid < 1500.0)):
+        return None
+    if air is not None:
+        ev = Evidence(metric="phase1.bands.air", value=float(air),
+                      frequency_range_hz=(8000.0, 22000.0), label=f"air {air:.0f} dB")
+    else:
+        ev = Evidence(metric="phase1.spectral_centroid_hz", value=float(centroid or 0.0),
+                      label=f"centroid {centroid or 0.0:.0f} Hz")
+    return _problem(
+        track_id=_track_id(a), slug="dull_no_air", severity="moderate",
+        category="frequency_balance", kind="observation", suspected=True,
+        headline="Dull top end - missing air",
+        summary=f"High-frequency air is low for {G.resolve_genre(g)} (brightness rank {rank}); the mix "
+                "may sound dull or lossy. Placeholder thresholds.",
+        evidence=[ev],
+        why_it_matters="Missing air makes a mix feel closed-in or like a lossy export.",
+    )
+
+
+@single("no_tonal_center", tier="A")
+def no_tonal_center(a: dict[str, Any]) -> Verdict | None:
+    p1 = _phase(a, "phase1")
+    flat = p1.get("spectral_flatness")
+    conf = p1.get("key_detection_confidence")
+    if flat is None or conf is None:
+        return None
+    if not (flat > 0.4 and conf < 0.5):
+        return None
+    return _problem(
+        track_id=_track_id(a), slug="no_tonal_center", severity="moderate", category="harmonic",
+        kind="observation", suspected=True, headline="No clear tonal centre",
+        summary=f"Spectral flatness {flat:.2f} (noisy) and key confidence {conf:.2f} (low) together "
+                "suggest no dominant key.",
+        evidence=[Evidence(metric="phase1.key_detection_confidence", value=float(conf),
+                           expected_range=(0.5, 1.0),
+                           label=f"key conf {conf:.2f}, flatness {flat:.2f}")],
+        why_it_matters="An ambiguous tonal centre weakens harmonic-mixing labels and can read as unmusical.",
+    )
+
+
+@single("over_widened", tier="A")
+def over_widened(a: dict[str, Any]) -> Verdict | None:
+    width = _phase(a, "phase1").get("stereo_width")
+    if width is None:
+        return None
+    g = _genre(a)
+    char = G.ppath(g, "stereo.width_character", "wide") or "wide"
+    ceiling = {"widest": 0.45, "wide": 0.40, "narrow_centered": 0.25}.get(char, 0.40)
+    if width <= ceiling:
+        return None
+    return _problem(
+        track_id=_track_id(a), slug="over_widened", severity="moderate", category="stereo_field",
+        kind="observation", suspected=True,
+        headline=f"Possibly over-widened for {G.resolve_genre(g)}",
+        summary=f"Stereo width {width:.2f} exceeds the placeholder ceiling for a '{char}' genre; a "
+                "stereo imager may be over-pushed. Placeholder threshold.",
+        evidence=[Evidence(metric="phase1.stereo_width", value=float(width),
+                           expected_range=(0.0, ceiling), label=f"width {width:.2f}")],
+        why_it_matters="Over-widening risks mono collapse and an unstable image.",
+    )
