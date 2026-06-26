@@ -2,9 +2,18 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from aimusic_shared.verdicts.models import Evidence, Severity, Verdict
+from aimusic_shared.verdicts.models import (
+    DataTier,
+    Evidence,
+    ProblemKind,
+    ProblemSource,
+    Severity,
+    Verdict,
+)
 from aimusic_shared.verdicts.scoring import compute_priority_score
 from aimusic_shared.verdicts.ulid_helpers import new_verdict_id
+
+from app.verdict_lib.suppression import apply as _apply_suppression
 
 RULE_ENGINE_VERSION = "rule_engine@1.0.0"
 RULE_MODEL = "rules"
@@ -69,6 +78,118 @@ def _track_id(analysis: dict[str, Any]) -> str:
 
 def _phase(analysis: dict[str, Any], key: str) -> dict[str, Any]:
     return analysis.get(key) or {}
+
+
+# ── Two-pass Problem engine (singles → composites + suppression) ─────────────
+# New tiered harness. Runs alongside the legacy `rule`/`evaluate_rules` path
+# above until the reconcile step retires it. Rules emit the richer Problem shape
+# (problem_id/kind/data_tier/…) via `_problem`.
+
+SingleFn = Callable[[dict[str, Any]], "Verdict | None"]
+CompositeFn = Callable[[dict[str, Any], dict[str, "Verdict"]], "Verdict | None"]
+_SINGLES: list[tuple[str, SingleFn]] = []
+_COMPOSITES: list[tuple[str, list[str], CompositeFn]] = []
+
+
+def single(slug: str, tier: str = "A") -> Callable[[SingleFn], SingleFn]:
+    """Register a single-metric rule (Tier A / B / S / P)."""
+    def deco(fn: SingleFn) -> SingleFn:
+        _SINGLES.append((slug, fn))
+        return fn
+    return deco
+
+
+def composite(slug: str, suppresses: list[str]) -> Callable[[CompositeFn], CompositeFn]:
+    """Register a Tier-C composite that absorbs the listed child slugs when it fires."""
+    def deco(fn: CompositeFn) -> CompositeFn:
+        _COMPOSITES.append((slug, suppresses, fn))
+        return fn
+    return deco
+
+
+def _problem(
+    *,
+    track_id: str,
+    slug: str,
+    severity: Severity,
+    category: str,
+    headline: str,
+    summary: str,
+    evidence: list[Evidence],
+    why_it_matters: str,
+    index: int = 0,
+    scope: str = "full_track",
+    confidence: float = 0.9,
+    kind: ProblemKind = "fault",
+    source: ProblemSource = "rule_engine",
+    data_tier: DataTier = "audio_only",
+    fixable: bool = True,
+    suspected: bool = False,
+    where: dict[str, Any] | None = None,
+) -> Verdict:
+    """Build a Problem record (a Verdict with the IDENTIFY-tier fields populated)."""
+    score = compute_priority_score(severity, category, scope)  # type: ignore[arg-type]
+    return Verdict(
+        verdict_id=new_verdict_id(),
+        track_id=track_id,
+        specialist=f"rule_engine.{slug}",
+        prompt_version=RULE_ENGINE_VERSION,
+        model=RULE_MODEL,
+        severity=severity,
+        category=category,  # type: ignore[arg-type]
+        confidence=confidence,
+        priority_score=score,
+        headline=headline,
+        summary=summary,
+        evidence=evidence,
+        fix=None,
+        why_it_matters=why_it_matters,
+        related_verdict_ids=[],
+        sources=["rule_engine"],
+        created_at=datetime.now(tz=timezone.utc),
+        problem_id=f"{category}.{slug}.{index}",
+        kind=kind,
+        source=source,
+        data_tier=data_tier,
+        fixable=fixable,
+        suspected=suspected,
+        where=where,
+    )
+
+
+def _tiered(value: float, bands: dict[str, float], *, higher_is_worse: bool) -> Severity | None:
+    """Pick the hottest severity whose threshold *value* crosses. `bands` keys are
+    severity names; only the present ones are checked, worst-first."""
+    for sev in ("critical", "severe", "moderate", "minor"):
+        if sev in bands:
+            thr = bands[sev]
+            if (higher_is_worse and value > thr) or (not higher_is_worse and value < thr):
+                return sev  # type: ignore[return-value]
+    return None
+
+
+def evaluate_problems(
+    analysis: dict[str, Any],
+    *,
+    singles: list[tuple[str, SingleFn]] | None = None,
+    composites: list[tuple[str, list[str], CompositeFn]] | None = None,
+) -> list[Verdict]:
+    """Two-pass evaluation: run all singles, then composites, then apply
+    suppression. Registries default to the module globals; pass explicit ones
+    in tests to avoid touching the global set."""
+    singles = _SINGLES if singles is None else singles
+    composites = _COMPOSITES if composites is None else composites
+    fired: dict[str, Verdict] = {}
+    for slug, fn in singles:
+        v = fn(analysis)
+        if v is not None:
+            fired[slug] = v
+    hits = []
+    for slug, suppresses, cfn in composites:
+        cv = cfn(analysis, fired)
+        if cv is not None:
+            hits.append((slug, suppresses, cv))
+    return _apply_suppression(fired, hits)
 
 
 # ── Rules ──────────────────────────────────────────────────────────────────
