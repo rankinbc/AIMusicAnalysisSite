@@ -13,6 +13,7 @@ from aimusic_shared.verdicts.models import (
 from aimusic_shared.verdicts.scoring import compute_priority_score
 from aimusic_shared.verdicts.ulid_helpers import new_verdict_id
 
+from app.verdict_lib import genre_config as G
 from app.verdict_lib.suppression import apply as _apply_suppression
 
 RULE_ENGINE_VERSION = "rule_engine@1.0.0"
@@ -618,4 +619,175 @@ def untreated_low_end(a: dict[str, Any], fired: dict[str, Verdict]) -> Verdict |
         ],
         why_it_matters="A dense low end without ducking congests the mix; the fix is sidechain "
                        "(with stems) or a complementary EQ carve.",
+    )
+
+
+# ── TIER A — fire from exposed phase-1/phase-9 fields ────────────────────────
+
+
+def _genre(a: dict[str, Any]) -> str | None:
+    return _phase(a, "phase2").get("genre")
+
+
+@single("true_peak_overshoot", tier="A")
+def true_peak_overshoot(a: dict[str, Any]) -> Verdict | None:
+    """True peak over the genre ceiling (binding A1) + hot-master rule."""
+    p1 = _phase(a, "phase1")
+    tp = p1.get("true_peak_db")
+    if tp is None:
+        return None
+    g, ctx = _genre(a), G.master_context()
+    ceiling = G.ppath(g, f"loudness.{ctx}.true_peak_dbtp_max", -1.0)
+    lufs = p1.get("lufs")
+    if lufs is not None and lufs > G.platform("hot_master_threshold_lufs", -14.0):
+        ceiling = G.platform("hot_master_true_peak_dbtp", -2.0)
+    if tp <= ceiling:
+        return None
+    sev: Severity = "severe" if tp > 0.0 else ("moderate" if tp > ceiling + 0.7 else "minor")
+    return _problem(
+        track_id=_track_id(a), slug="true_peak_overshoot", severity=sev, category="clipping",
+        kind="fault", headline=f"True peak {tp:+.2f} dBTP - over {ceiling:.1f} ceiling",
+        summary=f"Inter-sample true peak exceeds the {ceiling:.1f} dBTP ceiling; codec re-encoding will clip.",
+        evidence=[Evidence(metric="phase1.true_peak_db", value=float(tp),
+                           expected_range=(-6.0, ceiling), label=f"{tp:+.2f} dBTP")],
+        why_it_matters="Lossy codecs (AAC/Opus) raise peaks on re-encode; over the ceiling risks audible distortion.",
+    )
+
+
+@single("clipping_count", tier="A")
+def clipping_count(a: dict[str, Any]) -> Verdict | None:
+    p1 = _phase(a, "phase1")
+    if not p1.get("clipping_detected"):
+        return None
+    n = int(p1.get("clipped_sample_count", 0))
+    if n < 1:
+        return None
+    sev: Severity = "severe" if n > 1000 else ("moderate" if n > 100 else "minor")
+    return _problem(
+        track_id=_track_id(a), slug="clipping_count", severity=sev, category="clipping",
+        kind="fault", headline=f"Hard clipping ({n} samples)",
+        summary="The signal hits digital full-scale; distortion is baked in and unfixable downstream.",
+        evidence=[Evidence(metric="phase1.clipped_sample_count", value=float(n), label=f"{n} samples")],
+        why_it_matters="Clipping is irreversible - limiting/mastering downstream cannot remove it.",
+    )
+
+
+@single("loudness_vs_target", tier="A")
+def loudness_vs_target(a: dict[str, Any]) -> Verdict | None:
+    """Signed deviation from the genre's target for the active master_context (binding A2)."""
+    lufs = _phase(a, "phase1").get("lufs")
+    if lufs is None:
+        return None
+    g, ctx = _genre(a), G.master_context()
+    target = G.ppath(g, f"loudness.{ctx}.lufs_target") or G.ppath(g, "loudness.streaming.lufs_target", -14.0)
+    tol = G.ppath(g, "loudness.streaming.lufs_tolerance", 1.5)
+    delta = lufs - target
+    if abs(delta) <= tol or abs(delta) <= 3:  # win-band / below-moderate -> no card
+        return None
+    sev: Severity = "severe" if abs(delta) > 6 else "moderate"
+    direction = "loud" if delta > 0 else "quiet"
+    return _problem(
+        track_id=_track_id(a), slug="loudness_vs_target", severity=sev, category="loudness",
+        kind="fault", headline=f"Master too {direction} ({lufs:.1f} LUFS)",
+        summary=f"Integrated loudness {lufs:.1f} LUFS is {abs(delta):.1f} LU from the {target:.0f} "
+                f"{ctx} target for {G.resolve_genre(g)}.",
+        evidence=[Evidence(metric="phase1.lufs", value=float(lufs),
+                           expected_range=(target - 3, target + 3), label=f"{lufs:.1f} LUFS")],
+        why_it_matters="Streaming normalises to its target; too loud burns dynamics, too quiet gains up noise.",
+    )
+
+
+@single("over_compression", tier="A")
+def over_compression(a: dict[str, Any]) -> Verdict | None:
+    """Squashed dynamics vs the genre ideal (binding A3). suspected; techno's
+    inherently low LRA needs crest corroboration before firing."""
+    p1 = _phase(a, "phase1")
+    lra = p1.get("loudness_range_lu")
+    cf = p1.get("crest_factor")
+    if lra is None and cf is None:
+        return None
+    g = _genre(a)
+    lra_range = G.ppath(g, "dynamics.lra_lu.range", [5.0, 9.0])
+    crest_warn = G.ppath(g, "dynamics.crest_db.warn_below", 6.0)
+    lra_lo = lra_range[0]
+    crest_low = cf is not None and cf < crest_warn
+    if G.resolve_genre(g) == "techno" and not crest_low:
+        return None  # techno's low LRA is inherent - require crest corroboration
+    sev: Severity | None = None
+    if lra is not None and lra < (lra_lo - 2) and crest_low:
+        sev = "severe"
+    elif (lra is not None and lra < lra_lo) or crest_low:
+        sev = "moderate"
+    if sev is None:
+        return None
+    ev = []
+    if lra is not None:
+        ev.append(Evidence(metric="phase1.loudness_range_lu", value=float(lra),
+                           expected_range=tuple(lra_range), label=f"{lra:.1f} LU"))
+    if cf is not None:
+        ideal = G.ppath(g, "dynamics.crest_db.range", [7.0, 12.0])
+        ev.append(Evidence(metric="phase1.crest_factor", value=float(cf),
+                           expected_range=tuple(ideal), label=f"{cf:.1f} dB crest"))
+    return _problem(
+        track_id=_track_id(a), slug="over_compression", severity=sev, category="dynamics",
+        kind="observation", suspected=True, headline="Heavily compressed - dynamics squashed",
+        summary=f"Loudness range / crest are below the {G.resolve_genre(g)} ideal. Sometimes a genre choice.",
+        evidence=ev,
+        why_it_matters="Over-limiting kills transients and fatigues listeners; the genre ideal sets how far is too far.",
+    )
+
+
+@single("sub_mono_compatibility", tier="A")
+def sub_mono_compatibility(a: dict[str, Any]) -> Verdict | None:
+    mono = _phase(a, "phase1").get("mono_compatibility")
+    if mono is None:
+        return None
+    sev = _tiered(mono, {"severe": 0.4, "moderate": 0.6}, higher_is_worse=False)
+    if sev is None:
+        return None
+    return _problem(
+        track_id=_track_id(a), slug="sub_mono_compatibility", severity=sev,
+        category="mono_compatibility", kind="fault",
+        headline=f"Mono fold-down loses energy ({mono:.2f})",
+        summary=f"Mono-sum RMS is only {mono:.2f} of stereo - phase content collapses on mono/club systems.",
+        evidence=[Evidence(metric="phase1.mono_compatibility", value=float(mono),
+                           expected_range=(0.6, 1.0), label=f"{mono:.2f}")],
+        why_it_matters="Club, phone-speaker, and Bluetooth playback sum to mono; energy lost there sounds thin.",
+    )
+
+
+@single("negative_correlation", tier="A")
+def negative_correlation(a: dict[str, Any]) -> Verdict | None:
+    corr = _phase(a, "phase1").get("stereo_correlation")
+    if corr is None:
+        return None
+    sev = _tiered(corr, {"severe": -0.3, "moderate": 0.0}, higher_is_worse=False)
+    if sev is None:
+        return None
+    return _problem(
+        track_id=_track_id(a), slug="negative_correlation", severity=sev,
+        category="stereo_phase", kind="fault",
+        headline=f"Out-of-phase stereo ({corr:+.2f})",
+        summary=f"Stereo correlation is {corr:+.2f}; channels are partly out of phase and cancel in mono.",
+        evidence=[Evidence(metric="phase1.stereo_correlation", value=float(corr),
+                           expected_range=(0.2, 1.0), label=f"{corr:+.2f}")],
+        why_it_matters="Negative correlation usually means an over-pushed widener; mono fold-down hollows out.",
+    )
+
+
+@single("width_instability", tier="A")
+def width_instability(a: dict[str, Any]) -> Verdict | None:
+    wc = (_phase(a, "phase9").get("spatial") or {}).get("width_consistency")
+    if wc is None:
+        return None
+    sev = _tiered(wc, {"moderate": 40.0, "minor": 60.0}, higher_is_worse=False)
+    if sev is None:
+        return None
+    return _problem(
+        track_id=_track_id(a), slug="width_instability", severity=sev, category="spatial",
+        kind="fault", headline=f"Stereo width wanders ({wc:.0f}/100)",
+        summary=f"Stereo-image consistency is {wc:.0f}/100; the width shifts over time rather than staying stable.",
+        evidence=[Evidence(metric="phase9.spatial.width_consistency", value=float(wc),
+                           expected_range=(60.0, 100.0), label=f"{wc:.0f}/100")],
+        why_it_matters="An unstable image makes the mix feel restless and translates unpredictably across systems.",
     )
