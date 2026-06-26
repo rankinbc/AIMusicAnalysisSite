@@ -147,6 +147,16 @@ def _persist_verdict(analysis_id: uuid.UUID, v: VerdictModel) -> None:
         fix=(v.fix.model_dump() if v.fix else None),
         sources=v.sources,
         created_at=datetime.now(timezone.utc),
+        # IDENTIFY-tier Problem fields — set verbatim from the producer (the
+        # composite-refiner sets source="llm_identifier"/refines for LLM output).
+        problem_id=v.problem_id,
+        kind=v.kind,
+        source=v.source,
+        data_tier=v.data_tier,
+        fixable=v.fixable,
+        suspected=v.suspected,
+        where=v.where,
+        refines=v.refines,
     )
     with SessionFactory.begin() as s:
         s.add(row)

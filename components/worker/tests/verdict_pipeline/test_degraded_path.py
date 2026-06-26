@@ -28,6 +28,25 @@ from app.llm.gateway import (
 from app.verdict_lib import degraded
 
 
+def test_to_row_persists_problem_fields():
+    """The degraded mapper must carry the 8 IDENTIFY-tier Problem fields through
+    to the ORM row, or the deterministic engine's output is silently flattened."""
+    from aimusic_shared.verdicts.models import Evidence
+    from app.verdict_lib.rule_engine import _problem
+
+    v = _problem(
+        track_id="t", slug="clipping_count", severity="severe", category="clipping",
+        headline="h", summary="s", why_it_matters="w",
+        evidence=[Evidence(metric="phase1.clipped_sample_count", value=5.0, label="5")],
+        data_tier="audio_only", suspected=False,
+    )
+    row = degraded._to_row(uuid.uuid4(), v)
+    assert row.problem_id == "clipping.clipping_count.0"
+    assert row.kind == "fault" and row.source == "rule_engine"
+    assert row.data_tier == "audio_only" and row.fixable is True and row.suspected is False
+    assert row.where is None and row.refines is None
+
+
 # ── fake DB plumbing ────────────────────────────────────────────────────────
 
 
