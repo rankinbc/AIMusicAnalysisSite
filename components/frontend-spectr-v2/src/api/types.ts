@@ -879,7 +879,7 @@ export interface Phase1Data {
   clipped_sample_count?: number;
   low_energy?: number;
   bands?: Phase1Bands;
-  structure?: { sections?: unknown[]; beats?: unknown[] };
+  structure?: Phase1Structure;
   // ── full-EMIT metrics (2026-06-25): emitted on every analysis. ──
   /** dB, peak − RMS. <4 squashed, 8–14 healthy, >22 very wide. */
   crest_factor?: number;
@@ -898,6 +898,27 @@ export interface Phase1Data {
   /** LUFS — loudest 0.4 s window. */
   momentary_max_lufs?: number;
   transients?: Phase1Transients;
+}
+
+/** One allin1 song-structure segment (raw, pre-merge). */
+export interface Phase1Segment {
+  label: string;
+  start: number; // seconds
+  end: number; // seconds
+}
+
+/** Phase-1 `structure` block — allin1 (Docker) beat/segment detection.
+ *  `bpm` here is allin1's INDEPENDENT tempo estimate; compare it to the
+ *  top-level phase-1 `bpm` (librosa) to catch half/double-time octave errors. */
+export interface Phase1Structure {
+  available?: boolean;
+  deferred?: boolean;
+  detection_method?: string;
+  bpm?: number; // allin1 tempo (independent of phase1.bpm)
+  beats?: number[]; // beat onset times (seconds)
+  downbeats?: number[]; // bar onset times (seconds)
+  segments?: Phase1Segment[];
+  reason?: string; // set when available === false
 }
 
 /** Onset-based transient/punch readout (full-EMIT, 2026-06-25). */
@@ -1152,6 +1173,18 @@ export interface VerdictUserState {
   feedback: FeedbackKind | null;
 }
 
+// ── IDENTIFY-tier Problem taxonomy (mirrors aimusic_shared.verdicts.models) ──
+export type ProblemKind = 'fault' | 'observation' | 'integrity';
+export type ProblemSource = 'rule_engine' | 'llm_identifier';
+export type DataTier = 'audio_only' | 'stems' | 'project_midi';
+
+/** Section-localized problem location. jsonb passthrough — keys are snake_case. */
+export interface ProblemWhere {
+  section_type?: string;
+  start_seconds?: number;
+  end_seconds?: number;
+}
+
 export interface VerdictDto {
   id: string;
   analysisId: string;
@@ -1173,6 +1206,15 @@ export interface VerdictDto {
   evidence: unknown;
   fix: VerdictFix | null;
   sources: unknown;
+  // IDENTIFY-tier Problem fields (deterministic rule engine).
+  problemId: string | null;
+  kind: ProblemKind;
+  source: ProblemSource;
+  dataTier: DataTier;
+  fixable: boolean;
+  suspected: boolean;
+  where: ProblemWhere | null;
+  refines: string | null;
   createdAt: string;
   userState: VerdictUserState;
 }
