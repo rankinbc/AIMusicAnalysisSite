@@ -1,0 +1,231 @@
+.tab {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.sub {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/* all-clear */
+.allClear {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+.clearIc {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  color: var(--sev-win, var(--green));
+  border: 1px solid color-mix(in srgb, var(--sev-win, var(--green)) 45%, transparent);
+}
+.clearTitle {
+  font-weight: 600;
+  font-size: 13.5px;
+}
+
+/* sections */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sectionHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sectionTitle {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+.sectionCount {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--card-2);
+  border: 1px solid var(--border-2, var(--border));
+  border-radius: 999px;
+  padding: 0 7px;
+}
+.tierClean {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 4px 2px;
+}
+
+/* unlock affordance */
+.unlock {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  text-align: left;
+  border-style: dashed;
+  cursor: pointer;
+  width: 100%;
+}
+.unlock:hover {
+  border-color: color-mix(in srgb, var(--accent, var(--cyan)) 40%, var(--border));
+}
+.unlockIc {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+
+/* problem card */
+.card {
+  border: 1px solid var(--border-2, var(--border));
+  border-left: 3px solid var(--sev);
+  border-radius: 9px;
+  background: var(--card-2, rgba(255, 255, 255, 0.02));
+  padding: 12px 14px;
+}
+.card[data-suspected] {
+  border-style: dashed;
+  border-left-style: solid;
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.sevDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sev);
+  flex: 0 0 auto;
+}
+.headline {
+  font-weight: 600;
+  font-size: 13.5px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.badges {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.badge {
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  border-radius: 5px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+.measured {
+  color: var(--accent, var(--cyan));
+}
+.ai {
+  color: var(--violet, #b39ddf);
+}
+.unverified {
+  color: var(--orange);
+}
+.fyi {
+  color: var(--muted);
+}
+.data {
+  color: var(--blue, #6aa9ff);
+}
+
+.cardMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 8px 0 0 17px;
+  font-size: 11.5px;
+}
+.sevLabel {
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+.chip {
+  color: var(--text-2);
+  background: var(--card, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--border-2, var(--border));
+  border-radius: 5px;
+  padding: 1px 7px;
+  font-size: 11px;
+  text-transform: capitalize;
+}
+.dim {
+  color: var(--muted);
+}
+.whereChip {
+  color: var(--accent, var(--cyan));
+  font-size: 11px;
+}
+
+.metric {
+  margin: 8px 0 0 17px;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
+.cardFoot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0 0 17px;
+}
+.noFix {
+  font-size: 11px;
+  color: var(--muted);
+}
+.why {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.why summary {
+  cursor: pointer;
+  user-select: none;
+}
+.why p {
+  margin: 6px 0 0;
+  line-height: 1.5;
+  max-width: 60ch;
+}
+
+/* nested refines children */
+.children {
+  margin: 10px 0 0 17px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.childHeadline {
+  font-size: 12.5px;
+  flex: 1 1 auto;
+  min-width: 0;
+}

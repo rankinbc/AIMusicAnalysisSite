@@ -26,6 +26,8 @@ import { ProjectTab } from './ProjectTab';
 import { GamePlan } from './GamePlan';
 import { buildMoves } from './move-model';
 import { ResultsTabs, type ResultsTabKey } from './ResultsTabs';
+import { ProblemsTab } from './ProblemsTab';
+import { faultCount } from './problems-helpers';
 import { SongHeader, type SongHeaderInputs } from './SongHeader';
 import s from './ReportView.module.css';
 
@@ -143,7 +145,9 @@ export function ReportView({ results, songId, tab, onTabChange }: ReportViewProp
       <SongHeader
         songId={songId}
         versionId={results.versionId ?? null}
-        versionLabel={null}
+        versionLabel={
+          results.versionLabel ?? (results.versionNumber != null ? `v${results.versionNumber}` : null)
+        }
         trackName={trackName}
         genre={phase2?.genre}
         bpm={phase1?.bpm ?? phase2?.bpm}
@@ -160,6 +164,7 @@ export function ReportView({ results, songId, tab, onTabChange }: ReportViewProp
         current={tab}
         onChange={onTabChange}
         moveCount={moves.length}
+        problemCount={faultCount(verdicts)}
         phasesDone={phasesDone}
         phasesTotal={phasesTotal}
         hasProject={hasProject}
@@ -179,6 +184,13 @@ export function ReportView({ results, songId, tab, onTabChange }: ReportViewProp
             measurementsCount={countMeasurements(fj)}
             inputs={inputs}
             onAddInputs={() => onTabChange('files')}
+          />
+        )}
+        {tab === 'problems' && (
+          <ProblemsTab
+            verdicts={verdicts}
+            inputs={inputs}
+            onGoToActions={() => onTabChange('actions')}
           />
         )}
         {tab === 'analysis' && (

@@ -65,7 +65,7 @@ export function SongHeader({
 
   return (
     <header className={s.header}>
-      <CoverArt hue={hue} size="lg" className={s.cover}>
+      <CoverArt hue={hue} size="md" className={s.cover}>
         {versionLabel && <span className={s.coverBadge}>{versionLabel}</span>}
       </CoverArt>
 

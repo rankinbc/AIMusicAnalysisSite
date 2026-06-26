@@ -19,6 +19,8 @@ interface ResultsTabsProps {
   /** Worker phases done / total — small badge on the Analysis tab. */
   phasesDone: number;
   phasesTotal: number;
+  /** Number of fault problems — small badge on the Problems tab. */
+  problemCount: number;
   /** Show the Project tab — only when an .als project map was stored. */
   hasProject: boolean;
   /** Track count for the Project tab badge. */
@@ -31,6 +33,7 @@ export function ResultsTabs({
   current,
   onChange,
   moveCount,
+  problemCount,
   phasesDone,
   phasesTotal,
   hasProject,
@@ -39,6 +42,7 @@ export function ResultsTabs({
 }: ResultsTabsProps) {
   const tabs: TabDef[] = [
     { id: 'actions', label: 'Actions', icon: '◎', badge: moveCount > 0 ? moveCount : null, featured: true },
+    { id: 'problems', label: 'Problems', icon: '⊘', badge: problemCount > 0 ? problemCount : null },
     {
       id: 'analysis',
       label: 'Analysis',
