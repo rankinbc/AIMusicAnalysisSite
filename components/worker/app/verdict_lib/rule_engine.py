@@ -1028,3 +1028,169 @@ def over_widened(a: dict[str, Any]) -> Verdict | None:
                            expected_range=(0.0, ceiling), label=f"width {width:.2f}")],
         why_it_matters="Over-widening risks mono collapse and an unstable image.",
     )
+
+
+# ── TIER C — composites (Tier-A/B-input only). Corroborated → suspected=False, ─
+# absorb their child singles. C4 untreated_low_end lives above (needs B1);
+# C7 no_drop_payoff deferred (needs the section-RMS lift).
+
+
+@composite("loudness_war", suppresses=["over_compression", "true_peak_overshoot"])
+def loudness_war(a: dict[str, Any], fired: dict[str, Verdict]) -> Verdict | None:
+    """C1 — crushed dynamics AND peaks against the ceiling: over-limiting, not a
+    genre choice. Genre-aware (rule-bindings C1): a techno crest of 5 / LRA 3 is
+    inherent, so thresholds defer to the genre's warn_below / static_floor."""
+    p1 = _phase(a, "phase1")
+    cf, lra, tp = p1.get("crest_factor"), p1.get("loudness_range_lu"), p1.get("true_peak_db")
+    if cf is None or lra is None or tp is None:
+        return None
+    g = _genre(a)
+    crest_warn = G.ppath(g, "dynamics.crest_db.warn_below", 6.0)
+    lra_floor = G.ppath(g, "dynamics.lra_lu.static_floor", 4.0)
+    if not (cf < crest_warn and lra < lra_floor and tp > -0.3):
+        return None
+    return _problem(
+        track_id=_track_id(a), slug="loudness_war", severity="severe", confidence=0.95,
+        category="dynamics", kind="fault", suspected=False,
+        headline="Over-limited master - dynamics crushed and peaks clipped",
+        summary="Crest factor, loudness range, and true peak all indicate aggressive "
+                "limiting - corroborated, not a genre choice.",
+        evidence=[
+            Evidence(metric="phase1.crest_factor", value=float(cf),
+                     expected_range=(7.0, 12.0), label="crushed dynamics"),
+            Evidence(metric="phase1.loudness_range_lu", value=float(lra),
+                     expected_range=(5.0, 9.0), label="low LRA"),
+            Evidence(metric="phase1.true_peak_db", value=float(tp),
+                     expected_range=(-1.5, -1.0), label="against ceiling"),
+        ],
+        why_it_matters="Three corroborating metrics mean over-limiting - fix the master "
+                       "chain, not one knob.",
+    )
+
+
+@composite("congested_mix", suppresses=["mud_buildup"])
+def congested_mix(a: dict[str, Any], fired: dict[str, Verdict]) -> Verdict | None:
+    """C2 — low-mid mud confirmed by low spectral contrast + elevated flatness: the
+    mix is genuinely congested, not just bumpy in one band. Placeholder spectral
+    thresholds (no measured per-genre contrast corpus yet)."""
+    if "mud_buildup" not in fired:
+        return None
+    p1 = _phase(a, "phase1")
+    contrast = p1.get("spectral_contrast")
+    flat = p1.get("spectral_flatness")
+    if contrast is None or flat is None:
+        return None
+    if not (contrast < 15.0 and flat > 0.3):  # placeholder bands pending a corpus
+        return None
+    return _problem(
+        track_id=_track_id(a), slug="congested_mix", severity="severe", confidence=0.90,
+        category="clarity", kind="fault", suspected=False,
+        headline="Congested mix - low-mid mud with no spectral separation",
+        summary=f"Low-mid buildup, low spectral contrast ({contrast:.0f}) and elevated "
+                f"flatness ({flat:.2f}) corroborate a genuinely congested mix.",
+        evidence=[
+            Evidence(metric="phase1.spectral_contrast", value=float(contrast),
+                     label="low contrast"),
+            Evidence(metric="phase1.spectral_flatness", value=float(flat),
+                     label="elevated flatness"),
+        ],
+        why_it_matters="Congestion smears every element; a subtractive low-mid carve plus "
+                       "separation opens it up.",
+    )
+
+
+@composite("phantom_width", suppresses=["over_widened", "sub_mono_compatibility",
+                                        "negative_correlation"])
+def phantom_width(a: dict[str, Any], fired: dict[str, Verdict]) -> Verdict | None:
+    """C3 — wide image that collapses in mono: over-widening confirmed by poor mono
+    compatibility and negative/near-zero correlation. The width is fake."""
+    if "over_widened" not in fired:
+        return None
+    p1 = _phase(a, "phase1")
+    mono = p1.get("mono_compatibility")
+    corr = p1.get("stereo_correlation")
+    if mono is None or corr is None:
+        return None
+    if not (mono < 0.6 and corr <= 0.1):
+        return None
+    return _problem(
+        track_id=_track_id(a), slug="phantom_width", severity="severe", confidence=0.92,
+        category="stereo_field", kind="fault", suspected=False,
+        headline="Phantom width - stereo image collapses in mono",
+        summary=f"A wide image with mono compatibility {mono:.2f} and correlation "
+                f"{corr:.2f} means the width is phase tricks that fold away in mono.",
+        evidence=[
+            Evidence(metric="phase1.mono_compatibility", value=float(mono),
+                     expected_range=(0.6, 1.0), label="poor mono fold"),
+            Evidence(metric="phase1.stereo_correlation", value=float(corr),
+                     expected_range=(0.3, 1.0), label="near-zero / negative correlation"),
+        ],
+        why_it_matters="Club and phone playback sum toward mono; phantom width disappears "
+                       "and the mix thins out.",
+    )
+
+
+@composite("lifeless_at_source", suppresses=["robotic_velocity", "over_compression"])
+def lifeless_at_source(a: dict[str, Any], fired: dict[str, Verdict]) -> Verdict | None:
+    """C5 — crushed crest AND robotic MIDI on >=2 tracks with zero velocity spread:
+    the lifelessness is baked in at the source, not just the master. Needs phase8."""
+    p1 = _phase(a, "phase1")
+    cf = p1.get("crest_factor")
+    p8 = _phase(a, "phase8")
+    if cf is None or not p8:
+        return None
+    g = _genre(a)
+    crest_warn = G.ppath(g, "dynamics.crest_db.warn_below", 6.0)
+    if cf >= crest_warn:
+        return None
+    tracks = p8.get("per_track_analysis") or {}
+    robotic = [
+        name for name, t in tracks.items()
+        if t.get("humanization_score") == "robotic" and (t.get("velocity_std") or 0.0) < 1.0
+    ]
+    if len(robotic) < 2:
+        return None
+    return _problem(
+        track_id=_track_id(a), slug="lifeless_at_source", severity="severe", confidence=0.93,
+        category="humanization", kind="fault", suspected=False, data_tier="project_midi",
+        headline="Lifeless at the source - crushed crest and robotic MIDI",
+        summary=f"Crest factor {cf:.1f} plus zero velocity spread on {len(robotic)} tracks "
+                f"({', '.join(robotic[:3])}) - the flatness is in the parts, not the master.",
+        evidence=[Evidence(metric="phase1.crest_factor", value=float(cf),
+                           expected_range=(7.0, 12.0), label="crushed dynamics")],
+        why_it_matters="Mastering cannot add life that was never played in; humanize the "
+                       "velocities before touching the bus.",
+    )
+
+
+@composite("thin_and_bright", suppresses=["thin_low_end", "harsh_upper_mid", "dull_no_air"])
+def thin_and_bright(a: dict[str, Any], fired: dict[str, Verdict]) -> Verdict | None:
+    """C6 — weak low end AND a bright/hot top: a tonal-balance tilt, not two separate
+    problems. Placeholder spectral ceiling scaled by the genre brightness rank."""
+    if "thin_low_end" not in fired:
+        return None
+    p1 = _phase(a, "phase1")
+    centroid = p1.get("spectral_centroid_hz")
+    air = (p1.get("bands") or {}).get("air")
+    if centroid is None or air is None:
+        return None
+    g = _genre(a)
+    rank = G.ppath(g, "spectral.brightness_rank", 2) or 2
+    ceiling = 4000.0 + (3 - rank) * 600.0  # placeholder, brighter genres tolerate more
+    if not (centroid > ceiling and air > -50.0):
+        return None
+    return _problem(
+        track_id=_track_id(a), slug="thin_and_bright", severity="moderate", confidence=0.88,
+        category="frequency_balance", kind="fault", suspected=False,
+        headline="Thin and bright - tonal balance tilted off the low end",
+        summary=f"Weak low end with a hot top (centroid {centroid:.0f} Hz over {ceiling:.0f}, "
+                "air elevated) is one tilt to correct, not three faults. Placeholder thresholds.",
+        evidence=[
+            Evidence(metric="phase1.spectral_centroid_hz", value=float(centroid),
+                     expected_range=(1500.0, ceiling), label=f"centroid {centroid:.0f} Hz"),
+            Evidence(metric="phase1.bands.air", value=float(air),
+                     frequency_range_hz=(8000.0, 22000.0), label="air hot"),
+        ],
+        why_it_matters="A low-tilt EQ (shelve the top, lift the lows) rebalances the whole "
+                       "mix in one move.",
+    )
