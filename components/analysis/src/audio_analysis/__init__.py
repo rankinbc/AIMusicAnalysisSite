@@ -5,6 +5,7 @@ from .pipeline import (
     run_pipeline,
     run_single_phase,
 )
+from .schemas import ANALYSIS_SCHEMA_VERSION
 
 __version__ = "0.1.0"
 __all__ = [
@@ -13,4 +14,5 @@ __all__ = [
     "finalize_result",
     "rerun_single_phase",
     "detect_structure_and_rescore",
+    "ANALYSIS_SCHEMA_VERSION",
 ]

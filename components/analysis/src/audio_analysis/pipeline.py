@@ -10,7 +10,7 @@ from pathlib import Path
 from .coach import generate_coached_fixes
 from .converters import to_wav
 from .recommendations import translation_fixes
-from .schemas import PhaseResult, PipelineResult
+from .schemas import ANALYSIS_SCHEMA_VERSION, PhaseResult, PipelineResult
 from .scorers.danceability import danceability_score
 from .phases import (
     phase1_universal,
@@ -176,6 +176,7 @@ def finalize_result(
 
     return PipelineResult(
         file_path=str(file_path),
+        analysis_schema_version=ANALYSIS_SCHEMA_VERSION,
         phases=phase_results,
         overall_score=overall_score,
         grade=grade,
