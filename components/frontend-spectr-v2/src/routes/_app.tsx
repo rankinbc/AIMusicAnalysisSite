@@ -12,7 +12,6 @@ import { useAuth } from '../auth/AuthContext';
 import { useEntitlements } from '../api/hooks';
 import { AppDunningNotice } from '../features/billing/AppDunningNotice';
 import { BrandMark } from '../ui/BrandMark';
-import { MiniPlayer } from '../ui/MiniPlayer';
 import { UsageMeter } from '../components/UsageMeter';
 import s from './_app/_appLayout.module.css';
 
@@ -214,7 +213,6 @@ function AppLayout() {
       <main className={s.main}>
         <Outlet />
       </main>
-      <MiniPlayer />
     </div>
   );
 }

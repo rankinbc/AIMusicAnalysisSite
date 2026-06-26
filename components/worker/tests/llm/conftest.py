@@ -22,6 +22,10 @@ _DEFAULTS = dict(
     llm_max_retries=2,
     llm_timeout_s=120,
     llm_default_tier="free",
+    # Pin API transport: the budget guard skips the USD ceilings in CLI mode,
+    # so a ``configure()`` settings object must be explicitly non-CLI for the
+    # spend-ceiling tests to exercise the guard. (CLI-bypass has its own test.)
+    use_claude_cli=False,
     # Story 1.4 — budgets default very high in tests so individual cases
     # opt-in to "blow the budget" via ``configure(llm_budget_free_usd=...)``.
     llm_budget_free_usd=Decimal("1000000.00"),

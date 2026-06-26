@@ -1,4 +1,4 @@
-/* Authenticated layout: sticky topnav + main outlet container + MiniPlayer. */
+/* Authenticated layout: sticky topnav + main outlet container. */
 
 .shell {
   min-height: 100vh;
@@ -228,13 +228,6 @@
    Pages own their own gutters, so the notice supplies its own here. */
 .dunningSlot {
   padding: var(--space-4) var(--space-5) 0;
-}
-
-/* Clear the persistent MiniPlayer bar (UX-DR8) — only present ≥768px. */
-@media (min-width: 768px) {
-  .main {
-    padding-bottom: 64px;
-  }
 }
 
 .loading {

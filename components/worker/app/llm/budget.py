@@ -189,6 +189,8 @@ def check_budget(*, tier: str | None, purpose: str, user_id: Any | None) -> None
         return
 
     # 1. Circuit breaker (provider outage). Cheap in-process check first.
+    #    Kept even in CLI mode: a CLI that keeps erroring should still trip the
+    #    breaker so we don't hammer a down provider.
     if _breaker_open():
         logger.warning(
             "circuit breaker OPEN — refusing %s call (consecutive_errors=%d)",
@@ -198,6 +200,15 @@ def check_budget(*, tier: str | None, purpose: str, user_id: Any | None) -> None
             DEGRADATION_REASON_CIRCUIT_BREAKER,
             f"provider unavailable (consecutive_errors={_breaker.consecutive_errors})",
         )
+
+    # CLI transport (Claude subscription) has NO metered per-call API spend, so
+    # the USD ceilings below are meaningless against it — the gateway still
+    # records a notional cost for observability, but enforcing a dollar ceiling
+    # on a flat-rate subscription would wrongly degrade analyses (reason=
+    # tier_budget) and take the coach offline. Skip the spend guards in CLI mode;
+    # the circuit breaker above still applies.
+    if settings.use_claude_cli:
+        return
 
     # 2. Per-tier monthly ceiling (feature_flags override → env default, AR35).
     effective_tier = tier or settings.llm_default_tier

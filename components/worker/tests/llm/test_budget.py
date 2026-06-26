@@ -116,6 +116,31 @@ def test_spend_aggregation_failure_fails_open(configure, monkeypatch):
     budget.check_budget(tier="free", purpose="specialist", user_id=None)
 
 
+def test_claude_cli_mode_bypasses_spend_ceilings(configure, monkeypatch):
+    """CLI transport (Claude subscription) has no metered per-call API spend, so
+    the USD ceilings must NOT apply — enforcing them would wrongly degrade
+    analyses (reason=tier_budget) and take the coach offline."""
+    configure(use_claude_cli=True, llm_budget_free_usd=Decimal("5.00"))
+    # Spend is way over the ceiling — would raise in API mode.
+    monkeypatch.setattr(
+        budget, "_aggregate_tier_spend",
+        lambda tier, *, include_all_tiers=False: Decimal("99999.00"),
+    )
+    # No raise → CLI mode skipped the ceiling guards.
+    budget.check_budget(tier="free", purpose="coach", user_id=None)
+
+
+def test_claude_cli_mode_still_respects_circuit_breaker(configure):
+    """The CLI-spend bypass must NOT disable the provider-outage breaker — a CLI
+    that keeps erroring should still trip it so we don't hammer a down provider."""
+    configure(use_claude_cli=True, llm_circuit_breaker_threshold=2)
+    budget.record_outcome(outcome="error")
+    budget.record_outcome(outcome="error")
+    with pytest.raises(LlmBudgetExceeded) as exc:
+        budget.check_budget(tier="free", purpose="coach", user_id=None)
+    assert exc.value.reason == DEGRADATION_REASON_CIRCUIT_BREAKER
+
+
 # ── circuit breaker ─────────────────────────────────────────────────────────
 
 def test_breaker_opens_after_threshold_consecutive_errors(configure):

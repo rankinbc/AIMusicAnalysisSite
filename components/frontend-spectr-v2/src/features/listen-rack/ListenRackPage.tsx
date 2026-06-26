@@ -606,7 +606,10 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
 
   return (
     <div className="lr-shell">
-      <div className="lr-page">
+      {/* position:relative + z-index lifts the page above the full-screen
+          visualizer backdrop (VizStage background mode portals to <body> at
+          z-index 0); the global top nav is z-index 50 and stays on top too. */}
+      <div className="lr-page" style={{ position: 'relative', zIndex: 1 }}>
         <TrackHeader track={track} mode={mode} modes={modes} identity={identity} {...(onModeChange ? { onModeChange } : {})} />
 
         <div className="lr-grid">

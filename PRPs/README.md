@@ -60,14 +60,25 @@ Trivial fixes (typos, one-line bug fixes) don't need a PRP. Just ask Claude dire
 ```
 PRPs/
 ├── README.md                      # This file
-├── v1_ai_music_analyzer.md        # Your v1 implementation plan
+├── <slug>.md                      # ACTIVE PRPs / living reference docs (loose at root)
+├── prd.md, epics.md, architecture.md, ux-design-specification.md, sprint-status.yaml
+│                                  # BMAD roadmap — the live planning system (see stories/)
+├── stories/
+│   └── <epic>-<n>-<slug>.md       # BMAD story specs — kept as the sprint record (not archived)
+├── design_handoffs/
+│   └── <handoff>/                 # ACTIVE design handoffs only (consumed ones go to archive/)
 ├── templates/
 │   └── prp_base.md                # Structural template (don't edit)
 ├── archive/
-│   └── <YYYY-MM-DD>_<slug>.md     # Completed PRPs
+│   └── <YYYY-MM-DD>_<slug>[.md|/] # Completed PRPs + consumed design handoffs/inputs
 └── source/
     └── INITIAL.md                 # Per-feature intake template (edit for new features post-build)
 ```
+
+**Conventions (enforced during the 2026-06-25 cleanup):**
+- A PRP whose work has **shipped** moves to `archive/<YYYY-MM-DD>_<slug>.md` (date = when it landed). Design+impl pairs archive together.
+- **Duplicates** and **transient scaffolding** (one-shot bundles, launch checklists, drift-cleanup notes) are deleted, not archived — git history keeps them recoverable.
+- Loose files at root are **only** active PRPs and living reference docs (the roadmap, the product/vision briefs that are still the north star, and in-flight build PRPs).
 
 ---
 

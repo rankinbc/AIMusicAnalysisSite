@@ -23,6 +23,7 @@ import { StemsUploadDialog } from '../../components/StemsUploadDialog';
 import { rerunPhaseFor } from './analysis-tab-helpers';
 import { ArrangementTab } from './ArrangementTab';
 import { ReferenceTab } from './ReferenceTab';
+import { SongMap } from './SongMap';
 import { SpectrumTab } from './SpectrumTab';
 import { SPECIALIST_CATALOG, specialistLabel } from './helpers/specialists';
 import type { Move } from './move-model';
@@ -233,6 +234,14 @@ export function AnalysisTab({
           <ArrangementTab phase7={phase7} />
         </section>
       </div>
+
+      <section className={`card ${s.chartCard}`}>
+        <div className={s.chartHd}>
+          <span>Song map</span>
+          <AreaChip count={movesForArea(moves, 'structure')} />
+        </div>
+        <SongMap phase1={phase1} />
+      </section>
 
     <div className={s.layout}>
       <div className={s.left}>

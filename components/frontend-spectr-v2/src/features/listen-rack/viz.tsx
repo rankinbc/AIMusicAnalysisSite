@@ -7,7 +7,8 @@
  * `frameRef.current.spectrum`/energy with a real AnalyserNode tap (see
  * PORTING_NOTES.md → StageCanvas).
  */
-import { forwardRef, Fragment, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import { forwardRef, Fragment, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { CoverArt } from '../../ui/CoverArt';
 import type { AudioFrame } from '../listen/useAudioGraph';
@@ -393,6 +394,18 @@ export function VizStage({
   const laserRef = useRef<LaserFanHandle>(null);
   const fireRef = useRef<FireworksHandle>(null);
   const bgLayerRef = useRef<HTMLDivElement>(null);
+  // Background mode: pop the visualizer out to a fixed full-viewport layer that
+  // sits BEHIND the page (portaled to <body>, z-index 0). The listen page content
+  // is lifted above it (`.lr-page` → position:relative; z-index:1), and the global
+  // top nav is z-index:50, so the rest of the page stays exactly in place on top
+  // while the viz fills the whole window behind it. Esc (or the toggle) exits.
+  const [bgMode, setBgMode] = useState(false);
+  useEffect(() => {
+    if (!bgMode) return undefined;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setBgMode(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [bgMode]);
   const frameRef = useRef<VizFrame>({ t: 0, spectrum: new Array(56).fill(0), energy: 0.4, pulse: 0, beat: false, flash: 0 });
   const beatPhase = useRef(0), lastDrop = useRef(0), autoLast = useRef(0);
   const flashPtsRef = useRef<FlashPoint[]>([]), lastBurst = useRef(0), autoReactLast = useRef(0);
@@ -502,8 +515,31 @@ export function VizStage({
   const isRoom = stages.includes('room');
   const isDevices = stages.includes('devices');
 
-  return (
-    <div ref={onStageEngine} style={{ position: 'relative', height, overflow: 'hidden', borderRadius: compact ? 0 : 'var(--radius) var(--radius) 0 0', background: 'var(--bg-2)' }}>
+  const stageStyle: React.CSSProperties = bgMode
+    ? { position: 'fixed', inset: 0, width: '100vw', height: '100vh', zIndex: 0, overflow: 'hidden', background: 'var(--bg-2)' }
+    : { position: 'relative', height, overflow: 'hidden', borderRadius: compact ? 0 : 'var(--radius) var(--radius) 0 0', background: 'var(--bg-2)' };
+
+  const fsBtn = (
+    <button
+      type="button"
+      onClick={() => setBgMode((v) => !v)}
+      title={bgMode ? 'Exit background mode' : 'Play full-screen in the background'}
+      aria-label={bgMode ? 'Exit background mode' : 'Play full-screen in the background'}
+      className="mono"
+      style={{
+        position: 'absolute', top: 12, right: 12, zIndex: 6,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 34, height: 34, fontSize: 15, lineHeight: 1, cursor: 'pointer',
+        color: '#fff', background: 'rgba(8,18,22,0.55)', backdropFilter: 'blur(6px)',
+        border: '1px solid rgba(255,255,255,0.18)', borderRadius: 8,
+      }}
+    >
+      {bgMode ? '⤡' : '⛶'}
+    </button>
+  );
+
+  const stage = (
+    <div ref={onStageEngine} style={stageStyle}>
       <div ref={bgLayerRef} className={'viz-bg' + (viz.bgAuto ? ' lr-bg-cycle' : '')} style={{ position: 'absolute', inset: 0, background: `radial-gradient(ellipse 95% 85% at 50% 100%, ${cssVar(viz.bg || 'var(--cyan)')}1f, transparent 62%), transparent` }} />
       {viz.bgFlash && playing && !reduceMotion && <div className="lr-bg-flash" style={{ background: viz.bgFlashColor, animationDuration: (1 / safeFlashHz(viz.bgFlashHz)) + 's' }} />}
       {!isInfo && <StageCanvas ref={stageRef} accent={accentHex} />}
@@ -521,6 +557,25 @@ export function VizStage({
       )}
       <LaserFan ref={laserRef} />
       <Fireworks ref={fireRef} />
+      {fsBtn}
     </div>
   );
+
+  if (bgMode) {
+    // Reserve the card slot so the transport + the rest of the page stay in place,
+    // and portal the stage to <body> as a full-window backdrop behind the page.
+    return (
+      <>
+        <div style={{ position: 'relative', height, overflow: 'hidden', borderRadius: compact ? 0 : 'var(--radius) var(--radius) 0 0', background: 'var(--bg-2)', display: 'grid', placeItems: 'center', padding: '0 20px' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div className="mono" style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '0.08em', marginBottom: 12 }}>⛶ Visualizer is playing full-screen in the background</div>
+            <button type="button" onClick={() => setBgMode(false)} className="btn sm ghost" style={{ fontSize: 11 }}>⤡ Bring it back</button>
+          </div>
+        </div>
+        {createPortal(stage, document.body)}
+      </>
+    );
+  }
+
+  return stage;
 }
