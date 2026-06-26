@@ -1,3 +1,24 @@
+"""Deterministic IDENTIFY-tier rule engine — emits Problem records (Verdicts with
+``fix=None``; the SOLVE tier attaches fixes later).
+
+Two coexisting paths (additive; legacy retirement deferred):
+
+  * **Legacy** ``@rule`` / ``evaluate_rules`` — the original flat rule list. Still
+    the path wired into the live degraded/free verdict flow (``degraded.py``).
+  * **Two-pass Problem engine** ``@single`` / ``@composite`` / ``evaluate_problems``
+    — the MixCoach tiered engine. Pass 1 runs every Tier-A/B/S/P *single* (one
+    metric → one Problem); pass 2 runs Tier-C *composites* (corroborated, multi-
+    metric), then ``suppression.apply`` lets each composite absorb its child
+    singles (consolidation + audit trail). Thresholds are **genre-relative**,
+    resolved from ``config/genre-profiles.json`` via ``genre_config`` — the same
+    measured value yields a different severity per genre. Rules tagged
+    ``suspected=True`` ship on placeholder thresholds pending a measured corpus;
+    rules carry a ``data_tier`` (audio_only / stems / project_midi) and never
+    grade absent data (every rule guards its inputs and returns ``None``).
+
+The two-pass engine is built + tested but NOT yet on the live path; wiring it in
+(and retiring the legacy ``@rule`` list) is the reconcile follow-on.
+"""
 from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Callable
