@@ -94,6 +94,27 @@ def _key_estimate(chroma_mean: np.ndarray) -> dict:
         "profile_corrs": corrs,
     }
 
+def _low_band_energies(mono: np.ndarray, sr: int) -> dict:
+    """Low-band RMS energies from one STFT: the existing 20-200 Hz ``low_energy``
+    plus a sub-30 Hz split (B3 lift) for rumble / headroom-waste detection. The
+    ``low_energy`` value is byte-identical to the prior inline computation.
+    """
+    import librosa  # local import: keeps module import light, mirrors analyze()
+
+    stft_mag = np.abs(librosa.stft(mono))
+    freqs = librosa.fft_frequencies(sr=sr)
+
+    def _rms(mask: np.ndarray) -> float:
+        if not bool(mask.any()):
+            return 0.0
+        return float(np.sqrt(np.mean(stft_mag[mask, :] ** 2)))
+
+    return {
+        "low_energy": _rms((freqs >= 20) & (freqs <= 200)),
+        "sub_30_energy": _rms(freqs < 30),
+    }
+
+
 def _channel_balance(y: np.ndarray) -> dict:
     """Per-channel L/R RMS + signed balance (B5 lift) — the energy datapoint the
     `channel_imbalance` rule needs (the bare `stereo_correlation` scalar can't see
@@ -405,10 +426,9 @@ def analyze(
     # ------------------------------------------------------------------
     # Low-frequency energy (20–200 Hz band) — input for danceability scorer
     # ------------------------------------------------------------------
-    stft_mag = np.abs(librosa.stft(mono))
-    freqs = librosa.fft_frequencies(sr=sr)
-    low_band_mask = (freqs >= 20) & (freqs <= 200)
-    low_energy = float(np.sqrt(np.mean(stft_mag[low_band_mask, :] ** 2)))
+    low_bands = _low_band_energies(mono, sr)
+    low_energy = low_bands["low_energy"]
+    sub_30_energy = low_bands["sub_30_energy"]
 
     # ------------------------------------------------------------------
     # Structure via allin1 (optional; runs in the `allin1:latest` Docker
@@ -440,6 +460,7 @@ def analyze(
         "key_estimate": key_estimate,
         "mono_compatibility": mono_compatibility,
         "low_energy": low_energy,
+        "sub_30_energy": sub_30_energy,
         "crest_factor": crest_factor,
         "spectral_centroid_hz": spectral_centroid_hz,
         "spectral_contrast": spectral_contrast,
