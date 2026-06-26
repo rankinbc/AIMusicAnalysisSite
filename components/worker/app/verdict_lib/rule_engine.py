@@ -3,8 +3,8 @@
 
 Two coexisting paths (additive; legacy retirement deferred):
 
-  * **Legacy** ``@rule`` / ``evaluate_rules`` — the original flat rule list. Still
-    the path wired into the live degraded/free verdict flow (``degraded.py``).
+  * **Legacy** ``@rule`` / ``evaluate_rules`` — the original flat rule list. Kept
+    only as an importable alias for residual callers; no longer the live producer.
   * **Two-pass Problem engine** ``@single`` / ``@composite`` / ``evaluate_problems``
     — the MixCoach tiered engine. Pass 1 runs every Tier-A/B/S/P *single* (one
     metric → one Problem); pass 2 runs Tier-C *composites* (corroborated, multi-
@@ -16,8 +16,10 @@ Two coexisting paths (additive; legacy retirement deferred):
     rules carry a ``data_tier`` (audio_only / stems / project_midi) and never
     grade absent data (every rule guards its inputs and returns ``None``).
 
-The two-pass engine is built + tested but NOT yet on the live path; wiring it in
-(and retiring the legacy ``@rule`` list) is the reconcile follow-on.
+The two-pass engine is LIVE on the degraded/free path (``degraded.py`` calls
+``evaluate_problems``, validates, and persists the Problem columns). Promoting it
+to the healthy (non-degraded) analysis path and retiring the legacy ``@rule`` list
+are the remaining follow-ons.
 """
 from __future__ import annotations
 from datetime import datetime, timezone
