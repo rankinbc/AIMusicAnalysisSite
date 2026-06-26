@@ -31,6 +31,15 @@ public sealed record VerdictDto(
     JsonElement Evidence,
     JsonElement? Fix,
     JsonElement Sources,
+    // IDENTIFY-tier Problem fields (deterministic rule engine).
+    string? ProblemId,
+    string Kind,
+    string Source,
+    string DataTier,
+    bool Fixable,
+    bool Suspected,
+    JsonElement? Where,
+    string? Refines,
     DateTimeOffset CreatedAt,
     VerdictUserStateDto UserState);
 

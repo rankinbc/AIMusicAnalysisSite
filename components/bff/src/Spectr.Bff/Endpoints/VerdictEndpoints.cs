@@ -263,6 +263,14 @@ public static class VerdictEndpoints
             Evidence: ParseJsonOrEmpty(v.Evidence),
             Fix: TryParseJson(v.Fix),
             Sources: ParseJsonOrEmpty(v.Sources),
+            ProblemId: v.ProblemId,
+            Kind: v.Kind,
+            Source: v.Source,
+            DataTier: v.DataTier,
+            Fixable: v.Fixable,
+            Suspected: v.Suspected,
+            Where: TryParseJson(v.Where),
+            Refines: v.Refines,
             CreatedAt: v.CreatedAt,
             UserState: us);
     }
