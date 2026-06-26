@@ -56,7 +56,16 @@ def test_four_limiters_collapse_to_one():
 def test_stereo_width_maps_to_ms_ratio():
     op = DspOp(type="stereo_width", params={"width_pct": 90.0})
     out = compile_preset([_vfix("stereo_field.over_widened.0", op)])
-    assert out["chain"]["modules"]["ms"]["width"] == 0.9
+    ms = out["chain"]["modules"]["ms"]
+    assert ms["width"] == 0.9
+    assert "monoMakerHz" not in ms  # a plain width op must not write a stray mono-maker
+
+
+def test_stereo_width_with_mono_maker_writes_mono_maker_hz():
+    op = DspOp(type="stereo_width", params={"width_pct": 90.0, "mono_below_hz": 120.0})
+    out = compile_preset([_vfix("stereo_field.negative_correlation.0", op)])
+    ms = out["chain"]["modules"]["ms"]
+    assert ms["width"] == 0.9 and ms["monoMakerHz"] == 120.0
 
 
 def test_sidechain_op_diverts_to_leftover_advice():
@@ -79,3 +88,18 @@ def test_empty_input_returns_base_chain():
     assert out["chain"]["order"] == R.ORDER
     assert out["chain"]["modules"] == {}
     assert out["leftover_advice"] == []
+
+
+# ── Phase 1: same-slot EQ collision — equal magnitude, a cut beats a boost ────
+
+def test_eq_equal_magnitude_cut_beats_boost():
+    boost = DspOp(type="peaking_eq", params={"frequency_hz": 300.0, "gain_db": 3.0, "q": 1.0})
+    cut = DspOp(type="peaking_eq", params={"frequency_hz": 300.0, "gain_db": -3.0, "q": 1.0})
+    # Boost is authored first (higher confidence -> processed first), then the
+    # equal-magnitude cut. On a tie the corrective cut must win the band slot.
+    out = compile_preset([
+        _vfix("frequency_balance.boost.0", boost, conf=0.9),
+        _vfix("frequency_balance.cut.0", cut, conf=0.8),
+    ])
+    enabled = [b for b in out["chain"]["modules"]["eq"]["bands"] if b["enabled"]]
+    assert len(enabled) == 1 and enabled[0]["gainDb"] == -3.0

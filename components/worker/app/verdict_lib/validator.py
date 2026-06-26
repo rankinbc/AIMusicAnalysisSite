@@ -56,11 +56,16 @@ def _resolve_path(obj: Any, path: str) -> Any:
 
 def _value_close(a: Any, b: Any, *, rel_tol: float = 0.10) -> bool:
     """Compare numeric values with 10% relative tolerance.
-    Non-numeric: must be equal."""
+    Non-numeric: must be equal. A non-finite *actual* (NaN/Inf) is a degenerate
+    metric we can't compare numerically — don't hard-reject the verdict on it."""
     try:
         af, bf = float(a), float(b)
     except (TypeError, ValueError):
         return a == b
+    if not math.isfinite(af):
+        return True  # degenerate actual metric (NaN/Inf) — can't validate; don't reject
+    if not math.isfinite(bf):
+        return False  # claimed value is non-finite but the actual isn't → bogus claim
     if af == 0.0 and bf == 0.0:
         return True
     return math.isclose(af, bf, rel_tol=rel_tol)
@@ -77,6 +82,19 @@ def _infer_scope(verdict: Verdict) -> str:
     if target.get("type") == "stem":
         return "single_stem"
     return "full_track"
+
+
+def _is_deterministic(verdict: Verdict) -> bool:
+    """A deterministic rule-engine Problem — its severity comes from a measured
+    threshold, so it is EXEMPT from the moderate-baseline downgrade (architecture
+    §7). Keyed on the specialist provenance, NOT ``Verdict.source``: the model
+    DEFAULTS ``source='rule_engine'``, so an LLM specialist that never set it
+    would be wrongly exempted. The rule engine tags ``specialist='rule_engine'``
+    (legacy) or ``'rule_engine.<slug>'`` (Problem engine); LLM findings never do."""
+    return verdict.source == "rule_engine" and (
+        verdict.specialist == "rule_engine"
+        or verdict.specialist.startswith("rule_engine.")
+    )
 
 
 def validate_verdict(verdict: Verdict, analysis: dict[str, Any]) -> ValidationResult:
@@ -96,7 +114,7 @@ def validate_verdict(verdict: Verdict, analysis: dict[str, Any]) -> ValidationRe
     for ev in verdict.evidence:
         try:
             actual = _resolve_path(analysis, ev.metric)
-        except KeyError:
+        except (KeyError, TypeError, IndexError, ValueError):
             return fail(f"metric path {ev.metric!r} does not resolve in analysis JSON")
         if ev.value is not None and not _value_close(actual, ev.value):
             return fail(
@@ -144,6 +162,18 @@ def validate_verdict(verdict: Verdict, analysis: dict[str, Any]) -> ValidationRe
     #    for this (category, scope), and require the claimed severity to be no
     #    higher than that band.
     scope = _infer_scope(verdict)
+
+    # 3a. Deterministic rule-engine findings keep their measured severity —
+    #     exempt from the moderate-baseline downgrade (architecture §7); only
+    #     recompute priority_score. LLM findings (specialists + identifiers) still
+    #     run the downgrade guard below, since they can over-claim severity.
+    if _is_deterministic(verdict):
+        score = compute_priority_score(verdict.severity, verdict.category, scope)  # type: ignore[arg-type]
+        return ValidationResult(
+            ok=True,
+            verdict=verdict.model_copy(update={"priority_score": score}),
+        )
+
     baseline_score = compute_priority_score("moderate", verdict.category, scope)  # type: ignore[arg-type]
     baseline_band = severity_from_score(baseline_score)
     severity_rank: dict[Severity, int] = {

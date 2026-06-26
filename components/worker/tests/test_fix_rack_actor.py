@@ -100,3 +100,18 @@ def test_generate_fix_rack_skips_when_no_version(harness):
     fra.generate_fix_rack(str(aid))
 
     assert not [o for o in harness["added"] if isinstance(o, RackPreset)]
+
+
+def test_generate_fix_rack_survives_compute_error(harness, monkeypatch):
+    # Phase 1 hardening: a compute-phase blow-up (bad final_json / solver bug) must
+    # not raise out of the actor or half-write a preset.
+    aid, vid = uuid.uuid4(), uuid.uuid4()
+    harness["registry"][Analysis] = _analysis(aid, vid, {"phase1": {"true_peak_db": 0.5}})
+
+    def _boom(_flat):
+        raise RuntimeError("compute blew up")
+
+    monkeypatch.setattr(fra, "evaluate_problems", _boom)
+    fra.generate_fix_rack(str(aid))  # must not raise
+
+    assert not [o for o in harness["added"] if isinstance(o, RackPreset)]

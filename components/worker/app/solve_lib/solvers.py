@@ -73,8 +73,9 @@ def solve_frequency_balance(v: Verdict, a: dict[str, Any], genre: str | None) ->
     bands = _p1(a).get("bands") or {}
     if slug == "mud_buildup":
         lm, mid = bands.get("low_mid"), bands.get("mid")
-        diff = (lm - mid) if (lm is not None and mid is not None) else 6.0
-        gain = -_clamp(diff / 2.0, 0.0, 6.0)
+        if lm is None or mid is None:
+            return None  # can't size the carve without both bands — leave unsolved
+        gain = -_clamp((lm - mid) / 2.0, 0.0, 6.0)
         op = DspOp(type="peaking_eq", params={"frequency_hz": 300.0, "gain_db": gain, "q": 1.0})
         return _fix(v, [op], f"Carve {gain:.1f} dB at 300 Hz to clear low-mid mud.")
     if slug == "harsh_upper_mid":
@@ -110,10 +111,55 @@ def solve_stereo_field(v: Verdict, a: dict[str, Any], genre: str | None) -> Fix 
     return _fix(v, [op], f"Pull stereo width to {width_pct:.0f}% to restore mono stability.")
 
 
+# ── mono_compatibility / stereo_phase -> ms width + bass mono-maker ───────────
+# Two symptoms of the same disease; when they co-occur with over-widening the
+# `phantom_width` composite absorbs them (-> solve_stereo_field). These solvers
+# handle the INDEPENDENT case. One DSP capability: a `mono_below_hz` param on the
+# existing stereo_width op (the rack `ms` module already exposes monoMakerHz).
+
+def _mono_below(genre: str | None) -> float:
+    """Genre bass mono-maker crossover (Hz), clamped to the rack knob's [0, 400]."""
+    return _clamp(float(G.ppath(genre, "stereo.mono_below_hz", 100.0)), 0.0, 400.0)
+
+
+def solve_mono_compat(v: Verdict, a: dict[str, Any], genre: str | None) -> Fix | None:
+    if _slug(v) != "sub_mono_compatibility":
+        return None
+    mono_hz = _mono_below(genre)
+    op = DspOp(type="stereo_width", params={"width_pct": 100.0, "mono_below_hz": mono_hz})
+    return _fix(v, [op], f"Mono the low end below {mono_hz:.0f} Hz so the sub survives a mono fold-down.")
+
+
+def solve_stereo_phase(v: Verdict, a: dict[str, Any], genre: str | None) -> Fix | None:
+    if _slug(v) != "negative_correlation":
+        return None
+    corr = _p1(a).get("stereo_correlation")
+    # -1 correlation -> 60% width; 0 -> 90%. Mono-safe but not collapsed.
+    width_pct = 80.0 if corr is None else _clamp(90.0 + float(corr) * 30.0, 60.0, 100.0)
+    mono_hz = _mono_below(genre)
+    op = DspOp(type="stereo_width", params={"width_pct": width_pct, "mono_below_hz": mono_hz})
+    return _fix(v, [op], f"Narrow to {width_pct:.0f}% and mono below {mono_hz:.0f} Hz to recover phase coherence.")
+
+
+# ── clarity -> conservative low-mid carve ────────────────────────────────────
+
+def solve_clarity(v: Verdict, a: dict[str, Any], genre: str | None) -> Fix | None:
+    if _slug(v) != "congested_mix":
+        return None
+    # congested_mix evidence carries no per-band delta -> a fixed conservative carve.
+    # EQ alone won't fully de-congest (full separation needs stems); say so.
+    op = DspOp(type="peaking_eq", params={"frequency_hz": 300.0, "gain_db": -2.5, "q": 1.0})
+    return _fix(v, [op], "Carve 2.5 dB at 300 Hz to open congested low-mids; "
+                         "full separation needs stem-level work.")
+
+
 SOLVERS: dict[str, Callable[[Verdict, dict[str, Any], str | None], "Fix | None"]] = {
     "clipping": solve_clipping,
     "loudness": solve_loudness,
     "frequency_balance": solve_frequency_balance,
     "low_end": solve_low_end,
     "stereo_field": solve_stereo_field,
+    "mono_compatibility": solve_mono_compat,
+    "stereo_phase": solve_stereo_phase,
+    "clarity": solve_clarity,
 }

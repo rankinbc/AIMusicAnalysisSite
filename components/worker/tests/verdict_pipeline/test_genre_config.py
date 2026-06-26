@@ -33,3 +33,23 @@ def test_platform_targets_and_master_context():
 
 def test_binding_returns_predicate_spec():
     assert G.binding("A2_loudness_vs_target")["reads_field"] == "phase1.lufs"
+
+
+# ── Phase 1: a missing/malformed config degrades to a minimal fallback ───────
+
+def test_malformed_config_falls_back_to_minimal(monkeypatch, tmp_path):
+    # Point the loader at an empty dir (no json files) and clear the caches:
+    # missing config must degrade to the minimal fallback, not raise on every analysis.
+    monkeypatch.setattr(G, "_DIR", tmp_path)
+    G._profiles.cache_clear()
+    G._bindings.cache_clear()
+    try:
+        assert G.resolve_genre("trance") == "_fallback"
+        # ppath returns the rule's own default when the profile is empty
+        assert G.ppath("trance", "loudness.club.lufs_target", -14.0) == -14.0
+        assert G.master_context() == "streaming"
+        assert G.platform("anything", default=0) == 0
+    finally:
+        # Drop the fallback-cached values so other tests re-read the real config.
+        G._profiles.cache_clear()
+        G._bindings.cache_clear()

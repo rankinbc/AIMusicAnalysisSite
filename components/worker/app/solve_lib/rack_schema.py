@@ -46,7 +46,8 @@ PARAM_MAP: dict[str, dict[str, str]] = {
         "ceiling_db": "ceilingDb", "release_ms": "releaseMs", "lookahead_ms": "lookaheadMs",
     },
     "trim": {"gain_db": "gainDb"},
-    # ms is special-cased in the compiler (width_pct -> width as a ratio).
+    # ms is special-cased in the compiler: width_pct -> width (ratio), and the
+    # optional mono_below_hz -> monoMakerHz (bass mono-maker).
 }
 
 # DspOp eq-family type -> rack eq band `type` value.

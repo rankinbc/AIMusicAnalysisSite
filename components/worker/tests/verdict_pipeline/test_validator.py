@@ -112,3 +112,43 @@ def test_section_end_must_not_exceed_duration():
     result = validate_verdict(v, _analysis(duration=220.0))
     assert not result.ok
     assert "section" in result.failure.reason.lower()
+
+
+# ── Phase 1: NaN/Inf metric must not crash or silently reject ────────────────
+
+def test_nan_actual_metric_does_not_reject_verdict():
+    a = _analysis()
+    a["phase3"]["low_mid_energy"] = float("nan")  # degenerate measured metric
+    v = _v(evidence=[Evidence(metric="phase3.low_mid_energy", value=0.31, label="x")])
+    result = validate_verdict(v, a)
+    assert result.ok  # can't compare against NaN — don't hard-reject the verdict
+
+
+# ── Phase 2: source-aware severity downgrade ─────────────────────────────────
+
+def _rule_problem(*, severity="critical", category="dynamics"):
+    """A deterministic rule-engine Problem (specialist='rule_engine.<slug>')."""
+    from app.verdict_lib.rule_engine import _problem
+    return _problem(
+        track_id="track-1", slug="over_compression", severity=severity, category=category,
+        headline="h", summary="s", why_it_matters="w",
+        evidence=[Evidence(metric="phase3.low_mid_energy", value=0.31, label="x")],
+    )
+
+
+def test_rule_engine_severity_is_not_downgraded():
+    # A 'dynamics' critical would normally cap to moderate, but a deterministic
+    # rule-engine finding's severity is measured -> exempt (architecture §7).
+    v = _rule_problem(severity="critical", category="dynamics")
+    result = validate_verdict(v, _analysis())
+    assert result.ok
+    assert result.verdict.severity == "critical"
+
+
+def test_llm_specialist_severity_still_downgraded():
+    # Same category + claimed severity, but an LLM specialist (specialist != rule_engine)
+    # keeps the downgrade guard, since it can over-claim.
+    v = _v(severity="critical", category="dynamics", specialist="dynamics")
+    result = validate_verdict(v, _analysis())
+    assert result.ok
+    assert result.verdict.severity != "critical"

@@ -48,11 +48,16 @@ def generate_fix_rack(analysis_id: str) -> None:
         logger.warning("fix rack: analysis %s has no version_id; skipping", aid)
         return
 
-    # Phase 2 — compute (no DB; deterministic).
-    flattened = flatten(final_json if isinstance(final_json, dict) else {})
-    flattened.setdefault("track_id", str(aid))
-    result = solve(evaluate_problems(flattened), flattened)
-    chain = result["chain"]
+    # Phase 2 — compute (no DB; deterministic). Guarded: a malformed final_json
+    # or a solver bug must not crash the actor or half-write a preset.
+    try:
+        flattened = flatten(final_json if isinstance(final_json, dict) else {})
+        flattened.setdefault("track_id", str(aid))
+        result = solve(evaluate_problems(flattened), flattened)
+        chain = result["chain"]
+    except Exception:
+        logger.exception("fix rack: compute failed for analysis %s; skipping", aid)
+        return
 
     # Phase 3 — persist (idempotent: one analysis preset per version).
     with SessionFactory.begin() as s:

@@ -51,14 +51,18 @@
       "loudness": {
         "streaming": { "lufs_target": -14.0, "lufs_tolerance": 1.5, "true_peak_dbtp_max": -1.0, "provenance": "standard" },
         "club": { "lufs_target": -9.0, "lufs_range": [-10.0, -8.0], "true_peak_dbtp_max": -1.0, "provenance": "interpolation",
-                  "_note": "Original 90s masters predate LUFS metering; estimated from DR10–11 crest data. Weakest loudness figure in the file." }
+                  "_note": "Original 90s masters predate LUFS metering; estimated from DR10–11 crest data. Weakest loudness figure in the file." },
+        "stability": { "short_term_over_integrated_lu": 7.0, "provenance": "rule_of_thumb",
+                       "_note": "short_term_max minus integrated LUFS - EBU R128 programme-dynamics spread (LRA family). Classic trance's real breakdown/full-section contrast swings wider, so a higher floor; cutoff pending corpus validation." }
       },
       "dynamics": {
         "crest_db": { "target": 10.5, "range": [9.0, 12.0], "warn_below": 8.0, "provenance": "rule_of_thumb",
                       "_note": "Measured DR10–11 from Dynamic Range DB (PvD 'For an Angel' DR10, AvB '76' DR11)." },
         "lra_lu": { "target": 8.0, "range": [6.0, 10.0], "provenance": "interpolation",
                     "_note": "Higher than modern due to genuine breakdown↔full-section contrast." },
-        "plr": { "warn_below": 9.0, "provenance": "rule_of_thumb" }
+        "plr": { "warn_below": 9.0, "provenance": "rule_of_thumb" },
+        "transient_strength": { "weak_below": 0.8, "provenance": "interpolation",
+                                "_note": "avg_transient_strength = mean librosa onset_strength; level/normalization-dependent, NOT a calibrated absolute. Placeholder floor pending a measured corpus; rule ships suspected=true." }
       },
       "spectral_tilt": {
         "brightness_rank": 2,
@@ -92,14 +96,18 @@
       "loudness": {
         "streaming": { "lufs_target": -14.0, "lufs_tolerance": 1.5, "true_peak_dbtp_max": -1.0, "provenance": "standard" },
         "club": { "lufs_target": -7.0, "lufs_range": [-8.0, -6.0], "true_peak_dbtp_max": -1.0, "provenance": "rule_of_thumb",
-                  "_note": "Festival-oriented masters push to the loud end. iZotope top-dance analysis median ~-8.3 LUFS ±1." }
+                  "_note": "Festival-oriented masters push to the loud end. iZotope top-dance analysis median ~-8.3 LUFS ±1." },
+        "stability": { "short_term_over_integrated_lu": 6.0, "provenance": "rule_of_thumb",
+                       "_note": "short_term_max minus integrated LUFS - EBU R128 programme-dynamics spread (LRA family). Festival masters with big breakdowns swing moderately; cutoff pending corpus validation." }
       },
       "dynamics": {
         "crest_db": { "target": 6.5, "range": [5.0, 8.0], "warn_below": 4.5, "provenance": "rule_of_thumb",
                       "_note": "Measured DR5–7 (AvB 'Intense' DR6, PvD 'Evolution' DR5)." },
         "lra_lu": { "target": 5.5, "range": [4.0, 7.0], "provenance": "interpolation",
                     "_note": "Big breakdown raises LRA above straight techno." },
-        "plr": { "warn_below": 8.0, "provenance": "rule_of_thumb" }
+        "plr": { "warn_below": 8.0, "provenance": "rule_of_thumb" },
+        "transient_strength": { "weak_below": 0.8, "provenance": "interpolation",
+                                "_note": "avg_transient_strength = mean librosa onset_strength; level/normalization-dependent, NOT a calibrated absolute. Placeholder floor pending a measured corpus; rule ships suspected=true." }
       },
       "spectral_tilt": {
         "brightness_rank": 1,
@@ -137,14 +145,18 @@
       "loudness": {
         "streaming": { "lufs_target": -14.0, "lufs_tolerance": 1.5, "true_peak_dbtp_max": -1.0, "provenance": "standard" },
         "club": { "lufs_target": -6.5, "lufs_range": [-7.0, -6.0], "lufs_hot": -5.0, "true_peak_dbtp_max": -1.0, "provenance": "rule_of_thumb",
-                  "_note": "Samplesound techno-mastering guide: -8 to -6 LUFS typical; some tracks reach -5 or louder." }
+                  "_note": "Samplesound techno-mastering guide: -8 to -6 LUFS typical; some tracks reach -5 or louder." },
+        "stability": { "short_term_over_integrated_lu": 5.0, "provenance": "rule_of_thumb",
+                       "_note": "short_term_max minus integrated LUFS - EBU R128 programme-dynamics spread (LRA family). Techno is static/constant-loudness, so a wide spread is more anomalous; a lower floor flags instability sooner. Cutoff pending corpus." }
       },
       "dynamics": {
         "crest_db": { "target": 5.5, "range": [5.0, 7.0], "warn_below": 4.0, "provenance": "interpolation",
                       "_note": "WEAKEST FIGURE: DR rows for named peak-time artists could not be retrieved; inferred from LUFS/LRA + DR-DB note that dense electronic is normal at DR5." },
         "lra_lu": { "target": 4.0, "range": [3.0, 5.0], "static_floor": 3.0, "provenance": "rule_of_thumb",
                     "_note": "Constant-beat material sits ~4 LU regardless of compression; LRA<3 may be inherent, not over-limiting." },
-        "plr": { "warn_below": 7.0, "provenance": "interpolation" }
+        "plr": { "warn_below": 7.0, "provenance": "interpolation" },
+        "transient_strength": { "weak_below": 0.8, "provenance": "interpolation",
+                                "_note": "avg_transient_strength = mean librosa onset_strength; level/normalization-dependent, NOT a calibrated absolute. Placeholder floor pending a measured corpus; rule ships suspected=true. Techno's dense kick-forward material may tolerate a lower floor." }
       },
       "spectral_tilt": {
         "brightness_rank": 3,
@@ -171,7 +183,7 @@
 
   "_tuning_notes": {
     "build_a_corpus": "Replace interpolation-tagged crest/LRA/tilt numbers with measured medians + p10/p90 from 20–30 pro tracks per genre run through a BS.1770 + DR meter.",
-    "weakest_figures": ["techno.dynamics.crest_db", "techno.dynamics.plr", "classic_trance.loudness.club", "all spectral_tilt (no authoritative per-genre dataset)"],
+    "weakest_figures": ["techno.dynamics.crest_db", "techno.dynamics.plr", "classic_trance.loudness.club", "all spectral_tilt (no authoritative per-genre dataset)", "all dynamics.transient_strength (placeholder; avg onset strength is not a calibrated absolute)", "all loudness.stability (rule-of-thumb short-term-spread cutoff)"],
     "platform_drift": "If Spotify moves off -14 or a new club-delivery standard emerges, update _platform_targets and each profile's loudness.club."
   }
 }

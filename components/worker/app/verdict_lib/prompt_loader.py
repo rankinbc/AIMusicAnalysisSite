@@ -273,3 +273,39 @@ def load_coach_grounded_model() -> str | None:
     if not path.exists():
         return None
     return parse_model_frontmatter(path.read_text(encoding="utf-8"))
+
+
+# ── LLM-identifier prompts (Phase 5) ───────────────────────────────────────
+# Judgment-only IDENTIFY prompts live in their own folder, DELIBERATELY decoupled
+# from SLUG_TO_FILENAME / SpecialistCatalog (like the coach prompt). They emit
+# findings (no fix) and so don't belong in the on-demand specialist catalog.
+_DEFAULT_IDENTIFIER_DIR = Path(__file__).resolve().parents[2] / "prompts" / "identifiers"
+IDENTIFIER_PROMPTS_DIR = Path(os.environ.get("IDENTIFIER_PROMPTS_DIR") or _DEFAULT_IDENTIFIER_DIR)
+
+# Phase 1 subset = the one genuinely audio-only judge. The .als-gated
+# section_contrast / chord_harmony are deferred pending a grounding check.
+IDENTIFIER_SLUG_TO_FILENAME: dict[str, str] = {
+    "trance_arrangement": "TranceArrangement",
+}
+
+
+def load_identifier_prompt(slug: str) -> tuple[str, str]:
+    """Returns ``(version, body)`` for an LLM-identifier prompt by slug."""
+    name = IDENTIFIER_SLUG_TO_FILENAME.get(slug)
+    if name is None:
+        raise KeyError(f"unknown identifier slug: {slug!r}")
+    path = IDENTIFIER_PROMPTS_DIR / f"{name}.md"
+    if not path.exists():
+        raise FileNotFoundError(f"identifier prompt file not found: {path}")
+    return parse_version_frontmatter(path.read_text(encoding="utf-8"))
+
+
+def load_identifier_prompt_model(slug: str) -> str | None:
+    """Optional ``model:`` pin from an identifier prompt's frontmatter (NFR24)."""
+    name = IDENTIFIER_SLUG_TO_FILENAME.get(slug)
+    if name is None:
+        return None
+    path = IDENTIFIER_PROMPTS_DIR / f"{name}.md"
+    if not path.exists():
+        return None
+    return parse_model_frontmatter(path.read_text(encoding="utf-8"))

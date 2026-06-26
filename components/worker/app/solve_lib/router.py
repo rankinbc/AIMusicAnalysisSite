@@ -19,13 +19,18 @@ from aimusic_shared.verdicts.models import Verdict
 from app.solve_lib.solvers import SOLVERS
 from app.verdict_lib.validator import validate_verdict
 
-# (category, data_tier) -> solver name. MVP = audio_only master-rack moves.
+# (category, data_tier) -> solver name. audio_only master-rack moves. `dynamics`
+# is deliberately ABSENT: un-squashing over-compression / loudness_war is not a
+# master-rack move (it stays leftover advice).
 ROUTE_TABLE: dict[tuple[str, str], str] = {
     ("clipping", "audio_only"): "clipping",
     ("loudness", "audio_only"): "loudness",
     ("frequency_balance", "audio_only"): "frequency_balance",
     ("low_end", "audio_only"): "low_end",
     ("stereo_field", "audio_only"): "stereo_field",
+    ("mono_compatibility", "audio_only"): "mono_compatibility",
+    ("stereo_phase", "audio_only"): "stereo_phase",
+    ("clarity", "audio_only"): "clarity",
 }
 
 

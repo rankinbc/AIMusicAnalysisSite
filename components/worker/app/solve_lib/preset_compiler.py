@@ -37,6 +37,15 @@ def _rank(v: Verdict) -> tuple[float, int]:
     return (v.confidence, v.priority_score)
 
 
+def _eq_stronger(new_gain: float, cur_gain: float) -> bool:
+    """Does the new EQ move beat the one already in this slot? Larger magnitude
+    wins; on equal magnitude a cut (more negative) beats a boost — a corrective
+    cut is the safer / more intentional move than a boost of the same size."""
+    if abs(new_gain) != abs(cur_gain):
+        return abs(new_gain) > abs(cur_gain)
+    return new_gain < cur_gain
+
+
 def _base_chain() -> dict[str, Any]:
     return {"order": list(ORDER), "modules": {}, "masterBypass": False}
 
@@ -47,15 +56,17 @@ def _build_eq(pairs: list[_Pair], change_log: list[dict[str, Any]]) -> dict[str,
         for i in range(len(EQ_BANDS))
     ]
     for v, op in pairs:
-        freq = float(op.params["frequency_hz"])
+        # Clamp to the audible band before slotting — an out-of-range frequency
+        # must not index a wrong/edge EQ band.
+        freq = max(20.0, min(22000.0, float(op.params["frequency_hz"])))
         gain = float(op.params.get("gain_db", 0.0))
         slot = nearest_band_slot(freq)
         cur = bands[slot]
-        if cur["enabled"] and abs(cur["gainDb"]) >= abs(gain):
+        if cur["enabled"] and not _eq_stronger(gain, cur["gainDb"]):
             change_log.append({
                 "module": "eq",
                 "change": f"slot@{cur['freq']:.0f}Hz kept gainDb {cur['gainDb']}, dropped {gain}",
-                "from_fix": v.problem_id, "why": "same band slot — larger cut wins",
+                "from_fix": v.problem_id, "why": "same band slot — stronger move wins",
             })
             continue
         bands[slot] = {
@@ -75,6 +86,10 @@ def _build_single(mod: str, pairs: list[_Pair], change_log: list[dict[str, Any]]
     state: dict[str, Any] = {"enabled": True}
     if mod == "ms":
         state["width"] = float(winner_op.params["width_pct"]) / 100.0
+        # Bass mono-maker (Phase 4): only when the solver asked for it, so a plain
+        # width op doesn't write a stray monoMakerHz.
+        if "mono_below_hz" in winner_op.params:
+            state["monoMakerHz"] = float(winner_op.params["mono_below_hz"])
     else:
         pmap = PARAM_MAP[mod]
         for k, val in winner_op.params.items():

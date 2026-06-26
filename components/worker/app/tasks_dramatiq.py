@@ -78,6 +78,7 @@ except ImportError:
 # Deterministic Problem engine, run on every completed analysis (healthy path).
 # Module-level binding so it's a patchable seam in tests.
 from .verdict_lib.degraded import run_rule_engine_for_analysis  # noqa: E402
+from .trace import trace_runs_enabled  # noqa: E402
 
 
 def _utc_now() -> datetime:
@@ -257,6 +258,35 @@ def analyze_audio_job(job_id: str) -> None:
         logger.info("problem engine wrote %d problems for job=%s", written, job_id)
     except Exception:  # pragma: no cover — never fail a done analysis over this
         logger.warning("problem engine failed for job=%s", job_id, exc_info=True)
+
+    # ── Phase C3 — LLM identifiers (judgment-only findings; paid-tier gated) ──
+    # OFF by default: no tier is plumbed through the analysis job yet (Epic 2),
+    # so identifiers_enabled(None) is False until a real pro tier flows in here.
+    # Best-effort: a failure never undoes the completed analysis.
+    try:
+        from .verdict_lib.identifiers import run_llm_identifiers_for_analysis  # noqa: PLC0415
+        n_ident = run_llm_identifiers_for_analysis(analysis_id, tier=None, user_id=user_id)
+        if n_ident:
+            logger.info("llm identifiers wrote %d for job=%s", n_ident, job_id)
+    except Exception:  # pragma: no cover — never fail a done analysis over this
+        logger.warning("llm identifiers failed for job=%s", job_id, exc_info=True)
+
+    # ── Phase C-trace — optional run-trace artifact (dev/opt-in; TRACE_RUNS) ──
+    # Reconstructs the full decision flow (analysis → IDENTIFY → SOLVE) with the
+    # full per-stage payloads. Best-effort: a failure never undoes the analysis.
+    if trace_runs_enabled():
+        try:
+            from .trace.generate import generate_run_trace  # noqa: PLC0415
+            generate_run_trace(analysis_id, analysis_inputs={
+                "file_path": file_rel,
+                "reference_path": reference_path,
+                "als_file_path": als_file_path,
+                "stem_paths": stem_paths,
+                "stem_mode": stem_mode,
+                "defer_structure": True,
+            })
+        except Exception:  # pragma: no cover — never fail a done analysis over this
+            logger.warning("run trace failed for job=%s", job_id, exc_info=True)
 
     # ── Phase D — kick off background structure detection (fill-in) ──────────
     # The fast phases are now persisted + the job is COMPLETE. Enqueue the heavy

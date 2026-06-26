@@ -12,31 +12,56 @@ spec companion (not loaded). Never raises on a missing genre — falls back via
 from __future__ import annotations
 
 import json
+import logging
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+logger = logging.getLogger(__name__)
+
 _DIR = Path(__file__).with_name("config")
+
+# Minimal fail-safe configs. If a config file is missing or malformed, the engine
+# degrades to these (rules then fall back to their built-in defaults via ``ppath``)
+# instead of raising on every analysis.
+_FALLBACK_PROFILES: dict[str, Any] = {"genre_profiles": {"_fallback": {}}, "_platform_targets": {}}
+_FALLBACK_BINDINGS: dict[str, Any] = {
+    "genre_map": {"default": "_fallback"},
+    "master_context": {"default": "streaming"},
+    "bindings": {},
+}
 
 
 @lru_cache(maxsize=1)
 def _profiles() -> dict[str, Any]:
-    return json.loads((_DIR / "genre-profiles.json").read_text(encoding="utf-8"))
+    try:
+        return json.loads((_DIR / "genre-profiles.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        logger.exception(
+            "genre-profiles.json missing/malformed; using minimal fallback "
+            "(rules fall back to built-in defaults)"
+        )
+        return _FALLBACK_PROFILES
 
 
 @lru_cache(maxsize=1)
 def _bindings() -> dict[str, Any]:
-    return json.loads((_DIR / "rule-bindings.json").read_text(encoding="utf-8"))
+    try:
+        return json.loads((_DIR / "rule-bindings.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        logger.exception("rule-bindings.json missing/malformed; using minimal fallback")
+        return _FALLBACK_BINDINGS
 
 
 def resolve_genre(phase2_genre: str | None) -> str:
     """Map ``phase2.genre`` (dnb/trance/house/techno/other) to a profile key."""
-    gm = _bindings()["genre_map"]
-    return gm.get((phase2_genre or "").lower(), gm["default"])
+    gm = _bindings().get("genre_map", {})
+    return gm.get((phase2_genre or "").lower(), gm.get("default", "_fallback"))
 
 
 def profile(phase2_genre: str | None) -> dict[str, Any]:
-    return _profiles()["genre_profiles"][resolve_genre(phase2_genre)]
+    profs = _profiles().get("genre_profiles", {})
+    return profs.get(resolve_genre(phase2_genre), {})
 
 
 def ppath(phase2_genre: str | None, dotted: str, default: Any = None) -> Any:
@@ -52,14 +77,14 @@ def ppath(phase2_genre: str | None, dotted: str, default: Any = None) -> Any:
 
 def platform(key: str, default: Any = None) -> Any:
     """Read a cross-genre value from ``_platform_targets``."""
-    return _profiles()["_platform_targets"].get(key, default)
+    return _profiles().get("_platform_targets", {}).get(key, default)
 
 
 def master_context() -> str:
     """The loudness world to judge against — ``"streaming"`` (default) or ``"club"``."""
-    return _bindings()["master_context"]["default"]
+    return _bindings().get("master_context", {}).get("default", "streaming")
 
 
 def binding(rule_id: str) -> dict[str, Any]:
     """The ``rule-bindings.json::bindings`` entry for a rule (its predicate spec)."""
-    return _bindings()["bindings"].get(rule_id, {})
+    return _bindings().get("bindings", {}).get(rule_id, {})

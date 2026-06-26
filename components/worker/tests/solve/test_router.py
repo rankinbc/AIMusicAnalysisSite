@@ -44,3 +44,17 @@ def test_merge_attaches_validated_fix_only_to_routed():
     passed = next(p for p in out if p.category == "harmonic")
     assert routed.fix is not None and routed.fix.dsp_chain[0].type == "limiter"
     assert passed.fix is None  # observation passes through unsolved
+
+
+# ── Phase 4: new audio-only categories route; dynamics stays advice ──────────
+
+def test_route_new_audio_only_categories():
+    assert Rt.route(_p("sub_mono_compatibility", "mono_compatibility")) == "mono_compatibility"
+    assert Rt.route(_p("negative_correlation", "stereo_phase")) == "stereo_phase"
+    assert Rt.route(_p("congested_mix", "clarity")) == "clarity"
+
+
+def test_dynamics_not_routed():
+    # un-squashing over-compression / loudness_war is not a master-rack move.
+    assert Rt.route(_p("over_compression", "dynamics")) is None
+    assert Rt.route(_p("loudness_war", "dynamics")) is None

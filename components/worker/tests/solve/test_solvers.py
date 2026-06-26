@@ -101,7 +101,67 @@ def test_solve_stereo_narrows():
     _ok(fix, v, a)
 
 
+# ── Phase 1: no silent fallback when bands are missing ───────────────────────
+
+def test_solve_freq_balance_mud_declines_without_bands():
+    # Hardening: a missing low_mid/mid must leave the problem unsolved, not size
+    # the EQ carve off a hardcoded 6 dB default.
+    a = {"track_id": "t", "phase1": {"bands": {}}}
+    v = _p("mud_buildup", "frequency_balance", "phase1.bands.low_mid", -10.0)
+    assert S.solve_frequency_balance(v, a, None) is None
+
+
+# ── Phase 4: mono / stereo-phase / clarity ───────────────────────────────────
+
+def test_solve_mono_compat_sets_mono_maker():
+    a = {"track_id": "t", "phase1": {"mono_compatibility": 0.4}, "phase2": {"genre": "modern_trance"}}
+    v = _p("sub_mono_compatibility", "mono_compatibility", "phase1.mono_compatibility", 0.4)
+    fix = S.solve_mono_compat(v, a, "modern_trance")
+    assert fix is not None and fix.dsp_chain[0].type == "stereo_width"
+    assert fix.dsp_chain[0].params["mono_below_hz"] == 120.0  # modern_trance crossover
+    assert fix.dsp_chain[0].params["width_pct"] <= 100.0
+    _ok(fix, v, a)
+
+
+def test_solve_stereo_phase_narrows_and_monos():
+    a = {"track_id": "t", "phase1": {"stereo_correlation": -0.4}, "phase2": {"genre": "techno"}}
+    v = _p("negative_correlation", "stereo_phase", "phase1.stereo_correlation", -0.4)
+    fix = S.solve_stereo_phase(v, a, "techno")
+    op = fix.dsp_chain[0]
+    assert op.type == "stereo_width" and op.params["width_pct"] < 100.0
+    assert op.params["mono_below_hz"] > 0.0
+    _ok(fix, v, a)
+
+
+def test_solve_stereo_phase_handles_missing_correlation():
+    a = {"track_id": "t", "phase1": {}}
+    v = _p("negative_correlation", "stereo_phase", "phase1.x", 1.0)
+    fix = S.solve_stereo_phase(v, a, None)
+    assert fix.dsp_chain[0].params["width_pct"] == 80.0  # fallback when correlation absent
+
+
+def test_solve_clarity_low_mid_carve():
+    a = {"track_id": "t", "phase1": {"spectral_contrast": 10.0, "spectral_flatness": 0.4}}
+    v = _p("congested_mix", "clarity", "phase1.spectral_contrast", 10.0)
+    fix = S.solve_clarity(v, a, None)
+    op = fix.dsp_chain[0]
+    assert op.type == "peaking_eq" and op.params["gain_db"] < 0.0
+    assert 20.0 <= op.params["frequency_hz"] <= 22000.0
+    _ok(fix, v, a)
+
+
+def test_stereo_width_accepts_mono_below_hz_rejects_out_of_range():
+    import pytest
+    from aimusic_shared.verdicts.models import DspOp
+    DspOp(type="stereo_width", params={"width_pct": 100.0, "mono_below_hz": 120.0})  # ok
+    with pytest.raises(ValueError):
+        DspOp(type="stereo_width", params={"width_pct": 100.0, "mono_below_hz": 500.0})  # > 400
+
+
 # ── registry ─────────────────────────────────────────────────────────────────
 
 def test_solvers_registry_keys():
-    assert {"clipping", "loudness", "frequency_balance", "low_end", "stereo_field"} <= set(S.SOLVERS)
+    assert {
+        "clipping", "loudness", "frequency_balance", "low_end", "stereo_field",
+        "mono_compatibility", "stereo_phase", "clarity",
+    } <= set(S.SOLVERS)

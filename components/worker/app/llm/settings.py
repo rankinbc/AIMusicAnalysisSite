@@ -63,6 +63,13 @@ class LlmSettings(BaseSettings):
     llm_circuit_breaker_threshold: int = 5
     llm_circuit_breaker_cooldown_s: int = 300
 
+    # ── Phase 5: LLM-identifier layer (judgment-only findings on each analysis) ──
+    # Cost control: identifiers run on paid tiers only by default. With the
+    # default tier "free" they stay OFF until Epic 2 stamps a real pro tier.
+    identifiers_paid_only: bool = True
+    # Hard cap on identifier LLM calls per analysis regardless of roster growth.
+    max_identifiers_per_analysis: int = 3
+
     def tier_ceiling(self, tier: str | None) -> Decimal:
         """Resolve the monthly USD ceiling for a tier. Unknown / None →
         global cap (operators get a defended hard floor).

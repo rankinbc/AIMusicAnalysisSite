@@ -97,6 +97,9 @@ _DSP_PARAM_RANGES: dict[str, dict[str, tuple[float, float] | None]] = {
     },
     "stereo_width": {
         "width_pct": (0.0, 200.0),
+        # Bass mono-maker crossover; 0 = off. Mirrors the rack `ms.monoMakerHz`
+        # knob (frontend data.ts, range 0-400). Added with the Phase-4 mono/stereo solvers.
+        "mono_below_hz": (0.0, 400.0),
     },
     "sidechain": {
         "source_stem": None,    # string

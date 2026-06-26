@@ -23,6 +23,7 @@ The two-pass engine is LIVE on EVERY completed analysis: ``degraded.py`` calls
 follow-on.
 """
 from __future__ import annotations
+import logging
 from datetime import datetime, timezone
 from typing import Any, Callable
 
@@ -39,6 +40,8 @@ from aimusic_shared.verdicts.ulid_helpers import new_verdict_id
 
 from app.verdict_lib import genre_config as G
 from app.verdict_lib.suppression import apply as _apply_suppression
+
+logger = logging.getLogger(__name__)
 
 RULE_ENGINE_VERSION = "rule_engine@1.0.0"
 RULE_MODEL = "rules"
@@ -198,20 +201,56 @@ def evaluate_problems(
     *,
     singles: list[tuple[str, SingleFn]] | None = None,
     composites: list[tuple[str, list[str], CompositeFn]] | None = None,
+    trace: dict[str, list[Any]] | None = None,
 ) -> list[Verdict]:
     """Two-pass evaluation: run all singles, then composites, then apply
     suppression. Registries default to the module globals; pass explicit ones
-    in tests to avoid touching the global set."""
+    in tests to avoid touching the global set.
+
+    ``trace`` (optional): when a dict is passed, each rule's fire/skip decision is
+    appended to ``trace["singles"]`` / ``trace["composites"]`` for the run-trace
+    harness. Default ``None`` → byte-identical hot path, zero overhead."""
     singles = _SINGLES if singles is None else singles
     composites = _COMPOSITES if composites is None else composites
     fired: dict[str, Verdict] = {}
     for slug, fn in singles:
-        v = fn(analysis)
+        # Per-rule isolation: a single rule that throws (e.g. a bad metric type)
+        # must not wipe the whole batch of findings. Log and skip it.
+        try:
+            v = fn(analysis)
+        except Exception:
+            logger.exception("rule engine: single %r raised; skipping", slug)
+            if trace is not None:
+                trace.setdefault("singles", []).append(
+                    {"slug": slug, "fired": False, "error": True})
+            continue
+        if trace is not None:
+            trace.setdefault("singles", []).append({
+                "slug": slug,
+                "fired": v is not None,
+                "severity": v.severity if v is not None else None,
+                "category": v.category if v is not None else None,
+                "problem_id": v.problem_id if v is not None else None,
+            })
         if v is not None:
             fired[slug] = v
     hits = []
     for slug, suppresses, cfn in composites:
-        cv = cfn(analysis, fired)
+        try:
+            cv = cfn(analysis, fired)
+        except Exception:
+            logger.exception("rule engine: composite %r raised; skipping", slug)
+            if trace is not None:
+                trace.setdefault("composites", []).append(
+                    {"slug": slug, "fired": False, "error": True, "suppresses": suppresses})
+            continue
+        if trace is not None:
+            trace.setdefault("composites", []).append({
+                "slug": slug,
+                "fired": cv is not None,
+                "suppresses": suppresses,
+                "severity": cv.severity if cv is not None else None,
+            })
         if cv is not None:
             hits.append((slug, suppresses, cv))
     return _apply_suppression(fired, hits)
@@ -761,6 +800,70 @@ def over_compression(a: dict[str, Any]) -> Verdict | None:
     )
 
 
+@single("weak_transients", tier="A")
+def weak_transients(a: dict[str, Any]) -> Verdict | None:
+    """Weak onset envelope - dull attack / little punch (binding A_weak_transients).
+    suspected: avg_transient_strength is mean librosa onset_strength, which scales
+    with level/normalization and is NOT a calibrated absolute - this is a soft hint;
+    the corroborated signal is the Tier-C `lost_transients` composite. Not fixable
+    on the master (no transient-shaper DspOp); the corrective move is leftover advice."""
+    avg = (_phase(a, "phase1").get("transients") or {}).get("avg_transient_strength")
+    if avg is None:
+        return None
+    g = _genre(a)
+    floor = G.ppath(g, "dynamics.transient_strength.weak_below", 0.8)
+    sev = _tiered(avg, {"severe": floor * 0.5, "moderate": floor}, higher_is_worse=False)
+    if sev is None:
+        return None
+    return _problem(
+        track_id=_track_id(a), slug="weak_transients", severity=sev, category="dynamics",
+        kind="observation", suspected=True, fixable=False,
+        headline=f"Weak transient attack ({avg:.2f})",
+        summary=f"Mean onset strength {avg:.2f} is below the {G.resolve_genre(g)} floor - "
+                "dull attack / little punch. Placeholder threshold pending a measured corpus.",
+        evidence=[Evidence(metric="phase1.transients.avg_transient_strength", value=float(avg),
+                           expected_range=(floor, floor * 3), label=f"{avg:.2f}")],
+        why_it_matters="Weak transients read as a soft, lifeless attack; kicks and snares "
+                       "don't punch through on club or playlist playback.",
+    )
+
+
+@single("unstable_loudness", tier="A")
+def unstable_loudness(a: dict[str, Any]) -> Verdict | None:
+    """Short-term loudness spiking far above the integrated level - inconsistent
+    section-to-section levels (binding A_unstable_loudness). Grounded in a measured
+    LUFS relationship (EBU R128 programme-dynamics, the LRA family); the cutoff is a
+    rule-of-thumb so suspected=True. Not a gain-trim fix -> fixable=False."""
+    p1 = _phase(a, "phase1")
+    lufs = p1.get("lufs")
+    st = p1.get("short_term_max_lufs")
+    mom = p1.get("momentary_max_lufs")
+    if lufs is None or st is None or mom is None:
+        return None
+    st_spread = st - lufs
+    g = _genre(a)
+    floor = G.ppath(g, "loudness.stability.short_term_over_integrated_lu", 6.0)
+    sev = _tiered(st_spread, {"severe": floor + 3, "moderate": floor}, higher_is_worse=True)
+    if sev is None:
+        return None
+    mom_spread = mom - lufs
+    return _problem(
+        track_id=_track_id(a), slug="unstable_loudness", severity=sev, category="loudness",
+        kind="fault", suspected=True, fixable=False,
+        headline=f"Unstable loudness (+{st_spread:.1f} LU short-term)",
+        summary=f"Short-term loudness peaks {st_spread:.1f} LU above integrated "
+                f"(momentary +{mom_spread:.1f} LU) - the level swings wide between sections.",
+        evidence=[
+            Evidence(metric="phase1.short_term_max_lufs", value=float(st),
+                     label=f"+{st_spread:.1f} LU over integrated"),
+            Evidence(metric="phase1.momentary_max_lufs", value=float(mom),
+                     label=f"+{mom_spread:.1f} LU momentary"),
+        ],
+        why_it_matters="Short-term spikes far above the integrated level mean the track swings "
+                       "between quiet and slamming; loud sections fatigue and normalisation pumps.",
+    )
+
+
 @single("sub_mono_compatibility", tier="A")
 def sub_mono_compatibility(a: dict[str, Any]) -> Verdict | None:
     mono = _phase(a, "phase1").get("mono_compatibility")
@@ -1217,6 +1320,41 @@ def thin_and_bright(a: dict[str, Any], fired: dict[str, Verdict]) -> Verdict | N
         ],
         why_it_matters="A low-tilt EQ (shelve the top, lift the lows) rebalances the whole "
                        "mix in one move.",
+    )
+
+
+@composite("lost_transients", suppresses=["weak_transients", "over_compression"])
+def lost_transients(a: dict[str, Any], fired: dict[str, Verdict]) -> Verdict | None:
+    """C - weak transients corroborated by a crushed crest factor: the punch was
+    limited/compressed away, not merely soft. Audio-only analogue of the MIDI-only
+    `lifeless_at_source`. Uses the same genre-aware crest gate as `loudness_war`,
+    so techno's inherently low crest gates it out. De-suspected by corroboration."""
+    if "weak_transients" not in fired:
+        return None
+    p1 = _phase(a, "phase1")
+    avg = (p1.get("transients") or {}).get("avg_transient_strength")
+    cf = p1.get("crest_factor")
+    if avg is None or cf is None:
+        return None
+    g = _genre(a)
+    crest_warn = G.ppath(g, "dynamics.crest_db.warn_below", 6.0)
+    if cf >= crest_warn:
+        return None  # crest healthy (or inherent-low for techno) - not "lost"
+    ideal = G.ppath(g, "dynamics.crest_db.range", [7.0, 12.0])
+    return _problem(
+        track_id=_track_id(a), slug="lost_transients", severity="moderate", confidence=0.9,
+        category="dynamics", kind="fault", suspected=False, fixable=False,
+        headline="Lost transients - punch limited away",
+        summary=f"Weak onset strength ({avg:.2f}) with a crushed crest ({cf:.1f} dB) - the "
+                "transients were compressed/limited out, not just soft in the parts.",
+        evidence=[
+            Evidence(metric="phase1.transients.avg_transient_strength", value=float(avg),
+                     label="weak attack"),
+            Evidence(metric="phase1.crest_factor", value=float(cf),
+                     expected_range=tuple(ideal), label=f"{cf:.1f} dB crest"),
+        ],
+        why_it_matters="Weak transients plus a crushed crest mean the punch was limited away - "
+                       "address the master/bus dynamics chain, not one EQ move.",
     )
 
 
