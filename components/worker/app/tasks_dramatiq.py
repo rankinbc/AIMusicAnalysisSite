@@ -134,6 +134,7 @@ def analyze_audio_job(job_id: str) -> None:
         file_rel = version.file_path
         file_abs = str((Path(LOCAL_ROOT) / file_rel).resolve())
         user_id = job.user_id
+        tier = job.tier  # billing tier stamped by the BFF at dispatch (story 2.4)
         version_id = version.id
         song_id = version.song_id
         song_name = song.name if song is not None else None
@@ -260,12 +261,16 @@ def analyze_audio_job(job_id: str) -> None:
         logger.warning("problem engine failed for job=%s", job_id, exc_info=True)
 
     # ── Phase C3 — LLM identifiers (judgment-only findings; paid-tier gated) ──
-    # OFF by default: no tier is plumbed through the analysis job yet (Epic 2),
-    # so identifiers_enabled(None) is False until a real pro tier flows in here.
-    # Best-effort: a failure never undoes the completed analysis.
+    # Runs only on paid tiers (identifiers_enabled): free/anon analyses skip it.
+    # Best-effort: a failure never undoes the completed analysis. When tracing is
+    # on, each LLM call's full request/response is captured for the run trace.
+    _ident_calls: list[dict] = []
     try:
         from .verdict_lib.identifiers import run_llm_identifiers_for_analysis  # noqa: PLC0415
-        n_ident = run_llm_identifiers_for_analysis(analysis_id, tier=None, user_id=user_id)
+        n_ident = run_llm_identifiers_for_analysis(
+            analysis_id, tier=tier, user_id=user_id,
+            trace_sink=(_ident_calls if trace_runs_enabled() else None),
+        )
         if n_ident:
             logger.info("llm identifiers wrote %d for job=%s", n_ident, job_id)
     except Exception:  # pragma: no cover — never fail a done analysis over this
@@ -273,7 +278,7 @@ def analyze_audio_job(job_id: str) -> None:
 
     # ── Phase C-trace — optional run-trace artifact (dev/opt-in; TRACE_RUNS) ──
     # Reconstructs the full decision flow (analysis → IDENTIFY → SOLVE) with the
-    # full per-stage payloads. Best-effort: a failure never undoes the analysis.
+    # full per-stage payloads + the captured LLM routing. Best-effort.
     if trace_runs_enabled():
         try:
             from .trace.generate import generate_run_trace  # noqa: PLC0415
@@ -284,7 +289,7 @@ def analyze_audio_job(job_id: str) -> None:
                 "stem_paths": stem_paths,
                 "stem_mode": stem_mode,
                 "defer_structure": True,
-            })
+            }, llm_calls=_ident_calls)
         except Exception:  # pragma: no cover — never fail a done analysis over this
             logger.warning("run trace failed for job=%s", job_id, exc_info=True)
 

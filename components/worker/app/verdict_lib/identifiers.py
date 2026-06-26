@@ -91,11 +91,16 @@ def _hydrate_identifier(
 
 def run_llm_identifiers_for_analysis(
     analysis_id: str | uuid.UUID, *, tier: str | None, user_id: Any | None,
+    trace_sink: list[dict[str, Any]] | None = None,
 ) -> int:
     """Run the eligible LLM identifiers and persist their findings. Returns the
     count written. Best-effort + idempotent (guarded on an existing
     ``source='llm_identifier'`` row). Gated by tier; bounded by the per-analysis
-    cap; a budget exhaustion stamps the degradation notice and stops early."""
+    cap; a budget exhaustion stamps the degradation notice and stops early.
+
+    ``trace_sink`` (optional): when a list is passed, each LLM call's full request
+    (model, system prompt, user message) and response (raw text + outcome) is
+    appended for the run-trace harness."""
     if not identifiers_enabled(tier):
         return 0
     try:
@@ -149,6 +154,16 @@ def run_llm_identifiers_for_analysis(
                 continue
             user_msg = build_specialist_user_message(flattened, focus="")
             pinned = load_identifier_prompt_model(slug)
+            # Full LLM-routing record for the run trace (input payload now; the
+            # output payload is filled in on each outcome below).
+            call_rec: dict[str, Any] = {
+                "stage": "identifier", "slug": slug,
+                "request": {
+                    "model": pinned or "(gateway default)",
+                    "prompt_slug": slug, "prompt_version": version,
+                    "system": body, "user": user_msg,
+                },
+            }
             try:
                 result = gateway.complete_sync(
                     system=body, user=user_msg, purpose="identifier",
@@ -160,18 +175,33 @@ def run_llm_identifiers_for_analysis(
                 # Degraded path: stamp the notice + stop. The deterministic
                 # findings already exist; never write a fail marker here.
                 logger.info("identifiers: budget exceeded (%s) — stopping", exc.reason)
+                call_rec["response"] = {"outcome": "budget_exceeded", "reason": exc.reason}
+                if trace_sink is not None:
+                    trace_sink.append(call_rec)
                 write_degradation_notice(aid, reason=exc.reason, detail=exc.detail)
                 break
             except LlmError as exc:
                 logger.info("identifier %s LLM call failed: %s", slug, exc)
+                call_rec["response"] = {"outcome": "error", "error": str(exc)}
+                if trace_sink is not None:
+                    trace_sink.append(call_rec)
                 continue
             try:
                 parsed = extract_json_object(result.text)
             except ValueError as exc:
                 logger.info("identifier %s returned bad JSON: %s", slug, exc)
+                call_rec["response"] = {"outcome": "bad_json", "model": result.model, "raw": result.text}
+                if trace_sink is not None:
+                    trace_sink.append(call_rec)
                 continue
 
             raw_verdicts = parsed.get("verdicts") if isinstance(parsed, dict) else None
+            call_rec["response"] = {
+                "outcome": "ok", "model": result.model, "raw": result.text,
+                "parsed_verdicts": len(raw_verdicts) if isinstance(raw_verdicts, list) else 0,
+            }
+            if trace_sink is not None:
+                trace_sink.append(call_rec)
             if not isinstance(raw_verdicts, list):
                 continue
             survivors = []

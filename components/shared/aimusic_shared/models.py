@@ -201,6 +201,10 @@ class AnalysisJob(Base):
     phase_pct: Mapped[float] = mapped_column("phase_pct", Float, nullable=False, default=0.0)
     reference_id: Mapped[Optional[uuid.UUID]] = mapped_column("reference_id", UUID(as_uuid=True), nullable=True)
     task_id: Mapped[Optional[str]] = mapped_column("task_id", String(255), nullable=True)
+    # Story 2.4: tier ("free" | "pro" | "credits") stamped by the BFF at dispatch
+    # so the worker never reads billing tables. Mirrors EF AnalysisJob.Tier; the
+    # column already exists in the DB (migration 20260616052555_AddFeatureFlagsAndJobTier).
+    tier: Mapped[Optional[str]] = mapped_column("tier", String(16), nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column("error_message", String, nullable=True)
     dispatched_at: Mapped[datetime] = mapped_column(
         "dispatched_at", DateTime(timezone=True), nullable=False, server_default=func.now()

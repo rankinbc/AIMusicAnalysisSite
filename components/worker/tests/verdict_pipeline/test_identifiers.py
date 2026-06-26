@@ -185,3 +185,44 @@ def test_budget_exceeded_stamps_notice_and_stops(install, monkeypatch):
 
     assert n == 0
     assert notices == ["tier_budget"]
+
+
+# ── P1.2: trace_sink captures the full LLM request + response ────────────────
+
+def test_trace_sink_captures_request_and_response(install, monkeypatch):
+    aid = uuid.uuid4()
+    install(_analysis(aid, _final_json()))
+    from app.llm import gateway
+    monkeypatch.setattr(gateway, "complete_sync",
+                        lambda **kw: SimpleNamespace(text=_FAKE_JSON, model="fake"))
+
+    sink: list = []
+    n = I.run_llm_identifiers_for_analysis(aid, tier="pro", user_id=None, trace_sink=sink)
+
+    assert n == 1 and len(sink) == 1
+    rec = sink[0]
+    assert rec["slug"] == "trance_arrangement"
+    assert rec["request"]["system"] and rec["request"]["user"]  # full input payload
+    assert rec["response"]["outcome"] == "ok"
+    assert rec["response"]["raw"] == _FAKE_JSON                  # full output payload
+    assert rec["response"]["parsed_verdicts"] == 1
+
+
+def test_trace_sink_records_budget_exceeded(install, monkeypatch):
+    aid = uuid.uuid4()
+    install(_analysis(aid, _final_json()))
+    from app.llm import gateway
+    from app.llm.gateway import LlmBudgetExceeded
+
+    def _raise(**_kw):
+        raise LlmBudgetExceeded("tier_budget", "over")
+
+    monkeypatch.setattr(gateway, "complete_sync", _raise)
+    import app.verdict_lib.degraded as D
+    monkeypatch.setattr(D, "write_degradation_notice", lambda *a, **k: None)
+
+    sink: list = []
+    I.run_llm_identifiers_for_analysis(aid, tier="pro", user_id=None, trace_sink=sink)
+
+    assert len(sink) == 1
+    assert sink[0]["response"]["outcome"] == "budget_exceeded"
