@@ -6,5 +6,8 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['node_modules', 'dist', 'playwright/**'],
     environment: 'node',
+    environmentMatchGlobs: [
+      ['src/features/listen-rack/**', 'jsdom'],
+    ],
   },
 });
