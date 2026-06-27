@@ -188,3 +188,30 @@ describe('moveToMarkdown', () => {
     expect(moveToMarkdown([], 'Aurora')).toContain('No moves committed yet');
   });
 });
+
+function fakeVerdict(over: Partial<VerdictDto> = {}): VerdictDto {
+  return {
+    id: 'v1', specialist: 'loudness', category: 'loudness', headline: 'Too loud',
+    severity: 'critical', confidence: 0.8, priorityScore: 70,
+    summary: '', body: '', whyItMatters: '', metricLine: '', chartType: null,
+    userState: { applied: false, dismissed: false },
+    fix: { dsp_chain: [{ type: 'limiter', params: { ceiling_db: -1 } }] },
+    ...over,
+  } as unknown as VerdictDto;
+}
+
+describe('Move.ops', () => {
+  it('carries the raw dsp_chain ops from the verdict fix', () => {
+    const m = verdictToMove(fakeVerdict());
+    expect(m.ops).toEqual([{ type: 'limiter', params: { ceiling_db: -1 } }]);
+  });
+
+  it('is an empty array when the verdict has no fix', () => {
+    const m = verdictToMove(fakeVerdict({ fix: null }));
+    expect(m.ops).toEqual([]);
+  });
+
+  it('is an empty array for rule-engine moves', () => {
+    expect(ruleFixToMove('Master bus: lower the ceiling a touch', 0).ops).toEqual([]);
+  });
+});

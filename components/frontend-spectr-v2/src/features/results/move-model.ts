@@ -75,6 +75,9 @@ export interface Move {
   /** The originating verdict id, when this Move came from a specialist. Null for
    *  rule-engine Moves (which have no server-side userState to toggle). */
   verdictId: string | null;
+  /** Raw solver DSP ops (`fix.dsp_chain`), structured — drives the Listen rack
+   *  apply. Empty for rule-engine moves and verdicts without a fix. */
+  ops: VerdictDspOp[];
 }
 
 export interface ImpactBand {
@@ -167,7 +170,8 @@ function evidenceType(chartType: string | null): MoveEvidence['type'] {
 
 /** AI specialist verdict → Move. */
 export function verdictToMove(v: VerdictDto): Move {
-  const steps = (v.fix?.dsp_chain ?? []).map(opToStep);
+  const ops = v.fix?.dsp_chain ?? [];
+  const steps = ops.map(opToStep);
   const hasParams = steps.length > 0;
   const scope = v.fix?.target?.name?.trim() || prettifyCategory(v.category);
   const directive =
@@ -197,6 +201,7 @@ export function verdictToMove(v: VerdictDto): Move {
     specialist: v.specialist,
     status: statusFromUserState(v.userState),
     verdictId: v.id,
+    ops,
   };
 }
 
@@ -231,6 +236,7 @@ export function ruleFixToMove(
     specialist: null,
     status: 'suggested',
     verdictId: null,
+    ops: [],
   };
 }
 
