@@ -42,6 +42,7 @@ import { ResultsTabs, type ResultsTabKey } from './ResultsTabs';
 import { FindingsTab } from './FindingsTab';
 import { faultCount } from './problems-helpers';
 import { SongHeader, type SongHeaderInputs } from './SongHeader';
+import { buildListenFixes, writeListenFixes } from '../listen-rack/listenFixes';
 import './redesign.css';
 import s from './ReportView.module.css';
 
@@ -176,31 +177,13 @@ export function ReportView({ results, songId, tab, onTabChange }: ReportViewProp
     URL.revokeObjectURL(url);
   }, [committed, trackName]);
 
-  // Listen handoff — persist the selected fixes for the Listen page to pick up.
-  // Producer side only; no DSP here.
+  // Listen handoff — persist the user's Added + applyable fixes for the Listen
+  // "Plan" tab. Only fixes whose dsp_chain maps to a rack module are written;
+  // prose fixes belong to the DAW game plan. Producer side only.
   useEffect(() => {
     if (!versionId) return;
-    const sel = moves.filter((m) => committedIds.has(m.id));
-    const handoff = {
-      versionId,
-      jobId,
-      selectedFixes: sel.map((m) => ({
-        fixId: m.id,
-        verdictId: m.verdictId,
-        label: m.title,
-        scope: m.scope,
-        specialist: m.specialist,
-        // The DSP ops the fix compiles to — what the Listen rack applies.
-        dsp: m.steps.map((st) => ({ type: st.where, detail: st.detail })),
-      })),
-      savedAt: new Date().toISOString(),
-    };
-    try {
-      sessionStorage.setItem(`coachMix:${versionId}`, JSON.stringify(handoff));
-    } catch {
-      /* ignore */
-    }
-  }, [committedIds, moves, versionId, jobId]);
+    writeListenFixes(versionId, buildListenFixes(moves, (id) => committedIds.has(id)));
+  }, [committedIds, moves, versionId]);
 
   // "Analysis complete" teaser modal — shown once per job.
   const seenKey = `analysisModalSeen:${jobId}`;
