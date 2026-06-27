@@ -110,18 +110,12 @@ Subdirs kept as-is: `identifiers/` (SOLVE sub-specs) · `ui-decision-layer-surfa
 
 ## ⚠️ Open housekeeping flags
 
-1. **Epic-5 status drift in `sprint-status.yaml` (UNRESOLVED — needs a verification pass).**
-   The `development_status` block lists every epic-5 story as `backlog`, but the file's own
-   DRIFT NOTE (2026-06-23) records that 5.1 / 5.2 / 5.3 / 5.5 / 5.9-AC1 work landed out of
-   sprint order via the product-fidelity merge (`6f55403`). Epic-5 has **no story files** in
-   `stories/` (only epics 1–2 do), so reconciling requires verifying each against code.
-   Deliberately left as a flag rather than guessing 10 statuses — offer a focused pass.
-2. **Checkbox rot across the detection/SOLVE cluster.** Most plans show 0 checked tasks even
+1. **Checkbox rot across the detection/SOLVE cluster.** Most plans show 0 checked tasks even
    where code shipped. Don't trust `[ ]` state in these files — reconcile the status header
    when touched (the SOLVE/identify cluster is now reconciled; results-redesign cluster is next).
-3. **Dated research/validation docs** (`*-2026-06-1*`) clutter the root. Once their decisions
+2. **Dated research/validation docs** (`*-2026-06-1*`) clutter the root. Once their decisions
    are absorbed into the PRD/architecture, archive them as consumed research.
-4. **Unowned shipped actors.** `structure_actor.py` belongs to archived
+3. **Unowned shipped actors.** `structure_actor.py` belongs to archived
    `2026-06-25_deferred-structure-detection.md` (done); `recap_actor.py` is Listen-v3
    Room-session lifecycle (no root PRP needed) — noted so they don't read as orphans.
 
@@ -137,6 +131,10 @@ Subdirs kept as-is: `identifiers/` (SOLVE sub-specs) · `ui-decision-layer-surfa
    refused` (Docker stack down). No code regression.
 4. **SOLVE / identify-capabilities / problem-persist archive candidates — RESOLVED.** All
    verified shipped and archived this review (see "Changes this review").
+5. **Epic-5 status drift — RESOLVED (code verification, 2026-06-27).** Verified all 10
+   Epic-5 stories against `components/`: 5-2/5-3/5-5/5-8/5-9 shipped → `done`; 5-1/5-4/5-6/5-7
+   partial, 5-10 not-started → the active "close out Epic 5" sprint. `sprint-status.yaml`
+   reconciled (epic-5 → in-progress, per-story gap notes inline).
 
 ---
 

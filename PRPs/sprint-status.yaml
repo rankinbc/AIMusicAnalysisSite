@@ -47,13 +47,13 @@
 # Build order: E1 -> E2 -> E3 -> E4 -> E5 -> E6 -> E7 -> E8 -> E9 -> E10.
 
 generated: 2026-06-12
-last_updated: 2026-06-23
+last_updated: 2026-06-27
 # story 2-10 transitioned: backlog → ready-for-dev → in-progress → review → done (2026-06-23; nightly BillingReconciliationService + webhook replay idempotency tests + currency/price drift detection; code-review: 4 patches [sentinel false-positive, PeriodicTimer startup run, subscription-drift tests, per-row error isolation], 154/154 BFF tests). Epic-2 COMPLETE — all 10 stories done.
 # story 2-8 transitioned: backlog → ready-for-dev (create-story workflow, 2026-06-23; usage page summary + HonestMathBanner + UsageMeter nav + BFF coach-pool/honest-math surfacing)
 # story 2-9 transitioned: backlog → ready-for-dev (create-story workflow, 2026-06-23; dunning DunningBanner + next_payment_attempt persistence + graceful degradation via existing 2.7 BlurLock + AR15 results-forever)
 project: Spectr
 # (reconciled 2026-06-23 to git truth: 2-4 d9b9128, 2-5 5e8b582, 2-6 0805950 all committed → done. Epic-2 done-line now at 2-6; next = 2-7.)
-# (DRIFT NOTE 2026-06-23: product-fidelity merge (6f55403) landed Epic-5 work out of sprint order — 5.1 (1557764), 5.2/5.3/5.5 (21889ac), 5.9 AC1 (6c933fd) + .als features. Epic-5 statuses NOT yet reconciled here — needs separate pass.)
+# (RECONCILED 2026-06-27 via code verification — supersedes the 2026-06-23 DRIFT NOTE: Epic-5 is 5/10 shipped. DONE: 5-2/5-3/5-5/5-8/5-9. PARTIAL: 5-1/5-4/5-6/5-7. NOT-STARTED: 5-10. epic-5 -> in-progress. The 5 unshipped stories are the "close out Epic 5" sprint scope; per-story gaps noted inline below. Next step: create-story for 5-4 -> 5-6 -> 5-1 -> 5-7 -> 5-10 in that order.)
 # (re-updated 2026-06-15: 1-6 → done after code review)
 # (re-updated 2026-06-15: 1-9 → ready-for-dev after create-story; epic 1 still in-progress)
 # (re-updated 2026-06-15: 2-2 → done → in-progress after code review — 30 patches + 3 decisions queued)
@@ -110,17 +110,17 @@ development_status:
   4-6-gdpr-export-and-account-deletion: backlog
   epic-4-retrospective: optional
 
-  epic-5: backlog
-  5-1-app-shell-and-library-fidelity-phase-b: backlog
-  5-2-results-restructure-verdicthero-and-tabs-phase-c-core: backlog
-  5-3-featuredverdictcard-and-coach-handoff: backlog
-  5-4-analysis-summary-tab-filters-and-specialist-roster: backlog
-  5-5-frequency-stem-clash-reference-and-arrangement-panels: backlog
-  5-6-als-project-panel-and-track-name-attribution: backlog
-  5-7-partial-failure-reporting-and-free-retry: backlog
-  5-8-song-detail-and-version-compare: backlog
-  5-9-upload-dialog-polish-club-check-and-playback-verify: backlog
-  5-10-product-a11y-keyboard-and-kitchen-sink: backlog
+  epic-5: in-progress  # reconciled 2026-06-27 vs code — 5/10 shipped out-of-order; 5 remaining = active sprint
+  5-1-app-shell-and-library-fidelity-phase-b: backlog  # PARTIAL — TopNav/VersionArc/CoverArt shipped; GAP: LibraryCard/Row fidelity + MiniPlayer
+  5-2-results-restructure-verdicthero-and-tabs-phase-c-core: done  # GradeHero + ResultsTabs (5 badged tabs, URL tab state)
+  5-3-featuredverdictcard-and-coach-handoff: done  # VerdictCard: persona/impact/confidence/FixRecipe/feedback
+  5-4-analysis-summary-tab-filters-and-specialist-roster: backlog  # PARTIAL — PipelineDial/PhaseList/CoachFilters/SpecialistTile shipped; GAP: verify UnlockBlock + sticky rail
+  5-5-frequency-stem-clash-reference-and-arrangement-panels: done  # Spectrum/Reference/Arrangement tabs
+  5-6-als-project-panel-and-track-name-attribution: backlog  # PARTIAL — ProjectTab renders .als; GAP: track-name attribution chips
+  5-7-partial-failure-reporting-and-free-retry: backlog  # PARTIAL — DegradationBanner + rerun hooks; GAP: free-retry entitlement-free dispatch (AR16) + .als subprocess isolation (AR33)
+  5-8-song-detail-and-version-compare: done  # song detail route + ProgressTimeline + CompareDialog
+  5-9-upload-dialog-polish-club-check-and-playback-verify: done  # UnifiedUploadDialog + StereoCard/ClubCheck + ResultsPlayer
+  5-10-product-a11y-keyboard-and-kitchen-sink: backlog  # NOT-STARTED — ⌘K only; GAP: ⌘U, /dev/kitchen-sink, axe-core CI, focus-ring lint, responsive stacking
   epic-5-retrospective: optional
 
   epic-6: backlog
