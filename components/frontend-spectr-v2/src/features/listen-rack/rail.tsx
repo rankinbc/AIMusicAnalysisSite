@@ -6,13 +6,13 @@
  *   coachReply    → real coach analysis feed (each item keeps an `apply` patch).
  *   People/Chat   → real-time presence + messages + grant-control.
  */
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 
 import {
   MOCK_COMMENTS, railTabsFor, type AccessDto, type ActorRef, type CommentDto, type ModeId,
 } from './access';
 import {
-  BG_COLORS, DIRECTORS, LASER_EFFECTS, LASER_PATTERNS, PLAN_ITEMS, REACTION_GROUPS,
+  BG_COLORS, DIRECTORS, LASER_EFFECTS, LASER_PATTERNS, REACTION_GROUPS,
   ROOM_LISTENERS, STAGES, type RackPatch, type ReactionFeedItem, type Track, type TrackNote, type VizState,
 } from './data';
 import { Coach } from '../../ui/Coach';
@@ -22,6 +22,8 @@ import type { CapabilitySet } from './capabilities';
 import { sameActor, type RoomControl } from './identity';
 import type { RackState } from './rackState';
 import { Avatar, HSlider, HueSlider, SelectChip, Switch } from './ui';
+import { readListenFixes, type ListenFix } from './listenFixes';
+import { useFixOverlay } from './useFixOverlay';
 
 // SYNC toggle shown in a console bay header — binds that module to the music
 function SyncTag({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
@@ -515,25 +517,60 @@ function NotesPanel({ track, position, activeNote, onNoteClick }: {
   );
 }
 
-// ── PLAN tab — actionable fixes from the analysis ──────────────────────────
-function PlanPanel({ rs, announce }: { rs: RackState; announce?: (text: string, title?: string) => void }) {
-  const [done, setDone] = useState<Record<string, boolean>>({});
+// ── PLAN tab — the user's Added fixes, each a checkbox that applies that one
+// fix to the live rack (recompute-from-baseline; uncheck to compare). ────────
+export function PlanPanel({ rs, versionId }: { rs: RackState; versionId?: string }) {
+  const fixes: ListenFix[] = useMemo(
+    () => (versionId ? readListenFixes(versionId) : []),
+    [versionId],
+  );
+  const { isApplied, toggle } = useFixOverlay({
+    versionId: versionId ?? '',
+    fixes,
+    applyRackMod: rs.applyRackMod,
+  });
+
+  if (fixes.length === 0) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <PLabel accent="var(--cyan)">Your plan · from the analysis</PLabel>
+        <div className="mono" style={{ fontSize: 10.5, color: 'var(--muted)', lineHeight: 1.5 }}>
+          Add fixes on the Results page to apply them here. Each one becomes a checkbox you can toggle to A/B against your track.
+        </div>
+      </div>
+    );
+  }
+
+  const sevColor = (sev: string) =>
+    sev === 'crit' ? 'var(--orange)' : sev === 'warn' ? 'var(--violet)' : 'var(--cyan)';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <PLabel accent="var(--cyan)">Your plan · from the analysis</PLabel>
-      <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>{PLAN_ITEMS.length} fixes ranked by impact · apply drives the rack</div>
-      {PLAN_ITEMS.map((p, i) => {
-        const d = done[p.id];
+      <PLabel accent="var(--cyan)">Your plan · {fixes.length} fixes</PLabel>
+      <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>
+        Check a fix to apply it to the rack — uncheck to compare.
+      </div>
+      {fixes.map((f) => {
+        const on = isApplied(f.fixId);
+        const c = sevColor(f.sev);
+        const modules = [...new Set(f.ops.map((o) => o.type))].join(' · ');
         return (
-          <div key={p.id} style={{ padding: 12, borderRadius: 9, background: 'rgba(255,255,255,0.02)', border: `1px solid ${cssVar(p.color)}33`, borderLeft: `3px solid ${p.color}` }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="mono" style={{ fontSize: 9, fontWeight: 800, color: p.color }}>{String(i + 1).padStart(2, '0')}</span>
-              <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.12em', color: p.color, fontWeight: 700 }}>{p.tag}</span>
+          <label
+            key={f.fixId}
+            style={{ display: 'flex', gap: 10, padding: 12, borderRadius: 9, cursor: 'pointer', background: on ? 'rgba(0,229,176,0.05)' : 'rgba(255,255,255,0.02)', border: `1px solid ${cssVar(c)}33`, borderLeft: `3px solid ${c}` }}
+          >
+            <input
+              type="checkbox"
+              checked={on}
+              onChange={() => toggle(f.fixId)}
+              style={{ marginTop: 2, accentColor: 'var(--cyan)' }}
+            />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {f.scope && <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.12em', color: c, fontWeight: 700 }}>{f.scope.toUpperCase()}</div>}
+              <div style={{ fontSize: 12.5, fontWeight: 600, marginTop: 2, lineHeight: 1.3 }}>{f.title}</div>
+              {modules && <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)', marginTop: 4 }}>{modules}</div>}
             </div>
-            <div style={{ fontSize: 12.5, fontWeight: 600, marginTop: 4, lineHeight: 1.3 }}>{p.title}</div>
-            <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)', marginTop: 4 }}>{p.detail}</div>
-            <button type="button" onClick={() => { rs.applyCoach(p.apply); setDone((s) => ({ ...s, [p.id]: true })); if (announce) announce(`Applied — ${p.fix}`); }} className="btn sm" style={{ marginTop: 10, width: '100%', justifyContent: 'center', color: d ? 'var(--green)' : 'var(--cyan)', borderColor: d ? 'rgba(52,211,153,0.4)' : 'rgba(0,229,176,0.4)' }}>{d ? '✓ Applied' : 'Apply fix'}</button>
-          </div>
+          </label>
         );
       })}
     </div>
@@ -589,7 +626,7 @@ const TAB_LABELS: Record<string, string> = {
   coach: 'Coach', plan: 'Plan', comments: 'Comments', people: 'People', chat: 'Chat', stats: 'Stats', notes: 'Notes',
 };
 
-export function RightRail({ mode, access, cap, rs, track, position, activeNote, onNoteClick, onSeek, onReact, feed, announce, myStatus, roomControl, onGrant }: {
+export function RightRail({ mode, access, cap, rs, track, position, activeNote, onNoteClick, onSeek, onReact, feed, announce, myStatus, roomControl, onGrant, versionId }: {
   mode: ModeId;
   access: AccessDto;
   cap: CapabilitySet;
@@ -605,6 +642,7 @@ export function RightRail({ mode, access, cap, rs, track, position, activeNote, 
   myStatus: string;
   roomControl: RoomControl;
   onGrant: (scope: 'rack' | 'visuals', actor: ActorRef | null) => void;
+  versionId?: string;
 }) {
   const tabs = railTabsFor(mode, access);
   const [tab, setTab] = useState(tabs[0]);
@@ -622,7 +660,7 @@ export function RightRail({ mode, access, cap, rs, track, position, activeNote, 
       </div>
       <div style={{ overflow: 'auto', flex: 1, paddingRight: 2 }}>
         {active === 'coach' && <CoachPanel rs={rs} announce={announce} />}
-        {active === 'plan' && <PlanPanel rs={rs} announce={announce} />}
+        {active === 'plan' && <PlanPanel rs={rs} {...(versionId ? { versionId } : {})} />}
         {active === 'comments' && <CommentsPanel access={access} onSeek={onSeek} />}
         {active === 'people' && <PeoplePanel myStatus={myStatus} onReact={onReact} cap={cap} roomControl={roomControl} onGrant={onGrant} />}
         {active === 'chat' && <ChatPanel feed={feed} onReact={onReact} />}

@@ -18,6 +18,7 @@ function makeMove(over: Partial<Move> = {}): Move {
     directive: 'Lower the limiter ceiling to -3 dB and land at -14 LUFS.',
     directional: 'Bring the overall level down toward streaming target.',
     steps: [{ where: 'limiter', detail: 'ceiling_db=-3' }],
+    ops: [{ type: 'limiter', params: { ceiling_db: -3 } }],
     hasParams: true,
     why: 'You are 3 dB hotter than the platform target.',
     evidence: { type: 'meter', metric: 'Integrated: -11.2 LUFS', chartType: 'loudness' },
