@@ -3,8 +3,8 @@
 Living index of every PRP and what state it's in. Companion to `README.md` (which
 explains the *system*); this file tracks the *contents*.
 
-**Last reviewed:** 2026-06-26 (in-progress cluster verified against code)
-**Snapshot:** 66 archived · 18 sprint stories · 34 live root docs
+**Last reviewed:** 2026-06-27 (rule-engine cluster re-verified against code; teach-mode archived)
+**Snapshot:** 68 archived · 18 sprint stories · 34 live root docs
 
 Buckets:
 - **REFERENCE** — north-star / contract docs that stay at root permanently
@@ -14,12 +14,12 @@ Buckets:
 
 ---
 
-## 📦 Already archived — `archive/` (66 files)
+## 📦 Already archived — `archive/` (68 files)
 
 The v1 build, all 13 compliance gaps, verdict pipeline, stems/Ableton integration,
 song library, the full Listen DSP-rack engine (phases 1–5), Listen-v3
-spine/rooms/sharing, and the recent rule-engine / schema-gate work. Correctly
-maintained — no action.
+spine/rooms/sharing, the recent rule-engine / schema-gate work, and **teach-mode
+coach** (`2026-06-27_teach-mode-coach.md`). Correctly maintained — no action.
 
 ---
 
@@ -50,7 +50,7 @@ Borderline — kept as REFERENCE for now, not archived:
 ### Genuinely in progress (code partial)
 | File | Real status |
 |---|---|
-| `problem-engine-mixcoach-rules.md` | Engine LIVE on every analysis, but only ~2 of 43 planned IDENTIFY rules implemented. Follow-on: finish rules + retire legacy `@rule` path. |
+| `problem-engine-mixcoach-rules.md` | Engine LIVE on every analysis; **~39 of ~43 IDENTIFY rules implemented** — 30 `@single` (Tier A×18, B×4, S×2, P×4) + 9 `@composite` in `verdict_lib/`, verified 2026-06-27. (Prior "~2 of 43" was stale — checkboxes lied; code shipped.) Remaining: a few datapoint-gated rules + retire the legacy `@rule` path. |
 | `reference-profiles-backend.md` | Persistence fields exist (`ReferenceSet.profile_json/fingerprint`, `ReferenceTrack.analysis_status`); aggregation + endpoints incomplete. |
 | `listen-v3-bookmark-ui.md` | Backend done (`BookmarkEndpoints.cs`); frontend **not started** — no `BookmarksPanel.tsx` yet. |
 
@@ -105,6 +105,19 @@ All other stories are **done**: Epic 1 (1-1→1-6, 1-8, 1-9) · Epic 2 (2-1, 2-2
    `Procfile` drains all 4 queues; `docker/docker-compose.prod.yml` (W1/W2 split)
    exists; enforcement tests `test_actor_queues.py` + `test_queue_routing.py` exist.
    CLAUDE.md is accurate. **Action: flip the story file header `ready-for-dev` → `done`.**
+
+2. **Problem-engine rule count drift — RESOLVED (code wins).** The 2026-06-26 index
+   claimed "~2 of 43" IDENTIFY rules; a 2026-06-27 grep of `verdict_lib/` found
+   **30 `@single` + 9 `@composite` = ~39 rules** registered (Tier A/B/S/P + composites).
+   The revamp is essentially complete, not barely started. In-progress table corrected.
+
+3. **"Analysis seems broken" — RESOLVED (infra, not code).** 2026-06-27: analysis
+   suite 159/159 green, worker rule/SOLVE logic 187 green; the only failures were
+   `localhost:5432 connection refused` (Docker stack down). Bringing up
+   `docker compose -f docker/docker-compose.yml up -d postgres redis` made the DB
+   tests pass. No code regression. `ai-analysis-v2` == `master` == `origin/master`
+   (`ef816d9`, byte-identical); every other branch is 0 ahead — all analysis work is
+   already on the tip, nothing stranded on a feature branch.
 
 ## ⚠️ Open housekeeping flags
 
