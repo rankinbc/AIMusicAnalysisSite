@@ -3,7 +3,7 @@
 // every toggle (composeRack), so toggling is clean and fixes stack (two EQ fixes
 // land on different bands; unchecking one keeps the other). Applied ids persist
 // to localStorage per version.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { composeRack } from './fixToRackPatch';
 import { readAppliedIds, writeAppliedIds, type ListenFix } from './listenFixes';
@@ -17,10 +17,16 @@ interface UseFixOverlayArgs {
 
 export function useFixOverlay({ versionId, fixes, applyRackMod }: UseFixOverlayArgs) {
   const [appliedIds, setAppliedIds] = useState<string[]>(() => readAppliedIds(versionId));
+  const appliedRef = useRef(appliedIds);
+  useEffect(() => {
+    appliedRef.current = appliedIds;
+  }, [appliedIds]);
 
   // Re-read when switching versions.
   useEffect(() => {
-    setAppliedIds(readAppliedIds(versionId));
+    const restored = readAppliedIds(versionId);
+    appliedRef.current = restored;
+    setAppliedIds(restored);
   }, [versionId]);
 
   const byId = useMemo(() => new Map(fixes.map((f) => [f.fixId, f])), [fixes]);
@@ -31,12 +37,12 @@ export function useFixOverlay({ versionId, fixes, applyRackMod }: UseFixOverlayA
   }, [byId, applyRackMod]);
 
   const toggle = useCallback((id: string) => {
-    setAppliedIds((prev) => {
-      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
-      writeAppliedIds(versionId, next);
-      recompute(next);
-      return next;
-    });
+    const prev = appliedRef.current;
+    const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+    appliedRef.current = next;
+    setAppliedIds(next);
+    writeAppliedIds(versionId, next);
+    recompute(next);
   }, [versionId, recompute]);
 
   const isApplied = useCallback((id: string) => appliedIds.includes(id), [appliedIds]);
