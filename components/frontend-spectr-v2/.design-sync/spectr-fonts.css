@@ -1,0 +1,20 @@
+/* design-sync font source. The app's global.css declares these @font-face
+   rules with Vite `public/`-root urls (/fonts/*.woff2) that the converter
+   can't resolve at scrape time, so they ship dangling. This file re-declares
+   the same families with paths the converter CAN resolve (relative to this
+   file → the repo's public/fonts/), so it copies the woff2 into the bundle's
+   fonts/ and rewrites the url to ./<file>. Variable fonts, single src each. */
+@font-face {
+  font-family: 'Syne';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400 800;
+  src: url('../public/fonts/syne-variable-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 800;
+  src: url('../public/fonts/jetbrains-mono-variable-latin.woff2') format('woff2');
+}

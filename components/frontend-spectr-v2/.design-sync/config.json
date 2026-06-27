@@ -1,0 +1,17 @@
+{
+  "pkg": "spectr-frontend-v2",
+  "globalName": "SpectrUI",
+  "projectId": "9b79fb38-f75a-4515-b6eb-e0e85ab55f9b",
+  "shape": "package",
+  "srcDir": "src/ui",
+  "tsconfig": "tsconfig.app.json",
+  "cssEntry": "src/styles/global.css",
+  "tokensPkg": "spectr-frontend-v2",
+  "tokensGlob": "src/styles/tokens.css",
+  "extraFonts": ".design-sync/spectr-fonts.css",
+  "readmeHeader": ".design-sync/conventions.md",
+  "overrides": {
+    "SongVisualPicker": { "cardMode": "single", "primaryStory": "Picker", "viewport": "460x760" },
+    "Pill": { "cardMode": "column" }
+  }
+}
