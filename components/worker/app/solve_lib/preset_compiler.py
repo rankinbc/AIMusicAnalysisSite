@@ -15,6 +15,9 @@ not diagnose or invent fixes. Stages (PRPs/identifiers/preset-compiler.md):
 Returns ``{"chain", "leftover_advice", "change_log"}``. Nothing is silently
 dropped — every unmappable move comes back as advice.
 """
+# NOTE: the frontend mirrors this op→rack-module mapping in
+# components/frontend-spectr-v2/src/features/listen-rack/fixToRackPatch.ts
+# for per-fix apply. Keep the two mappings in sync.
 from __future__ import annotations
 
 from typing import Any
