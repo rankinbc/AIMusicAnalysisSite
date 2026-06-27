@@ -1,6 +1,6 @@
 # Story 2.4: Server-Side Entitlements & Metering
 
-Status: review
+Status: done
 
 ## Story
 

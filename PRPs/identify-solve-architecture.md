@@ -11,8 +11,12 @@
 > philosophy) and `PRPs/detection-prescription-inventory.md` (data-vs-consumer inventory). Memory:
 > *"the baseline burn-down IS the two-engine prescription rewrite."*
 >
-> Status: **LOCKED — under active implementation.** This is the architecture the team's build
-> brief (`PRPs/problem-engine-build-brief.md`) executes against; see "Build status" below.
+> Status: **BUILT — reference architecture.** The IDENTIFY tier shipped (rule_engine
+> `@single`/`@composite` in `verdict_lib/`, the 8 Problem columns on `Verdict.cs`, worker
+> mappers + BFF DTO) and the SOLVE tier shipped (`worker/app/solve_lib/` + `fix_rack_actor.py`
+> + `FixRackEndpoints.cs` + `FixRackPanel.tsx`). Keep this doc as the canonical reference for
+> the two-tier design; the build brief it drove (`PRPs/problem-engine-build-brief.md`) is now
+> consumed. Remaining follow-on: retire the legacy flat `@rule` registry.
 > Branch: `ai-analysis-v2`. Date: 2026-06-25 (reconciled same day).
 
 ---

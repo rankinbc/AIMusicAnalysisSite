@@ -1,6 +1,6 @@
 # Story 2.5: Paid Jobs Never Starve
 
-Status: ready-for-dev
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
