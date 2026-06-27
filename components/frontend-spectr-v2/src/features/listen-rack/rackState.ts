@@ -40,6 +40,7 @@ export interface RackState {
   setEqBands: (bands: EqBand[]) => void;
   reset: () => void;
   applyCoach: (apply: RackPatch) => void;
+  applyRackMod: (mod: Record<string, ModuleState>) => void;
   activeCount: number;
   presets: RackPreset[];
   savePreset: (by: string) => void;
@@ -102,6 +103,10 @@ export function useRackState(graph?: RackGraphBindings | null): RackState {
       return next;
     });
   }, [graph]);
+  const applyRackMod = useCallback((nextMod: Record<string, ModuleState>) => {
+    if (graph) pushFullRack(graph, nextMod, order, masterBypass);
+    setMod(nextMod);
+  }, [graph, order, masterBypass]);
   const savePreset = useCallback((by: string) => setPresets((p) => [...p, {
     id: Math.random().toString(36).slice(2),
     name: `Preset ${p.length + 1}`,
@@ -120,7 +125,7 @@ export function useRackState(graph?: RackGraphBindings | null): RackState {
   return {
     mod, order, setOrder: reorder, masterBypass, setMasterBypass: setMasterBypassBound,
     selected, setSelected, showBind, setShowBind,
-    setParam, setEnabled, setEqBands, reset, applyCoach, activeCount, presets, savePreset, recallPreset,
+    setParam, setEnabled, setEqBands, reset, applyCoach, applyRackMod, activeCount, presets, savePreset, recallPreset,
     graph: graph ?? null,
   };
 }
