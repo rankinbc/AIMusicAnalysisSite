@@ -230,6 +230,11 @@
   padding: var(--space-4) var(--space-5) 0;
 }
 
+/* Worker-offline notice slot (between topnav and main); mirrors .dunningSlot. */
+.workerHealthSlot {
+  padding: var(--space-4) var(--space-5) 0;
+}
+
 .loading {
   padding: var(--space-6);
   color: var(--muted);

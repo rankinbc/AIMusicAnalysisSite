@@ -11,7 +11,9 @@ describe('isResultsTabKey', () => {
   });
 
   it('rejects unknown / non-string values', () => {
-    expect(isResultsTabKey('coach')).toBe(false);
+    expect(isResultsTabKey('actions')).toBe(false); // old key, dissolved into coach
+    expect(isResultsTabKey('analysis')).toBe(false); // old key, folded into debug
+    expect(isResultsTabKey('nope')).toBe(false);
     expect(isResultsTabKey('')).toBe(false);
     expect(isResultsTabKey(undefined)).toBe(false);
     expect(isResultsTabKey(null)).toBe(false);

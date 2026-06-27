@@ -17,20 +17,32 @@ interface Props {
   versionId: string | null;
   /** Number of committed moves — gates idle vs empty. */
   committedCount: number;
+  /** Controlled mode (redesign): when provided, the panel reflects this
+   *  generation flag and delegates the trigger to `onGenerate` — so the coach
+   *  header's "Generate Coach Mix" button and this sidebar panel share one
+   *  flow. Omit both for the original self-contained behavior. */
+  requested?: boolean;
+  onGenerate?: () => void;
 }
 
-export function FixRackPanel({ jobId, versionId, committedCount }: Props) {
+export function FixRackPanel({ jobId, versionId, committedCount, requested, onGenerate }: Props) {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [requested, setRequested] = useState(false);
+  const [internalRequested, setInternalRequested] = useState(false);
   const gen = useGenerateFixRack(jobId);
-  const fixRack = useFixRack(jobId, requested);
+  const controlled = requested !== undefined;
+  const req = controlled ? requested : internalRequested;
+  const fixRack = useFixRack(jobId, req);
   const rack = fixRack.data ?? null;
   const enabled = useMemo(() => (rack ? enabledModuleIds(rack.chain) : []), [rack]);
 
   const generate = () => {
+    if (controlled) {
+      onGenerate?.();
+      return;
+    }
     void qc.invalidateQueries({ queryKey: ['fix-rack', jobId] });
-    setRequested(true);
+    setInternalRequested(true);
     gen.mutate();
   };
   const openInListen = () => {
@@ -125,7 +137,7 @@ export function FixRackPanel({ jobId, versionId, committedCount }: Props) {
   }
 
   // ── generating ──
-  if (requested) {
+  if (req) {
     return (
       <div className={`card ${s.panel} ${s.generating}`}>
         <span className={`${s.icon} ${s.busy}`}>◴</span>

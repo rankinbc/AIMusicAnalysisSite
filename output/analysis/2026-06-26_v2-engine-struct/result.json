@@ -1,0 +1,1498 @@
+{
+  "file_path": "data/audio/upload/6379b20b-c771-45e7-9af3-2228a266d094/source.flac",
+  "analysis_schema_version": "2.1.0",
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Universal Mix Analysis",
+      "status": "ok",
+      "data": {
+        "lufs": -32.765085853253176,
+        "rms": 0.004085472784936428,
+        "bpm": 112.34714673913044,
+        "duration_seconds": 561.7021315192744,
+        "bands": {
+          "sub_bass": -74.24713134765625,
+          "bass": -76.37014770507812,
+          "low_mid": -76.49137115478516,
+          "mid": -76.61036682128906,
+          "upper_mid": -76.26416778564453,
+          "presence": -75.91004943847656,
+          "air": -76.58792877197266
+        },
+        "stereo_correlation": 0.9999943232256989,
+        "stereo_width": 1.3766345546173397e-05,
+        "channel_balance": {
+          "l_rms_db": -47.7751494574249,
+          "r_rms_db": -47.7751494574249,
+          "balance_db": 0.0
+        },
+        "true_peak_db": -17.279395997020163,
+        "peak_dbfs": -17.621468751374735,
+        "clipping_detected": false,
+        "clipped_sample_count": 0,
+        "detected_key": "C",
+        "key_detection_confidence": 0.5530033706066295,
+        "key_estimate": {
+          "key": "C",
+          "mode": "major",
+          "confidence": 0.5530033706066295,
+          "second_key": "F",
+          "second_mode": "major",
+          "profile_corrs": [
+            0.3109266559336078,
+            0.3773692468987675,
+            0.005724229483611131,
+            -0.21285533336674095,
+            -0.23582966480286713,
+            0.38656380136145024,
+            -0.26314339692862454,
+            -0.16678225730279692,
+            0.3572726886629912,
+            0.1588426893894509,
+            -0.07947421456994846,
+            -0.6386144447589008,
+            0.14478269678958905,
+            0.2828739946908925,
+            0.3535911330640159,
+            -0.4732121266148287,
+            -0.3427603168516203,
+            0.5530033706066295,
+            0.15197611429263966,
+            -0.23467065486900143,
+            -0.3530703330076282,
+            0.3615002093465679,
+            0.05663228544618728,
+            -0.5006463728934434
+          ]
+        },
+        "mono_compatibility": 0.9999989573720857,
+        "low_energy": 0.13223028182983398,
+        "sub_30_energy": 0.044515930116176605,
+        "crest_factor": 30.153682686081027,
+        "spectral_centroid_hz": 10457.246237923724,
+        "spectral_contrast": 12.522539004192915,
+        "spectral_flatness": 0.3642873764038086,
+        "loudness_range_lu": 2.083163406614524,
+        "short_term_max_lufs": -32.971192064835336,
+        "momentary_max_lufs": -29.79602978219323,
+        "loudness_timeline": {
+          "momentary": {
+            "t": [
+              273.1689795918367,
+              275.04,
+              276.91102040816327,
+              278.7820408163265,
+              280.6530612244898,
+              284.3951020408163,
+              288.13714285714286,
+              291.8791836734694,
+              293.75020408163266,
+              295.6212244897959,
+              297.4922448979592,
+              301.2342857142857,
+              304.97632653061225,
+              308.71836734693875,
+              310.58938775510205,
+              312.4604081632653,
+              314.33142857142855,
+              316.20244897959185,
+              318.0734693877551,
+              321.81551020408165,
+              325.55755102040814,
+              437.8187755102041,
+              439.68979591836734,
+              441.5608163265306,
+              443.4318367346939,
+              445.30285714285714,
+              447.1738775510204,
+              449.0448979591837,
+              450.91591836734693,
+              454.6579591836735,
+              456.52897959183673,
+              458.4,
+              460.2710204081633,
+              462.1420408163265,
+              464.0130612244898,
+              465.8840816326531,
+              467.7551020408163,
+              471.4971428571429,
+              475.23918367346937
+            ],
+            "lufs": [
+              -31.801974150364483,
+              -32.6082979060726,
+              -43.21915973500702,
+              -43.26084730355327,
+              -31.062343949286937,
+              -34.76244301107874,
+              -32.536307843276084,
+              -34.736357643002925,
+              -31.962241159915777,
+              -34.21848249924141,
+              -33.70542517988358,
+              -31.28266309848544,
+              -32.535462302762284,
+              -32.75731123505586,
+              -32.003424729114116,
+              -31.9335985279528,
+              -39.310367799211036,
+              -38.644767524116574,
+              -31.062306871780546,
+              -35.169074607134135,
+              -32.5404894958988,
+              -34.43175200956617,
+              -31.832711112138618,
+              -30.77307748125015,
+              -33.14735709418758,
+              -32.69196038645205,
+              -32.127923088621145,
+              -45.12078531403934,
+              -31.144519851445242,
+              -40.05727076560568,
+              -33.06236841073983,
+              -33.56645829421406,
+              -29.79602978219323,
+              -32.96885553310166,
+              -40.039256728786874,
+              -33.271450590160335,
+              -32.027420355932165,
+              -32.209530504708866,
+              -35.530050532784905
+            ]
+          },
+          "short_term": {
+            "t": [
+              271.9026530612245,
+              275.62734693877553,
+              279.3520408163265,
+              283.07673469387754,
+              286.8014285714286,
+              290.5261224489796,
+              294.25081632653064,
+              297.9755102040816,
+              301.70020408163265,
+              305.4248979591837,
+              309.1495918367347,
+              312.8742857142857,
+              316.5989795918367,
+              320.32367346938776,
+              324.0483673469388,
+              435.7891836734694,
+              439.5138775510204,
+              443.23857142857145,
+              446.9632653061224,
+              450.68795918367346,
+              454.4126530612245,
+              458.1373469387755,
+              461.86204081632656,
+              465.58673469387753,
+              469.31142857142856,
+              473.0361224489796
+            ],
+            "lufs": [
+              -35.1700914844021,
+              -34.644890023897084,
+              -34.04895594396905,
+              -34.04895790113898,
+              -34.048920441478586,
+              -35.00462954507654,
+              -34.777395903726116,
+              -35.308237229237946,
+              -35.108121701021226,
+              -34.75298693255584,
+              -34.9869132559324,
+              -35.05685638439986,
+              -34.32351495626688,
+              -34.048957185742886,
+              -34.04892112027086,
+              -33.08371955631823,
+              -32.971194329355285,
+              -32.971192064835336,
+              -34.19915545915516,
+              -33.56619132791796,
+              -33.75557804465844,
+              -33.904491866006374,
+              -33.11728341932266,
+              -33.50793241838642,
+              -33.60365980672141,
+              -33.5482638915827
+            ]
+          }
+        },
+        "transients": {
+          "avg_transient_strength": 0.28786730766296387,
+          "transient_count": 209,
+          "transients_per_second": 0.37208333077658673
+        },
+        "structure": {
+          "available": true,
+          "detection_method": "allin1-docker",
+          "bpm": 63.0,
+          "beats": [
+            322.44,
+            323.41,
+            324.46,
+            325.41,
+            326.37,
+            327.36,
+            328.27,
+            329.23,
+            330.19,
+            331.2,
+            332.13,
+            333.08,
+            334.08,
+            335.04,
+            336.0,
+            336.96,
+            337.87,
+            338.83,
+            339.84,
+            340.75,
+            341.76,
+            342.68,
+            343.63,
+            344.61,
+            345.6,
+            346.53,
+            347.51,
+            348.48,
+            349.44,
+            350.4,
+            351.36,
+            352.32,
+            353.28,
+            354.24,
+            355.2,
+            356.16,
+            357.12,
+            358.03,
+            358.99,
+            359.98,
+            360.91,
+            361.87,
+            362.86,
+            363.79,
+            364.78,
+            365.75,
+            366.69,
+            367.65,
+            368.62,
+            369.57,
+            370.56,
+            371.47,
+            372.48,
+            373.39,
+            374.35,
+            375.31,
+            376.27,
+            377.23,
+            378.19,
+            379.2,
+            380.16,
+            381.09,
+            382.08,
+            382.99,
+            383.95,
+            384.92,
+            385.87,
+            386.83,
+            387.84,
+            388.75,
+            389.76,
+            390.67,
+            391.68,
+            392.64,
+            393.58,
+            394.56,
+            395.52,
+            396.43,
+            397.43,
+            398.4,
+            399.32,
+            400.31,
+            401.28,
+            402.19,
+            403.17,
+            404.12,
+            405.1,
+            406.03,
+            406.99,
+            408.0,
+            408.91,
+            409.89,
+            410.88,
+            411.84,
+            412.8,
+            413.75,
+            414.67,
+            415.63,
+            416.59,
+            417.6,
+            418.55,
+            419.51,
+            420.47,
+            421.44,
+            422.36,
+            423.36,
+            424.27,
+            425.27,
+            426.24,
+            427.16,
+            428.15,
+            429.11,
+            430.03,
+            431.01,
+            431.99,
+            432.91,
+            433.92,
+            434.83,
+            435.63,
+            436.43,
+            437.22,
+            438.12,
+            438.94,
+            439.83,
+            440.63,
+            441.52,
+            442.35,
+            443.24,
+            444.05,
+            444.93,
+            445.75,
+            446.64,
+            447.44,
+            448.33,
+            449.16,
+            450.04,
+            450.84,
+            451.74,
+            452.56,
+            453.45,
+            454.25,
+            455.14,
+            455.97,
+            456.85,
+            457.65,
+            458.55,
+            459.37,
+            460.26,
+            461.06,
+            461.95,
+            462.78,
+            463.66,
+            464.46,
+            465.35,
+            466.18,
+            467.07
+          ],
+          "downbeats": [
+            323.41,
+            327.36,
+            331.2,
+            335.04,
+            338.83,
+            342.68,
+            346.53,
+            350.4,
+            354.24,
+            358.03,
+            361.87,
+            365.75,
+            369.57,
+            373.39,
+            377.23,
+            381.09,
+            384.92,
+            388.75,
+            392.64,
+            396.43,
+            400.31,
+            404.12,
+            408.0,
+            411.84,
+            415.63,
+            419.51,
+            423.36,
+            427.16,
+            431.01,
+            434.83,
+            438.12,
+            441.52,
+            444.93,
+            448.33,
+            451.74,
+            455.14,
+            458.55,
+            461.95,
+            465.35
+          ],
+          "segments": [
+            {
+              "label": "end",
+              "start": 0.0,
+              "end": 20.64
+            },
+            {
+              "label": "end",
+              "start": 20.64,
+              "end": 41.28
+            },
+            {
+              "label": "end",
+              "start": 41.28,
+              "end": 81.46
+            },
+            {
+              "label": "end",
+              "start": 81.46,
+              "end": 123.31
+            },
+            {
+              "label": "end",
+              "start": 123.31,
+              "end": 138.17
+            },
+            {
+              "label": "end",
+              "start": 138.17,
+              "end": 138.18
+            },
+            {
+              "label": "end",
+              "start": 138.18,
+              "end": 156.04
+            },
+            {
+              "label": "end",
+              "start": 156.04,
+              "end": 179.0
+            },
+            {
+              "label": "end",
+              "start": 179.0,
+              "end": 206.96
+            },
+            {
+              "label": "end",
+              "start": 206.96,
+              "end": 234.36
+            },
+            {
+              "label": "end",
+              "start": 234.36,
+              "end": 272.85
+            },
+            {
+              "label": "intro",
+              "start": 272.85,
+              "end": 309.85
+            },
+            {
+              "label": "intro",
+              "start": 309.85,
+              "end": 327.15
+            },
+            {
+              "label": "end",
+              "start": 327.15,
+              "end": 362.66
+            },
+            {
+              "label": "end",
+              "start": 362.66,
+              "end": 396.59
+            },
+            {
+              "label": "end",
+              "start": 396.59,
+              "end": 435.96
+            },
+            {
+              "label": "intro",
+              "start": 435.96,
+              "end": 449.77
+            },
+            {
+              "label": "intro",
+              "start": 449.77,
+              "end": 463.4
+            },
+            {
+              "label": "end",
+              "start": 463.4,
+              "end": 513.86
+            },
+            {
+              "label": "end",
+              "start": 513.86,
+              "end": 536.44
+            },
+            {
+              "label": "end",
+              "start": 536.44,
+              "end": 561.7
+            },
+            {
+              "label": "end",
+              "start": 561.7,
+              "end": 561.71
+            }
+          ]
+        }
+      },
+      "error": null
+    },
+    {
+      "phase": 2,
+      "name": "Genre Detection",
+      "status": "ok",
+      "data": {
+        "genre": "other",
+        "confidence": 0.5,
+        "bpm": 112.34714673913044
+      },
+      "error": null
+    },
+    {
+      "phase": 3,
+      "name": "Genre-Specific Scoring",
+      "status": "ok",
+      "data": {
+        "genre": "other",
+        "total_score": 49.409741785413644,
+        "sub_scores": {
+          "frequency_balance": 98.8183822631836,
+          "stereo_width": 0.0011013076436938718
+        },
+        "notes": []
+      },
+      "error": null
+    },
+    {
+      "phase": 4,
+      "name": "Stem Separation & Clash",
+      "status": "ok",
+      "data": {
+        "stems": {},
+        "band_energy": {
+          "sub_bass": -17.255117170442784,
+          "bass": -13.929393356377187,
+          "low_mid": -11.239927686305254,
+          "mid": -15.522284036357972,
+          "high_mid": -13.399290337788106,
+          "presence": -13.654598401600456,
+          "air": -22.00488972905432
+        },
+        "clashes": [
+          {
+            "stems": "low-end buildup",
+            "frequency_range": "sub-bass / bass (20\u2013200 Hz)",
+            "severity": "high"
+          },
+          {
+            "stems": "low-mid congestion",
+            "frequency_range": "low-mid (200\u2013500 Hz)",
+            "severity": "high"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "phase": 5,
+      "name": "Reference Comparison",
+      "status": "ok",
+      "data": {
+        "status": "skipped",
+        "deltas": {},
+        "genre_context": {
+          "genre": "other",
+          "preset_name": "other",
+          "checks": {}
+        }
+      },
+      "error": null
+    },
+    {
+      "phase": 6,
+      "name": "Gap Analysis",
+      "status": "ok",
+      "data": {
+        "genre": "other",
+        "percentile": 50.0,
+        "gaps": {}
+      },
+      "error": null
+    },
+    {
+      "phase": 7,
+      "name": "Arrangement Advice",
+      "status": "ok",
+      "data": {
+        "overall_score": 44.5,
+        "grade": "D",
+        "total_duration": 561.71,
+        "component_scores": {
+          "structure": 50.0,
+          "length": 52.7,
+          "eight_bar": 0,
+          "energy_contrast": 50,
+          "flow": 60
+        },
+        "structure_score": 50.0,
+        "length_score": 52.7,
+        "eight_bar_score": 0,
+        "energy_contrast_score": 50,
+        "flow_score": 60,
+        "section_scores": [
+          {
+            "section_type": "outro",
+            "start_time": 0.0,
+            "end_time": 20.64,
+            "duration": 20.64,
+            "bars": 10,
+            "score": 40,
+            "time_range": "0:00-0:20",
+            "eight_bar_compliant": false,
+            "checks": [
+              {
+                "name": "Length OK",
+                "passed": false
+              },
+              {
+                "name": "8-bar rule",
+                "passed": false
+              }
+            ],
+            "issues": [
+              "Too short (10 vs min 16)"
+            ]
+          },
+          {
+            "section_type": "outro",
+            "start_time": 20.64,
+            "end_time": 41.28,
+            "duration": 20.64,
+            "bars": 10,
+            "score": 40,
+            "time_range": "0:20-0:41",
+            "eight_bar_compliant": false,
+            "checks": [
+              {
+                "name": "Length OK",
+                "passed": false
+              },
+              {
+                "name": "8-bar rule",
+                "passed": false
+              }
+            ],
+            "issues": [
+              "Too short (10 vs min 16)"
+            ]
+          },
+          {
+            "section_type": "outro",
+            "start_time": 41.28,
+            "end_time": 81.46,
+            "duration": 40.18,
+            "bars": 19,
+            "score": 87.8,
+            "time_range": "0:41-1:21",
+            "eight_bar_compliant": false,
+            "checks": [
+              {
+                "name": "Length OK",
+                "passed": true
+              },
+              {
+                "name": "8-bar rule",
+                "passed": false
+              }
+            ],
+            "issues": []
+          },
+          {
+            "section_type": "outro",
+            "start_time": 81.46,
+            "end_time": 123.31,
+            "duration": 41.85,
+            "bars": 20,
+            "score": 88.8,
+            "time_range": "1:21-2:03",
+            "eight_bar_compliant": false,
+            "checks": [
+              {
+                "name": "Length OK",
+                "passed": true
+              },
+              {
+                "name": "8-bar rule",
+                "passed": false
+              }
+            ],
+            "issues": []
+          },
+          {
+            "section_type": "outro",
+            "start_time": 123.31,
+            "end_time": 138.17,
+            "duration": 14.86,
+            "bars": 7,
+            "score": 20,
+            "time_range": "2:03-2:18",
+            "eight_bar_compliant": false,
+            "checks": [
+              {
+                "name": "Length OK",
+                "passed": false
+              },
+              {
+                "name": "8-bar rule",
+                "passed": false
+              }
+            ],
+            "issues": [
+              "Too short (7 vs min 16)"
+            ]
+          },
+          {
+            "section_type": "outro",
+            "start_time": 138.17,
+            "end_time": 138.18,
+            "duration": 0.01,
+            "bars": 1,
+            "score": 20,
+            "time_range": "2:18-2:18",
+            "eight_bar_compliant": false,
+            "checks": [
+              {
+                "name": "Length OK",
+                "passed": false
+              },
+              {
+                "name": "8-bar rule",
+                "passed": false
+              }
+            ],
+            "issues": [
+              "Too short (1 vs min 16)"
+            ]
+          },
+          {
+            "section_type": "outro",
+            "start_time": 138.18,
+            "end_time": 156.04,
+            "duration": 17.86,
+            "bars": 8,
+            "score": 40,
+            "time_range": "2:18-2:36",
+            "eight_bar_compliant": true,
+            "checks": [
+              {
+                "name": "Length OK",
+                "passed": false
+              },
+              {
+                "name": "8-bar rule",
+                "passed": true
+              }
+            ],
+            "issues": [
+              "Too short (8 vs min 16)"
+            ]
+          },
+          {
+            "section_type": "outro",
+            "start_time": 156.04,
+            "end_time": 179.0,
+            "duration": 22.96,
+            "bars": 11,
+            "score": 40,
+            "time_range": "2:36-2:59",
+            "eight_bar_compliant": false,
+            "checks": [
+              {
+                "name": "Length OK",
+                "passed": false
+              },
+              {
+                "name": "8-bar rule",
+                "passed": false
+              }
+            ],
+            "issues": [
+              "Too short (11 vs min 16)"
+            ]
+          },
+          {
+            "section_type": "outro",
+            "start_time": 179.0,
+            "end_time": 206.96,
+            "duration": 27.96,
+            "bars": 13,
+            "score": 40,
+            "time_range": "2:59-3:26",
+            "eight_bar_compliant": false,
+            "checks": [
+              {
+                "name": "Length OK",
+                "passed": false
+              },
+              {
+                "name": "8-bar rule",
+                "passed": false
+              }
+            ],
+            "issues": [
+              "Too short (13 vs min 16)"
+            ]
+          },
+          {
+            "section_type": "outro",
+            "start_time": 206.96,
+            "end_time": 234.36,
+            "duration": 27.4,
+            "bars": 13,
+            "score": 40,
+            "time_range": "3:26-3:54",
+            "eight_bar_compliant": false,
+            "checks": [
+              {
+                "name": "Length OK",
+                "passed": false
+              },
+              {
+                "name": "8-bar rule",
+                "passed": false
+              }
+            ],
+            "issues": [
+              "Too short (13 vs min 16)"
+            ]
+          },
+          {
+            "section_type": "outro",
+            "start_time": 234.36,
+            "end_time": 272.85,
+            "duration": 38.49,
+            "bars": 18,
+            "score": 86.9,
+            "time_range": "3:54-4:32",
+            "eight_bar_compliant": false,
+            "checks": [
+              {
+                "name": "Length OK",
+                "passed": true
+              },
+              {
+                "name": "8-bar rule",
+                "passed": false
+              }
+            ],
+            "issues": []
+          },
+          {
+            "section_type": "intro",
+            "start_time": 272.85,
+            "end_time": 309.85,
+            "duration": 37.0,
+            "bars": 17,
+            "score": 85.9,
+            "time_range": "4:32-5:09",
+            "eight_bar_compliant": false,
+            "checks": [
+              {
+                "name": "Length OK",
+                "passed": true
+              },
+              {
+                "name": "8-bar rule",
+                "passed": false
+              }
+            ],
+            "issues": []
+          },
+          {
+            "section_type": "intro",
+            "start_time": 309.85,
+            "end_time": 327.15,
+            "duration": 17.3,
+            "bars": 8,
+            "score": 40,
+            "time_range": "5:09-5:27",
+            "eight_bar_compliant": true,
+            "checks": [
+              {
+                "name": "Length OK",
+                "passed": false
+              },
+              {
+                "name": "8-bar rule",
+                "passed": true
+              }
+            ],
+            "issues": [
+              "Too short (8 vs min 16)"
+            ]
+          },
+          {
+            "section_type": "outro",
+            "start_time": 327.15,
+            "end_time": 362.66,
+            "duration": 35.51,
+            "bars": 17,
+            "score": 85.9,
+            "time_range": "5:27-6:02",
+            "eight_bar_compliant": false,
+            "checks": [
+              {
+                "name": "Length OK",
+                "passed": true
+              },
+              {
+                "name": "8-bar rule",
+                "passed": false
+              }
+            ],
+            "issues": []
+          },
+          {
+            "section_type": "outro",
+            "start_time": 362.66,
+            "end_time": 396.59,
+            "duration": 33.93,
+            "bars": 16,
+            "score": 85.0,
+            "time_range": "6:02-6:36",
+            "eight_bar_compliant": true,
+            "checks": [
+              {
+                "name": "Length OK",
+                "passed": true
+              },
+              {
+                "name": "8-bar rule",
+                "passed": true
+              }
+            ],
+            "issues": []
+          },
+          {
+            "section_type": "outro",
+            "start_time": 396.59,
+            "end_time": 435.96,
+            "duration": 39.37,
+            "bars": 18,
+            "score": 86.9,
+            "time_range": "6:36-7:15",
+            "eight_bar_compliant": false,
+            "checks": [
+              {
+                "name": "Length OK",
+                "passed": true
+              },
+              {
+                "name": "8-bar rule",
+                "passed": false
+              }
+            ],
+            "issues": []
+          },
+          {
+            "section_type": "intro",
+            "start_time": 435.96,
+            "end_time": 449.77,
+            "duration": 13.81,
+            "bars": 6,
+            "score": 20,
+            "time_range": "7:15-7:29",
+            "eight_bar_compliant": false,
+            "checks": [
+              {
+                "name": "Length OK",
+                "passed": false
+              },
+              {
+                "name": "8-bar rule",
+                "passed": false
+              }
+            ],
+            "issues": [
+              "Too short (6 vs min 16)"
+            ]
+          },
+          {
+            "section_type": "intro",
+            "start_time": 449.77,
+            "end_time": 463.4,
+            "duration": 13.63,
+            "bars": 6,
+            "score": 20,
+            "time_range": "7:29-7:43",
+            "eight_bar_compliant": false,
+            "checks": [
+              {
+                "name": "Length OK",
+                "passed": false
+              },
+              {
+                "name": "8-bar rule",
+                "passed": false
+              }
+            ],
+            "issues": [
+              "Too short (6 vs min 16)"
+            ]
+          },
+          {
+            "section_type": "outro",
+            "start_time": 463.4,
+            "end_time": 513.86,
+            "duration": 50.46,
+            "bars": 24,
+            "score": 92.5,
+            "time_range": "7:43-8:33",
+            "eight_bar_compliant": true,
+            "checks": [
+              {
+                "name": "Length OK",
+                "passed": true
+              },
+              {
+                "name": "8-bar rule",
+                "passed": true
+              }
+            ],
+            "issues": []
+          },
+          {
+            "section_type": "outro",
+            "start_time": 513.86,
+            "end_time": 536.44,
+            "duration": 22.58,
+            "bars": 11,
+            "score": 40,
+            "time_range": "8:33-8:56",
+            "eight_bar_compliant": false,
+            "checks": [
+              {
+                "name": "Length OK",
+                "passed": false
+              },
+              {
+                "name": "8-bar rule",
+                "passed": false
+              }
+            ],
+            "issues": [
+              "Too short (11 vs min 16)"
+            ]
+          },
+          {
+            "section_type": "outro",
+            "start_time": 536.44,
+            "end_time": 561.7,
+            "duration": 25.26,
+            "bars": 12,
+            "score": 40,
+            "time_range": "8:56-9:21",
+            "eight_bar_compliant": false,
+            "checks": [
+              {
+                "name": "Length OK",
+                "passed": false
+              },
+              {
+                "name": "8-bar rule",
+                "passed": false
+              }
+            ],
+            "issues": [
+              "Too short (12 vs min 16)"
+            ]
+          },
+          {
+            "section_type": "outro",
+            "start_time": 561.7,
+            "end_time": 561.71,
+            "duration": 0.01,
+            "bars": 1,
+            "score": 20,
+            "time_range": "9:21-9:21",
+            "eight_bar_compliant": false,
+            "checks": [
+              {
+                "name": "Length OK",
+                "passed": false
+              },
+              {
+                "name": "8-bar rule",
+                "passed": false
+              }
+            ],
+            "issues": [
+              "Too short (1 vs min 16)"
+            ]
+          }
+        ],
+        "issues": [
+          {
+            "severity": "CRITICAL",
+            "message": "Outro at 2:03-2:18 is only 7 bars (min: 16)",
+            "section": "outro",
+            "fix_suggestion": "Extend to at least 16 bars, ideally 32 bars"
+          },
+          {
+            "severity": "CRITICAL",
+            "message": "Outro at 2:18-2:18 is only 1 bars (min: 16)",
+            "section": "outro",
+            "fix_suggestion": "Extend to at least 16 bars, ideally 32 bars"
+          },
+          {
+            "severity": "CRITICAL",
+            "message": "Intro at 7:15-7:29 is only 6 bars (min: 16)",
+            "section": "intro",
+            "fix_suggestion": "Extend to at least 16 bars, ideally 32 bars"
+          },
+          {
+            "severity": "CRITICAL",
+            "message": "Intro at 7:29-7:43 is only 6 bars (min: 16)",
+            "section": "intro",
+            "fix_suggestion": "Extend to at least 16 bars, ideally 32 bars"
+          },
+          {
+            "severity": "CRITICAL",
+            "message": "Outro at 9:21-9:21 is only 1 bars (min: 16)",
+            "section": "outro",
+            "fix_suggestion": "Extend to at least 16 bars, ideally 32 bars"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Missing drop section",
+            "section": null,
+            "fix_suggestion": "Add a clear drop section to complete the trance structure"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Missing breakdown section",
+            "section": null,
+            "fix_suggestion": "Add a clear breakdown section to complete the trance structure"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro is 10 bars (recommended: 16-64)",
+            "section": "outro",
+            "fix_suggestion": "Consider extending to 32 bars for better DJ compatibility"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro is 10 bars (recommended: 16-64)",
+            "section": "outro",
+            "fix_suggestion": "Consider extending to 32 bars for better DJ compatibility"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro is 8 bars (recommended: 16-64)",
+            "section": "outro",
+            "fix_suggestion": "Consider extending to 32 bars for better DJ compatibility"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro is 11 bars (recommended: 16-64)",
+            "section": "outro",
+            "fix_suggestion": "Consider extending to 32 bars for better DJ compatibility"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro is 13 bars (recommended: 16-64)",
+            "section": "outro",
+            "fix_suggestion": "Consider extending to 32 bars for better DJ compatibility"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro is 13 bars (recommended: 16-64)",
+            "section": "outro",
+            "fix_suggestion": "Consider extending to 32 bars for better DJ compatibility"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Intro is 8 bars (recommended: 16-64)",
+            "section": "intro",
+            "fix_suggestion": "Consider extending to 32 bars for better DJ compatibility"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro is 11 bars (recommended: 16-64)",
+            "section": "outro",
+            "fix_suggestion": "Consider extending to 32 bars for better DJ compatibility"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro is 12 bars (recommended: 16-64)",
+            "section": "outro",
+            "fix_suggestion": "Consider extending to 32 bars for better DJ compatibility"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro at 0:00-0:20 is 10 bars (not divisible by 8)",
+            "section": "outro",
+            "fix_suggestion": "Adjust to 8 bars"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro at 0:20-0:41 is 10 bars (not divisible by 8)",
+            "section": "outro",
+            "fix_suggestion": "Adjust to 8 bars"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro at 0:41-1:21 is 19 bars (not divisible by 8)",
+            "section": "outro",
+            "fix_suggestion": "Adjust to 16 bars"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro at 1:21-2:03 is 20 bars (not divisible by 8)",
+            "section": "outro",
+            "fix_suggestion": "Adjust to 24 bars"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro at 2:03-2:18 is 7 bars (not divisible by 8)",
+            "section": "outro",
+            "fix_suggestion": "Adjust to 8 bars"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro at 2:18-2:18 is 1 bars (not divisible by 8)",
+            "section": "outro",
+            "fix_suggestion": "Adjust to 8 bars"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro at 2:36-2:59 is 11 bars (not divisible by 8)",
+            "section": "outro",
+            "fix_suggestion": "Adjust to 8 bars"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro at 2:59-3:26 is 13 bars (not divisible by 8)",
+            "section": "outro",
+            "fix_suggestion": "Adjust to 16 bars"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro at 3:26-3:54 is 13 bars (not divisible by 8)",
+            "section": "outro",
+            "fix_suggestion": "Adjust to 16 bars"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro at 3:54-4:32 is 18 bars (not divisible by 8)",
+            "section": "outro",
+            "fix_suggestion": "Adjust to 16 bars"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Intro at 4:32-5:09 is 17 bars (not divisible by 8)",
+            "section": "intro",
+            "fix_suggestion": "Adjust to 16 bars"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro at 5:27-6:02 is 17 bars (not divisible by 8)",
+            "section": "outro",
+            "fix_suggestion": "Adjust to 16 bars"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro at 6:36-7:15 is 18 bars (not divisible by 8)",
+            "section": "outro",
+            "fix_suggestion": "Adjust to 16 bars"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Intro at 7:15-7:29 is 6 bars (not divisible by 8)",
+            "section": "intro",
+            "fix_suggestion": "Adjust to 8 bars"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Intro at 7:29-7:43 is 6 bars (not divisible by 8)",
+            "section": "intro",
+            "fix_suggestion": "Adjust to 8 bars"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro at 8:33-8:56 is 11 bars (not divisible by 8)",
+            "section": "outro",
+            "fix_suggestion": "Adjust to 8 bars"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro at 8:56-9:21 is 12 bars (not divisible by 8)",
+            "section": "outro",
+            "fix_suggestion": "Adjust to 16 bars"
+          },
+          {
+            "severity": "WARNING",
+            "message": "Outro at 9:21-9:21 is 1 bars (not divisible by 8)",
+            "section": "outro",
+            "fix_suggestion": "Adjust to 8 bars"
+          },
+          {
+            "severity": "SUGGESTION",
+            "message": "Unusual transition: intro -> intro",
+            "section": "intro",
+            "fix_suggestion": "Consider adding a buildup between these sections"
+          },
+          {
+            "severity": "SUGGESTION",
+            "message": "Unusual transition: intro -> outro",
+            "section": "intro",
+            "fix_suggestion": "Consider adding a buildup between these sections"
+          },
+          {
+            "severity": "SUGGESTION",
+            "message": "Unusual transition: intro -> intro",
+            "section": "intro",
+            "fix_suggestion": "Consider adding a buildup between these sections"
+          },
+          {
+            "severity": "SUGGESTION",
+            "message": "Unusual transition: intro -> outro",
+            "section": "intro",
+            "fix_suggestion": "Consider adding a buildup between these sections"
+          }
+        ],
+        "suggestions": [
+          "Ensure all sections are divisible by 8 bars for DJ mixing",
+          "Add 16-bar buildups with rising snare rolls before each drop",
+          "Consider adding a second drop for extended mix versions"
+        ],
+        "metadata": {
+          "total_bars": 263,
+          "section_count": 22,
+          "detected_tempo": 112.3,
+          "has_intro": true,
+          "has_buildup": false,
+          "has_drop": false,
+          "has_breakdown": false,
+          "has_outro": true,
+          "energy_contrast_db": null
+        },
+        "fixes": [
+          "Ensure all sections are divisible by 8 bars for DJ mixing",
+          "Add 16-bar buildups with rising snare rolls before each drop",
+          "Consider adding a second drop for extended mix versions"
+        ],
+        "violations": [
+          "Outro at 2:03-2:18 is only 7 bars (min: 16)",
+          "Outro at 2:18-2:18 is only 1 bars (min: 16)",
+          "Intro at 7:15-7:29 is only 6 bars (min: 16)",
+          "Intro at 7:29-7:43 is only 6 bars (min: 16)",
+          "Outro at 9:21-9:21 is only 1 bars (min: 16)",
+          "Missing drop section",
+          "Missing breakdown section",
+          "Outro is 10 bars (recommended: 16-64)",
+          "Outro is 10 bars (recommended: 16-64)",
+          "Outro is 8 bars (recommended: 16-64)",
+          "Outro is 11 bars (recommended: 16-64)",
+          "Outro is 13 bars (recommended: 16-64)",
+          "Outro is 13 bars (recommended: 16-64)",
+          "Intro is 8 bars (recommended: 16-64)",
+          "Outro is 11 bars (recommended: 16-64)",
+          "Outro is 12 bars (recommended: 16-64)",
+          "Outro at 0:00-0:20 is 10 bars (not divisible by 8)",
+          "Outro at 0:20-0:41 is 10 bars (not divisible by 8)",
+          "Outro at 0:41-1:21 is 19 bars (not divisible by 8)",
+          "Outro at 1:21-2:03 is 20 bars (not divisible by 8)",
+          "Outro at 2:03-2:18 is 7 bars (not divisible by 8)",
+          "Outro at 2:18-2:18 is 1 bars (not divisible by 8)",
+          "Outro at 2:36-2:59 is 11 bars (not divisible by 8)",
+          "Outro at 2:59-3:26 is 13 bars (not divisible by 8)",
+          "Outro at 3:26-3:54 is 13 bars (not divisible by 8)",
+          "Outro at 3:54-4:32 is 18 bars (not divisible by 8)",
+          "Intro at 4:32-5:09 is 17 bars (not divisible by 8)",
+          "Outro at 5:27-6:02 is 17 bars (not divisible by 8)",
+          "Outro at 6:36-7:15 is 18 bars (not divisible by 8)",
+          "Intro at 7:15-7:29 is 6 bars (not divisible by 8)",
+          "Intro at 7:29-7:43 is 6 bars (not divisible by 8)",
+          "Outro at 8:33-8:56 is 11 bars (not divisible by 8)",
+          "Outro at 8:56-9:21 is 12 bars (not divisible by 8)",
+          "Outro at 9:21-9:21 is 1 bars (not divisible by 8)",
+          "Unusual transition: intro -> intro",
+          "Unusual transition: intro -> outro",
+          "Unusual transition: intro -> intro",
+          "Unusual transition: intro -> outro"
+        ],
+        "section_count": 22,
+        "arrangement_status": "scored"
+      },
+      "error": null
+    },
+    {
+      "phase": 9,
+      "name": "Mix Translation",
+      "status": "ok",
+      "data": {
+        "spatial": {
+          "height_score": 100.0,
+          "depth_score": 50.000283838715056,
+          "width_consistency": 0.0,
+          "analysis": [
+            "High frequency emphasis (100%) - mix may sound thin or harsh",
+            "Good depth perception (50%)",
+            "Unstable stereo image (0%) - stereo width varies significantly"
+          ]
+        },
+        "surround": {
+          "mono_compatibility": 99.99974998098432,
+          "phase_score": 99.99971616128494,
+          "is_atmos_ready": true,
+          "analysis": [
+            "Good mono compatibility (100%)",
+            "Good phase coherence (100%)",
+            "Mix is suitable for spatial audio formats (Atmos, Sony 360)"
+          ]
+        },
+        "playback": {
+          "headphone_score": 99.99990917859658,
+          "speaker_score": 71.04905397165567,
+          "crossfeed_safe": true,
+          "bass_translation": "weak",
+          "analysis": [
+            "Good headphone compatibility (100%)",
+            "Good speaker translation (71%)",
+            "Bass may be inaudible on laptop/phone speakers"
+          ]
+        }
+      },
+      "error": null
+    },
+    {
+      "phase": 8,
+      "name": "ALS Analysis",
+      "status": "skipped",
+      "data": {},
+      "error": null
+    }
+  ],
+  "overall_score": 49.409741785413644,
+  "grade": "F",
+  "top_fixes": [
+    "Bass won't read on laptop / phone speakers \u2014 add 100\u2013300 Hz harmonics so the low end survives small playback systems.",
+    "Stereo image is unstable across the track \u2014 automate width changes deliberately rather than letting it drift.",
+    "Ensure all sections are divisible by 8 bars for DJ mixing"
+  ],
+  "danceability_score": 15,
+  "coach_name": "Coach",
+  "coach_intro": "Here's what I'd focus on to push this mix forward:",
+  "coached_fixes": [
+    "Your integrated loudness (-32.8 LUFS) is sitting below the sweet spot for Spotify (-14.0 LUFS). You have headroom to work with \u2014 nudge your master limiter ceiling up slightly and re-check. Small gain is better than a big push.",
+    "The low end won't read on laptop or phone speakers. Add some 100\u2013300 Hz harmonics to your sub/bass (a touch of saturation works) so the groove still lands on small systems."
+  ]
+}

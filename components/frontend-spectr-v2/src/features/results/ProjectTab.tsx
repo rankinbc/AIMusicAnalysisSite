@@ -1,116 +1,221 @@
-import type { AlsProjectJson, AlsProjectTrack } from '../../api/types';
-import s from './ProjectTab.module.css';
+import type { AlsProjectJson, AlsProjectTrack, Phase8Data } from '../../api/types';
 
 interface ProjectTabProps {
   project: AlsProjectJson;
+  /** Worker phase-8 health/arrangement read (when the .als was analyzed). */
+  phase8?: Phase8Data | undefined;
 }
 
-/**
- * "Project awareness" view: the track map SPECTR parsed from the uploaded .als,
- * stored alongside the analysis. Renders project stats + a per-track list with
- * device chips so tracks are visible and referenceable. The authoritative
- * arrangement/health numbers live in the Analysis tab (worker phase 8); this
- * view is the saved structural picture of the project.
- */
-export function ProjectTab({ project }: ProjectTabProps) {
+const SECTION_HUES = [168, 28, 280, 198, 320, 140, 48];
+
+// The Project tab (.als): health + arrangement up top, then per-track device
+// chains in signal order. Reads the client-parsed .als map + worker phase 8.
+export function ProjectTab({ project, phase8 }: ProjectTabProps) {
   const audioCount = project.tracks.filter((t) => t.type === 'audio').length;
   const midiCount = project.tracks.filter((t) => t.type === 'midi').length;
+  const deviceTotal = phase8?.total_devices ?? project.devices.length;
 
   return (
-    <div className={s.wrap}>
-      <div className={s.head}>
-        <div>
-          <h3 className={s.title}>Project structure</h3>
-          <p className={s.sub}>
-            Parsed from your Ableton project{' '}
-            {project.abletonVersion ? `(${project.abletonVersion})` : ''} — analysis is tied to
-            these tracks &amp; devices.
-          </p>
+    <div className="ti-stack">
+      <p className="tab-intro">
+        <b>From your Ableton project.</b> Read from the uploaded{' '}
+        <span className="mono">.als</span> — device chains, health, and arrangement, independent of
+        the audio analysis.
+      </p>
+
+      <div className="proj-grid">
+        <section className="card">
+          <div className="card-hd">
+            <span className="t">
+              <span className="led" /> Project health
+            </span>
+            {(phase8?.ableton_version ?? project.abletonVersion) && (
+              <span className="meta">{phase8?.ableton_version ?? project.abletonVersion}</span>
+            )}
+          </div>
+          <div className="card-body">
+            <div className="proj-health">
+              <HealthRing score={phase8?.health_score} />
+              <div className="proj-stats">
+                <ProjStat
+                  label="Tempo"
+                  value={`${phase8?.tempo ?? project.tempo ?? '—'}`}
+                  unit="BPM"
+                />
+                <ProjStat
+                  label="Time sig"
+                  value={phase8?.time_signature ?? project.timeSignature ?? '—'}
+                  unit=""
+                />
+                <ProjStat
+                  label="Devices"
+                  value={`${deviceTotal}`}
+                  unit={phase8?.disabled_devices ? `${phase8.disabled_devices} off` : ''}
+                />
+                {phase8?.clutter_pct != null && (
+                  <ProjStat label="Clutter" value={`${phase8.clutter_pct}%`} unit="" />
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {phase8?.arrangement?.sections && phase8.arrangement.sections.length > 0 && (
+          <ArrangementCard sections={phase8.arrangement.sections} />
+        )}
+      </div>
+
+      <section className="card">
+        <div className="card-hd">
+          <span className="t">
+            <span className="led" /> Tracks
+          </span>
+          <span className="meta">
+            {project.tracks.length} tracks · device chain order
+          </span>
+        </div>
+        <div className="card-body">
+          {project.tracks.length > 0 ? (
+            <div className="tracks-grid">
+              {project.tracks.map((t) => (
+                <TrackChain key={`${t.index}-${t.name}`} track={t} />
+              ))}
+            </div>
+          ) : (
+            <div className="na">No audio or MIDI tracks were found in this project.</div>
+          )}
+        </div>
+      </section>
+
+      <div className="proj-grid">
+        <section className="card">
+          <div className="card-hd">
+            <span className="t">
+              <span className="led" /> Mix
+            </span>
+            <span className="meta">
+              {audioCount} audio · {midiCount} MIDI
+            </span>
+          </div>
+          <div className="card-body">
+            {project.plugins.length > 0 ? (
+              <div className="plugin-chips">
+                {project.plugins.map((p) => (
+                  <span key={p} className="plugin-chip">
+                    {p}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div className="na">No third-party plugins detected.</div>
+            )}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function HealthRing({ score }: { score: number | undefined }) {
+  const ringSize = 76;
+  const stroke = 7;
+  const r = (ringSize - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const pct = score != null ? Math.max(0, Math.min(100, score)) : 0;
+  const off = c - (pct / 100) * c;
+  return (
+    <div className="rv-ring" role="img" aria-label={`Project health ${score ?? 0} of 100`}>
+      <svg width={ringSize} height={ringSize} style={{ transform: 'rotate(-90deg)' }} aria-hidden>
+        <circle cx={ringSize / 2} cy={ringSize / 2} r={r} stroke="rgba(255,255,255,0.06)" strokeWidth={stroke} fill="none" />
+        <circle
+          cx={ringSize / 2}
+          cy={ringSize / 2}
+          r={r}
+          stroke="var(--cyan)"
+          strokeWidth={stroke}
+          fill="none"
+          strokeDasharray={c}
+          strokeDashoffset={off}
+          strokeLinecap="round"
+        />
+      </svg>
+      <span className="rv-num">{score ?? '—'}</span>
+    </div>
+  );
+}
+
+function ArrangementCard({
+  sections,
+}: {
+  sections: { name: string; duration_bars: number }[];
+}) {
+  const totalBars = sections.reduce((acc, s) => acc + (s.duration_bars || 0), 0);
+  return (
+    <section className="card">
+      <div className="card-hd">
+        <span className="t">
+          <span className="led" /> Arrangement
+        </span>
+        <span className="meta">from .als markers</span>
+      </div>
+      <div className="card-body">
+        <div className="arr-bar">
+          {sections.map((sec, i) => {
+            const w = totalBars > 0 ? (sec.duration_bars / totalBars) * 100 : 100 / sections.length;
+            return (
+              <span
+                key={`${sec.name}-${i}`}
+                className="arr-seg"
+                style={{ width: `${w}%`, ['--hue' as string]: String(SECTION_HUES[i % SECTION_HUES.length]) }}
+                title={`${sec.name} · ${sec.duration_bars} bars`}
+              >
+                {sec.name}
+              </span>
+            );
+          })}
+        </div>
+        <div className="mono lm-ends" style={{ marginTop: 10 }}>
+          <span>{sections.length} sections</span>
+          <span>{totalBars} bars</span>
         </div>
       </div>
+    </section>
+  );
+}
 
-      <div className={s.stats}>
-        {project.tempo != null && (
-          <Stat value={`${project.tempo}`} label="BPM" />
-        )}
-        <Stat value={project.timeSignature} label="time" />
-        <Stat value={`${audioCount}`} label="audio" />
-        <Stat value={`${midiCount}`} label="MIDI" />
-        <Stat value={`${project.devices.length}`} label="devices" />
-        {project.plugins.length > 0 && (
-          <Stat value={`${project.plugins.length}`} label="plugins" />
-        )}
+function TrackChain({ track }: { track: AlsProjectTrack }) {
+  return (
+    <div>
+      <div className="trk-head">
+        <span className="trk-name">{track.name}</span>
+        <span className="trk-type">{track.type}</span>
+        <span className="trk-count">{track.devices.length} dev</span>
       </div>
-
-      {project.tracks.length > 0 ? (
-        <ul className={s.trackList}>
-          {project.tracks.map((t) => (
-            <TrackRow key={`${t.index}-${t.name}`} track={t} />
+      {track.devices.length > 0 ? (
+        <div className="trk-chain">
+          {track.devices.map((d, i) => (
+            <span key={`${d}-${i}`} className="dev-chip">
+              {d}
+            </span>
           ))}
-        </ul>
+        </div>
       ) : (
-        <p className={s.empty}>No audio or MIDI tracks were found in this project.</p>
-      )}
-
-      {project.devices.length > 0 && (
-        <div className={s.section}>
-          <span className={s.sectionLabel}>All devices &amp; plugins</span>
-          <div className={s.chipRow}>
-            {project.devices.map((d) => (
-              <span
-                key={d}
-                className={`${s.chip} ${project.plugins.includes(d) ? s.plugin : ''}`}
-                title={project.plugins.includes(d) ? `${d} (plugin)` : d}
-              >
-                {d}
-              </span>
-            ))}
-          </div>
+        <div className="trk-chain">
+          <span className="dev-chip off">no devices</span>
         </div>
       )}
     </div>
   );
 }
 
-function Stat({ value, label }: { value: string; label: string }) {
+function ProjStat({ label, value, unit }: { label: string; value: string; unit: string }) {
   return (
-    <span className={s.stat}>
-      <b>{value}</b> {label}
-    </span>
-  );
-}
-
-function TrackRow({ track }: { track: AlsProjectTrack }) {
-  return (
-    <li className={s.track}>
-      <span className={s.swatch} style={{ background: swatchColor(track.color) }} aria-hidden />
-      <span className={s.trackName} title={track.name}>
-        {track.name}
+    <div className="proj-stat">
+      <span className="mono psl">{label}</span>
+      <span className="psv">
+        {value}
+        {unit && <small>{unit}</small>}
       </span>
-      <span className={`${s.typePill} ${track.type === 'midi' ? s.midi : ''}`}>{track.type}</span>
-      <div className={s.devices}>
-        {track.devices.length > 0 ? (
-          track.devices.map((d, i) => (
-            <span key={`${d}-${i}`} className={s.deviceChip} title={d}>
-              {d}
-            </span>
-          ))
-        ) : (
-          <span className={s.noDevices}>no devices</span>
-        )}
-      </div>
-    </li>
+    </div>
   );
-}
-
-/**
- * A stable swatch colour for a track. Ableton stores a palette *index*, not a
- * colour value; rather than ship the full 70-swatch palette we map the index to
- * a deterministic hue (golden-angle spacing keeps adjacent tracks distinct).
- * Tracks with no colour get a neutral swatch.
- */
-function swatchColor(colorIndex: number | null): string {
-  if (colorIndex == null) return 'var(--border-2, #444)';
-  const hue = (colorIndex * 137.508) % 360;
-  return `hsl(${hue.toFixed(0)}, 55%, 55%)`;
 }

@@ -1,0 +1,425 @@
+{
+  "file_path": "data/audio/upload/6379b20b-c771-45e7-9af3-2228a266d094/source.flac",
+  "analysis_schema_version": "2.1.0",
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Universal Mix Analysis",
+      "status": "ok",
+      "data": {
+        "lufs": -32.765085853253176,
+        "rms": 0.004085472784936428,
+        "bpm": 112.34714673913044,
+        "duration_seconds": 561.7021315192744,
+        "bands": {
+          "sub_bass": -74.24713134765625,
+          "bass": -76.37014770507812,
+          "low_mid": -76.49137115478516,
+          "mid": -76.61036682128906,
+          "upper_mid": -76.26416778564453,
+          "presence": -75.91004943847656,
+          "air": -76.58792877197266
+        },
+        "stereo_correlation": 0.9999943232256989,
+        "stereo_width": 1.3766345546173397e-05,
+        "channel_balance": {
+          "l_rms_db": -47.7751494574249,
+          "r_rms_db": -47.7751494574249,
+          "balance_db": 0.0
+        },
+        "true_peak_db": -17.279395997020163,
+        "peak_dbfs": -17.621468751374735,
+        "clipping_detected": false,
+        "clipped_sample_count": 0,
+        "detected_key": "C",
+        "key_detection_confidence": 0.5530033706066295,
+        "key_estimate": {
+          "key": "C",
+          "mode": "major",
+          "confidence": 0.5530033706066295,
+          "second_key": "F",
+          "second_mode": "major",
+          "profile_corrs": [
+            0.3109266559336078,
+            0.3773692468987675,
+            0.005724229483611131,
+            -0.21285533336674095,
+            -0.23582966480286713,
+            0.38656380136145024,
+            -0.26314339692862454,
+            -0.16678225730279692,
+            0.3572726886629912,
+            0.1588426893894509,
+            -0.07947421456994846,
+            -0.6386144447589008,
+            0.14478269678958905,
+            0.2828739946908925,
+            0.3535911330640159,
+            -0.4732121266148287,
+            -0.3427603168516203,
+            0.5530033706066295,
+            0.15197611429263966,
+            -0.23467065486900143,
+            -0.3530703330076282,
+            0.3615002093465679,
+            0.05663228544618728,
+            -0.5006463728934434
+          ]
+        },
+        "mono_compatibility": 0.9999989573720857,
+        "low_energy": 0.13223028182983398,
+        "sub_30_energy": 0.044515930116176605,
+        "crest_factor": 30.153682686081027,
+        "spectral_centroid_hz": 10457.246237923724,
+        "spectral_contrast": 12.522539004192915,
+        "spectral_flatness": 0.3642873764038086,
+        "loudness_range_lu": 2.083163406614524,
+        "short_term_max_lufs": -32.971192064835336,
+        "momentary_max_lufs": -29.79602978219323,
+        "loudness_timeline": {
+          "momentary": {
+            "t": [
+              273.1689795918367,
+              275.04,
+              276.91102040816327,
+              278.7820408163265,
+              280.6530612244898,
+              284.3951020408163,
+              288.13714285714286,
+              291.8791836734694,
+              293.75020408163266,
+              295.6212244897959,
+              297.4922448979592,
+              301.2342857142857,
+              304.97632653061225,
+              308.71836734693875,
+              310.58938775510205,
+              312.4604081632653,
+              314.33142857142855,
+              316.20244897959185,
+              318.0734693877551,
+              321.81551020408165,
+              325.55755102040814,
+              437.8187755102041,
+              439.68979591836734,
+              441.5608163265306,
+              443.4318367346939,
+              445.30285714285714,
+              447.1738775510204,
+              449.0448979591837,
+              450.91591836734693,
+              454.6579591836735,
+              456.52897959183673,
+              458.4,
+              460.2710204081633,
+              462.1420408163265,
+              464.0130612244898,
+              465.8840816326531,
+              467.7551020408163,
+              471.4971428571429,
+              475.23918367346937
+            ],
+            "lufs": [
+              -31.801974150364483,
+              -32.6082979060726,
+              -43.21915973500702,
+              -43.26084730355327,
+              -31.062343949286937,
+              -34.76244301107874,
+              -32.536307843276084,
+              -34.736357643002925,
+              -31.962241159915777,
+              -34.21848249924141,
+              -33.70542517988358,
+              -31.28266309848544,
+              -32.535462302762284,
+              -32.75731123505586,
+              -32.003424729114116,
+              -31.9335985279528,
+              -39.310367799211036,
+              -38.644767524116574,
+              -31.062306871780546,
+              -35.169074607134135,
+              -32.5404894958988,
+              -34.43175200956617,
+              -31.832711112138618,
+              -30.77307748125015,
+              -33.14735709418758,
+              -32.69196038645205,
+              -32.127923088621145,
+              -45.12078531403934,
+              -31.144519851445242,
+              -40.05727076560568,
+              -33.06236841073983,
+              -33.56645829421406,
+              -29.79602978219323,
+              -32.96885553310166,
+              -40.039256728786874,
+              -33.271450590160335,
+              -32.027420355932165,
+              -32.209530504708866,
+              -35.530050532784905
+            ]
+          },
+          "short_term": {
+            "t": [
+              271.9026530612245,
+              275.62734693877553,
+              279.3520408163265,
+              283.07673469387754,
+              286.8014285714286,
+              290.5261224489796,
+              294.25081632653064,
+              297.9755102040816,
+              301.70020408163265,
+              305.4248979591837,
+              309.1495918367347,
+              312.8742857142857,
+              316.5989795918367,
+              320.32367346938776,
+              324.0483673469388,
+              435.7891836734694,
+              439.5138775510204,
+              443.23857142857145,
+              446.9632653061224,
+              450.68795918367346,
+              454.4126530612245,
+              458.1373469387755,
+              461.86204081632656,
+              465.58673469387753,
+              469.31142857142856,
+              473.0361224489796
+            ],
+            "lufs": [
+              -35.1700914844021,
+              -34.644890023897084,
+              -34.04895594396905,
+              -34.04895790113898,
+              -34.048920441478586,
+              -35.00462954507654,
+              -34.777395903726116,
+              -35.308237229237946,
+              -35.108121701021226,
+              -34.75298693255584,
+              -34.9869132559324,
+              -35.05685638439986,
+              -34.32351495626688,
+              -34.048957185742886,
+              -34.04892112027086,
+              -33.08371955631823,
+              -32.971194329355285,
+              -32.971192064835336,
+              -34.19915545915516,
+              -33.56619132791796,
+              -33.75557804465844,
+              -33.904491866006374,
+              -33.11728341932266,
+              -33.50793241838642,
+              -33.60365980672141,
+              -33.5482638915827
+            ]
+          }
+        },
+        "transients": {
+          "avg_transient_strength": 0.28786730766296387,
+          "transient_count": 209,
+          "transients_per_second": 0.37208333077658673
+        },
+        "structure": {
+          "available": false,
+          "deferred": true,
+          "reason": "Structure detection running in the background",
+          "segments": [],
+          "beats": []
+        }
+      },
+      "error": null
+    },
+    {
+      "phase": 2,
+      "name": "Genre Detection",
+      "status": "ok",
+      "data": {
+        "genre": "other",
+        "confidence": 0.5,
+        "bpm": 112.34714673913044
+      },
+      "error": null
+    },
+    {
+      "phase": 3,
+      "name": "Genre-Specific Scoring",
+      "status": "ok",
+      "data": {
+        "genre": "other",
+        "total_score": 49.409741785413644,
+        "sub_scores": {
+          "frequency_balance": 98.8183822631836,
+          "stereo_width": 0.0011013076436938718
+        },
+        "notes": []
+      },
+      "error": null
+    },
+    {
+      "phase": 4,
+      "name": "Stem Separation & Clash",
+      "status": "ok",
+      "data": {
+        "stems": {},
+        "band_energy": {
+          "sub_bass": -17.255117170442784,
+          "bass": -13.929393356377187,
+          "low_mid": -11.239927686305254,
+          "mid": -15.522284036357972,
+          "high_mid": -13.399290337788106,
+          "presence": -13.654598401600456,
+          "air": -22.00488972905432
+        },
+        "clashes": [
+          {
+            "stems": "low-end buildup",
+            "frequency_range": "sub-bass / bass (20\u2013200 Hz)",
+            "severity": "high"
+          },
+          {
+            "stems": "low-mid congestion",
+            "frequency_range": "low-mid (200\u2013500 Hz)",
+            "severity": "high"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "phase": 5,
+      "name": "Reference Comparison",
+      "status": "ok",
+      "data": {
+        "status": "skipped",
+        "deltas": {},
+        "genre_context": {
+          "genre": "other",
+          "preset_name": "other",
+          "checks": {}
+        }
+      },
+      "error": null
+    },
+    {
+      "phase": 6,
+      "name": "Gap Analysis",
+      "status": "ok",
+      "data": {
+        "genre": "other",
+        "percentile": 50.0,
+        "gaps": {}
+      },
+      "error": null
+    },
+    {
+      "phase": 7,
+      "name": "Arrangement Advice",
+      "status": "ok",
+      "data": {
+        "overall_score": 0,
+        "grade": "\u2026",
+        "total_duration": 0.0,
+        "component_scores": {},
+        "structure_score": 0,
+        "length_score": 0,
+        "eight_bar_score": 0,
+        "energy_contrast_score": 0,
+        "flow_score": 0,
+        "section_scores": [],
+        "issues": [
+          {
+            "severity": "SUGGESTION",
+            "message": "Arrangement analysis in progress \u2014 structure detection is running in the background.",
+            "section": null,
+            "fix_suggestion": ""
+          }
+        ],
+        "suggestions": [],
+        "metadata": {
+          "total_bars": 0,
+          "section_count": 0,
+          "detected_tempo": null,
+          "has_intro": false,
+          "has_buildup": false,
+          "has_drop": false,
+          "has_breakdown": false,
+          "has_outro": false,
+          "energy_contrast_db": null
+        },
+        "fixes": [],
+        "violations": [
+          "Arrangement analysis in progress \u2014 structure detection is running in the background."
+        ],
+        "section_count": 0,
+        "arrangement_status": "pending"
+      },
+      "error": null
+    },
+    {
+      "phase": 9,
+      "name": "Mix Translation",
+      "status": "ok",
+      "data": {
+        "spatial": {
+          "height_score": 100.0,
+          "depth_score": 50.000283838715056,
+          "width_consistency": 0.0,
+          "analysis": [
+            "High frequency emphasis (100%) - mix may sound thin or harsh",
+            "Good depth perception (50%)",
+            "Unstable stereo image (0%) - stereo width varies significantly"
+          ]
+        },
+        "surround": {
+          "mono_compatibility": 99.99974998098432,
+          "phase_score": 99.99971616128494,
+          "is_atmos_ready": true,
+          "analysis": [
+            "Good mono compatibility (100%)",
+            "Good phase coherence (100%)",
+            "Mix is suitable for spatial audio formats (Atmos, Sony 360)"
+          ]
+        },
+        "playback": {
+          "headphone_score": 99.99990917859658,
+          "speaker_score": 71.04905397165567,
+          "crossfeed_safe": true,
+          "bass_translation": "weak",
+          "analysis": [
+            "Good headphone compatibility (100%)",
+            "Good speaker translation (71%)",
+            "Bass may be inaudible on laptop/phone speakers"
+          ]
+        }
+      },
+      "error": null
+    },
+    {
+      "phase": 8,
+      "name": "ALS Analysis",
+      "status": "skipped",
+      "data": {},
+      "error": null
+    }
+  ],
+  "overall_score": 49.409741785413644,
+  "grade": "F",
+  "top_fixes": [
+    "Bass won't read on laptop / phone speakers \u2014 add 100\u2013300 Hz harmonics so the low end survives small playback systems.",
+    "Stereo image is unstable across the track \u2014 automate width changes deliberately rather than letting it drift.",
+    "EQ clash between low-end buildup: reduce sub-bass / bass (20\u2013200 Hz)"
+  ],
+  "danceability_score": 15,
+  "coach_name": "Coach",
+  "coach_intro": "Here's what I'd focus on to push this mix forward:",
+  "coached_fixes": [
+    "Your integrated loudness (-32.8 LUFS) is sitting below the sweet spot for Spotify (-14.0 LUFS). You have headroom to work with \u2014 nudge your master limiter ceiling up slightly and re-check. Small gain is better than a big push.",
+    "The low end won't read on laptop or phone speakers. Add some 100\u2013300 Hz harmonics to your sub/bass (a touch of saturation works) so the groove still lands on small systems."
+  ]
+}

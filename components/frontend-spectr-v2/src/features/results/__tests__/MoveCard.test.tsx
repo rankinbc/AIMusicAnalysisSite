@@ -4,8 +4,9 @@ import { describe, expect, it } from 'vitest';
 import { MoveCard } from '../MoveCard';
 import type { Move } from '../move-model';
 
-// Static-markup render (jsdom-free, story 1.7 pattern). Covers the lead-with-
-// directive layout, confidence-gated steps, param highlighting, and triage label.
+// Static-markup render (jsdom-free, story 1.7 pattern). Covers the prototype
+// move-card layout: problem kicker, directive with highlighted params, the
+// source chip, the collapsed expand toggles, and the Add/Added rack toggle.
 
 function makeMove(over: Partial<Move> = {}): Move {
   return {
@@ -34,68 +35,66 @@ function makeMove(over: Partial<Move> = {}): Move {
 const noop = () => {};
 
 describe('MoveCard', () => {
-  it('leads with the directive, highlights measured params, shows confidence', () => {
+  it('leads with the title + scope, highlights measured params, shows confidence', () => {
     const html = renderToStaticMarkup(
-      <MoveCard move={makeMove()} onToggleCommit={noop} onAudition={noop} />,
+      <MoveCard move={makeMove()} onToggleCommit={noop} />,
     );
     expect(html).toContain('Pull the master back to streaming level');
     expect(html).toContain('Master bus');
-    expect(html).toContain('96% conf');
-    // numeric tokens wrapped as mono params
-    expect(html).toMatch(/<code[^>]*>-3 dB<\/code>/);
-    expect(html).toMatch(/<code[^>]*>-14 LUFS<\/code>/);
+    expect(html).toContain('96%');
+    // numeric tokens wrapped as params
+    expect(html).toMatch(/<span class="param">-3 dB<\/span>/);
+    expect(html).toMatch(/<span class="param">-14 LUFS<\/span>/);
   });
 
-  it('marks rule-engine provenance with a RULE chip (not an AI persona)', () => {
+  it('marks rule-engine provenance on the source chip (no AI tint)', () => {
     const html = renderToStaticMarkup(
-      <MoveCard move={makeMove()} onToggleCommit={noop} onAudition={noop} />,
+      <MoveCard move={makeMove()} onToggleCommit={noop} />,
     );
-    expect(html).toContain('RULE');
+    expect(html).toContain('rule engine');
+    expect(html).not.toContain('move-src ai');
   });
 
-  it('renders a finding number, AI persona group, and impact tag for specialist Moves', () => {
+  it('tints the source chip for AI specialist Moves', () => {
     const html = renderToStaticMarkup(
       <MoveCard
-        move={makeMove({ isRule: false, specialist: 'low_end', impact: 82, verdictId: 'v1' })}
-        rank={3}
+        move={makeMove({ isRule: false, specialist: 'low_end', source: 'Low End', verdictId: 'v1' })}
         onToggleCommit={noop}
-        onAudition={noop}
       />,
     );
-    expect(html).toContain('Finding #03');
-    expect(html).toContain('Spectrum'); // low_end specialist's group label
-    expect(html).toContain('HIGH IMPACT'); // impact 82 → high band
-    expect(html).not.toContain('RULE');
+    expect(html).toContain('move-src ai');
+    expect(html).toContain('Low End');
   });
 
-  it('renders the structured steps when params back the fix', () => {
+  it('offers a "suggested fix" toggle when params back the fix', () => {
     const html = renderToStaticMarkup(
-      <MoveCard move={makeMove()} onToggleCommit={noop} onAudition={noop} />,
+      <MoveCard move={makeMove()} onToggleCommit={noop} />,
     );
-    expect(html).toContain('ceiling_db=-3');
+    expect(html).toContain('suggested fix');
+    // steps live behind the toggle — not in the collapsed markup
+    expect(html).not.toContain('ceiling_db=-3');
   });
 
-  it('renders directional prose and no steps when the fix has no params', () => {
+  it('renders directional prose and no fix toggle when the fix has no params', () => {
     const html = renderToStaticMarkup(
       <MoveCard
         move={makeMove({ hasParams: false, steps: [] })}
         onToggleCommit={noop}
-        onAudition={noop}
       />,
     );
     expect(html).toContain('Bring the overall level down toward streaming target.');
-    expect(html).not.toContain('ceiling_db');
+    expect(html).not.toContain('suggested fix');
   });
 
-  it('shows the triage label by commit status', () => {
+  it('shows the rack toggle label by commit status', () => {
     const suggested = renderToStaticMarkup(
-      <MoveCard move={makeMove()} onToggleCommit={noop} onAudition={noop} />,
+      <MoveCard move={makeMove()} onToggleCommit={noop} />,
     );
-    expect(suggested).toContain('+ Add to plan');
+    expect(suggested).toContain('+ Add');
 
     const committed = renderToStaticMarkup(
-      <MoveCard move={makeMove({ status: 'committed' })} onToggleCommit={noop} onAudition={noop} />,
+      <MoveCard move={makeMove({ status: 'committed' })} onToggleCommit={noop} />,
     );
-    expect(committed).toContain('✓ In plan');
+    expect(committed).toContain('✓ Added');
   });
 });

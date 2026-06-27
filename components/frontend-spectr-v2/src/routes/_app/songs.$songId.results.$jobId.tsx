@@ -3,6 +3,7 @@ import { Link, createFileRoute } from '@tanstack/react-router';
 import { useJob, useJobResults } from '../../api/hooks';
 import { ReportView } from '../../features/results/ReportView';
 import {
+  DEFAULT_RESULTS_TAB,
   isResultsTabKey,
   type ResultsTabKey,
 } from '../../features/results/results-tab-keys';
@@ -11,7 +12,7 @@ import s from './results.module.css';
 interface ResultsSearch {
   // Optional so the many existing navigations to this route (upload dialogs,
   // listen/reports/song-detail links) don't need to pass a tab. Absent ⇒ the
-  // Actions plan. `?tab=analysis` / `?tab=files` deep-link the other tabs.
+  // AI Coach tab. `?tab=findings` / `?tab=trackinfo` / etc. deep-link the rest.
   tab?: ResultsTabKey;
 }
 
@@ -24,7 +25,7 @@ export const Route = createFileRoute('/_app/songs/$songId/results/$jobId')({
 function ResultsPage() {
   const { songId, jobId } = Route.useParams();
   const { tab } = Route.useSearch();
-  const activeTab: ResultsTabKey = tab ?? 'actions';
+  const activeTab: ResultsTabKey = tab ?? DEFAULT_RESULTS_TAB;
   const navigate = Route.useNavigate();
   const setTab = (next: ResultsTabKey) =>
     void navigate({ search: (prev) => ({ ...prev, tab: next }), replace: true });

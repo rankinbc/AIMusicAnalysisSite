@@ -27,6 +27,7 @@ AIMusicAnalysisSite/
 ├── migrations/               (Alembic DB migrations — shared by api + worker)
 ├── schemas/                  (Shared OpenAPI/TypeScript schema files)
 ├── docker/                   (Docker Compose for local dev: PostgreSQL, Redis, allin1)
+├── scripts/                  (Local dev orchestration scripts — e.g. start-spectr.ps1 stack launcher)
 ├── PRPs/
 │   ├── v1_ai_music_analyzer.md
 │   ├── archive/
@@ -60,7 +61,8 @@ AIMusicAnalysisSite/
 - All outputs land in `output/<component>/<YYYY-MM-DD>_<description>/` — never at project root, never overwriting prior runs
 - Never add a new top-level folder without updating this section first
 - Never rename `components/`, `data/`, `output/`, or `PRPs/`
-- `migrations/`, `schemas/`, `docker/`, and `reference_library/` are declared project-level folders — use each as described in its README
+- `migrations/`, `schemas/`, `docker/`, `scripts/`, and `reference_library/` are declared project-level folders — use each as described in its README
+- `scripts/` holds local dev orchestration (stack launch/stop, DB reset, etc.) — not application code and not generated artifacts
 
 ---
 

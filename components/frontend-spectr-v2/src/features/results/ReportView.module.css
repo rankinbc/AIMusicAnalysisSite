@@ -2,12 +2,31 @@
    Drop-in for src/features/results/ReportView.module.css */
 
 .report {
-  max-width: 1080px;
+  max-width: 1240px;
   margin: 0 auto;
   padding: var(--space-6) var(--space-6) 120px;
   display: flex;
   flex-direction: column;
   gap: 0;
+}
+
+/* Two-column shell: the report main column + the persistent right rail
+   (Fixes for Listen / Coach Mix / Game Plan), visible across every tab. */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 288px;
+  gap: 24px;
+  align-items: start;
+}
+
+.main {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 .header {

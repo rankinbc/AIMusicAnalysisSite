@@ -1,32 +1,33 @@
-import { Fragment, useState } from 'react';
+import { useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 
-import { groupColor, specialistGroup } from './helpers/specialists';
-import { impactBand, type Move, type MoveSev } from './move-model';
-import { MiniBot } from './TranceBot';
-import s from './MoveCard.module.css';
+import { type Move, type MoveSev } from './move-model';
+import { RackModules } from './RackModules';
 
 interface MoveCardProps {
   move: Move;
-  /** 1-based position in the plan — rendered as a "Finding #NN" label + ghost
-   *  numeral so each Move reads like a numbered studio finding (UX-DR12). */
+  /** Unused in the redesign layout (kept for call-site compatibility). */
   rank?: number | undefined;
   /** Toggle the Move's plan membership (committed ⇄ suggested). */
   onToggleCommit: (move: Move) => void;
-  /** Deep-link to the Listen page to audition the fix. */
-  onAudition: () => void;
 }
 
 const SEV_VAR: Record<MoveSev, string> = {
-  crit: 'var(--red)',
-  warn: 'var(--orange)',
-  info: 'var(--blue)',
-  low: 'var(--green)',
+  crit: 'var(--sev-critical)',
+  warn: 'var(--sev-severe)',
+  info: 'var(--sev-minor)',
+  low: 'var(--sev-win)',
 };
 
-/** Wrap measured tokens (−3 dB, 120 Hz, −14 LUFS, 8 ms, 62%) in mono/cyan so
- *  the directive reads like the prototype WITHOUT inventing values — we only
- *  style numbers that the directive prose already contains. */
+const SEV_LABEL: Record<MoveSev, string> = {
+  crit: 'Critical',
+  warn: 'Severe',
+  info: 'Minor',
+  low: 'Win',
+};
+
+/** Highlight measured tokens (−3 dB, 120 Hz, −14 LUFS, 8 ms, 62%) as params so
+ *  the directive reads like the prototype WITHOUT inventing values. */
 function highlightParams(text: string): ReactNode[] {
   const re = /(-?\d[\d.,]*\s?(?:dBTP|dB|LUFS|LU|kHz|Hz|ms|%))/g;
   const out: ReactNode[] = [];
@@ -36,9 +37,9 @@ function highlightParams(text: string): ReactNode[] {
   while ((m = re.exec(text)) !== null) {
     if (m.index > last) out.push(text.slice(last, m.index));
     out.push(
-      <code key={key++} className={`mono ${s.param}`}>
+      <span key={key++} className="param">
         {m[0]}
-      </code>,
+      </span>,
     );
     last = m.index + m[0].length;
   }
@@ -46,113 +47,138 @@ function highlightParams(text: string): ReactNode[] {
   return out;
 }
 
-export function MoveCard({ move, rank, onToggleCommit, onAudition }: MoveCardProps) {
-  const [showWhy, setShowWhy] = useState(false);
-  const [showData, setShowData] = useState(false);
-  const committed = move.status === 'committed';
-  const confPct = Math.round(move.confidence * 100);
+// Prototype "move" card: a problem kicker, the action title, the directive
+// (params highlighted), and a foot with why/data/fix toggles + the Add-to-Listen
+// rack toggle. Styling lives in redesign.css (scoped `.move`).
+export function MoveCard({ move, onToggleCommit }: MoveCardProps) {
+  const [open, setOpen] = useState<null | 'why' | 'data' | 'fix'>(null);
+  const toggle = (k: 'why' | 'data' | 'fix') => setOpen((o) => (o === k ? null : k));
+
+  const added = move.status === 'committed';
+  const isAi = !move.isRule;
+  const directional = !move.hasParams;
+  const metric = move.evidence.metric;
+  const shortMetric = metric && metric.length <= 30 ? metric : null;
+  const hasSteps = move.hasParams && move.steps.length > 0;
   const directiveText = move.hasParams ? move.directive : move.directional;
 
-  const band = impactBand(move.impact);
-  const group = move.specialist ? specialistGroup(move.specialist) : null;
-  const personaColor = group ? groupColor(group) : 'var(--cyan)';
-  const numeral = rank != null ? String(rank).padStart(2, '0') : null;
-
-  const style: CSSProperties = {
-    ['--sev' as string]: SEV_VAR[move.sev],
-    ['--persona-color' as string]: personaColor,
-  };
+  const style: CSSProperties = { ['--sev' as string]: SEV_VAR[move.sev] };
 
   return (
-    <article className={s.move} style={style} data-committed={committed || undefined}>
-      <div className={s.sevBar} aria-hidden />
-      {numeral && (
-        <span className={s.ghostNum} aria-hidden>
-          {numeral}
-        </span>
-      )}
-
-      <div className={s.metaHead}>
-        {numeral && <span className={s.findingNum}>Finding #{numeral}</span>}
-        {move.isRule ? (
-          <span className={s.ruleChip}>RULE</span>
-        ) : (
-          <span className={s.personaChip}>
-            <MiniBot size={13} color={personaColor.startsWith('var') ? '#00e5b0' : personaColor} />
-            {group ?? 'AI'}
-          </span>
-        )}
-        <span className={s.impactTag} style={{ color: band.tone }}>
-          {band.glyph} {band.label}
-        </span>
-      </div>
-
-      <h3 className={s.title}>{move.title}</h3>
-
-      <p className={s.directive}>
-        <span className={s.arrow} aria-hidden>
-          →
-        </span>{' '}
-        {move.scope && <span className={`mono ${s.scope}`}>{move.scope}</span>}
-        {move.scope && ' · '}
-        {highlightParams(directiveText)}
-      </p>
-
-      {move.hasParams && move.steps.length > 0 && (
-        <div className={s.steps}>
-          {move.steps.map((st, i) => (
-            <Fragment key={i}>
-              <span className={`mono ${s.stepWhere}`}>{st.where}</span>
-              <span className={`mono ${s.stepDetail}`}>{st.detail || '—'}</span>
-            </Fragment>
-          ))}
+    <div className="move" data-move-id={move.id} data-added={added ? 'true' : 'false'} style={style}>
+      <div className="move-main">
+        <div className="move-prob">
+          <span className="mp-dot" />
+          <span className="mp-lab">Fix</span>
+          {move.scope && <span className="mp-head">{move.scope}</span>}
+          <span className="mp-spacer" />
+          {shortMetric && <span className="mp-metric">{shortMetric}</span>}
+          <span className="mp-sev">{SEV_LABEL[move.sev]}</span>
         </div>
-      )}
 
-      <div className={s.foot}>
-        <span className={`mono ${s.conf}`} title="Confidence">
-          {confPct}% conf
-        </span>
+        <div className="move-top">
+          <div className="move-title">{move.title}</div>
+        </div>
 
-        <div className={s.toggles}>
+        <div className={`directive${directional ? ' directional' : ''}`}>
+          <span className="arrow" aria-hidden>
+            →
+          </span>
+          <div className="d-text">
+            {!directional && move.scope && (
+              <>
+                <span className="scope">{move.scope}</span> ·{' '}
+              </>
+            )}
+            {highlightParams(directiveText)}
+          </div>
+        </div>
+
+        <div className="move-foot">
+          <span className="move-conf">
+            <span className="cv">{Math.round(move.confidence * 100)}%</span> conf
+          </span>
+          <span className={`move-src${isAi ? ' ai' : ''}`}>{move.source}</span>
+          <span className="spacer" />
           {move.why && (
             <button
               type="button"
-              className={s.toggle}
-              aria-expanded={showWhy}
-              onClick={() => setShowWhy((v) => !v)}
+              className={`linkbtn${open === 'why' ? ' on' : ''}`}
+              onClick={() => toggle('why')}
             >
-              why {showWhy ? '▴' : '▾'}
+              why <span className="chev">▾</span>
             </button>
           )}
-          {move.evidence.metric && (
+          {metric && (
             <button
               type="button"
-              className={s.toggle}
-              aria-expanded={showData}
-              onClick={() => setShowData((v) => !v)}
+              className={`linkbtn${open === 'data' ? ' on' : ''}`}
+              onClick={() => toggle('data')}
             >
-              data {showData ? '▴' : '▾'}
+              data <span className="chev">▾</span>
             </button>
           )}
-          <button type="button" className={s.audition} onClick={onAudition}>
-            ▶ Audition
-          </button>
+          {hasSteps && (
+            <button
+              type="button"
+              className={`linkbtn${open === 'fix' ? ' on' : ''}`}
+              onClick={() => toggle('fix')}
+            >
+              suggested fix <span className="chev">▾</span>
+            </button>
+          )}
           <button
             type="button"
-            className={s.triage}
-            data-in={committed || undefined}
+            className={`rack-toggle${added ? ' on' : ''}`}
             onClick={() => onToggleCommit(move)}
+            title="Queue this fix for the Listen page"
           >
-            {committed ? '✓ In plan' : '+ Add to plan'}
+            {added ? '✓ Added' : '+ Add'}
           </button>
         </div>
       </div>
 
-      {showWhy && move.why && <p className={s.why}>{move.why}</p>}
-      {showData && move.evidence.metric && (
-        <p className={`mono ${s.data}`}>{move.evidence.metric}</p>
+      {open && (
+        <div className="move-expand fade-up">
+          {open === 'why' && move.why && (
+            <div className="why-callout">
+              <span className="wq" aria-hidden>
+                ?
+              </span>
+              <div className="wbody">{move.why}</div>
+            </div>
+          )}
+          {open === 'data' && metric && (
+            <div className="evidence">
+              <div className="evidence-hd">
+                <span className="lab">The data</span>
+                {move.evidence.chartType && <span className="metric">{move.evidence.chartType}</span>}
+              </div>
+              <div className="ev-readout">
+                <span className="ev-metric">{metric}</span>
+                <div className="ev-meta">
+                  <span>measured · {move.source}</span>
+                </div>
+                <div className="ev-conf">
+                  <div className="ecl">
+                    <span>confidence</span>
+                    <span>{Math.round(move.confidence * 100)}%</span>
+                  </div>
+                  <div className="ecbar">
+                    <div className="ecfill" style={{ width: `${Math.round(move.confidence * 100)}%` }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          {open === 'fix' && hasSteps && (
+            <div>
+              <div className="pb-h">Rack settings</div>
+              <RackModules steps={move.steps} />
+            </div>
+          )}
+        </div>
       )}
-    </article>
+    </div>
   );
 }

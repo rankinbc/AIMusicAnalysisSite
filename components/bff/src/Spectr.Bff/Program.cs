@@ -172,6 +172,14 @@ builder.Services.AddScoped<ReferenceProfileAggregator>();
 // Story 2.10 — nightly billing reconciliation (read-only drift check).
 builder.Services.AddHostedService<BillingReconciliationService>();
 
+// Worker supervision — fail jobs orphaned by a dead/restarted dramatiq worker so
+// the UI shows a re-runnable error instead of an infinite spinner. Runtime
+// backstop to scripts/recover-jobs.ps1 (which handles dev restarts at launch).
+builder.Services.AddHostedService<StaleJobReaper>();
+builder.Services.AddOptions<WorkerOptions>()
+    .Bind(builder.Configuration.GetSection(WorkerOptions.SectionName))
+    .ValidateOnStart();
+
 // Story 1.9: per-analysis free-tier coach follow-up cap. Fail-fast at startup
 // on a non-positive value — a zero cap would make the product unusable and we
 // don't want a config typo to ship silently.
@@ -290,6 +298,7 @@ api.MapVersionViewEndpoints();
 api.MapFeedbackEndpoints();
 api.MapRoomEndpoints();
 api.MapBillingEndpoints();
+api.MapHealthEndpoints();
 
 app.MapGet("/", () => Results.Json(new { status = "ok", version = "2.0.0" }))
    .AllowAnonymous();

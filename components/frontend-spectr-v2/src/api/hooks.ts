@@ -54,6 +54,7 @@ import type {
   VerdictsListResponse,
   VersionDto,
   VersionFilesResponse,
+  WorkerHealthResponse,
 } from './types';
 
 // ── Auth ────────────────────────────────────────────────────────────────────
@@ -438,6 +439,23 @@ export function useDeleteNote(versionId: string) {
   });
 }
 
+// ── Worker health ───────────────────────────────────────────────────────────
+/** Polls analysis-worker liveness for the global offline banner. Polls slowly
+ *  while healthy and faster while offline so recovery clears the banner quickly.
+ *  Anonymous endpoint — safe before auth. */
+export function useWorkerHealth() {
+  return useQuery<WorkerHealthResponse>({
+    queryKey: ['health', 'worker'],
+    queryFn: () =>
+      fetcher<WorkerHealthResponse>({ url: '/health/worker', method: 'GET' }),
+    refetchInterval: (query) =>
+      query.state.data?.healthy === false ? 10_000 : 30_000,
+    refetchIntervalInBackground: false,
+    staleTime: 5_000,
+    retry: false,
+  });
+}
+
 // ── Jobs ────────────────────────────────────────────────────────────────────
 export function useJob(jobId: string, opts?: { pollMs?: number }) {
   return useQuery<JobStatusDto>({
@@ -527,7 +545,18 @@ export function useVerdicts(jobId: string, opts: UseVerdictsOptions) {
         method: 'GET',
       }),
     enabled: opts.enabled && Boolean(jobId),
-    refetchInterval: () => (opts.optimisticRunning.size > 0 ? 3000 : false),
+    // Poll while (a) a specialist the user kicked off is still running, OR
+    // (b) Triage hasn't landed its routing plan yet. The BFF lazy-fires
+    // `run_triage` on the first GET and returns BEFORE the plan is written, so
+    // without this the suggestions never surface on the initial upload. Bound
+    // the triage wait so a permanently-empty plan doesn't poll forever.
+    refetchInterval: (query) => {
+      if (opts.optimisticRunning.size > 0) return 3000;
+      const d = query.state.data;
+      const triagePending = d != null && d.routing_plan == null && d.degradation == null;
+      if (triagePending && query.state.dataUpdateCount < 25) return 3000;
+      return false;
+    },
     retry: false,
   });
 }

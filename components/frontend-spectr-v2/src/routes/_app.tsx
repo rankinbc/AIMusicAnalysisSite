@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import { useEntitlements } from '../api/hooks';
 import { AppDunningNotice } from '../features/billing/AppDunningNotice';
+import { AppWorkerHealthNotice } from '../features/health/AppWorkerHealthNotice';
 import { BrandMark } from '../ui/BrandMark';
 import { UsageMeter } from '../components/UsageMeter';
 import s from './_app/_appLayout.module.css';
@@ -210,6 +211,8 @@ function AppLayout() {
       {pathname !== '/billing' && (
         <AppDunningNotice className={s.dunningSlot} />
       )}
+      {/* Global analysis-worker outage notice — renders nothing while healthy. */}
+      <AppWorkerHealthNotice className={s.workerHealthSlot} />
       <main className={s.main}>
         <Outlet />
       </main>

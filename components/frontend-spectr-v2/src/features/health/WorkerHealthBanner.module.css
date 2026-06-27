@@ -1,0 +1,33 @@
+/* Worker-offline banner. A stalled analysis pipeline is a critical outage, so
+   red (--red), unlike the recoverable amber dunning banner. */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 0.75rem);
+  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
+  border: 1px solid var(--red);
+  background: var(--red-dim);
+  border-radius: var(--radius, 10px);
+  color: var(--text);
+}
+
+.dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--red);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.message {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.3;
+}

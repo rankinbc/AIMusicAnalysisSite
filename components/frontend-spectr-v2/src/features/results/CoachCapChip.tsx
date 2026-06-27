@@ -22,10 +22,15 @@ interface CoachCapChipProps {
 }
 
 export function CoachCapChip({ used, limit }: CoachCapChipProps) {
+  // Unlimited tiers report an int-max limit — render "unlimited" rather than
+  // the raw 2147483647.
+  const unlimited = !Number.isFinite(limit) || limit >= 1_000_000;
   const remaining = Math.max(0, limit - used);
-  const tone = remaining === 1 ? 'orange' : 'default';
-  const visibleText = `${used} of ${limit} follow-ups · this analysis`;
-  const ariaLabel = `${visibleText}, ${remaining} remaining`;
+  const tone = !unlimited && remaining === 1 ? 'orange' : 'default';
+  const visibleText = unlimited
+    ? 'unlimited follow-ups'
+    : `${used} of ${limit} follow-ups · this analysis`;
+  const ariaLabel = unlimited ? visibleText : `${visibleText}, ${remaining} remaining`;
 
   return (
     <span aria-label={ariaLabel}>
