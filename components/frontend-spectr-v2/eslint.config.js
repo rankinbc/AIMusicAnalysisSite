@@ -7,7 +7,16 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 
 export default [
   {
-    ignores: ['dist/**', 'node_modules/**', 'src/routeTree.gen.ts', 'src/api/generated/**'],
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'src/routeTree.gen.ts',
+      'src/api/generated/**',
+      // design-sync tool scratch dirs (not project source)
+      '.ds-sync/**',
+      'ds-bundle/**',
+      '.design-sync/**',
+    ],
   },
   js.configs.recommended,
   {
