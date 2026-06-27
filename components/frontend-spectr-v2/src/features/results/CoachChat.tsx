@@ -65,30 +65,23 @@ interface CoachChatProps {
   /** Count of measurement keys surfaced from `analyses.final_json` —
    *  contributes to the grounding scope line ({n} measurements). */
   measurementsCount: number;
+  /** Optional actions rendered top-right of the coach card (redesign: the
+   *  Specialist Team + Generate Coach Mix buttons live here). */
+  headerActions?: React.ReactNode;
 }
-
-const STRONG = [
-  'Mix balance and frequency',
-  'Loudness and streaming targets',
-  'Specialist findings & priorities',
-  'Genre-comparative analysis',
-];
-
-const WEAK = [
-  'Subjective taste and vibe',
-  'Mastering chain plugin specifics',
-  'Real-time playback rendering',
-  'Live arrangement experiments',
-];
 
 export function CoachChat({
   trackName,
   analysisId,
   verdicts,
   measurementsCount,
+  headerActions,
 }: CoachChatProps) {
   const [input, setInput] = useState('');
-  const [showCaps, setShowCaps] = useState(false);
+  // teach-mode-coach: when on, the next question is sent as mode="teach" so the
+  // coach teaches the relevant craft grounded in this track instead of a direct
+  // Q&A answer.
+  const [teachMode, setTeachMode] = useState(false);
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [offlineState, setOfflineState] = useState(false);
@@ -203,6 +196,7 @@ export function CoachChat({
               finalized: m.status === 'complete' || m.status === 'refused',
             };
             if (m.evidence) turn.evidence = m.evidence;
+            if (m.mode === 'teach') turn.mode = 'teach';
             if (m.status === 'refused') {
               turn.refused = true;
               if (m.refusalReason) turn.refusalReason = m.refusalReason;
@@ -272,12 +266,15 @@ export function CoachChat({
     // response can't overwrite a freshly-mounted analysis's caps with the
     // outgoing analysis's reply.
     const sendAnalysisId = analysisId;
+    // Snapshot the toggle at send time so a mid-flight toggle can't relabel
+    // the in-flight turn. Both bubbles carry it so the assistant answer badges.
+    const turnMode: 'qa' | 'teach' = teachMode ? 'teach' : 'qa';
     sendingRef.current = true;
     setInput('');
     setTurns((t) => [
       ...t,
-      { role: 'user', text: msg },
-      { role: 'assistant', text: '', finalized: false },
+      { role: 'user', text: msg, mode: turnMode },
+      { role: 'assistant', text: '', finalized: false, mode: turnMode },
     ]);
     setStreaming(true);
     setStreamStatus('Coach is responding…');
@@ -297,7 +294,7 @@ export function CoachChat({
       const postRes = await fetch(`/api/coach/${analysisId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({ content: msg }),
+        body: JSON.stringify({ content: msg, mode: turnMode }),
         signal: ac.signal,
       });
 
@@ -449,170 +446,44 @@ export function CoachChat({
         ariaLiveTimerRef.current = null;
       }
     }
-  }, [analysisId, caps, flushAriaLive, input, offlineState, scheduleAriaLive, streaming]);
+  }, [analysisId, caps, flushAriaLive, input, offlineState, scheduleAriaLive, streaming, teachMode]);
 
   return (
-    <section className={s.coach}>
-      <div className={s.body}>
-        <div className={s.avatar}>
-          <TranceBot size={72} thinking={streaming} />
-        </div>
-        <div className={s.text}>
-          <div className={s.statusRow}>
-            <span className="dot pulse-soft" aria-hidden="true" />
-            <span className={s.statusLabel}>Ask the coach</span>
-            {/* P17 — `·` separator matches UX-DR13 overline */}
-            <span className={s.statusSep}>·</span>
-            <span className={s.statusSub}>online · trained on your analysis</span>
-            {/* review-fix P10 — chip is always visible per Task 4.3, even
-                during the hydration window. Default to 0/limit so it never
-                disappears on a failed/slow hydration. */}
-            <span className={s.capsChipSlot}>
-              <CoachCapChip used={caps?.used ?? 0} limit={caps?.limit ?? 3} />
-            </span>
+    <div className="coach-wrap">
+      <div className="coach-hd">
+        <TranceBot size={50} thinking={streaming} />
+        <div className="ch-b">
+          <div className="ch-k">
+            <span className="led" />
+            <span className="lab">Ask the Coach</span>
           </div>
-          <h3 className={s.title}>Ask anything about this mix</h3>
-          <p className={s.subtitle}>
+          <div className="ch-name">Ask anything about this mix</div>
+          <div className="ch-sub">
             I&rsquo;ve seen every metric on <strong>{trackName || 'this track'}</strong>, every
             specialist verdict, and how it compares to your genre&rsquo;s reference profile.
-            Ask me what to fix first, what would push you up a grade, or why a specialist
-            flagged what it did.{' '}
-            <button
-              type="button"
-              className={s.capabilitiesLink}
-              onClick={() => setShowCaps((v) => !v)}
-            >
-              {showCaps ? 'hide' : 'what can I ask?'}
-            </button>
-          </p>
+          </div>
+        </div>
+        {headerActions && <div className="coach-actions">{headerActions}</div>}
+      </div>
 
-          {showCaps && (
-            <div className={s.capabilities}>
-              <div className={s.capabilitiesCol}>
-                <h4 style={{ color: 'var(--cyan)' }}>Strong here</h4>
-                <ul className={s.capabilitiesList}>
-                  {STRONG.map((x) => (
-                    <li key={x}>· {x}</li>
-                  ))}
-                </ul>
-              </div>
-              <div className={s.capabilitiesCol}>
-                <h4 style={{ color: 'var(--orange)' }}>Falls flat here</h4>
-                <ul className={s.capabilitiesList}>
-                  {WEAK.map((x) => (
-                    <li key={x}>· {x}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          )}
-
-          {caps?.capReached && !streaming ? (
-            // Story 1.9 / AC3 — input row replaced by CoachGateInline once
-            // the per-analysis cap is reached. Transcript above remains
-            // visible + scrollable. Suggestion chips disappear too — they'd
-            // prefill an input that no longer exists.
-            <CoachGateInline />
-          ) : (
-            <>
-              <div className={s.suggestions}>
-                {suggestions.map((q) => (
-                  <button
-                    key={q}
-                    type="button"
-                    className={s.suggestion}
-                    onClick={() => setInput(q)}
-                    disabled={offlineState}
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
-
-              <div className={s.inputRow}>
-                <input
-                  className={`${s.input}${offlineState ? ` ${s.inputDisabled}` : ''}`}
-                  placeholder={offlineState ? 'Coach is offline' : 'Ask the coach…'}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !streaming) {
-                      e.preventDefault();
-                      send();
-                    }
-                  }}
-                  disabled={offlineState}
-                  aria-label="Coach question input"
-                />
-                {streaming ? (
-                  <button
-                    type="button"
-                    className="btn ghost"
-                    onClick={handleStop}
-                    aria-label="Stop coach response"
-                  >
-                    ◼ Stop
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="btn primary"
-                    onClick={send}
-                    disabled={!input.trim() || offlineState}
-                  >
-                    Ask →
-                  </button>
-                )}
-              </div>
-            </>
-          )}
-
-          <p
-            className={s.groundingScope}
-            aria-label="Coach answers are grounded in this report only."
-          >
-            Answers grounded in analysis <code>#{shortid}</code> ·{' '}
-            {measurementsCount} measurements · {openVerdictCount} verdicts
-          </p>
-
-          {offlineState && (
-            <section
-              className={`card ${s.offlineCard}`}
-              aria-labelledby="coach-offline-heading"
-            >
-              <div className={s.offlineHeader}>
-                <span className="label" id="coach-offline-heading">
-                  Coach offline
-                </span>
-                <Pill tone="orange">unavailable</Pill>
-              </div>
-              <p className={s.offlineBody}>{COACH_OFFLINE_COPY}</p>
-              <div className={s.offlineActions}>
-                <button type="button" className="btn sm" onClick={handleRetry}>
-                  Retry
-                </button>
-              </div>
-            </section>
-          )}
-
-          {turns.length > 0 && (
-            <div className={s.transcript}>
-              {turns.map((turn, i) => {
-                const isAssistant = turn.role === 'assistant';
-                const showStreamingPlaceholder =
-                  isAssistant && !turn.finalized && streaming && i === turns.length - 1 && !turn.text;
-                const unlock = turn.refused ? resolveUnlockAction(turn.refusalReason) : null;
-                return (
-                  <div
-                    key={i}
-                    className={isAssistant ? s.turnAssistant : s.turnUser}
-                  >
-                    <span className={s.turnLabel}>
-                      {isAssistant ? 'Coach' : 'You'}
+      <div className="coach-body">
+        {turns.length > 0 && (
+          <div className="coach-thread">
+            {turns.map((turn, i) => {
+              const isAssistant = turn.role === 'assistant';
+              const showStreamingPlaceholder =
+                isAssistant && !turn.finalized && streaming && i === turns.length - 1 && !turn.text;
+              const unlock = turn.refused ? resolveUnlockAction(turn.refusalReason) : null;
+              return (
+                <div key={i} className={`cmsg ${isAssistant ? 'bot' : 'user'}`}>
+                  <span className="cm-role">{isAssistant ? 'Coach' : 'You'}</span>
+                  {isAssistant && turn.mode === 'teach' && (
+                    <span className="cm-teach-badge">
+                      <Pill tone="violet">Teach</Pill>
                     </span>
-                    <p className={s.turnText}>
-                      {turn.text || (showStreamingPlaceholder ? '…' : '')}
-                    </p>
+                  )}
+                  <div className="bub">
+                    {turn.text || (showStreamingPlaceholder ? '…' : '')}
                     {isAssistant && turn.finalized && turn.evidence && turn.evidence.length > 0 && (
                       <EvidenceChips evidence={turn.evidence} />
                     )}
@@ -629,33 +500,112 @@ export function CoachChat({
                       </div>
                     )}
                   </div>
-                );
-              })}
-            </div>
-          )}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
-          {/* Single SR-only live region for stream-state + token mirror. The
-              ariaLiveText additive region uses additions-only so VoiceOver
-              announces only the throttled delta. The status string is
-              announced as a whole when it changes (offline / done / cancelled). */}
-          <span className="sr-only" aria-live="polite">
-            {streamStatus}
-          </span>
-          <span
-            className="sr-only"
-            aria-live="polite"
-            aria-atomic="false"
-            aria-relevant="additions"
+        {offlineState && (
+          <section
+            className={`card ${s.offlineCard}`}
+            aria-labelledby="coach-offline-heading"
+            style={{ margin: '14px 14px 0' }}
           >
-            {ariaLiveText}
-          </span>
+            <div className={s.offlineHeader}>
+              <span className="label" id="coach-offline-heading">
+                Coach offline
+              </span>
+              <Pill tone="orange">unavailable</Pill>
+            </div>
+            <p className={s.offlineBody}>{COACH_OFFLINE_COPY}</p>
+            <div className={s.offlineActions}>
+              <button type="button" className="btn sm" onClick={handleRetry}>
+                Retry
+              </button>
+            </div>
+          </section>
+        )}
 
-          <p className={s.disclaimer}>
-            Coach answers are scoped to this analysis. I won&rsquo;t mix the track for you, but I
-            will tell you exactly which knob to turn and how far.
-          </p>
+        {caps?.capReached && !streaming ? (
+          <div style={{ padding: '12px 14px 0' }}>
+            <CoachGateInline />
+          </div>
+        ) : (
+          <>
+            <div className="coach-chips">
+              {suggestions.map((q) => (
+                <button key={q} type="button" onClick={() => setInput(q)} disabled={offlineState}>
+                  {q}
+                </button>
+              ))}
+            </div>
+
+            <div className="coach-input">
+              <button
+                type="button"
+                className="coach-teach"
+                onClick={() => setTeachMode((v) => !v)}
+                aria-pressed={teachMode}
+                aria-label="Teach me mode — learn the craft using your track as the example"
+                title="Teach me: the coach explains the craft using your track's measurements"
+                disabled={offlineState}
+              >
+                🎓 {teachMode ? 'Teaching' : 'Teach'}
+              </button>
+              <input
+                placeholder={
+                  offlineState
+                    ? 'Coach is offline'
+                    : teachMode
+                      ? 'Ask the coach to teach you something…'
+                      : 'Ask the coach about this mix…'
+                }
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !streaming) {
+                    e.preventDefault();
+                    send();
+                  }
+                }}
+                disabled={offlineState}
+                aria-label="Coach question input"
+              />
+              {streaming ? (
+                <button type="button" className="send" onClick={handleStop} aria-label="Stop coach response">
+                  ◼
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="send"
+                  onClick={send}
+                  disabled={!input.trim() || offlineState}
+                >
+                  Ask →
+                </button>
+              )}
+            </div>
+          </>
+        )}
+
+        <div className="coach-cap">
+          <CoachCapChip used={caps?.used ?? 0} limit={caps?.limit ?? 3} />
         </div>
+        <div className="coach-grounding" aria-label="Coach answers are grounded in this report only.">
+          Answers grounded in analysis <code>#{shortid}</code> · {measurementsCount} measurements ·{' '}
+          {openVerdictCount} verdicts
+        </div>
+
+        {/* SR-only live regions for stream-state + token mirror. */}
+        <span className="sr-only" aria-live="polite">
+          {streamStatus}
+        </span>
+        <span className="sr-only" aria-live="polite" aria-atomic="false" aria-relevant="additions">
+          {ariaLiveText}
+        </span>
       </div>
-    </section>
+    </div>
   );
 }

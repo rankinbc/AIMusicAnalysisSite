@@ -29,6 +29,11 @@ public sealed class CoachMessage
     [Column("status"), MaxLength(16)]
     public string Status { get; set; } = "complete";    // "pending" | "complete" | "refused" | "error"
 
+    // teach-mode flag (story: teach-mode-coach). Stamped on the user row at POST;
+    // read by the coach_reply actor to pick the TeachCoach prompt + inject units.
+    [Column("mode"), MaxLength(20)]
+    public string Mode { get; set; } = "qa";            // "qa" | "teach"
+
     [Column("content")]
     public string Content { get; set; } = "";
 

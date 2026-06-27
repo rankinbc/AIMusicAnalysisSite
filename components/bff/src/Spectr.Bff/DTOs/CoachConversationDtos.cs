@@ -15,7 +15,8 @@ public sealed record CoachMessageDto(
     IReadOnlyList<CoachEvidenceDto>? Evidence,   // null on user rows
     string? RefusalReason,                        // set on refused/coach_offline rows
     DateTimeOffset CreatedAt,
-    DateTimeOffset? CompletedAt);
+    DateTimeOffset? CompletedAt,
+    string Mode = "qa");                           // "qa" | "teach" — lets the UI badge teach answers durably
 
 // Story 1.9 / UX-DR16 + Story 2.6 / FR15: coach follow-up cap state. `CapReached`
 // is server-computed (single source of truth — the frontend never re-derives it).
@@ -39,7 +40,10 @@ public sealed record CoachConversationDto(
     IReadOnlyList<CoachMessageDto> Messages,
     CoachCapsDto Caps);
 
-public sealed record CreateCoachMessageRequest(string Content);
+// `Mode` (story: teach-mode-coach) is optional — absent/unknown binds to "qa"
+// so every existing caller keeps working. "teach" puts the coach in teach mode
+// for this turn (lesson grounded in the track) rather than direct Q&A.
+public sealed record CreateCoachMessageRequest(string Content, string? Mode = null);
 
 public sealed record CreateCoachMessageResponse(
     Guid ConversationId,

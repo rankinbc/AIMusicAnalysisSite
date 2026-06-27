@@ -123,6 +123,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         builder.Entity<CoachMessage>().ToTable(t => t.HasCheckConstraint(
             "ck_coach_messages_status",
             "\"status\" IN ('pending','complete','refused','error')"));
+        // teach-mode-coach: enum-as-string CHECK on coach_messages mode + a
+        // DB default of 'qa' so existing rows backfill to a CHECK-valid value
+        // (an empty-string default would violate the CHECK on create).
+        builder.Entity<CoachMessage>().ToTable(t => t.HasCheckConstraint(
+            "ck_coach_messages_mode", "\"mode\" IN ('qa','teach')"));
+        builder.Entity<CoachMessage>().Property(m => m.Mode).HasDefaultValue("qa");
 
         // Polymorphic CHECK on comments — PRP-3 swapped this from 2-way to 3-way
         // (exactly one of {target_share_token, target_published_track,

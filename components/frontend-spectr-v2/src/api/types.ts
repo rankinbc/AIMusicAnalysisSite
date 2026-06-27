@@ -1363,6 +1363,10 @@ export interface CoachMessageDto {
   createdAt: string;
   /** ISO-8601 UTC; null while status === 'pending'. */
   completedAt: string | null;
+  /** teach-mode-coach: "qa" (direct answer) | "teach" (lesson grounded in the
+   *  track). Lets the UI badge teach answers durably across reloads. Optional —
+   *  older payloads omit it (treat as "qa"). */
+  mode?: 'qa' | 'teach';
 }
 
 /** Story 1.9 / UX-DR16 — per-analysis follow-up cap state. `capReached` is
@@ -1397,6 +1401,9 @@ export interface CoachConversationDto {
 
 export interface CreateCoachMessageRequest {
   content: string;
+  /** teach-mode-coach: omit or "qa" for a direct answer; "teach" for a lesson
+   *  grounded in the track. */
+  mode?: 'qa' | 'teach';
 }
 
 export interface CreateCoachMessageResponse {
@@ -1555,4 +1562,15 @@ export interface RevokeRequest {
 }
 export interface RecapPublishRequest {
   momentIds: number[];
+}
+
+/** GET /api/health/worker — analysis-worker liveness for the global offline banner.
+ *  Mirrors Spectr.Bff.Endpoints.WorkerHealthDto. */
+export interface WorkerHealthResponse {
+  /** A dramatiq heartbeat fresher than the stale threshold exists. */
+  healthy: boolean;
+  /** Seconds since the most recent worker heartbeat; null if none ever seen. */
+  lastHeartbeatAgeSeconds: number | null;
+  /** Pending analysis messages across the paid + free lanes. */
+  queueDepth: number;
 }

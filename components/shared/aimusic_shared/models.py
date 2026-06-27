@@ -443,6 +443,9 @@ class CoachMessage(Base):
             "status IN ('pending','complete','refused','error')",
             name="ck_coach_messages_status",
         ),
+        CheckConstraint(
+            "mode IN ('qa','teach')", name="ck_coach_messages_mode",
+        ),
         Index(
             "ix_coach_messages_conversation_created_at",
             "conversation_id", "created_at",
@@ -464,6 +467,11 @@ class CoachMessage(Base):
     role: Mapped[str] = mapped_column("role", String(16), nullable=False)
     status: Mapped[str] = mapped_column(
         "status", String(16), nullable=False, default="complete",
+    )
+    # teach-mode flag stamped on the user row by the BFF (story: teach-mode-coach).
+    # Read by the coach_reply actor to pick the TeachCoach prompt + inject units.
+    mode: Mapped[str] = mapped_column(
+        "mode", String(20), nullable=False, default="qa", server_default="qa",
     )
     content: Mapped[str] = mapped_column("content", String, nullable=False, default="")
     evidence: Mapped[Optional[Any]] = mapped_column(

@@ -64,6 +64,8 @@ from .verdict_lib.json_extraction import extract_json_object
 from .verdict_lib.prompt_loader import (
     load_coach_grounded,
     load_coach_grounded_model,
+    load_coach_teach,
+    load_coach_teach_model,
 )
 
 # NOTE: ``app.db_sync`` raises ``RuntimeError("DATABASE_URL not set")`` at
@@ -198,9 +200,36 @@ def _mark_complete_partial(
 
 # ── prompt assembly ────────────────────────────────────────────────────────
 
+def _render_teach_block(teach_units: list[Any], catalog: list[str]) -> str:
+    """Render the teach-mode ``## Teaching units`` + ``## Lesson catalog``
+    block injected below ``## Context``. Empty (``""``) when there's nothing to
+    inject, so qa-mode output stays byte-identical to the grounded path.
+    """
+    if not teach_units and not catalog:
+        return ""
+    parts: list[str] = []
+    if teach_units:
+        unit_blocks: list[str] = []
+        for u in teach_units:
+            paths = ", ".join(getattr(u, "reference_paths", ()) or [])
+            unit_blocks.append(
+                f"### {u.title} ({u.category})\n"
+                f"Reference paths for THIS track: {paths or '(none)'}\n\n"
+                f"{u.body}"
+            )
+        parts.append("## Teaching units\n\n" + "\n\n".join(unit_blocks))
+    if catalog:
+        catalog_lines = "\n".join(f"- {t}" for t in catalog)
+        parts.append("## Lesson catalog\n\n" + catalog_lines)
+    return "\n\n".join(parts) + "\n\n"
+
+
 def _build_user_turn(
     context_bundle: dict[str, Any],
     user_question: str,
+    *,
+    teach_units: list[Any] | None = None,
+    catalog: list[str] | None = None,
 ) -> str:
     """Compose the user-turn payload sent to the gateway as ``user=``.
 
@@ -226,9 +255,11 @@ def _build_user_turn(
     safe_question = user_question.replace("</user_input>", "</user_input&#62;")
 
     bundle_json = json.dumps(context_bundle, indent=2, default=str)
+    teach_block = _render_teach_block(teach_units or [], catalog or [])
     return (
         "## Context\n\n"
         f"```json\n{bundle_json}\n```\n\n"
+        f"{teach_block}"
         "## Conversation so far\n\n"
         f"{tail_block}\n\n"
         "## User question (untrusted)\n\n"
@@ -314,6 +345,9 @@ def coach_reply(
                 _mark_error(mid, body=COACH_GENERIC_ERROR_BODY)
                 return
             user_question = user_row.content
+            # teach-mode flag rides the user row (default qa); the dramatiq
+            # envelope is unchanged (still 3 string args).
+            mode = getattr(user_row, "mode", None) or "qa"
 
             conversation = s.get(Conversation, cid)
             if conversation is None:
@@ -390,16 +424,49 @@ def coach_reply(
             conversation_tail=tail,
         )
 
-        # ── Phase C: build user turn ───────────────────────────────────────
-        try:
-            version, system_body = load_coach_grounded()
-        except FileNotFoundError:
-            logger.exception("coach_reply: coach prompt file missing")
-            publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
-            _mark_error(mid)
-            return
-        model_pin = load_coach_grounded_model()
-        user_turn = _build_user_turn(bundle, user_question)
+        # ── Phase C: build user turn (teach vs grounded) ───────────────────
+        teach_units: list[Any] = []
+        catalog: list[str] = []
+        if mode == "teach":
+            # Selection is fail-soft: a unit-loading bug must not break the
+            # turn — fall back to no units (the prompt then teaches general
+            # craft). Mirrors resolve_evidence's never-raise discipline.
+            try:
+                from .coach_lib.teach import (  # noqa: PLC0415 — lazy
+                    load_units, select_units,
+                )
+                teach_units, catalog = select_units(
+                    user_question, verdicts_for_bundle, load_units(),
+                )
+            except Exception:
+                logger.exception(
+                    "coach_reply: teach unit selection failed; continuing "
+                    "without units",
+                )
+                teach_units, catalog = [], []
+            try:
+                version, system_body = load_coach_teach()
+            except FileNotFoundError:
+                logger.exception("coach_reply: teach prompt file missing")
+                publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
+                _mark_error(mid)
+                return
+            model_pin = load_coach_teach_model()
+            prompt_slug = "coach_teach"
+        else:
+            try:
+                version, system_body = load_coach_grounded()
+            except FileNotFoundError:
+                logger.exception("coach_reply: coach prompt file missing")
+                publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
+                _mark_error(mid)
+                return
+            model_pin = load_coach_grounded_model()
+            prompt_slug = "coach_grounded"
+
+        user_turn = _build_user_turn(
+            bundle, user_question, teach_units=teach_units, catalog=catalog,
+        )
 
         # ── Phase D: stream gateway call (story 1.6) ───────────────────────
         splitter = StreamSplitter()
@@ -410,7 +477,7 @@ def coach_reply(
                 system=system_body,
                 user=user_turn,
                 purpose="coach",
-                prompt_slug="coach_grounded",
+                prompt_slug=prompt_slug,
                 prompt_version=version,
                 model=model_pin,
                 user_id=user_id,
@@ -509,7 +576,11 @@ def coach_reply(
             _mark_error(mid, llm_call_id=llm_call_id)
             return
 
-        if answer_makes_numeric_claim_without_evidence(payload):
+        # Teach mode states general craft numbers ("-1 dBTP", "200-500 Hz")
+        # that are NOT track values and have no path — so the numeric gate is
+        # skipped in teach mode. Track-specific claims are still required to
+        # cite a resolvable path (enforced by the prompt + Phase F resolution).
+        if mode != "teach" and answer_makes_numeric_claim_without_evidence(payload):
             logger.info(
                 "coach_reply: rejecting numeric answer with no evidence (msg=%s)",
                 assistant_message_id,

@@ -972,6 +972,122 @@ def test_persist_completes_before_terminal_publish(
     )
 
 
+# ── Teach mode (story: teach-mode-coach) ───────────────────────────────────
+
+
+def _seed_teach_pair(s, conversation_id, user_question):
+    """(user mode=teach complete, assistant mode=teach pending) pair."""
+    from aimusic_shared.models import CoachMessage  # noqa: PLC0415
+    now = datetime.now(tz=timezone.utc)
+    uid = uuid.uuid4()
+    aid = uuid.uuid4()
+    s.add(CoachMessage(
+        id=uid, conversation_id=conversation_id, role="user",
+        status="complete", content=user_question, mode="teach", completed_at=now,
+    ))
+    s.add(CoachMessage(
+        id=aid, conversation_id=conversation_id, role="assistant",
+        status="pending", content="", mode="teach",
+    ))
+    return uid, aid
+
+
+_TEACH_FINAL_JSON = {
+    "phases": [
+        {"phase": 1, "name": "intake", "data": {
+            "bands": {"low_mid": -6.0, "mid": -12.0, "bass": -4.0},
+            "lufs": -9.0, "true_peak_db": -0.2,
+        }},
+    ],
+    "grade": "B",
+}
+
+
+def test_teach_mode_loads_teach_prompt_and_injects_units(sqlite_db, monkeypatch):
+    """mode=teach → TeachCoach.md is the system prompt, units are injected, and
+    the gateway is told prompt_slug=coach_teach."""
+    from app import coach_actor  # noqa: PLC0415
+
+    with sqlite_db.SessionFactory.begin() as s:
+        analysis_id = _seed_analysis(s, final_json=_TEACH_FINAL_JSON)
+        cid = _seed_conversation(s, analysis_id)
+        uid, aid = _seed_teach_pair(s, cid, "why is my low end muddy?")
+
+    reply_text = json.dumps({
+        "kind": "answer",
+        "body": "Mud lives ~300 Hz; cut 2-4 dB. Your low-mid is hot vs the mids.",
+        "evidence": [{"label": "low-mid", "path": "phase1.bands.low_mid"}],
+        "refusal_reason": None,
+    })
+    calls = _stub_gateway(monkeypatch, text=reply_text)
+
+    coach_actor.coach_reply.fn(str(cid), str(uid), str(aid))
+
+    assert len(calls) == 1
+    assert calls[0]["prompt_slug"] == "coach_teach"
+    assert "TEACH mode" in calls[0]["system"]
+    assert "## Teaching units" in calls[0]["user"]
+    assert "## Lesson catalog" in calls[0]["user"]
+    with sqlite_db.SessionFactory() as s:
+        row = _fetch_message(s, aid)
+        assert row.status == "complete"
+        assert row.evidence == [{"label": "low-mid", "path": "phase1.bands.low_mid"}]
+
+
+def test_teach_mode_allows_general_number_without_evidence(sqlite_db, monkeypatch):
+    """The teach-mode crux: a general craft number with NO evidence chip is
+    accepted (qa mode would demote this to error)."""
+    from app import coach_actor  # noqa: PLC0415
+
+    with sqlite_db.SessionFactory.begin() as s:
+        analysis_id = _seed_analysis(s, final_json=_TEACH_FINAL_JSON)
+        cid = _seed_conversation(s, analysis_id)
+        uid, aid = _seed_teach_pair(s, cid, "what ceiling should I use?")
+
+    reply_text = json.dumps({
+        "kind": "answer",
+        "body": "Aim for -1.0 dBTP on your limiter ceiling for streaming.",
+        "evidence": [],  # general number, no track chip — fine in teach mode
+        "refusal_reason": None,
+    })
+    _stub_gateway(monkeypatch, text=reply_text)
+
+    coach_actor.coach_reply.fn(str(cid), str(uid), str(aid))
+
+    with sqlite_db.SessionFactory() as s:
+        row = _fetch_message(s, aid)
+        assert row.status == "complete"  # NOT demoted to error
+
+
+def test_teach_mode_still_drops_unresolvable_track_chip(sqlite_db, monkeypatch):
+    """Track-claim grounding still holds in teach mode: an unresolvable
+    evidence path is dropped server-side (resolve_evidence unchanged)."""
+    from app import coach_actor  # noqa: PLC0415
+
+    with sqlite_db.SessionFactory.begin() as s:
+        analysis_id = _seed_analysis(s, final_json=_TEACH_FINAL_JSON)
+        cid = _seed_conversation(s, analysis_id)
+        uid, aid = _seed_teach_pair(s, cid, "teach me about my low end")
+
+    reply_text = json.dumps({
+        "kind": "answer",
+        "body": "Your low-mid runs hot.",
+        "evidence": [
+            {"label": "low-mid", "path": "phase1.bands.low_mid"},
+            {"label": "bogus", "path": "phase99.invented"},
+        ],
+        "refusal_reason": None,
+    })
+    _stub_gateway(monkeypatch, text=reply_text)
+
+    coach_actor.coach_reply.fn(str(cid), str(uid), str(aid))
+
+    with sqlite_db.SessionFactory() as s:
+        row = _fetch_message(s, aid)
+        assert row.status == "complete"
+        assert row.evidence == [{"label": "low-mid", "path": "phase1.bands.low_mid"}]
+
+
 def test_phase_a_failure_publishes_error_frame(
     sqlite_db, monkeypatch, _stub_redis,
 ):

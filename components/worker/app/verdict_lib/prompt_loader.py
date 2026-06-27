@@ -37,6 +37,7 @@ _DEFAULT_COACH_DIR = Path(__file__).resolve().parents[2] / "prompts" / "coach"
 COACH_PROMPTS_DIR = Path(os.environ.get("COACH_PROMPTS_DIR") or _DEFAULT_COACH_DIR)
 
 COACH_GROUNDED_FILENAME = "CoachGrounded"
+COACH_TEACH_FILENAME = "TeachCoach"
 
 
 SLUG_TO_FILENAME: dict[str, str] = {
@@ -270,6 +271,30 @@ def load_coach_grounded_model() -> str | None:
     """Optional ``model:`` pin from the coach prompt's frontmatter (NFR24).
     ``None`` → caller uses the gateway's configured default."""
     path = COACH_PROMPTS_DIR / f"{COACH_GROUNDED_FILENAME}.md"
+    if not path.exists():
+        return None
+    return parse_model_frontmatter(path.read_text(encoding="utf-8"))
+
+
+def load_coach_teach() -> tuple[str, str]:
+    """Returns ``(version, body)`` for the teach-mode coach prompt.
+
+    Reads the live ``TeachCoach.md`` under ``COACH_PROMPTS_DIR`` (same sibling
+    folder + frontmatter convention as the grounded coach; no pin-table
+    lookup). Raises :class:`FileNotFoundError` if missing — the ``coach_reply``
+    actor catches it and writes an ``error`` status so the user sees a real
+    message instead of a stuck spinner.
+    """
+    path = COACH_PROMPTS_DIR / f"{COACH_TEACH_FILENAME}.md"
+    if not path.exists():
+        raise FileNotFoundError(f"coach teach prompt file not found: {path}")
+    return parse_version_frontmatter(path.read_text(encoding="utf-8"))
+
+
+def load_coach_teach_model() -> str | None:
+    """Optional ``model:`` pin from the teach-mode coach prompt's frontmatter
+    (NFR24). ``None`` → caller uses the gateway's configured default."""
+    path = COACH_PROMPTS_DIR / f"{COACH_TEACH_FILENAME}.md"
     if not path.exists():
         return None
     return parse_model_frontmatter(path.read_text(encoding="utf-8"))
