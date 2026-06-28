@@ -180,11 +180,16 @@ what changed" card + `CompareDialog` are **removed**.
   read view of that version's saved plan (its items / moves). From there, the producer
   can route into the Listen "Plan" tab to apply it, or back to the Report. If no game
   plan exists for a version, the affordance is absent (not disabled).
-- **Implementation note:** game-plan persistence already exists on the Results/Listen
-  side (the Plan-tab apply work). The song page only needs a **read** path: "does this
-  version have a saved game plan, and fetch it." Confirm the existing endpoint/shape
-  during planning; if a per-version "has plan" flag isn't cheaply available, add it to
-  the per-version payload alongside §4.
+- **Implementation note (resolved 2026-06-28):** there is **no server-side per-version
+  game plan** — the proper `game_plans` table is PRP-5 (`listen-v3-game-plan-comparison.md`,
+  NOT started). What DOES exist: the Listen Plan tab persists per-version committed moves to
+  **`localStorage`** under `listenFixes:{versionId}` (+ `listenApplied:{versionId}`), via
+  `features/listen-rack/listenFixes.ts`. So the song page's marker + view is a **frontend,
+  local-interim** feature: read `listenFixes:{versionId}`; show the marker when it's
+  non-empty; the modal lists those moves with an "Apply in Listen" route. **Caveat:** this
+  reflects only plans saved in THIS browser (localStorage, not the server). Swap the source
+  to the `game_plans` GET endpoint when PRP-5 ships. **No BFF work** — lives entirely in
+  Plan 2 (frontend).
 
 ### 3.6 Activity / visibility strip — minimal social, graceful
 - **Display:** for the current version, render only what the BFF provides:
@@ -255,12 +260,13 @@ Letter grades were dropped — **score (0–100) is the only quality signal on t
 is unused here and does **not** need to be computed or sent for this surface. (No code to
 remove server-side necessarily; just: don't add grade to the new per-version payload.)
 
-### Change E — game-plan read path (§3.7)
-- Need a per-version "has a saved game plan" signal + a fetch for its content. Reuse the
-  existing Results/Listen game-plan persistence (read-only — no create/edit here). If a cheap
-  `hasGamePlan: boolean` (or `gamePlanId`) isn't already exposed per version, add it to
-  `VersionDto`. NOTE: this item was **not** in the 2026-06-27 backend report's four points —
-  confirm the existing game-plan endpoint/shape during planning before building the read view.
+### Change E — game-plan read path (§3.7) — NO BFF WORK (resolved 2026-06-28)
+- Investigation verdict: the per-version game plan is **not persisted server-side** (the
+  `game_plans` table is PRP-5, not started). The Listen Plan tab already saves per-version
+  moves to **`localStorage`** (`listenFixes:{versionId}`). The song-page marker + read view
+  therefore read that localStorage directly — a **frontend, local-interim** feature in Plan 2.
+- Future: when PRP-5 ships the `game_plans` table + `GET /api/versions/{id}/plan`, swap the
+  frontend source from localStorage to the endpoint. No change needed in THIS BFF plan.
 
 ---
 
