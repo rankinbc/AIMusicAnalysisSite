@@ -33,6 +33,7 @@ import { CoachMixModal } from './CoachMixModal';
 import { ExportModal } from './ExportModal';
 import { FixModal } from './FixModal';
 import { ProjectTab } from './ProjectTab';
+import { ProjectUnlock } from './ProjectUnlock';
 import { RackSidebar } from './RackSidebar';
 import { ReferenceTab } from './ReferenceTab';
 import { TrackInfoTab } from './TrackInfoTab';
@@ -291,12 +292,14 @@ export function ReportView({ results, songId, tab, onTabChange }: ReportViewProp
               />
             )}
             {tab === 'findings' && (
-              <FindingsTab verdicts={verdicts} onGoToActions={() => onTabChange('coach')} />
+              <FindingsTab
+                verdicts={verdicts}
+                onGoToActions={() => onTabChange('coach')}
+                onTrackActivate={() => onTabChange('project')}
+              />
             )}
             {tab === 'project' && alsProject && <ProjectTab project={alsProject} phase8={phase8} />}
-            {tab === 'project' && !alsProject && (
-              <div className={s.noVersion}>No Ableton project was uploaded with this analysis.</div>
-            )}
+            {tab === 'project' && !alsProject && <ProjectUnlock />}
             {tab === 'reference' && (
               <ReferenceTab genre={phase2?.genre} score={fj.overall_score} phase6={phase6} />
             )}

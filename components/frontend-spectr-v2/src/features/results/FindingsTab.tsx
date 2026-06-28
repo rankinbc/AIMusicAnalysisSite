@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 
 import type { VerdictDto } from '../../api/types';
 import { SEVERITY_RANK, severityColor, severityLabel } from './helpers/severity';
@@ -9,6 +10,25 @@ import {
   type SpecialistGroup,
 } from './helpers/specialists';
 import { faultCount } from './problems-helpers';
+import { TrackChip } from './TrackChip';
+import { tokenizeTrackNames } from './track-highlight';
+
+// Render verdict prose with any attributed .als track names (FR12) wrapped in a
+// cyan TrackChip. Falls back to the raw string when there's nothing to attribute.
+function withTrackChips(
+  text: string,
+  names: string[] | undefined,
+  onTrackActivate?: (name: string) => void,
+): ReactNode {
+  if (!names || names.length === 0 || !onTrackActivate) return text;
+  return tokenizeTrackNames(text, names).map((seg, i) =>
+    seg.type === 'track' ? (
+      <TrackChip key={i} name={seg.value} onActivate={onTrackActivate} />
+    ) : (
+      <span key={i}>{seg.value}</span>
+    ),
+  );
+}
 
 const SEV_ORDER = ['critical', 'severe', 'moderate', 'minor', 'win'] as const;
 type Sev = (typeof SEV_ORDER)[number];
@@ -62,9 +82,11 @@ interface FindingsTabProps {
   verdicts: VerdictDto[];
   /** Jump to the AI Coach tab to act on a fix. */
   onGoToActions: () => void;
+  /** Jump to the .als Project panel when a track-name chip is clicked (FR12). */
+  onTrackActivate?: (name: string) => void;
 }
 
-export function FindingsTab({ verdicts, onGoToActions }: FindingsTabProps) {
+export function FindingsTab({ verdicts, onGoToActions, onTrackActivate }: FindingsTabProps) {
   const [sevFilter, setSevFilter] = useState<'all' | Sev>('all');
   const [groupFilter, setGroupFilter] = useState<'all' | SpecialistGroup>('all');
 
@@ -146,13 +168,31 @@ export function FindingsTab({ verdicts, onGoToActions }: FindingsTabProps) {
       {list.length === 0 ? (
         <div className="na">No findings match this filter.</div>
       ) : (
-        list.map((f) => <FindingCard key={f.id} v={f} onGoToActions={onGoToActions} />)
+        list.map((f) => (
+          <FindingCard
+            key={f.id}
+            v={f}
+            onGoToActions={onGoToActions}
+            onTrackActivate={onTrackActivate}
+          />
+        ))
       )}
     </div>
   );
 }
 
-function FindingCard({ v, onGoToActions }: { v: VerdictDto; onGoToActions: () => void }) {
+function FindingCard({
+  v,
+  onGoToActions,
+  onTrackActivate,
+}: {
+  v: VerdictDto;
+  onGoToActions: () => void;
+  // `| undefined` is required under exactOptionalPropertyTypes since the parent
+  // forwards its own optional prop (which may be undefined) verbatim.
+  onTrackActivate?: ((name: string) => void) | undefined;
+}) {
+  const trackNames = v.where?.track_names;
   const [why, setWhy] = useState(false);
   const group = groupForVerdict(v);
   const isAi = v.source === 'llm_identifier';
@@ -176,8 +216,14 @@ function FindingCard({ v, onGoToActions }: { v: VerdictDto; onGoToActions: () =>
             <span>{specName(v)}</span>
           </span>
         </div>
-        <div className="finding-head">{v.headline}</div>
-        {v.summary && <div className="finding-sum">{v.summary}</div>}
+        <div className="finding-head">
+          {withTrackChips(v.headline, trackNames, onTrackActivate)}
+        </div>
+        {v.summary && (
+          <div className="finding-sum">
+            {withTrackChips(v.summary, trackNames, onTrackActivate)}
+          </div>
+        )}
         <div className="finding-foot">
           {v.metricLine && (
             <span className="ev-chip">

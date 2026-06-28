@@ -82,7 +82,8 @@ def test_robotic_velocity_zero_std_is_critical():
     v = RE.robotic_velocity(a)
     assert v is not None and v.severity == "critical"
     assert v.category == "humanization" and v.data_tier == "project_midi"
-    assert v.where is None
+    # FR12: attribute the finding to the offending named project track.
+    assert v.where == {"track_names": ["Lead"]}
     assert validate_verdict(v, a).ok
 
 

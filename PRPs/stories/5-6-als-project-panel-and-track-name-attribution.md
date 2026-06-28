@@ -1,6 +1,6 @@
 # Story 5.6: .als Project Panel & Track-Name Attribution
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -28,28 +28,28 @@ This story **closes out** a mostly-built story. Do NOT rebuild AC1. Verified sta
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Worker — emit structured track attribution on `.als` verdicts (AC: 2)**
-  - [ ] 1.1 Audit every rule in `components/worker/app/verdict_lib/` carrying `data_tier="project_midi"` that references a track name. Confirmed two so far: `robotic_velocity` (~`rule_engine.py:1469`, extracts `worst_name` from `phase8.per_track_analysis`) and `lifeless_at_source` (~`rule_engine.py:1284`, names up to 3 tracks in `summary`). **Grep `per_track_analysis` and `track_name` across `verdict_lib/` to find any others** — do not assume the list is complete.
-  - [ ] 1.2 For each such rule, populate the existing `where` payload with an optional `track_names: list[str]` of the attributed track name(s) it already computed (e.g. `robotic_velocity` → `["<worst_name>"]`; `lifeless_at_source` → the `robotic[:3]` list). Today these pass `where=None` — keep all other `where` keys (`section_type`, `start_seconds`, `end_seconds`) optional/absent when not applicable.
-  - [ ] 1.3 **No DB migration required.** `where` is a `jsonb` string column (`Verdict.cs:104`) whose shape is not schema-enforced; you are adding a key to the serialized dict, not a column. Verify the worker's verdict mapper (`degraded._to_row` / `verdict_actor._persist_verdict`) serializes the full `where` dict verbatim (it already does for the section keys).
-  - [ ] 1.4 Add/extend a unit test in `components/worker/tests/` asserting that a `project_midi` rule fixture with named tracks emits `where.track_names == [...]`.
+- [x] **Task 1: Worker — emit structured track attribution on `.als` verdicts (AC: 2)**
+  - [x] 1.1 Audited all `data_tier="project_midi"` rules. Exactly two cite a specific named track: `robotic_velocity` (`rule_engine.py:1470`, `worst_name`) and `lifeless_at_source` (`rule_engine.py:1283`, `robotic[:3]`). The other three (`no_headroom`, `quantization_issues`, `project_clutter`) are project-wide, correctly NOT track-attributed.
+  - [x] 1.2 Populated `where={"track_names": [...]}` on both: `robotic_velocity` → `[worst_name]`; `lifeless_at_source` → `robotic[:3]`. Validator still passes (`validate_verdict(...).ok`).
+  - [x] 1.3 Confirmed no migration: ORM `where` is `JSONB nullable` (`aimusic_shared/models.py:338`); `degraded._to_row` passes `where=v.where` verbatim. A dict serializes cleanly.
+  - [x] 1.4 Updated `test_rules_stem_midi.py` (robotic_velocity asserts `where == {"track_names": ["Lead"]}`) + `test_composites.py` (lifeless asserts `["Lead", "Bass"]`). 51 rule/composite/identifier tests pass in isolation.
 
-- [ ] **Task 2: Frontend types — surface `track_names` on the verdict `where` (AC: 2)**
-  - [ ] 2.1 In `components/frontend-spectr-v2/src/api/types.ts`, extend the `ProblemWhere` type (consumed by `VerdictDto.where`, ~`types.ts:1218–1250`) with `track_names?: string[]`. Keep it optional — most verdicts have no track attribution. No BFF DTO change is needed: `VerdictDto.Where` already passes the jsonb through as `JsonElement?` (`VerdictDto.cs:41`).
+- [x] **Task 2: Frontend types — surface `track_names` on the verdict `where` (AC: 2)**
+  - [x] 2.1 Added `track_names?: string[]` to `ProblemWhere` (`types.ts:1216`). No BFF DTO change needed (`VerdictDto.Where` is pass-through `JsonElement?`).
 
-- [ ] **Task 3: Frontend — `TrackChip` + inline highlight in verdict text (AC: 2)**
-  - [ ] 3.1 Create `components/frontend-spectr-v2/src/features/results/TrackChip.tsx` — a cyan chip for a track name. Reuse the global `.pill` utility (tone cyan) and mirror the **existing `EvidenceChips` pattern** (`CoachChat.tsx:488`: cyan `Pill`, click → scroll/navigate). Props: `{ name: string; onActivate: () => void }`.
-  - [ ] 3.2 In `VerdictCard.tsx`, where `headline`/`summary`/`body` render (lines 88/90/92), tokenize each string against `verdict.where?.track_names`: split on exact-name occurrences and wrap matches in `<TrackChip>`, leaving the rest as text. Use the authoritative `track_names` strings — **do NOT** fuzzy-match arbitrary words (avoids false positives like the word "bass" matching a "Bass" track). Render plain text unchanged when `track_names` is empty/absent.
-  - [ ] 3.3 `onActivate` switches the results tab to **Project** via the URL tab param (`?tab=project`, the mechanism `ResultsTabs` already uses). If a lightweight scroll-into-view of the matching track row in `ProjectTab` is feasible, add it; otherwise tab-switch alone satisfies "link to the panel."
-  - [ ] 3.4 Static-render unit test (existing vitest style, `renderToStaticMarkup`): a verdict with `where.track_names=["SUB-DEEP"]` and `headline` containing `SUB-DEEP` renders a `TrackChip`; a verdict with no `track_names` renders plain text (no chip).
+- [x] **Task 3: Frontend — `TrackChip` + inline highlight in verdict text (AC: 2)** — ⚠️ DEVIATION, see Completion Notes
+  - [x] 3.1 Created `TrackChip.tsx` + `TrackChip.module.css` (cyan inline chip; focus-visible ring).
+  - [x] 3.2 **Implemented in the LIVE findings surface `FindingsTab.tsx`/`FindingCard`, NOT the dead `VerdictCard.tsx`** (VerdictsPanel/VerdictCard are unrendered in the redesign — see Completion Notes). Added pure tokenizer `track-highlight.ts` (`tokenizeTrackNames`) + `withTrackChips()` helper; highlights `headline`/`summary` against `v.where?.track_names`. Exact, case-sensitive, longest-first — no fuzzy matching.
+  - [x] 3.3 `onTrackActivate` wired from `ReportView` → `onTabChange('project')`. Chip click switches to the Project tab via the existing URL `?tab=` mechanism.
+  - [x] 3.4 Tests: `track-highlight.test.ts` (6 pure-tokenizer cases incl. case-sensitivity + longest-match) + `FindingsTab.trackchip.test.tsx` (3 render cases: chip present / plain-text when no attribution / no chip when no handler).
 
-- [ ] **Task 4: Frontend — no-.als unlock invitation (AC: 3)**
-  - [ ] 4.1 Replace the plain placeholder at `ReportView.tsx:298` (the "No Ableton project was uploaded…" branch) with an unlock-invitation block following the established `UnlockZone` pattern (`AnalysisTab.tsx:864–876`: title + description + hint + benefit chip). Copy tone: invite re-upload with the .als; benefit chip e.g. "Track-named fixes". Keep it in `ProjectTab`/`ReportView` consistent with how other tabs render their locked state.
-  - [ ] 4.2 Static-render test: with no `phase8`/`alsProject`, the Project tab renders the unlock invitation (benefit chip present), not the plain placeholder.
+- [x] **Task 4: Frontend — no-.als unlock invitation (AC: 3)**
+  - [x] 4.1 Created self-contained `ProjectUnlock.tsx` + `.module.css` (benefit chip "Track-named fixes" + invitation + hint), replacing the plain `ReportView` placeholder. Self-contained rather than reusing `AnalysisTab`'s local `UnlockZone` (coupled to that module's CSS).
+  - [x] 4.2 `ProjectUnlock.test.tsx`: asserts benefit chip + `.als` invitation render and the old placeholder text is gone.
 
-- [ ] **Task 5: Gates (AC: all)**
-  - [ ] 5.1 Worker: `pytest -q components/worker/tests/`.
-  - [ ] 5.2 Frontend (all four, per CLAUDE.md): `npx tsc --noEmit`, `npm run lint` (`--max-warnings 0`), `npm run build`, `npx vitest run`.
+- [x] **Task 5: Gates (AC: all)**
+  - [x] 5.1 Worker: my-change tests pass in isolation (51). Full suite shows 12 pre-existing failures (db_sync test-isolation pollution) — **proven pre-existing**: the clean baseline (changes stashed) fails the identical 12/514. Not a regression.
+  - [x] 5.2 Frontend: `tsc`/`npm run build` ✓ (fixed an `exactOptionalPropertyTypes` forward-prop error), `npm run lint` clean, `npx vitest run` 561 passed.
 
 ## Dev Notes
 
@@ -82,8 +82,48 @@ FR12 says attribute "where **determinable**." The worker already knows the exact
 
 ### Agent Model Used
 
+claude-opus-4-8[1m] (dev-story workflow)
+
 ### Debug Log References
+
+- Worker full-suite 12/514 failures investigated: pass in isolation; same 12 fail on the
+  stashed clean baseline → pre-existing db_sync test-isolation pollution, not this change.
+- `npm run build` surfaced an `exactOptionalPropertyTypes` error (`FindingsTab.tsx:172`) that
+  `tsc --noEmit` (looser tsconfig) missed — fixed by widening `FindingCard`'s `onTrackActivate`
+  to `((name: string) => void) | undefined`.
 
 ### Completion Notes List
 
+- ⚠️ **Deviation (AC2 target component):** the story specified injecting chips into
+  `VerdictCard.tsx`, but `VerdictCard`/`VerdictsPanel` are **unrendered in the live redesign**
+  (only a stale comment in `AnalysisTab` references them). The live findings surface is
+  `FindingsTab.tsx` → `FindingCard`. Implemented the highlight there instead, satisfying AC2's
+  intent (chips in the verdict text the user actually sees). `VerdictCard` left untouched (dead).
+- Track attribution is structured, not text-scraped: rule engine emits authoritative
+  `where.track_names`; the frontend highlights only those exact strings (case-sensitive,
+  longest-first) so a track literally named "Bass" never lights up the word "bass" in prose.
+- Chip → Project tab uses the existing `onTabChange('project')` URL mechanism; deeper
+  scroll-to-track-row was left out of scope (tab-switch satisfies "link to the panel").
+- AC1 (`ProjectTab` structure summary) verified shipped, untouched.
+
 ### File List
+
+- `components/worker/app/verdict_lib/rule_engine.py` (M — `where.track_names` on 2 rules)
+- `components/worker/tests/verdict_pipeline/test_rules_stem_midi.py` (M — assert track_names)
+- `components/worker/tests/verdict_pipeline/test_composites.py` (M — assert track_names)
+- `components/frontend-spectr-v2/src/api/types.ts` (M — `ProblemWhere.track_names`)
+- `components/frontend-spectr-v2/src/features/results/track-highlight.ts` (A)
+- `components/frontend-spectr-v2/src/features/results/TrackChip.tsx` (A)
+- `components/frontend-spectr-v2/src/features/results/TrackChip.module.css` (A)
+- `components/frontend-spectr-v2/src/features/results/ProjectUnlock.tsx` (A)
+- `components/frontend-spectr-v2/src/features/results/ProjectUnlock.module.css` (A)
+- `components/frontend-spectr-v2/src/features/results/FindingsTab.tsx` (M — highlight + thread onTrackActivate)
+- `components/frontend-spectr-v2/src/features/results/ReportView.tsx` (M — ProjectUnlock + onTrackActivate wiring)
+- `components/frontend-spectr-v2/src/features/results/__tests__/track-highlight.test.ts` (A)
+- `components/frontend-spectr-v2/src/features/results/__tests__/FindingsTab.trackchip.test.tsx` (A)
+- `components/frontend-spectr-v2/src/features/results/__tests__/ProjectUnlock.test.tsx` (A)
+
+### Change Log
+
+- 2026-06-27 — Implemented Story 5.6 AC2 (structured `.als` track attribution + TrackChip in the
+  live FindingsTab) and AC3 (ProjectUnlock invitation). AC1 already shipped. Status → review.

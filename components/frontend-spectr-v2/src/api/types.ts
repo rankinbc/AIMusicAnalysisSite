@@ -1213,6 +1213,8 @@ export interface ProblemWhere {
   section_type?: string;
   start_seconds?: number;
   end_seconds?: number;
+  // FR12: named .als project tracks this finding is attributed to (rule engine sets these).
+  track_names?: string[];
 }
 
 export interface VerdictDto {

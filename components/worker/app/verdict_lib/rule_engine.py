@@ -1280,6 +1280,7 @@ def lifeless_at_source(a: dict[str, Any], fired: dict[str, Verdict]) -> Verdict 
     return _problem(
         track_id=_track_id(a), slug="lifeless_at_source", severity="severe", confidence=0.93,
         category="humanization", kind="fault", suspected=False, data_tier="project_midi",
+        where={"track_names": robotic[:3]},  # FR12: attribute to the robotic named tracks
         headline="Lifeless at the source - crushed crest and robotic MIDI",
         summary=f"Crest factor {cf:.1f} plus zero velocity spread on {len(robotic)} tracks "
                 f"({', '.join(robotic[:3])}) - the flatness is in the parts, not the master.",
@@ -1465,7 +1466,8 @@ def robotic_velocity(a: dict[str, Any]) -> Verdict | None:
                       label=f"{worst_name} robotic")
     return _problem(
         track_id=_track_id(a), slug="robotic_velocity", severity=worst_sev,
-        category="humanization", kind="fault", data_tier="project_midi", where=None,
+        category="humanization", kind="fault", data_tier="project_midi",
+        where={"track_names": [worst_name]},  # FR12: attribute to the named project track
         headline=f"Robotic velocities ({worst_name})",
         summary=f"{worst_name} has near-zero velocity variation - notes are machine-flat, not played.",
         evidence=[ev],

@@ -133,6 +133,8 @@ def test_lifeless_at_source_fires():
     v = RE.lifeless_at_source(a, {})
     assert v is not None and v.category == "humanization" and v.confidence == 0.93
     assert v.suspected is False
+    # FR12: attribute to the robotic named tracks (up to 3).
+    assert v.where == {"track_names": ["Lead", "Bass"]}
     assert validate_verdict(v, a).ok
 
 
