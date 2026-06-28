@@ -1,8 +1,12 @@
 # Song Page Console Redesign — Design Spec
 
-**Status:** design approved (2026-06-27); awaiting implementation plan
+**Status:** design approved + **hi-fi design delivered** (2026-06-27); awaiting implementation plan
 **Surface:** `frontend-spectr-v2` route `/_app/songs/$songId` (the page reached by
 clicking a song in the Library)
+**Design reference (source of truth for markup/styling/logic):**
+`PRPs/design_handoffs/song-page-console/{README.md, SongPageConsole.dc.html}` — reconciled
+into §3.3 / §3.5 / §5 below (inline `ComparePanel`, custom grade-free `ScoreTrendCard`).
+The game-plan view (§3.7) is the one piece NOT in the delivered design — add it during build.
 **Companion build plan:** `song-page-console-redesign-build.md` (to be written via
 writing-plans)
 
@@ -106,23 +110,27 @@ One scannable vertical column (collapses gracefully on narrow viewports):
     element's `timeupdate`, not React state assumptions.
   - AudioContext / playback must start from a user gesture (autoplay policy).
 
-### 3.3 Progress timeline — NOW REAL, DUAL-SERIES
-- **Display:** reuse `src/ui/ProgressTimeline`, fed with **real per-version mix scores**
-  (see §4), and **overlay the producer's personal score** as a second series so the AI
-  arc and the personal arc sit on one 0–100 axis. Hover → version label + mix score +
-  personal score + date. No letter grades.
-- **Interactions:** click a point → select that version (loads into player slot A and
-  highlights its row).
-- **Implementation note:** `ui/ProgressTimeline`'s `TimelineVersion` currently carries a
-  `grade` field used for coloring; for this screen ignore grade and add an optional
-  `personalScore` to drive the second series (small prop extension, back-compatible).
+### 3.3 Score trend — custom grade-free chart (`ScoreTrendCard`)
+**Reconciled to the delivered design** (`design_handoffs/song-page-console/`):
+- **Display:** a **custom SVG line + area chart** of the **AI mix score** across scored
+  versions (oldest→newest), with dashed score gridlines (e.g. 50/60/70/80/90), per-point
+  score labels, `v# · date` under each point, and the current point emphasized. A header
+  trend readout ("+25 pts · v2→v5"). **Do NOT use `ui/ProgressTimeline`** — it's
+  grade-based; this is a single-series, grade-free chart.
+- **Personal score is NOT overlaid here** (the earlier dual-series idea was dropped in the
+  design). The personal score lives on version rows (§3.4) and in the compare panel (§3.5).
+- **Interactions:** click a point → loads that version into **deck A** and highlights its
+  row. Sparse (<2 scored versions) → calm placeholder line + "Scores appear here as you
+  analyze versions".
 
 ### 3.4 Versions list — the spine, de-cluttered
-- **Display per row:** slot letter (A/B/C/D…), `v#` chip, label (or `Version N`), the
-  **AI mix score** (`mono`, cyan, e.g. `87/100`, or `—` when unscored), the **personal
-  score** (`mono`, muted, e.g. `you 90`, or `you —` when unset), created date, `current`
-  badge, a small **gameplan indicator** when one is attached (see §3.7), and an
-  **analysis status indicator**:
+- **Display per row** (per delivered design): a **slot badge** (cyan `A`/`B` when that
+  version is loaded into a deck, else a muted positional letter `C/D/E…`), `v#` chip,
+  label (or `Version N`), `current` chip, a **personal-score pill** (`★ 90`, violet) when
+  the user has rated it, the created date, the **AI mix score** (`mono`, cyan, e.g.
+  `87/100`, or `—` when unscored), a small **gameplan indicator** when one is attached
+  (see §3.7 — **added on top of the delivered design**), and an **analysis status
+  indicator**:
   - `✓` analyzed (has a completed `latestVersionResult`)
   - `⟳` analyzing (an in-flight job for that version) — optionally with progress
   - `⚠` failed (last job failed)
@@ -139,23 +147,29 @@ One scannable vertical column (collapses gracefully on narrow viewports):
   Each action reuses existing hooks: `useSetCurrentVersion`, `usePatchVersion`,
   `useReanalyzeVersion`, `useDeleteVersion`, and `ReanalyzeWithReferenceDialog`.
 
-### 3.5 Compare — any two versions, with a personal verdict
-- **Pick any two versions** (A vs B), via two selectors plus quick presets
-  (`v1 → current`, `Last two`). Reuse/extend the existing `CompareDialog` for the metric
-  deltas (mix score, loudness, dynamics, bass energy, air, stereo width).
+### 3.5 Compare — INLINE under the decks (`ComparePanel`), no modal
+**Reconciled to the delivered design:** the compare is **not a modal and not a separate
+card** — it lives **inside the Quick-player card, directly under the two decks**, and
+always reflects whatever versions are loaded in deck A and deck B. "Compare any two
+versions" = load them into the decks (the deck dropdowns are the pickers). The old "Spot
+what changed" card + `CompareDialog` are **removed**.
+- **6 metric tiles** comparing deck A's version to deck B's: **Mix score, Loudness (LUFS),
+  Dynamics (LU), Bass energy, Air/highs, Stereo width.** Each tile shows `A vs B` and the
+  **Δ (= A − B)**, colored green/red by whether A is "better" — higher-is-better for most;
+  LUFS is closeness-to-target (≈ −9). Needs the per-version metrics from §4 Change A.
 - **Personal verdict (new):**
-  - **Delta notes** — a free-text field attached to the *(versionA, versionB)* pair, where
-    the producer records what changed in their own words ("fuller low end, vox still
-    harsh"). Persisted; reappears when that pair is compared again.
-  - **Personal score (0–100)** — set/adjust the producer's own score for the version
-    being judged (default target = the newer of the two). This is the SAME per-version
-    personal score shown on rows and the timeline — the compare view is just the most
-    convenient place to set it. Editable inline (number input / slider), `mono`.
-  - Both are optional; absent → muted "add your notes" / "rate this version" affordances.
-  - Show the AI delta and the personal score side by side so "the AI says +7, I say it's
-    a 90" reads at a glance.
+  - **Two `0–100` personal-score inputs** (one for deck A's version, one for deck B's),
+    their delta, and a live verdict ("▲ you rate A higher"). Violet styling. Persists
+    per-version (§4 Change B). `mono`.
+  - **Delta notes** — a textarea attached to the *(versionA, versionB)* pair, keyed by the
+    **sorted** id pair so A↔B don't duplicate. Persists (§4 Change C); reappears when that
+    pair is loaded again.
+  - A "saved to this song" caption signals persistence.
 
-### 3.7 Game plan (per-version, read-from-Results)
+### 3.7 Game plan (per-version, read-from-Results) — ADDED ON TOP OF THE DELIVERED DESIGN
+> **The delivered design does NOT include this** (no row marker, no menu item, no modal).
+> Layer it on during the build (decision 2026-06-27: "add it during build"). Match the
+> delivered design's row + menu styling so it reads as native.
 - **Context:** a **game plan** is an actionable change-set a producer can save from the
   **Results page** for a specific version (the "Actions" surface). It is optional and
   version-scoped. The song page does not create or edit game plans — it **surfaces and
@@ -252,25 +266,27 @@ remove server-side necessarily; just: don't add grade to the new per-version pay
 
 ## 5. Code structure (decompose the monolith)
 
-Create `src/features/song/` and reduce the route file to a thin composition shell:
+Create `src/features/song/` and reduce the route file to a thin composition shell.
+**Component names match the delivered design** (`design_handoffs/song-page-console/README.md`):
 
 | File | Responsibility |
 |---|---|
-| `SongHeader.tsx` | identity + header actions (incl. Archive in `⋯`) |
-| `QuickPlayer.tsx` + `useQuickPlayer.ts` | A/B slots, WaveSurfer, transport |
-| `ProgressTimelineCard.tsx` | wraps `ui/ProgressTimeline` with real scores |
-| `VersionList.tsx` | list container + sorting |
-| `VersionRow.tsx` | one row: status, inline Play/Report |
-| `VersionRowMenu.tsx` | the `⋯` context menu + its actions |
-| `CompareCard.tsx` | pick-any-two + presets → `CompareDialog`; hosts delta notes + personal-score editor |
-| `PersonalScoreField.tsx` | inline 0–100 personal-score input (reused by CompareCard + optionally rows) |
-| `GamePlanViewModal.tsx` | read-only view of a version's saved game plan (opened from row `⋯`) |
-| `ActivityStrip.tsx` | graceful read-only social strip |
-| `song-helpers.ts` | pure logic: per-version score mapping, status derivation, A/B slot defaults, sort, compare-pair key normalization |
+| `SongHeader.tsx` | cover, title, meta pills, tags, actions (Edit / ★ Publish / + Add version), Archive in `⋯` |
+| `QuickPlayer.tsx` + `useQuickPlayer.ts` | two A/B decks: version dropdown, WaveSurfer waveform + playhead, transport, one-click audible switch, "Open in Listen ↗" |
+| `ComparePanel.tsx` | **inside `QuickPlayer`, under the decks** — live A-vs-B 6-metric tiles + personal-score inputs (A/B) + delta/verdict + notes textarea. Replaces the old modal `CompareDialog`. |
+| `ScoreTrendCard.tsx` | custom **grade-free** SVG score-over-versions chart (NOT `ui/ProgressTimeline`); click-point → load into deck A |
+| `VersionList.tsx` | list container + sorting (newest first) |
+| `VersionRow.tsx` | one row: slot badge, label (+ inline edit), personal-score pill, score, status, inline Play/Report/Retry |
+| `VersionRowMenu.tsx` | the `⋯` Radix menu + its actions (incl. the **added** "View game plan") |
+| `GamePlanViewModal.tsx` | read-only view of a version's saved game plan (opened from row `⋯`) — **not in the delivered design; added per §3.7** |
+| `ActivityStrip.tsx` | graceful read-only social strip (or folded into `SongHeader` per the design's `◷ N saved` pill) |
+| `song-helpers.ts` | pure logic: per-version score/status mapping, A/B slot defaults, sort, **A-vs-B metric delta calc** (dir: high/target/neutral; LUFS target ≈ −9), **personal-score delta/verdict**, **note-pair key normalization** (sorted ids) |
 
 The inline `MakeCurrentButton` / `ReanalyzeButton` / `EditVersionLabelButton` /
-`DeleteVersionDialog` move out of the route into the feature folder. Follow the
-existing `features/results/` decomposition as the pattern. No file over ~300 lines.
+`DeleteVersionDialog` move out of the route into the feature folder. Follow the existing
+`features/results/` decomposition as the pattern. **The `.dc.html` view-model is the
+source of truth** for the metric-delta math, wave rendering, and interaction logic — port
+it, adapting state to TanStack Query + the existing hooks. No file over ~300 lines.
 
 ---
 
