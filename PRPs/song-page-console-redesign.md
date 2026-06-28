@@ -183,41 +183,70 @@ One scannable vertical column (collapses gracefully on narrow viewports):
 
 ---
 
-## 4. Data dependency (BFF — small, NO migration)
+## 4. Data dependencies (BFF)
 
+Backend report verified 2026-06-27. Three new build surfaces below; everything else on
+this page maps to endpoints/hooks the rest of the spec already accounts for (per-version
+audio stream §3.2; make-current / reanalyze / reanalyze-with-reference / edit-label /
+delete via existing hooks §5; saved/bookmark count via existing bookmarks §3.6; Room/Share
+disabled stubs §7 — do NOT rebuild these).
+
+### Change A — per-version result **+ measured metrics** (small, NO migration)
 Per-version analysis data **already exists**: `Analysis.VersionId` is an FK on the
-`analyses` table, and `ReportsEndpoints.List` already queries per-version. The
-song-detail endpoint simply doesn't use it (it groups by `SongId` and takes the
-newest single row).
+`analyses` table, and `ReportsEndpoints.List` already queries per-version. The song-detail
+endpoint just doesn't use it (it groups by `SongId` and takes the newest single row).
 
-**Change A — per-version AI score (small, NO migration):**
-1. `SongEndpoints.GetById` — batch-load each version's latest `Analysis` by
-   `VersionId` (mirror the `ReportsEndpoints.List` join pattern).
-2. `VersionDto` — add optional `latestVersionResult: AnalysisSummaryDto?`.
+1. `SongEndpoints.GetById` — batch-load each version's latest `Analysis` by `VersionId`
+   (mirror the `ReportsEndpoints.List` join pattern).
+2. `VersionDto` — add optional `latestVersionResult` carrying **all six measured values the
+   A/B "What changed" panel compares**, not just the score:
+   **mix score (0–100), loudness (LUFS), dynamic range (LU), bass energy, air/highs,
+   stereo width.** These already live in each analysis record — they just ride along on the
+   same per-version join. If the existing `AnalysisSummaryDto` doesn't already carry all
+   six, widen it (or add a `VersionResultDto`) — **without the metrics the deltas can't
+   render.**
 3. `ToVersionDto` mapping — populate it.
-4. Frontend `api/types.ts` `VersionDto` — add the matching optional field.
+4. Frontend `api/types.ts` `VersionDto` — add the matching optional field with the six metrics.
 
-Estimated ~30 lines in the BFF + 1 field on each side. Unlocks §3.3 + real row scores.
-The frontend degrades gracefully if absent (falls back to latest-only) so the two sides
-ship independently.
+Frontend degrades gracefully if absent (row scores fall back to latest-only; compare deltas
+hidden) so the two sides ship independently.
 
-**Change B — personal score + delta notes (NEW; needs a small migration):**
-- **Personal score:** add a nullable `personal_score` (int 0–100) — simplest home is a
-  column on `song_versions` (songs are single-owner, so no per-user fan-out needed).
-  Surface it on `VersionDto` as `personalScore: number | null`. Add a write endpoint,
-  e.g. `PUT /api/versions/{id}/personal-score`.
-- **Delta notes:** a small new table keyed by *(user/song, versionAId, versionBId)* →
-  `notes` text + timestamps (normalize the pair order so A↔B is symmetric). Endpoints:
-  `GET /api/songs/{id}/compare-notes?a=&b=` and `PUT` the same. Keep it its own table
-  (not on a version) because notes describe a *pair*, not a single version.
-- New frontend hooks: `useSetPersonalScore(versionId)`, `useCompareNotes(songId, a, b)` +
-  `useSaveCompareNotes`.
+### Change B — personal score: NEW user-owned data (per **user × version**)
+Producers type their own 0–100 rating on a version — subjective, separate from the computed
+score, and **per-user** (NOT a column on `song_versions` — songs become shareable, so two
+users must be able to rate the same version independently).
 
-**Change C — game-plan read path (§3.7):**
+- **Store:** `version_user_ratings(user_id, version_id, score 0–100, updated_at)`, **unique
+  on (user_id, version_id)**.
+- **Endpoints:** read — fold the caller's ratings into the song payload (or
+  `GET /api/songs/{id}/my-ratings`); upsert `PUT /api/versions/{id}/rating {score}`; clear
+  `DELETE /api/versions/{id}/rating`.
+- **Surface:** the current user's rating rides on each `VersionDto` as
+  `personalScore: number | null` (their own, not anyone else's).
+- **Hooks:** `useSetPersonalScore(versionId)` (PUT) + `useClearPersonalScore(versionId)` (DELETE).
+
+### Change C — compare notes: NEW user-owned data (per **user × version-pair**)
+Free-text notes about the delta between two specific versions — **per-user**.
+
+- **Store:** `version_compare_notes(user_id, song_id, version_a_id, version_b_id, body,
+  updated_at)` — **normalize the pair (store sorted)** so A↔B order doesn't create
+  duplicates; **unique on (user_id, normalized pair)**.
+- **Endpoints:** read (per song or per pair); upsert `PUT`; `DELETE`.
+- **Hooks:** `useCompareNotes(songId, a, b)` + `useSaveCompareNotes` + `useDeleteCompareNotes`.
+
+Both B and C are **per-user and persist to the song** — the UI copy reads "saved to this song".
+
+### Change D — data contract: grades retired for this surface (no endpoint)
+Letter grades were dropped — **score (0–100) is the only quality signal on this page**. `grade`
+is unused here and does **not** need to be computed or sent for this surface. (No code to
+remove server-side necessarily; just: don't add grade to the new per-version payload.)
+
+### Change E — game-plan read path (§3.7)
 - Need a per-version "has a saved game plan" signal + a fetch for its content. Reuse the
-  existing Results/Listen game-plan persistence. If a cheap `hasGamePlan: boolean` (or
-  `gamePlanId`) isn't already exposed per version, add it to `VersionDto`. The song page
-  is **read-only** here — no create/edit.
+  existing Results/Listen game-plan persistence (read-only — no create/edit here). If a cheap
+  `hasGamePlan: boolean` (or `gamePlanId`) isn't already exposed per version, add it to
+  `VersionDto`. NOTE: this item was **not** in the 2026-06-27 backend report's four points —
+  confirm the existing game-plan endpoint/shape during planning before building the read view.
 
 ---
 
@@ -268,7 +297,8 @@ No inline reactions/comments/heatmaps, no live presence/chat, no DSP on this pag
 rooms UI, no per-version share-setting editor (those belong to the version surfaces).
 No new social schema. No changes to Listen/Room. **No game-plan creation or editing** on
 this page — game plans are authored on the Results page; the song page only reads/opens
-them (§3.7). The only new persistence is the personal score + delta-notes (§4 Change B).
+them (§3.7). The only new persistence is the per-user personal score (§4 Change B) and
+per-user compare notes (§4 Change C).
 
 ---
 
@@ -291,11 +321,14 @@ them (§3.7). The only new persistence is the personal score + delta-notes (§4 
 
 ## 10. Open dependencies / sequencing
 
-1. BFF per-version AI-score DTO change (§4 Change A) — small, no migration; can land
-   first or in parallel (frontend degrades gracefully without it).
-2. BFF personal-score + delta-notes (§4 Change B) — needs a small migration
-   (`song_versions.personal_score` + a `version_compare_notes` table) and 2–3 endpoints.
-3. Game-plan read path (§4 Change C) — confirm the existing Results/Listen game-plan
-   endpoint/shape; add a per-version `hasGamePlan` signal if not already cheap.
-4. Frontend feature-folder build (§5) consuming the new fields.
-5. Social seams (§7) remain stubs until the listening-room endpoints ship.
+1. BFF per-version result + **6 measured metrics** on the DTO (§4 Change A) — small, no
+   migration; can land first or in parallel (frontend degrades gracefully without it).
+2. BFF personal score (§4 Change B) — migration for `version_user_ratings` (per user ×
+   version, unique) + PUT/DELETE `/versions/{id}/rating` + fold ratings into the song payload.
+3. BFF compare notes (§4 Change C) — migration for `version_compare_notes` (per user ×
+   sorted pair, unique) + read/PUT/DELETE.
+4. Data-contract note (§4 Change D) — no endpoint; just don't send `grade` on this surface.
+5. Game-plan read path (§4 Change E) — confirm existing Results/Listen game-plan shape; add
+   a per-version `hasGamePlan` signal if not already cheap. (Not in the backend report — verify.)
+6. Frontend feature-folder build (§5) consuming the new fields/hooks.
+7. Social seams (§7) remain stubs until the listening-room endpoints ship.
