@@ -611,7 +611,9 @@ export function CommentsPanel({ versionId, access, isOwner, position, onSeek }: 
 
   const submit = () => {
     const body = text.trim();
-    if (!body || !vid) return;
+    // Guard against a double-submit: the Post button is disabled while a post is
+    // in flight, but the Enter-key handler reaches here directly (review 11.1).
+    if (!body || !vid || postMut.isPending) return;
     postMut.mutate(
       { body, t: pinTime ? Math.round(position) : null, parentId: replyTo },
       { onSuccess: () => { setText(''); setPinTime(false); setReplyTo(null); } },
@@ -659,7 +661,9 @@ export function CommentsPanel({ versionId, access, isOwner, position, onSeek }: 
         <span className="pill violet">Async review</span>
       </div>
 
-      {commentsQ.isError ? (
+      {commentsQ.isLoading ? (
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>Loading feedback…</div>
+      ) : commentsQ.isError ? (
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>You don&rsquo;t have access to comments on this track.</div>
       ) : threads.length === 0 ? (
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>No feedback yet.</div>

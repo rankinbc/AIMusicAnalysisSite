@@ -1,6 +1,6 @@
 # Story 11.1: Threaded Timestamped Comments Panel
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -92,3 +92,14 @@ claude-opus-4-8[1m] (dev-story workflow)
 - 2026-06-27 — Story 11.1 implemented: rail CommentsPanel rewired from MOCK_COMMENTS to
   real PRP-3 `useComments` (threaded, timestamped, owner/author-moderated) + pure
   comment-tree helper. Gates green. Status → review.
+
+## Review Findings (code review 2026-06-28, 3 adversarial layers)
+
+- [x] [Review][Patch] Enter-key submit bypasses the in-flight guard → duplicate comment POST [rail.tsx:679] — FIXED: `submit()` now early-returns on `postMut.isPending`.
+- [x] [Review][Patch] No loading state — initial fetch renders "No feedback yet." instead of a loader [rail.tsx:662] — FIXED: added a `commentsQ.isLoading` branch before the empty/error checks.
+- [x] [Review][Defer] No explicit test that the timestamp chip click invokes `onSeek` [CommentsPanel.test.tsx] — deferred; panel tests are SSR (`renderToStaticMarkup`, no `@testing-library`), so click-invocation isn't in the established pattern; the chip→`onSeek` pass-through is verified structurally.
+- [x] [Review][Defer] Mutation failures show no error feedback (server-rejected moderation, reply to a since-deleted parent) [rail.tsx] — deferred; a general "mutation error toast" is out of this story's scope.
+- [x] [Review][Defer] `position` not guarded for NaN/negative when pinning to time [rail.tsx:~648] — deferred; `position` comes from the audio element (finite ≥0); cheap defensive guard for later.
+- [x] [Review][Defer] `MOCK_COMMENTS` keeps an extra `deletedAt` field vs the API `CommentDto` [access.ts] — deferred, pre-existing (not caused by this change).
+
+Dismissed (3): Auditor "AC4 test would fail" — **false positive** (the empty-list message and the composer "Comments are closed" gate render in separate sections; the test's `toContain('Comments are closed')` passes, consistent with the 572-green run); moderation toggle idempotent re-POST (harmless); "nesting test only checks text" (nesting is structurally asserted in `comment-tree.test.ts`).
