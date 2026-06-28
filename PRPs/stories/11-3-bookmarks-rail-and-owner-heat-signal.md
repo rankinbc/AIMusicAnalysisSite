@@ -20,6 +20,12 @@ So that "love this part" becomes durable, aggregated signal.
 
 ## Context — what already exists (reuse, do not rebuild)
 
+> ⚠️ **Verify before building — the "unused / no component" claims below are grep-level, not
+> render-truth.** Stories 5.6 and 11.1 both found the "missing" component already existed as a
+> **mock or dead code** (the rail `CommentsPanel` rendered `MOCK_COMMENTS`; `VerdictCard` was
+> unrendered in the redesign). **First grep for the real render path** (who actually renders
+> this surface today) — you may be replacing a mock or wiring an existing seam, not building net-new.
+
 Backend complete (`BookmarkEndpoints.cs` + `TrackBookmark.cs`: `timestamp_seconds`, `note` (280), `identity_visible`, anon-capable; owner-only signal endpoint). Frontend **hooks exist, unused**:
 - `src/features/listen/useBookmarks.ts` — `useMyBookmarks()` (12), `useCreateBookmark()` (21), `useDeleteBookmark()` (30). (`usePostAnonBookmark` is for 11.4.)
 - `src/features/listen/useBookmarkSignal.ts` — `useBookmarkSignal(versionId, enabled=true)` (11) — the `enabled` flag is how AC4 is satisfied.

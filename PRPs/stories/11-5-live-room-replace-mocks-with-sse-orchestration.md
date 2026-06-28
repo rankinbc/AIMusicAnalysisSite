@@ -20,6 +20,12 @@ So that people hear my track together and react live.
 
 ## Context — what already exists (reuse, do not rebuild)
 
+> ⚠️ **Verify before building — the component-state claims below are grep-level, not
+> render-truth.** Stories 5.6 and 11.1 both found the "missing"/"unwired" surface already
+> existed as a **mock or dead code** (the rail `CommentsPanel` rendered `MOCK_COMMENTS`). This
+> story is explicitly a mock→real swap, so **first grep the real render path** (which route
+> renders `useMockRoomOrchestration` today) and confirm the mock vs. live seam before cutting over.
+
 The room BACKEND is fully real: `RoomEndpoints.cs` (Start/List/Get/StreamSession SSE, React/Chat/Status, Transport/Visuals/Rack, Grant/Revoke, End/PublishRecap), `ListeningSession.cs`, `ControlGrant.cs`, worker `recap_actor.py`. The SSE **consumer is already written and unit-tested but UNWIRED**:
 - `src/features/listen/useRoomStream.ts` — `useRoomStream(sessionId, handlers, token?)` (45); `parseRoomFrame` is unit-tested in `useRoomStream.test.ts`.
 - `src/features/listen/useRoomActions.ts` — `useRoomActions(sessionId, token?)` (33) returns the action senders.

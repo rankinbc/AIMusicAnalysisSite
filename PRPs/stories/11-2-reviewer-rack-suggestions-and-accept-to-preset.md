@@ -21,6 +21,12 @@ So that good suggestions become a usable preset with credit to the proposer.
 
 ## Context — what already exists (reuse, do not rebuild)
 
+> ⚠️ **Verify before building — the "unused / no component" claims below are grep-level, not
+> render-truth.** Stories 5.6 and 11.1 both found the "missing" component already existed as a
+> **mock or dead code** (the rail `CommentsPanel` rendered `MOCK_COMMENTS`; `VerdictCard` was
+> unrendered in the redesign). **First grep for the real render path** (who actually renders
+> this surface today) — you may be replacing a mock or wiring an existing seam, not building net-new.
+
 Backend complete (`FeedbackEndpoints.cs` AcceptSuggestion forks to `RackPreset` with `from_suggestion_id` provenance; `ReviewerSuggestion.cs` carries `chain_json`, `status`, `comment_id`, `created_in_session_id`/`via_grant_id`). Frontend **hooks exist, unused**:
 - `src/features/listen/useSuggestions.ts` — `useSuggestions(versionId)` (19), `useAcceptSuggestion(versionId)` (38), `useRejectSuggestion(versionId)` (50). (`usePostAnonSuggestion` is for 11.4.)
 - Preset list: `src/features/listen-rack/useRackPresets.ts` — `useRackPresets(versionId)` (76).
