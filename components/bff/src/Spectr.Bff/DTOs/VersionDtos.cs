@@ -1,5 +1,13 @@
 namespace Spectr.Bff.DTOs;
 
+public sealed record VersionMetricsDto(
+    double? Score,
+    double? Lufs,
+    double? DynamicRangeLu,
+    double? Bass,
+    double? Air,
+    double? StereoWidth);
+
 public sealed record VersionDto(
     Guid Id,
     Guid SongId,
