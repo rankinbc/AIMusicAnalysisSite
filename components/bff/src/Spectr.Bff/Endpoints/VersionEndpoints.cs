@@ -1022,17 +1022,37 @@ public static class VersionEndpoints
             return Results.BadRequest(new { error = "score must be 0..100" });
         var userId = currentUser.UserId();
 
-        // Ownership: the version must belong to the caller (via its song).
-        var owns = await db.SongVersions.AsNoTracking()
-            .AnyAsync(v => v.Id == versionId && db.Songs.Any(s => s.Id == v.SongId && s.UserId == userId), ct);
-        if (!owns) return Results.NotFound();
+        if (!await UserOwnsVersion(db, versionId, userId, ct)) return Results.NotFound();
 
         var row = await db.VersionUserRatings
             .FirstOrDefaultAsync(r => r.UserId == userId && r.VersionId == versionId, ct);
         if (row is null)
+        {
             db.VersionUserRatings.Add(new VersionUserRating { UserId = userId, VersionId = versionId, Score = body.Score });
-        else { row.Score = body.Score; row.UpdatedAt = DateTimeOffset.UtcNow; }
-        await db.SaveChangesAsync(ct);
+            try
+            {
+                await db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException)
+            {
+                // Concurrent insert won the race; detach the failed entity, re-resolve and update.
+                db.ChangeTracker.Clear();
+                row = await db.VersionUserRatings
+                    .FirstOrDefaultAsync(r => r.UserId == userId && r.VersionId == versionId, ct);
+                if (row is not null)
+                {
+                    row.Score = body.Score;
+                    row.UpdatedAt = DateTimeOffset.UtcNow;
+                    await db.SaveChangesAsync(ct);
+                }
+            }
+        }
+        else
+        {
+            row.Score = body.Score;
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+        }
         return Results.Ok(new { score = body.Score });
     }
 
