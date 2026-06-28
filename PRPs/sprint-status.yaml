@@ -114,9 +114,9 @@ development_status:
   5-1-app-shell-and-library-fidelity-phase-b: backlog  # PARTIAL — TopNav/VersionArc/CoverArt shipped; GAP: LibraryCard/Row fidelity + MiniPlayer
   5-2-results-restructure-verdicthero-and-tabs-phase-c-core: done  # GradeHero + ResultsTabs (5 badged tabs, URL tab state)
   5-3-featuredverdictcard-and-coach-handoff: done  # VerdictCard: persona/impact/confidence/FixRecipe/feedback
-  5-4-analysis-summary-tab-filters-and-specialist-roster: backlog  # PARTIAL — PipelineDial/PhaseList/CoachFilters/SpecialistTile shipped; GAP: verify UnlockBlock + sticky rail
+  5-4-analysis-summary-tab-filters-and-specialist-roster: done  # shipped; AC1/AC2/AC3 met — final gap (sticky side rail, AnalysisTab.module.css .right) closed 2026-06-27
   5-5-frequency-stem-clash-reference-and-arrangement-panels: done  # Spectrum/Reference/Arrangement tabs
-  5-6-als-project-panel-and-track-name-attribution: backlog  # PARTIAL — ProjectTab renders .als; GAP: track-name attribution chips
+  5-6-als-project-panel-and-track-name-attribution: ready-for-dev  # story file created 2026-06-27; AC1 shipped, scope = AC2 (structured track attribution + TrackChip) + AC3 (unlock invitation)
   5-7-partial-failure-reporting-and-free-retry: backlog  # PARTIAL — DegradationBanner + rerun hooks; GAP: free-retry entitlement-free dispatch (AR16) + .als subprocess isolation (AR33)
   5-8-song-detail-and-version-compare: done  # song detail route + ProgressTimeline + CompareDialog
   5-9-upload-dialog-polish-club-check-and-playback-verify: done  # UnifiedUploadDialog + StereoCard/ClubCheck + ResultsPlayer
