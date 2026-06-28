@@ -32,6 +32,13 @@ This scope decision was made deliberately over two richer alternatives (embed li
 social on the song page / make it a primary listening surface) to avoid two sources
 of truth for version-level social.
 
+**Scoring model (locked):** SPECTR does **not** use letter grades anywhere in this
+design — the only AI number is the **mix score (0–100)**. In addition, the producer
+can assign their **own personal score (0–100) per version** and write **free-text notes
+on the delta** between any two versions. The personal score captures artistic judgment
+the AI number can't, and overlays the AI score on the progress timeline so the producer
+sees their own improvement arc. Drop `GradePill` / `grade` from this screen entirely.
+
 ---
 
 ## 2. Information architecture — single-column stacked
@@ -49,12 +56,14 @@ One scannable vertical column (collapses gracefully on narrow viewports):
 ├ Progress timeline ────────────────────────────────────────┤
 │ real score-over-versions  62 → 71 → 80 → 87               │
 ├ Versions list ────────────────────────────────────────────┤
-│ A v4 final  87/100  current  ✓   [▶] [Report ↗]   ⋯       │
-│ B v3 bass   80/100            ✓   [▶] [Report ↗]   ⋯       │
-│ C v2 rough  71/100            ⟳   [▶]              ⋯       │
-│ D v1 demo     —              ⚠   [▶] [Retry]       ⋯       │
-├ Compare ──────────────────────────────────────────────────┤
-│ v_ → v_   [v1→current] [Last two] [Pick two…]             │
+│ A v4 final  87/100  you 90  current ✓  [▶] [Report ↗]  ⋯  │
+│ B v3 bass   80/100  you 78          ✓  [▶] [Report ↗]  ⋯  │
+│ C v2 rough  71/100  you —           ⟳  [▶]             ⋯  │
+│ D v1 demo     —     you 60          ⚠  [▶] [Retry]     ⋯  │
+├ Compare (any two versions) ───────────────────────────────┤
+│ pick A ▾  vs  pick B ▾   [v1→current] [Last two]          │
+│ deltas: score +7 · LUFS −0.4 · width +6%   …             │
+│ your notes: "fuller low end, vox still harsh"  · you: 90  │
 └───────────────────────────────────────────────────────────┘
 ```
 
@@ -64,9 +73,9 @@ One scannable vertical column (collapses gracefully on narrow viewports):
 
 ### 3.1 Identity header
 - **Display:** `CoverArt` (visual template via `visualFromDto`), song name, genre
-  `Pill`, current grade `GradePill` + score, version count, **visibility badge**
-  (`◐ private` / `🔗 link` / `● public`, from `SongDto.visibility`; absent → private),
-  tags (existing tag pills incl. `pub` marker).
+  `Pill`, current **mix score (0–100)** as a `Pill` (NO letter grade), version count,
+  **visibility badge** (`◐ private` / `🔗 link` / `● public`, from `SongDto.visibility`;
+  absent → private), tags (existing tag pills incl. `pub` marker).
 - **Interactions:**
   - `Edit` → existing `SongEditDialog`.
   - `★ Publish` → existing `SharePublishDialog`; disabled with a toast when no
@@ -97,34 +106,71 @@ One scannable vertical column (collapses gracefully on narrow viewports):
     element's `timeupdate`, not React state assumptions.
   - AudioContext / playback must start from a user gesture (autoplay policy).
 
-### 3.3 Progress timeline — NOW REAL
-- **Display:** reuse `src/ui/ProgressTimeline`, fed with **real per-version scores**
-  (see §4). Hover → version label + grade + date.
+### 3.3 Progress timeline — NOW REAL, DUAL-SERIES
+- **Display:** reuse `src/ui/ProgressTimeline`, fed with **real per-version mix scores**
+  (see §4), and **overlay the producer's personal score** as a second series so the AI
+  arc and the personal arc sit on one 0–100 axis. Hover → version label + mix score +
+  personal score + date. No letter grades.
 - **Interactions:** click a point → select that version (loads into player slot A and
   highlights its row).
+- **Implementation note:** `ui/ProgressTimeline`'s `TimelineVersion` currently carries a
+  `grade` field used for coloring; for this screen ignore grade and add an optional
+  `personalScore` to drive the second series (small prop extension, back-compatible).
 
 ### 3.4 Versions list — the spine, de-cluttered
-- **Display per row:** slot letter (A/B/C/D…), `GradePill` (or `v#` when unscored),
-  label (or `Version N`), **real score/grade**, created date, `current` badge,
+- **Display per row:** slot letter (A/B/C/D…), `v#` chip, label (or `Version N`), the
+  **AI mix score** (`mono`, cyan, e.g. `87/100`, or `—` when unscored), the **personal
+  score** (`mono`, muted, e.g. `you 90`, or `you —` when unset), created date, `current`
+  badge, a small **gameplan indicator** when one is attached (see §3.7), and an
   **analysis status indicator**:
   - `✓` analyzed (has a completed `latestVersionResult`)
   - `⟳` analyzing (an in-flight job for that version) — optionally with progress
   - `⚠` failed (last job failed)
+  - No letter grades anywhere.
 - **Interactions:**
   - **Inline (only two):** `▶` load into player (slot A), `Report ↗` (only when
     analyzed → `/songs/$songId/results/$jobId`).
   - **Failed rows:** inline `Retry`.
-  - **`⋯` context menu (everything else):** Make current · Edit label · Reanalyze ·
-    Reanalyze with reference · Open in Listen · **Open in Room** *(future — disabled
-    stub)* · Delete (danger).
+  - **`⋯` context menu (everything else):** Make current · Edit label · **View game plan**
+    *(only when one is attached — see §3.7)* · Reanalyze · Reanalyze with reference ·
+    Open in Listen · **Open in Room** *(future — disabled stub)* · Delete (danger).
   - Sorting: descending by version number (current behavior).
 - **Implementation notes:** the menu uses a Radix dropdown (Radix already in stack).
   Each action reuses existing hooks: `useSetCurrentVersion`, `usePatchVersion`,
   `useReanalyzeVersion`, `useDeleteVersion`, and `ReanalyzeWithReferenceDialog`.
 
-### 3.5 Compare
-- Keep the existing `CompareDialog` + quick presets (`v1 → current`, `Last two`,
-  `Pick two…`). Behavior unchanged; restyled into the stack as a compact card.
+### 3.5 Compare — any two versions, with a personal verdict
+- **Pick any two versions** (A vs B), via two selectors plus quick presets
+  (`v1 → current`, `Last two`). Reuse/extend the existing `CompareDialog` for the metric
+  deltas (mix score, loudness, dynamics, bass energy, air, stereo width).
+- **Personal verdict (new):**
+  - **Delta notes** — a free-text field attached to the *(versionA, versionB)* pair, where
+    the producer records what changed in their own words ("fuller low end, vox still
+    harsh"). Persisted; reappears when that pair is compared again.
+  - **Personal score (0–100)** — set/adjust the producer's own score for the version
+    being judged (default target = the newer of the two). This is the SAME per-version
+    personal score shown on rows and the timeline — the compare view is just the most
+    convenient place to set it. Editable inline (number input / slider), `mono`.
+  - Both are optional; absent → muted "add your notes" / "rate this version" affordances.
+  - Show the AI delta and the personal score side by side so "the AI says +7, I say it's
+    a 90" reads at a glance.
+
+### 3.7 Game plan (per-version, read-from-Results)
+- **Context:** a **game plan** is an actionable change-set a producer can save from the
+  **Results page** for a specific version (the "Actions" surface). It is optional and
+  version-scoped. The song page does not create or edit game plans — it **surfaces and
+  opens** any that exist.
+- **Display:** a version with a saved game plan shows a small indicator on its row (e.g.
+  a `Pill`/`Dot` "plan" marker). 
+- **Interactions:** `View game plan` (row `⋯` menu, shown only when one exists) opens a
+  read view of that version's saved plan (its items / moves). From there, the producer
+  can route into the Listen "Plan" tab to apply it, or back to the Report. If no game
+  plan exists for a version, the affordance is absent (not disabled).
+- **Implementation note:** game-plan persistence already exists on the Results/Listen
+  side (the Plan-tab apply work). The song page only needs a **read** path: "does this
+  version have a saved game plan, and fetch it." Confirm the existing endpoint/shape
+  during planning; if a per-version "has plan" flag isn't cheaply available, add it to
+  the per-version payload alongside §4.
 
 ### 3.6 Activity / visibility strip — minimal social, graceful
 - **Display:** for the current version, render only what the BFF provides:
@@ -144,16 +190,34 @@ Per-version analysis data **already exists**: `Analysis.VersionId` is an FK on t
 song-detail endpoint simply doesn't use it (it groups by `SongId` and takes the
 newest single row).
 
-**Change:**
+**Change A — per-version AI score (small, NO migration):**
 1. `SongEndpoints.GetById` — batch-load each version's latest `Analysis` by
    `VersionId` (mirror the `ReportsEndpoints.List` join pattern).
 2. `VersionDto` — add optional `latestVersionResult: AnalysisSummaryDto?`.
 3. `ToVersionDto` mapping — populate it.
 4. Frontend `api/types.ts` `VersionDto` — add the matching optional field.
 
-Estimated ~30 lines in the BFF + 1 field on each side. This unlocks §3.3 and the real
-scores in §3.4. The frontend should degrade gracefully if the field is absent
-(fall back to today's latest-only behavior) so the two sides can ship independently.
+Estimated ~30 lines in the BFF + 1 field on each side. Unlocks §3.3 + real row scores.
+The frontend degrades gracefully if absent (falls back to latest-only) so the two sides
+ship independently.
+
+**Change B — personal score + delta notes (NEW; needs a small migration):**
+- **Personal score:** add a nullable `personal_score` (int 0–100) — simplest home is a
+  column on `song_versions` (songs are single-owner, so no per-user fan-out needed).
+  Surface it on `VersionDto` as `personalScore: number | null`. Add a write endpoint,
+  e.g. `PUT /api/versions/{id}/personal-score`.
+- **Delta notes:** a small new table keyed by *(user/song, versionAId, versionBId)* →
+  `notes` text + timestamps (normalize the pair order so A↔B is symmetric). Endpoints:
+  `GET /api/songs/{id}/compare-notes?a=&b=` and `PUT` the same. Keep it its own table
+  (not on a version) because notes describe a *pair*, not a single version.
+- New frontend hooks: `useSetPersonalScore(versionId)`, `useCompareNotes(songId, a, b)` +
+  `useSaveCompareNotes`.
+
+**Change C — game-plan read path (§3.7):**
+- Need a per-version "has a saved game plan" signal + a fetch for its content. Reuse the
+  existing Results/Listen game-plan persistence. If a cheap `hasGamePlan: boolean` (or
+  `gamePlanId`) isn't already exposed per version, add it to `VersionDto`. The song page
+  is **read-only** here — no create/edit.
 
 ---
 
@@ -169,9 +233,11 @@ Create `src/features/song/` and reduce the route file to a thin composition shel
 | `VersionList.tsx` | list container + sorting |
 | `VersionRow.tsx` | one row: status, inline Play/Report |
 | `VersionRowMenu.tsx` | the `⋯` context menu + its actions |
-| `CompareCard.tsx` | compare presets → `CompareDialog` |
+| `CompareCard.tsx` | pick-any-two + presets → `CompareDialog`; hosts delta notes + personal-score editor |
+| `PersonalScoreField.tsx` | inline 0–100 personal-score input (reused by CompareCard + optionally rows) |
+| `GamePlanViewModal.tsx` | read-only view of a version's saved game plan (opened from row `⋯`) |
 | `ActivityStrip.tsx` | graceful read-only social strip |
-| `song-helpers.ts` | pure logic: per-version score mapping, status derivation, A/B slot defaults, sort |
+| `song-helpers.ts` | pure logic: per-version score mapping, status derivation, A/B slot defaults, sort, compare-pair key normalization |
 
 The inline `MakeCurrentButton` / `ReanalyzeButton` / `EditVersionLabelButton` /
 `DeleteVersionDialog` move out of the route into the feature folder. Follow the
@@ -200,19 +266,24 @@ them up **without a re-layout**. No fabricated data in the meantime.
 
 No inline reactions/comments/heatmaps, no live presence/chat, no DSP on this page, no
 rooms UI, no per-version share-setting editor (those belong to the version surfaces).
-No new social schema. No changes to Listen/Room.
+No new social schema. No changes to Listen/Room. **No game-plan creation or editing** on
+this page — game plans are authored on the Results page; the song page only reads/opens
+them (§3.7). The only new persistence is the personal score + delta-notes (§4 Change B).
 
 ---
 
 ## 9. Testing
 
 - **Unit (`song-helpers.ts`):** per-version score mapping, status derivation
-  (analyzed/analyzing/failed/unscored), A/B default slot selection, version sort.
-- **Component:** `VersionRow` renders correct status + inline actions; `VersionRowMenu`
-  fires each action; analyzing/failed/Retry paths; `QuickPlayer` slot-switch makes the
-  correct source audible.
-- **Render:** per-version-score mapping with and without `latestVersionResult` (graceful
-  fallback).
+  (analyzed/analyzing/failed/unscored), A/B default slot selection, version sort,
+  compare-pair key normalization (A↔B symmetric).
+- **Component:** `VersionRow` renders mix + personal score + gameplan indicator + status,
+  and the two inline actions; `VersionRowMenu` fires each action incl. conditional
+  "View game plan"; analyzing/failed/Retry paths; `QuickPlayer` slot-switch makes the
+  correct source audible; `CompareCard` saves delta notes + personal score and shows AI
+  delta vs personal score side by side; `GamePlanViewModal` renders a fetched plan.
+- **Render:** per-version-score mapping with and without `latestVersionResult` and with
+  and without `personalScore` (graceful fallback / muted "rate this" affordance).
 - **Gates:** `tsc --noEmit`, `npm run lint --max-warnings 0`, `npm run build`,
   `npx vitest run`. BFF: `dotnet build && dotnet test`.
 
@@ -220,7 +291,11 @@ No new social schema. No changes to Listen/Room.
 
 ## 10. Open dependencies / sequencing
 
-1. BFF per-version DTO change (§4) — small; can land first or in parallel (frontend
-   degrades gracefully without it).
-2. Frontend feature-folder build (§5) consuming the new field.
-3. Social seams (§7) remain stubs until the listening-room endpoints ship.
+1. BFF per-version AI-score DTO change (§4 Change A) — small, no migration; can land
+   first or in parallel (frontend degrades gracefully without it).
+2. BFF personal-score + delta-notes (§4 Change B) — needs a small migration
+   (`song_versions.personal_score` + a `version_compare_notes` table) and 2–3 endpoints.
+3. Game-plan read path (§4 Change C) — confirm the existing Results/Listen game-plan
+   endpoint/shape; add a per-version `hasGamePlan` signal if not already cheap.
+4. Frontend feature-folder build (§5) consuming the new fields.
+5. Social seams (§7) remain stubs until the listening-room endpoints ship.
