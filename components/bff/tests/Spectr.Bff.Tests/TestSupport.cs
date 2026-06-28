@@ -89,4 +89,47 @@ public static class TestSeed
 
         return (songId, versionId);
     }
+
+    /// <summary>
+    /// Seeds a Song + TWO SongVersions owned by <paramref name="userId"/>.
+    /// Used by compare-notes tests that need a valid normalized pair.
+    /// </summary>
+    public static async Task<(Guid SongId, Guid VersionAId, Guid VersionBId)> SongWithTwoVersionsAsync<TProgram>(
+        WebApplicationFactory<TProgram> factory, Guid userId)
+        where TProgram : class
+    {
+        var songId = Guid.NewGuid();
+        var versionAId = Guid.NewGuid();
+        var versionBId = Guid.NewGuid();
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Songs.Add(new Song
+        {
+            Id = songId,
+            UserId = userId,
+            Name = $"Test Track {Guid.NewGuid():N}",
+        });
+        db.SongVersions.Add(new SongVersion
+        {
+            Id = versionAId,
+            SongId = songId,
+            VersionNumber = 1,
+            Label = "v1",
+            IsCurrent = false,
+            FilePath = $"audio/upload/{Guid.NewGuid()}/source.wav",
+        });
+        db.SongVersions.Add(new SongVersion
+        {
+            Id = versionBId,
+            SongId = songId,
+            VersionNumber = 2,
+            Label = "v2",
+            IsCurrent = true,
+            FilePath = $"audio/upload/{Guid.NewGuid()}/source.wav",
+        });
+        await db.SaveChangesAsync();
+
+        return (songId, versionAId, versionBId);
+    }
 }

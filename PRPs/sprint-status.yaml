@@ -167,7 +167,7 @@ development_status:
   epic-11: in-progress
   11-1-threaded-timestamped-comments-panel: done  # implemented + code-reviewed 2026-06-28: rail CommentsPanel -> real useComments (threaded/moderated) + comment-tree helper; 2 review patches applied (Enter-guard, loading state); gates green, vitest 572
   11-2-reviewer-rack-suggestions-and-accept-to-preset: ready-for-dev  # first sprint (stretch; dep 11-1)
-  11-3-bookmarks-rail-and-owner-heat-signal: ready-for-dev  # first sprint (committed)
+  11-3-bookmarks-rail-and-owner-heat-signal: review  # implemented 2026-06-28: BookmarksRail on transport (markers/add/note/name-toggle/delete) + owner count signal; AC3 scoped to count+identified (no density DTO), AC2 note-edit via delete+recreate (no PATCH); gates green, vitest 579
   11-4-anonymous-reviewer-surface-on-share-token: backlog  # dep 11-1/11-2/11-3
   11-5-live-room-replace-mocks-with-sse-orchestration: ready-for-dev  # first sprint (committed)
   11-6-notifications-backend-table-sink-and-endpoints: backlog

@@ -15,6 +15,13 @@ public static class CompareEndpoints
     {
         var g = app.MapGroup("/compare").WithTags("compare").RequireAuthorization();
         g.MapGet("/", Compare);
+
+        // Per-user × per-version-pair notes (Change C).
+        // Pair is normalized (A↔B → same row) so order doesn't matter to callers.
+        g.MapGet("/notes", GetNotes);
+        g.MapPut("/notes", PutNotes);
+        g.MapDelete("/notes", DeleteNotes);
+
         return app;
     }
 
@@ -161,5 +168,88 @@ public static class CompareEndpoints
                 dict[prop.Name] = prop.Value.GetDouble();
         }
         return dict.Count > 0 ? dict : null;
+    }
+
+    // ── Compare notes (Change C) ─────────────────────────────────────────────
+
+    public sealed record CompareNoteBody(string Body);
+
+    // Normalize the pair so A↔B collapse to one row (Guid ordinal sort).
+    private static (Guid lo, Guid hi) Norm(Guid a, Guid b) =>
+        a.CompareTo(b) <= 0 ? (a, b) : (b, a);
+
+    // GET /api/compare/notes?versionA=&versionB=
+    // Returns { body: "" } when no note exists for this user+pair.
+    private static async Task<IResult> GetNotes(
+        Guid versionA, Guid versionB, ClaimsPrincipal currentUser, AppDbContext db, CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        var (lo, hi) = Norm(versionA, versionB);
+        var row = await db.VersionCompareNotes.AsNoTracking()
+            .FirstOrDefaultAsync(n => n.UserId == userId && n.VersionAId == lo && n.VersionBId == hi, ct);
+        return Results.Ok(new CompareNoteBody(row?.Body ?? ""));
+    }
+
+    // PUT /api/compare/notes?versionA=&versionB=  body: { "body": "..." }
+    // Upserts. Ownership check via the lo-id version's song → caller.
+    // Race-hardened: concurrent inserts catch DbUpdateException, re-read, update.
+    private static async Task<IResult> PutNotes(
+        Guid versionA, Guid versionB, CompareNoteBody input,
+        ClaimsPrincipal currentUser, AppDbContext db, CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        var (lo, hi) = Norm(versionA, versionB);
+
+        // Ownership: verify the lo version belongs to the caller.
+        var songId = await db.SongVersions.AsNoTracking()
+            .Where(v => v.Id == lo && db.Songs.Any(s => s.Id == v.SongId && s.UserId == userId))
+            .Select(v => (Guid?)v.SongId).FirstOrDefaultAsync(ct);
+        if (songId is null) return Results.NotFound();
+
+        var row = await db.VersionCompareNotes
+            .FirstOrDefaultAsync(n => n.UserId == userId && n.VersionAId == lo && n.VersionBId == hi, ct);
+        if (row is null)
+        {
+            db.VersionCompareNotes.Add(new VersionCompareNote
+            {
+                UserId = userId, SongId = songId.Value, VersionAId = lo, VersionBId = hi, Body = input.Body,
+            });
+            try
+            {
+                await db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException)
+            {
+                // Concurrent insert won the race; detach, re-read, update.
+                db.ChangeTracker.Clear();
+                row = await db.VersionCompareNotes
+                    .FirstOrDefaultAsync(n => n.UserId == userId && n.VersionAId == lo && n.VersionBId == hi, ct);
+                if (row is not null)
+                {
+                    row.Body = input.Body;
+                    row.UpdatedAt = DateTimeOffset.UtcNow;
+                    await db.SaveChangesAsync(ct);
+                }
+            }
+        }
+        else
+        {
+            row.Body = input.Body;
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+        }
+        return Results.Ok(new CompareNoteBody(input.Body));
+    }
+
+    // DELETE /api/compare/notes?versionA=&versionB= → 204 (idempotent)
+    private static async Task<IResult> DeleteNotes(
+        Guid versionA, Guid versionB, ClaimsPrincipal currentUser, AppDbContext db, CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        var (lo, hi) = Norm(versionA, versionB);
+        var row = await db.VersionCompareNotes
+            .FirstOrDefaultAsync(n => n.UserId == userId && n.VersionAId == lo && n.VersionBId == hi, ct);
+        if (row is not null) { db.VersionCompareNotes.Remove(row); await db.SaveChangesAsync(ct); }
+        return Results.NoContent();
     }
 }

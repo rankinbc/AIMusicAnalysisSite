@@ -44,6 +44,7 @@ import {
 } from './useRackPresets';
 import { asVizLook, useSaveVizPreset, useVizPresets } from './useVizPresetsServer';
 import { Transport } from './transport';
+import { BookmarksRail } from '../listen/BookmarksRail';
 import { Coach } from '../../ui/Coach';
 import { Avatar, SegBar } from './ui';
 import { VizStage } from './viz';
@@ -625,6 +626,10 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
               <div style={{ borderTop: '1px solid var(--border)' }}>
                 <Transport track={track} playing={playing} position={position} duration={duration} onTogglePlay={togglePlay}
                   onSeek={seek} notes={track.notes} onNoteClick={(n) => { setActiveNote(n.id); seek(n.t); }} activeNote={activeNote} reactions={feed} />
+                {realAudio && versionId && (
+                  <BookmarksRail versionId={versionId} durationSeconds={duration} position={position}
+                    onSeek={seek} isOwner={identity.isOwner} />
+                )}
               </div>
             </div>
 

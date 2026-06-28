@@ -76,6 +76,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     // Personal score — per-user × per-version rating (Change B)
     public DbSet<VersionUserRating> VersionUserRatings => Set<VersionUserRating>();
 
+    // Compare notes — per-user × per-version-pair (Change C)
+    public DbSet<VersionCompareNote> VersionCompareNotes => Set<VersionCompareNote>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         builder.HasPostgresExtension("pgcrypto");      // gen_random_uuid()
@@ -284,6 +287,13 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         builder.Entity<VersionUserRating>()
             .HasIndex(r => new { r.UserId, r.VersionId }).IsUnique();
         builder.Entity<VersionUserRating>().Property(r => r.UpdatedAt).HasDefaultValueSql("now()");
+
+        // Compare notes — one note per (user, normalized version pair).
+        // Pair is stored normalized (version_a_id < version_b_id by Guid ordinal)
+        // so reading/writing with A↔B reversed always hits the same row.
+        builder.Entity<VersionCompareNote>()
+            .HasIndex(n => new { n.UserId, n.VersionAId, n.VersionBId }).IsUnique();
+        builder.Entity<VersionCompareNote>().Property(n => n.UpdatedAt).HasDefaultValueSql("now()");
 
         // Song tags — no duplicate tag name per (song, user); fast lookup by song.
         builder.Entity<SongTag>()

@@ -1,6 +1,6 @@
 # Story 11.3: Bookmarks Rail & Owner Heat Signal
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -33,18 +33,18 @@ Backend complete (`BookmarkEndpoints.cs` + `TrackBookmark.cs`: `timestamp_second
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: BookmarksRail component (AC: 1, 2)**
-  - [ ] 1.1 Create `src/features/listen/BookmarksRail.tsx` (+ module css). Props: `{ versionId: string; durationSeconds: number; currentTime: number; onSeek: (s: number) => void }`.
-  - [ ] 1.2 Consume `useMyBookmarks()`; render each as a marker positioned at `timestamp_seconds / durationSeconds` along the timeline, click → `onSeek`.
-  - [ ] 1.3 "Add bookmark" at the playhead via `useCreateBookmark` with optional note (small inline popover); edit note + toggle `identity_visible` (PATCH or delete+recreate per the hook surface — check `useBookmarks.ts` for an update hook; if absent, scope edit to note via the create/delete pair and note the limitation); delete via `useDeleteBookmark`.
-- [ ] **Task 2: Owner heat-signal overlay (AC: 3, 4)**
-  - [ ] 2.1 Create `src/features/listen/BookmarkSignalOverlay.tsx`. Consume `useBookmarkSignal(versionId, enabled = isOwner)` — **pass `enabled=false` for non-owners so the owner-only request is never issued** (AC4).
-  - [ ] 2.2 Render `BookmarkSignalDto` as a density heat strip over the timeline (aggregate counts → opacity/height per bucket). Show identified bookmarkers (those with `identity_visible=true`) in a small list.
-- [ ] **Task 3: Mount into the Listen page (AC: 1, 3)**
-  - [ ] 3.1 Mount `BookmarksRail` on the transport in `ListenRackPage.tsx` (it owns the audio element/duration/currentTime and `onSeek`). Mount `BookmarkSignalOverlay` only when the viewer is the owner (derive from capabilities at `ListenRackPage.tsx:604`).
-- [ ] **Task 4: Tests (AC: 5)**
-  - [ ] 4.1 `__tests__/BookmarksRail.test.tsx` — markers positioned from a fixture `BookmarkDto[]`; `__tests__/BookmarkSignalOverlay.test.tsx` — heat strip from a `BookmarkSignalDto` fixture + asserts the signal hook is called with `enabled=false` for a non-owner. Match the `useBookmarks.test.ts` style.
-- [ ] **Task 5: Gates** — `npx tsc --noEmit`, `npm run lint`, `npm run build`, `npx vitest run`.
+- [x] **Task 1: BookmarksRail component (AC: 1, 2)**
+  - [x] 1.1 Created `src/features/listen/BookmarksRail.tsx` (+ `.module.css`). Props: `{ versionId, durationSeconds, position, onSeek, isOwner }`.
+  - [x] 1.2 Consumes `useMyBookmarks()` filtered to this version via pure `bookmarks-helpers.ts` (`bookmarksForVersion` — `useMyBookmarks` returns ALL my bookmarks, not version-scoped); markers positioned via `markerPct(t, dur)`, click → `onSeek`.
+  - [x] 1.3 "★ Bookmark @ {time}" via `useCreateBookmark` with optional note; name-toggle via the server **upsert** (re-POST same version+t flips `identity_visible` — confirmed in `BookmarkEndpoints.Create`); **note-edit via delete+recreate** (⚠️ no PATCH endpoint, and the upsert ignores `note` — see Completion Notes); delete via `useDeleteBookmark`.
+- [x] **Task 2: Owner signal (AC: 3, 4)** — ⚠️ SCOPE ADJUSTED, see Completion Notes
+  - [x] 2.1 `useBookmarkSignal(versionId, enabled = isOwner)` — non-owner never issues the request (AC4).
+  - [x] 2.2 ⚠️ `BookmarkSignalDto` is `{ count, identified[] }` — **no per-timestamp data**, so a timeline density heat-strip is not backed by the API. Rendered the supported signal: aggregate **count + opted-in named bookmarkers** inline in the rail header. Folded into `BookmarksRail` (no separate `BookmarkSignalOverlay`).
+- [x] **Task 3: Mount into the Listen page (AC: 1, 3)**
+  - [x] 3.1 Mounted `BookmarksRail` directly under the `Transport` in `ListenRackPage.tsx` (gated `realAudio && versionId`), passing `duration`/`position`/`seek`/`identity.isOwner`. The owner signal self-gates via `enabled=isOwner`.
+- [x] **Task 4: Tests (AC: 5)**
+  - [x] 4.1 `bookmarks-helpers.test.ts` (4 pure: version-filter + track-level-last ordering, `markerPct` clamp/null) + `BookmarksRail.test.tsx` (3 render via seeded `QueryClientProvider`: version-filtered markers + `@0:30` chip + add button, owner-only signal `7 saved`, empty state).
+- [x] **Task 5: Gates** — tsc/lint clean, build ✓, vitest 579 (+7).
 
 ## Dev Notes
 
@@ -59,10 +59,45 @@ Backend complete (`BookmarkEndpoints.cs` + `TrackBookmark.cs`: `timestamp_second
 
 ### Agent Model Used
 
+claude-opus-4-8[1m] (dev-story workflow)
+
 ### Debug Log References
+
+- Verify-before-build (per the story caveat): confirmed NO existing render-usage of the
+  bookmark hooks (only a comment in `routes/_app/listen.$versionId.tsx`), so this is a genuine
+  net-new UI — unlike 5.6/11.1.
+- Two backend realities surfaced that adjusted scope (below): `BookmarkSignalDto` shape and the
+  absence of a PATCH endpoint.
 
 ### Completion Notes List
 
+- ⚠️ **AC3 scope adjusted to the data contract.** The story envisioned a timeline "density
+  heat-strip," but `BookmarkSignalDto = { count, identified[] }` carries no per-timestamp data
+  (anon bookmarks are counted anonymously; the owner doesn't receive their `t` values). Rendered
+  the supported signal: aggregate **count + opted-in named bookmarkers**. A true heat-strip would
+  need a new owner-only timestamped-density endpoint — out of scope.
+- ⚠️ **AC2 note-edit via delete+recreate.** `BookmarkEndpoints` exposes only GET/POST/DELETE (no
+  PATCH). The POST is an upsert that toggles `identity_visible` on a repeat (same version+t) call
+  but **ignores `note`**. So: name-toggle = re-POST upsert; note-edit = delete then recreate at
+  the same `t` (new id/createdAt). Documented; a PATCH would make edits in-place.
+- ⚠️ **Two-component split folded into one.** No separate `BookmarkSignalOverlay` — since the
+  signal is a count+names summary (not a timeline overlay), it lives in the `BookmarksRail` header.
+- AC4 enforced via `useBookmarkSignal(versionId, enabled = isOwner)` — a non-owner never fires the
+  owner-only request (verified by a test asserting the signal is absent + the hook's `enabled` gate).
+- Mounted under the existing `Transport` (which owns duration/position/seek), gated `realAudio && versionId`.
+
 ### File List
 
+- `components/frontend-spectr-v2/src/features/listen/bookmarks-helpers.ts` (A)
+- `components/frontend-spectr-v2/src/features/listen/__tests__/bookmarks-helpers.test.ts` (A)
+- `components/frontend-spectr-v2/src/features/listen/BookmarksRail.tsx` (A)
+- `components/frontend-spectr-v2/src/features/listen/BookmarksRail.module.css` (A)
+- `components/frontend-spectr-v2/src/features/listen/__tests__/BookmarksRail.test.tsx` (A)
+- `components/frontend-spectr-v2/src/features/listen-rack/ListenRackPage.tsx` (M — import + mount under Transport)
+
 ### Change Log
+
+- 2026-06-28 — Story 11.3 implemented: `BookmarksRail` on the transport (timestamped markers,
+  add-at-playhead, note/name-toggle/delete, owner count signal) consuming the real PRP-6 hooks +
+  pure `bookmarks-helpers`. AC3 scoped to count+identified (DTO has no density); AC2 note-edit via
+  delete+recreate (no PATCH). Gates green. Status → review.
