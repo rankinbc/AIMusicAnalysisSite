@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import type { SongDto } from '../../api/types';
+import type { SongDto, SongVisual } from '../../api/types';
+import { CoverArt } from '../../ui/CoverArt';
 import styles from './SongConsole.module.css';
 
 interface SongHeaderProps {
   song: SongDto;
+  visual?: SongVisual | null;
+  hue?: number;
   onEdit: () => void;
   onPublish: () => void;
   onAddVersion: () => void;
@@ -18,7 +21,7 @@ function fmtSaved(iso: string): string {
   }
 }
 
-export function SongHeader({ song, onEdit, onPublish, onAddVersion, onArchive }: SongHeaderProps) {
+export function SongHeader({ song, visual, hue, onEdit, onPublish, onAddVersion, onArchive }: SongHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const versions = song.versions ?? [];
@@ -34,7 +37,9 @@ export function SongHeader({ song, onEdit, onPublish, onAddVersion, onArchive }:
   return (
     <div className={`card ${styles.headerWrap}`}>
       {/* Cover art */}
-      <div className={styles.coverWrap} />
+      <div className={styles.coverWrap}>
+        <CoverArt hue={hue ?? 168} visual={visual ?? null} size="fluid" ratio={1} />
+      </div>
 
       {/* Info column */}
       <div className={styles.headerInfo}>

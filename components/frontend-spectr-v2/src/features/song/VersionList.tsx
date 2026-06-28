@@ -93,8 +93,8 @@ export function VersionList({
               onReport={() => onReport(version)}
               onRetry={() => onRetry(version.id)}
               menu={menu}
-              status={statusEntry?.status}
-              progress={statusEntry?.progress}
+              {...(statusEntry?.status !== undefined ? { status: statusEntry.status } : {})}
+              {...(statusEntry?.progress !== undefined ? { progress: statusEntry.progress } : {})}
               editing={editingId === version.id}
               editValue={editingId === version.id ? editValue : ''}
               onEditChange={setEditValue}

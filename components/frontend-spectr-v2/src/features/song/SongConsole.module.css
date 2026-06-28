@@ -1,4 +1,33 @@
+/* ── Page layout ────────────────────────────────────────────────────────── */
+.page {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-6) 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.backLink {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--muted);
+  text-decoration: none;
+  width: max-content;
+  letter-spacing: 0.06em;
+}
+.backLink:hover {
+  color: var(--cyan);
+}
+
 /* ── Song Page Console — scoped animations ─────────────────────────────── */
+@keyframes spcShimmer {
+  from { background-position: -480px 0; }
+  to   { background-position:  480px 0; }
+}
+@keyframes spcUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 @keyframes spcSpin {
   to { transform: rotate(360deg); }
 }

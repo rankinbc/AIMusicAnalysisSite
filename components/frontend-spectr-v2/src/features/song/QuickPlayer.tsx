@@ -242,7 +242,7 @@ export function QuickPlayer({ song, player, onOpenListen }: QuickPlayerProps) {
                 dur={dur}
                 menuOpen={slotMenuOpen === key}
                 onToggleMenu={() => toggleMenu(key)}
-                onOpenListen={onOpenListen}
+                {...(onOpenListen !== undefined ? { onOpenListen } : {})}
                 onLoadedMetadata={() => {
                   const el = key === 'A' ? player.audioARef.current : player.audioBRef.current;
                   if (el) setDur(el.duration || 0);

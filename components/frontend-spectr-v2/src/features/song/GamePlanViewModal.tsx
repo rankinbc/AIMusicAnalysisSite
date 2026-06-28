@@ -2,7 +2,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { readListenFixes } from '../listen-rack/listenFixes';
 import s from './SongConsole.module.css';
 
-interface Props {
+export interface GamePlanViewModalProps {
   versionId: string;
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -17,7 +17,7 @@ function sevPillClass(sev: string): string {
   return 'pill cyan';
 }
 
-export function GamePlanViewModal({ versionId, open, onOpenChange, onApplyInListen }: Props) {
+export function GamePlanViewModal({ versionId, open, onOpenChange, onApplyInListen }: GamePlanViewModalProps) {
   const fixes = readListenFixes(versionId);
   const count = fixes.length;
 
