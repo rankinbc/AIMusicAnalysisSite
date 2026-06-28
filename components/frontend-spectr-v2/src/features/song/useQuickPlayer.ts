@@ -17,6 +17,7 @@ export function useQuickPlayer(versions: VersionDto[]) {
   const [highlight, setHighlight] = useState<string | null>(null);
   const audioARef = useRef<HTMLAudioElement | null>(null);
   const audioBRef = useRef<HTMLAudioElement | null>(null);
+  const audibleRef = useRef<Key>('A');
 
   const refOf = (k: Key) => (k === 'A' ? audioARef : audioBRef);
 
@@ -30,20 +31,28 @@ export function useQuickPlayer(versions: VersionDto[]) {
   const start = (k: Key) => { void refOf(k).current?.play().catch(() => {}); };
 
   const play = useCallback((k: Key) => {
-    setAudible(prev => {
-      if (prev !== k) { pause(prev); start(k); setPlaying(true); return k; }
-      // toggle on the live deck
+    const prev = audibleRef.current;
+    if (prev !== k) {
+      pause(prev);
+      start(k);
+      audibleRef.current = k;
+      setAudible(k);
+      setPlaying(true);
+    } else {
       const el = refOf(k).current;
       if (el?.paused) { start(k); setPlaying(true); } else { pause(k); setPlaying(false); }
-      return prev;
-    });
+    }
   }, []);
 
   const seek = useCallback((k: Key, fraction: number) => {
+    const prev = audibleRef.current;
+    if (prev !== k) { pause(prev); }
     const el = refOf(k).current;
     if (el && el.duration) el.currentTime = Math.max(0, Math.min(1, fraction)) * el.duration;
-    setAudible(prev => { if (prev !== k) { pause(prev); } return k; });
-    start(k); setPlaying(true);
+    audibleRef.current = k;
+    setAudible(k);
+    start(k);
+    setPlaying(true);
   }, []);
 
   const setSlot = useCallback((k: Key, id: string) => {
@@ -51,7 +60,7 @@ export function useQuickPlayer(versions: VersionDto[]) {
   }, []);
 
   const loadIntoA = useCallback((id: string) => {
-    setSlotA(id); setAudible('A'); setHighlight(id); start('A'); setPlaying(true);
+    setSlotA(id); audibleRef.current = 'A'; setAudible('A'); setHighlight(id); start('A'); setPlaying(true);
   }, []);
 
   // timeupdate handlers (wire onTimeUpdate on each <audio>)
