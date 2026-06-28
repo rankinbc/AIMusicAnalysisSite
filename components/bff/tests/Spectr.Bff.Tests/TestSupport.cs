@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Spectr.Bff.DTOs;
 using Spectr.Data;
+using Spectr.Data.Entities;
 
 namespace Spectr.Bff.Tests;
 
@@ -50,5 +51,42 @@ public static class TestAuth
         var auth = await resp.Content.ReadFromJsonAsync<AuthResponse>();
         if (auth is null) throw new InvalidOperationException("Register returned null body.");
         return (auth.User.Id, auth.AccessToken);
+    }
+}
+
+public static class TestSeed
+{
+    /// <summary>
+    /// Seeds a Song + one SongVersion owned by <paramref name="userId"/> via a DI
+    /// scope and returns their ids.  Extracted from SongVersionMetricsTests so
+    /// multiple test classes can reuse this without duplicating the insert logic.
+    /// </summary>
+    public static async Task<(Guid SongId, Guid VersionId)> SongWithVersionAsync<TProgram>(
+        WebApplicationFactory<TProgram> factory, Guid userId)
+        where TProgram : class
+    {
+        var songId = Guid.NewGuid();
+        var versionId = Guid.NewGuid();
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Songs.Add(new Song
+        {
+            Id = songId,
+            UserId = userId,
+            Name = $"Test Track {Guid.NewGuid():N}",
+        });
+        db.SongVersions.Add(new SongVersion
+        {
+            Id = versionId,
+            SongId = songId,
+            VersionNumber = 1,
+            Label = "v1",
+            IsCurrent = true,
+            FilePath = $"audio/upload/{Guid.NewGuid()}/source.wav",
+        });
+        await db.SaveChangesAsync();
+
+        return (songId, versionId);
     }
 }

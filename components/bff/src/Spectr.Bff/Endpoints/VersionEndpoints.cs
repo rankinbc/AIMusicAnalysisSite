@@ -53,6 +53,10 @@ public static class VersionEndpoints
             .DisableAntiforgery()
             .WithMetadata(new RequestSizeLimitAttribute(50L * 1024 * 1024));    // .als files are small
 
+        // Personal score — per-user × per-version rating (Change B)
+        g.MapPut("/{versionId:guid}/rating", SetRating);
+        g.MapDelete("/{versionId:guid}/rating", ClearRating);
+
         return app;
     }
 
@@ -1006,5 +1010,40 @@ public static class VersionEndpoints
             queueName,
             ct);
         return (jobId, null);
+    }
+
+    // ── PUT /api/versions/{id}/rating — upsert personal score (0..100) ────────
+    public sealed record SetRatingRequest(int Score);
+
+    private static async Task<IResult> SetRating(
+        Guid versionId, SetRatingRequest body, ClaimsPrincipal currentUser, AppDbContext db, CancellationToken ct)
+    {
+        if (body.Score is < 0 or > 100)
+            return Results.BadRequest(new { error = "score must be 0..100" });
+        var userId = currentUser.UserId();
+
+        // Ownership: the version must belong to the caller (via its song).
+        var owns = await db.SongVersions.AsNoTracking()
+            .AnyAsync(v => v.Id == versionId && db.Songs.Any(s => s.Id == v.SongId && s.UserId == userId), ct);
+        if (!owns) return Results.NotFound();
+
+        var row = await db.VersionUserRatings
+            .FirstOrDefaultAsync(r => r.UserId == userId && r.VersionId == versionId, ct);
+        if (row is null)
+            db.VersionUserRatings.Add(new VersionUserRating { UserId = userId, VersionId = versionId, Score = body.Score });
+        else { row.Score = body.Score; row.UpdatedAt = DateTimeOffset.UtcNow; }
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new { score = body.Score });
+    }
+
+    // ── DELETE /api/versions/{id}/rating — remove personal score ─────────────
+    private static async Task<IResult> ClearRating(
+        Guid versionId, ClaimsPrincipal currentUser, AppDbContext db, CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        var row = await db.VersionUserRatings
+            .FirstOrDefaultAsync(r => r.UserId == userId && r.VersionId == versionId, ct);
+        if (row is not null) { db.VersionUserRatings.Remove(row); await db.SaveChangesAsync(ct); }
+        return Results.NoContent();
     }
 }

@@ -154,9 +154,15 @@ public static class SongEndpoints
             a => a.VersionId!.Value,
             a => FinalJsonMetrics.Read(a.FinalJson));
 
+        // Batch-load the caller's personal score for each version (single query, no N+1).
+        var ratingByVersion = await db.VersionUserRatings.AsNoTracking()
+            .Where(r => r.UserId == userId && versionIds.Contains(r.VersionId))
+            .ToDictionaryAsync(r => r.VersionId, r => (int?)r.Score, ct);
+
         return Results.Ok(BuildSongDto(
             song,
-            versions.Select(v => ToVersionDto(v, metricsByVersion.GetValueOrDefault(v.Id), null)).ToList(),
+            versions.Select(v => ToVersionDto(
+                v, metricsByVersion.GetValueOrDefault(v.Id), ratingByVersion.GetValueOrDefault(v.Id))).ToList(),
             latest is null ? null : ToSummaryDto(latest),
             tags.Select(t => new TagDto(t.Id, t.Name, t.IsPublic)).ToList()));
     }

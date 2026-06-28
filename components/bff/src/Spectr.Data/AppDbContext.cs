@@ -73,6 +73,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     // Song tags (private + public, user-defined)
     public DbSet<SongTag> SongTags => Set<SongTag>();
 
+    // Personal score — per-user × per-version rating (Change B)
+    public DbSet<VersionUserRating> VersionUserRatings => Set<VersionUserRating>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         builder.HasPostgresExtension("pgcrypto");      // gen_random_uuid()
@@ -276,6 +279,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         // Story 2.4 — feature_flags: string PK, DB-side updated_at default.
         builder.Entity<FeatureFlag>().HasKey(f => f.Name);
         builder.Entity<FeatureFlag>().Property(f => f.UpdatedAt).HasDefaultValueSql("now()");
+
+        // Personal score — one rating per (user, version).
+        builder.Entity<VersionUserRating>()
+            .HasIndex(r => new { r.UserId, r.VersionId }).IsUnique();
+        builder.Entity<VersionUserRating>().Property(r => r.UpdatedAt).HasDefaultValueSql("now()");
 
         // Song tags — no duplicate tag name per (song, user); fast lookup by song.
         builder.Entity<SongTag>()
