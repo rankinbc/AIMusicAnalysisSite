@@ -1,6 +1,6 @@
 # Story 11.2: Reviewer Rack-Suggestions & Accept-to-Preset
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 <!-- First-sprint STRETCH — depends on 11.1 landing (suggestions render inline in comment threads). -->
@@ -34,17 +34,17 @@ Backend complete (`FeedbackEndpoints.cs` AcceptSuggestion forks to `RackPreset` 
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: SuggestionCard + list (AC: 1, 5)**
-  - [ ] 1.1 Create `src/features/listen/SuggestionList.tsx` + `SuggestionCard.tsx` (+ module css). Consume `useSuggestions(versionId)`.
-  - [ ] 1.2 Each card renders the proposed chain as a readable op summary (reuse the existing DSP-op formatting from `VerdictCard`'s `FixStep`/`formatParam` pattern if extractable, else a small local formatter), the `status` badge, and a provenance line when `created_in_session_id`/`via_grant_id` are present ("proposed in a room").
-- [ ] **Task 2: Owner accept/reject (AC: 2, 4)**
-  - [ ] 2.1 Owner-only Accept → `useAcceptSuggestion` (server forks the preset); Reject → `useRejectSuggestion`. On accept success, invalidate both the suggestions query and `useRackPresets(versionId)` so the new preset shows (AC4). Do NOT build preset-forking client-side.
-  - [ ] 2.2 Non-owners see read-only cards (no accept/reject).
-- [ ] **Task 3: Inline in comment threads (AC: 3)**
-  - [ ] 3.1 A suggestion with `comment_id` renders inside that comment's thread in `CommentsPanel` (11.1). Provide a `<SuggestionCard>` slot keyed by `comment_id`; standalone suggestions (no `comment_id`) render in the `SuggestionList` section.
-- [ ] **Task 4: Tests (AC: 5)**
-  - [ ] 4.1 `__tests__/SuggestionCard.test.tsx` — `renderToStaticMarkup` over fixtures covering open/accepted/rejected + a provenance variant; assert the chain summary + status badge + owner vs non-owner controls.
-- [ ] **Task 5: Gates** — `npx tsc --noEmit`, `npm run lint`, `npm run build`, `npx vitest run`.
+- [x] **Task 1: SuggestionCard (AC: 1, 5)**
+  - [x] 1.1 Created `src/features/listen/SuggestionCard.tsx` (+ `.module.css`) + pure `suggestion-helpers.ts`. (No separate `SuggestionList.tsx` — the standalone list is a small section in `CommentsPanel`; see Completion Notes.)
+  - [x] 1.2 Chain summary via pure `chainSummary(unknown)` — renders the `Chain.order` as prettified module chips (the `Chain` shape is `{order, modules, masterBypass}`, NOT the `VerdictDspOp` shape, so the `FixStep` idiom doesn't transfer — a dedicated tolerant formatter was the right call). Status badge + room-provenance line (`createdInSessionId`; note the DTO has **no `via_grant_id`** field).
+- [x] **Task 2: Owner accept/reject (AC: 2, 4)**
+  - [x] 2.1 Owner Accept → `useAcceptSuggestion` (server forks the preset; the hook already invalidates `['versions',v,'suggestions']` + `['versions',v,'rack','presets']` so the new preset appears — AC4). Reject → `useRejectSuggestion`. No client-side forking.
+  - [x] 2.2 Non-owners + terminal (accepted/rejected) suggestions are read-only, gated by pure `canActOnSuggestion(status, isOwner)`.
+- [x] **Task 3: Inline in comment threads (AC: 3)**
+  - [x] 3.1 `CommentsPanel` consumes `useSuggestions(vid)` + `partitionSuggestions`; the per-comment placeholder chip is replaced by an inline `<SuggestionCard>` (keyed by `commentId`); standalone suggestions render in a "Suggested fixes" section above the threads.
+- [x] **Task 4: Tests (AC: 5)**
+  - [x] 4.1 `suggestion-helpers.test.ts` (5 pure: chainSummary, partition, can-act gating) + `SuggestionCard.test.tsx` (5 render: summary/proposer/status, owner Accept/Reject, hidden for non-owner, hidden when terminal, room provenance).
+- [x] **Task 5: Gates** — tsc/lint clean, build ✓, vitest 589 (+10).
 
 ## Dev Notes
 
@@ -59,9 +59,45 @@ Backend complete (`FeedbackEndpoints.cs` AcceptSuggestion forks to `RackPreset` 
 
 ### Agent Model Used
 
+claude-opus-4-8[1m] (dev-story workflow)
+
 ### Debug Log References
 
+- Verify-before-build: the only existing suggestion render was the placeholder chip in the
+  11.1 `CommentsPanel` (`rail.tsx`); `useSuggestions` data was unconsumed. Genuine net-new UI.
+- `SuggestionDto.chain` is `unknown` on the wire (`Chain = {order, modules, masterBypass}`),
+  and the DTO carries `createdInSessionId` but **no `via_grant_id`** (the story over-listed it).
+- Audition (`auditionSuggestion(graph, sg)` exists) needs the live `AudioGraphHandle`, which the
+  rail panel doesn't hold — out of the 5 ACs, deferred (see Completion Notes).
+
 ### Completion Notes List
+
+- **No separate `SuggestionList`.** Standalone (comment-less) suggestions render as a compact
+  "Suggested fixes" section inside `CommentsPanel`; comment-linked ones render inline in the
+  thread. Splitting a second component added no value for a list of the same cards.
+- **Chain summary, not `FixStep` reuse.** The proposed chain is a `Chain` (`order`/`modules`),
+  a different shape from `VerdictDspOp`; rendered the prettified module order as chips via a
+  pure, drift-tolerant `chainSummary(unknown)` (returns [] on a malformed chain).
+- **AC4 is free.** `useAcceptSuggestion` already invalidates the rack-preset query key, so the
+  forked preset appears with no extra wiring; the client never forks.
+- **Audition deferred** (recorded in `deferred-work.md`): the non-destructive chain preview needs
+  the live audio graph plumbed into the rail panel; not among the 5 ACs.
+- Reused the 11.1 seeded-`QueryClientProvider` render-test pattern.
+
+### File List
+
+- `components/frontend-spectr-v2/src/features/listen/suggestion-helpers.ts` (A)
+- `components/frontend-spectr-v2/src/features/listen/__tests__/suggestion-helpers.test.ts` (A)
+- `components/frontend-spectr-v2/src/features/listen/SuggestionCard.tsx` (A)
+- `components/frontend-spectr-v2/src/features/listen/SuggestionCard.module.css` (A)
+- `components/frontend-spectr-v2/src/features/listen/__tests__/SuggestionCard.test.tsx` (A)
+- `components/frontend-spectr-v2/src/features/listen-rack/rail.tsx` (M — CommentsPanel consumes useSuggestions; inline + standalone SuggestionCards)
+
+### Change Log
+
+- 2026-06-28 — Story 11.2 implemented: reviewer rack-suggestions surfaced in the comments panel
+  (inline per-comment + standalone "Suggested fixes"), owner Accept→preset / Reject via the real
+  PRP-3 hooks, pure `suggestion-helpers`. Audition deferred. Gates green. Status → review.
 
 ### File List
 

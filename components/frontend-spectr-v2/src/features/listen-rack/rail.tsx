@@ -28,6 +28,9 @@ import {
   useComments, usePostComment, usePatchCommentStatus, useDeleteComment,
 } from '../listen/useComments';
 import { buildCommentThreads, canModerate } from '../listen/comment-tree';
+import { useSuggestions } from '../listen/useSuggestions';
+import { partitionSuggestions } from '../listen/suggestion-helpers';
+import { SuggestionCard } from '../listen/SuggestionCard';
 import { useMe } from '../../api/hooks';
 import type { CommentDto as ApiCommentDto } from '../../api/types';
 
@@ -603,6 +606,12 @@ export function CommentsPanel({ versionId, access, isOwner, position, onSeek }: 
   const [pinTime, setPinTime] = useState(false);
   const [replyTo, setReplyTo] = useState<string | null>(null);
 
+  const suggestionsQ = useSuggestions(vid);
+  const { byCommentId: suggestionByComment, standalone: standaloneSuggestions } = useMemo(
+    () => partitionSuggestions(suggestionsQ.data ?? []),
+    [suggestionsQ.data],
+  );
+
   const meId = me.data?.id ?? null;
   const threads = useMemo(() => buildCommentThreads(commentsQ.data ?? []), [commentsQ.data]);
   const total = threads.reduce((n, th) => n + 1 + th.replies.length, 0);
@@ -634,9 +643,11 @@ export function CommentsPanel({ versionId, access, isOwner, position, onSeek }: 
           {c.status === 'resolved' && <span className="mono" style={{ marginLeft: 'auto', fontSize: 8, color: 'var(--green)', letterSpacing: '0.1em' }}>✓ RESOLVED</span>}
         </div>
         <div style={{ fontSize: 11.5, color: 'var(--text-2)', marginTop: 6, lineHeight: 1.45 }}>{c.body}</div>
-        {c.suggestionId && (
-          <div className="mono" style={{ marginTop: 7, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 9, color: 'var(--cyan)', padding: '3px 8px', borderRadius: 6, border: '1px dashed rgba(0,229,176,0.35)', background: 'rgba(0,229,176,0.05)' }}>⌁ suggested a rack chain · audition</div>
-        )}
+        {suggestionByComment.has(c.id) ? (
+          <SuggestionCard suggestion={suggestionByComment.get(c.id)!} versionId={vid} isOwner={isOwner} />
+        ) : c.suggestionId ? (
+          <div className="mono" style={{ marginTop: 7, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 9, color: 'var(--cyan)', padding: '3px 8px', borderRadius: 6, border: '1px dashed rgba(0,229,176,0.35)', background: 'rgba(0,229,176,0.05)' }}>⌁ suggested a rack chain</div>
+        ) : null}
         <div style={{ display: 'flex', gap: 10, marginTop: 7, flexWrap: 'wrap' }}>
           {!isReply && access.gates.canComment && (
             <button type="button" onClick={() => setReplyTo(replyTo === c.id ? null : c.id)} className="mono" style={{ fontSize: 9, color: replyTo === c.id ? 'var(--cyan)' : 'var(--muted)', background: 'none', padding: 0 }}>reply</button>
@@ -660,6 +671,15 @@ export function CommentsPanel({ versionId, access, isOwner, position, onSeek }: 
         <PLabel accent="var(--violet)">Feedback · {total}</PLabel>
         <span className="pill violet">Async review</span>
       </div>
+
+      {standaloneSuggestions.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span className="label" style={{ fontSize: 9, color: 'var(--muted)' }}>Suggested fixes</span>
+          {standaloneSuggestions.map((sg) => (
+            <SuggestionCard key={sg.id} suggestion={sg} versionId={vid} isOwner={isOwner} />
+          ))}
+        </div>
+      )}
 
       {commentsQ.isLoading ? (
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>Loading feedback…</div>
