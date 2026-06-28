@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import type { BookmarkDto } from '../../api/types';
 import { bookmarksForVersion, markerPct } from './bookmarks-helpers';
@@ -37,13 +37,24 @@ export function BookmarksRail({ versionId, durationSeconds, position, onSeek, is
   const [note, setNote] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
+  // Closing the editor unmounts the input, which fires its onBlur. Without this
+  // guard that blur re-invokes commitNote (double delete+recreate), and Escape —
+  // which also closes the editor — would commit instead of cancel. The ref is
+  // synchronous so it blocks the same-tick blur a state flag can't (review 11.3).
+  const editCommitted = useRef(false);
 
   const bookmarks = bookmarksForVersion(myQ.data ?? [], versionId);
+
+  const openEdit = (b: BookmarkDto) => {
+    editCommitted.current = false;
+    setEditing(b.id);
+    setEditText(b.note ?? '');
+  };
 
   const add = () => {
     if (createMut.isPending) return;
     createMut.mutate(
-      { targetVersionId: versionId, t: Math.round(position), note: note.trim() || null },
+      { targetVersionId: versionId, t: Number.isFinite(position) ? Math.round(position) : 0, note: note.trim() || null },
       { onSuccess: () => setNote('') },
     );
   };
@@ -53,8 +64,13 @@ export function BookmarksRail({ versionId, durationSeconds, position, onSeek, is
     createMut.mutate({ targetVersionId: versionId, t: b.t, identityVisible: !b.identityVisible });
 
   // No PATCH endpoint — edit a note by deleting and recreating at the same moment.
-  const saveNote = (b: BookmarkDto) => {
+  // Runs at most once per edit session (Enter, then the unmount blur, can't both fire).
+  const commitNote = (b: BookmarkDto) => {
+    if (editCommitted.current) return;
+    editCommitted.current = true;
+    setEditing(null);
     const next = editText.trim() || null;
+    if (next === (b.note ?? null)) return; // unchanged — skip the delete+recreate
     deleteMut.mutate(b.id, {
       onSuccess: () =>
         createMut.mutate({
@@ -64,6 +80,11 @@ export function BookmarksRail({ versionId, durationSeconds, position, onSeek, is
           identityVisible: b.identityVisible,
         }),
     });
+  };
+
+  // Escape cancels: mark committed so the unmount blur is a no-op, then close.
+  const cancelEdit = () => {
+    editCommitted.current = true;
     setEditing(null);
   };
 
@@ -87,6 +108,10 @@ export function BookmarksRail({ versionId, durationSeconds, position, onSeek, is
             <button
               key={b.id}
               type="button"
+              // Decorative duplicate of the accessible list seek buttons below; the
+              // track is aria-hidden, so keep these out of the tab order to avoid a
+              // focusable-inside-aria-hidden conflict (WCAG 4.1.2, review 11.3).
+              tabIndex={-1}
               className={s.marker}
               style={{ left: `${pct}%` }}
               title={b.note ?? fmt(b.t)}
@@ -103,7 +128,7 @@ export function BookmarksRail({ versionId, durationSeconds, position, onSeek, is
           className={s.noteInput}
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
+          onKeyDown={(e) => { if (!e.nativeEvent.isComposing && e.key === 'Enter') add(); }}
           placeholder="note (optional)"
         />
         <button type="button" className="btn sm primary" onClick={add} disabled={createMut.isPending}>
@@ -124,14 +149,18 @@ export function BookmarksRail({ versionId, durationSeconds, position, onSeek, is
                   value={editText}
                   autoFocus
                   onChange={(e) => setEditText(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') saveNote(b); if (e.key === 'Escape') setEditing(null); }}
-                  onBlur={() => saveNote(b)}
+                  onKeyDown={(e) => {
+                    if (e.nativeEvent.isComposing) return;
+                    if (e.key === 'Enter') commitNote(b);
+                    else if (e.key === 'Escape') cancelEdit();
+                  }}
+                  onBlur={() => commitNote(b)}
                 />
               ) : (
                 <button
                   type="button"
                   className={s.note}
-                  onClick={() => { setEditing(b.id); setEditText(b.note ?? ''); }}
+                  onClick={() => openEdit(b)}
                 >
                   {b.note || <span className={s.noteEmpty}>add a note</span>}
                 </button>

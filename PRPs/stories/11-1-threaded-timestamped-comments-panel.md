@@ -103,3 +103,14 @@ claude-opus-4-8[1m] (dev-story workflow)
 - [x] [Review][Defer] `MOCK_COMMENTS` keeps an extra `deletedAt` field vs the API `CommentDto` [access.ts] — deferred, pre-existing (not caused by this change).
 
 Dismissed (3): Auditor "AC4 test would fail" — **false positive** (the empty-list message and the composer "Comments are closed" gate render in separate sections; the test's `toContain('Comments are closed')` passes, consistent with the 572-green run); moderation toggle idempotent re-POST (harmless); "nesting test only checks text" (nesting is structurally asserted in `comment-tree.test.ts`).
+
+### Review Findings
+
+_Code review 2026-06-28 (social stories 11.1/11.2/11.3, range 2beea4a..ed94cc3)._
+
+- [ ] [Review][Patch] Any comments load failure renders "You don't have access" — `isError` is true for network/500/timeout too, not just 403/404 [rail.tsx:686-687]
+- [ ] [Review][Patch] Comment composer Enter handler has no IME-composition guard (submits half-composed CJK/accented input) [rail.tsx:703]
+- [ ] [Review][Patch] `pinTime` stamps `Math.round(position)` with no finite guard — a NaN position yields a NaN comment timestamp [rail.tsx:627]
+- [x] [Review][Defer] Moderation/delete buttons have no in-flight guard and delete has no confirm — rapid clicks race status flips [rail.tsx:655-660] — deferred, polish
+- [x] [Review][Defer] `buildCommentThreads` drops reply-to-reply (grandchildren); UI can't create them today (reply button is `!isReply` only) + documented one-level design — latent for API/anon writers [comment-tree.ts:25-47] — deferred, not reachable via UI
+- [x] [Review][Defer] Posting a reply whose parent was deleted concurrently → server 404 (no stale-`replyTo` reconciliation) [rail.tsx:621-630] — deferred, race, low

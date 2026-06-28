@@ -93,3 +93,13 @@ Real findings that are out of scope for the current story but worth revisiting.
 ## Deferred from: story 11.2 (2026-06-28)
 
 - **Suggestion audition (non-destructive chain preview)** [components/frontend-spectr-v2/src/features/listen/SuggestionCard.tsx + features/listen/useSuggestions.ts] — `auditionSuggestion(graph, suggestion)` already exists (applies the proposed `Chain` to the live `AudioGraphHandle` via the PRP-1 apply loop), but the `SuggestionCard` renders inside the rail `CommentsPanel`, which doesn't hold the audio graph (`rs`/`graph` live in `ListenRackPage`). Not among the 5 ACs. To wire: thread an `onAudition(suggestion)` callback from `ListenRackPage` → `RightRail` → `CommentsPanel` → `SuggestionCard`, calling `auditionSuggestion(graph, sg)`; add a "revert" to restore the prior chain.
+
+## Deferred from: code review of stories 11.1/11.2/11.3 (2026-06-28)
+
+- **Bookmark note-edit can lose data on partial failure** (11.3, `BookmarksRail.tsx:56-68`) — edit is delete-then-recreate (no PATCH endpoint); a delete-succeeds/recreate-fails sequence permanently loses the bookmark with no rollback or error surfaced. Proper fix is a backend `PATCH /bookmarks/{id}` for the note, or an optimistic-restore on the create `onError`.
+- **`toggleName` no in-flight guard** (11.3, `BookmarksRail.tsx:52-53`) — rapid clicks issue conflicting upserts that double-toggle identity_visible. Add `if (createMut.isPending) return;`.
+- **Bookmark mutations share one `createMut`** (11.3) — `add`/`toggleName`/`saveNote` all drive the same `useCreateBookmark()`, so the Add button's `disabled={createMut.isPending}` also disables during an unrelated toggle. Separate mutation instances per operation.
+- **Track-level bookmark seeks to 0** (11.3, `BookmarksRail.tsx:120`) — a `t=null` bookmark renders `@0:00` and seeks the transport to start with no indication it has no real position.
+- **Comment moderation buttons no in-flight guard / no delete confirm** (11.1, `rail.tsx:655-660`) — rapid clicks race pin/unpin/resolve flips; destructive delete is one click with no prompt.
+- **`buildCommentThreads` drops reply-to-reply** (11.1, `comment-tree.ts:25-47`) — grandchildren land in `repliesByParent[replyId]` but only top-level ids are read back. Not reachable via the current UI (reply button is `!isReply`-only) and the one-level design is documented, but an API/anon/room-created nested reply would silently vanish and under-count `total`. Either flatten grandchildren under the nearest rendered ancestor or surface them as top-level.
+- **Reply to a concurrently-deleted parent** (11.1, `rail.tsx:621-630`) — `replyTo` isn't reconciled against the live list, so posting after the parent is deleted elsewhere 404s.

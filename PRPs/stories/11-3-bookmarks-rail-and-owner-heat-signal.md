@@ -1,6 +1,6 @@
 # Story 11.3: Bookmarks Rail & Owner Heat Signal
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -101,3 +101,18 @@ claude-opus-4-8[1m] (dev-story workflow)
   add-at-playhead, note/name-toggle/delete, owner count signal) consuming the real PRP-6 hooks +
   pure `bookmarks-helpers`. AC3 scoped to count+identified (DTO has no density); AC2 note-edit via
   delete+recreate (no PATCH). Gates green. Status → review.
+
+### Review Findings
+
+_Code review 2026-06-28 (social stories 11.1/11.2/11.3, range 2beea4a..ed94cc3)._
+
+- [ ] [Review][Patch] Note-edit double-fires `saveNote`: `setEditing(null)` unmounts the input → `onBlur` fires → `saveNote` runs again; and Escape sets editing=null which ALSO commits via the same blur instead of cancelling [BookmarksRail.tsx:121-129]
+- [ ] [Review][Patch] `aria-hidden` track container holds focusable `<button>` seek markers — focusable-yet-hidden (WCAG 4.1.2); they need a real accessible seek path [BookmarksRail.tsx:82-98]
+- [ ] [Review][Patch] Bookmark add + note-edit Enter handlers have no IME-composition guard [BookmarksRail.tsx:106,127]
+- [ ] [Review][Patch] `add` stamps `Math.round(position)` with no finite guard — a NaN position yields a NaN bookmark timestamp (renders no marker) [BookmarksRail.tsx:46]
+- [x] [Review][Defer] Note edit is delete-then-recreate; if the recreate POST fails after the delete succeeds the bookmark is permanently lost with no rollback — needs a backend PATCH or optimistic restore [BookmarksRail.tsx:56-68] — deferred, needs backend
+- [x] [Review][Defer] `toggleName` has no `isPending` guard — rapid clicks double-toggle identity_visible [BookmarksRail.tsx:52-53] — deferred, minor
+- [x] [Review][Defer] `add`/`toggleName`/`saveNote` share one `createMut`, so the Add button disables during an unrelated toggle [BookmarksRail.tsx:32-68] — deferred, minor
+- [x] [Review][Defer] Track-level bookmark (`t=null`) seeks to 0 silently from the list with no indication it has no position [BookmarksRail.tsx:120] — deferred, minor UX
+
+Dismissed (false positives / accepted): `toggleName` does NOT wipe the note — backend upsert (`BookmarkEndpoints.cs:114-122`) only mutates `IdentityVisible`, never `Note` (verified); AC3 density→count is a documented, sound reduction against `BookmarkSignalDto = {count, identified[]}`.

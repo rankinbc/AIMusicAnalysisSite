@@ -1,6 +1,6 @@
 # Story 11.2: Reviewer Rack-Suggestions & Accept-to-Preset
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 <!-- First-sprint STRETCH — depends on 11.1 landing (suggestions render inline in comment threads). -->
@@ -102,3 +102,11 @@ claude-opus-4-8[1m] (dev-story workflow)
 ### File List
 
 ### Change Log
+
+### Review Findings
+
+_Code review 2026-06-28 (social stories 11.1/11.2/11.3, range 2beea4a..ed94cc3)._
+
+- [ ] [Review][Patch] AC5 coverage gap — `SuggestionCard.test.tsx` renders only `proposed`/`accepted`; the `rejected` state (distinct `STATUS_LABEL.rejected` + opacity rule) has no render test, only a pure `canActOnSuggestion` test [SuggestionCard.test.tsx]
+
+All other ACs verified met: the "reuse AcceptSuggestion — never fork client-side" constraint is obeyed; AC4 preset-appears is free via the hook's `['versions',v,'rack','presets']` invalidation; owner-only gating hides Accept/Reject from non-owners and on terminal states.

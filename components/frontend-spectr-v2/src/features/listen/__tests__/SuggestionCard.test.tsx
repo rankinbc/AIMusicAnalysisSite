@@ -55,6 +55,13 @@ describe('SuggestionCard (story 11.2)', () => {
     expect(html).not.toContain('Reject');
   });
 
+  it('renders the rejected state read-only (label shown, no actions even for the owner)', () => {
+    const html = render(sg({ status: 'rejected' }), true);
+    expect(html).toContain('rejected');
+    expect(html).not.toContain('Accept');
+    expect(html).not.toContain('Reject');
+  });
+
   it('renders room provenance when proposed in a session', () => {
     const html = render(sg({ createdInSessionId: 'sess-1' }), false);
     expect(html).toContain('proposed live in a room');

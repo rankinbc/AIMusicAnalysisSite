@@ -624,7 +624,7 @@ export function CommentsPanel({ versionId, access, isOwner, position, onSeek }: 
     // in flight, but the Enter-key handler reaches here directly (review 11.1).
     if (!body || !vid || postMut.isPending) return;
     postMut.mutate(
-      { body, t: pinTime ? Math.round(position) : null, parentId: replyTo },
+      { body, t: pinTime && Number.isFinite(position) ? Math.round(position) : null, parentId: replyTo },
       { onSuccess: () => { setText(''); setPinTime(false); setReplyTo(null); } },
     );
   };
@@ -684,7 +684,7 @@ export function CommentsPanel({ versionId, access, isOwner, position, onSeek }: 
       {commentsQ.isLoading ? (
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>Loading feedback…</div>
       ) : commentsQ.isError ? (
-        <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>You don&rsquo;t have access to comments on this track.</div>
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>Couldn&rsquo;t load feedback for this track.</div>
       ) : threads.length === 0 ? (
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>No feedback yet.</div>
       ) : (
@@ -700,7 +700,7 @@ export function CommentsPanel({ versionId, access, isOwner, position, onSeek }: 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
           {replyTo && <div className="mono" style={{ fontSize: 9, color: 'var(--muted)' }}>replying… <button type="button" onClick={() => setReplyTo(null)} style={{ color: 'var(--cyan)', background: 'none', padding: 0 }}>cancel</button></div>}
           <div style={{ display: 'flex', gap: 7, alignItems: 'center', padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border)' }}>
-            <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submit(); }} placeholder={replyTo ? 'Reply…' : 'Leave feedback…'} style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 12, fontFamily: 'inherit' }} />
+            <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (!e.nativeEvent.isComposing && e.key === 'Enter') submit(); }} placeholder={replyTo ? 'Reply…' : 'Leave feedback…'} style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 12, fontFamily: 'inherit' }} />
             <button type="button" onClick={() => setPinTime((p) => !p)} title="pin to current time" className="mono" style={{ fontSize: 9.5, color: pinTime ? 'var(--cyan)' : 'var(--muted)', background: 'none', padding: 0 }}>@{fmtTime(position)}</button>
             <button type="button" onClick={submit} disabled={postMut.isPending || !text.trim()} className="btn sm primary" style={{ padding: '4px 12px', fontSize: 11 }}>Post</button>
           </div>
