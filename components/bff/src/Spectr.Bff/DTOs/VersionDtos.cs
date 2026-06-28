@@ -17,7 +17,9 @@ public sealed record VersionDto(
     string FilePath,
     DateTimeOffset CreatedAt,
     string? AlsFilePath = null,
-    string? ReferencePath = null);
+    string? ReferencePath = null,
+    VersionMetricsDto? LatestResult = null,
+    int? PersonalScore = null);
 
 // GET /api/versions/{id}/files — metadata for all files attached to a version.
 // `Available` is false when the file has been deleted / expired from storage.

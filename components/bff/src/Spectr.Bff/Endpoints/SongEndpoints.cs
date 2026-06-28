@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Spectr.Bff.Auth;
 using Spectr.Bff.DTOs;
 using Spectr.Bff.Services;
+using Spectr.Bff.Support;
 using Spectr.Data;
 using Spectr.Data.Entities;
 using System.Security.Claims;
@@ -71,7 +72,7 @@ public static class SongEndpoints
 
         var dto = songs.Select(s => BuildSongDto(
             s,
-            versions.Where(v => v.SongId == s.Id).Select(ToVersionDto).ToList(),
+            versions.Where(v => v.SongId == s.Id).Select(v => ToVersionDto(v, null, null)).ToList(),
             latest.Where(a => a.SongId == s.Id).Select(ToSummaryDto).FirstOrDefault(),
             tagsBySong.TryGetValue(s.Id, out var st) ? (IReadOnlyList<TagDto>)st : Array.Empty<TagDto>()
         )).ToList();
@@ -141,9 +142,21 @@ public static class SongEndpoints
             .Where(t => t.SongId == songId && t.UserId == userId)
             .ToListAsync(ct);
 
+        // Batch-load the newest analysis per version so each VersionDto can
+        // carry its own metrics without N+1 queries.
+        var versionIds = versions.Select(v => v.Id).ToList();
+        var perVersionLatest = await db.Analyses.AsNoTracking()
+            .Where(a => a.UserId == userId && a.VersionId != null && versionIds.Contains(a.VersionId!.Value))
+            .GroupBy(a => a.VersionId!.Value)
+            .Select(g => g.OrderByDescending(a => a.CreatedAt).First())
+            .ToListAsync(ct);
+        var metricsByVersion = perVersionLatest.ToDictionary(
+            a => a.VersionId!.Value,
+            a => FinalJsonMetrics.Read(a.FinalJson));
+
         return Results.Ok(BuildSongDto(
             song,
-            versions.Select(ToVersionDto).ToList(),
+            versions.Select(v => ToVersionDto(v, metricsByVersion.GetValueOrDefault(v.Id), null)).ToList(),
             latest is null ? null : ToSummaryDto(latest),
             tags.Select(t => new TagDto(t.Id, t.Name, t.IsPublic)).ToList()));
     }
@@ -451,9 +464,9 @@ public static class SongEndpoints
         }
     }
 
-    private static VersionDto ToVersionDto(SongVersion v) =>
+    internal static VersionDto ToVersionDto(SongVersion v, VersionMetricsDto? metrics, int? personalScore) =>
         new(v.Id, v.SongId, v.VersionNumber, v.Label, v.IsCurrent, v.FilePath, v.CreatedAt,
-            v.AlsFilePath, v.ReferencePath);
+            v.AlsFilePath, v.ReferencePath, metrics, personalScore);
 
     internal static AnalysisSummaryDto ToSummaryDto(Analysis a)
     {
