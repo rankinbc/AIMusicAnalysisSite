@@ -42,7 +42,7 @@ export function useQuickPlayer(versions: VersionDto[]) {
       const el = refOf(k).current;
       if (el?.paused) { start(k); setPlaying(true); } else { pause(k); setPlaying(false); }
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const seek = useCallback((k: Key, fraction: number) => {
     const prev = audibleRef.current;
@@ -53,7 +53,7 @@ export function useQuickPlayer(versions: VersionDto[]) {
     setAudible(k);
     start(k);
     setPlaying(true);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setSlot = useCallback((k: Key, id: string) => {
     (k === 'A' ? setSlotA : setSlotB)(id);
@@ -61,7 +61,7 @@ export function useQuickPlayer(versions: VersionDto[]) {
 
   const loadIntoA = useCallback((id: string) => {
     setSlotA(id); audibleRef.current = 'A'; setAudible('A'); setHighlight(id); start('A'); setPlaying(true);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // timeupdate handlers (wire onTimeUpdate on each <audio>)
   const onTime = useCallback((k: Key) => {
