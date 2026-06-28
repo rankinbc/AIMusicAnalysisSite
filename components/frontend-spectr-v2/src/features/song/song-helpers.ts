@@ -1,4 +1,5 @@
 import type { VersionDto, VersionMetricsDto } from '../../api/types';
+import { readListenFixes } from '../listen-rack/listenFixes';
 
 export type Dir = 'high' | 'target' | 'neutral';
 export type Tone = 'good' | 'bad' | 'neutral';
@@ -59,6 +60,10 @@ export function defaultSlots(versions: VersionDto[]): { a: string | null; b: str
   const current = versions.find(v => v.isCurrent) ?? desc[0] ?? null;
   const prev = desc.find(v => v.id !== current?.id) ?? null;
   return { a: current?.id ?? null, b: prev?.id ?? null };
+}
+
+export function hasGamePlan(versionId: string): boolean {
+  return readListenFixes(versionId).length > 0;
 }
 
 export function scoredAsc(versions: VersionDto[]): VersionDto[] {
