@@ -60,8 +60,10 @@ export function ComparePanel({ song, slotA, slotB }: ComparePanelProps) {
   const bPersonal = bInput !== '' ? Number(bInput) : null;
   const verdict = personalVerdict(aPersonal, bPersonal);
 
-  const handlePersonalA = (raw: string) => {
-    setAInput(raw);
+  // I2: commit on blur/Enter only — not on every keystroke. Firing the
+  // mutation on every onChange invalidates ['songs'] and refetches mid-type,
+  // which overwrites the input via the sync effect below.
+  const commitA = (raw: string) => {
     if (raw === '') {
       if (slotA) clearScoreA.mutate();
     } else {
@@ -70,8 +72,7 @@ export function ComparePanel({ song, slotA, slotB }: ComparePanelProps) {
     }
   };
 
-  const handlePersonalB = (raw: string) => {
-    setBInput(raw);
+  const commitB = (raw: string) => {
     if (raw === '') {
       if (slotB) clearScoreB.mutate();
     } else {
@@ -136,7 +137,9 @@ export function ComparePanel({ song, slotA, slotB }: ComparePanelProps) {
             max={100}
             placeholder="—"
             value={aInput}
-            onChange={e => handlePersonalA(e.target.value)}
+            onChange={e => setAInput(e.target.value)}
+            onBlur={e => commitA(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') commitA(aInput); }}
             className={styles.personalInput}
           />
         </div>
@@ -149,7 +152,9 @@ export function ComparePanel({ song, slotA, slotB }: ComparePanelProps) {
             max={100}
             placeholder="—"
             value={bInput}
-            onChange={e => handlePersonalB(e.target.value)}
+            onChange={e => setBInput(e.target.value)}
+            onBlur={e => commitB(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') commitB(bInput); }}
             className={styles.personalInput}
           />
         </div>

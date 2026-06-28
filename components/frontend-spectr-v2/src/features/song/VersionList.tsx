@@ -46,6 +46,9 @@ export function VersionList({
   const [editValue, setEditValue] = useState('');
 
   const sorted = sortVersionsDesc(versions);
+  // I3: Report navigates to song.latestResult.jobId, which belongs to the
+  // highest-versionNumber row. Gate canReport to that row only.
+  const latestVersionId = sorted[0]?.id ?? null;
   const versionCountStr = `${versions.length} version${versions.length === 1 ? '' : 's'}`;
 
   const startEdit = (v: VersionDto) => {
@@ -99,6 +102,7 @@ export function VersionList({
               onRetry={() => onRetry(version.id)}
               menu={menu}
               hasGamePlan={vHasPlan}
+              canReport={version.id === latestVersionId}
               {...(statusEntry?.status !== undefined ? { status: statusEntry.status } : {})}
               {...(statusEntry?.progress !== undefined ? { progress: statusEntry.progress } : {})}
               editing={editingId === version.id}

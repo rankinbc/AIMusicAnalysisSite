@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { getAccessToken } from '../../api/fetcher';
 import type { VersionDto } from '../../api/types';
@@ -10,6 +10,16 @@ export function useQuickPlayer(versions: VersionDto[]) {
   const init = defaultSlots(versions);
   const [slotA, setSlotA] = useState<string | null>(init.a);
   const [slotB, setSlotB] = useState<string | null>(init.b);
+
+  // C1: on cold navigation useSong is still loading when the hook first runs,
+  // so versions=[] and init.{a,b} are null. This effect fills the slots once
+  // versions arrive without clobbering a user's explicit pick.
+  useEffect(() => {
+    if (versions.length === 0) return;
+    const d = defaultSlots(versions);
+    setSlotA(a => a ?? d.a);
+    setSlotB(b => b ?? d.b);
+  }, [versions]);
   const [audible, setAudible] = useState<Key>('A');
   const [playing, setPlaying] = useState(false);
   const [posA, setPosA] = useState(0);
@@ -60,6 +70,7 @@ export function useQuickPlayer(versions: VersionDto[]) {
   }, []);
 
   const loadIntoA = useCallback((id: string) => {
+    if (audibleRef.current !== 'A') pause(audibleRef.current);
     setSlotA(id); audibleRef.current = 'A'; setAudible('A'); setHighlight(id); start('A'); setPlaying(true);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import type { VersionDto } from '../../api/types';
 import type { VStatus } from './song-helpers';
+import { versionStatus } from './song-helpers';
 import styles from './SongConsole.module.css';
 
 const SLOT_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as const;
@@ -30,6 +31,13 @@ interface VersionRowProps {
   progress?: number;
   /** Show the ◷ plan pill when the version has a saved game plan */
   hasGamePlan?: boolean;
+  /**
+   * Show the Report button for this row.
+   * I3: Report navigates to song.latestResult.jobId (the song-level job),
+   * so it must only appear on the latest version. Per-version Report needs
+   * a per-version jobId widened from the BFF first.
+   */
+  canReport?: boolean;
   /** Editing state managed by parent */
   editing?: boolean;
   editValue?: string;
@@ -49,6 +57,7 @@ export function VersionRow({
   onRetry,
   menu,
   hasGamePlan = false,
+  canReport = false,
   status,
   progress = 0,
   editing = false,
@@ -64,11 +73,15 @@ export function VersionRow({
   const loaded = inA || inB;
   const badge = inA ? 'A' : inB ? 'B' : (SLOT_LETTERS[index] ?? String(index + 1));
 
-  const computedStatus: VStatus = status ?? (version.latestResult?.score != null ? 'analyzed' : 'unscored');
+  // M2: use the tested versionStatus helper instead of inlining score-null check.
+  const computedStatus: VStatus = status ?? versionStatus(version);
   const isAnalyzed = computedStatus === 'analyzed';
   const isAnalyzing = computedStatus === 'analyzing';
   const isFailed = computedStatus === 'failed';
-  const showReport = isAnalyzed;
+  // I3: only show Report on the latest version (canReport from parent).
+  // song.latestResult.jobId is the job used for navigation; per-version Report
+  // needs a per-version jobId widened from the BFF.
+  const showReport = isAnalyzed && canReport;
   const showRetry = isFailed;
 
   const score = version.latestResult?.score ?? null;
