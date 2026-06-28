@@ -1268,3 +1268,162 @@ So that 3 a.m. incidents have a script (NFR31).
 1. **Given** `docs/runbook.md`, **When** complete, **Then** it covers: stuck job, webhook backlog, LLM budget breach, restore-from-backup, abuse response, secrets rotation, and prompt rollback.
 2. **Given** the launch checklist, **When** executed, **Then** SPF/DKIM/DMARC are verified, the Stripe sandbox matrix (dunning/refund/proration — NFR23) has passed, the restore test is done, and alerting has been test-fired.
 3. **Given** production error responses (NFR9), **When** errors occur, **Then** no stack traces or internals leak (test asserts the envelope).
+
+## Epic 11: SPECTR Social — Collaboration, Feedback & Discovery
+
+Surface the already-built Listen-V3 social backend (version sharing, live rooms, threaded timestamped feedback, reviewer rack-suggestions, bookmarks, anon identity) as real, shippable user-facing experiences, then close the two greenfield gaps — in-app notifications and public profiles/follow/discovery — so SPECTR moves from "analyze alone" to "share a version, collect timestamped feedback and rack-fix suggestions (logged-in or anonymous), co-listen live in a room, get notified, and follow other producers." The backend is ~90% done (PRP-0..6 slice); the bulk of this epic is **wiring built hooks to new components**, one **mock→SSE swap**, and one **greenfield social-graph** slice. This is a net-new epic alongside Epics 1–10 (no renumbering). Story lineage: 11.1–11.4 operationalize PRP-3; 11.5 PRP-4; 11.3/11.4 PRP-6; 11.6/11.7 PRP-7 (`PRPs/listen-v3-notifications.md`).
+
+**Sequencing.** Wave A (11.1‖11.3‖11.5, pure wiring/swap) → Wave B (11.4 anon surface) → Wave C/D (11.6→11.7 notifications) → Wave E (11.8→11.9→11.10 social graph) → 11.11 polish. Hard chains: 11.1→11.2→11.4 · 11.6→11.7 · 11.8→11.9→11.10. **First sprint:** 11.1 + 11.3 + 11.5 committed, 11.2 stretch.
+
+### Story 11.1: Threaded Timestamped Comments Panel
+
+As a producer reviewing a track,
+I want to read and leave comments pinned to specific moments,
+So that feedback points to the exact spot in the mix it's about.
+
+**Acceptance Criteria:**
+
+1. **Given** a version I can view, **When** I open the Comments panel, **Then** threaded comments render ordered with status (open/resolved/pinned/hidden) and timestamp anchors, consuming the existing `useComments` hooks (no new backend).
+2. **Given** I click a timestamped comment, **Then** the player seeks to that timestamp.
+3. **Given** I am the author or owner, **When** I patch a comment's status (resolve/pin/hide), **Then** the list reflects it after query invalidation.
+4. **Given** a server 403/404, **Then** the panel renders a "not permitted" empty state — gating is server-side via `AccessService`; it is never re-implemented client-side.
+5. **Given** the panel renders, **Then** a vitest static-render test covers the threaded list + status badges.
+
+### Story 11.2: Reviewer Rack-Suggestions & Accept-to-Preset
+
+As a track owner,
+I want to see a reviewer's proposed rack-chain fix and adopt it in one click,
+So that good suggestions become a usable preset with credit to the proposer.
+
+**Acceptance Criteria:**
+
+1. **Given** a version with suggestions, **Then** each `ReviewerSuggestion` shows its chain summary, status, and provenance (session/grant origin where present).
+2. **Given** I am the owner, **When** I Accept a suggestion, **Then** the backend forks a `RackPreset` and the suggestion flips to accepted (reuse the `AcceptSuggestion` endpoint — never fork client-side).
+3. **Given** a suggestion linked to a comment, **Then** it renders inline within that comment thread (11.1).
+4. **Given** accept succeeds, **Then** the new preset appears in the rack preset list.
+5. **Given** the suggestion card renders, **Then** a static-render test covers its states (open/accepted/rejected).
+
+### Story 11.3: Bookmarks Rail & Owner Heat Signal
+
+As a listener,
+I want to bookmark moments with a note and let owners see where attention lands,
+So that "love this part" becomes durable, aggregated signal.
+
+**Acceptance Criteria:**
+
+1. **Given** I am listening, **When** I add a bookmark at the playhead with an optional note, **Then** it persists and appears on the timeline (consume `useBookmarks`).
+2. **Given** my bookmarks, **Then** I can edit the note, toggle `identity_visible`, and delete (CRUD via `/me/bookmarks`).
+3. **Given** I am the version owner, **When** I open the signal view, **Then** I see aggregated bookmark density over the timeline (`/versions/{id}/bookmarks/signal`, owner-only).
+4. **Given** a non-owner, **Then** the owner-only signal call is never made.
+5. **Given** the rail/overlay renders, **Then** a static-render test covers bookmark markers + signal heat.
+
+### Story 11.4: Anonymous Reviewer Surface on Share Token
+
+As a producer who received a share link,
+I want to view and give feedback without an account,
+So that getting ears on a track has zero friction.
+
+**Acceptance Criteria:**
+
+1. **Given** a valid share token, **When** an anon visitor opens `/v/{token}`, **Then** they see the owner-safe version (never `.als`/raw stems) plus comments/suggestions/bookmarks in their token-scoped anon variants.
+2. **Given** the token's `ShareSetting` grants canComment/canSuggest/canBookmark, **Then** those actions are enabled; otherwise hidden (resolved by `AccessService`).
+3. **Given** an anon write, **Then** it carries the durable signed-cookie anon `ActorRef` and is rate-limited; the route uses the opaque ResourceToken, never JWT `?t=`.
+4. **Given** a revoked or expired token, **Then** the page renders a revoked state.
+5. **Given** the page renders, **Then** a static-render test covers the anon gating matrix.
+
+### Story 11.5: Live Room — Replace Mocks with SSE Orchestration
+
+As a producer,
+I want to host a real synchronized listening room,
+So that people hear my track together and react live.
+
+**Acceptance Criteria:**
+
+1. **Given** a host starts a room, **When** participants join, **Then** state syncs from the first `sync` snapshot frame and applies subsequent `SessionEvent` deltas (reuse the written-but-unwired `useRoomStream`).
+2. **Given** a participant reacts/chats/changes transport-visuals-rack, **Then** the action POSTs via `useRoomActions` and fans out to all clients.
+3. **Given** the host grants or revokes control, **Then** capabilities update live (reuse `identity.ts`/`capabilities.ts`).
+4. **Given** the host ends the room, **Then** `PublishRecap` triggers and `recap_actor.py` produces the recap.
+5. **Given** `useMockRoomOrchestration` is removed from the page, **Then** no mock import remains, the swap sits behind an adapter seam (not a page rewrite), and existing `listen-rack` tests still pass.
+
+### Story 11.6: Notifications Backend — Table, Sink & Endpoints
+
+As a user,
+I want the system to record things that happen to my tracks,
+So that feedback, suggestions, and adoptions don't get missed.
+
+**Acceptance Criteria:**
+
+1. **Given** the migration, **Then** a `notifications` table exists with a raw-SQL partial-unique on `digest_key` (mirror `CreditLedgerEntry`/`WebhookEvent`), and the Python model is mirrored in `aimusic_shared/models.py`.
+2. **Given** the existing call sites (comment_created, suggestion_created, suggestion_accepted, mention), **Then** `NotifyAsync` now writes rows built to the AS-BUILT seam (`ActorRef` recipient, dict payload); anon recipients are a no-op (no orphan rows).
+3. **Given** a bookmark create, **Then** a new digest call site collapses into one rolling `(recipient, version, day)` row with incrementing `count`.
+4. **Given** a comment body with `@handle`, **Then** `MentionParser` resolves handles to user ids and produces `mention` rows.
+5. **Given** `GET /me/notifications` (paged) + unread-count + mark-read + read-all, **Then** all are recipient-scoped (IDOR-safe), with integration coverage for digest-upsert idempotency.
+
+### Story 11.7: Notification Center — Bell & Inbox
+
+As a user,
+I want a bell with unread count and an inbox,
+So that I can see and act on what happened while I was away.
+
+**Acceptance Criteria:**
+
+1. **Given** unread notifications, **Then** the bell in the app shell shows a live unread count (TanStack Query `refetchInterval` poll; SSE deferred).
+2. **Given** I open the bell, **Then** I see a paged list; per-event items render individually, bookmarks render as a digest ("3 people bookmarked Aurora v3 today").
+3. **Given** I click a notification, **Then** it deep-links to the version/comment/room and marks read.
+4. **Given** mark-all-read, **Then** the unread count resets.
+5. **Given** the center renders, **Then** a static-render test covers per-event vs digest rendering and the unread badge.
+
+### Story 11.8: Public Profiles
+
+As a producer,
+I want a public page at my handle,
+So that others can see who I am and what I've shared.
+
+**Acceptance Criteria:**
+
+1. **Given** a user has a handle, **When** anyone visits `/u/{handle}`, **Then** they see display_name, bio, public_link, hue theming, and that user's public/shared versions.
+2. **Given** the visitor is the owner, **Then** an "Edit profile" affordance links to the existing `/profile`.
+3. **Given** a handle that doesn't exist, **Then** a 404 page renders.
+4. **Given** a private user, **Then** only public-visibility content is exposed (owner-safe subset via `AccessService`).
+5. **Given** the public profile endpoint, **Then** it is unauthenticated and rate-limited; a static-render test covers populated + empty profiles.
+
+### Story 11.9: Follow Graph
+
+As a producer,
+I want to follow other producers,
+So that I keep up with people whose work I rate.
+
+**Acceptance Criteria:**
+
+1. **Given** another user's profile, **When** I click Follow, **Then** a `FollowRelation(follower, followee)` row is created idempotently (unique `(follower_id, followee_id)` index; no duplicates).
+2. **Given** I unfollow, **Then** the relation is removed and counts update.
+3. **Given** any profile, **Then** follower/following counts render.
+4. **Given** my own profile, **Then** the Follow button is hidden (no self-follow).
+5. **Given** follow writes, **Then** they are auth-required and rate-limited, and the Python model is mirrored.
+
+### Story 11.10: Activity Feed
+
+As a producer,
+I want a feed of recent activity from people I follow,
+So that the app gives me a reason to come back.
+
+**Acceptance Criteria:**
+
+1. **Given** I follow users, **When** I open the feed, **Then** I see their recent public version-shares and published room recaps in reverse-chron.
+2. **Given** I follow no one, **Then** an empty state suggests profiles to discover.
+3. **Given** a feed item, **Then** it deep-links to the version/profile/recap.
+4. **Given** the feed query, **Then** it is recipient-scoped, paged, and reuses visibility gating (never leaks private content).
+5. **Given** the feed renders, **Then** a static-render test covers populated + empty feed.
+
+### Story 11.11: Discovery Entry-Points
+
+As a user,
+I want the social surfaces connected into a loop,
+So that comments, rooms, profiles, and follows reinforce each other.
+
+**Acceptance Criteria:**
+
+1. **Given** I type `@` in a comment composer, **Then** a handle autocomplete suggests users (resolving against the index used by `MentionParser`).
+2. **Given** a comment or room-participant avatar, **When** clicked, **Then** it links to `/u/{handle}`.
+3. **Given** an anon viewer on `/v/{token}` who registers, **Then** a "follow this producer" CTA is offered post-claim.
+4. **Given** these entry-points, **Then** static-render tests cover the mention autocomplete and avatar links.

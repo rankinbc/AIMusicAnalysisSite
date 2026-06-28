@@ -116,7 +116,7 @@ development_status:
   5-3-featuredverdictcard-and-coach-handoff: done  # VerdictCard: persona/impact/confidence/FixRecipe/feedback
   5-4-analysis-summary-tab-filters-and-specialist-roster: done  # shipped; AC1/AC2/AC3 met — final gap (sticky side rail, AnalysisTab.module.css .right) closed 2026-06-27
   5-5-frequency-stem-clash-reference-and-arrangement-panels: done  # Spectrum/Reference/Arrangement tabs
-  5-6-als-project-panel-and-track-name-attribution: ready-for-dev  # story file created 2026-06-27; AC1 shipped, scope = AC2 (structured track attribution + TrackChip) + AC3 (unlock invitation)
+  5-6-als-project-panel-and-track-name-attribution: review  # implemented 2026-06-27: AC2 structured where.track_names + TrackChip in live FindingsTab (VerdictCard was dead), AC3 ProjectUnlock; gates green (worker isolated; frontend tsc/lint/build/vitest 561)
   5-7-partial-failure-reporting-and-free-retry: backlog  # PARTIAL — DegradationBanner + rerun hooks; GAP: free-retry entitlement-free dispatch (AR16) + .als subprocess isolation (AR33)
   5-8-song-detail-and-version-compare: done  # song detail route + ProgressTimeline + CompareDialog
   5-9-upload-dialog-polish-club-check-and-playback-verify: done  # UnifiedUploadDialog + StereoCard/ClubCheck + ResultsPlayer
@@ -160,3 +160,20 @@ development_status:
   10-7-measurement-conformance-harness: backlog
   10-8-runbook-and-launch-checklist: backlog
   epic-10-retrospective: optional
+
+  # Epic 11 added 2026-06-27 (sprint plan: PRPs/stories + plan file). Social backend ~90% built
+  # via the Listen-V3 PRP slice; this epic surfaces it in UI + adds notifications + social graph.
+  # First sprint = 11-1/11-3/11-5 (ready-for-dev), 11-2 stretch; remainder backlog.
+  epic-11: in-progress
+  11-1-threaded-timestamped-comments-panel: ready-for-dev  # first sprint (committed)
+  11-2-reviewer-rack-suggestions-and-accept-to-preset: ready-for-dev  # first sprint (stretch; dep 11-1)
+  11-3-bookmarks-rail-and-owner-heat-signal: ready-for-dev  # first sprint (committed)
+  11-4-anonymous-reviewer-surface-on-share-token: backlog  # dep 11-1/11-2/11-3
+  11-5-live-room-replace-mocks-with-sse-orchestration: ready-for-dev  # first sprint (committed)
+  11-6-notifications-backend-table-sink-and-endpoints: backlog
+  11-7-notification-center-bell-and-inbox: backlog  # dep 11-6
+  11-8-public-profiles: backlog  # greenfield social graph
+  11-9-follow-graph: backlog  # dep 11-8
+  11-10-activity-feed: backlog  # dep 11-9
+  11-11-discovery-entry-points: backlog  # dep 11-1/11-7/11-8/11-9
+  epic-11-retrospective: optional

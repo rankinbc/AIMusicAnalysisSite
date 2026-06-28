@@ -5,8 +5,9 @@ explains the *system*); this file tracks the *contents*.
 
 **Last reviewed:** 2026-06-27 (housekeeping executed: 5 shipped PRPs archived, 3 story
 headers + identify-solve header reconciled to code-truth; **2nd pass same day: 7-doc
-results-redesign cluster archived after the redesign landed + verified**)
-**Snapshot:** 80 archived · 18 sprint stories · 30 root `.md` (incl README/STATUS)
+results-redesign cluster archived after the redesign landed + verified**; **3rd pass:
+Epic 5 close-out sprint + story 5.6 shipped; Epic 11 Social sprint planned**)
+**Snapshot:** 80 archived · 22 sprint stories · 30 root `.md` (incl README/STATUS)
 
 Buckets:
 - **REFERENCE** — north-star / contract docs that stay at root permanently
@@ -71,6 +72,18 @@ maintained — no action.
 | `problem-engine-mixcoach-rules.md` | Engine LIVE on every analysis; **~39 of ~43 IDENTIFY rules implemented** — 30 `@single` (Tier A×18, B×4, S×2, P×4) + 9 `@composite` in `verdict_lib/`. Remaining: a few datapoint-gated rules + **retire the legacy flat `@rule` registry** (the one named follow-on left in the IDENTIFY/SOLVE arc). |
 | `reference-profiles-backend.md` | Persistence fields exist (`ReferenceSet.profile_json/fingerprint`, `ReferenceTrack.analysis_status`); aggregation + endpoints incomplete. |
 | `listen-v3-bookmark-ui.md` | Backend done (`BookmarkEndpoints.cs`); frontend **partial** — hooks shipped (`features/listen/useBookmarks.ts`, `useBookmarkSignal.ts`) but the **`BookmarksPanel.tsx` rail + timeline markers are unbuilt** (verified 2026-06-27). |
+
+### Epic 11 — SPECTR Social (sprint planned 2026-06-27)
+New epic in `epics.md` (alongside 1–10) + `sprint-status.yaml` (`epic-11: in-progress`).
+**Key finding:** the social *backend* is ~90% already built via the Listen-V3 PRP-0..6 slice
+(`ShareSetting`/`VersionShareEndpoints`, `RoomEndpoints`/`ListeningSession`/`ControlGrant`/
+`recap_actor.py`, `TrackComment`/`ReviewerSuggestion`/`FeedbackEndpoints`, `TrackBookmark`/
+`BookmarkEndpoints`, anon `ActorRef`). The gaps are **frontend wiring** (comments/suggestions/
+bookmarks hooks exist with no components; room page on mocks), **notifications** (`INotificationSink`
+no-op only), and **profiles/follow/discovery** (greenfield). 11 stories; first sprint =
+`11-1`/`11-3`/`11-5` (ready-for-dev) + `11-2` stretch — story files written. Plan:
+`~/.claude/plans/fluttering-stirring-abelson.md`. Lineage: PRP-3/4/6/7. Note: this supersedes
+`listen-v3-bookmark-ui.md` (row above) — its work is now story **11.3**.
 
 ### Results-redesign cluster — SHIPPED + ARCHIVED (2026-06-27)
 Redesign landed and verified against code; all 7 docs moved to `archive/2026-06-27_*`
