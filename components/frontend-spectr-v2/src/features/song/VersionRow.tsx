@@ -113,18 +113,18 @@ export function VersionRow({
               onKeyDown={handleKeyDown}
               autoFocus
             />
-            <button className="btn primary sm" onClick={onEditSave} style={{ padding: '5px 9px' }}>Save</button>
+            <button className={`btn primary sm ${styles.rowActionPadded}`} onClick={onEditSave}>Save</button>
             <button className="btn ghost sm" onClick={onEditCancel} style={{ padding: '5px 8px' }}>Cancel</button>
           </div>
         ) : (
           <div className={styles.metaRow}>
-            <span className={`mono ${styles.vNum ?? ''}`} style={{ fontSize: '12px', fontWeight: 700, color: 'var(--cyan)', flexShrink: 0 }}>
+            <span className={`mono ${styles.vNum}`}>
               v{version.versionNumber}
             </span>
-            <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.005em' }}>
+            <span className={styles.versionLabel}>
               {version.label ?? `Version ${version.versionNumber}`}
             </span>
-            {isCurrent && <span className="pill cyan" style={{ fontSize: '9px', padding: '2px 7px' }}>current</span>}
+            {isCurrent && <span className={`pill cyan ${styles.currentVersionPill}`}>current</span>}
             {hasPersonal && (
               <span className="pill" style={{ fontSize: '9px', padding: '2px 7px', color: 'var(--violet)', borderColor: 'rgba(167,139,250,.32)', background: 'rgba(167,139,250,.06)' }}>
                 ★ {personalStr}
@@ -171,14 +171,14 @@ export function VersionRow({
         </div>
 
         <div className={styles.rowActions}>
-          <button onClick={onPlay} title="Load into deck A" className="btn ghost sm" style={{ padding: '5px 9px' }}>▶</button>
+          <button onClick={onPlay} title="Load into deck A" className={`btn ghost sm ${styles.rowActionPadded}`}>▶</button>
           {showReport && (
-            <button onClick={onReport} className="btn ghost sm" style={{ padding: '5px 9px' }}>
+            <button onClick={onReport} className={`btn ghost sm ${styles.rowActionPadded}`}>
               Report <span style={{ color: 'var(--violet)' }}>↗</span>
             </button>
           )}
           {showRetry && (
-            <button onClick={onRetry} className="btn sm" style={{ padding: '5px 9px', color: 'var(--red)', borderColor: 'rgba(244,63,94,.32)' }}>
+            <button onClick={onRetry} className={`btn sm ${styles.rowRetryBtn}`}>
               ↻ Retry
             </button>
           )}

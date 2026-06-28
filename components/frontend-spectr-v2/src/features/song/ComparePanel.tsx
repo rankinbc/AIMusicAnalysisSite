@@ -128,7 +128,7 @@ export function ComparePanel({ song, slotA, slotB }: ComparePanelProps) {
       {/* Personal score inputs */}
       <div className={styles.comparePersonal}>
         <span className="label" style={{ color: 'var(--violet)' }}>Your score</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div className={styles.scoreInputGroup}>
           <span className="mono" style={{ fontSize: '10px', color: 'var(--cyan)' }}>A</span>
           <input
             type="number"
@@ -141,7 +141,7 @@ export function ComparePanel({ song, slotA, slotB }: ComparePanelProps) {
           />
         </div>
         <span className="mono" style={{ fontSize: '10px', color: 'var(--dim)' }}>vs</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div className={styles.scoreInputGroup}>
           <span className="mono" style={{ fontSize: '10px', color: 'var(--text-2)' }}>B</span>
           <input
             type="number"
@@ -158,7 +158,7 @@ export function ComparePanel({ song, slotA, slotB }: ComparePanelProps) {
             {verdict.deltaStr}
           </span>
         )}
-        <span className="mono" style={{ marginLeft: 'auto', fontSize: '9px', color: 'var(--muted)', letterSpacing: '0.04em' }}>
+        <span className={`mono ${styles.savedToSong}`}>
           saved to this song
         </span>
       </div>

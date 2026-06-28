@@ -1,8 +1,6 @@
-import type { VersionDto } from '../../api/types';
 import styles from './SongConsole.module.css';
 
 interface VersionRowMenuProps {
-  version: VersionDto;
   hasGamePlan?: boolean;
   onMakeCurrent: () => void;
   onEditLabel: () => void;

@@ -7,7 +7,6 @@ vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.f
 describe('VersionRowMenu', () => {
   it('shows "game plan" only when hasGamePlan is true', () => {
     const props = {
-      version: { id: 'v1', versionNumber: 1 } as never,
       onMakeCurrent: vi.fn(),
       onEditLabel: vi.fn(),
       onReanalyze: vi.fn(),
@@ -24,7 +23,6 @@ describe('VersionRowMenu', () => {
 
   it('always renders core menu items', () => {
     const props = {
-      version: { id: 'v2', versionNumber: 2 } as never,
       onMakeCurrent: vi.fn(),
       onEditLabel: vi.fn(),
       onReanalyze: vi.fn(),

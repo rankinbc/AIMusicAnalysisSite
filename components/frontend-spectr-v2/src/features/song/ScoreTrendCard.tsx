@@ -137,7 +137,7 @@ export function ScoreTrendCard({ versions, onPointClick }: ScoreTrendCardProps) 
         {sparse ? (
           <div className={styles.timelineSparse}>
             <div className={styles.timelineRule} />
-            <span className={`mono ${styles.timelineSparseHint ?? ''}`} style={{ fontSize: '11px', color: 'var(--muted)' }}>
+            <span className={`mono ${styles.timelineSparseHint}`}>
               Scores appear here as you analyze versions
             </span>
           </div>

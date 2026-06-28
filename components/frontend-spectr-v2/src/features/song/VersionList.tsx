@@ -70,7 +70,6 @@ export function VersionList({
           const statusEntry = statusMap?.[version.id];
           const menu = (
             <VersionRowMenu
-              version={version}
               hasGamePlan={gamePlanIds?.has(version.id) ?? false}
               onMakeCurrent={() => onMakeCurrent(version.id)}
               onEditLabel={() => startEdit(version)}

@@ -56,9 +56,10 @@ interface DeckProps {
   menuOpen: boolean;
   onToggleMenu: () => void;
   onOpenListen?: (id: string) => void;
+  onLoadedMetadata?: () => void;
 }
 
-function Deck({ slotKey, versionId, song, player, dur, menuOpen, onToggleMenu, onOpenListen }: DeckProps) {
+function Deck({ slotKey, versionId, song, player, dur, menuOpen, onToggleMenu, onOpenListen, onLoadedMetadata }: DeckProps) {
   const version = song.versions.find(v => v.id === versionId) ?? null;
   if (!version) return null;
 
@@ -187,8 +188,7 @@ function Deck({ slotKey, versionId, song, player, dur, menuOpen, onToggleMenu, o
 
       {/* Open in Listen */}
       <button
-        className="btn ghost sm"
-        style={{ flexShrink: 0 }}
+        className={`btn ghost sm ${styles.deckListenBtn}`}
         onClick={() => onOpenListen?.(version.id)}
       >
         Open in Listen <span style={{ color: 'var(--violet)' }}>↗</span>
@@ -199,6 +199,7 @@ function Deck({ slotKey, versionId, song, player, dur, menuOpen, onToggleMenu, o
         ref={slotKey === 'A' ? player.audioARef : player.audioBRef}
         src={player.audioUrl(versionId) ?? undefined}
         onTimeUpdate={() => player.onTime(slotKey)}
+        onLoadedMetadata={onLoadedMetadata}
         crossOrigin="anonymous"
         style={{ display: 'none' }}
       />
@@ -218,35 +219,35 @@ export function QuickPlayer({ song, player, onOpenListen }: QuickPlayerProps) {
 
   return (
     <>
-      <div className="card" style={{ overflow: 'visible' }}>
+      <div className={`card ${styles.quickPlayerCard}`}>
         <div className="card-hd">
           <span className="label">Quick audition · A / B</span>
           <span className="mono" style={{ fontSize: '10px', color: 'var(--muted)', letterSpacing: '0.04em' }}>
             tap a deck to switch what you hear
           </span>
         </div>
-        <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div className={`card-body ${styles.cardBodyCol}`}>
           {(['A', 'B'] as const).map(key => {
             const id = key === 'A' ? player.slotA : player.slotB;
             const dur = key === 'A' ? durA : durB;
             const setDur = key === 'A' ? setDurA : setDurB;
             if (!id) return null;
             return (
-              <div key={key} onLoadedMetadata={() => {
-                const el = key === 'A' ? player.audioARef.current : player.audioBRef.current;
-                if (el) setDur(el.duration || 0);
-              }}>
-                <Deck
-                  slotKey={key}
-                  versionId={id}
-                  song={song}
-                  player={player}
-                  dur={dur}
-                  menuOpen={slotMenuOpen === key}
-                  onToggleMenu={() => toggleMenu(key)}
-                  onOpenListen={onOpenListen}
-                />
-              </div>
+              <Deck
+                key={key}
+                slotKey={key}
+                versionId={id}
+                song={song}
+                player={player}
+                dur={dur}
+                menuOpen={slotMenuOpen === key}
+                onToggleMenu={() => toggleMenu(key)}
+                onOpenListen={onOpenListen}
+                onLoadedMetadata={() => {
+                  const el = key === 'A' ? player.audioARef.current : player.audioBRef.current;
+                  if (el) setDur(el.duration || 0);
+                }}
+              />
             );
           })}
 
@@ -254,7 +255,7 @@ export function QuickPlayer({ song, player, onOpenListen }: QuickPlayerProps) {
           {slotMenuOpen && (
             <div
               onClick={closeMenu}
-              style={{ position: 'fixed', inset: 0, zIndex: 20 }}
+              className={styles.clickOutsideOverlay}
             />
           )}
 

@@ -151,6 +151,19 @@
 }
 
 /* ── QuickPlayer / Deck ─────────────────────────────────────────────────── */
+.quickPlayerCard {
+  overflow: visible;
+}
+.cardBodyCol {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.clickOutsideOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
 .deck {
   position: relative;
   display: flex;
@@ -162,6 +175,13 @@
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.015);
   transition: border-color 0.18s ease, background 0.18s ease;
+}
+.deckLive {
+  border-color: rgba(0, 229, 176, 0.4);
+  background: rgba(0, 229, 176, 0.05);
+}
+.deckListenBtn {
+  flex-shrink: 0;
 }
 .deckSide {
   display: flex;
@@ -337,6 +357,17 @@
 }
 
 /* ── ComparePanel ───────────────────────────────────────────────────────── */
+.scoreInputGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.savedToSong {
+  margin-left: auto;
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
 .compareSection {
   margin-top: 2px;
   padding-top: 14px;
@@ -419,6 +450,10 @@
 }
 
 /* ── ScoreTrendCard ─────────────────────────────────────────────────────── */
+.timelineSparseHint {
+  font-size: 11px;
+  color: var(--muted);
+}
 .timelineSparse {
   height: 120px;
   display: flex;
@@ -441,6 +476,30 @@
 }
 
 /* ── VersionRow ─────────────────────────────────────────────────────────── */
+.vNum {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cyan);
+  flex-shrink: 0;
+}
+.versionLabel {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.005em;
+}
+.currentVersionPill {
+  font-size: 9px;
+  padding: 2px 7px;
+}
+.rowActionPadded {
+  padding: 5px 9px;
+}
+.rowRetryBtn {
+  padding: 5px 9px;
+  color: var(--red);
+  border-color: rgba(244, 63, 94, 0.32);
+}
 .versionRow {
   position: relative;
   display: flex;
