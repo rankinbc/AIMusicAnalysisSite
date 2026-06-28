@@ -165,7 +165,7 @@ development_status:
   # via the Listen-V3 PRP slice; this epic surfaces it in UI + adds notifications + social graph.
   # First sprint = 11-1/11-3/11-5 (ready-for-dev), 11-2 stretch; remainder backlog.
   epic-11: in-progress
-  11-1-threaded-timestamped-comments-panel: ready-for-dev  # first sprint (committed)
+  11-1-threaded-timestamped-comments-panel: review  # implemented 2026-06-27: rail CommentsPanel -> real useComments (threaded/moderated) + comment-tree helper; gates green, vitest 572
   11-2-reviewer-rack-suggestions-and-accept-to-preset: ready-for-dev  # first sprint (stretch; dep 11-1)
   11-3-bookmarks-rail-and-owner-heat-signal: ready-for-dev  # first sprint (committed)
   11-4-anonymous-reviewer-surface-on-share-token: backlog  # dep 11-1/11-2/11-3

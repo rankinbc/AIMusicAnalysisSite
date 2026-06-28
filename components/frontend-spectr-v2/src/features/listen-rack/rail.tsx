@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 
 import {
-  MOCK_COMMENTS, railTabsFor, type AccessDto, type ActorRef, type CommentDto, type ModeId,
+  railTabsFor, type AccessDto, type ActorRef, type ModeId,
 } from './access';
 import {
   BG_COLORS, DIRECTORS, LASER_EFFECTS, LASER_PATTERNS, REACTION_GROUPS,
@@ -24,6 +24,12 @@ import type { RackState } from './rackState';
 import { Avatar, HSlider, HueSlider, SelectChip, Switch } from './ui';
 import { readListenFixes, type ListenFix } from './listenFixes';
 import { useFixOverlay } from './useFixOverlay';
+import {
+  useComments, usePostComment, usePatchCommentStatus, useDeleteComment,
+} from '../listen/useComments';
+import { buildCommentThreads, canModerate } from '../listen/comment-tree';
+import { useMe } from '../../api/hooks';
+import type { CommentDto as ApiCommentDto } from '../../api/types';
 
 // SYNC toggle shown in a console bay header — binds that module to the music
 function SyncTag({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
@@ -578,39 +584,101 @@ export function PlanPanel({ rs, versionId }: { rs: RackState; versionId?: string
 }
 
 // ── COMMENTS tab — async View feedback thread (timestamped + suggestions) ──
-function CommentsPanel({ access, onSeek }: { access: AccessDto; onSeek: (t: number) => void }) {
-  const [comments] = useState<CommentDto[]>(MOCK_COMMENTS);
+// Story 11.1: real PRP-3 comments (useComments). Gating is server-side via
+// AccessService — a 403/404 from the query renders the "not permitted" state.
+export function CommentsPanel({ versionId, access, isOwner, position, onSeek }: {
+  versionId?: string;
+  access: AccessDto;
+  isOwner: boolean;
+  position: number;
+  onSeek: (t: number) => void;
+}) {
+  const vid = versionId ?? '';
+  const commentsQ = useComments(vid);
+  const me = useMe(Boolean(vid));
+  const postMut = usePostComment(vid);
+  const patchMut = usePatchCommentStatus(vid);
+  const delMut = useDeleteComment(vid);
   const [text, setText] = useState('');
-  const sevColor = (s: CommentDto['status']) => s === 'pinned' ? 'var(--cyan)' : s === 'resolved' ? 'var(--green)' : 'var(--violet)';
+  const [pinTime, setPinTime] = useState(false);
+  const [replyTo, setReplyTo] = useState<string | null>(null);
+
+  const meId = me.data?.id ?? null;
+  const threads = useMemo(() => buildCommentThreads(commentsQ.data ?? []), [commentsQ.data]);
+  const total = threads.reduce((n, th) => n + 1 + th.replies.length, 0);
+  const sevColor = (s: ApiCommentDto['status']) =>
+    s === 'pinned' ? 'var(--cyan)' : s === 'resolved' ? 'var(--green)' : s === 'hidden' ? 'var(--muted)' : 'var(--violet)';
+
+  const submit = () => {
+    const body = text.trim();
+    if (!body || !vid) return;
+    postMut.mutate(
+      { body, t: pinTime ? Math.round(position) : null, parentId: replyTo },
+      { onSuccess: () => { setText(''); setPinTime(false); setReplyTo(null); } },
+    );
+  };
+
+  const renderComment = (c: ApiCommentDto, isReply: boolean) => {
+    const tone = sevColor(c.status);
+    const name = c.author.handle ?? c.author.displayName ?? 'anon';
+    const mod = canModerate(c, meId, isOwner);
+    return (
+      <div key={c.id} style={{ marginLeft: isReply ? 16 : 0, padding: '10px 11px', borderRadius: 9, background: 'rgba(255,255,255,0.02)', border: `1px solid ${cssVar(tone)}2e`, borderLeft: `3px solid ${tone}`, opacity: c.status === 'hidden' ? 0.55 : 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Avatar handle={name} hue={c.author.hue ?? 200} anon={c.author.type === 'anon'} size={22} />
+          <span className="mono" style={{ fontSize: 10.5, color: c.author.type === 'anon' ? 'var(--muted)' : 'var(--violet)' }}>{c.author.type === 'anon' ? name : '@' + name}</span>
+          {c.t != null && <button type="button" onClick={() => onSeek(c.t as number)} className="mono" style={{ fontSize: 9.5, color: 'var(--cyan)', background: 'none', padding: 0 }}>@{fmtTime(c.t)}</button>}
+          {c.status === 'pinned' && <span className="mono" style={{ marginLeft: 'auto', fontSize: 8, color: 'var(--cyan)', letterSpacing: '0.1em' }}>★ PINNED</span>}
+          {c.status === 'resolved' && <span className="mono" style={{ marginLeft: 'auto', fontSize: 8, color: 'var(--green)', letterSpacing: '0.1em' }}>✓ RESOLVED</span>}
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--text-2)', marginTop: 6, lineHeight: 1.45 }}>{c.body}</div>
+        {c.suggestionId && (
+          <div className="mono" style={{ marginTop: 7, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 9, color: 'var(--cyan)', padding: '3px 8px', borderRadius: 6, border: '1px dashed rgba(0,229,176,0.35)', background: 'rgba(0,229,176,0.05)' }}>⌁ suggested a rack chain · audition</div>
+        )}
+        <div style={{ display: 'flex', gap: 10, marginTop: 7, flexWrap: 'wrap' }}>
+          {!isReply && access.gates.canComment && (
+            <button type="button" onClick={() => setReplyTo(replyTo === c.id ? null : c.id)} className="mono" style={{ fontSize: 9, color: replyTo === c.id ? 'var(--cyan)' : 'var(--muted)', background: 'none', padding: 0 }}>reply</button>
+          )}
+          {mod && (
+            <>
+              <button type="button" onClick={() => patchMut.mutate({ commentId: c.id, body: { status: c.status === 'resolved' ? 'open' : 'resolved' } })} className="mono" style={modBtn}>{c.status === 'resolved' ? 'reopen' : 'resolve'}</button>
+              <button type="button" onClick={() => patchMut.mutate({ commentId: c.id, body: { status: c.status === 'pinned' ? 'open' : 'pinned' } })} className="mono" style={modBtn}>{c.status === 'pinned' ? 'unpin' : 'pin'}</button>
+              {c.status !== 'hidden' && <button type="button" onClick={() => patchMut.mutate({ commentId: c.id, body: { status: 'hidden' } })} className="mono" style={modBtn}>hide</button>}
+              <button type="button" onClick={() => delMut.mutate(c.id)} className="mono" style={{ ...modBtn, color: 'var(--red)' }}>delete</button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <PLabel accent="var(--violet)">Feedback · {comments.length}</PLabel>
+        <PLabel accent="var(--violet)">Feedback · {total}</PLabel>
         <span className="pill violet">Async review</span>
       </div>
-      {comments.map((c) => {
-        const tone = sevColor(c.status);
-        const name = c.author.handle ?? c.author.displayName ?? 'anon';
-        return (
-          <div key={c.id} style={{ padding: '10px 11px', borderRadius: 9, background: 'rgba(255,255,255,0.02)', border: `1px solid ${cssVar(tone)}2e`, borderLeft: `3px solid ${tone}` }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Avatar handle={name} hue={c.author.hue ?? 200} anon={c.author.type === 'anon'} size={22} />
-              <span className="mono" style={{ fontSize: 10.5, color: c.author.type === 'anon' ? 'var(--muted)' : 'var(--violet)' }}>{c.author.type === 'anon' ? name : '@' + name}</span>
-              {c.t != null && <button type="button" onClick={() => onSeek(c.t as number)} className="mono" style={{ fontSize: 9.5, color: 'var(--cyan)', background: 'none', padding: 0 }}>@{fmtTime(c.t)}</button>}
-              {c.status === 'pinned' && <span className="mono" style={{ marginLeft: 'auto', fontSize: 8, color: 'var(--cyan)', letterSpacing: '0.1em' }}>★ PINNED</span>}
-            </div>
-            <div style={{ fontSize: 11.5, color: 'var(--text-2)', marginTop: 6, lineHeight: 1.45 }}>{c.body}</div>
-            {c.suggestionId && (
-              <div className="mono" style={{ marginTop: 7, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 9, color: 'var(--cyan)', padding: '3px 8px', borderRadius: 6, border: '1px dashed rgba(0,229,176,0.35)', background: 'rgba(0,229,176,0.05)' }}>⌁ suggested a rack chain · audition</div>
-            )}
+
+      {commentsQ.isError ? (
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>You don&rsquo;t have access to comments on this track.</div>
+      ) : threads.length === 0 ? (
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>No feedback yet.</div>
+      ) : (
+        threads.map((th) => (
+          <div key={th.comment.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {renderComment(th.comment, false)}
+            {th.replies.map((r) => renderComment(r, true))}
           </div>
-        );
-      })}
+        ))
+      )}
+
       {access.gates.canComment ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          {replyTo && <div className="mono" style={{ fontSize: 9, color: 'var(--muted)' }}>replying… <button type="button" onClick={() => setReplyTo(null)} style={{ color: 'var(--cyan)', background: 'none', padding: 0 }}>cancel</button></div>}
           <div style={{ display: 'flex', gap: 7, alignItems: 'center', padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border)' }}>
-            <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Leave feedback…" style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 12, fontFamily: 'inherit' }} />
-            <button type="button" onClick={() => setText('')} className="btn sm primary" style={{ padding: '4px 12px', fontSize: 11 }}>Post</button>
+            <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submit(); }} placeholder={replyTo ? 'Reply…' : 'Leave feedback…'} style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 12, fontFamily: 'inherit' }} />
+            <button type="button" onClick={() => setPinTime((p) => !p)} title="pin to current time" className="mono" style={{ fontSize: 9.5, color: pinTime ? 'var(--cyan)' : 'var(--muted)', background: 'none', padding: 0 }}>@{fmtTime(position)}</button>
+            <button type="button" onClick={submit} disabled={postMut.isPending || !text.trim()} className="btn sm primary" style={{ padding: '4px 12px', fontSize: 11 }}>Post</button>
           </div>
           {access.gates.canSuggest && <div className="mono" style={{ fontSize: 9, color: 'var(--muted)' }}>The rack is read-only here — edit it to <span style={{ color: 'var(--cyan)' }}>fork &amp; suggest a chain</span>.</div>}
         </div>
@@ -621,12 +689,14 @@ function CommentsPanel({ access, onSeek }: { access: AccessDto; onSeek: (t: numb
   );
 }
 
+const modBtn: React.CSSProperties = { fontSize: 9, color: 'var(--muted)', background: 'none', padding: 0 };
+
 // ── the panel shell ────────────────────────────────────────────────────────
 const TAB_LABELS: Record<string, string> = {
   coach: 'Coach', plan: 'Plan', comments: 'Comments', people: 'People', chat: 'Chat', stats: 'Stats', notes: 'Notes',
 };
 
-export function RightRail({ mode, access, cap, rs, track, position, activeNote, onNoteClick, onSeek, onReact, feed, announce, myStatus, roomControl, onGrant, versionId }: {
+export function RightRail({ mode, access, cap, rs, track, position, activeNote, onNoteClick, onSeek, onReact, feed, announce, myStatus, roomControl, onGrant, versionId, isOwner = false }: {
   mode: ModeId;
   access: AccessDto;
   cap: CapabilitySet;
@@ -643,6 +713,7 @@ export function RightRail({ mode, access, cap, rs, track, position, activeNote, 
   roomControl: RoomControl;
   onGrant: (scope: 'rack' | 'visuals', actor: ActorRef | null) => void;
   versionId?: string;
+  isOwner?: boolean;
 }) {
   const tabs = railTabsFor(mode, access);
   const [tab, setTab] = useState(tabs[0]);
@@ -661,7 +732,7 @@ export function RightRail({ mode, access, cap, rs, track, position, activeNote, 
       <div style={{ overflow: 'auto', flex: 1, paddingRight: 2 }}>
         {active === 'coach' && <CoachPanel rs={rs} announce={announce} />}
         {active === 'plan' && <PlanPanel rs={rs} {...(versionId ? { versionId } : {})} />}
-        {active === 'comments' && <CommentsPanel access={access} onSeek={onSeek} />}
+        {active === 'comments' && <CommentsPanel access={access} onSeek={onSeek} isOwner={isOwner} position={position} {...(versionId ? { versionId } : {})} />}
         {active === 'people' && <PeoplePanel myStatus={myStatus} onReact={onReact} cap={cap} roomControl={roomControl} onGrant={onGrant} />}
         {active === 'chat' && <ChatPanel feed={feed} onReact={onReact} />}
         {active === 'stats' && <StatsPanel track={track} />}

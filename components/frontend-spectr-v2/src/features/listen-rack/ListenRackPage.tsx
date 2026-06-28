@@ -690,7 +690,7 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
           <RightRail mode={mode} access={access} cap={cap} rs={rs} track={track} position={position}
             activeNote={activeNote} onNoteClick={(n) => { setActiveNote(n.id); seek(n.t); }} onSeek={seek}
             onReact={(e) => { setMyStatus(e); spawnReaction(e, 'maek'); }} feed={feed} announce={announce} myStatus={myStatus}
-            roomControl={roomControl} onGrant={grantControl} {...(versionId ? { versionId } : {})} />
+            roomControl={roomControl} onGrant={grantControl} isOwner={identity.isOwner} {...(versionId ? { versionId } : {})} />
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 # Story 11.1: Threaded Timestamped Comments Panel
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -28,19 +28,19 @@ The BFF backend is complete (`FeedbackEndpoints.cs` + `TrackComment.cs`: threade
 ## Tasks / Subtasks
 
 - [ ] **Task 1: CommentsPanel component (AC: 1, 3, 4)**
-  - [ ] 1.1 Create `src/features/listen/CommentsPanel.tsx` (+ `CommentsPanel.module.css`). Props: `{ versionId: string; isOwner: boolean; onSeek: (seconds: number) => void }`.
-  - [ ] 1.2 Consume `useComments(versionId)`; build the parent/child tree from the flat `CommentDto[]` (group by `parent_id`). Order: pinned first, then open, then resolved/hidden; within a group, by `created_at`. Render status badges (reuse the global `.pill[.tone]` utility).
-  - [ ] 1.3 Composer: a textarea + "post" wired to `usePostComment`; optional "pin to current time" using the playhead seconds (passed in via prop or read from the page's transport). Reply affordance sets `parent_id`.
-  - [ ] 1.4 Moderation controls (resolve/pin/hide) via `usePatchCommentStatus`, shown only when `isOwner` or the viewer is the comment author. Delete via `useDeleteComment` (author/owner only).
-  - [ ] 1.5 Error/empty states: on the query's 403/404 render a "You don't have access to comments here" card; on empty render the designed empty state. Do NOT compute permission client-side — render whatever the server returns.
-- [ ] **Task 2: Timestamp seek (AC: 2)**
-  - [ ] 2.1 A comment with `timestamp_seconds != null` renders a clickable time chip (`mm:ss`) that calls `onSeek(timestamp_seconds)`.
-  - [ ] 2.2 In the mount point (Task 3) wire `onSeek` to the existing player transport seek.
-- [ ] **Task 3: Mount into the Listen page (AC: 1)**
-  - [ ] 3.1 Mount `CommentsPanel` in the Listen rack right-rail (`src/features/listen-rack/ListenRackPage.tsx` — it already owns the tabbed right rail and the audio transport for `onSeek`). Pass `versionId`, owner-ness (derive from `identity`/`access` already in the page — `resolveCapabilities` at `ListenRackPage.tsx:604`), and the seek callback.
-- [ ] **Task 4: Tests (AC: 5)**
-  - [ ] 4.1 `src/features/listen/__tests__/CommentsPanel.test.tsx` — `renderToStaticMarkup` with a fixture `CommentDto[]` (mixed statuses + a threaded reply + a timestamped comment): asserts thread nesting, status badges, and the time chip render. Mock the hooks (the existing `useBookmarks.test.ts`/`useRoomStream.test.ts` show the test style).
-- [ ] **Task 5: Gates** — `npx tsc --noEmit`, `npm run lint`, `npm run build`, `npx vitest run`.
+  - [x] 1.1 ⚠️ DEVIATION — a `CommentsPanel` already existed (mock) inline in `features/listen-rack/rail.tsx:587`, rendering `MOCK_COMMENTS`. Per house convention (all rail panels live in `rail.tsx`, reusing local `Avatar`/`PLabel`/`fmtTime`), **rewrote it in place + `export`ed it** rather than creating a new `features/listen/CommentsPanel.tsx`. Props: `{ versionId?, access, isOwner, position, onSeek }`.
+  - [x] 1.2 Consumes `useComments(versionId)`; threading/ordering extracted to a pure, testable helper `features/listen/comment-tree.ts` (`buildCommentThreads`: pinned→open→resolved→hidden, then createdAt; orphan replies surface top-level). Status badges (PINNED/RESOLVED) via inline tones (matching the rail's inline-style idiom).
+  - [x] 1.3 Composer wired to `usePostComment` with a "pin to current time" toggle (`@mm:ss` from `position`) + reply affordance (`parentId`).
+  - [x] 1.4 Moderation (resolve/reopen, pin/unpin, hide, delete) via `usePatchCommentStatus`/`useDeleteComment`, gated by pure `canModerate(comment, meId, isOwner)` (`useMe` supplies the author id).
+  - [x] 1.5 `commentsQ.isError` → "you don't have access" state; empty → "No feedback yet". No client-side permission computation.
+- [x] **Task 2: Timestamp seek (AC: 2)**
+  - [x] 2.1 `t != null` renders the `@mm:ss` chip calling `onSeek(t)`.
+  - [x] 2.2 `onSeek` was ALREADY wired — `RightRail` passes the page's pitch-aware `seek` (`ListenRackPage.tsx:595`) to the comments tab. No new wiring needed.
+- [x] **Task 3: Mount into the Listen page (AC: 1)**
+  - [x] 3.1 Panel was already mounted in the rail's `'comments'` tab; added `isOwner`/`position`/`versionId` to the `RightRail` signature + render, and passed `isOwner={identity.isOwner}` from `ListenRackPage`.
+- [x] **Task 4: Tests (AC: 5)**
+  - [x] 4.1 `features/listen/__tests__/comment-tree.test.ts` (7 pure tests: ordering, nesting, orphan, canModerate matrix) + `features/listen-rack/__tests__/CommentsPanel.test.tsx` (4 render tests via a seeded `QueryClientProvider`: status badges + `@1:05` chip, reply nesting, owner-vs-viewer moderation, comments-closed state).
+- [x] **Task 5: Gates** — tsc clean, lint clean, build ✓, vitest 572 passed (+11).
 
 ## Dev Notes
 
@@ -56,10 +56,39 @@ The BFF backend is complete (`FeedbackEndpoints.cs` + `TrackComment.cs`: threade
 
 ### Agent Model Used
 
+claude-opus-4-8[1m] (dev-story workflow)
+
 ### Debug Log References
+
+- The story's premise ("CommentsPanel absent, create new file") was partly wrong:
+  a mock `CommentsPanel` + a `'comments'` rail tab + a pitch-aware `seek` already
+  existed (same drift pattern as 5.4). Pivoted to an in-place rewrite, which is the
+  idiomatic choice (all rail panels live in `rail.tsx`).
+- Render-testing a hook component needed a new pattern (none existed): a seeded
+  `QueryClientProvider` (`setQueryData(['versions','v1','comments'], …)` + `['auth','me']`)
+  rendered via `renderToStaticMarkup`. Pure thread/moderation logic was extracted to
+  `comment-tree.ts` and tested directly to keep most coverage provider-free.
 
 ### Completion Notes List
 
+- AC1 threaded list (pinned→open→resolved→hidden, nested replies, status badges) ✓
+- AC2 timestamp chip → existing pitch-aware `seek` ✓ (already wired through `RightRail`)
+- AC3 owner/author moderation via pure `canModerate` + `useMe` ✓
+- AC4 server-side gating only; `isError` → not-permitted, `!canComment` → closed ✓
+- AC5 11 new tests (7 pure + 4 render) ✓
+- `MOCK_COMMENTS` left intact in `access.ts` (still used by `access.test.ts`); only the
+  rail panel stopped consuming it.
+
 ### File List
 
+- `components/frontend-spectr-v2/src/features/listen/comment-tree.ts` (A)
+- `components/frontend-spectr-v2/src/features/listen/__tests__/comment-tree.test.ts` (A)
+- `components/frontend-spectr-v2/src/features/listen-rack/rail.tsx` (M — real CommentsPanel + RightRail `isOwner` prop)
+- `components/frontend-spectr-v2/src/features/listen-rack/ListenRackPage.tsx` (M — pass `isOwner={identity.isOwner}`)
+- `components/frontend-spectr-v2/src/features/listen-rack/__tests__/CommentsPanel.test.tsx` (A)
+
 ### Change Log
+
+- 2026-06-27 — Story 11.1 implemented: rail CommentsPanel rewired from MOCK_COMMENTS to
+  real PRP-3 `useComments` (threaded, timestamped, owner/author-moderated) + pure
+  comment-tree helper. Gates green. Status → review.
