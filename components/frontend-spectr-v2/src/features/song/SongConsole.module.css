@@ -727,6 +727,16 @@
   border-top: 1px solid var(--border);
 }
 
+/* ── Scoped animation utility classes (keyframes defined above) ─────────── */
+.shimmer {
+  background: linear-gradient(90deg, var(--surface) 0px, var(--card-hover) 120px, var(--surface) 240px);
+  background-size: 480px 100%;
+  animation: spcShimmer 1.3s ease infinite;
+}
+.fadeUp {
+  animation: spcUp .4s ease both;
+}
+
 /* ── VersionRowMenu ─────────────────────────────────────────────────────── */
 .rowMenu {
   position: absolute;

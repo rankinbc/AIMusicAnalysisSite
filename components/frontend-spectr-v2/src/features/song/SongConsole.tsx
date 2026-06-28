@@ -40,13 +40,6 @@ interface SongConsoleProps {
   songId: string;
 }
 
-// ── Shimmer helper (loading skeleton) ────────────────────────────────────────
-const shimmerStyle: React.CSSProperties = {
-  background:
-    'linear-gradient(90deg, var(--surface) 0px, var(--card-hover) 120px, var(--surface) 240px)',
-  backgroundSize: '480px 100%',
-  animation: 'spcShimmer 1.3s ease infinite',
-};
 
 export function SongConsole({ songId }: SongConsoleProps) {
   const navigate = useNavigate();
@@ -137,7 +130,7 @@ export function SongConsole({ songId }: SongConsoleProps) {
     [song, navigate],
   );
 
-  const onRetry = useCallback(
+  const startReanalysis = useCallback(
     (versionId: string) => {
       reanalyzeMutation.mutate(versionId, {
         onSuccess: (res) => {
@@ -154,6 +147,11 @@ export function SongConsole({ songId }: SongConsoleProps) {
       });
     },
     [song, reanalyzeMutation, navigate],
+  );
+
+  const onRetry = useCallback(
+    (versionId: string) => startReanalysis(versionId),
+    [startReanalysis],
   );
 
   const onMakeCurrent = useCallback(
@@ -168,33 +166,19 @@ export function SongConsole({ songId }: SongConsoleProps) {
   );
 
   const onReanalyze = useCallback(
-    (versionId: string) => {
-      reanalyzeMutation.mutate(versionId, {
-        onSuccess: (res) => {
-          toast.success('Re-analysis started');
-          if (song) {
-            void navigate({
-              to: '/songs/$songId/results/$jobId',
-              params: { songId: song.id, jobId: res.jobId },
-            });
-          }
-        },
-        onError: (err) =>
-          toast.error(err instanceof Error ? err.message : 'Could not start re-analysis'),
-      });
-    },
-    [song, reanalyzeMutation, navigate],
+    (versionId: string) => startReanalysis(versionId),
+    [startReanalysis],
   );
 
   const onEditLabel = useCallback(
-    (versionId: string, label: string) => {
-      patchVersionMutation.mutate(
-        { versionId, label: label.trim() || null },
-        {
-          onError: () => toast.error('Could not update label'),
-        },
-      );
-    },
+    (versionId: string, label: string): Promise<void> =>
+      patchVersionMutation
+        .mutateAsync({ versionId, label: label.trim() || null })
+        .then(() => undefined)
+        .catch((err: unknown) => {
+          toast.error('Could not update label');
+          throw err;
+        }),
     [patchVersionMutation],
   );
 
@@ -221,28 +205,28 @@ export function SongConsole({ songId }: SongConsoleProps) {
     return (
       <div className={styles.page}>
         <div className="card" style={{ padding: 22, display: 'flex', gap: 20, alignItems: 'flex-start' }}>
-          <div style={{ ...shimmerStyle, width: 152, height: 152, borderRadius: 14, flexShrink: 0 }} />
+          <div className={styles.shimmer} style={{ width: 152, height: 152, borderRadius: 14, flexShrink: 0 }} />
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, paddingTop: 6 }}>
-            <div style={{ ...shimmerStyle, width: '54%', height: 30, borderRadius: 8 }} />
-            <div style={{ ...shimmerStyle, width: '78%', height: 16, borderRadius: 6 }} />
-            <div style={{ ...shimmerStyle, width: '38%', height: 16, borderRadius: 6 }} />
+            <div className={styles.shimmer} style={{ width: '54%', height: 30, borderRadius: 8 }} />
+            <div className={styles.shimmer} style={{ width: '78%', height: 16, borderRadius: 6 }} />
+            <div className={styles.shimmer} style={{ width: '38%', height: 16, borderRadius: 6 }} />
           </div>
         </div>
         <div className="card" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{ ...shimmerStyle, width: '30%', height: 14, borderRadius: 6 }} />
-          <div style={{ ...shimmerStyle, width: '100%', height: 56, borderRadius: 10 }} />
-          <div style={{ ...shimmerStyle, width: '100%', height: 56, borderRadius: 10 }} />
+          <div className={styles.shimmer} style={{ width: '30%', height: 14, borderRadius: 6 }} />
+          <div className={styles.shimmer} style={{ width: '100%', height: 56, borderRadius: 10 }} />
+          <div className={styles.shimmer} style={{ width: '100%', height: 56, borderRadius: 10 }} />
         </div>
         <div className="card" style={{ padding: 0 }}>
           <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)' }}>
-            <div style={{ ...shimmerStyle, width: '26%', height: 14, borderRadius: 6 }} />
+            <div className={styles.shimmer} style={{ width: '26%', height: 14, borderRadius: 6 }} />
           </div>
           {[0, 1, 2, 3].map((i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '15px 18px', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ ...shimmerStyle, width: 34, height: 34, borderRadius: 8 }} />
-              <div style={{ ...shimmerStyle, width: '40%', height: 15, borderRadius: 6 }} />
+              <div className={styles.shimmer} style={{ width: 34, height: 34, borderRadius: 8 }} />
+              <div className={styles.shimmer} style={{ width: '40%', height: 15, borderRadius: 6 }} />
               <div style={{ flex: 1 }} />
-              <div style={{ ...shimmerStyle, width: 64, height: 15, borderRadius: 6 }} />
+              <div className={styles.shimmer} style={{ width: 64, height: 15, borderRadius: 6 }} />
             </div>
           ))}
         </div>
@@ -254,7 +238,7 @@ export function SongConsole({ songId }: SongConsoleProps) {
   if (error || !song) {
     return (
       <div className={styles.page}>
-        <div className="card" style={{ padding: '52px 32px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, animation: 'spcUp .4s ease both' }}>
+        <div className={`card ${styles.fadeUp}`} style={{ padding: '52px 32px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
           <div style={{ width: 54, height: 54, borderRadius: '50%', display: 'grid', placeItems: 'center', background: 'var(--red-dim)', border: '1px solid rgba(244,63,94,.24)', color: 'var(--red)', fontSize: 22, marginBottom: 8 }}>!</div>
           <div style={{ fontSize: 19, fontWeight: 700 }}>Song not found</div>
           <div style={{ color: 'var(--muted)', fontSize: 14 }}>This track may have been deleted or moved.</div>
@@ -268,7 +252,7 @@ export function SongConsole({ songId }: SongConsoleProps) {
   if (song.versions.length === 0) {
     return (
       <div className={styles.page}>
-        <div className="card" style={{ padding: '56px 32px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, animation: 'spcUp .4s ease both' }}>
+        <div className={`card ${styles.fadeUp}`} style={{ padding: '56px 32px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
           <div style={{ width: 60, height: 60, borderRadius: 16, display: 'grid', placeItems: 'center', background: 'var(--cyan-dim)', border: '1px solid rgba(0,229,176,.22)', marginBottom: 10, fontSize: 24 }}>◇</div>
           <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-.01em' }}>No versions yet</div>
           <div style={{ color: 'var(--muted)', fontSize: 14, maxWidth: 340, lineHeight: 1.5 }}>

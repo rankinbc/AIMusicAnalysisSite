@@ -28,6 +28,8 @@ interface VersionRowProps {
   /** Job-derived status; defaults to computed from latestResult */
   status?: VStatus;
   progress?: number;
+  /** Show the ◷ plan pill when the version has a saved game plan */
+  hasGamePlan?: boolean;
   /** Editing state managed by parent */
   editing?: boolean;
   editValue?: string;
@@ -46,6 +48,7 @@ export function VersionRow({
   onReport,
   onRetry,
   menu,
+  hasGamePlan = false,
   status,
   progress = 0,
   editing = false,
@@ -125,6 +128,7 @@ export function VersionRow({
               {version.label ?? `Version ${version.versionNumber}`}
             </span>
             {isCurrent && <span className={`pill cyan ${styles.currentVersionPill}`}>current</span>}
+            {hasGamePlan && <span className={`pill cyan ${styles.currentVersionPill}`}>◷ plan</span>}
             {hasPersonal && (
               <span className="pill" style={{ fontSize: '9px', padding: '2px 7px', color: 'var(--violet)', borderColor: 'rgba(167,139,250,.32)', background: 'rgba(167,139,250,.06)' }}>
                 ★ {personalStr}

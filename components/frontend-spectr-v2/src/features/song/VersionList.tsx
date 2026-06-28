@@ -19,7 +19,7 @@ interface VersionListProps {
   onOpenListen: (id: string) => void;
   onViewGamePlan?: (id: string) => void;
   onDelete: (id: string) => void;
-  onEditLabel: (id: string, label: string) => void;
+  onEditLabel: (id: string, label: string) => Promise<void>;
   statusMap?: Record<string, { status: VStatus; progress?: number }>;
   gamePlanIds?: ReadonlySet<string>;
 }
@@ -53,10 +53,14 @@ export function VersionList({
     setEditValue(v.label ?? `Version ${v.versionNumber}`);
   };
   const cancelEdit = () => setEditingId(null);
-  const saveEdit = (v: VersionDto) => {
+  const saveEdit = async (v: VersionDto) => {
     const label = editValue.trim() || `Version ${v.versionNumber}`;
-    onEditLabel(v.id, label);
-    setEditingId(null);
+    try {
+      await onEditLabel(v.id, label);
+      setEditingId(null);
+    } catch {
+      // error toast already fired in onEditLabel; keep edit mode open
+    }
   };
 
   return (
@@ -68,9 +72,10 @@ export function VersionList({
       <div>
         {sorted.map((version, i) => {
           const statusEntry = statusMap?.[version.id];
+          const vHasPlan = gamePlanIds?.has(version.id) ?? false;
           const menu = (
             <VersionRowMenu
-              hasGamePlan={gamePlanIds?.has(version.id) ?? false}
+              hasGamePlan={vHasPlan}
               onMakeCurrent={() => onMakeCurrent(version.id)}
               onEditLabel={() => startEdit(version)}
               onReanalyze={() => onReanalyze(version.id)}
@@ -93,12 +98,13 @@ export function VersionList({
               onReport={() => onReport(version)}
               onRetry={() => onRetry(version.id)}
               menu={menu}
+              hasGamePlan={vHasPlan}
               {...(statusEntry?.status !== undefined ? { status: statusEntry.status } : {})}
               {...(statusEntry?.progress !== undefined ? { progress: statusEntry.progress } : {})}
               editing={editingId === version.id}
               editValue={editingId === version.id ? editValue : ''}
               onEditChange={setEditValue}
-              onEditSave={() => saveEdit(version)}
+              onEditSave={() => { void saveEdit(version); }}
               onEditCancel={cancelEdit}
             />
           );
