@@ -30,6 +30,13 @@ describe('metricDelta', () => {
   it('missing side → em dash, neutral', () => {
     expect(metricDelta(null, 80, score)).toMatchObject({ aStr: '—', tone: 'neutral' });
   });
+  it('target metric: A farther from target than B is bad', () => {
+    expect(metricDelta(-6, -9, lufs).tone).toBe('bad');
+  });
+  it('neutral dir: large gap still neutral (no winner)', () => {
+    const bass = METRICS.find(m => m.key === 'bass')!;
+    expect(metricDelta(90, 50, bass).tone).toBe('neutral');
+  });
 });
 
 describe('personalVerdict', () => {
