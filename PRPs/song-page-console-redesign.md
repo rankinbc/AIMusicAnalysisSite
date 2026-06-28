@@ -7,8 +7,10 @@ clicking a song in the Library)
 `PRPs/design_handoffs/song-page-console/{README.md, SongPageConsole.dc.html}` — reconciled
 into §3.3 / §3.5 / §5 below (inline `ComparePanel`, custom grade-free `ScoreTrendCard`).
 The game-plan view (§3.7) is the one piece NOT in the delivered design — add it during build.
-**Companion build plan:** `song-page-console-redesign-build.md` (to be written via
-writing-plans)
+**Companion build plans (written 2026-06-28):**
+`song-page-console-build-1-bff.md` (BFF: per-version metrics + rating + compare-notes) →
+`song-page-console-build-2-frontend.md` (frontend: port the design into `features/song/`).
+Build BFF first; the frontend degrades gracefully without it.
 
 ---
 
@@ -101,7 +103,10 @@ One scannable vertical column (collapses gracefully on narrow viewports):
   - `Open in Listen ↗` per slot → `/listen-rack/$versionId` for the full DSP rack.
 - **Implementation notes:**
   - Raw audio only — **no DSP graph, no rooms**. Do NOT reuse the heavy
-    `features/listen/useAudioGraph.ts`; use a lightweight WaveSurfer instance per slot.
+    `features/listen/useAudioGraph.ts`. **Native `<audio>` per deck** drives playback; the
+    waveform is the delivered design's decorative bar visual + a `currentTime`-driven playhead
+    (NOT WaveSurfer — it isn't used in the app today; real peaks via `Analysis.waveform_peaks_path`
+    is a future enhancement).
   - Audio source = existing Range-enabled `/api/versions/{id}/audio?t=<jwt>` stream
     (same access pattern the Listen page uses; token via query param because media
     elements can't set headers).
