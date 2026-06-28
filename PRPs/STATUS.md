@@ -4,8 +4,9 @@ Living index of every PRP and what state it's in. Companion to `README.md` (whic
 explains the *system*); this file tracks the *contents*.
 
 **Last reviewed:** 2026-06-27 (housekeeping executed: 5 shipped PRPs archived, 3 story
-headers + identify-solve header reconciled to code-truth)
-**Snapshot:** 73 archived · 18 sprint stories · 37 root `.md` (incl README/STATUS)
+headers + identify-solve header reconciled to code-truth; **2nd pass same day: 7-doc
+results-redesign cluster archived after the redesign landed + verified**)
+**Snapshot:** 80 archived · 18 sprint stories · 30 root `.md` (incl README/STATUS)
 
 Buckets:
 - **REFERENCE** — north-star / contract docs that stay at root permanently
@@ -30,6 +31,16 @@ unreliable; verdicts are code-truth.
 - `schema-contract-prevention-design.md` — lint gate shipped
   (`test_schema_contract_lints.py`); impl partner already archived
   (`2026-06-25_schema-path-lint-gate.md`).
+
+**Archived 2nd pass (results-redesign cluster shipped → `archive/2026-06-27_*`):**
+The redesign landed + verified against `components/frontend-spectr-v2/src/features/results/`
+(7-tab structure live: `TrackInfoTab`/`AnalysisTab`/`FindingsTab`/`ProjectTab`/`CoachTab`/
+`DebugTab` + `SongHeader` + `ResultsPlayer` + `redesign.css`; Plan-tab apply shipped in
+commits `ef816d9`/`21f0903`). Archived together:
+- `analysis-results-page-redesign.md` + `-build.md`
+- `results-redesign-backend-spec.md` + `results-redesign-integration-plan.md`
+- `reference-tab-design.md`
+- `listen-plan-apply-fixes-spec.md` + `-plan.md`
 
 **Status headers reconciled to code-truth:**
 - Stories `2-4`, `2-5`, `1-7`: `review`/`ready-for-dev` → **`done`** (all committed; working
@@ -59,16 +70,11 @@ maintained — no action.
 |---|---|
 | `problem-engine-mixcoach-rules.md` | Engine LIVE on every analysis; **~39 of ~43 IDENTIFY rules implemented** — 30 `@single` (Tier A×18, B×4, S×2, P×4) + 9 `@composite` in `verdict_lib/`. Remaining: a few datapoint-gated rules + **retire the legacy flat `@rule` registry** (the one named follow-on left in the IDENTIFY/SOLVE arc). |
 | `reference-profiles-backend.md` | Persistence fields exist (`ReferenceSet.profile_json/fingerprint`, `ReferenceTrack.analysis_status`); aggregation + endpoints incomplete. |
-| `listen-v3-bookmark-ui.md` | Backend done (`BookmarkEndpoints.cs`); frontend **not started** — no `BookmarksPanel.tsx` yet. |
+| `listen-v3-bookmark-ui.md` | Backend done (`BookmarkEndpoints.cs`); frontend **partial** — hooks shipped (`features/listen/useBookmarks.ts`, `useBookmarkSignal.ts`) but the **`BookmarksPanel.tsx` rail + timeline markers are unbuilt** (verified 2026-06-27). |
 
-### Results-redesign cluster (build front as of 2026-06-26/27)
-These root docs drove the in-flight results-page redesign + listen Plan-tab apply
-work (see recent commits `ef816d9`, `21f0903`). Treat as IN-PROGRESS until the
-redesign lands and is verified, then archive together:
-`analysis-results-page-redesign.md` · `analysis-results-page-redesign-build.md` ·
-`results-redesign-backend-spec.md` · `results-redesign-integration-plan.md` ·
-`reference-tab-design.md` · `listen-plan-apply-fixes-spec.md` ·
-`listen-plan-apply-fixes-plan.md`.
+### Results-redesign cluster — SHIPPED + ARCHIVED (2026-06-27)
+Redesign landed and verified against code; all 7 docs moved to `archive/2026-06-27_*`
+(see "Changes this review"). No longer a build front.
 
 ### Reference doc kept at root
 | File | Note |
