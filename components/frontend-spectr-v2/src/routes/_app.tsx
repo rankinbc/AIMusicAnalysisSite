@@ -12,6 +12,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useEntitlements } from '../api/hooks';
 import { AppDunningNotice } from '../features/billing/AppDunningNotice';
 import { AppWorkerHealthNotice } from '../features/health/AppWorkerHealthNotice';
+import { NotificationBell } from '../features/notifications/NotificationCenter';
 import { BrandMark } from '../ui/BrandMark';
 import { UsageMeter } from '../components/UsageMeter';
 import s from './_app/_appLayout.module.css';
@@ -112,27 +113,8 @@ function AppLayout() {
             <input placeholder="Search your tracks, notes, fixes…" />
             <span className={s.navSearchKbd}>⌘K</span>
           </div>
-          <button
-            type="button"
-            className={s.navIconBtn}
-            title="Notifications"
-            aria-label="Notifications"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path
-                d="M3 6a4 4 0 1 1 8 0v3l1 1H2l1-1V6z"
-                stroke="currentColor"
-                strokeWidth="1.3"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M5 11a2 2 0 0 0 4 0"
-                stroke="currentColor"
-                strokeWidth="1.3"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
+          {/* Story 11.7 — live bell (was a decorative placeholder). */}
+          <NotificationBell className={s.navIconBtn} />
           <Link to="/library" className="btn primary sm">
             + Upload
           </Link>
