@@ -281,6 +281,10 @@ app.UseAuthorization();
 app.UseAnonIdentity();
 
 // ── Routes ─────────────────────────────────────────────────────────────────────
+// Story 7.2 — root-level (non-/api) crawler OG shell for /r/{token}; nginx
+// routes bot user-agents here, humans get the SPA.
+app.MapOgShareEndpoints();
+
 var api = app.MapGroup("/api");
 
 api.MapAuthEndpoints();
