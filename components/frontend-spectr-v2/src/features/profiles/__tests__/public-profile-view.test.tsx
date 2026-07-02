@@ -47,6 +47,26 @@ describe('PublicProfileView (story 11.8)', () => {
       .not.toContain('data-testid="edit-profile"');
   });
 
+  it('renders follow counts and gates the button (story 11.9)', () => {
+    const follow = { followers: 12, following: 3, isFollowing: false, canFollow: true };
+    const withButton = renderToStaticMarkup(<PublicProfileView profile={profile()} follow={follow} />);
+    expect(withButton).toContain('data-testid="follow-counts"');
+    expect(withButton).toContain('12');
+    expect(withButton).toContain('+ Follow');
+
+    const following = renderToStaticMarkup(
+      <PublicProfileView profile={profile()} follow={{ ...follow, isFollowing: true }} />,
+    );
+    expect(following).toContain('Following ✓');
+
+    // No self-follow / logged-out: counts render, button hides (AC3/AC4).
+    const noButton = renderToStaticMarkup(
+      <PublicProfileView profile={profile()} follow={{ ...follow, canFollow: false }} />,
+    );
+    expect(noButton).toContain('data-testid="follow-counts"');
+    expect(noButton).not.toContain('data-testid="follow-button"');
+  });
+
   it('renders the empty state when nothing is public', () => {
     const html = renderToStaticMarkup(
       <PublicProfileView profile={profile({ publicVersions: [], bio: null, publicLink: null, displayName: null })} />,

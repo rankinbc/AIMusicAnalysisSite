@@ -1239,6 +1239,29 @@ class Notification(Base):
     )
 
 
+class FollowRelation(Base):
+    # Story 11.9 — mirror of the BFF's EF FollowRelation (canonical:
+    # FollowRelation.cs + migration AddFollowRelations). Unique (follower,
+    # followee) pair = idempotent Follow; CHECK rejects self-follows.
+    __tablename__ = "follow_relations"
+    __table_args__ = (
+        UniqueConstraint("follower_id", "followee_id", name="ux_follow_relations_pair"),
+        Index("ix_follow_relations_followee", "followee_id"),
+        CheckConstraint("follower_id <> followee_id", name="ck_follow_relations_no_self"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    follower_id: Mapped[uuid.UUID] = mapped_column(
+        "follower_id", UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    followee_id: Mapped[uuid.UUID] = mapped_column(
+        "followee_id", UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 __all__ = [
     "Base",
     "JOB_STATUS_PENDING",
@@ -1265,4 +1288,5 @@ __all__ = [
     "TrackComment",
     "TrackBookmark",
     "Notification",
+    "FollowRelation",
 ]

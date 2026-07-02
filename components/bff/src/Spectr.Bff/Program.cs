@@ -302,6 +302,7 @@ api.MapShareEndpoints();
 api.MapBookmarkEndpoints();
 api.MapNotificationEndpoints();
 api.MapProfileEndpoints();   // story 11.8 — /api/u/{handle} public profile
+api.MapFollowEndpoints();    // story 11.9 — /api/u/{handle}/follow
 api.MapFileEndpoints();
 api.MapCoachEndpoints();
 api.MapCoachConversationEndpoints();

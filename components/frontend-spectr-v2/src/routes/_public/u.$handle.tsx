@@ -7,6 +7,7 @@ import {
   PublicProfileView,
   type PublicProfile,
 } from '../../features/profiles/PublicProfileView';
+import { useFollow, useFollowState, useUnfollow } from '../../features/profiles/useFollow';
 
 // Story 11.8 — public profile at /u/{handle}. Unauthenticated read; the
 // owner (matched by handle via /auth/me) gets the Edit-profile affordance.
@@ -28,7 +29,11 @@ function PublicProfileRoute() {
   const { handle } = Route.useParams();
   const { data, isLoading, error } = usePublicProfile(handle);
   // Owner detection only matters when a session exists.
-  const { data: me } = useMe(Boolean(getAccessToken()));
+  const authed = Boolean(getAccessToken());
+  const { data: me } = useMe(authed);
+  const { data: followState } = useFollowState(handle);
+  const followMut = useFollow(handle);
+  const unfollowMut = useUnfollow(handle);
 
   if (isLoading) {
     return (
@@ -49,5 +54,23 @@ function PublicProfileRoute() {
   }
 
   const isOwner = Boolean(me?.handle && me.handle.toLowerCase() === data.handle.toLowerCase());
-  return <PublicProfileView profile={data} isOwner={isOwner} />;
+  return (
+    <PublicProfileView
+      profile={data}
+      isOwner={isOwner}
+      {...(followState
+        ? {
+            follow: {
+              followers: followState.followers,
+              following: followState.following,
+              isFollowing: followState.isFollowing,
+              canFollow: authed && !followState.isSelf,
+              pending: followMut.isPending || unfollowMut.isPending,
+              onToggle: () =>
+                followState.isFollowing ? unfollowMut.mutate() : followMut.mutate(),
+            },
+          }
+        : {})}
+    />
+  );
 }

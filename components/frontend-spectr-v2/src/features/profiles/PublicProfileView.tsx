@@ -19,12 +19,25 @@ export interface PublicProfile {
   }[];
 }
 
+// Story 11.9 — follow surface: counts always render; the button hides for
+// the owner (no self-follow) and for logged-out visitors.
+export interface FollowSurface {
+  followers: number;
+  following: number;
+  isFollowing: boolean;
+  canFollow: boolean; // authed AND not self
+  onToggle?: () => void;
+  pending?: boolean;
+}
+
 export function PublicProfileView({
   profile,
   isOwner,
+  follow,
 }: {
   profile: PublicProfile;
   isOwner?: boolean;
+  follow?: FollowSurface;
 }) {
   const avatarHue = profile.avatarHue ?? 168;
   const bannerHue = profile.bannerHue ?? avatarHue;
@@ -54,12 +67,30 @@ export function PublicProfileView({
           <h1 style={{ margin: 0, fontSize: 24 }}>{profile.displayName ?? `@${profile.handle}`}</h1>
           <p className="mono" style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--muted)' }}>
             @{profile.handle}
+            {follow && (
+              <span data-testid="follow-counts">
+                {' · '}
+                <strong>{follow.followers}</strong> followers · <strong>{follow.following}</strong> following
+              </span>
+            )}
           </p>
         </div>
         {isOwner && (
           <a href="/profile" className="btn sm ghost" data-testid="edit-profile" style={{ marginBottom: 6 }}>
             Edit profile
           </a>
+        )}
+        {follow?.canFollow && (
+          <button
+            type="button"
+            className={`btn sm ${follow.isFollowing ? 'ghost' : 'primary'}`}
+            data-testid="follow-button"
+            disabled={follow.pending}
+            onClick={follow.onToggle}
+            style={{ marginBottom: 6 }}
+          >
+            {follow.isFollowing ? 'Following ✓' : '+ Follow'}
+          </button>
         )}
       </header>
 
