@@ -385,23 +385,46 @@ public static class FeedbackEndpoints
         return Results.Ok(await LoadComments(db, hit.Value.VersionId, ct));
     }
 
+    // Story 11.4 (AC3): anon token-route writes are rate-limited on BOTH the
+    // durable actor key and the ip (the ip arm is the real ceiling — anonId is
+    // cheap to rotate). 10 writes/min matches the IRateLimiter design note.
+    private static async Task<IResult?> CheckAnonWriteLimit(
+        IRateLimiter limiter, HttpContext http, Guid? userId, string? anonId,
+        string action, CancellationToken ct)
+    {
+        var actorKey = userId is Guid u ? $"user:{u}" : $"anon:{anonId ?? "unknown"}";
+        var ip = http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var res = await limiter.CheckAsync(actorKey, ip, action, limit: 10, TimeSpan.FromMinutes(1), ct);
+        return res.Allowed
+            ? null
+            : ErrorEnvelope.Build(429, "rate_limited",
+                "Too many submissions — try again shortly.",
+                new { retryAfterSeconds = (int)res.RetryAfter.TotalSeconds });
+    }
+
     private static async Task<IResult> PostCommentAnon(
         string token, PostCommentRequest body, ClaimsPrincipal user, ResourceTokenAuth tokenAuth,
-        AccessService access, AppDbContext db, INotificationSink notif, CancellationToken ct)
+        AccessService access, AppDbContext db, INotificationSink notif, IRateLimiter limiter,
+        HttpContext http, CancellationToken ct)
     {
         var hit = await ResolveAnonAsync(token, user, tokenAuth, access, ct);
         if (hit is null) return Results.NotFound();
         var (versionId, userId, anonId, acc) = hit.Value;
+        if (await CheckAnonWriteLimit(limiter, http, userId, anonId, "anon_comment", ct) is IResult denied)
+            return denied;
         return await InsertComment(db, notif, versionId, acc, userId, anonId, body, ct);
     }
 
     private static async Task<IResult> PostSuggestionAnon(
         string token, CreateSuggestionRequest body, ClaimsPrincipal user, ResourceTokenAuth tokenAuth,
-        AccessService access, RoomBus bus, AppDbContext db, INotificationSink notif, CancellationToken ct)
+        AccessService access, RoomBus bus, AppDbContext db, INotificationSink notif, IRateLimiter limiter,
+        HttpContext http, CancellationToken ct)
     {
         var hit = await ResolveAnonAsync(token, user, tokenAuth, access, ct);
         if (hit is null) return Results.NotFound();
         var (versionId, userId, anonId, acc) = hit.Value;
+        if (await CheckAnonWriteLimit(limiter, http, userId, anonId, "anon_suggestion", ct) is IResult denied)
+            return denied;
         return await InsertSuggestion(db, notif, access, bus, versionId, acc, userId, anonId, body, ct);
     }
 }
