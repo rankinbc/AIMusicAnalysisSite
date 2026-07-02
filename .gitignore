@@ -83,6 +83,8 @@ components/frontend/dist/
 
 # Frontend caches
 components/frontend/.cache/
+components/frontend-spectr/.cache/
+components/frontend-spectr-v2/.cache/
 
 # API cache
 components/api/.cache/
@@ -113,6 +115,7 @@ components/data/
 # run logs / generated analysis outputs
 *.log.err
 data/output/
+data/analysis/
 
 # TanStack Router generated cache
 **/.tanstack/
