@@ -118,9 +118,14 @@ def install_fake_sessions(monkeypatch, tmp_path):
                 return _begin()
 
         # Force the lazy import to resolve, then swap the symbol the helper
-        # will read on its next invocation.
-        import app.db_sync as db_sync  # noqa: PLC0415
-        monkeypatch.setattr(db_sync, "SessionFactory", _Factory())
+        # will read on its next invocation. NOTE: patch the sys.modules entry,
+        # not `import app.db_sync as db_sync` — the as-import resolves via the
+        # `app` package ATTRIBUTE, which can diverge from sys.modules when an
+        # earlier test's fixture re-imported db_sync (the helper's lazy
+        # `from app.db_sync import ...` reads sys.modules).
+        import sys as _sys  # noqa: PLC0415
+        import app.db_sync  # noqa: F401, PLC0415
+        monkeypatch.setattr(_sys.modules["app.db_sync"], "SessionFactory", _Factory())
         return session
 
     return _install

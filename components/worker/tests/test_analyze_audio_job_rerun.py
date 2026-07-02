@@ -43,8 +43,18 @@ def sqlite_db(monkeypatch, tmp_path: Path):
     Base.metadata.create_all(db_sync.engine)
     yield db_sync
 
+    # ALWAYS evict the sqlite-bound module AND fix up the `app` package
+    # attribute — `import app.db_sync as x` resolves via the attribute while
+    # `from app.db_sync import y` resolves via sys.modules; restoring only one
+    # leaves two diverging module objects and poisons every later db_sync test
+    # (the full-suite-only failures in test_degraded_path/test_identifiers).
+    import app  # noqa: PLC0415
+    sys.modules.pop("app.db_sync", None)
     if saved is not None:
         sys.modules["app.db_sync"] = saved
+        app.db_sync = saved
+    elif hasattr(app, "db_sync"):
+        del app.db_sync
 
 
 def _utcnow() -> datetime:
