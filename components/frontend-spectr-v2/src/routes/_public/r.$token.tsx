@@ -17,6 +17,17 @@ import s from './r.module.css';
 // against /api/share/{token}/audio (Range-friendly) plus a comments thread
 // with optional timestamp pins.
 
+// Story 7.1 — the share endpoint's projected verdict shape (snake_case, user
+// state pre-stripped server-side).
+interface ShareVerdict {
+  id: string;
+  severity: string | null;
+  headline: string | null;
+  summary: string | null;
+  metric_line: string | null;
+  evidence: { metric?: string; label?: string; value?: unknown }[] | null;
+}
+
 export const Route = createFileRoute('/_public/r/$token')({
   component: SharedReviewerPage,
 });
@@ -56,6 +67,14 @@ function SharedReviewerPage() {
     const p = fj.phases?.find((x) => x.phase === 1);
     return p?.data as Phase1Data | undefined;
   }, [fj]);
+
+  // Story 7.1 (AC2) — top 3 verdicts with evidence chips, present only when
+  // the owner enabled show_verdicts. The payload is the server-projected
+  // shape from ShareEndpoints (snake_case fields, user state pre-stripped).
+  const topVerdicts = useMemo(() => {
+    if (!Array.isArray(data?.verdicts)) return [];
+    return (data.verdicts as ShareVerdict[]).slice(0, 3);
+  }, [data]);
 
   if (isLoading) {
     return (
@@ -147,6 +166,37 @@ function SharedReviewerPage() {
           )}
         </div>
       </section>
+
+      {topVerdicts.length > 0 && (
+        <section className={`card ${s.commentsCard}`}>
+          <h2 className={s.sectionTitle}>Top signals</h2>
+          <ul className={s.commentList}>
+            {topVerdicts.map((v) => (
+              <li key={v.id} className={s.commentRow}>
+                <span className={`mono ${s.commentMeta}`}>
+                  {(v.severity ?? 'note').toUpperCase()}
+                  {v.metric_line ? ` · ${v.metric_line}` : ''}
+                </span>
+                <p className={s.commentBodyText}>
+                  <strong>{v.headline ?? 'Verdict'}</strong>
+                  {v.summary ? ` — ${v.summary}` : ''}
+                </p>
+                {Array.isArray(v.evidence) && v.evidence.length > 0 && (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                    {v.evidence.slice(0, 4).map((e, i) => (
+                      <Pill key={i}>
+                        <span className="mono">
+                          {e.label ?? e.metric ?? String(e.value ?? '')}
+                        </span>
+                      </Pill>
+                    ))}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className={`card ${s.commentsCard}`}>
         <h2 className={s.sectionTitle}>Comments</h2>

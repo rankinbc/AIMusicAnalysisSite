@@ -131,8 +131,8 @@ development_status:
   6-5-funnel-instrumentation: backlog
   epic-6-retrospective: optional
 
-  epic-7: backlog
-  7-1-share-link-and-read-only-public-report: backlog
+  epic-7: in-progress  # release-plan social phase (2026-07-02)
+  7-1-share-link-and-read-only-public-report: review  # 2026-07-02: gaps closed — ShareReportProjection default-deny allowlist (+poisoned-payload test), regenerate endpoint, top-3 verdicts on /r page; most of the surface pre-existed from Listen-V3
   7-2-og-share-shell: backlog
   7-3-share-revocation: backlog
   7-4-share-cta-and-attribution: backlog
