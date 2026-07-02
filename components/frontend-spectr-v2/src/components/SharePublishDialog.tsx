@@ -2,7 +2,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-import { useCreateShare, usePatchShare, useRevokeShare } from '../api/hooks';
+import { useCreateShare, usePatchShare, useRegenerateShare, useRevokeShare } from '../api/hooks';
 import f from '../styles/forms.module.css';
 
 interface Props {
@@ -22,6 +22,7 @@ export function SharePublishDialog({ open, onOpenChange, analysisId, songName }:
   const create = useCreateShare(analysisId);
   const patch = usePatchShare(analysisId);
   const revoke = useRevokeShare(analysisId);
+  const regenerate = useRegenerateShare(analysisId);
 
   const [token, setToken] = useState<string | null>(null);
   const [showVerdicts, setShowVerdicts] = useState(true);
@@ -102,6 +103,26 @@ export function SharePublishDialog({ open, onOpenChange, analysisId, songName }:
             <p className={f.dialogDescription}>Generating link…</p>
           ) : token ? (
             <>
+              {/* Story 7.3 (UX-DR42) — glyph + one-line scope statement of
+                  EXACTLY what a share exposes (and what it never does). */}
+              <p
+                className="mono"
+                data-testid="share-scope"
+                style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 11,
+                  lineHeight: 1.5, color: 'var(--text-2)', padding: '8px 10px',
+                  borderRadius: 8, background: 'rgba(0, 229, 176, 0.06)',
+                  border: '1px solid rgba(0, 229, 176, 0.25)', margin: '0 0 12px',
+                }}
+              >
+                <span aria-hidden>🌐</span>
+                <span>
+                  Public link — anyone with it can play the track and see the grade,
+                  score{showVerdicts ? ', top signals' : ''} and comments. Your project
+                  file, stems and library stay private.
+                </span>
+              </p>
+
               <label className={f.label}>
                 Public link
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -142,7 +163,25 @@ export function SharePublishDialog({ open, onOpenChange, analysisId, songName }:
                   className={f.button}
                   style={{ color: 'var(--red)' }}
                 >
-                  {revoke.isPending ? 'Revoking…' : 'Revoke link'}
+                  {revoke.isPending ? 'Revoking…' : '🔒 Revoke link'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    regenerate.mutate(undefined, {
+                      onSuccess: (res) => {
+                        setToken(res.shareToken);
+                        toast.success('New link created — the old one is dead');
+                      },
+                      onError: (err) =>
+                        toast.error(err instanceof Error ? err.message : 'Could not regenerate'),
+                    })
+                  }
+                  disabled={regenerate.isPending}
+                  className={f.button}
+                  title="Mint a fresh link; the current one stops working immediately"
+                >
+                  {regenerate.isPending ? 'Regenerating…' : '↻ Regenerate'}
                 </button>
                 <Dialog.Close asChild>
                   <button type="button" className={f.button}>

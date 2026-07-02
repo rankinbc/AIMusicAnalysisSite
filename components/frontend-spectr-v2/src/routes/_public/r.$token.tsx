@@ -264,6 +264,26 @@ function SharedReviewerPage() {
         </ul>
       </section>
 
+      {/* Story 7.4 (FR24/UX-DR35) — the viral-loop CTA. Sticky on mobile with
+          a ≥40px target. Attribution: the `via` param rides to signup and is
+          stashed so the funnel survives navigation; full share→visit→analysis
+          →signup event recording lands with Epic 6 instrumentation (6.5). */}
+      <div className={s.ctaWrap}>
+        <a
+          className={s.cta}
+          href={`/register?via=share_${token}`}
+          onClick={() => {
+            try {
+              localStorage.setItem('spectr_attribution', `share_${token}`);
+            } catch {
+              /* storage blocked — the URL param still carries it */
+            }
+          }}
+        >
+          Analyze your own track free →
+        </a>
+      </div>
+
       {duration > 0 && null /* preserve duration for future scrubber */}
     </div>
   );

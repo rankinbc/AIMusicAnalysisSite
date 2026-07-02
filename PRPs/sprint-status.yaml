@@ -133,9 +133,9 @@ development_status:
 
   epic-7: in-progress  # release-plan social phase (2026-07-02)
   7-1-share-link-and-read-only-public-report: review  # 2026-07-02: gaps closed — ShareReportProjection default-deny allowlist (+poisoned-payload test), regenerate endpoint, top-3 verdicts on /r page; most of the surface pre-existed from Listen-V3
-  7-2-og-share-shell: backlog
-  7-3-share-revocation: backlog
-  7-4-share-cta-and-attribution: backlog
+  7-2-og-share-shell: review  # 2026-07-02: root /r/{token} OG shell (grade/verdict meta, noindex, inline projection, branded og-share.png) + nginx bot-vs-human split; 2 tests
+  7-3-share-revocation: review  # 2026-07-02: scope banner (UX-DR42 globe/lock glyphs + exact-exposure copy) + regenerate UI; revoke/gone-page pre-existed (7.1/7.2); 2 jsdom tests
+  7-4-share-cta-and-attribution: review  # 2026-07-02: sticky mobile CTA (44px) + via=share_{token} attribution carry/stash; event recording deferred to 6.5, presigned playback mechanics to 3.3 (scoping property already holds via token-gated stream)
   epic-7-retrospective: optional
 
   epic-8: backlog
@@ -168,12 +168,12 @@ development_status:
   11-1-threaded-timestamped-comments-panel: done  # implemented + code-reviewed 2026-06-28: rail CommentsPanel -> real useComments (threaded/moderated) + comment-tree helper; 2 review patches applied (Enter-guard, loading state); gates green, vitest 572
   11-2-reviewer-rack-suggestions-and-accept-to-preset: done  # code-reviewed 2026-06-28: 1 patch (rejected-state render test); audition deferred; gates green, vitest 590
   11-3-bookmarks-rail-and-owner-heat-signal: done  # code-reviewed 2026-06-28: 4 patches (note-edit double-save/Escape-cancel, aria-hidden markers, IME guard, NaN-t guard); 4 defers logged; gates green, vitest 590
-  11-4-anonymous-reviewer-surface-on-share-token: backlog  # dep 11-1/11-2/11-3
+  11-4-anonymous-reviewer-surface-on-share-token: review  # 2026-07-02: /v/{token} feedback UI (token-scoped comments thread + post, bookmark-moment, gate-mirrored) + anon write rate-limit wiring (10/min dual-arm); 7 gating-matrix tests
   11-5-live-room-replace-mocks-with-sse-orchestration: review  # implemented 2026-07-02: roomStateReducer (snapshot+delta, 10 tests) + useRoomOrchestration adapter (session/stream/actions) + page roomLive seam + VITE_ROOM_LIVE_SSE flagged route cutover; gates green vitest 611; remote rack/visuals application deferred (noted in story)
   11-6-notifications-backend-table-sink-and-endpoints: review  # implemented 2026-07-02: notifications table (partial-unique digest_key) + TableNotificationSink (DI-swapped) + MentionParser + bookmark digest + /me/notifications endpoints; 11 tests; python mirror; gates green
   11-7-notification-center-bell-and-inbox: review  # implemented 2026-07-02: NotificationBell (30s unread poll) + paged inbox dropdown, digest-vs-event rendering, deep-link + mark-read, mark-all-read; 10 static-render tests; gates green vitest 621
-  11-8-public-profiles: backlog  # greenfield social graph
-  11-9-follow-graph: backlog  # dep 11-8
+  11-8-public-profiles: review  # 2026-07-02: GET /api/u/{handle} (anon, ip-rate-limited, public-visibility-only) + /u/{handle} page (hue theming, owner edit affordance, 404); 2 BFF + 4 static tests; no migration (profile fields pre-existed)
+  11-9-follow-graph: review  # 2026-07-02: FollowRelation (unique pair + no-self CHECK, migration, python mirror) + /api/u/{handle}/follow GET/PUT/DELETE (idempotent, rate-limited) + profile counts/button; 2 BFF + frontend tests
   11-10-activity-feed: backlog  # dep 11-9
   11-11-discovery-entry-points: backlog  # dep 11-1/11-7/11-8/11-9
   epic-11-retrospective: optional

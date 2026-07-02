@@ -7,6 +7,41 @@
   gap: 20px;
 }
 
+/* Story 7.4 (FR24/UX-DR35) — conversion CTA. Inline card on desktop; on
+   mobile it goes sticky at the bottom with a ≥40px touch target. */
+.cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 12px 18px;
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, var(--accent-bright), var(--cyan));
+  color: var(--ink-on-accent);
+  font-weight: 700;
+  font-size: 14px;
+  text-decoration: none;
+  box-shadow: 0 0 0 1px rgba(0, 229, 176, 0.45);
+}
+.cta:hover {
+  filter: brightness(1.06);
+}
+
+@media (max-width: 640px) {
+  .ctaWrap {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, transparent, rgba(7, 10, 18, 0.92) 30%);
+    z-index: 40;
+  }
+  .page {
+    padding-bottom: 120px; /* keep content clear of the sticky CTA */
+  }
+}
+
 .header {
   display: flex;
   align-items: flex-start;

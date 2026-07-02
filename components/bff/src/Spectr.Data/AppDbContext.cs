@@ -82,6 +82,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     // Notifications inbox (story 11.6)
     public DbSet<Notification> Notifications => Set<Notification>();
 
+    // Follow graph (story 11.9)
+    public DbSet<FollowRelation> FollowRelations => Set<FollowRelation>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         builder.HasPostgresExtension("pgcrypto");      // gen_random_uuid()
@@ -214,6 +217,22 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             .HasDatabaseName("ix_notifications_recipient_updated");
         builder.Entity<Notification>()
             .HasOne<User>().WithMany().HasForeignKey(n => n.RecipientUserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Follow graph (story 11.9): idempotent Follow via the unique pair;
+        // followee index serves follower-count + feed fan-in reads; CHECK
+        // rejects self-follows at the storage layer too.
+        builder.Entity<FollowRelation>().HasIndex(f => new { f.FollowerId, f.FolloweeId })
+            .IsUnique().HasDatabaseName("ux_follow_relations_pair");
+        builder.Entity<FollowRelation>().HasIndex(f => f.FolloweeId)
+            .HasDatabaseName("ix_follow_relations_followee");
+        builder.Entity<FollowRelation>().ToTable(t => t.HasCheckConstraint(
+            "ck_follow_relations_no_self", "follower_id <> followee_id"));
+        builder.Entity<FollowRelation>()
+            .HasOne<User>().WithMany().HasForeignKey(f => f.FollowerId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<FollowRelation>()
+            .HasOne<User>().WithMany().HasForeignKey(f => f.FolloweeId)
             .OnDelete(DeleteBehavior.Cascade);
 
         // Indexes for hot read paths
