@@ -834,6 +834,20 @@ export function useRevokeShare(analysisId: string) {
   });
 }
 
+// Story 7.3 (AR28) — regenerate mints a fresh token; the old link is dead
+// the moment this resolves.
+export function useRegenerateShare(analysisId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      fetcher<CreateShareResponse>({
+        url: `/analyses/${analysisId}/share/regenerate`,
+        method: 'POST',
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['analyses', analysisId] }),
+  });
+}
+
 // ── Share (public-side, no auth) ────────────────────────────────────────────
 export function useSharedAnalysis(token: string) {
   return useQuery<SharedAnalysisDto>({

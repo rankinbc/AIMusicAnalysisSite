@@ -134,7 +134,7 @@ development_status:
   epic-7: in-progress  # release-plan social phase (2026-07-02)
   7-1-share-link-and-read-only-public-report: review  # 2026-07-02: gaps closed — ShareReportProjection default-deny allowlist (+poisoned-payload test), regenerate endpoint, top-3 verdicts on /r page; most of the surface pre-existed from Listen-V3
   7-2-og-share-shell: review  # 2026-07-02: root /r/{token} OG shell (grade/verdict meta, noindex, inline projection, branded og-share.png) + nginx bot-vs-human split; 2 tests
-  7-3-share-revocation: backlog
+  7-3-share-revocation: review  # 2026-07-02: scope banner (UX-DR42 globe/lock glyphs + exact-exposure copy) + regenerate UI; revoke/gone-page pre-existed (7.1/7.2); 2 jsdom tests
   7-4-share-cta-and-attribution: backlog
   epic-7-retrospective: optional
 
