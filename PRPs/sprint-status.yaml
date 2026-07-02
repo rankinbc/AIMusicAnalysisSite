@@ -172,7 +172,7 @@ development_status:
   11-5-live-room-replace-mocks-with-sse-orchestration: review  # implemented 2026-07-02: roomStateReducer (snapshot+delta, 10 tests) + useRoomOrchestration adapter (session/stream/actions) + page roomLive seam + VITE_ROOM_LIVE_SSE flagged route cutover; gates green vitest 611; remote rack/visuals application deferred (noted in story)
   11-6-notifications-backend-table-sink-and-endpoints: review  # implemented 2026-07-02: notifications table (partial-unique digest_key) + TableNotificationSink (DI-swapped) + MentionParser + bookmark digest + /me/notifications endpoints; 11 tests; python mirror; gates green
   11-7-notification-center-bell-and-inbox: review  # implemented 2026-07-02: NotificationBell (30s unread poll) + paged inbox dropdown, digest-vs-event rendering, deep-link + mark-read, mark-all-read; 10 static-render tests; gates green vitest 621
-  11-8-public-profiles: backlog  # greenfield social graph
+  11-8-public-profiles: review  # 2026-07-02: GET /api/u/{handle} (anon, ip-rate-limited, public-visibility-only) + /u/{handle} page (hue theming, owner edit affordance, 404); 2 BFF + 4 static tests; no migration (profile fields pre-existed)
   11-9-follow-graph: backlog  # dep 11-8
   11-10-activity-feed: backlog  # dep 11-9
   11-11-discovery-entry-points: backlog  # dep 11-1/11-7/11-8/11-9
