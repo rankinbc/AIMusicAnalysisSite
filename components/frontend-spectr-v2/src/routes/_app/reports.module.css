@@ -60,7 +60,7 @@
 }
 
 .error {
-  color: var(--red, #f87171);
+  color: var(--red);
   font-size: 14px;
 }
 

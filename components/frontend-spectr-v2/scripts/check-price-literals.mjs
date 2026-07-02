@@ -17,8 +17,13 @@ const TARGETS = [
     root: FRONTEND_ROOT,
     exts: [".ts", ".tsx"],
     // Exempt exactly src/config/** (relative to the scan root) — not any
-    // directory that happens to be named "config".
-    allow: (p) => relative(FRONTEND_ROOT, p).split(sep)[0] === "config",
+    // directory that happens to be named "config" — plus test files: tests
+    // ASSERT the config-driven rendering ("$12.99/mo"), they don't source
+    // prices, so flagging them would forbid exactly the coverage we want.
+    allow: (p) =>
+      relative(FRONTEND_ROOT, p).split(sep)[0] === "config" ||
+      /\.test\.(ts|tsx)$/.test(p) ||
+      p.split(sep).includes("__tests__"),
   },
   {
     root: BFF_ROOT,

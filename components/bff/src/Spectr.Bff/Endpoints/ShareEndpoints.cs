@@ -18,6 +18,7 @@ public static class ShareEndpoints
         var owner = app.MapGroup("/analyses/{analysisId:guid}/share")
             .WithTags("share").RequireAuthorization();
         owner.MapPost("/", CreateShare);
+        owner.MapPost("/regenerate", RegenerateShare); // story 7.1 AC1 — old token dies
         owner.MapPatch("/", PatchShare);
         owner.MapDelete("/", RevokeShare);
 
@@ -52,6 +53,31 @@ public static class ShareEndpoints
             analysis.ShareToken = GenerateToken();
             analysis.ShareEnabledAt = DateTimeOffset.UtcNow;
         }
+        await db.SaveChangesAsync(ct);
+
+        return Results.Ok(new CreateShareResponse(
+            analysis.ShareToken!,
+            analysis.ShareShowVerdicts,
+            analysis.ShareEnabledAt ?? DateTimeOffset.UtcNow,
+            $"/r/{analysis.ShareToken}"));
+    }
+
+    // Story 7.1 AC1 — regenerate: mint a fresh token; the previous one is
+    // immediately dead (single ShareToken column — there is no grace period,
+    // which is exactly the AR28 contract "the old token stays dead").
+    private static async Task<IResult> RegenerateShare(
+        Guid analysisId,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        var analysis = await db.Analyses
+            .FirstOrDefaultAsync(a => a.Id == analysisId && a.UserId == userId, ct);
+        if (analysis is null) return Results.NotFound();
+
+        analysis.ShareToken = GenerateToken();
+        analysis.ShareEnabledAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
 
         return Results.Ok(new CreateShareResponse(
@@ -143,8 +169,10 @@ public static class ShareEndpoints
             verdictsJson = JsonDocument.Parse(JsonSerializer.Serialize(arr)).RootElement.Clone();
         }
 
-        var finalJson = ParseJson(hit.a.FinalJson)
-            ?? JsonDocument.Parse("{}").RootElement.Clone();
+        // Story 7.1 (FR22/AC3): the PUBLIC payload is the default-deny
+        // allowlist projection — never the raw final_json (.als internals,
+        // stem paths and upload keys must not reach strangers).
+        var finalJson = ShareReportProjection.Build(ParseJson(hit.a.FinalJson));
 
         return Results.Ok(new SharedAnalysisDto(
             token,

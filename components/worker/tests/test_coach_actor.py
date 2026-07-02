@@ -86,9 +86,15 @@ def sqlite_db(monkeypatch, tmp_path: Path):
 
     yield db_sync
 
+    # Restore BOTH sys.modules and the `app` package attribute — they must not
+    # diverge (as-imports read the attribute; from-imports read sys.modules).
+    import app  # noqa: PLC0415
     sys.modules.pop("app.db_sync", None)
     if saved is not None:
         sys.modules["app.db_sync"] = saved
+        app.db_sync = saved
+    elif hasattr(app, "db_sync"):
+        del app.db_sync
 
 
 def _seed_analysis(s, *, final_json=None, degradation_notice=None):

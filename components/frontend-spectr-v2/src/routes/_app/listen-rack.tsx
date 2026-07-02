@@ -12,10 +12,12 @@ import { useMockRoomOrchestration } from '../../features/listen-rack/useMockRoom
  * when the child is active (same pattern as songs.$songId.tsx); otherwise it
  * renders the demo.
  *
- * Mode + identity + room-control come from useMockRoomOrchestration (all mocked;
- * later GET /access + the PRP-4 room stream). The SegBar inside the page is
- * owner-only (decision B). onGrant mutates the mock RoomControl locally so the
- * host→DJ/VJ delegation flow is demoable without the live session stream.
+ * Mode + identity + room-control stay MOCKED here BY DESIGN (story 11.5): real
+ * orchestration needs a versionId (access, session history, SSE) — this
+ * param-less demo has none. The real-audio route (`/listen-rack/$versionId`)
+ * runs the live useRoomOrchestration adapter behind the VITE_ROOM_LIVE_SSE flag.
+ * The SegBar inside the page is owner-only (decision B). onGrant mutates the
+ * mock RoomControl locally so the host→DJ/VJ delegation flow stays demoable.
  */
 function ListenRackRoute() {
   const childMatches = useChildMatches();

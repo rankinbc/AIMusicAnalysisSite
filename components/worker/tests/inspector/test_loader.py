@@ -17,8 +17,16 @@ def sqlite_factory(monkeypatch, tmp_path):
 
     Base.metadata.create_all(db_sync.engine)
     yield db_sync.SessionFactory
+    # ALWAYS evict the sqlite-bound module AND restore the `app` package
+    # attribute — they must not diverge (as-imports read the attribute;
+    # from-imports read sys.modules).
+    import app  # noqa: PLC0415
+    sys.modules.pop("app.db_sync", None)
     if saved is not None:
         sys.modules["app.db_sync"] = saved
+        app.db_sync = saved
+    elif hasattr(app, "db_sync"):
+        del app.db_sync
 
 
 def _seed_analysis(factory, **over):

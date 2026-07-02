@@ -16,13 +16,16 @@ public interface INotificationSink
         IReadOnlyDictionary<string, object?> data,
         CancellationToken ct = default);
 
+    // Story 11.6 seam refinement (reserved above): digest rows key on the
+    // version, so the call site must supply it.
     Task NotifyDigestAsync(
         ActorRef recipient,
         string digestType,
+        Guid versionId,
         CancellationToken ct = default);
 }
 
-/// <summary>Default no-op sink — does nothing until PRP-7 registers the real one.</summary>
+/// <summary>No-op sink — kept for tests; TableNotificationSink is registered (story 11.6).</summary>
 public sealed class NoOpNotificationSink : INotificationSink
 {
     public Task NotifyAsync(
@@ -34,5 +37,6 @@ public sealed class NoOpNotificationSink : INotificationSink
     public Task NotifyDigestAsync(
         ActorRef recipient,
         string digestType,
+        Guid versionId,
         CancellationToken ct = default) => Task.CompletedTask;
 }

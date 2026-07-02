@@ -17,8 +17,6 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple
 import math
-import base64
-import struct
 
 
 @dataclass
@@ -1098,7 +1096,7 @@ class ALSParser:
                 break
 
         # Sort by time
-        return sorted(locators, key=lambda l: l.time)
+        return sorted(locators, key=lambda loc: loc.time)
 
     def _parse_scenes(self, root: ET.Element) -> List[Scene]:
         """

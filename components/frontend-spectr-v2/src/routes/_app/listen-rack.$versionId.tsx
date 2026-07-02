@@ -8,6 +8,11 @@ import {
 import { ListenRackPage } from '../../features/listen-rack/ListenRackPage';
 import { buildTrack } from '../../features/listen-rack/trackFromAnalysis';
 import { useMockRoomOrchestration } from '../../features/listen-rack/useMockRoomOrchestration';
+import { useRoomOrchestration } from '../../features/listen-rack/useRoomOrchestration';
+
+// Story 11.5 cutover flag: real SSE room orchestration is the DEFAULT; set
+// VITE_ROOM_LIVE_SSE=0 to fall back to the mock during rollout.
+const ROOM_LIVE_SSE = import.meta.env['VITE_ROOM_LIVE_SSE'] !== '0';
 
 function pickPhase<T>(fj: FinalJson, phaseNumber: number): T | undefined {
   return fj.phases?.find((p) => p.phase === phaseNumber)?.data as T | undefined;
@@ -24,8 +29,13 @@ function pickPhase<T>(fj: FinalJson, phaseNumber: number): T | undefined {
  */
 function ListenRackVersionRoute() {
   const { versionId } = Route.useParams();
+  // Both hooks run unconditionally (rules of hooks); the flag selects which
+  // one drives the page. The real hook's queries are disabled when the flag
+  // is off (empty versionId gates every `enabled:`).
+  const real = useRoomOrchestration(ROOM_LIVE_SSE ? versionId : '');
+  const mock = useMockRoomOrchestration();
   const { mode, modes, identity, access, roomControl, onModeChange, onGrant } =
-    useMockRoomOrchestration();
+    ROOM_LIVE_SSE ? real : mock;
 
   const { data: version } = useVersion(versionId);
   const { data: song } = useSong(version?.songId ?? '');
@@ -51,7 +61,8 @@ function ListenRackVersionRoute() {
     <ListenRackPage versionId={versionId} mode={mode} modes={modes} identity={identity}
       access={access} roomControl={roomControl} onGrant={onGrant}
       {...(track ? { track } : {})}
-      {...(onModeChange ? { onModeChange } : {})} />
+      {...(onModeChange ? { onModeChange } : {})}
+      {...(ROOM_LIVE_SSE ? { roomLive: real.live, onStartRoom: real.startRoom } : {})} />
   );
 }
 

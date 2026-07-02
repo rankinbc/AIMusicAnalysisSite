@@ -82,7 +82,7 @@ public static class BookmarkEndpoints
 
     private static async Task<IResult> Create(
         CreateBookmarkRequest body, ClaimsPrincipal currentUser, AppDbContext db,
-        AccessService access, CancellationToken ct)
+        AccessService access, INotificationSink notif, CancellationToken ct)
     {
         var userId = currentUser.UserId();
         var hasToken = !string.IsNullOrWhiteSpace(body.TargetShareToken);
@@ -135,6 +135,19 @@ public static class BookmarkEndpoints
         };
         db.TrackBookmarks.Add(row);
         await db.SaveChangesAsync(ct);
+
+        // Story 11.6 (AC3): version bookmarks roll into the owner's daily digest
+        // ("N people bookmarked X today"). Self-bookmarks don't notify.
+        if (body.TargetVersionId is Guid bvid)
+        {
+            var ownerId = await (
+                from v in db.SongVersions.AsNoTracking()
+                join s in db.Songs.AsNoTracking() on v.SongId equals s.Id
+                where v.Id == bvid
+                select (Guid?)s.UserId).FirstOrDefaultAsync(ct);
+            if (ownerId is Guid oid && oid != userId)
+                await notif.NotifyDigestAsync(ActorRef.User(oid), "bookmark", bvid, ct);
+        }
         return Results.Created($"/api/me/bookmarks/{row.Id}", ToDto(row));
     }
 

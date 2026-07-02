@@ -83,7 +83,7 @@ public sealed class SpinePrimitivesTests
 
         await notif.NotifyAsync(ActorRef.Anon("a"), "comment_created",
             new Dictionary<string, object?> { ["x"] = 1 });
-        await notif.NotifyDigestAsync(ActorRef.Anon("a"), "bookmark_digest");
+        await notif.NotifyDigestAsync(ActorRef.Anon("a"), "bookmark_digest", Guid.NewGuid());
         await plan.InsertDrainItemAsync(Guid.NewGuid(), "suggestion", "preset", "r1");
         // Reaching here without throwing IS the assertion (no-op seam).
     }

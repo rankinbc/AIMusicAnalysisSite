@@ -24,6 +24,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -1198,6 +1199,46 @@ class TrackBookmark(Base):
     )
 
 
+class Notification(Base):
+    # Story 11.6 — mirror of the BFF's EF `Notification` (canonical: Notification.cs
+    # + migration 20260702190631_AddNotifications). Two row shapes share the table:
+    # EVENT rows (digest_key NULL, one per occurrence) and DIGEST rows (digest_key
+    # "{recipient}:{type}:{version}:{yyyy-MM-dd}", rolling count). The partial
+    # unique index on digest_key WHERE digest_key IS NOT NULL is raw SQL in the
+    # EF migration — declared here for metadata completeness only.
+    __tablename__ = "notifications"
+    __table_args__ = (
+        Index("ix_notifications_recipient_updated", "recipient_user_id", "updated_at"),
+        Index(
+            "ux_notifications_digest_key",
+            "digest_key",
+            unique=True,
+            postgresql_where=text("digest_key IS NOT NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    recipient_user_id: Mapped[uuid.UUID] = mapped_column(
+        "recipient_user_id",
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    event_type: Mapped[str] = mapped_column("event_type", String(64), nullable=False)
+    payload: Mapped[Optional[dict]] = mapped_column("payload", JSONB, nullable=True)
+    digest_key: Mapped[Optional[str]] = mapped_column("digest_key", String(200), nullable=True)
+    count: Mapped[int] = mapped_column("count", Integer, nullable=False, default=1)
+    read_at: Mapped[Optional[datetime]] = mapped_column(
+        "read_at", DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 __all__ = [
     "Base",
     "JOB_STATUS_PENDING",
@@ -1223,4 +1264,5 @@ __all__ = [
     "CompareCache",
     "TrackComment",
     "TrackBookmark",
+    "Notification",
 ]

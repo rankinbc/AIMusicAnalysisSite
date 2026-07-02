@@ -137,8 +137,12 @@ def install(monkeypatch, tmp_path):
             def begin():
                 return _begin()
 
-        import app.db_sync as db_sync  # noqa: PLC0415
-        monkeypatch.setattr(db_sync, "SessionFactory", _Factory())
+        # Patch the sys.modules entry, not `import ... as` — the as-import
+        # resolves via the `app` package attribute, which can diverge from
+        # sys.modules after another test's fixture re-imported db_sync.
+        import sys as _sys  # noqa: PLC0415
+        import app.db_sync  # noqa: F401, PLC0415
+        monkeypatch.setattr(_sys.modules["app.db_sync"], "SessionFactory", _Factory())
         return session
 
     return _install

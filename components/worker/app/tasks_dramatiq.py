@@ -87,6 +87,10 @@ except ImportError:
 from .verdict_lib.degraded import run_rule_engine_for_analysis  # noqa: E402
 from .trace import trace_runs_enabled  # noqa: E402
 
+# Story 3.1 — S3/MinIO fetch shim for presigned-uploaded sources (module import
+# so tests can patch app.tasks_dramatiq.object_store.*).
+from . import object_store  # noqa: E402
+
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -184,7 +188,15 @@ def analyze_audio_job(job_id: str) -> None:
         except Exception:  # progress is best-effort — never fail the job over it
             logger.warning("progress update failed (phase=%s)", phase, exc_info=True)
 
+    # Story 3.1: presigned uploads land in object storage, not the local root.
+    # When S3 is configured and the local path is absent, pull the object down
+    # to a temp file for the pipeline. Legacy local-disk uploads are untouched.
+    fetched_source: Path | None = None
     try:
+        if object_store.s3_enabled() and not Path(file_abs).exists():
+            fetched_source = object_store.fetch_to_local(file_rel)
+            file_abs = str(fetched_source)
+
         logger.info("analyze_audio_job: pipeline begin job=%s file=%s", job_id, file_abs)
         pipeline_result = run_pipeline(
             file_path=file_abs,
@@ -216,6 +228,8 @@ def analyze_audio_job(job_id: str) -> None:
                 failed.failed_at = _utc_now()
                 failed.current_phase = "failed"
         raise
+    finally:
+        object_store.cleanup_local(fetched_source)
 
     # ── Phase C — persist Analysis row + flip job to COMPLETE ───────────────
     analysis_id = uuid.uuid4()

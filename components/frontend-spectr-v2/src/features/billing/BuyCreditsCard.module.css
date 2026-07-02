@@ -83,5 +83,5 @@
 .configError {
   margin: 0;
   font-size: 12px;
-  color: var(--warn, #f59e0b);
+  color: var(--yellow);
 }

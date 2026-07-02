@@ -34,11 +34,11 @@
 }
 
 .amountPositive {
-  color: var(--green, #34d399);
+  color: var(--green);
 }
 
 .amountNegative {
-  color: var(--orange, #fb923c);
+  color: var(--orange);
 }
 
 .tdReference {

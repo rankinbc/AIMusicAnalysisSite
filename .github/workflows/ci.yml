@@ -7,9 +7,14 @@
 #   components/worker/tests/test_frozen_v1_boundary.py). The api test suite
 #   is intentionally import-broken since the story-1.1 pipeline relocation.
 #
-#   components/analysis is also not gated yet: its tests need heavy ML deps
-#   (librosa/torch). Its gate lands with the first story that touches
-#   analysis code (Epic 8).
+#   components/analysis IS gated (added 2026-07-02, production-readiness
+#   sweep): base install only — the [ml] extra (torch/demucs) stays out;
+#   its tests mock the heavy models.
+#
+# Python deps are pinned via components/worker/requirements.lock.txt
+# (uv pip compile of components/worker/requirements.in — union of
+# worker + shared + analysis runtime deps). Installs pass it as a
+# constraints file so CI resolves the same versions as prod images.
 
 name: ci
 
@@ -87,17 +92,20 @@ jobs:
           python-version: "3.12"
       - name: Install (shared editable first — aimusic-shared is not on PyPI)
         run: |
-          pip install -e components/shared
+          pip install -e components/shared -c components/worker/requirements.lock.txt
+          pip install -e components/analysis -c components/worker/requirements.lock.txt
           # ruff/mypy pinned to locally-verified versions — unpinned latest
           # can redden CI with zero repo changes (new default rules).
-          pip install -r components/worker/requirements.txt "ruff~=0.15.11" "mypy~=1.20"
+          pip install -r components/worker/requirements.txt -c components/worker/requirements.lock.txt "ruff~=0.15.11" "mypy~=1.20"
       - name: Ruff
-        run: ruff check components/worker/ components/shared/
+        run: ruff check components/worker/ components/shared/ components/analysis/src/
       - name: Worker tests (golden fixtures + boundary + enforcement lints)
         run: python -m pytest -q tests/
         working-directory: components/worker
       - name: Shared tests
         run: python -m pytest -q components/shared/tests/
+      - name: Analysis tests (heavy models mocked; no [ml] extra installed)
+        run: python -m pytest -q components/analysis/tests/
       - name: Mypy (relocated pipeline)
         run: python -m mypy app/verdict_lib/ --ignore-missing-imports
         working-directory: components/worker

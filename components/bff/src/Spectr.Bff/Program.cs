@@ -91,6 +91,12 @@ builder.Services.AddScoped<HandleSeeder>();
 // File storage — swap LocalDiskFileStorage for R2FileStorage via config when public.
 builder.Services.AddSingleton<IFileStorage, LocalDiskFileStorage>();
 
+// Story 3.1 — S3-compatible presigned multipart store (R2 prod / MinIO dev, AR17).
+// Always registered; IsConfigured=false (no Storage:S3:ServiceUrl) makes the
+// /uploads endpoints answer 501 and the frontend falls back to legacy upload.
+builder.Services.Configure<S3StorageOptions>(builder.Configuration.GetSection(S3StorageOptions.SectionName));
+builder.Services.AddSingleton<IMultipartObjectStore, S3ObjectStore>();
+
 // Job queue — dramatiq-compatible Redis client.
 builder.Services.AddSingleton<IJobQueue, DramatiqJobQueue>();
 
@@ -144,7 +150,8 @@ builder.Services.AddOptions<AnonOptions>()
     .ValidateOnStart();
 builder.Services.AddScoped<AnonIdentity>();
 builder.Services.AddScoped<ResourceTokenAuth>();
-builder.Services.AddScoped<INotificationSink, NoOpNotificationSink>();
+// Story 11.6: the real table-backed sink (was NoOpNotificationSink).
+builder.Services.AddScoped<INotificationSink, TableNotificationSink>();
 builder.Services.AddScoped<IGamePlanSink, NoOpGamePlanSink>();
 builder.Services.AddSingleton<IRateLimiter, RedisRateLimiter>();
 
@@ -280,6 +287,7 @@ api.MapAuthEndpoints();
 api.MapMeEndpoints();
 api.MapSongEndpoints();
 api.MapVersionEndpoints();
+api.MapUploadEndpoints();
 api.MapReportsEndpoints();
 api.MapJobEndpoints();
 api.MapVerdictEndpoints();
@@ -288,6 +296,7 @@ api.MapReportPhaseEndpoints();
 api.MapReferenceEndpoints();
 api.MapShareEndpoints();
 api.MapBookmarkEndpoints();
+api.MapNotificationEndpoints();
 api.MapFileEndpoints();
 api.MapCoachEndpoints();
 api.MapCoachConversationEndpoints();

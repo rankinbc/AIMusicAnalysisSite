@@ -732,6 +732,56 @@ namespace Spectr.Data.Migrations
                     b.ToTable("llm_calls");
                 });
 
+            modelBuilder.Entity("Spectr.Data.Entities.Notification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Count")
+                        .HasColumnType("integer")
+                        .HasColumnName("count");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DigestKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("digest_key");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("event_type");
+
+                    b.Property<string>("PayloadJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload");
+
+                    b.Property<DateTimeOffset?>("ReadAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("read_at");
+
+                    b.Property<Guid>("RecipientUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("recipient_user_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RecipientUserId", "UpdatedAt")
+                        .HasDatabaseName("ix_notifications_recipient_updated");
+
+                    b.ToTable("notifications");
+                });
+
             modelBuilder.Entity("Spectr.Data.Entities.PromptVersion", b =>
                 {
                     b.Property<string>("Slug")
@@ -2274,6 +2324,15 @@ namespace Spectr.Data.Migrations
                     b.HasOne("Spectr.Data.Entities.SongVersion", null)
                         .WithMany()
                         .HasForeignKey("SongVersionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Spectr.Data.Entities.Notification", b =>
+                {
+                    b.HasOne("Spectr.Data.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("RecipientUserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

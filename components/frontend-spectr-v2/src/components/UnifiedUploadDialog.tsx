@@ -24,7 +24,7 @@ import type {
   StemRawDto,
   StemRole,
 } from '../api/types';
-import { useFileUpload } from '../hooks/useFileUpload';
+import { useMixUpload } from '../hooks/useMixUpload';
 import { AlsPreviewPanel } from '../features/upload/AlsPreviewPanel';
 import {
   AlsParseError,
@@ -159,7 +159,10 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
   const references = useReferences();
   const songs = useSongs();
   const createSong = useCreateSong();
-  const fileUpload = useFileUpload();
+  // Story 3.1: presigned-first mix upload; transparently falls back to the
+  // legacy proxy path when S3 is unconfigured (501). Attachments below stay
+  // on the legacy endpoints until story 3.2.
+  const fileUpload = useMixUpload();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const ents = useEntitlements();
