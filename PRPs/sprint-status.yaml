@@ -170,7 +170,7 @@ development_status:
   11-3-bookmarks-rail-and-owner-heat-signal: done  # code-reviewed 2026-06-28: 4 patches (note-edit double-save/Escape-cancel, aria-hidden markers, IME guard, NaN-t guard); 4 defers logged; gates green, vitest 590
   11-4-anonymous-reviewer-surface-on-share-token: backlog  # dep 11-1/11-2/11-3
   11-5-live-room-replace-mocks-with-sse-orchestration: review  # implemented 2026-07-02: roomStateReducer (snapshot+delta, 10 tests) + useRoomOrchestration adapter (session/stream/actions) + page roomLive seam + VITE_ROOM_LIVE_SSE flagged route cutover; gates green vitest 611; remote rack/visuals application deferred (noted in story)
-  11-6-notifications-backend-table-sink-and-endpoints: backlog
+  11-6-notifications-backend-table-sink-and-endpoints: review  # implemented 2026-07-02: notifications table (partial-unique digest_key) + TableNotificationSink (DI-swapped) + MentionParser + bookmark digest + /me/notifications endpoints; 11 tests; python mirror; gates green
   11-7-notification-center-bell-and-inbox: backlog  # dep 11-6
   11-8-public-profiles: backlog  # greenfield social graph
   11-9-follow-graph: backlog  # dep 11-8

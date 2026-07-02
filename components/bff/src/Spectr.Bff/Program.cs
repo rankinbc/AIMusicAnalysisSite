@@ -150,7 +150,8 @@ builder.Services.AddOptions<AnonOptions>()
     .ValidateOnStart();
 builder.Services.AddScoped<AnonIdentity>();
 builder.Services.AddScoped<ResourceTokenAuth>();
-builder.Services.AddScoped<INotificationSink, NoOpNotificationSink>();
+// Story 11.6: the real table-backed sink (was NoOpNotificationSink).
+builder.Services.AddScoped<INotificationSink, TableNotificationSink>();
 builder.Services.AddScoped<IGamePlanSink, NoOpGamePlanSink>();
 builder.Services.AddSingleton<IRateLimiter, RedisRateLimiter>();
 
@@ -295,6 +296,7 @@ api.MapReportPhaseEndpoints();
 api.MapReferenceEndpoints();
 api.MapShareEndpoints();
 api.MapBookmarkEndpoints();
+api.MapNotificationEndpoints();
 api.MapFileEndpoints();
 api.MapCoachEndpoints();
 api.MapCoachConversationEndpoints();

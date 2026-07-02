@@ -79,6 +79,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     // Compare notes — per-user × per-version-pair (Change C)
     public DbSet<VersionCompareNote> VersionCompareNotes => Set<VersionCompareNote>();
 
+    // Notifications inbox (story 11.6)
+    public DbSet<Notification> Notifications => Set<Notification>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         builder.HasPostgresExtension("pgcrypto");      // gen_random_uuid()
@@ -200,6 +203,17 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             .HasDatabaseName("ix_track_bookmarks_target_version_id");
         builder.Entity<TrackBookmark>()
             .HasOne<SongVersion>().WithMany().HasForeignKey(b => b.TargetVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Notifications inbox (story 11.6): recipient-scoped list ordered by
+        // updated_at; FK cascade cleans the inbox with the user. The DIGEST
+        // uniqueness (partial unique on digest_key WHERE digest_key IS NOT NULL)
+        // is raw SQL appended to the migration — EF can't express it fluently
+        // here without also filtering event rows (digest_key NULL is exempt).
+        builder.Entity<Notification>().HasIndex(n => new { n.RecipientUserId, n.UpdatedAt })
+            .HasDatabaseName("ix_notifications_recipient_updated");
+        builder.Entity<Notification>()
+            .HasOne<User>().WithMany().HasForeignKey(n => n.RecipientUserId)
             .OnDelete(DeleteBehavior.Cascade);
 
         // Indexes for hot read paths

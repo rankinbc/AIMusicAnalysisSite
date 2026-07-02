@@ -148,9 +148,18 @@ public static class FeedbackEndpoints
         await db.SaveChangesAsync(ct);
 
         var ownerId = await VersionOwner(db, versionId, ct);
-        if (ownerId is Guid oid)
+        if (ownerId is Guid oid && oid != userId)
             await notif.NotifyAsync(ActorRef.User(oid), "comment_created",
                 new Dictionary<string, object?> { ["commentId"] = row.Id, ["versionId"] = versionId }, ct);
+
+        // Story 11.6 (AC4): @handle mentions → per-recipient `mention` rows.
+        // Self-mentions and the owner (already notified above) are skipped.
+        foreach (var mentioned in await MentionParser.ResolveMentionedUserIdsAsync(db, text, ct))
+        {
+            if (mentioned == userId || mentioned == ownerId) continue;
+            await notif.NotifyAsync(ActorRef.User(mentioned), "mention",
+                new Dictionary<string, object?> { ["commentId"] = row.Id, ["versionId"] = versionId }, ct);
+        }
 
         var author = userId is Guid au
             ? ActorOf(au, await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == au, ct), null, null)
