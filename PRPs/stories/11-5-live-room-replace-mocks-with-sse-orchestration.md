@@ -1,6 +1,6 @@
 # Story 11.5: Live Room — Replace Mocks with SSE Orchestration
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -64,10 +64,26 @@ The room BACKEND is fully real: `RoomEndpoints.cs` (Start/List/Get/StreamSession
 
 ### Agent Model Used
 
-### Debug Log References
+claude-fable-5 (2026-07-02)
 
 ### Completion Notes List
 
+- **AC1** — `roomStateReducer.ts` (pure): `applySnapshot` hydrates roster/transport/feed at `snapshotSeq`; `applyEvent` folds deltas with seq dedupe (`seq <= lastSeq` dropped per relay resume contract). Consumed via `useRoomStream` handlers in the adapter.
+- **AC2** — `useRoomOrchestration.ts` composes `useRoomSession` + `useRoomActions` + `useRoomStream`; senders are fire-and-forget POSTs (server fans back through the stream, no optimistic writes). Page's react/status handlers route through the `roomLive` seam when a session runs.
+- **AC3** — `onGrant` maps to `actions.grant/revoke`; NO local state write — the grant event returns via SSE and folds into `roomControl`, so `resolveCapabilities` recomputes from server truth.
+- **AC4** — host strip "End room + publish recap" → `useEndSession` then `usePublishRecap` (momentIds: [] = default hottest moments server-side).
+- **AC5** — versioned route runs the real adapter behind `VITE_ROOM_LIVE_SSE` (default ON; `=0` reverts to mock). Both hooks called unconditionally (rules of hooks); the real hook's queries gate on empty versionId when flagged off. Param-less demo route stays mock BY DESIGN (no versionId → no access/session/SSE). Existing listen-rack tests untouched and green.
+- Page changes are a SEAM, not a rewrite: optional `roomLive`/`onStartRoom` props, `feedShown` selection, ambient mock-reaction interval disabled when live, small LIVE-ROOM strip (start/end + roster count + stream status).
+- Deferred (noted in reducer): remote `visuals`/`rack` deltas advance seq but don't yet drive the local engine surfaces — grantee edits fan out server-side but remote application to the local rack is a follow-on (needs an engine-write seam decision).
+- Identity when anon (share-token room join) is minimal: `useMe` only — full anon reviewer surface is story 11.4.
+
 ### File List
 
+- `src/features/listen-rack/roomStateReducer.ts` (new) + `roomStateReducer.test.ts` (10 tests)
+- `src/features/listen-rack/useRoomOrchestration.ts` (new — adapter, same shape as mock + `live` seam)
+- `src/features/listen-rack/ListenRackPage.tsx` (seam: roomLive/onStartRoom props, feedShown, live strip)
+- `src/routes/_app/listen-rack.$versionId.tsx` (flagged cutover), `src/routes/_app/listen-rack.tsx` (doc comment)
+
 ### Change Log
+
+- 2026-07-02: implemented; gates green (vite build, tsc -b, eslint, lint:css, lint:prices, vitest 611/611). Status → review.

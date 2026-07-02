@@ -42,6 +42,7 @@ import {
   asChain, buildExportEnvelope, parseImportEnvelope, useRackDraft, useRackDraftAutosave,
   useRackPresets, useSaveRackPreset,
 } from './useRackPresets';
+import type { RoomLiveSeam } from './useRoomOrchestration';
 import { asVizLook, useSaveVizPreset, useVizPresets } from './useVizPresetsServer';
 import { Transport } from './transport';
 import { BookmarksRail } from '../listen/BookmarksRail';
@@ -145,9 +146,15 @@ export interface ListenRackPageProps {
   /** Real track header/notes/sections/stats (Phase 2.5). Defaults to the TRACK
    *  fixture for the mock demo route. */
   track?: Track;
+  /** Story 11.5 — live SSE room seam. When set, Room mode uses the real
+   *  session feed + senders instead of the local mock simulation. */
+  roomLive?: RoomLiveSeam | null;
+  /** Story 11.5 — host-only "go live" affordance (undefined when not hostable
+   *  or a session already runs). */
+  onStartRoom?: (() => void) | undefined;
 }
 
-export function ListenRackPage({ mode, modes, identity, access, roomControl, onModeChange, onGrant, versionId, track: trackProp }: ListenRackPageProps) {
+export function ListenRackPage({ mode, modes, identity, access, roomControl, onModeChange, onGrant, versionId, track: trackProp, roomLive, onStartRoom }: ListenRackPageProps) {
   const track = trackProp ?? TRACK;
   // ── Real-audio seam (Phase 1) ──
   // `versionId` present ⇒ real mode: mount <audio> + the page-agnostic audio
@@ -536,8 +543,10 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     ROOM_LISTENERS.filter(() => Math.random() < 0.75).forEach((u, i) => setTimeout(() => spawnPresence(u, '🔥'), i * 130));
   }, [spawnPresence]);
 
+  // Ambient MOCK reactions — demo only; a live session's feed comes from the
+  // SSE stream (story 11.5), so the simulation stays off when roomLive is set.
   useEffect(() => {
-    if (!playing || mode !== 'room') return undefined;
+    if (!playing || mode !== 'room' || roomLive) return undefined;
     const iv = setInterval(() => {
       if (Math.random() < 0.6) {
         const u = ROOM_LISTENERS[1 + Math.floor(Math.random() * (ROOM_LISTENERS.length - 1))];
@@ -545,7 +554,7 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
       }
     }, 2800);
     return () => clearInterval(iv);
-  }, [playing, mode, spawnReaction]);
+  }, [playing, mode, spawnReaction, roomLive]);
 
   useEffect(() => { if (!announcement) return undefined; const t = setTimeout(() => setAnnouncement(null), 4800); return () => clearTimeout(t); }, [announcement]);
 
@@ -605,6 +614,21 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
   const cap = resolveCapabilities(mode, identity, roomControl, access);
   const rackReadOnly = cap.rackReadOnly;
 
+  // Story 11.5 — live seam: a running session's SSE feed replaces the local
+  // mock feed, and reactions/status POST to the room (fan-out returns them
+  // through the stream; the local pop is just immediate visual feedback).
+  const feedShown = roomLive ? roomLive.state.feed : feed;
+  const reactHandler = (e: string) => {
+    setMyStatus(e);
+    if (roomLive) {
+      roomLive.sendReact(e, posRef.current);
+      roomLive.sendStatus(e);
+      spawnPresence({ handle: identity.actor.handle ?? 'you', hue: identity.actor.hue ?? 168, anon: identity.actor.type === 'anon' }, e);
+    } else {
+      spawnReaction(e, 'maek');
+    }
+  };
+
   return (
     <div className="lr-shell">
       {/* position:relative + z-index lifts the page above the full-screen
@@ -612,6 +636,30 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
           z-index 0); the global top nav is z-index 50 and stays on top too. */}
       <div className="lr-page" style={{ position: 'relative', zIndex: 1 }}>
         <TrackHeader track={track} mode={mode} modes={modes} identity={identity} {...(onModeChange ? { onModeChange } : {})} />
+
+        {mode === 'room' && (roomLive || onStartRoom) && (
+          <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '10px 0 2px', fontSize: 10.5 }}>
+            {roomLive ? (
+              <>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--orange)', fontWeight: 700, letterSpacing: '0.12em' }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: roomLive.streamStatus === 'open' ? 'var(--orange)' : 'var(--muted)', boxShadow: roomLive.streamStatus === 'open' ? '0 0 8px var(--orange)' : 'none' }} />
+                  LIVE ROOM · {roomLive.state.roster.length} listening
+                  {roomLive.streamStatus !== 'open' && ` · ${roomLive.streamStatus}`}
+                </span>
+                {identity.isHost && (
+                  <button type="button" className="btn sm ghost" style={{ fontSize: 10 }}
+                    disabled={roomLive.isEnding} onClick={roomLive.endRoom}>
+                    {roomLive.isEnding ? 'Ending…' : 'End room + publish recap'}
+                  </button>
+                )}
+              </>
+            ) : (
+              <button type="button" className="btn sm primary" style={{ fontSize: 10.5 }} onClick={onStartRoom}>
+                ◉ Start live room
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="lr-grid">
           <div style={{ minWidth: 0 }}>
@@ -625,7 +673,7 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
               <CoachToast msg={announcement} />
               <div style={{ borderTop: '1px solid var(--border)' }}>
                 <Transport track={track} playing={playing} position={position} duration={duration} onTogglePlay={togglePlay}
-                  onSeek={seek} notes={track.notes} onNoteClick={(n) => { setActiveNote(n.id); seek(n.t); }} activeNote={activeNote} reactions={feed} />
+                  onSeek={seek} notes={track.notes} onNoteClick={(n) => { setActiveNote(n.id); seek(n.t); }} activeNote={activeNote} reactions={feedShown} />
                 {realAudio && versionId && (
                   <BookmarksRail versionId={versionId} durationSeconds={duration} position={position}
                     onSeek={seek} isOwner={identity.isOwner} />
@@ -694,7 +742,7 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
 
           <RightRail mode={mode} access={access} cap={cap} rs={rs} track={track} position={position}
             activeNote={activeNote} onNoteClick={(n) => { setActiveNote(n.id); seek(n.t); }} onSeek={seek}
-            onReact={(e) => { setMyStatus(e); spawnReaction(e, 'maek'); }} feed={feed} announce={announce} myStatus={myStatus}
+            onReact={reactHandler} feed={feedShown} announce={announce} myStatus={myStatus}
             roomControl={roomControl} onGrant={grantControl} isOwner={identity.isOwner} {...(versionId ? { versionId } : {})} />
         </div>
       </div>
