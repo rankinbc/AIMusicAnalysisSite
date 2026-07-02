@@ -41,10 +41,10 @@ AIMusicAnalysisSite/
 │   ├── shared/               # aimusic-shared ORM models
 │   ├── api/                  # FastAPI legacy (verdict pipeline)
 │   └── frontend-spectr/      # vanilla JSX legacy SPA
-├── data/                     # NOT committed — uploads, model caches
+├── data/                     # runtime data (gitignored except reference_library)
 ├── docker/                   # docker compose: postgres, redis
-├── migrations/               # Alembic (legacy api side)
-├── output/                   # NOT committed — per-job analysis artifacts
+├── migrations/               # placeholder — canonical schema is EF Core in bff/src/Spectr.Data
+├── output/                   # per-job analysis artifacts (gitignored; a few reference samples committed)
 └── PRPs/                     # plan-research-prompt docs (slice plans + archive)
 ```
 
