@@ -650,8 +650,6 @@ class ArrangementScorer:
 
         # Convert confidence difference to pseudo-dB (0-1 confidence -> 0-20 dB range)
         # In production, this would use actual RMS values
-        contrast_proxy = (drop_confidence - breakdown_confidence) * 20
-
         metrics['drop_energy_db'] = -10 - (1 - drop_confidence) * 10  # Proxy RMS
         metrics['breakdown_energy_db'] = -20 - (1 - breakdown_confidence) * 10  # Proxy RMS
         metrics['contrast_db'] = abs(metrics['drop_energy_db'] - metrics['breakdown_energy_db'])

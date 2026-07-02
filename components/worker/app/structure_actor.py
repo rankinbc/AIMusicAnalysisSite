@@ -25,17 +25,6 @@ from pathlib import Path
 
 import dramatiq
 
-
-def _structure_time_limit_ms() -> int:
-    """Dramatiq hard time limit for the actor — must exceed the allin1 subprocess
-    timeout (ALLIN1_TIMEOUT, default 1800 s) plus merge/write overhead, else
-    dramatiq kills a legitimately-running CPU analysis mid-flight."""
-    try:
-        timeout_s = int(os.getenv("ALLIN1_TIMEOUT", "") or 1800)
-    except ValueError:
-        timeout_s = 1800
-    return (timeout_s + 300) * 1000
-
 from aimusic_shared.models import (
     JOB_STATUS_COMPLETE,
     JOB_STATUS_FAILED,
@@ -49,6 +38,17 @@ from .db_sync import SessionFactory
 from .tasks_dramatiq import LOCAL_ROOT, _utc_now
 
 logger = logging.getLogger(__name__)
+
+
+def _structure_time_limit_ms() -> int:
+    """Dramatiq hard time limit for the actor — must exceed the allin1 subprocess
+    timeout (ALLIN1_TIMEOUT, default 1800 s) plus merge/write overhead, else
+    dramatiq kills a legitimately-running CPU analysis mid-flight."""
+    try:
+        timeout_s = int(os.getenv("ALLIN1_TIMEOUT", "") or 1800)
+    except ValueError:
+        timeout_s = 1800
+    return (timeout_s + 300) * 1000
 
 try:
     from audio_analysis import detect_structure_and_rescore

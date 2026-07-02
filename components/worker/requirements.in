@@ -1,0 +1,33 @@
+# Lock input — union of runtime deps for worker + aimusic-shared + audio-analysis (no [ml] extra).
+# Regenerate the lock with:
+#   uv pip compile components/worker/requirements.in --universal --python-version 3.11 \
+#     -o components/worker/requirements.lock.txt
+# Install pattern (CI + Docker):
+#   pip install -e components/shared -c components/worker/requirements.lock.txt
+#   pip install -e components/analysis -c components/worker/requirements.lock.txt
+#   pip install -r components/worker/requirements.txt -c components/worker/requirements.lock.txt
+# (aimusic-shared itself is local — intentionally NOT in this lock input.)
+
+# worker (components/worker/requirements.txt)
+anthropic>=0.69,<1
+dramatiq[redis]>=1.16
+pydantic-settings>=2.0
+redis>=5.0.0
+sqlalchemy>=2.0.0
+psycopg2-binary
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+
+# shared (components/shared/pyproject.toml)
+python-ulid>=2.2
+pydantic>=2.7,<3
+
+# analysis (components/analysis/pyproject.toml, no ml extra)
+librosa>=0.11,<1.0
+soundfile
+scipy
+numpy<2.0
+pyloudnorm
+scikit-learn
+rapidfuzz>=3.0
+Pillow>=10,<12

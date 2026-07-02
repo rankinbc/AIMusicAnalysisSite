@@ -197,10 +197,10 @@
 /* ── Entitlement exhausted inline error ── */
 .entExhaustedError {
   padding: 10px 12px;
-  border: 1px solid var(--red, #f04);
+  border: 1px solid var(--red);
   border-radius: var(--radius-sm);
   background: rgba(255, 0, 68, 0.06);
-  color: var(--red, #f04);
+  color: var(--red);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -314,7 +314,7 @@
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--cyan);
-  color: #00171f;
+  color: var(--ink-on-accent);
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 9px;
   letter-spacing: 0.1em;
@@ -412,8 +412,8 @@
 }
 
 .fileClear:hover {
-  border-color: var(--red, #f04);
-  color: var(--red, #f04);
+  border-color: var(--red);
+  color: var(--red);
 }
 
 /* ── .als instant preview panel ── */

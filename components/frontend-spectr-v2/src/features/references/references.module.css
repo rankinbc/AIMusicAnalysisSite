@@ -361,7 +361,7 @@
   background: var(--card);
 }
 .menuItemDanger {
-  color: var(--red, #f87171);
+  color: var(--red);
 }
 .menuSectionLabel {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
