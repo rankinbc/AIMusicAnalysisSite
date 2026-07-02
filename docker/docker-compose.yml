@@ -31,6 +31,42 @@ services:
       timeout: 3s
       retries: 5
 
+  # Story 3.1 (AR17): S3-compatible object storage for presigned multipart
+  # uploads — MinIO in dev/CI, Cloudflare R2 in prod (same code path).
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # web console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # One-shot bucket bootstrap: creates the `spectr` bucket and applies the
+  # CORS rule the browser-direct flow REQUIRES (FOOTGUN #2: without
+  # ExposeHeaders ETag the browser cannot read per-part ETags and multipart
+  # Complete is impossible).
+  minio-init:
+    image: minio/mc
+    depends_on:
+      minio: { condition: service_healthy }
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb --ignore-existing local/spectr &&
+      printf '<CORSConfiguration><CORSRule><AllowedOrigin>http://localhost:5174</AllowedOrigin><AllowedMethod>PUT</AllowedMethod><AllowedMethod>GET</AllowedMethod><AllowedMethod>HEAD</AllowedMethod><AllowedHeader>*</AllowedHeader><ExposeHeader>ETag</ExposeHeader><MaxAgeSeconds>3600</MaxAgeSeconds></CORSRule></CORSConfiguration>' > /tmp/cors.xml &&
+      mc cors set local/spectr /tmp/cors.xml &&
+      echo 'minio bucket + CORS ready'
+      "
+
   # C# BFF — owns auth, library, user state, queue dispatch, audio streaming.
   bff:
     build:
@@ -47,6 +83,15 @@ services:
       Jwt__Audience: "spectr.web"
       Storage__Provider: "local"
       Storage__LocalRoot: "/data"
+      # Story 3.1: presigned multipart via MinIO (AR17). Browser PUTs go to
+      # localhost:9000 so the presign endpoint must be the HOST-visible URL,
+      # not the compose-internal one — the signature bakes in the host.
+      Storage__S3__ServiceUrl: "http://localhost:9000"
+      Storage__S3__AccessKey: "minioadmin"
+      Storage__S3__SecretKey: "minioadmin"
+      Storage__S3__Bucket: "spectr"
+      Storage__S3__Region: "us-east-1"
+      Storage__S3__ForcePathStyle: "true"
       ASPNETCORE_ENVIRONMENT: "Development"
     ports:
       - "5000:5000"
@@ -72,6 +117,12 @@ services:
       # LLM gateway (story 1.3): fake by default so the dev stack needs no key.
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
       LLM_FAKE: "${LLM_FAKE:-1}"
+      # Story 3.1: fetch presigned-uploaded sources from MinIO (compose-internal host).
+      S3_ENDPOINT: "http://minio:9000"
+      S3_ACCESS_KEY: "minioadmin"
+      S3_SECRET_KEY: "minioadmin"
+      S3_BUCKET: "spectr"
+      S3_REGION: "us-east-1"
     volumes:
       - ../data:/data
       - ../components/analysis:/app/analysis
@@ -89,3 +140,4 @@ services:
 
 volumes:
   postgres_data_16:
+  minio_data:

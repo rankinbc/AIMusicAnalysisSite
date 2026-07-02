@@ -307,27 +307,8 @@ public static class VersionEndpoints
         if (file.Length > MaxUploadBytes)
             return Results.BadRequest(new { error = "File exceeds 250 MB limit." });
 
-        Guid songGuid;
-        if (!string.IsNullOrEmpty(songId))
-        {
-            if (!Guid.TryParse(songId, out songGuid))
-                return Results.BadRequest(new { error = "Invalid song_id." });
-            var owned = await db.Songs.AnyAsync(s => s.Id == songGuid && s.UserId == userId, ct);
-            if (!owned) return Results.NotFound();
-        }
-        else
-        {
-            songGuid = Guid.NewGuid();
-            var stem = Path.GetFileNameWithoutExtension(file.FileName);
-            if (string.IsNullOrWhiteSpace(stem)) stem = "Untitled";
-            db.Songs.Add(new Song
-            {
-                Id = songGuid,
-                UserId = userId,
-                Name = stem.Length > 200 ? stem[..200] : stem,
-                GenreHint = string.IsNullOrWhiteSpace(genreHint) ? null : genreHint!.Trim(),
-            });
-        }
+        var (songGuid, songErr) = await ResolveOrCreateSongAsync(db, userId, songId, genreHint, file.FileName, ct);
+        if (songErr is not null) return songErr;
 
         var jobId = Guid.NewGuid();
         var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
@@ -344,26 +325,7 @@ public static class VersionEndpoints
                 ct);
         }
 
-        var nextVersionNumber = await db.SongVersions
-            .Where(v => v.SongId == songGuid)
-            .Select(v => (int?)v.VersionNumber)
-            .MaxAsync(ct) ?? 0;
-        nextVersionNumber++;
-
-        // Demote any existing current version before inserting the new one.
-        await db.SongVersions
-            .Where(v => v.SongId == songGuid && v.IsCurrent)
-            .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsCurrent, false), ct);
-
-        var versionId = Guid.NewGuid();
-        db.SongVersions.Add(new SongVersion
-        {
-            Id = versionId,
-            SongId = songGuid,
-            VersionNumber = nextVersionNumber,
-            FilePath = key,
-            IsCurrent = true,
-        });
+        var versionId = await InsertVersionRowAsync(db, songGuid, key, ct);
 
         var shouldAnalyze = analyze ?? true;
         await db.SaveChangesAsync(ct);  // saves Song + SongVersion
@@ -894,13 +856,72 @@ public static class VersionEndpoints
         return Results.File(stream, contentType, enableRangeProcessing: true);
     }
 
+    // ── Story 3.1: shared song/version row creation ─────────────────────────
+    // Extracted from UploadVersion so the presigned /uploads/complete path
+    // (UploadEndpoints) creates rows identically to the legacy proxy path.
+    internal static async Task<(Guid SongId, IResult? Error)> ResolveOrCreateSongAsync(
+        AppDbContext db, Guid userId, string? songId, string? genreHint, string fileName, CancellationToken ct)
+    {
+        Guid songGuid;
+        if (!string.IsNullOrEmpty(songId))
+        {
+            if (!Guid.TryParse(songId, out songGuid))
+                return (Guid.Empty, Results.BadRequest(new { error = "Invalid song_id." }));
+            var owned = await db.Songs.AnyAsync(s => s.Id == songGuid && s.UserId == userId, ct);
+            if (!owned) return (Guid.Empty, Results.NotFound());
+        }
+        else
+        {
+            songGuid = Guid.NewGuid();
+            var stem = Path.GetFileNameWithoutExtension(fileName);
+            if (string.IsNullOrWhiteSpace(stem)) stem = "Untitled";
+            db.Songs.Add(new Song
+            {
+                Id = songGuid,
+                UserId = userId,
+                Name = stem.Length > 200 ? stem[..200] : stem,
+                GenreHint = string.IsNullOrWhiteSpace(genreHint) ? null : genreHint!.Trim(),
+            });
+        }
+        return (songGuid, null);
+    }
+
+    // Allocates the next version number, demotes the previous current version,
+    // and stages the new SongVersion row (caller SaveChanges).
+    internal static async Task<Guid> InsertVersionRowAsync(
+        AppDbContext db, Guid songGuid, string fileKey, CancellationToken ct)
+    {
+        var nextVersionNumber = await db.SongVersions
+            .Where(v => v.SongId == songGuid)
+            .Select(v => (int?)v.VersionNumber)
+            .MaxAsync(ct) ?? 0;
+        nextVersionNumber++;
+
+        // Demote any existing current version before inserting the new one.
+        await db.SongVersions
+            .Where(v => v.SongId == songGuid && v.IsCurrent)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsCurrent, false), ct);
+
+        var versionId = Guid.NewGuid();
+        db.SongVersions.Add(new SongVersion
+        {
+            Id = versionId,
+            SongId = songGuid,
+            VersionNumber = nextVersionNumber,
+            FilePath = fileKey,
+            IsCurrent = true,
+        });
+        return versionId;
+    }
+
     // ── Story 2.4: Entitlement-gated dispatch ───────────────────────────────
-    // Single authoritative dispatch path. All 5 analyze-dispatch sites route
-    // through here. Never called by result-read handlers (AR15).
+    // Single authoritative dispatch path. All analyze-dispatch sites route
+    // through here (incl. story 3.1's /uploads/complete in UploadEndpoints).
+    // Never called by result-read handlers (AR15).
     //
     // preallocatedJobId: pass when the caller already used the jobId in a
     // storage key (e.g. UploadVersion: "audio/upload/{jobId}/...").
-    private static async Task<(Guid JobId, IResult? Error)> DispatchAnalysisAsync(
+    internal static async Task<(Guid JobId, IResult? Error)> DispatchAnalysisAsync(
         Guid userId,
         Guid versionId,
         Guid? referenceId,

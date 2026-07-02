@@ -93,8 +93,8 @@ development_status:
   2-10-billing-integrity-and-reconciliation: done
   epic-2-retrospective: optional
 
-  epic-3: backlog
-  3-1-direct-to-r2-presigned-multipart-upload: backlog
+  epic-3: in-progress  # release-plan Phase 1 (2026-07-02) — build order E3 -> E4 -> social(E7+E11) -> E10
+  3-1-direct-to-r2-presigned-multipart-upload: review  # implemented 2026-07-02: BFF init/complete/abort + S3ObjectStore, worker boto3 fetch shim, useMixUpload presigned-first w/ 501 fallback, compose MinIO; gates green (BFF 12 new, worker 534, frontend 601); known gaps in story Dev Agent Record
   3-2-worker-side-validation-and-attachments-via-r2: backlog
   3-3-signed-playback-and-durable-reports: backlog
   3-4-retention-sweep: backlog

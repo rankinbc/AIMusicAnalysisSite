@@ -91,6 +91,12 @@ builder.Services.AddScoped<HandleSeeder>();
 // File storage — swap LocalDiskFileStorage for R2FileStorage via config when public.
 builder.Services.AddSingleton<IFileStorage, LocalDiskFileStorage>();
 
+// Story 3.1 — S3-compatible presigned multipart store (R2 prod / MinIO dev, AR17).
+// Always registered; IsConfigured=false (no Storage:S3:ServiceUrl) makes the
+// /uploads endpoints answer 501 and the frontend falls back to legacy upload.
+builder.Services.Configure<S3StorageOptions>(builder.Configuration.GetSection(S3StorageOptions.SectionName));
+builder.Services.AddSingleton<IMultipartObjectStore, S3ObjectStore>();
+
 // Job queue — dramatiq-compatible Redis client.
 builder.Services.AddSingleton<IJobQueue, DramatiqJobQueue>();
 
@@ -280,6 +286,7 @@ api.MapAuthEndpoints();
 api.MapMeEndpoints();
 api.MapSongEndpoints();
 api.MapVersionEndpoints();
+api.MapUploadEndpoints();
 api.MapReportsEndpoints();
 api.MapJobEndpoints();
 api.MapVerdictEndpoints();
