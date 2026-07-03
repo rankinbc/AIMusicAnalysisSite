@@ -152,7 +152,7 @@ development_status:
 
   epic-10: in-progress  # started 2026-07-03
   10-1-production-deploy-topology: done  # merged via PR #23 (2026-07-03); implemented + code-reviewed 2026-07-03 (17 patches incl CRITICAL: deploy health check was a permanent false positive — now probes bff in-network; scan-before-push; GHCR login runbook; ForcePathStyle=false for R2; redeploy verb; always-lock BootMigrator) (branch ops/10-1-deploy-topology): infra/{compose.prod.yml,Caddyfile,Dockerfile.web,deploy.sh} + worker Dockerfile (deferred since 1.1) + /healthz + BootMigrator advisory lock + ForwardedHeaders/FrontendOrigin gates + CI deploy job (GHCR x3 + trivy + SSH w/ graceful skip) + runbook deploy/rollback/R2/rotation; BFF 327
-  10-2-backups-and-restore-proof: backlog
+  10-2-backups-and-restore-proof: review  # implemented 2026-07-03 (branch ops/10-2-backups): backup.sh (dump->gzip->size-guard->stream-upload->prune) + restore-test.sh (staleness gate + scratch postgres + schema assertions) — FULL CYCLE EXECUTED vs dev stack (40 migrations/42 tables restored); runbook drill log + launch gate
   10-3-observability-stack: backlog
   10-4-phone-grade-alerting-and-status: backlog
   10-5-admin-endpoints-and-audit-log: backlog

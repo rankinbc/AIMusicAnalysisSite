@@ -62,6 +62,46 @@ migration means merge == deploy == applied.
       failed deletes (future).
 - [ ] `backups/` prefix: 30-day expiry (10.2 wires the nightly pg_dump).
 
+## Backups & restore proof (story 10.2 / AR31 / NFR15)
+
+Nightly `pg_dump` → R2 `backups/` (30 d retention, script-side prune +
+bucket lifecycle belt-and-braces). Weekly restore test into a THROWAWAY
+postgres:16 container with schema/data assertions + a staleness gate
+(newest dump older than 30 h = the nightly silently died = failure).
+Failures exit non-zero and push to `NTFY_URL` when configured (10.4
+formalizes alerting).
+
+### Setup (VPS)
+
+1. Create a THIRD R2 token `R2_BACKUP_*` scoped to `backups/` ONLY —
+   dumps contain the entire database; the BFF/worker tokens must never
+   read them. Add to `/opt/spectr/.env` (+ optional `NTFY_URL`).
+2. Cron (as the deploy user):
+   ```
+   15 03 * * *  cd /opt/spectr && ./backup.sh >> backup.log 2>&1
+   30 04 * * 0  cd /opt/spectr && ./restore-test.sh >> restore-test.log 2>&1
+   ```
+3. R2 lifecycle rule: `backups/` prefix, expire after 30 d (the script
+   prunes too — either alone suffices, together they're safe).
+
+### Restore drill (the launch gate, NFR15)
+
+Procedure (identical to what `restore-test.sh` automates — run manually
+once pre-launch and log it below):
+
+1. `./restore-test.sh` on the VPS — fetches newest dump, restores into a
+   scratch container, asserts `__EFMigrationsHistory` ≥ 1, tables ≥ 20,
+   `users` queryable.
+2. For a REAL disaster restore: stop the stack, `docker volume rm` the
+   postgres volume, `up -d postgres`, then
+   `gunzip -c dump.sql.gz | docker compose exec -T postgres psql -U spectr -d spectr`
+   (dumps are `--clean --if-exists` — idempotent replay), then `up -d`.
+3. Log the drill:
+
+| Date | Dump | Result | Notes |
+|------|------|--------|-------|
+| 2026-07-03 | spectr-20260703-222012.sql.gz (dev-stack drill) | PASS — 40 migrations, 42 tables, users queryable | Full cycle: backup.sh → minio → restore-test.sh scratch container. VPS drill pending first deploy (10.8 gate). |
+
 ## Email deliverability (story 4.2 / NFR25)
 
 The email pathway: producer → `IEmailSender` (BFF: template render +
