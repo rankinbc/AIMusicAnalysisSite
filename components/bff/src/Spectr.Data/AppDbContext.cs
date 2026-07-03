@@ -91,6 +91,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     // Single-use auth tokens: email verification + password reset (story 4.3)
     public DbSet<AuthToken> AuthTokens => Set<AuthToken>();
 
+    // Anonymous device identities (story 4.5 — AR24/AR25)
+    public DbSet<Device> Devices => Set<Device>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         builder.HasPostgresExtension("pgcrypto");      // gen_random_uuid()

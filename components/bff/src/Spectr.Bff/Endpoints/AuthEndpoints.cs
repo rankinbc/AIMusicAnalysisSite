@@ -130,7 +130,47 @@ public static class AuthEndpoints
             DisplayName = handle,
         };
         db.Users.Add(user);
-        await db.SaveChangesAsync(ct);
+
+        // Story 4.5 (AR25/FR28) — CLAIM: a valid spectr_device cookie means
+        // this browser ran anonymous analyses; re-parent that device's jobs,
+        // reports, and conversations to the new account in the SAME
+        // transaction as the user insert — the analysis is never lost.
+        // Best-effort by design: absent/invalid cookie or an already-claimed
+        // device is a plain registration, never a failure.
+        var devices = httpCtx.RequestServices.GetRequiredService<DeviceService>();
+        var claimDeviceId = devices.ReadDeviceId(httpCtx.Request);
+        await using (var tx = await db.Database.BeginTransactionAsync(ct))
+        {
+            await db.SaveChangesAsync(ct);
+
+            if (claimDeviceId is not null)
+            {
+                var claimed = await db.Devices
+                    .Where(d => d.Id == claimDeviceId && d.ClaimedAt == null)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(d => d.ClaimedAt, DateTimeOffset.UtcNow)
+                        .SetProperty(d => d.ClaimedByUserId, user.Id), ct);
+                if (claimed == 1)
+                {
+                    await db.AnalysisJobs.Where(j => j.DeviceId == claimDeviceId)
+                        .ExecuteUpdateAsync(s => s
+                            .SetProperty(j => j.UserId, user.Id)
+                            .SetProperty(j => j.DeviceId, (string?)null), ct);
+                    await db.Analyses.Where(a => a.DeviceId == claimDeviceId)
+                        .ExecuteUpdateAsync(s => s
+                            .SetProperty(a => a.UserId, user.Id)
+                            .SetProperty(a => a.DeviceId, (string?)null), ct);
+                    await db.Conversations.Where(c => c.DeviceId == claimDeviceId)
+                        .ExecuteUpdateAsync(s => s
+                            .SetProperty(c => c.UserId, user.Id)
+                            .SetProperty(c => c.DeviceId, (string?)null), ct);
+                }
+            }
+
+            await tx.CommitAsync(ct);
+        }
+        if (claimDeviceId is not null)
+            DeviceService.ClearCookie(resp);
 
         var (rawRefresh, _) = await refresh.IssueAsync(user.Id, ct);
         resp.Cookies.Append(RefreshTokenService.CookieName, rawRefresh, refresh.CookieOptions());

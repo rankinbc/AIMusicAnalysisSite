@@ -158,20 +158,63 @@ def _is_paid_now(session, user_id) -> bool:
     return (balance or 0) > 0
 
 
+def _anon_hours() -> int:
+    return int(os.environ.get("RETENTION_ANON_HOURS", "72"))
+
+
 def _purge_unclaimed_anonymous(now: datetime) -> int:
-    """AC3 — anonymous DEVICE uploads unclaimed >72 h. The devices table lands
-    with Epic 4 (story 4.5); until then this guard no-ops safely. Runs in its
-    OWN session so a failed probe can never poison the sweep's transactions."""
+    """Story 4.5 (AR26) — devices unclaimed for > RETENTION_ANON_HOURS purge
+    WITH their owned rows (jobs, reports, conversations + coach messages).
+    NFR20's reports-live-forever guarantee does NOT apply here: unclaimed
+    means there is no owner to keep a report for — that IS the 72 h deal the
+    anonymous funnel offers. Claimed devices' rows were already re-parented
+    to a user (device_id NULL) so they can never match. Runs in its OWN
+    session; any failure is logged and never poisons the sweep. Storage
+    objects for anon jobs are deleted when 6.3 fixes the anon key
+    convention — today anon rows have no uploaded keys to chase (row purge
+    is the complete story until then).
+
+    Returns the number of devices purged. Tolerates the table being absent
+    (pre-4.5 databases, partial sqlite test mirrors).
+    """
+    cutoff = now - timedelta(hours=_anon_hours())
     try:
-        with SessionFactory() as s:
-            probe = s.execute(text("SELECT to_regclass('public.devices')")).scalar()
+        with SessionFactory.begin() as s:
+            stale = [r.id for r in s.execute(text(
+                "SELECT id FROM devices WHERE claimed_at IS NULL AND created_at < :cutoff"
+            ), {"cutoff": cutoff}).all()]
+            if not stale:
+                return 0
+
+            ids = text(
+                "DELETE FROM coach_messages WHERE conversation_id IN "
+                "(SELECT id FROM conversations WHERE device_id IN :dids)"
+            ).bindparams(bindparam("dids", expanding=True))
+            s.execute(ids, {"dids": stale})
+            # Verdicts hang off analyses with no DB-level FK (repo convention)
+            # — delete them explicitly or they orphan.
+            s.execute(
+                text(
+                    "DELETE FROM verdicts WHERE analysis_id IN "
+                    "(SELECT id FROM analyses WHERE device_id IN :dids)"
+                ).bindparams(bindparam("dids", expanding=True)),
+                {"dids": stale},
+            )
+            for table in ("conversations", "analyses", "analysis_jobs"):
+                stmt = text(
+                    f"DELETE FROM {table} WHERE device_id IN :dids"  # noqa: S608 — fixed table list
+                ).bindparams(bindparam("dids", expanding=True))
+                s.execute(stmt, {"dids": stale})
+            s.execute(
+                text("DELETE FROM devices WHERE id IN :dids")
+                .bindparams(bindparam("dids", expanding=True)),
+                {"dids": stale},
+            )
+            logger.info("sweep_retention: purged %d unclaimed anon device(s)", len(stale))
+            return len(stale)
     except Exception:
-        probe = None
-    if probe is None:
-        logger.info("sweep_retention: no devices table yet — anon purge no-op")
+        logger.info("sweep_retention: anon purge skipped", exc_info=True)
         return 0
-    # Epic 4 will implement the actual purge here (RETENTION_ANON_HOURS).
-    return 0
 
 
 def _load_candidates(session, free_cutoff: datetime, lapsed_purgeable: set):

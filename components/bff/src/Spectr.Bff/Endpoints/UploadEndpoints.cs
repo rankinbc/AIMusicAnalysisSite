@@ -54,8 +54,33 @@ public static class UploadEndpoints
         IMultipartObjectStore store,
         IOptions<S3StorageOptions> s3Options,
         EntitlementService ents,
+        IRateLimiter limiter,
+        HttpContext httpCtx,
         CancellationToken ct)
     {
+        // Story 4.5 (AC4/AR26): per-actor + per-IP limits on /uploads/init.
+        // Today the actor is the authed user; 6.3's anon path passes
+        // device:{id} through the same limiter. Same knob as the auth
+        // endpoints: RateLimits:Enabled=false in Development (test volume).
+        var cfg = httpCtx.RequestServices.GetRequiredService<IConfiguration>();
+        if (!string.Equals(cfg["RateLimits:Enabled"], "false", StringComparison.OrdinalIgnoreCase))
+        {
+            var ip = httpCtx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            try
+            {
+                var verdict = await limiter.CheckAsync(
+                    $"user:{currentUser.UserId()}", ip, "uploads_init", 10, TimeSpan.FromMinutes(1), ct);
+                if (!verdict.Allowed)
+                    return ErrorEnvelope.Build(429, "rate_limited", "Too many uploads — slow down.");
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // FAIL-OPEN (4.3 precedent): a Redis blip must not block uploads.
+                httpCtx.RequestServices.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("Uploads").LogError(ex, "Rate limiter unavailable — failing OPEN.");
+            }
+        }
+
         if (!store.IsConfigured)
             return ErrorEnvelope.Build(501, "presigned_unavailable",
                 "Presigned upload storage is not configured; use the legacy upload endpoint.");

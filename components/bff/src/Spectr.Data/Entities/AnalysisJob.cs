@@ -14,8 +14,13 @@ public sealed class AnalysisJob
     [Column("id")]
     public Guid Id { get; set; } = Guid.NewGuid();
 
+    // Story 4.5 (AR24): nullable — anonymous jobs own device_id instead.
+    // DB CHECK enforces exactly-one of (user_id, device_id).
     [Column("user_id")]
-    public Guid UserId { get; set; }
+    public Guid? UserId { get; set; }
+
+    [Column("device_id"), MaxLength(26)]
+    public string? DeviceId { get; set; }
 
     // Nullable: ad-hoc upload that hasn't been saved to library yet
     [Column("version_id")]

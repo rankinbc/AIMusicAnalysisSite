@@ -16,8 +16,13 @@ public sealed class Analysis
     public Guid JobId { get; set; }
 
     // Denormalized for IDOR-safe list queries (avoid 3-table join on every list).
+    // Story 4.5 (AR24): nullable — anonymous reports own device_id instead
+    // (DB CHECK exactly-one).
     [Column("user_id")]
-    public Guid UserId { get; set; }
+    public Guid? UserId { get; set; }
+
+    [Column("device_id"), MaxLength(26)]
+    public string? DeviceId { get; set; }
 
     // Nullable: ad-hoc analyses not saved to library don't have a version yet.
     [Column("version_id")]

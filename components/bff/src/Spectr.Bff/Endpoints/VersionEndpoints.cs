@@ -1087,6 +1087,23 @@ public static class VersionEndpoints
             return (Guid.Empty, ErrorEnvelope.Build(409, "entitlement_exhausted",
                 "You have used all your analyses for this billing period."));
 
+        // Story 4.5 (AC5/AR26) — the SECOND-analysis verify gate: a free-tier
+        // user with an unverified email gets exactly one analysis; the next
+        // dispatch requires verification. Pro/credits exempt (Stripe receipts
+        // already prove a mailbox). Report VIEWING is never gated — read
+        // paths don't check this.
+        if (ent.Tier is not ("pro" or "credits"))
+        {
+            var verified = await db.Users.AsNoTracking()
+                .Where(u => u.Id == userId)
+                .Select(u => u.EmailVerifiedAt)
+                .FirstOrDefaultAsync(ct);
+            if (verified is null
+                && await db.AnalysisJobs.AsNoTracking().AnyAsync(j => j.UserId == userId, ct))
+                return (Guid.Empty, ErrorEnvelope.Build(403, "email_verification_required",
+                    "Verify your email to run another analysis. Check your inbox for the link."));
+        }
+
         var jobId = preallocatedJobId ?? Guid.NewGuid();
         var billingPeriod = DateTimeOffset.UtcNow.ToString("yyyy-MM");
 
