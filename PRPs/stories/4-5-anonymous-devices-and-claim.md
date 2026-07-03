@@ -1,6 +1,6 @@
 # Story 4.5: Anonymous Devices & Claim
 
-Status: review
+Status: done
 
 ## Story
 
