@@ -23,7 +23,7 @@ cd "$(dirname "$0")"
 if [ -f .env ]; then
   while IFS='=' read -r k v; do
     case "$k" in
-      R2_BACKUP_ACCESS_KEY|R2_BACKUP_SECRET_KEY|R2_ENDPOINT|R2_BUCKET|NTFY_URL|AGE_HOURS_MAX|RETENTION_DAYS)
+      R2_BACKUP_ACCESS_KEY|R2_BACKUP_SECRET_KEY|R2_ENDPOINT|R2_BUCKET|NTFY_URL|AGE_HOURS_MAX|RETENTION_DAYS|HEALTHCHECKS_BACKUP_URL)
         export "$k=$v" ;;
     esac
   done < .env
@@ -109,5 +109,13 @@ set +e
 PRUNE_RC=$?
 set -e
 [ "$PRUNE_RC" -eq 0 ] || warn "prune step failed (backup itself SUCCEEDED: $KEY)"
+
+# Story 10.4 — dead-man's switch: healthchecks.io alerts when this ping
+# STOPS arriving (a dead cron can't report itself; the external check can).
+# Success-only, fail-soft — a ping outage must not fail a good backup.
+if [ -n "${HEALTHCHECKS_BACKUP_URL:-}" ]; then
+  curl -fsS -m 10 "$HEALTHCHECKS_BACKUP_URL" > /dev/null 2>&1 \
+    || echo "?? healthchecks ping failed (backup itself OK)" >&2
+fi
 
 echo "==> backup done: s3://$BUCKET/$KEY"

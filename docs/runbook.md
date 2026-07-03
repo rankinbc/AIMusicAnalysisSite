@@ -123,6 +123,43 @@ migration means merge == deploy == applied.
 | Share-link k-factor | Epic 6 share instrumentation (not yet) |
 | Failed-payment recovery | `subscriptions.next_payment_attempt` + Stripe |
 
+## Alerting & status (story 10.4 / FR49 / NFR16)
+
+**Phone pushes**: install the ntfy app, subscribe to a PRIVATE topic
+(`ntfy.sh/<long-random-string>` — the topic name IS the secret), set
+`NTFY_URL=https://ntfy.sh/<topic>` in `.env`. Grafana's provisioned
+contact point + the backup/restore scripts all push there.
+
+**The six FR49 conditions**:
+
+| Condition | Mechanism |
+|---|---|
+| Job failure spike (>3 failed / 15 m) | Grafana rule `spectr-failure-spike` (prom) |
+| LLM budget ≥80% (global, month) | Grafana rule `spectr-llm-budget-80` (SQL vs `feature_flags.llm_budget_global_usd`; a missing/NULL flag keeps it silent — set the flag row, env-fallback ceilings aren't DB-visible) |
+| Billing/email webhook failures | Grafana rule `spectr-webhook-failures` (stuck >15 m or errored, 30 m window) |
+| Verdict wrong-rate >10% (7 d, n≥10) | Grafana rule `spectr-wrong-rate` |
+| Disk >80% | Grafana rule `spectr-disk-80` via node_exporter (noData = ALERTING — exporter down is an incident). Verify the mountpoint label on the VPS: `node_filesystem_avail_bytes{mountpoint="/host"}` |
+| Backup missed | healthchecks.io dead-man check — `backup.sh` pings `HEALTHCHECKS_BACKUP_URL` on success; a missing ping alerts EXTERNALLY (a dead cron can't report itself) |
+
+**healthchecks.io setup** (independent of the VPS by construction):
+1. Check "spectr-backup": period 24 h, grace 3 h → copy the ping URL into
+   `.env` as `HEALTHCHECKS_BACKUP_URL`.
+2. Uptime probe on `https://<domain>/healthz` (healthchecks.io supports
+   scheduled HTTP checks via cronless monitors; UptimeRobot free tier is
+   the fallback) → alert on non-200 / body ≠ `{"status":"ok"}`.
+3. Point both integrations at the same ntfy topic (healthchecks.io has a
+   native ntfy integration) — one buzz channel.
+
+**Status page (NFR16)**: template at `infra/status/index.html`. Publish it
+OUTSIDE the VPS: create public repo `spectr-status`, copy the file as
+`index.html`, enable GitHub Pages (main branch, root). Incident procedure:
+edit the status card + incident log, commit — from any device. Never serve
+the status page from the VPS.
+
+**Tuning**: rules live in `infra/grafana/provisioning/alerting/rules.yml`
+(re-provisioned on every deploy — edit in the repo, not the UI; UI edits
+to provisioned rules don't persist).
+
 ## Backups & restore proof (story 10.2 / AR31 / NFR15)
 
 Nightly `pg_dump` → R2 `backups/` (30 d retention, script-side prune +

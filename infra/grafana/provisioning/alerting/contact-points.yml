@@ -1,0 +1,23 @@
+# Story 10.4 (FR49) — every alert goes to the operator's phone via ntfy.
+# Grafana's webhook POSTs its JSON payload; ntfy renders the raw body as the
+# notification text (readable enough to buzz + glance; the pretty-message
+# proxy is a later nicety). NTFY_URL comes from the container env.
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: ntfy-phone
+    receivers:
+      - uid: ntfy-phone
+        type: webhook
+        settings:
+          url: ${NTFY_URL}
+          httpMethod: POST
+
+policies:
+  - orgId: 1
+    receiver: ntfy-phone
+    group_by: ["alertname"]
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h
