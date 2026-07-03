@@ -178,7 +178,7 @@ internal sealed class RetentionSweepScheduler(
 
         // Story 4.4 (AC3 fix): billingUrl was missing — the template's
         // KEEP MY FILES button rendered href="" since 3.4.
-        var origin = cfg["App:FrontendOrigin"] ?? "http://localhost:5174";
+        var origin = AppUrls.FrontendOrigin(cfg);
         await email.SendAsync(address, "retention-warning", new Dictionary<string, string>
         {
             ["purgeDate"] = purgeDate.ToString("yyyy-MM-dd"),

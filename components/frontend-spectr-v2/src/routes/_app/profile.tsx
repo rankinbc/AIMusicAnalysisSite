@@ -1,6 +1,8 @@
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 
+import { toast } from 'sonner';
+
 import {
   useMeActivity,
   useMeProfile,
@@ -309,7 +311,10 @@ function SettingsTab({ displayName, handle, email, onSignOut }: SettingsProps) {
   // Story 4.4 — analysis-complete email opt-out.
   const notifyOn = profile.data?.notifyAnalysisComplete ?? true;
   const toggleNotify = () => {
-    patchProfile.mutate({ notifyAnalysisComplete: !notifyOn });
+    patchProfile.mutate(
+      { notifyAnalysisComplete: !notifyOn },
+      { onError: () => toast.error('Could not save email preference — try again.') },
+    );
   };
 
   return (
@@ -342,7 +347,7 @@ function SettingsTab({ displayName, handle, email, onSignOut }: SettingsProps) {
             <input
               type="checkbox"
               checked={notifyOn}
-              disabled={profile.isLoading || patchProfile.isPending}
+              disabled={profile.isLoading || profile.isError || patchProfile.isPending}
               onChange={toggleNotify}
             />
             Email me when an analysis finishes

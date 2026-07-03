@@ -22,8 +22,10 @@ public sealed class LifecycleOptions
     public bool Enabled { get; set; } = true;
     // Catch-up window: a BFF restart must not orphan completions that
     // happened while it was down, but ancient completions must not suddenly
-    // email users either.
-    public int LookbackMinutes { get; set; } = 120;
+    // email users either. 24 h (review-raised from 2 h) covers any realistic
+    // outage; completions older than this are ACCEPTED LOSS, by design —
+    // there is no high-water mark.
+    public int LookbackMinutes { get; set; } = 1440;
     // 3.4 lesson: an immediate startup pass fires into every
     // WebApplicationFactory test host — delay the first tick.
     public int InitialDelaySeconds { get; set; } = 90;
@@ -80,31 +82,35 @@ internal sealed class LifecycleEmailScheduler(
 
         var cutoff = DateTimeOffset.UtcNow.AddMinutes(-Math.Max(1, opts.LookbackMinutes));
 
-        // Recently-completed jobs with a saved song (song-less ad-hoc analyses
-        // have no deep link), owner opted in. The digest ledger filters the
-        // already-emailed ones — checked via LEFT JOIN to keep this one query.
+        // Recently-completed jobs with a LIVE saved song (song-less or
+        // deleted-song analyses have no working deep link). NOTE: the opt-out
+        // flag is NOT in this filter — the ledger row doubles as the in-app
+        // notification, and "email me" must not silently disable the bell.
+        // Oldest first so a post-outage backlog drains before aging past the
+        // lookback window.
         var candidates = await (
             from job in db.AnalysisJobs.AsNoTracking()
             join a in db.Analyses.AsNoTracking() on job.Id equals a.JobId
+            join song in db.Songs.AsNoTracking() on a.SongId equals song.Id
             join u in db.Users.AsNoTracking() on job.UserId equals u.Id
             where job.Status == "complete"
                 && job.CompletedAt != null && job.CompletedAt > cutoff
-                && a.SongId != null
-                && u.NotifyAnalysisComplete
                 && u.IsActive
                 && !db.Notifications.Any(n => n.DigestKey == "analysis_complete:" + job.Id.ToString())
+            orderby job.CompletedAt
             select new
             {
                 JobId = job.Id,
                 UserId = u.Id,
                 u.Email,
+                u.NotifyAnalysisComplete,
                 a.SongId,
                 a.SongName,
             })
             .Take(200) // bounded per tick; the next minute picks up the rest
             .ToListAsync(ct);
 
-        var origin = _config["App:FrontendOrigin"] ?? "http://localhost:5174";
+        var origin = AppUrls.FrontendOrigin(_config, _logger);
         var sent = 0;
         foreach (var c in candidates)
         {
@@ -116,17 +122,31 @@ internal sealed class LifecycleEmailScheduler(
                 RecipientUserId = c.UserId,
                 EventType = "analysis_complete",
                 DigestKey = $"analysis_complete:{c.JobId}",
-                PayloadJson = $"{{\"jobId\":\"{c.JobId}\",\"songId\":\"{c.SongId}\"}}",
+                PayloadJson = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    jobId = c.JobId,
+                    songId = c.SongId,
+                    songName = c.SongName,
+                }),
             });
             try
             {
                 await db.SaveChangesAsync(ct);
             }
-            catch (DbUpdateException)
+            catch (DbUpdateException ex)
             {
                 db.ChangeTracker.Clear();
-                continue; // another replica already claimed this job
+                if (ex.InnerException is Npgsql.PostgresException { SqlState: "23505" })
+                    continue; // another replica already claimed this job
+                // Anything else is a REAL failure, not a duplicate — log it;
+                // the job stays unclaimed and self-heals next tick.
+                _logger.LogError(ex,
+                    "Analysis-complete ledger insert failed for job {JobId}.", c.JobId);
+                continue;
             }
+
+            if (!c.NotifyAnalysisComplete)
+                continue; // in-app notice recorded; email declined by the user
 
             try
             {
@@ -150,7 +170,9 @@ internal sealed class LifecycleEmailScheduler(
         }
 
         if (sent > 0)
-            _logger.LogInformation("Lifecycle sweep sent {Count} analysis-complete email(s).", sent);
+            _logger.LogInformation(
+                "Lifecycle sweep queued {Count} analysis-complete email(s) (suppressed addresses skip inside the pathway).",
+                sent);
         return sent;
     }
 }

@@ -75,6 +75,23 @@ claude-fable-5 (Claude Code)
 - Shared: `models.py` (notify_analysis_complete mirror)
 - Frontend: `api/types.ts`, `routes/_app/profile.tsx` + `profile.module.css`
 
+### Senior Developer Review (AI)
+
+2026-07-03 — bmad-code-review (Blind Hunter + Edge Case Hunter/Acceptance Auditor; auditor ran 7/7 lifecycle+dunning tests against live Postgres and inspected the dev DB directly). Outcome: **Approve after patches** — one CRITICAL confirmed by DB inspection. 11 patches applied:
+
+- [x] [CRITICAL] **Migration backfilled every existing user opted-OUT**: `AddNotifyAnalysisComplete` used `defaultValue: false` (5,605 rows confirmed false in dev) — the entire installed base would never get a completion email and the story's own default-ON decision was violated at the schema layer → `FixNotifyAnalysisCompleteDefaultTrue` migration: server default → true + backfill UPDATE (safe: feature shipped in the same PR, nobody opted out intentionally)
+- [x] [High] Opt-out silently killed the IN-APP notification too (the ledger doubles as the bell) → the preference now gates only the EMAIL; the ledger/notification is always written; test renamed + asserts the notification exists for opted-out users
+- [x] [High] Blanket `DbUpdateException`-as-duplicate misclassified real insert failures with zero logging (a transient fault could eat a dunning email as "already sent") → both sites discriminate on `PostgresException 23505`; non-dup failures log loudly (poller self-heals next tick; dunning retries on the next Smart-Retry event)
+- [x] [Med] Lookback gap: outage > window silently drops completions forever → default raised 2 h → 24 h, `orderby CompletedAt` drains post-outage backlog oldest-first before it ages out, accepted-loss beyond 24 h documented in the option comment (no high-water mark by design)
+- [x] [Med] Hand-interpolated `PayloadJson` (Stripe-supplied invoice.Id could break the jsonb insert → misread as duplicate) → `JsonSerializer.Serialize` both sites; completion payload now carries songName (the in-app notice renders without a join)
+- [x] [Med] Deleted-song deep links 404'd → inner join to live `songs` rows
+- [x] [Med] `App:FrontendOrigin` localhost fallback duplicated ×4 with no warning → `AppUrls.FrontendOrigin` single helper (warn on missing), all senders converted
+- [x] [Low] Dunning silent no-ops (absent invoice.Id / inactive user) now LogWarning; password-changed send catches OperationCanceledException too (the reset already committed — a client disconnect must not turn success into 500; send uses CancellationToken.None)
+- [x] [Low] Toggle UX: onError toast + disabled on profile load error; "sent" log wording notes suppressed addresses skip inside the pathway
+- Verified-clean by the review (no change): `ux_notifications_digest_key` partial unique index EXISTS in the DB (raw-SQL migration, invisible in the EF snapshot — the blind layer's top concern resolved by direct inspection); ChangeTracker.Clear is safe (webhook bookkeeping is raw SQL); Guid.ToString() Npgsql translation exercised against real PG; rerun-phase jobs excluded by the analyses join; Take(200) liveness guaranteed by the ledger filter.
+- Deferred: grade in completion emails (needs a grade column or final_json parse — recorded, template branch ready); authenticated change-password endpoint doesn't exist (single insertion point confirmed complete); high-water-mark catch-up (24 h window accepted).
+
 ### Change Log
 
 - 2026-07-03: implemented on `account/4-4-lifecycle-emails`. Gates: BFF 316/316, shared 27, vitest 677, all linters clean. Status → review.
+- 2026-07-03 (review): 11 patches applied incl. the CRITICAL default-false migration fix. Gates after: BFF 316/316, vitest 677, all linters clean.

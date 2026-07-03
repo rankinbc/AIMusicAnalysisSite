@@ -130,17 +130,24 @@ public sealed class LifecycleEmailTests(WebApplicationFactory<Program> factory)
     }
 
     [Fact]
-    public async Task Opted_Out_User_Gets_No_Email()
+    public async Task Opted_Out_User_Gets_No_Email_But_Still_Gets_The_In_App_Notification()
     {
         if (!await TestDb.Reachable(_factory)) { return; }
 
         var address = $"lcoff+{Guid.NewGuid():N}@spectr.test";
         var (scheduler, email, f) = Build();
-        var (userId, _, _) = await SeedCompletedAnalysisAsync(f, address, notify: false);
+        var (userId, _, jobId) = await SeedCompletedAnalysisAsync(f, address, notify: false);
         try
         {
             await scheduler.RunOnceAsync(CancellationToken.None);
             Assert.DoesNotContain(email.Sent, s => s.To == address);
+
+            // Review-hardened: "email me" is an EMAIL preference — the bell
+            // notification must still exist for opted-out users.
+            using var scope = f.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            Assert.True(await db.Notifications.AnyAsync(
+                n => n.DigestKey == $"analysis_complete:{jobId}"));
         }
         finally
         {
