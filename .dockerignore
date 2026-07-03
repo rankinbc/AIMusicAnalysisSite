@@ -1,0 +1,23 @@
+# Story 10.1 — repo-root build context (infra/Dockerfile.web). Keep the
+# upload lean and secrets/tooling out of the daemon context; the final web
+# stage only receives dist/ + Caddyfile, but the CONTEXT should still never
+# carry .git, envs, or a Windows node_modules tree.
+.git/
+**/node_modules/
+**/bin/
+**/obj/
+**/__pycache__/
+**/dist/
+.env
+.env.*
+data/
+output/
+PRPs/
+docs/
+components/api/
+components/frontend/
+components/frontend-spectr/
+components/worker/
+components/shared/
+components/analysis/
+components/bff/

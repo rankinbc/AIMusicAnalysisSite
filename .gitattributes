@@ -1,0 +1,7 @@
+# Story 10.1 — files that EXECUTE on Linux must never be checked out with
+# CRLF on Windows dev machines (a CRLF shebang breaks bash on the VPS).
+*.sh text eol=lf
+Caddyfile text eol=lf
+Dockerfile* text eol=lf
+*.Dockerfile text eol=lf
+Procfile text eol=lf

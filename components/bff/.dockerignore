@@ -1,0 +1,8 @@
+# Story 10.1 (AR31) — nothing secret or build-noise enters the image context.
+**/bin/
+**/obj/
+**/*.user
+.env
+.env.*
+appsettings.*.local.json
+tests/

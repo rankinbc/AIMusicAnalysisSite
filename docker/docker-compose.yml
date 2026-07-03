@@ -122,8 +122,10 @@ services:
   # CMD must mirror the Procfile's --queues default coach).
   worker:
     build:
-      context: ../components/worker
-      dockerfile: Dockerfile
+      # Story 10.1: the worker Dockerfile finally exists; its context is
+      # components/ (it copies shared/ + analysis/ alongside worker/).
+      context: ../components
+      dockerfile: worker/Dockerfile
     depends_on:
       postgres: { condition: service_healthy }
       redis:    { condition: service_healthy }

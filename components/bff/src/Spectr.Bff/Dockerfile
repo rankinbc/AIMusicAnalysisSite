@@ -14,4 +14,17 @@ WORKDIR /app
 COPY --from=build /app .
 EXPOSE 5000
 ENV ASPNETCORE_URLS=http://+:5000
+# Story 10.1 hardening: non-root (AR31 hygiene) + in-container LIVENESS.
+# Probes GET / (app-alive, no dependencies) — NOT /healthz, which checks
+# DB/redis: a database blip must not make compose restart-loop the BFF.
+# No chown of /app: the runtime user must not be able to rewrite its own
+# binaries (read is enough).
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && adduser --disabled-password --gecos "" --uid 10001 spectr
+USER spectr
+# start-period 120s: boot-time migrations (10.1) may legitimately take a
+# while on deploy — don't flip unhealthy mid-migration.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
+    CMD curl -fsS http://localhost:5000/ || exit 1
 ENTRYPOINT ["dotnet", "Spectr.Bff.dll"]
