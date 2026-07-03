@@ -166,6 +166,11 @@ class SongVersion(Base):
         "stem_analysis_mode", String(16), nullable=False, server_default="grouped", default="grouped"
     )
     is_current: Mapped[bool] = mapped_column("is_current", Boolean, nullable=False, default=False)
+    # Story 3.4 — retention sweep marker (mirror of EF AddRawAudioPurgedAt).
+    # Set when the raw audio objects were purged; paths remain as audit trail.
+    raw_audio_purged_at: Mapped[Optional[datetime]] = mapped_column(
+        "raw_audio_purged_at", DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         "created_at", DateTime(timezone=True), nullable=False, server_default=func.now()
     )

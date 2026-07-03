@@ -56,6 +56,12 @@ services:
   # Complete is impossible).
   # Story 3.2 (AR21): the worker gets its OWN credentials (spectr-worker),
   # separate from the BFF's — in prod R2 this is a distinct scoped API token.
+  # Story 3.4 (AC4/NFR26): the 180-day lifecycle rules below are the BACKSTOP
+  # to the authoritative sweep_retention actor (30d free / 90d post-lapse) —
+  # deliberately far behind policy so lifecycle never deletes ahead of the
+  # sweep, while orphaned/unregistered objects still age out. reports/ and
+  # analysis/ prefixes have NO rule: reports live forever (NFR20).
+  # Prod: configure the same three prefix rules on the R2 bucket (10.1).
   minio-init:
     image: minio/mc
     depends_on:
@@ -68,7 +74,10 @@ services:
       mc cors set local/spectr /tmp/cors.xml &&
       (mc admin user add local spectr-worker spectr-worker-secret || true) &&
       mc admin policy attach local readwrite --user spectr-worker || true &&
-      echo 'minio bucket + CORS + worker user ready'
+      (mc ilm rule add local/spectr --prefix 'audio/' --expire-days 180 || true) &&
+      (mc ilm rule add local/spectr --prefix 'stems/' --expire-days 180 || true) &&
+      (mc ilm rule add local/spectr --prefix 'als/' --expire-days 180 || true) &&
+      echo 'minio bucket + CORS + worker user + lifecycle ready'
       "
 
   # C# BFF — owns auth, library, user state, queue dispatch, audio streaming.

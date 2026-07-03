@@ -101,3 +101,25 @@ def cleanup_all(fetched: list[Path]) -> None:
     """cleanup_local over a batch of resolve_local fetches."""
     for f in fetched:
         cleanup_local(f)
+
+
+def delete_object(key: str, local_root: str) -> None:
+    """Story 3.4 — remove a stored object EVERYWHERE it may live.
+
+    Deletes the local file under ``local_root`` (missing-ok) AND, when S3 is
+    enabled, the bucket object. Exact keys only — callers must never pass
+    prefixes; the traversal guard mirrors resolve_local. Idempotent: deleting
+    an absent object is success (the sweep re-runs nightly).
+    """
+    if ".." in Path(key).parts:
+        raise ValueError(f"path traversal in stored path: {key!r}")
+    try:
+        local = (Path(local_root) / key).resolve()
+        local.unlink(missing_ok=True)
+    except OSError:
+        logger.warning("object_store: local delete failed for %s", key, exc_info=True)
+    if s3_enabled():
+        bucket = os.environ.get("S3_BUCKET", "spectr")
+        # S3 DeleteObject on a missing key is a success (204) — idempotent.
+        _client().delete_object(Bucket=bucket, Key=key)
+        logger.info("object_store: deleted s3://%s/%s", bucket, key)

@@ -187,6 +187,12 @@ builder.Services.AddOptions<WorkerOptions>()
     .Bind(builder.Configuration.GetSection(WorkerOptions.SectionName))
     .ValidateOnStart();
 
+// Story 3.4 — retention: email seam (Epic 4 swaps Resend in) + nightly driver
+// that warns lapsed users and enqueues the worker's sweep_retention actor.
+builder.Services.AddSingleton<IEmailSender, LoggingEmailSender>();
+builder.Services.Configure<RetentionOptions>(builder.Configuration.GetSection(RetentionOptions.SectionName));
+builder.Services.AddHostedService<RetentionSweepScheduler>();
+
 // Story 1.9: per-analysis free-tier coach follow-up cap. Fail-fast at startup
 // on a non-positive value — a zero cap would make the product unusable and we
 // don't want a config typo to ship silently.
