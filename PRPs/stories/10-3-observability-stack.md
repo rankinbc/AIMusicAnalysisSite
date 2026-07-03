@@ -1,6 +1,6 @@
 # Story 10.3: Observability Stack
 
-Status: review
+Status: done
 
 ## Story
 
