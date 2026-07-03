@@ -1,7 +1,14 @@
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 
-import { useMeActivity, useMeStats, usePatchMe, useSongs } from '../../api/hooks';
+import {
+  useMeActivity,
+  useMeProfile,
+  useMeStats,
+  usePatchMe,
+  usePatchMeProfile,
+  useSongs,
+} from '../../api/hooks';
 import { useAuth } from '../../auth/AuthContext';
 import { normalizeGrade } from '../../features/results/helpers/grade';
 import { CoverArt } from '../../ui/CoverArt';
@@ -286,6 +293,8 @@ interface SettingsProps {
 function SettingsTab({ displayName, handle, email, onSignOut }: SettingsProps) {
   const { updateUser } = useAuth();
   const patchMe = usePatchMe();
+  const profile = useMeProfile();
+  const patchProfile = usePatchMeProfile();
 
   const save = async (field: 'displayName' | 'handle', value: string): Promise<string | null> => {
     try {
@@ -295,6 +304,12 @@ function SettingsTab({ displayName, handle, email, onSignOut }: SettingsProps) {
     } catch (err) {
       return extractValidationMessage(err, field) ?? 'Could not save change.';
     }
+  };
+
+  // Story 4.4 — analysis-complete email opt-out.
+  const notifyOn = profile.data?.notifyAnalysisComplete ?? true;
+  const toggleNotify = () => {
+    patchProfile.mutate({ notifyAnalysisComplete: !notifyOn });
   };
 
   return (
@@ -320,6 +335,18 @@ function SettingsTab({ displayName, handle, email, onSignOut }: SettingsProps) {
             />
             <SettingRow label="Email" value={email} />
           </div>
+        </div>
+        <div className="card card-body">
+          <SectionTitle>Emails</SectionTitle>
+          <label className={s.toggleRow}>
+            <input
+              type="checkbox"
+              checked={notifyOn}
+              disabled={profile.isLoading || patchProfile.isPending}
+              onChange={toggleNotify}
+            />
+            Email me when an analysis finishes
+          </label>
         </div>
         <div className="card card-body">
           <SectionTitle>Session</SectionTitle>

@@ -24,6 +24,12 @@ public sealed class User
     [Column("email_verified_at")]
     public DateTimeOffset? EmailVerifiedAt { get; set; }
 
+    // Story 4.4 (FR44/AR27): the analysis-complete email opt-out. Default ON;
+    // the profile Settings tab owns the toggle. Scoped to completion emails
+    // only — verification/reset/dunning/retention are not optional.
+    [Column("notify_analysis_complete")]
+    public bool NotifyAnalysisComplete { get; set; } = true;
+
     // Identity / public profile fields (added in v2 — see REQUIREMENTS_ARCHITECTURE.md §Identity)
     [Column("handle"), MaxLength(32)]
     public string? Handle { get; set; }

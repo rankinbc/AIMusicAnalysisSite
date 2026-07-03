@@ -956,7 +956,9 @@ public static class BillingEndpoints
 
         try
         {
-            await DispatchAsync(stripeEvent, db, mirrorService, credits, cache, logger, ct);
+            await DispatchAsync(stripeEvent, db, mirrorService, credits, cache, logger,
+                httpCtx.RequestServices.GetRequiredService<IEmailSender>(),
+                httpCtx.RequestServices.GetRequiredService<IConfiguration>(), ct);
             // review-fix P3 — also clear processing_error on success so
             // a previously-failed event that succeeds on retry leaves
             // no stale error trail.
@@ -996,6 +998,8 @@ public static class BillingEndpoints
         CreditLedgerService credits,
         IMemoryCache cache,
         ILogger<BillingWebhook> logger,
+        IEmailSender email,
+        IConfiguration cfg,
         CancellationToken ct)
     {
         switch (stripeEvent.Type)
@@ -1106,6 +1110,51 @@ public static class BillingEndpoints
                 sub.UpdatedAt = DateTimeOffset.UtcNow;
                 await db.SaveChangesAsync(ct);
                 cache.Remove($"ent:{sub.UserId:N}");
+
+                // Story 4.4 (AC2/FR33 email half) — the dunning notice, once
+                // per failed INVOICE (Stripe re-fires payment_failed on every
+                // Smart-Retry attempt; the digest ledger keys on invoice id so
+                // the user gets one email per invoice, not one per retry).
+                if (stripeEvent.Type == "invoice.payment_failed"
+                    && !string.IsNullOrEmpty(invoice.Id))
+                {
+                    var address = await db.Users.AsNoTracking()
+                        .Where(u => u.Id == sub.UserId && u.IsActive)
+                        .Select(u => u.Email)
+                        .FirstOrDefaultAsync(ct);
+                    if (address is not null)
+                    {
+                        db.Notifications.Add(new Spectr.Data.Entities.Notification
+                        {
+                            RecipientUserId = sub.UserId,
+                            EventType = "dunning",
+                            DigestKey = $"dunning:{invoice.Id}",
+                            PayloadJson = $"{{\"invoiceId\":\"{invoice.Id}\"}}",
+                        });
+                        try
+                        {
+                            await db.SaveChangesAsync(ct);
+                            var origin = cfg["App:FrontendOrigin"] ?? "http://localhost:5174";
+                            await email.SendAsync(address, EmailTemplates.Dunning,
+                                new Dictionary<string, string>
+                                {
+                                    ["nextAttempt"] = sub.NextPaymentAttempt?.ToString("yyyy-MM-dd") ?? "soon",
+                                    ["billingUrl"] = $"{origin}/billing",
+                                }, ct);
+                        }
+                        catch (DbUpdateException)
+                        {
+                            db.ChangeTracker.Clear(); // retry of the same invoice — already emailed
+                        }
+                        catch (Exception ex) when (ex is not OperationCanceledException)
+                        {
+                            // Email failure must not 5xx the webhook (Stripe
+                            // would redeliver and the ledger already claimed).
+                            logger.LogError(ex,
+                                "Dunning email failed for invoice {InvoiceId}.", invoice.Id);
+                        }
+                    }
+                }
                 return;
             }
             default:

@@ -15,9 +15,10 @@ public static class EmailTemplates
     public const string AnalysisComplete = "analysis-complete";
     public const string Dunning = "dunning";
     public const string RetentionWarning = "retention-warning";
+    public const string PasswordChanged = "password-changed"; // story 4.4 (4.3 review commitment)
 
     public static readonly IReadOnlyList<string> All =
-        [Verification, Reset, AnalysisComplete, Dunning, RetentionWarning];
+        [Verification, Reset, AnalysisComplete, Dunning, RetentionWarning, PasswordChanged];
 
     /// <summary>
     /// Render a registered template. Body values are HTML-encoded; URL slots
@@ -76,7 +77,7 @@ public static class EmailTemplates
                 Shell("Analysis complete",
                     $"""
                     <p><span style="{MonoCss}">{D("songName")}</span> finished its 7-phase analysis.</p>
-                    <p>Grade: <span style="{MonoCss}">{D("grade")}</span></p>
+                    {(D("grade").Length > 0 ? $"""<p>Grade: <span style="{MonoCss}">{D("grade")}</span></p>""" : "")}
                     <p style="margin:28px 0;"><a href="{U("reportUrl")}" style="{ButtonCss}">OPEN REPORT</a></p>
                     <p style="{MutedCss}">You can turn these emails off in your profile.</p>
                     """)),
@@ -97,6 +98,14 @@ public static class EmailTemplates
                     <p>Your <b>reports, verdicts, and coach chats are never deleted</b> — only the audio.</p>
                     <p style="margin:28px 0;"><a href="{U("billingUrl")}" style="{ButtonCss}">KEEP MY FILES</a></p>
                     <p style="{MutedCss}">Re-subscribing (or buying credits) before the date cancels the cleanup automatically.</p>
+                    """)),
+            PasswordChanged => (
+                "Your SPECTR password was changed",
+                Shell("Password changed",
+                    $"""
+                    <p>Your account password was just changed and every other session was signed out.</p>
+                    <p style="{MutedCss}">If this was you, you're done — nothing else to do.</p>
+                    <p style="{MutedCss}">If this was NOT you, someone had access to your email inbox. Use the password-reset flow on the sign-in page immediately and review your mailbox security. (No links in this email on purpose — go to the app directly.)</p>
                     """)),
             _ => throw new InvalidOperationException(
                 $"Unknown email template '{template}'. Registered: {string.Join(", ", All)}."),

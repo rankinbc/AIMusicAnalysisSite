@@ -614,6 +614,8 @@ export interface MeProfileDto {
   bannerHue: number | null;
   accent: string | null;
   publicLink: string | null;
+  /** Story 4.4 — analysis-complete email opt-out (true = emails on). */
+  notifyAnalysisComplete: boolean;
 }
 
 export interface PatchMeProfileRequest {
@@ -624,6 +626,8 @@ export interface PatchMeProfileRequest {
   bannerHue?: number | null;
   accent?: string | null;
   publicLink?: string | null;
+  /** Story 4.4 — omit = unchanged. */
+  notifyAnalysisComplete?: boolean;
 }
 
 export interface MeStatsDto {

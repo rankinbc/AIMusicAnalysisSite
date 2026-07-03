@@ -461,6 +461,17 @@
   margin-bottom: 12px;
 }
 
+/* Story 4.4 — email-preference checkbox row (Settings tab). */
+.toggleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.5;
+  cursor: pointer;
+}
+
 .dangerActions {
   display: flex;
   flex-direction: column;

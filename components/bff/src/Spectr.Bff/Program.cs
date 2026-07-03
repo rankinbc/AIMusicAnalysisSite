@@ -244,6 +244,10 @@ builder.Services.AddOptions<ResendOptions>()
     .ValidateOnStart();
 builder.Services.Configure<RetentionOptions>(builder.Configuration.GetSection(RetentionOptions.SectionName));
 builder.Services.AddHostedService<RetentionSweepScheduler>();
+// Story 4.4 — analysis-complete email poller (worker can't render; BFF owns
+// the registry). Digest-keyed notifications rows are the send ledger.
+builder.Services.Configure<LifecycleOptions>(builder.Configuration.GetSection(LifecycleOptions.SectionName));
+builder.Services.AddHostedService<LifecycleEmailScheduler>();
 
 // Story 1.9: per-analysis free-tier coach follow-up cap. Fail-fast at startup
 // on a non-positive value — a zero cap would make the product unusable and we
