@@ -85,6 +85,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     // Follow graph (story 11.9)
     public DbSet<FollowRelation> FollowRelations => Set<FollowRelation>();
 
+    // Email suppression list (story 4.2 — bounce/complaint webhook appends)
+    public DbSet<EmailSuppression> EmailSuppressions => Set<EmailSuppression>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         builder.HasPostgresExtension("pgcrypto");      // gen_random_uuid()

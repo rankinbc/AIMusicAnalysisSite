@@ -228,9 +228,19 @@ builder.Services.AddOptions<WorkerOptions>()
     .Bind(builder.Configuration.GetSection(WorkerOptions.SectionName))
     .ValidateOnStart();
 
-// Story 3.4 — retention: email seam (Epic 4 swaps Resend in) + nightly driver
-// that warns lapsed users and enqueues the worker's sweep_retention actor.
-builder.Services.AddSingleton<IEmailSender, LoggingEmailSender>();
+// Story 3.4 seam → story 4.2 implementation: the ONE email pathway.
+// QueueEmailSender renders (registry), checks suppression, enqueues the
+// send_email actor on `maintenance` (retry semantics there). Key-less dev is
+// safe: the actor stubs (logs) without RESEND_API_KEY.
+builder.Services.AddScoped<IEmailSender, QueueEmailSender>();
+var requireEmail = string.Equals(
+    Environment.GetEnvironmentVariable("SPECTR_REQUIRE_EMAIL"), "1", StringComparison.Ordinal);
+builder.Services.AddOptions<ResendOptions>()
+    .Bind(builder.Configuration.GetSection(ResendOptions.SectionName))
+    .Validate(
+        o => !requireEmail || (o.IsConfigured && !string.IsNullOrWhiteSpace(o.WebhookSecret)),
+        "Resend:ApiKey and Resend:WebhookSecret must be set when SPECTR_REQUIRE_EMAIL=1.")
+    .ValidateOnStart();
 builder.Services.Configure<RetentionOptions>(builder.Configuration.GetSection(RetentionOptions.SectionName));
 builder.Services.AddHostedService<RetentionSweepScheduler>();
 
@@ -362,6 +372,7 @@ api.MapFeedbackEndpoints();
 api.MapRoomEndpoints();
 api.MapBillingEndpoints();
 api.MapHealthEndpoints();
+app.MapEmailWebhookEndpoints();  // story 4.2 — POST /api/email/webhook (svix-verified)
 
 app.MapGet("/", () => Results.Json(new { status = "ok", version = "2.0.0" }))
    .AllowAnonymous();
