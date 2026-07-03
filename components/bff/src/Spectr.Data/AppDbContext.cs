@@ -94,6 +94,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     // Anonymous device identities (story 4.5 — AR24/AR25)
     public DbSet<Device> Devices => Set<Device>();
 
+    // Append-only audit trail (story 4.6 first writer; 10.5 extends)
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         builder.HasPostgresExtension("pgcrypto");      // gen_random_uuid()

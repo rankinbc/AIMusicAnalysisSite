@@ -30,6 +30,14 @@ public sealed class User
     [Column("notify_analysis_complete")]
     public bool NotifyAnalysisComplete { get; set; } = true;
 
+    // Story 4.6 (4.3 commitment) — JWT token-versioning: stamped into every
+    // access token as `tver`; OnTokenValidated rejects stale versions.
+    // Bumped on password reset and account deletion so outstanding access
+    // JWTs die within the 60 s validation-cache window instead of living
+    // out their 15-minute TTL.
+    [Column("token_version")]
+    public int TokenVersion { get; set; } = 1;
+
     // Identity / public profile fields (added in v2 — see REQUIREMENTS_ARCHITECTURE.md §Identity)
     [Column("handle"), MaxLength(32)]
     public string? Handle { get; set; }

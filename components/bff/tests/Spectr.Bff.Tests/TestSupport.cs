@@ -41,10 +41,13 @@ public static class TestAuth
     /// (userId, accessToken).  The register response already carries User.Id
     /// so no second round-trip to /api/auth/me is needed.
     /// </summary>
+    // Exposed for tests that must re-authenticate (e.g. account deletion).
+    public const string Password = "correct-horse-battery";
+
     public static async Task<(Guid UserId, string Token)> RegisterAsync(HttpClient client)
     {
         var email = $"test+{Guid.NewGuid():N}@spectr.test";
-        const string password = "correct-horse-battery";
+        const string password = Password;
 
         var resp = await client.PostAsJsonAsync("/api/auth/register", new { email, password });
         resp.EnsureSuccessStatusCode();

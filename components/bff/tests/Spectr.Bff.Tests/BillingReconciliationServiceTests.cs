@@ -43,6 +43,9 @@ public sealed class BillingReconciliationServiceTests
 
         public Task<StripeBillingPortalSession> CreatePortalSessionAsync(StripeBillingPortalSessionCreateOptions options, string idempotencyKey, CancellationToken ct)
             => throw new NotImplementedException();
+
+        public Task CancelImmediatelyAsync(string subscriptionId, Guid userId, CancellationToken ct)
+            => throw new NotImplementedException();
     }
 
     // Scope factory that must NOT be called — validates the skip-when-

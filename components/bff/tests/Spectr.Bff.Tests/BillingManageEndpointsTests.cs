@@ -69,6 +69,14 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
         public Task<Stripe.Subscription?> GetSubscriptionAsync(string subscriptionId, CancellationToken ct)
             => Task.FromResult<Stripe.Subscription?>(null);
 
+        // Story 4.6 — account-delete immediate cancel (recorded for tests).
+        public string? LastCanceledSubscriptionId { get; set; }
+        public Task CancelImmediatelyAsync(string subscriptionId, Guid userId, CancellationToken ct)
+        {
+            LastCanceledSubscriptionId = subscriptionId;
+            return Task.CompletedTask;
+        }
+
         public Task<Stripe.Price?> GetPriceAsync(string priceId, CancellationToken ct)
             => Task.FromResult<Stripe.Price?>(null);
     }
