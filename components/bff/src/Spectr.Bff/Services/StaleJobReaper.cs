@@ -60,19 +60,31 @@ internal sealed class StaleJobReaper(
     // internal — callable directly from unit tests without the 60 s timer.
     internal async Task<int> ReapAsync(CancellationToken ct)
     {
-        var cutoff = DateTimeOffset.UtcNow
-            - TimeSpan.FromMinutes(_workerOpts.Value.StaleJobMinutes);
+        var now = DateTimeOffset.UtcNow;
+        var startedCutoff = now - TimeSpan.FromMinutes(_workerOpts.Value.StaleJobMinutes);
+        // Clamp: a misconfigured grace below the processing window would fail
+        // QUEUED jobs faster than started ones — inverting NFR16 entirely.
+        var pendingCutoff = now - TimeSpan.FromMinutes(
+            Math.Max(_workerOpts.Value.PendingGraceMinutes, _workerOpts.Value.StaleJobMinutes));
 
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        // Set-based UPDATE (no entity loading). A job is abandoned when it is
-        // still non-terminal AND its most-recent activity predates the cutoff.
+        // Story 3.5 (NFR16) — two different abandonment signals:
+        //  * PROCESSING jobs are abandoned when the worker that STARTED them
+        //    went away (StaleJobMinutes from started_at) — their message was
+        //    consumed, nothing will resume them; fail-and-resurface.
+        //  * PENDING jobs are just queued — their message still sits in the
+        //    Redis LIST and the returning worker WILL consume it. They only
+        //    get failed after the much longer PendingGraceMinutes, catching a
+        //    truly orphaned row (message lost) without failing a queue that's
+        //    merely waiting out a worker restart or backlog.
         // error_code is deliberately NOT "invalid_file" (that triggers the BFF
         // credit-reversal read path in JobEndpoints).
         var failed = await db.AnalysisJobs
-            .Where(j => (j.Status == "pending" || j.Status == "processing")
-                && (j.StartedAt ?? j.DispatchedAt) < cutoff)
+            .Where(j =>
+                (j.Status == "processing" && (j.StartedAt ?? j.DispatchedAt) < startedCutoff)
+                || (j.Status == "pending" && j.DispatchedAt < pendingCutoff))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(j => j.Status, "failed")
                 .SetProperty(j => j.ErrorCode, "worker_unavailable")
@@ -85,8 +97,8 @@ internal sealed class StaleJobReaper(
         if (failed > 0)
         {
             _logger.LogWarning(
-                "Stale-job reaper failed {Count} abandoned job(s) older than {Minutes} min.",
-                failed, _workerOpts.Value.StaleJobMinutes);
+                "Stale-job reaper failed {Count} abandoned job(s) (processing > {Minutes} min / pending > {Grace} min).",
+                failed, _workerOpts.Value.StaleJobMinutes, _workerOpts.Value.PendingGraceMinutes);
         }
 
         return failed;

@@ -27,6 +27,15 @@ describe('planParts (story 3.1 — uniform parts, FOOTGUN #3)', () => {
     expect(planParts(1, PART)).toEqual([{ partNumber: 1, start: 0, end: 1 }]);
   });
 
+  it('190 MB (Journey 2 flaky-FLAC case) is 12 parts, uniform except last', () => {
+    // Pins the Journey-2 part plan only. The re-sign sufficiency argument
+    // (12 parts x 3 attempts inside the 2 h URL window) is timing ANALYSIS
+    // recorded in story 3.5 decision 4 — not something a unit test can prove.
+    const plans = planParts(190 * 1000 * 1000, PART);
+    expect(plans).toHaveLength(12);
+    expect(plans.slice(0, -1).every((p) => p.end - p.start === PART)).toBe(true);
+  });
+
   it('250 MB is 16 parts', () => {
     expect(planParts(250 * MiB, PART)).toHaveLength(16);
   });

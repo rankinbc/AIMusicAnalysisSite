@@ -1153,11 +1153,35 @@ public static class VersionEndpoints
             "credits" => DramatiqQueues.AnalysisPaid,
             _         => DramatiqQueues.AnalysisFree, // "free", null, future anonymous
         };
-        await queue.EnqueueAsync(
-            DramatiqTasks.AnalyzeAudioJob,
-            new object[] { jobId.ToString() },
-            queueName,
-            ct);
+        try
+        {
+            await queue.EnqueueAsync(
+                DramatiqTasks.AnalyzeAudioJob,
+                new object[] { jobId.ToString() },
+                queueName,
+                ct);
+        }
+        catch (Exception)
+        {
+            // Story 3.5 review: an enqueue failure (Redis down) after the job
+            // row committed would leave a MESSAGELESS pending row — with the
+            // NFR16 pending grace it would now sit 4 h before resurfacing, and
+            // a credits spend would never be reversed. Fail it immediately as
+            // dispatch_failed (≠ invalid_file, so no automatic refund path —
+            // the user re-runs; ≠ worker_unavailable, so logs distinguish
+            // enqueue failure from worker death).
+            var row = await db.AnalysisJobs.FirstOrDefaultAsync(j => j.Id == jobId, ct);
+            if (row is not null)
+            {
+                row.Status = "failed";
+                row.ErrorCode = "dispatch_failed";
+                row.ErrorMessage = "Could not queue the analysis. Try again.";
+                row.CurrentPhase = "failed";
+                row.FailedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync(ct);
+            }
+            throw;
+        }
         return (jobId, null);
     }
 

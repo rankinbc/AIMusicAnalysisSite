@@ -131,6 +131,24 @@ def analyze_audio_job(job_id: str) -> None:
         job = s.get(AnalysisJob, jid)
         if job is None:
             raise ValueError(f"job {job_id} not found")
+        # Story 3.5 — redelivery guard: a duplicate/redelivered message must
+        # be a clean no-op for jobs the user already saw reach a terminal
+        # state. COMPLETE: re-running would regress status and hit the unique
+        # analyses.job_id index in an IntegrityError retry-loop. FAILED with
+        # worker_unavailable: the reaper already told the user to re-run —
+        # silently resurrecting it here could double-run against that manual
+        # retry. Other failed codes (invalid_file, pipeline errors) stay
+        # no-op-free: dramatiq's own max_retries redelivery is the mechanism
+        # that legitimately re-enters those. (A mid-run crash redelivery is
+        # still `processing` and correctly re-runs.)
+        if job.status == JOB_STATUS_COMPLETE or (
+            job.status == JOB_STATUS_FAILED and job.error_code == "worker_unavailable"
+        ):
+            logger.info(
+                "analyze_audio_job: job=%s terminal (%s/%s) — redelivery no-op",
+                job_id, job.status, job.error_code,
+            )
+            return
         if job.version_id is None:
             raise ValueError(f"job {job_id} has no version_id")
         version = s.get(SongVersion, job.version_id)

@@ -254,9 +254,11 @@ function Update-Database {
 }
 
 # ── Job recovery ────────────────────────────────────────────────────────────
-# Stop-Apps just killed the worker, so any jobs it had in-flight are now
-# abandoned (stuck `processing`/`pending` with unacked Redis messages). Fail the
-# stale ones so the UI shows a re-runnable error instead of spinning forever.
+# Stop-Apps just killed the worker, so any job it had IN-FLIGHT (`processing`,
+# message consumed + unacked) is abandoned — fail those so the UI shows a
+# re-runnable error instead of spinning forever. Story 3.5 (NFR16): `pending`
+# jobs are NOT failed — their messages still sit in the Redis LIST and the
+# worker we're about to start resumes them.
 function Invoke-Recovery {
     if ($SkipRecovery) { Step 'Skipping job recovery (-SkipRecovery)'; return }
     Step 'Recovering jobs orphaned by a stopped worker'
