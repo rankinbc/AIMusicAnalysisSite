@@ -68,20 +68,9 @@ public static class AuthEndpoints
         }
     }
 
-    // Single source for the email-link base. A missing App:FrontendOrigin in
-    // prod would ship localhost links — log loudly (boot-time validation is
-    // 10.1's full-config sweep).
+    // Single source for the email-link base — see Services/AppUrls.
     private static string FrontendOrigin(IConfiguration cfg, ILoggerFactory lf)
-    {
-        var origin = cfg["App:FrontendOrigin"];
-        if (string.IsNullOrWhiteSpace(origin))
-        {
-            lf.CreateLogger("Auth").LogWarning(
-                "App:FrontendOrigin not configured — email links will point at localhost.");
-            return "http://localhost:5174";
-        }
-        return origin;
-    }
+        => AppUrls.FrontendOrigin(cfg, lf.CreateLogger("Auth"));
 
     private static async Task SendVerificationEmailAsync(
         IEmailSender email, AuthTokenService tokens, IConfiguration cfg,
@@ -522,10 +511,28 @@ public static class AuthEndpoints
         await tokens.InvalidateOutstandingAsync(user.Id, AuthTokenService.PurposeResetPassword, ct);
         await tx.CommitAsync(ct);
 
-        httpCtx.RequestServices.GetRequiredService<ILoggerFactory>()
-            .CreateLogger("Auth").LogInformation(
-                "Password reset completed for {UserId}; {Count} refresh session(s) revoked.",
-                user.Id, revoked);
+        var authLogger = httpCtx.RequestServices.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("Auth");
+        authLogger.LogInformation(
+            "Password reset completed for {UserId}; {Count} refresh session(s) revoked.",
+            user.Id, revoked);
+
+        // Story 4.4 (4.3 review commitment) — containment signal: tell the
+        // mailbox owner the password changed, so an attacker-initiated reset
+        // isn't silent. Best-effort, post-commit; deliberately link-free.
+        // Catch EVERYTHING incl. cancellation: the reset already committed —
+        // a client disconnect during this send must not turn success into 500.
+        try
+        {
+            var emailSender = httpCtx.RequestServices.GetRequiredService<IEmailSender>();
+            await emailSender.SendAsync(user.Email, EmailTemplates.PasswordChanged,
+                new Dictionary<string, string>(), CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            authLogger.LogError(ex, "Password-changed notification failed for {UserId}.", user.Id);
+        }
+
         return Results.NoContent();
     }
 

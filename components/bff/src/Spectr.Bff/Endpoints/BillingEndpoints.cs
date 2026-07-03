@@ -956,7 +956,9 @@ public static class BillingEndpoints
 
         try
         {
-            await DispatchAsync(stripeEvent, db, mirrorService, credits, cache, logger, ct);
+            await DispatchAsync(stripeEvent, db, mirrorService, credits, cache, logger,
+                httpCtx.RequestServices.GetRequiredService<IEmailSender>(),
+                httpCtx.RequestServices.GetRequiredService<IConfiguration>(), ct);
             // review-fix P3 — also clear processing_error on success so
             // a previously-failed event that succeeds on retry leaves
             // no stale error trail.
@@ -996,6 +998,8 @@ public static class BillingEndpoints
         CreditLedgerService credits,
         IMemoryCache cache,
         ILogger<BillingWebhook> logger,
+        IEmailSender email,
+        IConfiguration cfg,
         CancellationToken ct)
     {
         switch (stripeEvent.Type)
@@ -1106,6 +1110,68 @@ public static class BillingEndpoints
                 sub.UpdatedAt = DateTimeOffset.UtcNow;
                 await db.SaveChangesAsync(ct);
                 cache.Remove($"ent:{sub.UserId:N}");
+
+                // Story 4.4 (AC2/FR33 email half) — the dunning notice, once
+                // per failed INVOICE (Stripe re-fires payment_failed on every
+                // Smart-Retry attempt; the digest ledger keys on invoice id so
+                // the user gets one email per invoice, not one per retry).
+                if (stripeEvent.Type == "invoice.payment_failed")
+                {
+                    if (string.IsNullOrEmpty(invoice.Id))
+                    {
+                        logger.LogWarning(
+                            "invoice.payment_failed without an invoice id (event {EventId}) — no dunning email.",
+                            stripeEvent.Id);
+                        return;
+                    }
+                    var address = await db.Users.AsNoTracking()
+                        .Where(u => u.Id == sub.UserId && u.IsActive)
+                        .Select(u => u.Email)
+                        .FirstOrDefaultAsync(ct);
+                    if (address is null)
+                    {
+                        logger.LogWarning(
+                            "Dunning skipped: no active user for subscription {UserId} (invoice {InvoiceId}).",
+                            sub.UserId, invoice.Id);
+                        return;
+                    }
+
+                    db.Notifications.Add(new Spectr.Data.Entities.Notification
+                    {
+                        RecipientUserId = sub.UserId,
+                        EventType = "dunning",
+                        DigestKey = $"dunning:{invoice.Id}",
+                        PayloadJson = System.Text.Json.JsonSerializer.Serialize(
+                            new { invoiceId = invoice.Id }),
+                    });
+                    try
+                    {
+                        await db.SaveChangesAsync(ct);
+                        await email.SendAsync(address, EmailTemplates.Dunning,
+                            new Dictionary<string, string>
+                            {
+                                ["nextAttempt"] = sub.NextPaymentAttempt?.ToString("yyyy-MM-dd") ?? "soon",
+                                ["billingUrl"] = $"{AppUrls.FrontendOrigin(cfg)}/billing",
+                            }, ct);
+                    }
+                    catch (DbUpdateException ex)
+                    {
+                        db.ChangeTracker.Clear();
+                        if (ex.InnerException is not Npgsql.PostgresException { SqlState: "23505" })
+                            // A REAL insert failure, not a Smart-Retry dup —
+                            // the user's payment-failure email is lost this
+                            // attempt; log loudly (next retry event re-tries).
+                            logger.LogError(ex,
+                                "Dunning ledger insert failed for invoice {InvoiceId}.", invoice.Id);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        // Email failure must not 5xx the webhook (Stripe
+                        // would redeliver and the ledger already claimed).
+                        logger.LogError(ex,
+                            "Dunning email failed for invoice {InvoiceId}.", invoice.Id);
+                    }
+                }
                 return;
             }
             default:

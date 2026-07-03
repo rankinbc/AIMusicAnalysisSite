@@ -22,7 +22,8 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-    private WebApplicationFactory<Program> BuildConfigured() =>
+    private WebApplicationFactory<Program> BuildConfigured(
+        Action<IServiceCollection>? services = null) =>
         _factory.WithWebHostBuilder(builder =>
         {
             builder.ConfigureAppConfiguration((_, cfg) =>
@@ -35,6 +36,7 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
                     ["Stripe:PriceProAnnual"] = "price_test_annual_REPLACE_IN_DEV_SECRETS",
                 });
             });
+            if (services is not null) builder.ConfigureServices(services);
         });
 
     private async Task<bool> PostgresReachable()
@@ -354,6 +356,77 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             await db.WebhookEvents
                 .Where(w => w.Id == "evt_test_invoice_failed_001")
+                .ExecuteDeleteAsync();
+        }
+    }
+
+    // ── Story 4.4 — dunning email (FR33 email half) ────────────────────────
+
+    private sealed class RecordingEmailSender : Spectr.Bff.Services.IEmailSender
+    {
+        public System.Collections.Concurrent.ConcurrentQueue<(string To, string Template, IReadOnlyDictionary<string, string> Data)> Sent { get; } = new();
+
+        public Task SendAsync(string toEmail, string template,
+            IReadOnlyDictionary<string, string> data, CancellationToken ct = default)
+        {
+            Sent.Enqueue((toEmail, template, data));
+            return Task.CompletedTask;
+        }
+    }
+
+    [Fact]
+    public async Task Webhook_Invoice_Payment_Failed_Sends_Dunning_Email_Once_Per_Invoice()
+    {
+        if (!await PostgresReachable()) { return; }
+
+        var email = new RecordingEmailSender();
+        var factory = BuildConfigured(s =>
+            s.AddSingleton<Spectr.Bff.Services.IEmailSender>(email));
+        var client = factory.CreateClient();
+        var userId = await SeedUserWithCustomerIdAsync(factory, "cus_test_001");
+
+        try
+        {
+            var createBody = StripeTestUtilities.ReadFixture("subscription_created.json");
+            await PostWebhookAsync(client, createBody,
+                StripeTestUtilities.ComputeSignatureHeader(createBody, StripeTestUtilities.TestWebhookSecret));
+
+            var failBody = StripeTestUtilities.ReadFixture("invoice_payment_failed.json");
+            var resp = await PostWebhookAsync(client, failBody,
+                StripeTestUtilities.ComputeSignatureHeader(failBody, StripeTestUtilities.TestWebhookSecret));
+            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+            var mail = Assert.Single(email.Sent,
+                s => s.Template == Spectr.Bff.Services.EmailTemplates.Dunning);
+            Assert.False(string.IsNullOrEmpty(mail.Data["nextAttempt"]));
+            Assert.Contains("/billing", mail.Data["billingUrl"]);
+
+            // Stripe re-fires payment_failed per Smart-Retry attempt — the
+            // per-invoice digest ledger must dedupe. (Same event id would be
+            // caught by webhook_events; simulate the retry by clearing that
+            // dedupe row so only the dunning digest can stop the resend.)
+            using (var scope = factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                await db.WebhookEvents
+                    .Where(w => w.Id == "evt_test_invoice_failed_001")
+                    .ExecuteDeleteAsync();
+            }
+            await PostWebhookAsync(client, failBody,
+                StripeTestUtilities.ComputeSignatureHeader(failBody, StripeTestUtilities.TestWebhookSecret));
+            Assert.Single(email.Sent,
+                s => s.Template == Spectr.Bff.Services.EmailTemplates.Dunning);
+        }
+        finally
+        {
+            await CleanupAsync(factory, userId, "evt_test_sub_created_001");
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.WebhookEvents
+                .Where(w => w.Id == "evt_test_invoice_failed_001")
+                .ExecuteDeleteAsync();
+            await db.Notifications
+                .Where(n => n.RecipientUserId == userId)
                 .ExecuteDeleteAsync();
         }
     }

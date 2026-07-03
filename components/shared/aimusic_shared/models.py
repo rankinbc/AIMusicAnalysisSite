@@ -65,6 +65,11 @@ class User(Base):
     email_verified_at: Mapped[Optional[datetime]] = mapped_column(
         "email_verified_at", DateTime(timezone=True), nullable=True
     )
+    # Story 4.4 — analysis-complete email opt-out (mirror of EF
+    # AddNotifyAnalysisComplete).
+    notify_analysis_complete: Mapped[bool] = mapped_column(
+        "notify_analysis_complete", Boolean, nullable=False, default=True
+    )
     handle: Mapped[Optional[str]] = mapped_column("handle", String(32), nullable=True)
     display_name: Mapped[Optional[str]] = mapped_column("display_name", String(80), nullable=True)
     bio: Mapped[Optional[str]] = mapped_column("bio", String(500), nullable=True)

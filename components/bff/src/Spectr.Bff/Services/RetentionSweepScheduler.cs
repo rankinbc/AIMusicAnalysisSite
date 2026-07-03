@@ -96,11 +96,12 @@ internal sealed class RetentionSweepScheduler(
             DramatiqTasks.SweepRetention, [opts.LapsedDays], DramatiqQueues.Maintenance, ct);
         _logger.LogInformation("Retention sweep enqueued on {Queue}.", DramatiqQueues.Maintenance);
 
-        await SendDueWarningsAsync(db, email, opts, ct);
+        var cfg = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+        await SendDueWarningsAsync(db, email, opts, cfg, ct);
     }
 
     private async Task SendDueWarningsAsync(
-        AppDbContext db, IEmailSender email, RetentionOptions opts, CancellationToken ct)
+        AppDbContext db, IEmailSender email, RetentionOptions opts, IConfiguration cfg, CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
         var sentinelCutoff = now.AddYears(5); // SubscriptionMirrorService missing-field sentinel
@@ -117,7 +118,7 @@ internal sealed class RetentionSweepScheduler(
         {
             try
             {
-                await WarnOneAsync(db, email, opts, sub.UserId, sub.CurrentPeriodEnd, now, ct);
+                await WarnOneAsync(db, email, opts, cfg, sub.UserId, sub.CurrentPeriodEnd, now, ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -129,7 +130,7 @@ internal sealed class RetentionSweepScheduler(
     }
 
     private static async Task WarnOneAsync(
-        AppDbContext db, IEmailSender email, RetentionOptions opts,
+        AppDbContext db, IEmailSender email, RetentionOptions opts, IConfiguration cfg,
         Guid userId, DateTimeOffset periodEnd, DateTimeOffset now, CancellationToken ct)
     {
         // A paid signal (re-subscribe, credits) always wins — no warning.
@@ -175,10 +176,14 @@ internal sealed class RetentionSweepScheduler(
             return; // this notice tier was already sent for this lapse cycle
         }
 
+        // Story 4.4 (AC3 fix): billingUrl was missing — the template's
+        // KEEP MY FILES button rendered href="" since 3.4.
+        var origin = AppUrls.FrontendOrigin(cfg);
         await email.SendAsync(address, "retention-warning", new Dictionary<string, string>
         {
             ["purgeDate"] = purgeDate.ToString("yyyy-MM-dd"),
             ["daysLeft"] = daysLeft.ToString(),
+            ["billingUrl"] = $"{origin}/billing",
         }, ct);
     }
 }

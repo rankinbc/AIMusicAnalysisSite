@@ -42,6 +42,7 @@ public static class MeEndpoints
             {
                 x.Id, x.Email, x.Handle, x.DisplayName, x.Bio,
                 x.AvatarHue, x.BannerHue, x.Accent, x.PublicLink,
+                x.NotifyAnalysisComplete,
                 SubStatus = sub == null ? null : sub.Status,
             }
         ).FirstOrDefaultAsync(ct);
@@ -49,7 +50,8 @@ public static class MeEndpoints
         var tier = AuthEndpoints.ResolveTier(row.SubStatus);
         return Results.Ok(new MeProfileDto(
             row.Id, row.Email, row.Handle, row.DisplayName, row.Bio,
-            row.AvatarHue, row.BannerHue, row.Accent, row.PublicLink, tier));
+            row.AvatarHue, row.BannerHue, row.Accent, row.PublicLink, tier,
+            row.NotifyAnalysisComplete));
     }
 
     // PATCH /api/me/profile — full profile patch (display_name+handle also
@@ -113,6 +115,10 @@ public static class MeEndpoints
             else user.PublicLink = t.Length == 0 ? null : t;
         }
 
+        // Story 4.4 — completion-email opt-out toggle (null = unchanged).
+        if (req.NotifyAnalysisComplete is { } notify)
+            user.NotifyAnalysisComplete = notify;
+
         if (errors.Count > 0) return Results.ValidationProblem(errors);
         await db.SaveChangesAsync(ct);
         // Story 2.1 review-fix P9 — include tier in the PATCH response too.
@@ -123,7 +129,8 @@ public static class MeEndpoints
                 .FirstOrDefaultAsync(ct));
         return Results.Ok(new MeProfileDto(
             user.Id, user.Email, user.Handle, user.DisplayName, user.Bio,
-            user.AvatarHue, user.BannerHue, user.Accent, user.PublicLink, tierAfter));
+            user.AvatarHue, user.BannerHue, user.Accent, user.PublicLink, tierAfter,
+            user.NotifyAnalysisComplete));
     }
 
     // GET /api/me/stats — top-of-profile summary numbers.

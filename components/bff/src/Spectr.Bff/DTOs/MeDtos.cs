@@ -35,7 +35,8 @@ public sealed record MeProfileDto(
     short? BannerHue,
     string? Accent,
     string? PublicLink,
-    string Tier);
+    string Tier,
+    bool NotifyAnalysisComplete);  // story 4.4 — completion-email opt-out
 
 public sealed record PatchMeProfileRequest(
     string? DisplayName,
@@ -44,4 +45,5 @@ public sealed record PatchMeProfileRequest(
     short? AvatarHue,
     short? BannerHue,
     string? Accent,
-    string? PublicLink);
+    string? PublicLink,
+    bool? NotifyAnalysisComplete = null);  // story 4.4 — null = unchanged
