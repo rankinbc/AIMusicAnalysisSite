@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Spectr.Bff.DTOs;
 using Spectr.Data;
@@ -43,6 +44,18 @@ public static class TestAuth
     /// </summary>
     // Exposed for tests that must re-authenticate (e.g. account deletion).
     public const string Password = "correct-horse-battery";
+
+    /// <summary>
+    /// Story 10.5: audit_log + credit_ledger are trigger-enforced
+    /// append-only. Test cleanup legitimately purges its own rows — this
+    /// arms the session-scoped escape hatch. Opens the context's connection
+    /// so the SET and the subsequent deletes share one Postgres session.
+    /// </summary>
+    public static async Task AllowPurgeAsync(Spectr.Data.AppDbContext db)
+    {
+        await db.Database.OpenConnectionAsync();
+        await db.Database.ExecuteSqlRawAsync("SET spectr.allow_purge = '1'");
+    }
 
     public static async Task<(Guid UserId, string Token)> RegisterAsync(HttpClient client)
     {

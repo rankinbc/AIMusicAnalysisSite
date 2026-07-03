@@ -79,6 +79,14 @@ if (jwtKey == anonSigningKey)
         "Anon:SigningKey must DIFFER from Jwt:Key — one HMAC key serving two "
         + "token formats invites cross-protocol confusion.");
 
+// Story 10.5 — the admin key is optional (absent = surface 404s) but a
+// CONFIGURED key must be strong: a guessable admin key is worse than none.
+var adminKey = builder.Configuration["Admin:ApiKey"];
+if (!string.IsNullOrWhiteSpace(adminKey) && !isDevEnv && adminKey.Length < 32)
+    throw new InvalidOperationException(
+        "Admin:ApiKey is set but shorter than 32 chars. Generate one with "
+        + "`openssl rand -base64 48` or unset it to disable the admin surface.");
+
 // Story 10.1 (4.3/4.4 deferral paid): outside Development, a missing
 // App:FrontendOrigin means every verification/reset/report email ships
 // localhost links — that's a boot failure, not a warning.
@@ -155,19 +163,24 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 if (tverClaim is null || sub is null || !Guid.TryParse(sub, out var uid))
                     return; // pre-4.6 token without tver: honored until natural expiry (≤15 min, one-time rollout window)
 
-                int? current;
+                (int Version, bool Banned)? current;
                 try
                 {
                     var cache = ctx.HttpContext.RequestServices
                         .GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
+                    // 10.5: same cached lookup now also carries the ban flag —
+                    // one query, one cache key, one eviction path.
                     current = await cache.GetOrCreateAsync($"tver:{uid:N}", async e =>
                     {
                         e.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(60);
                         var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
-                        return await db.Users.AsNoTracking()
+                        var row = await db.Users.AsNoTracking()
                             .Where(u => u.Id == uid)
-                            .Select(u => (int?)u.TokenVersion)
+                            .Select(u => new { u.TokenVersion, u.BannedAt })
                             .FirstOrDefaultAsync();
+                        return row is null
+                            ? ((int, bool)?)null
+                            : (row.TokenVersion, row.BannedAt != null);
                     });
                 }
                 catch (Exception ex)
@@ -184,8 +197,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                             "Token-version check unavailable — failing OPEN.");
                     return;
                 }
-                if (current is null || tverClaim != current.Value.ToString())
+                if (current is null || tverClaim != current.Value.Version.ToString())
                     ctx.Fail("stale token version");
+                else if (current.Value.Banned)
+                    ctx.Fail("account banned"); // 10.5 — bans kill live tokens too
             },
         };
     });
@@ -231,6 +246,7 @@ builder.Services.AddSingleton<CoachChatService>();
 // ONLY writer to the `subscriptions` table (architecture money-boundary).
 builder.Services.AddSingleton<IStripeCheckoutClient, StripeCheckoutClient>();
 builder.Services.AddSingleton<IStripeSubscriptionClient, StripeSubscriptionClient>();
+builder.Services.AddSingleton<IStripeRefundClient, StripeRefundClient>(); // 10.5 admin refunds
 builder.Services.AddScoped<SubscriptionMirrorService>();
 
 // Story 2.3 — append-only credit ledger. The ONLY writer to credit_ledger
@@ -498,6 +514,7 @@ api.MapRoomEndpoints();
 api.MapBillingEndpoints();
 api.MapHealthEndpoints();
 api.MapAccountEndpoints();       // story 4.6 — /api/me/export + /api/me/delete
+api.MapAdminEndpoints();         // story 10.5 — /api/admin/* (X-Admin-Key elevated auth)
 app.MapEmailWebhookEndpoints();  // story 4.2 — POST /api/email/webhook (svix-verified)
 
 app.MapGet("/", () => Results.Json(new { status = "ok", version = "2.0.0" }))

@@ -55,6 +55,7 @@ public sealed class EntitlementServiceTests
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await db.UsageEvents.Where(e => e.UserId == userId).ExecuteDeleteAsync();
+        await TestAuth.AllowPurgeAsync(db);
         await db.CreditLedger.Where(e => e.UserId == userId).ExecuteDeleteAsync();
         await db.Subscriptions.Where(s => s.UserId == userId).ExecuteDeleteAsync();
         await db.Users.Where(u => u.Id == userId).ExecuteDeleteAsync();

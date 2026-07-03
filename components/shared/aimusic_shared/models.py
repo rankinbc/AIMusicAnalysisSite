@@ -74,6 +74,13 @@ class User(Base):
     token_version: Mapped[int] = mapped_column(
         "token_version", Integer, nullable=False, default=1
     )
+    # Story 10.5 — operator ban mirror (worker never writes these).
+    banned_at: Mapped[Optional[datetime]] = mapped_column(
+        "banned_at", DateTime(timezone=True), nullable=True
+    )
+    ban_reason: Mapped[Optional[str]] = mapped_column(
+        "ban_reason", String(500), nullable=True
+    )
     handle: Mapped[Optional[str]] = mapped_column("handle", String(32), nullable=True)
     display_name: Mapped[Optional[str]] = mapped_column("display_name", String(80), nullable=True)
     bio: Mapped[Optional[str]] = mapped_column("bio", String(500), nullable=True)

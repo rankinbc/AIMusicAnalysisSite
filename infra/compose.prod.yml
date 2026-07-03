@@ -61,6 +61,8 @@ services:
       ForwardedHeaders__Enabled: "true"
       # Story 10.3 — optional; empty disables Sentry entirely.
       Sentry__Dsn: "${SENTRY_DSN_BFF:-}"
+      # Story 10.5 — optional; unset = the /api/admin surface 404s.
+      Admin__ApiKey: "${ADMIN_API_KEY:-}"
       App__FrontendOrigin: "https://${SPECTR_DOMAIN:?}"
       # Object storage = Cloudflare R2 (S3 API). Local root backs the
       # residual IFileStorage writes (volume above).
