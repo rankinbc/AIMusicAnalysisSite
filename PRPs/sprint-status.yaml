@@ -101,8 +101,8 @@ development_status:
   3-5-upload-and-job-persistence-resilience-verified: done  # merged via PR #10 (2026-07-03); implemented + code-reviewed 2026-07-03 (branch storage/3-5-resilience): NFR16 FIX — reaper split predicate (pending survives worker restarts; 4h PendingGraceMinutes clamped >= StaleJobMinutes) + recover-jobs.ps1 processing-only w/ -IncludePending escape + redelivery guards in analyze/rerun/structure actors (complete + reaper-failed no-op) + dispatch_failed on enqueue failure; AC1 poll-path regression test, AC3 190MB/12-part case; 10 review patches; BFF 279, worker 567, vitest 674
   epic-3-retrospective: optional
 
-  epic-4: backlog
-  4-1-secrets-hardening-and-auth-regression: backlog
+  epic-4: in-progress  # started 2026-07-03
+  4-1-secrets-hardening-and-auth-regression: review  # implemented 2026-07-03 (branch account/4-1-secrets-hardening): NFR6 — appsettings.json carries no signing keys (dev keys in Development.json only; launchSettings + start-spectr set Development env — dotnet run defaulted to Production!); RequireSigningKey boot validation (>=32 bytes, Jwt + Anon); root .env.example (AR40 inventory); refresh-rotation + logout-revocation regression tests; gitleaks CI job + .gitleaks.toml (local run clean, 493 commits); BFF 284/284
   4-2-transactional-email-foundation-resend: backlog
   4-3-email-verification-and-password-reset: backlog
   4-4-lifecycle-emails-completion-dunning-retention: backlog

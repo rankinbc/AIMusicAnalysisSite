@@ -1,0 +1,40 @@
+# Story 4.1 (AC4/NFR6) — gitleaks config for the CI `secrets` job.
+# Default ruleset applies; this file only allowlists the KNOWN FAKES the
+# repo deliberately contains (test fixtures + dev-compose credentials).
+# Anything new that trips a rule fails CI.
+
+title = "SPECTR secret scan"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known dev/test fakes — placeholders only, never real credentials"
+regexes = [
+  # Stripe test fixtures used across BFF billing tests + docs
+  '''sk_test_(fake|unit|x|4eC39HqLyjWDarjtT1zdp7dc|<[^>]+>)''',
+  '''whsec_(unit|test_secret[a-z_]*|<[^>]+>)''',
+  # Dev compose / MinIO / worker credentials (documented dev-only)
+  '''minioadmin''',
+  '''spectr-worker-secret''',
+  # appsettings/dev placeholders
+  '''REPLACE_ME[A-Z_]*''',
+  '''REPLACE_WITH_32_PLUS_RANDOM_BYTES[A-Z_]*''',
+  '''spectr-dev-only-[a-z-]+''',
+  '''dev-anon-signing-key-change-in-prod''',
+  '''change-me-in-production''',
+  '''price_test_(monthly|annual)_REPLACE_IN_DEV_SECRETS''',
+  # Test-fixture signing key (SpinePrimitivesTests) — obviously fake
+  '''test-anon-signing-key-0123456789''',
+]
+paths = [
+  # Frozen v1 (AR3) — excluded from CI/deploy; its .env.example holds
+  # legacy placeholder names that pattern-match generic rules.
+  '''components/api/.env.example''',
+  # Planning docs — prose like "key shapes per kind" trips generic-api-key;
+  # CI's other jobs already ignore PRPs/** entirely.
+  '''PRPs/.*''',
+  # Vendored/lock artifacts
+  '''package-lock\.json''',
+  '''requirements\.lock\.txt''',
+]

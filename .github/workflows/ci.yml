@@ -36,6 +36,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Story 4.1 (AC4/NFR6): secret scan over working tree + full git history.
+  # Known dev/test fakes are allowlisted in .gitleaks.toml — anything new
+  # that trips a rule fails the build. Built-IMAGE scanning is deferred to
+  # story 10.1 (CI builds no images today; compose builds are local-only).
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # scan full history, not just the tip
+      - name: Run gitleaks
+        run: |
+          GITLEAKS_VERSION=8.24.3
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          ./gitleaks detect --source . --config .gitleaks.toml --redact -v
+
   bff:
     runs-on: ubuntu-latest
     timeout-minutes: 15

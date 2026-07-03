@@ -22,8 +22,29 @@ builder.Host.UseSerilog((ctx, services, lc) => lc
 // ── Configuration ──────────────────────────────────────────────────────────────
 var conn = builder.Configuration.GetConnectionString("Postgres")
     ?? throw new InvalidOperationException("Missing ConnectionStrings:Postgres");
-var jwtKey = builder.Configuration["Jwt:Key"]
-    ?? throw new InvalidOperationException("Missing Jwt:Key");
+
+// Story 4.1 (NFR6) — secrets fail-fast. appsettings.json carries NO signing
+// keys; dev values live in appsettings.Development.json only. Any other
+// environment must supply them via env/user-secrets or the BFF refuses to
+// boot. Length is enforced here (not at first sign) because HmacSha256
+// requires >= 32 bytes and a short key would otherwise explode mid-request.
+static string RequireSigningKey(IConfiguration cfg, string key, string envForm)
+{
+    var value = cfg[key];
+    if (string.IsNullOrWhiteSpace(value))
+        throw new InvalidOperationException(
+            $"Missing {key}. Set the {envForm} environment variable "
+            + "(32+ random bytes) or a dotnet user-secret. The BFF refuses to "
+            + "boot without it outside Development (NFR6).");
+    if (Encoding.UTF8.GetBytes(value).Length < 32)
+        throw new InvalidOperationException(
+            $"{key} is too short: HmacSha256 requires at least 32 bytes. "
+            + $"Provide 32+ random bytes via {envForm}.");
+    return value;
+}
+
+var jwtKey = RequireSigningKey(builder.Configuration, "Jwt:Key", "Jwt__Key");
+RequireSigningKey(builder.Configuration, "Anon:SigningKey", "Anon__SigningKey");
 
 // Allow 250 MB uploads for long FLACs.
 builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 250L * 1024 * 1024);
