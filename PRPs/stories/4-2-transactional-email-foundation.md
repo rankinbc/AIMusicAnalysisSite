@@ -1,6 +1,6 @@
 # Story 4.2: Transactional Email Foundation (Resend)
 
-Status: review
+Status: done
 
 ## Story
 
