@@ -1,6 +1,6 @@
 # Story 10.4: Phone-Grade Alerting & Status
 
-Status: review
+Status: done
 
 ## Story
 
