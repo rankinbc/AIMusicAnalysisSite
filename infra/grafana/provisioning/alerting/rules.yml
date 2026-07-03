@@ -19,7 +19,7 @@ groups:
         condition: C
         for: 5m
         noDataState: OK
-        execErrState: Alerting
+        execErrState: Error
         annotations:
           summary: "More than 3 failed analysis jobs in 15m — check worker logs + Sentry."
         data:
@@ -45,9 +45,9 @@ groups:
         condition: C
         for: 15m
         noDataState: OK
-        execErrState: OK
+        execErrState: Error
         annotations:
-          summary: "Month-to-date LLM spend >= 80% of feature_flags llm_budget_global_usd. Hard stop hits at 100% (FR16)."
+          summary: "Month-to-date LLM spend >= 80% of feature_flags llm_budget_global_usd. Hard stop at 100% applies in API-transport mode only (FR16)."
         data:
           - refId: A
             relativeTimeRange: { from: 300, to: 0 }
@@ -55,10 +55,12 @@ groups:
             model:
               refId: A
               format: table
+              rawQuery: true
+              editorMode: code
               rawSql: >-
                 SELECT coalesce(
                   (SELECT sum(cost_usd)::float FROM llm_calls
-                    WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'utc')
+                    WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'utc') AT TIME ZONE 'utc'
                       AND outcome = 'ok')
                   / nullif((SELECT nullif(value,'')::float FROM feature_flags
                             WHERE name = 'llm_budget_global_usd'), 0),
@@ -78,7 +80,7 @@ groups:
         condition: C
         for: 10m
         noDataState: OK
-        execErrState: OK
+        execErrState: Error
         annotations:
           summary: "webhook_events stuck unprocessed >15m or errored in the last 30m — check Stripe/Resend dashboards + BFF logs."
         data:
@@ -88,10 +90,11 @@ groups:
             model:
               refId: A
               format: table
+              rawQuery: true
+              editorMode: code
               rawSql: >-
                 SELECT count(*)::float AS value FROM webhook_events
-                WHERE (processed_at IS NULL AND received_at < now() - interval '15 minutes'
-                       AND received_at > now() - interval '24 hours')
+                WHERE (processed_at IS NULL AND received_at < now() - interval '15 minutes')
                    OR (processing_error IS NOT NULL
                        AND received_at > now() - interval '30 minutes')
           - refId: C
@@ -109,7 +112,7 @@ groups:
         condition: C
         for: 10m
         noDataState: OK
-        execErrState: OK
+        execErrState: Error
         annotations:
           summary: "7-day wrong-feedback rate exceeded 10% (n>=10) — quality regression, check recent prompt versions."
         data:
@@ -119,6 +122,8 @@ groups:
             model:
               refId: A
               format: table
+              rawQuery: true
+              editorMode: code
               rawSql: >-
                 SELECT CASE
                   WHEN count(*) FILTER (WHERE feedback IS NOT NULL) >= 10
@@ -142,7 +147,7 @@ groups:
         condition: C
         for: 10m
         noDataState: Alerting   # node_exporter down IS an incident
-        execErrState: Alerting
+        execErrState: Error
         annotations:
           summary: "Root filesystem >80% — prune docker images/logs before postgres dies with the disk."
         data:
@@ -153,8 +158,8 @@ groups:
               refId: A
               instant: true
               expr: >-
-                max(1 - node_filesystem_avail_bytes{mountpoint="/host",fstype!~"tmpfs|overlay"}
-                      / node_filesystem_size_bytes{mountpoint="/host",fstype!~"tmpfs|overlay"})
+                max(1 - node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}
+                      / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"})
           - refId: C
             relativeTimeRange: { from: 0, to: 0 }
             datasourceUid: __expr__

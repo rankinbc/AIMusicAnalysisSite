@@ -57,7 +57,7 @@ claude-fable-5 (Claude Code)
 
 - AC1: five in-stack conditions as provisioned Grafana rules; the sixth (missed backup) is a healthchecks.io dead-man ping by design — the VPS can't report its own cron death.
 - AC2: /healthz probed externally (healthchecks.io / UptimeRobot); same ntfy channel.
-- AC3: status template published to GitHub Pages, never the VPS.
+- AC3: status TEMPLATE + GitHub Pages procedure — nothing is auto-published; the operator performs the Pages setup once (runbook). Never the VPS.
 - Known limits (documented): budget rule sees only the feature_flags ceiling (env fallback invisible); ntfy shows raw Grafana JSON (readable, ugly — later nicety); alert rules render live only on the VPS (same class as 10.3's dashboard).
 
 ### File List
@@ -68,6 +68,19 @@ claude-fable-5 (Claude Code)
 - `infra/backup.sh` (dead-man ping), `infra/status/index.html` (new)
 - `docs/runbook.md` (Alerting & status), `.env.example`
 
+### Senior Developer Review (AI)
+
+2026-07-03 — bmad-code-review (combined adversarial pass; schemas verified against Grafana 11 provisioning knowledge + every SQL column cross-checked against EF entities + obs.py metric names). Outcome: **Changes requested → all applied** (9 patches):
+
+- [x] [CRITICAL] **Disk rule matched NOTHING**: `--path.rootfs=/host` STRIPS the prefix — the host root exports as `mountpoint="/"`, so `mountpoint="/host"` = empty vector = noData = Alerting = a PERMANENT false page from first boot with zero real disk coverage → `mountpoint="/"` + runbook first-boot sanity check
+- [x] [High] **Placeholder ntfy default was a live public topic**: unset NTFY_URL would have POSTed business telemetry (spend %, failure counts) to a guessable public topic while delivery LOOKED healthy → unroutable `http://127.0.0.1:9/ntfy-unconfigured` (parseable; fails loudly in the notification log)
+- [x] [High] **Webhook rule auto-resolved still-broken events**: the 24 h clamp sent a "Resolved" push at hour 24 for an event still unprocessed — the worst money-path failure mode → clamp dropped (repeat_interval 4 h is the nag governor; abandonment is an operator decision, not a timer's)
+- [x] [High] **`execErrState: OK` silently disabled 3 of 5 conditions on a broken Postgres datasource** (wrong grafana password / revoked grant / cast error = budget+webhook+wrong-rate dark forever) → `Error` on all five (DatasourceError pushes with honest labels; alerting failing must itself alert)
+- [x] [Med] Budget annotation promised a 100% hard stop that CLI-transport mode disables → reworded ("API-transport mode only"); completion note overclaim fixed (template + procedure, nothing auto-published); stale-rule-file zombie warning in the runbook (scp overlays, provisioning doesn't delete)
+- [x] [Low] `rawQuery: true` + `editorMode: code` on the pg models (export-shape insurance); month boundary pinned to timestamptz UTC; wrong-rate updated_at drift + increase() extrapolation noted as accepted
+- Verified-clean: contactPoints+policies single-file valid; groups/relativeTimeRange/threshold-model shapes; env interpolation in alerting provisioning; every metric/column reference (spectr_job_duration_seconds_count, feedback='wrong', outcome='ok', webhook_events columns); dead-man ping semantics (set -e guarantees no ping on failure; prune-warn doesn't block it); CI scp -r covers alerting/.
+
 ### Change Log
 
 - 2026-07-03: implemented on `ops/10-4-alerting`. Compose/yaml/bash validated; app code untouched. Status → review.
+- 2026-07-03 (review): 9 patches incl. the CRITICAL dead disk rule. Yaml re-validated.

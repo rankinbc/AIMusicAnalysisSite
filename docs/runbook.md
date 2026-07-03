@@ -138,7 +138,7 @@ contact point + the backup/restore scripts all push there.
 | LLM budget ≥80% (global, month) | Grafana rule `spectr-llm-budget-80` (SQL vs `feature_flags.llm_budget_global_usd`; a missing/NULL flag keeps it silent — set the flag row, env-fallback ceilings aren't DB-visible) |
 | Billing/email webhook failures | Grafana rule `spectr-webhook-failures` (stuck >15 m or errored, 30 m window) |
 | Verdict wrong-rate >10% (7 d, n≥10) | Grafana rule `spectr-wrong-rate` |
-| Disk >80% | Grafana rule `spectr-disk-80` via node_exporter (noData = ALERTING — exporter down is an incident). Verify the mountpoint label on the VPS: `node_filesystem_avail_bytes{mountpoint="/host"}` |
+| Disk >80% | Grafana rule `spectr-disk-80` via node_exporter (noData = ALERTING — exporter down is an incident). `--path.rootfs=/host` strips the prefix, so the host root is `mountpoint="/"` — first-boot sanity: `node_filesystem_avail_bytes{mountpoint="/"}` must return a sample or this rule pages permanently |
 | Backup missed | healthchecks.io dead-man check — `backup.sh` pings `HEALTHCHECKS_BACKUP_URL` on success; a missing ping alerts EXTERNALLY (a dead cron can't report itself) |
 
 **healthchecks.io setup** (independent of the VPS by construction):
@@ -158,7 +158,14 @@ the status page from the VPS.
 
 **Tuning**: rules live in `infra/grafana/provisioning/alerting/rules.yml`
 (re-provisioned on every deploy — edit in the repo, not the UI; UI edits
-to provisioned rules don't persist).
+to provisioned rules don't persist). CAUTION: deploys `scp -r` OVER the
+VPS copy — a deleted/renamed rule file lingers there and Grafana keeps
+provisioning it (renamed uid = zombie duplicate). When removing a rule,
+also delete the stale file on the VPS (or add a `deleteRules:` entry).
+
+**execErrState = Error everywhere**: a broken datasource (wrong grafana
+DB password, revoked grant) pushes a DatasourceError notification —
+alerting failing must itself alert, with an honest label.
 
 ## Backups & restore proof (story 10.2 / AR31 / NFR15)
 
