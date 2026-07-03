@@ -48,6 +48,13 @@ public sealed class SongVersion
     [Column("is_current")]
     public bool IsCurrent { get; set; }
 
+    // Story 3.4 — set when the retention sweep deleted this version's raw
+    // audio objects (mix/stems/als/reference). file_path is NOT NULL so paths
+    // remain as the audit trail; this marker is the sweep's idempotency key.
+    // Reports/verdicts/chats are never touched (NFR20).
+    [Column("raw_audio_purged_at")]
+    public DateTimeOffset? RawAudioPurgedAt { get; set; }
+
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 

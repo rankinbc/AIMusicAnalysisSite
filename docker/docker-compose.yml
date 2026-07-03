@@ -56,6 +56,15 @@ services:
   # Complete is impossible).
   # Story 3.2 (AR21): the worker gets its OWN credentials (spectr-worker),
   # separate from the BFF's — in prod R2 this is a distinct scoped API token.
+  # Story 3.4 (AC4/NFR26) — lifecycle backstop, REVIEW-REVISED: blanket
+  # prefix-expiry rules on audio/ stems/ als/ are UNSAFE — those prefixes
+  # also hold PAID users' content, which has NO age limit while subscribed,
+  # so any expire-days rule would eventually delete a paying customer's
+  # mixes. The authoritative purge is the sweep_retention actor (tier-aware);
+  # the correct object-storage backstop is TAG-based expiry (the sweep tags
+  # residue it failed to delete; a lifecycle rule expires only tagged
+  # objects) — deferred to 10.1 with the prod R2 config. reports/ and
+  # analysis/ must NEVER carry expiry (NFR20: reports live forever).
   minio-init:
     image: minio/mc
     depends_on:

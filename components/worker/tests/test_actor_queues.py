@@ -19,6 +19,7 @@ from app.coach_actor import coach_reply  # noqa: E402
 from app.reference_analyzer_actor import run_reference_analyzer  # noqa: E402
 from app.rerun_phase_actor import rerun_phase  # noqa: E402
 from app.recap_actor import synthesize_recap  # noqa: E402
+from app.retention_actor import sweep_retention  # noqa: E402
 from app.structure_actor import detect_structure_job  # noqa: E402
 from app.tasks_dramatiq import analyze_audio_job, classify_stems  # noqa: E402
 from app.triage_actor import run_triage  # noqa: E402
@@ -34,6 +35,7 @@ EXPECTED_QUEUES = {
     "detect_structure_job": "analysis-paid",
     "synthesize_recap": "analysis-paid",
     "coach_reply": "coach",
+    "sweep_retention": "maintenance",  # story 3.4 (AR22)
 }
 
 
@@ -48,6 +50,7 @@ def test_actor_queue_assignments():
         "detect_structure_job": detect_structure_job.queue_name,
         "synthesize_recap": synthesize_recap.queue_name,
         "coach_reply": coach_reply.queue_name,
+        "sweep_retention": sweep_retention.queue_name,
     }
     assert actual == EXPECTED_QUEUES
 

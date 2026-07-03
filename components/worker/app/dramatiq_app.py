@@ -48,9 +48,10 @@ from . import rerun_phase_actor  # noqa: E402,F401
 from . import structure_actor  # noqa: E402,F401
 from . import recap_actor  # noqa: E402,F401
 from . import fix_rack_actor  # noqa: E402,F401
+from . import retention_actor  # noqa: E402,F401  (story 3.4 — sweep_retention)
 
-# Story 2.5 (AR23): the `maintenance` queue carries no actor yet (Epic 3/4 add
-# sweep_retention / send_email). Declare it explicitly so W2's
-# `--queues analysis-free maintenance` whitelist resolves to a live (empty)
-# consumer today rather than an inert entry. Benign: nothing produces to it yet.
+# Story 2.5 (AR23) / 3.4: `maintenance` now carries the sweep_retention actor
+# (declared by its decorator); the explicit declare stays harmless and keeps
+# W2's `--queues analysis-free maintenance` whitelist resolving even if the
+# actor import order changes. Epic 4 adds send_email here too.
 broker.declare_queue("maintenance")
