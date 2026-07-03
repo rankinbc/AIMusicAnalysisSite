@@ -43,12 +43,38 @@ def set_correlation(correlation_id: object) -> None:
     """Bind the correlation id to this actor invocation's context."""
     cid = str(correlation_id)
     _correlation.set(cid)
+    _sentry_tag("correlation_id", cid)
+
+
+def set_tag(name: str, value: object) -> None:
+    """Extra Sentry tag (e.g. job_id on the verdict lanes, analysis_id on
+    coach) so the upload→job→actors→LLM chain is searchable by EITHER id —
+    the analyze lane correlates by job id, the verdict lanes by analysis id."""
+    _sentry_tag(name, str(value))
+
+
+def _sentry_tag(name: str, value: str) -> None:
     try:
         import sentry_sdk
 
-        sentry_sdk.set_tag("correlation_id", cid)
+        sentry_sdk.set_tag(name, value)
     except Exception:  # pragma: no cover - sentry absent/uninitialized
         pass
+
+
+def make_correlation_reset_middleware():
+    """Dramatiq middleware: reset the contextvar per message so actors that
+    DON'T call set_correlation (classify_stems, sweeps, future actors) never
+    log under the PREVIOUS message's id — a wrong correlation id is worse
+    than none (review High). Factory keeps the dramatiq import out of
+    module scope (obs is imported by DB-free unit tests)."""
+    import dramatiq
+
+    class CorrelationResetMiddleware(dramatiq.Middleware):
+        def before_process_message(self, broker, message):  # noqa: ANN001
+            _correlation.set("-")
+
+    return CorrelationResetMiddleware()
 
 
 def get_correlation() -> str:

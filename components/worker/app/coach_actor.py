@@ -373,12 +373,7 @@ def coach_reply(
             user_id = conversation.user_id
             analysis_id = analysis.id
             # 10.3: stitch the coach lane onto the analysis correlation chain.
-            try:
-                import sentry_sdk  # noqa: PLC0415
-
-                sentry_sdk.set_tag("analysis_id", str(analysis_id))
-            except Exception:
-                pass
+            obs.set_tag("analysis_id", analysis_id)
 
             # Conversation tail = all non-pending messages EXCLUDING both
             # the pending assistant row AND the user row we're answering

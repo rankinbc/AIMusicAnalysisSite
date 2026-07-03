@@ -34,7 +34,7 @@ from dramatiq.brokers.redis import RedisBroker
 # Story 10.3 — correlation-stamped logging + DSN-gated Sentry replace the
 # bare basicConfig; the Prometheus middleware exposes the dramatiq metrics
 # exporter (+ our custom counters from obs.py) when enabled.
-from .obs import configure_logging, init_sentry  # noqa: E402
+from .obs import configure_logging, init_sentry, make_correlation_reset_middleware  # noqa: E402
 
 configure_logging()
 if init_sentry():
@@ -43,6 +43,7 @@ if init_sentry():
 _REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
 broker = RedisBroker(url=_REDIS_URL)
+broker.add_middleware(make_correlation_reset_middleware())
 if os.environ.get("WORKER_METRICS", "").strip() == "1":
     from dramatiq.middleware.prometheus import Prometheus
 

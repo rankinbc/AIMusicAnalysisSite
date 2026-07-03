@@ -28,8 +28,8 @@ COPY worker/prompts/ ./prompts/
 # Docker would otherwise create the volume mount root-owned and the first
 # model download EACCESes.
 RUN useradd --create-home --uid 10001 spectr \
-    && mkdir -p /data/models \
-    && chown -R spectr /data
+    && mkdir -p /data/models /tmp/dramatiq-prometheus \
+    && chown -R spectr /data /tmp/dramatiq-prometheus
 USER spectr
 
 # Liveness: a wedged dramatiq master that can't reach Redis is dead weight —

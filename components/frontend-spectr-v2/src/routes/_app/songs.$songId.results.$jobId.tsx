@@ -1,5 +1,5 @@
 import { Link, createFileRoute } from '@tanstack/react-router';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { useJob, useJobResults } from '../../api/hooks';
 import { capture } from '../../lib/analytics';
@@ -45,8 +45,14 @@ function ResultsPage() {
     setCorrelation(jobId);
     return () => setCorrelation(null);
   }, [jobId]);
+  const viewCaptured = useRef<string | null>(null);
   useEffect(() => {
-    if (isComplete) capture('report_viewed', { job_id: jobId });
+    // Once per job per mount-session — remounts/StrictMode must not inflate
+    // the TTFI denominator.
+    if (isComplete && viewCaptured.current !== jobId) {
+      viewCaptured.current = jobId;
+      capture('report_viewed', { job_id: jobId });
+    }
   }, [isComplete, jobId]);
 
   if (job.error) {

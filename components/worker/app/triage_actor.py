@@ -87,6 +87,8 @@ def run_triage(analysis_id: str) -> None:
                 return
             raw_final = analysis.final_json
             caller_id = analysis.user_id  # for the metering row
+            # cross-lane trace stitch (getattr: test stubs omit the column)
+            obs.set_tag("job_id", getattr(analysis, "job_id", None))
     except Exception:
         logger.exception("run_triage Phase A failed for %s", analysis_id)
         return

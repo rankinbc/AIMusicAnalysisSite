@@ -75,6 +75,25 @@ claude-fable-5 (Claude Code)
 - Infra: `infra/prometheus/prometheus.yml` (new), `infra/grafana/**` (new: datasources, provider, spectr-ops.json), `infra/compose.prod.yml` (+2 services, worker/bff env), `infra/Dockerfile.web` (VITE args), `.github/workflows/ci.yml` (build-args + scp)
 - Docs: `docs/runbook.md` (Observability), `.env.example`
 
+### Senior Developer Review (AI)
+
+2026-07-03 — bmad-code-review (Blind Hunter + Edge Case Hunter/Acceptance Auditor; the auditor read the INSTALLED dramatiq/prometheus_client sources, ran the BFF metrics test against a live scrape, and verified streaming metering single-write). Outcome: **Changes requested → all applied** (14 patches):
+
+- [x] [CRITICAL] **Worker :9191 exporter would have served an EMPTY registry in prod**: dramatiq's Prometheus middleware sets `PROMETHEUS_MULTIPROC_DIR` only in `after_process_boot` — AFTER obs.py imported prometheus_client (the value class binds at import), so neither dramatiq's families nor the 3 custom counters would ever reach the exporter → the dir is now set in the compose worker env (pre-import) + created/chowned in the Dockerfile; both lanes inherit via the anchor
+- [x] [High] **Stale correlation ids bled across actor invocations** (contextvar never cleared; thread reuse stamps the PREVIOUS job's id on classify_stems/sweeps logs — a wrong id is worse than none) → `CorrelationResetMiddleware` (dramatiq before_process_message resets to "-"), registered unconditionally
+- [x] [High] **`identifyUser` was exported, tested, and never called** — every PostHog event anonymous, KPI joins impossible, logout never reset shared-device identity → wired into AuthContext (follows auth state, resets on logout)
+- [x] [Med] **`:?` Grafana vars would have deploy-frozen the whole stack** post-merge (every compose command incl. auto-rollback fails until .env edited) → `:-changeme`/`:-` defaults (grafana is tunnel-only) + runbook ".env additions" bullet with set-it warning
+- [x] [Med] Correlation single-tag claim was FALSE across lanes (analyze=job id, verdict lanes=analysis id) → cross-lane stitch tags (`job_id` on triage/specialist via the loaded row — getattr-guarded for test stubs; `analysis_id` on analyze Phase C + coach) + runbook honesty rewrite ("search either id")
+- [x] [Med] Correlation middleware ran AFTER UseSerilogRequestLogging — the request-summary line (the one you grep first) never carried the id → reordered before it
+- [x] [Med] Queue gauge: frozen-stale on Redis failure with zero signal + blind to `.DQ` delay queues (a retry storm read as empty) → `.DQ` summed in + `spectr_queue_depth_scrape_errors_total` staleness counter
+- [x] [Med] /metrics test silently required live Redis (label assert) → family asserted unconditionally, label sample gated on `redis.IsConnected`
+- [x] [Med] Dashboard: `refId` added to all 11 targets (provisioned JSON skips UI normalization; Postgres panels often reject refId-less targets); panel 5 now shows the feature_flags budget ceilings alongside spend (the "vs budget" half existed only in a description); panel 10 retitled honestly (query aggregates all handlers incl. scrape noise)
+- [x] [Low] main.tsx init try/catch (an SDK init throw must not white-page before the ErrorBoundary exists); report_viewed per-job ref-guard (remounts/StrictMode won't inflate the TTFI denominator); Sentry scope-lifetime invariant documented at the middleware; runbook role-SQL ordered BEFORE first up + dev /metrics exposure noted
+- Verified-clean by the review: streaming metering writes exactly one row per logical call (LLM_COST can't double-count); tier binds outside the try (no NameError on the new failure-path observes); lowercase dramatiq_prom_* env names correct; CI build-args reach the pushed image; RouteValues available (implicit UseRouting); grafana `${VAR}` provisioning expansion supported; configure_logging's handler replacement is exactly-one-handler (CLI's handler replaced, no duplicates); @sentry/react ErrorBoundary safe uninitialized.
+- Deferred (10.4+): panel-5 divergence during incidents (SQL ok-only vs counter all-outcomes — noted in panel description), Phase-C failure-duration observation, --processes>1 multiproc gauge audit.
+- Honest scope: grafana dashboard + :9191 exporter still never rendered/scraped against live instances — first VPS boot verifies; the multiproc fix is source-verified against installed dramatiq 2.2.0.
+
 ### Change Log
 
 - 2026-07-03: implemented on `ops/10-3-observability`. Gates: BFF 328, worker 583+3xf, shared 27, frontend 678, ruff clean. Status → review.
+- 2026-07-03 (review): 14 patches incl. the CRITICAL multiproc import-order fix. Gates re-verified: BFF 328, worker 583+3xf, frontend 678, tsc/lint/ruff clean.

@@ -312,6 +312,7 @@ def analyze_audio_job(job_id: str) -> None:
 
     # ── Phase C — persist Analysis row + flip job to COMPLETE ───────────────
     analysis_id = uuid.uuid4()
+    obs.set_tag("analysis_id", analysis_id)  # cross-lane trace stitch
     with SessionFactory.begin() as s:
         done = s.get(AnalysisJob, jid)
         if done is None:

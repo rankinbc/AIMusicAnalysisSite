@@ -109,7 +109,16 @@ services:
       RESEND_API_KEY: "${RESEND_API_KEY:?}"
       SPECTR_REQUIRE_EMAIL: "1"
       # Story 10.3 — metrics exporter (:9191, scraped internally) + Sentry.
+      # PROMETHEUS_MULTIPROC_DIR MUST be set here (env, pre-import): the
+      # dramatiq middleware only sets it in after_process_boot, which is
+      # AFTER obs.py has imported prometheus_client — the value class binds
+      # at import, and without this every metric (dramatiq's AND ours)
+      # writes in-process only while the :9191 exporter serves the EMPTY
+      # multiprocess registry (review CRITICAL).
       WORKER_METRICS: "1"
+      PROMETHEUS_MULTIPROC_DIR: "/tmp/dramatiq-prometheus"
+      prometheus_multiproc_dir: "/tmp/dramatiq-prometheus"
+      dramatiq_prom_db: "/tmp/dramatiq-prometheus"
       dramatiq_prom_host: "0.0.0.0"
       dramatiq_prom_port: "9191"
       SENTRY_DSN: "${SENTRY_DSN_WORKER:-}"
@@ -153,11 +162,16 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
     environment:
+      # Defaults (NOT :?) — observability must never deploy-freeze the app
+      # stack (review: a :? here fails EVERY compose command incl. the
+      # auto-rollback path until the operator edits .env). Grafana binds
+      # 127.0.0.1 only, so the changeme default is tunnel-reachable only;
+      # runbook says set both properly + run the role SQL.
       GF_SECURITY_ADMIN_USER: "admin"
-      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:?}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-changeme}"
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
-      GRAFANA_PG_PASSWORD: "${GRAFANA_PG_PASSWORD:?}"  # read-only role (runbook SQL)
+      GRAFANA_PG_PASSWORD: "${GRAFANA_PG_PASSWORD:-}"  # read-only role (runbook SQL)
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro

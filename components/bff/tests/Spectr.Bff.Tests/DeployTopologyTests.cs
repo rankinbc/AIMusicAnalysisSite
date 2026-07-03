@@ -37,9 +37,16 @@ public sealed class DeployTopologyTests(WebApplicationFactory<Program> factory)
         var resp = await client.GetAsync("/metrics");
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         var body = await resp.Content.ReadAsStringAsync();
-        Assert.Contains("spectr_queue_depth", body);            // 10.3 queue gauge
-        Assert.Contains("queue=\"analysis-paid\"", body);
+        Assert.Contains("spectr_queue_depth", body);            // 10.3 gauge family (always registered)
         Assert.Contains("http_request_duration_seconds", body); // prometheus-net HTTP metrics
+        // Label samples only materialize when the before-collect LLEN
+        // succeeds — don't couple the suite to a live Redis (review).
+        using var scope = _factory.Services.CreateScope();
+        var redis = scope.ServiceProvider.GetRequiredService<StackExchange.Redis.IConnectionMultiplexer>();
+        if (redis.IsConnected)
+        {
+            Assert.Contains("queue=\"analysis-paid\"", body);
+        }
     }
 
     [Fact]

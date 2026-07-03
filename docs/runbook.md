@@ -64,17 +64,33 @@ migration means merge == deploy == applied.
 
 ## Observability (story 10.3 / AR32 / NFR30)
 
+- **.env additions with 10.3** (all have safe defaults — nothing
+  deploy-blocks): `SENTRY_DSN_BFF`, `SENTRY_DSN_WORKER`,
+  `GRAFANA_ADMIN_PASSWORD` (defaults to `changeme` — tunnel-only, but SET
+  IT), `GRAFANA_PG_PASSWORD`.
+- **Grafana read-only DB role — run BEFORE first up** (or the 5 Postgres
+  panels error until you do; they self-heal after, no restart needed):
+  see the SQL block below.
 - **Sentry** (all optional, DSN-gated): create 3 projects → set
   `SENTRY_DSN_BFF`, `SENTRY_DSN_WORKER` in `.env`; `VITE_SENTRY_DSN` as a
-  CI repo secret (baked into the web bundle at build). Every event carries
-  `correlation_id` = the analysis job id (coach events also carry
-  `analysis_id`); search that tag to trace upload → job → actors → LLM
-  calls → report render.
+  CI repo secret (baked into the web bundle at build). Correlation tags:
+  the ANALYZE lane correlates by **job id**, the verdict/triage/rerun
+  lanes by **analysis id** — every event carries BOTH where known
+  (`correlation_id` + the `job_id`/`analysis_id` stitch tag; coach adds
+  `analysis_id` to its conversation-id correlation), so search either id
+  to assemble the full upload → job → actors → LLM → render trace.
+  `llm_calls.correlation_id` stores the analysis id on verdict lanes.
 - **Prometheus** (internal-only): scrapes BFF `:5000/metrics`
-  (prometheus-net HTTP metrics + `spectr_queue_depth{queue}` for all four
-  dramatiq lanes) and both workers `:9191` (dramatiq middleware +
-  `spectr_job_duration_seconds`, `spectr_llm_cost_usd_total`,
+  (prometheus-net HTTP metrics + `spectr_queue_depth{queue}` — LIST + .DQ
+  delay queue, all four lanes; `spectr_queue_depth_scrape_errors_total`
+  rising = the gauge is stale) and both workers `:9191` (dramatiq
+  middleware + `spectr_job_duration_seconds`, `spectr_llm_cost_usd_total`,
   `spectr_verdict_validation_rejects_total`). 30 d retention.
+  `PROMETHEUS_MULTIPROC_DIR` MUST stay in the worker compose env — set
+  after import it's ignored and `:9191` serves an empty registry. Note:
+  in dev the BFF listens on localhost:5000 with `/metrics` anonymous
+  (prod: port unpublished, caddy never routes it — the catch-all serves
+  the SPA shell for `/metrics`).
 - **Grafana**: `127.0.0.1:3000` only — reach it with
   `ssh -L 3000:localhost:3000 <vps>`. Login admin / `GRAFANA_ADMIN_PASSWORD`.
   The `SPECTR / SPECTR Ops` dashboard is file-provisioned (10 panels:

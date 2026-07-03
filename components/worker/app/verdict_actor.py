@@ -185,6 +185,8 @@ def run_specialist(analysis_id: str, slug: str, user_id: str) -> None:
             # `final_json` is JSONB — already a dict by SA.
             raw_final = analysis.final_json
             track_id = str(analysis.id)
+            # cross-lane trace stitch (getattr: test stubs omit the column)
+            obs.set_tag("job_id", getattr(analysis, "job_id", None))
     except Exception as exc:
         logger.exception("Phase A failed for slug=%s", slug)
         _persist_fail_marker(aid, slug, f"DB read failed: {exc}")

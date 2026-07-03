@@ -3,94 +3,249 @@
   "uid": "spectr-ops",
   "schemaVersion": 39,
   "refresh": "1m",
-  "time": { "from": "now-24h", "to": "now" },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
   "panels": [
     {
-      "id": 1, "type": "timeseries", "title": "Queue depth",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
-      "datasource": { "uid": "spectr-prom" },
-      "targets": [{ "expr": "spectr_queue_depth", "legendFormat": "{{queue}}" }]
+      "id": 1,
+      "type": "timeseries",
+      "title": "Queue depth",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "uid": "spectr-prom"
+      },
+      "targets": [
+        {
+          "expr": "spectr_queue_depth",
+          "legendFormat": "{{queue}}",
+          "refId": "A"
+        }
+      ]
     },
     {
-      "id": 2, "type": "timeseries", "title": "Job duration p90 (5m)",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
-      "datasource": { "uid": "spectr-prom" },
-      "targets": [{
-        "expr": "histogram_quantile(0.9, sum by (le, tier) (rate(spectr_job_duration_seconds_bucket[5m])))",
-        "legendFormat": "{{tier}}"
-      }]
+      "id": 2,
+      "type": "timeseries",
+      "title": "Job duration p90 (5m)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "uid": "spectr-prom"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.9, sum by (le, tier) (rate(spectr_job_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{tier}}",
+          "refId": "A"
+        }
+      ]
     },
     {
-      "id": 3, "type": "stat", "title": "Pipeline health — success rate (24h)",
-      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 8 },
-      "datasource": { "uid": "spectr-pg" },
-      "targets": [{
-        "format": "table", "rawSql": "SELECT round(100.0 * count(*) FILTER (WHERE status = 'complete') / greatest(count(*), 1), 1) AS success_pct FROM analysis_jobs WHERE dispatched_at > now() - interval '24 hours' AND status IN ('complete','failed')"
-      }],
-      "fieldConfig": { "defaults": { "unit": "percent", "thresholds": { "steps": [
-        { "color": "red", "value": null }, { "color": "yellow", "value": 90 }, { "color": "green", "value": 97 } ] } } }
+      "id": 3,
+      "type": "stat",
+      "title": "Pipeline health \u2014 success rate (24h)",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 8
+      },
+      "datasource": {
+        "uid": "spectr-pg"
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT round(100.0 * count(*) FILTER (WHERE status = 'complete') / greatest(count(*), 1), 1) AS success_pct FROM analysis_jobs WHERE dispatched_at > now() - interval '24 hours' AND status IN ('complete','failed')",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 97
+              }
+            ]
+          }
+        }
+      }
     },
     {
-      "id": 4, "type": "timeseries", "title": "Jobs by terminal status (hourly)",
-      "gridPos": { "h": 8, "w": 18, "x": 6, "y": 8 },
-      "datasource": { "uid": "spectr-pg" },
-      "targets": [{
-        "format": "time_series", "rawSql": "SELECT date_trunc('hour', coalesce(completed_at, failed_at)) AS time, status AS metric, count(*) AS value FROM analysis_jobs WHERE coalesce(completed_at, failed_at) > now() - interval '48 hours' AND status IN ('complete','failed') GROUP BY 1, 2 ORDER BY 1"
-      }]
+      "id": 4,
+      "type": "timeseries",
+      "title": "Jobs by terminal status (hourly)",
+      "gridPos": {
+        "h": 8,
+        "w": 18,
+        "x": 6,
+        "y": 8
+      },
+      "datasource": {
+        "uid": "spectr-pg"
+      },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawSql": "SELECT date_trunc('hour', coalesce(completed_at, failed_at)) AS time, status AS metric, count(*) AS value FROM analysis_jobs WHERE coalesce(completed_at, failed_at) > now() - interval '48 hours' AND status IN ('complete','failed') GROUP BY 1, 2 ORDER BY 1",
+          "refId": "A"
+        }
+      ]
     },
     {
-      "id": 5, "type": "bargauge", "title": "LLM spend vs budget (this month, USD)",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
-      "datasource": { "uid": "spectr-pg" },
-      "targets": [{
-        "format": "table", "rawSql": "SELECT coalesce(tier,'unknown') AS tier, sum(cost_usd)::float AS spent_usd FROM llm_calls WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'utc') AND outcome = 'ok' GROUP BY 1 ORDER BY 2 DESC"
-      }],
-      "description": "Ceilings: feature_flags llm_budget_{free,pro,global}_usd (env fallback). Alert wiring lands in 10.4."
+      "id": 5,
+      "type": "bargauge",
+      "title": "LLM spend vs budget (this month, USD)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "datasource": {
+        "uid": "spectr-pg"
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT coalesce(tier,'unknown') AS tier, sum(cost_usd)::float AS spent_usd FROM llm_calls WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'utc') AND outcome = 'ok' GROUP BY 1 ORDER BY 2 DESC",
+          "refId": "A"
+        },
+        {
+          "refId": "B",
+          "format": "table",
+          "rawSql": "SELECT 'budget:' || replace(name, 'llm_budget_', '') AS tier, nullif(value, '')::float AS spent_usd FROM feature_flags WHERE name IN ('llm_budget_free_usd','llm_budget_pro_usd','llm_budget_global_usd')"
+        }
+      ],
+      "description": "Bars prefixed budget: are the feature_flags ceilings (env-fallback ceilings not shown). Alert wiring lands in 10.4."
     },
     {
-      "id": 6, "type": "timeseries", "title": "LLM spend rate (prom counter)",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
-      "datasource": { "uid": "spectr-prom" },
-      "targets": [{
-        "expr": "sum by (tier) (increase(spectr_llm_cost_usd_total[1h]))",
-        "legendFormat": "{{tier}} $/h"
-      }]
+      "id": 6,
+      "type": "timeseries",
+      "title": "LLM spend rate (prom counter)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "datasource": {
+        "uid": "spectr-prom"
+      },
+      "targets": [
+        {
+          "expr": "sum by (tier) (increase(spectr_llm_cost_usd_total[1h]))",
+          "legendFormat": "{{tier}} $/h",
+          "refId": "A"
+        }
+      ]
     },
     {
-      "id": 7, "type": "stat", "title": "Verdict feedback — helpful / wrong (30d)",
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 },
-      "datasource": { "uid": "spectr-pg" },
-      "targets": [{
-        "format": "table", "rawSql": "SELECT round(100.0 * count(*) FILTER (WHERE feedback = 'helpful') / greatest(count(*) FILTER (WHERE feedback IS NOT NULL), 1), 1) AS helpful_pct, round(100.0 * count(*) FILTER (WHERE feedback = 'wrong') / greatest(count(*) FILTER (WHERE feedback IS NOT NULL), 1), 1) AS wrong_pct FROM verdict_user_state WHERE updated_at > now() - interval '30 days'"
-      }],
+      "id": 7,
+      "type": "stat",
+      "title": "Verdict feedback \u2014 helpful / wrong (30d)",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 24
+      },
+      "datasource": {
+        "uid": "spectr-pg"
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT round(100.0 * count(*) FILTER (WHERE feedback = 'helpful') / greatest(count(*) FILTER (WHERE feedback IS NOT NULL), 1), 1) AS helpful_pct, round(100.0 * count(*) FILTER (WHERE feedback = 'wrong') / greatest(count(*) FILTER (WHERE feedback IS NOT NULL), 1), 1) AS wrong_pct FROM verdict_user_state WHERE updated_at > now() - interval '30 days'",
+          "refId": "A"
+        }
+      ],
       "description": "KPI: >70% helpful, <10% wrong."
     },
     {
-      "id": 8, "type": "timeseries", "title": "Validation rejects (per specialist)",
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 },
-      "datasource": { "uid": "spectr-prom" },
-      "targets": [{
-        "expr": "sum by (slug) (increase(spectr_verdict_validation_rejects_total[1h]))",
-        "legendFormat": "{{slug}}"
-      }]
+      "id": 8,
+      "type": "timeseries",
+      "title": "Validation rejects (per specialist)",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 24
+      },
+      "datasource": {
+        "uid": "spectr-prom"
+      },
+      "targets": [
+        {
+          "expr": "sum by (slug) (increase(spectr_verdict_validation_rejects_total[1h]))",
+          "legendFormat": "{{slug}}",
+          "refId": "A"
+        }
+      ]
     },
     {
-      "id": 9, "type": "stat", "title": "MRR proxy — active subs by price",
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 },
-      "datasource": { "uid": "spectr-pg" },
-      "targets": [{
-        "format": "table", "rawSql": "SELECT price_id, count(*) AS subs FROM subscriptions WHERE status IN ('active','trialing') GROUP BY 1"
-      }],
+      "id": 9,
+      "type": "stat",
+      "title": "MRR proxy \u2014 active subs by price",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 24
+      },
+      "datasource": {
+        "uid": "spectr-pg"
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT price_id, count(*) AS subs FROM subscriptions WHERE status IN ('active','trialing') GROUP BY 1",
+          "refId": "A"
+        }
+      ],
       "description": "Multiply by price amounts (Stripe dashboard is authoritative for MRR)."
     },
     {
-      "id": 10, "type": "timeseries", "title": "HTTP p95 by handler (BFF)",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
-      "datasource": { "uid": "spectr-prom" },
-      "targets": [{
-        "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))",
-        "legendFormat": "p95"
-      }]
+      "id": 10,
+      "type": "timeseries",
+      "title": "HTTP p95 (all handlers, incl. scrape/health noise)",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "datasource": {
+        "uid": "spectr-prom"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95",
+          "refId": "A"
+        }
+      ]
     }
   ]
 }

@@ -421,11 +421,13 @@ if (string.Equals(app.Configuration["ForwardedHeaders:Enabled"], "true", StringC
 // whatever environment is running (dev + CI). Lock down before public exposure.
 app.MapOpenApi();
 
-app.UseSerilogRequestLogging();
-
 // Story 10.3 — correlation enrichment (NFR30): any request that names a job
 // or analysis id carries that id on every log line + Sentry event, so one id
-// traces upload → job → actors → LLM calls → report render.
+// traces upload → job → actors → LLM calls → report render. Registered
+// BEFORE UseSerilogRequestLogging so the request-summary line carries it too
+// (review: order matters — LogContext pops before the summary otherwise).
+// Cross-request tag safety relies on Sentry.AspNetCore's per-request scope
+// (UseSentry); with DSN unset ConfigureScope is a documented no-op.
 app.Use(async (ctx, next) =>
 {
     var routeVals = ctx.Request.RouteValues;
@@ -445,6 +447,8 @@ app.Use(async (ctx, next) =>
         await next();
     }
 });
+
+app.UseSerilogRequestLogging();
 
 // Story 10.3 — prometheus HTTP metrics + /metrics (internal scrape only —
 // caddy never routes /metrics; prometheus reaches bff:5000 on the compose net).
@@ -529,7 +533,10 @@ app.MapGet("/healthz", async (AppDbContext db, IConnectionMultiplexer redis) =>
 // middleware can't see Redis LIST depth; the BFF already owns a Redis
 // connection, so depth is collected here at scrape time for all four lanes.
 var queueDepthGauge = Metrics.CreateGauge(
-    "spectr_queue_depth", "Dramatiq queue depth (pending messages).", "queue");
+    "spectr_queue_depth", "Dramatiq queue depth (pending + delayed messages).", "queue");
+var queueScrapeErrors = Metrics.CreateCounter(
+    "spectr_queue_depth_scrape_errors_total",
+    "Queue-depth collection failures — a rising rate means the gauge is STALE.");
 Metrics.DefaultRegistry.AddBeforeCollectCallback(async ct =>
 {
     try
@@ -538,13 +545,18 @@ Metrics.DefaultRegistry.AddBeforeCollectCallback(async ct =>
         var rdb = redisConn.GetDatabase();
         foreach (var q in new[] { "coach", "analysis-paid", "analysis-free", "maintenance" })
         {
-            var len = await rdb.ListLengthAsync($"dramatiq:{q}");
+            // .DQ carries retried/delayed messages — a retry storm must not
+            // read as an empty queue (review).
+            var len = await rdb.ListLengthAsync($"dramatiq:{q}")
+                + await rdb.ListLengthAsync($"dramatiq:{q}.DQ");
             queueDepthGauge.WithLabels(q).Set(len);
         }
     }
     catch
     {
-        // Scrapes must not fail because Redis blipped — gauges just go stale.
+        // Scrapes must not fail on a Redis blip — gauge goes stale, and the
+        // error counter is the staleness signal.
+        queueScrapeErrors.Inc();
     }
 });
 app.MapMetrics().AllowAnonymous();

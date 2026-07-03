@@ -11,9 +11,14 @@ import { routeTree } from './routeTree.gen';
 import './styles/tokens.css';
 import './styles/global.css';
 
-// Story 10.3 — both no-op without their VITE_* env keys.
-initSentry();
-initAnalytics();
+// Story 10.3 — both no-op without their VITE_* env keys. Wrapped: an SDK
+// init failure (blocked storage, adblock) must never prevent app mount.
+try {
+  initSentry();
+  initAnalytics();
+} catch {
+  // observability is optional; the app is not
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
