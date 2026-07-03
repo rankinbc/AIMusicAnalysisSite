@@ -433,6 +433,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             .HasDatabaseName("ix_listening_sessions_host_id");
         builder.Entity<ListeningSession>().HasIndex(s => s.Status)
             .HasDatabaseName("ix_listening_sessions_status");
+        // Story 11.10 — the activity-feed recap query: filter host_id +
+        // recap_published_at IS NOT NULL, ordered recap_published_at DESC.
+        // Partial: only published sessions are ever feed-visible.
+        builder.Entity<ListeningSession>().HasIndex(s => new { s.HostId, s.RecapPublishedAt })
+            .HasDatabaseName("ix_listening_sessions_host_recap_published")
+            .HasFilter("recap_published_at IS NOT NULL");
         builder.Entity<ListeningSession>()
             .HasOne<SongVersion>().WithMany().HasForeignKey(s => s.SongVersionId)
             .OnDelete(DeleteBehavior.Cascade);

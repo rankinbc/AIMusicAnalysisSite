@@ -845,6 +845,11 @@ class ListeningSession(Base):
     )
     events_json: Mapped[Optional[Any]] = mapped_column("events_json", JSONB, nullable=True)
     recap_json: Mapped[Optional[Any]] = mapped_column("recap_json", JSONB, nullable=True)
+    # Story 11.10 — first host publish of the recap (mirror of EF
+    # AddRecapPublishedAt). recap_json alone is auto-synthesized, not "published".
+    recap_published_at: Mapped[Optional[datetime]] = mapped_column(
+        "recap_published_at", DateTime(timezone=True), nullable=True
+    )
 
 
 class ControlGrant(Base):

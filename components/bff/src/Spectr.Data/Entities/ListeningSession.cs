@@ -42,4 +42,10 @@ public sealed class ListeningSession
     // Written by synthesize_recap after the events_json flush. Null while live.
     [Column("recap_json", TypeName = "jsonb")]
     public string? RecapJson { get; set; }
+
+    // Story 11.10 — set the FIRST time the host publishes the recap (recap_json
+    // alone is auto-synthesized on room end, so non-null recap_json != published).
+    // Feed publish-signal AND sort key; never reset on re-publish.
+    [Column("recap_published_at")]
+    public DateTimeOffset? RecapPublishedAt { get; set; }
 }

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Spectr.Bff.DTOs;
 using System.Net;
@@ -158,6 +159,46 @@ public sealed class VersionShareEndpointsTests(WebApplicationFactory<Program> fa
         // Back to private → the share token no longer resolves.
         await PutShare(owner, versionId, new { visibility = "private" });
         Assert.Equal(HttpStatusCode.NotFound, (await anon.GetAsync($"/api/v/{token}")).StatusCode);
+    }
+
+    // Story 11.11 — /v/{token} carries the owner's public identity for the
+    // follow-producer CTA (null when the owner has no handle or is inactive).
+    [Fact]
+    public async Task VersionView_Carries_Owner_Handle_When_Followable()
+    {
+        if (!await PostgresReachable()) return;
+        var (owner, email) = await NewAuthedClient();
+        var versionId = await CreateVersion(owner);
+        var s = await PutShare(owner, versionId, new { visibility = "unlisted" });
+        var token = s!.ShareToken!;
+        var anon = _factory.CreateClient();
+
+        // Registration auto-seeds a handle; overwrite it with a known value
+        // so the assertion is deterministic.
+        var handle = $"own{Guid.NewGuid():N}"[..14];
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<Spectr.Data.AppDbContext>();
+            var user = await db.Users.SingleAsync(u => u.Email == email);
+            user.Handle = handle;
+            user.DisplayName = "Owner Name";
+            await db.SaveChangesAsync();
+        }
+        var view = await anon.GetFromJsonAsync<VersionViewDto>($"/api/v/{token}");
+        Assert.Equal(handle, view!.OwnerHandle);
+        Assert.Equal("Owner Name", view.OwnerDisplayName);
+
+        // Deactivated owner → null identity (a /u/{handle} link would 404).
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<Spectr.Data.AppDbContext>();
+            var user = await db.Users.SingleAsync(u => u.Email == email);
+            user.IsActive = false;
+            await db.SaveChangesAsync();
+        }
+        var gone = await anon.GetFromJsonAsync<VersionViewDto>($"/api/v/{token}");
+        Assert.Null(gone!.OwnerHandle);
+        Assert.Null(gone.OwnerDisplayName);
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
