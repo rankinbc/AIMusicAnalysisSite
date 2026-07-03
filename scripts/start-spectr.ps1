@@ -296,7 +296,11 @@ function Start-Apps {
 
     # --- BFF ---
     if (Get-Command dotnet -ErrorAction SilentlyContinue) {
-        Start-InWindow -Title 'SPECTR BFF (:5000)' -WorkDir $BffDir -Command 'dotnet run'
+        # Story 4.1: Development env is REQUIRED for local runs — appsettings.json
+        # carries no signing keys (NFR6); dev keys live in appsettings.Development.json.
+        # `dotnet run` reads Properties/launchSettings.json (Development), and the
+        # explicit env var below covers shells/tools that bypass launch profiles.
+        Start-InWindow -Title 'SPECTR BFF (:5000)' -WorkDir $BffDir -Command "`$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run"
     } else {
         Fail 'BFF: `dotnet` not found on PATH (install .NET 10 SDK)'
     }

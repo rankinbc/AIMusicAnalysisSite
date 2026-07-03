@@ -9,6 +9,13 @@
     <ProjectReference Include="..\Spectr.Domain\Spectr.Domain.csproj" />
   </ItemGroup>
 
+  <!-- Story 4.1 (NFR6): the dev-only signing keys in appsettings.Development.json
+       must never ship in a published image — combined with the boot-time
+       dev-key blacklist this closes the env=Development-in-prod bypass. -->
+  <ItemGroup>
+    <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
   <!-- Story 2.10: unit tests call internal methods on BillingReconciliationService -->
   <ItemGroup>
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">

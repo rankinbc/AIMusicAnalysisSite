@@ -92,6 +92,10 @@ services:
       ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=spectr;Username=spectr;Password=spectr"
       Redis__ConnectionString: "redis:6379"
       Jwt__Key: "${JWT_KEY:?Set JWT_KEY in your shell or .env (32+ random bytes)}"
+      # Story 4.1: appsettings.Development.json is excluded from publish, so
+      # the containerized BFF needs the anon key from env. Dev default below
+      # is compose-dev-only (same class as minioadmin); override in .env.
+      Anon__SigningKey: "${ANON_SIGNING_KEY:-spectr-compose-dev-anon-signing-key-0123456789}"
       Jwt__Issuer: "spectr.bff"
       Jwt__Audience: "spectr.web"
       Storage__Provider: "local"

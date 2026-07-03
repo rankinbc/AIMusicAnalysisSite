@@ -22,8 +22,49 @@ builder.Host.UseSerilog((ctx, services, lc) => lc
 // ── Configuration ──────────────────────────────────────────────────────────────
 var conn = builder.Configuration.GetConnectionString("Postgres")
     ?? throw new InvalidOperationException("Missing ConnectionStrings:Postgres");
-var jwtKey = builder.Configuration["Jwt:Key"]
-    ?? throw new InvalidOperationException("Missing Jwt:Key");
+
+// Story 4.1 (NFR6) — secrets fail-fast. appsettings.json carries NO signing
+// keys; dev values live in appsettings.Development.json only. Any other
+// environment must supply them via env/user-secrets or the BFF refuses to
+// boot. Length is enforced here (not at first sign) because HmacSha256
+// requires >= 32 bytes and a short key would otherwise explode mid-request.
+// Review-hardened: placeholder values are rejected EVERYWHERE, and the
+// publicly-committed dev keys are rejected outside Development — setting
+// ASPNETCORE_ENVIRONMENT=Development on a prod host must not silently sign
+// tokens with keys anyone can read on GitHub.
+static string RequireSigningKey(IConfiguration cfg, string key, string envForm, bool isDevelopment)
+{
+    var value = cfg[key];
+    if (string.IsNullOrWhiteSpace(value))
+        throw new InvalidOperationException(
+            $"Missing {key}. Set the {envForm} environment variable "
+            + "(32+ random bytes) or a dotnet user-secret. The BFF refuses to "
+            + "boot without it outside Development (NFR6).");
+    if (value.StartsWith("REPLACE_", StringComparison.OrdinalIgnoreCase))
+        throw new InvalidOperationException(
+            $"{key} is still the .env.example placeholder. Generate a real key "
+            + $"(openssl rand -base64 48) and set it via {envForm}.");
+    if (!isDevelopment && (
+            value.StartsWith("spectr-dev-only-", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("dev-anon-signing-key", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("change-me", StringComparison.OrdinalIgnoreCase)))
+        throw new InvalidOperationException(
+            $"{key} is a PUBLICLY-COMMITTED development key — refusing to boot "
+            + $"outside Development. Provide a real secret via {envForm}.");
+    if (Encoding.UTF8.GetBytes(value).Length < 32)
+        throw new InvalidOperationException(
+            $"{key} is too short: HmacSha256 requires at least 32 bytes. "
+            + $"Provide 32+ random bytes via {envForm}.");
+    return value;
+}
+
+var isDevEnv = builder.Environment.IsDevelopment();
+var jwtKey = RequireSigningKey(builder.Configuration, "Jwt:Key", "Jwt__Key", isDevEnv);
+var anonSigningKey = RequireSigningKey(builder.Configuration, "Anon:SigningKey", "Anon__SigningKey", isDevEnv);
+if (jwtKey == anonSigningKey)
+    throw new InvalidOperationException(
+        "Anon:SigningKey must DIFFER from Jwt:Key — one HMAC key serving two "
+        + "token formats invites cross-protocol confusion.");
 
 // Allow 250 MB uploads for long FLACs.
 builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 250L * 1024 * 1024);

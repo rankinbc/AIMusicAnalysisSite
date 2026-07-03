@@ -20,6 +20,17 @@
 # will be folded into 10.1's topology.
 
 services:
+  # Story 4.1 (NFR6): the prod overlay must NOT inherit the base compose's
+  # ASPNETCORE_ENVIRONMENT=Development — that would run the BFF with dev-mode
+  # behaviors. Production requires REAL signing keys (no defaults, compose
+  # refuses to start without them; the BFF boot-validates length + rejects
+  # committed dev values). Full prod topology still lands in 10.1.
+  bff:
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      Jwt__Key: "${JWT_KEY:?Production requires JWT_KEY (32+ random bytes)}"
+      Anon__SigningKey: "${ANON_SIGNING_KEY:?Production requires ANON_SIGNING_KEY (32+ random bytes, different from JWT_KEY)}"
+
   # Disable the single dev worker under the prod overlay.
   worker:
     profiles: ["dev-only"]
