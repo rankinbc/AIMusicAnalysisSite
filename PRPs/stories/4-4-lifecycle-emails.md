@@ -1,6 +1,6 @@
 # Story 4.4: Lifecycle Emails (Completion, Dunning, Retention)
 
-Status: review
+Status: done
 
 ## Story
 
