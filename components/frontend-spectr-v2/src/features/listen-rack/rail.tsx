@@ -6,7 +6,7 @@
  *   coachReply    → real coach analysis feed (each item keeps an `apply` patch).
  *   People/Chat   → real-time presence + messages + grant-control.
  */
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
 import {
   railTabsFor, type AccessDto, type ActorRef, type ModeId,
@@ -33,6 +33,8 @@ import { partitionSuggestions } from '../listen/suggestion-helpers';
 import { SuggestionCard } from '../listen/SuggestionCard';
 import { useMe } from '../../api/hooks';
 import type { CommentDto as ApiCommentDto } from '../../api/types';
+import { useMentionAutocomplete } from '../mentions/useMentionAutocomplete';
+import { MentionSuggestList } from '../mentions/MentionSuggestList';
 
 // SYNC toggle shown in a console bay header — binds that module to the music
 function SyncTag({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
@@ -377,8 +379,18 @@ function PeoplePanel({ myStatus, onReact, cap, roomControl, onGrant }: {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
         {ROOM_LISTENERS.map((u) => (
           <div key={u.handle} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 9px', borderRadius: 8, background: 'rgba(255,255,255,0.02)', border: `1px solid ${u.you ? 'rgba(0,229,176,0.4)' : 'var(--border)'}` }}>
-            <Avatar handle={u.handle} hue={u.hue} anon={u.anon} size={26} />
-            <span className="mono" style={{ fontSize: 11, color: u.you ? 'var(--cyan)' : 'var(--text-2)' }}>{u.anon ? 'anonymous' : '@' + u.handle}</span>
+            {/* Story 11.11 — non-anon listeners deep-link to /u/{handle}. */}
+            {u.anon ? (
+              <>
+                <Avatar handle={u.handle} hue={u.hue} anon size={26} />
+                <span className="mono" style={{ fontSize: 11, color: 'var(--text-2)' }}>anonymous</span>
+              </>
+            ) : (
+              <a href={`/u/${u.handle}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+                <Avatar handle={u.handle} hue={u.hue} size={26} />
+                <span className="mono" style={{ fontSize: 11, color: u.you ? 'var(--cyan)' : 'var(--text-2)' }}>@{u.handle}</span>
+              </a>
+            )}
             <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               {u.you && <span className="mono" style={{ fontSize: 8.5, color: 'var(--cyan)', letterSpacing: '0.1em' }}>HOST</span>}
               {!u.you && (() => {
@@ -605,6 +617,10 @@ export function CommentsPanel({ versionId, access, isOwner, position, onSeek }: 
   const [text, setText] = useState('');
   const [pinTime, setPinTime] = useState(false);
   const [replyTo, setReplyTo] = useState<string | null>(null);
+  // Story 11.11 — @handle autocomplete; keydown routes through the dropdown
+  // first so Enter picks a suggestion instead of submitting.
+  const commentInputRef = useRef<HTMLInputElement>(null);
+  const mention = useMentionAutocomplete(setText, commentInputRef);
 
   const suggestionsQ = useSuggestions(vid);
   const { byCommentId: suggestionByComment, standalone: standaloneSuggestions } = useMemo(
@@ -625,7 +641,7 @@ export function CommentsPanel({ versionId, access, isOwner, position, onSeek }: 
     if (!body || !vid || postMut.isPending) return;
     postMut.mutate(
       { body, t: pinTime && Number.isFinite(position) ? Math.round(position) : null, parentId: replyTo },
-      { onSuccess: () => { setText(''); setPinTime(false); setReplyTo(null); } },
+      { onSuccess: () => { setText(''); mention.close(); setPinTime(false); setReplyTo(null); } },
     );
   };
 
@@ -636,8 +652,18 @@ export function CommentsPanel({ versionId, access, isOwner, position, onSeek }: 
     return (
       <div key={c.id} style={{ marginLeft: isReply ? 16 : 0, padding: '10px 11px', borderRadius: 9, background: 'rgba(255,255,255,0.02)', border: `1px solid ${cssVar(tone)}2e`, borderLeft: `3px solid ${tone}`, opacity: c.status === 'hidden' ? 0.55 : 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Avatar handle={name} hue={c.author.hue ?? 200} anon={c.author.type === 'anon'} size={22} />
-          <span className="mono" style={{ fontSize: 10.5, color: c.author.type === 'anon' ? 'var(--muted)' : 'var(--violet)' }}>{c.author.type === 'anon' ? name : '@' + name}</span>
+          {/* Story 11.11 — authed authors deep-link to their public profile. */}
+          {c.author.type === 'user' && c.author.handle ? (
+            <a href={`/u/${c.author.handle}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
+              <Avatar handle={name} hue={c.author.hue ?? 200} size={22} />
+              <span className="mono" style={{ fontSize: 10.5, color: 'var(--violet)' }}>@{name}</span>
+            </a>
+          ) : (
+            <>
+              <Avatar handle={name} hue={c.author.hue ?? 200} anon={c.author.type === 'anon'} size={22} />
+              <span className="mono" style={{ fontSize: 10.5, color: c.author.type === 'anon' ? 'var(--muted)' : 'var(--violet)' }}>{c.author.type === 'anon' ? name : '@' + name}</span>
+            </>
+          )}
           {c.t != null && <button type="button" onClick={() => onSeek(c.t as number)} className="mono" style={{ fontSize: 9.5, color: 'var(--cyan)', background: 'none', padding: 0 }}>@{fmtTime(c.t)}</button>}
           {c.status === 'pinned' && <span className="mono" style={{ marginLeft: 'auto', fontSize: 8, color: 'var(--cyan)', letterSpacing: '0.1em' }}>★ PINNED</span>}
           {c.status === 'resolved' && <span className="mono" style={{ marginLeft: 'auto', fontSize: 8, color: 'var(--green)', letterSpacing: '0.1em' }}>✓ RESOLVED</span>}
@@ -700,7 +726,12 @@ export function CommentsPanel({ versionId, access, isOwner, position, onSeek }: 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
           {replyTo && <div className="mono" style={{ fontSize: 9, color: 'var(--muted)' }}>replying… <button type="button" onClick={() => setReplyTo(null)} style={{ color: 'var(--cyan)', background: 'none', padding: 0 }}>cancel</button></div>}
           <div style={{ display: 'flex', gap: 7, alignItems: 'center', padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border)' }}>
-            <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (!e.nativeEvent.isComposing && e.key === 'Enter') submit(); }} placeholder={replyTo ? 'Reply…' : 'Leave feedback…'} style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 12, fontFamily: 'inherit' }} />
+            <div style={{ position: 'relative', flex: 1, display: 'flex' }}>
+              {mention.open && (
+                <MentionSuggestList items={mention.items} activeIndex={mention.activeIndex} onPick={mention.pick} />
+              )}
+              <input ref={commentInputRef} value={text} onChange={(e) => { setText(e.target.value); mention.onChange(e.target.value, e.target.selectionStart); }} onKeyDown={(e) => { if (mention.handleKeyDown(e)) return; if (!e.nativeEvent.isComposing && e.key === 'Enter') submit(); }} onBlur={mention.close} placeholder={replyTo ? 'Reply…' : 'Leave feedback…'} style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 12, fontFamily: 'inherit' }} />
+            </div>
             <button type="button" onClick={() => setPinTime((p) => !p)} title="pin to current time" className="mono" style={{ fontSize: 9.5, color: pinTime ? 'var(--cyan)' : 'var(--muted)', background: 'none', padding: 0 }}>@{fmtTime(position)}</button>
             <button type="button" onClick={submit} disabled={postMut.isPending || !text.trim()} className="btn sm primary" style={{ padding: '4px 12px', fontSize: 11 }}>Post</button>
           </div>

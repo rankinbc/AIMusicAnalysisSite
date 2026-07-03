@@ -58,6 +58,9 @@ public sealed record CreateInviteRequest(
     string? InvitedHandle);
 
 // Anonymous View entry (GET /v/{token}) — version + current-analysis summary + anon gates.
+// OwnerHandle/OwnerDisplayName (story 11.11): public identity of the track owner
+// for the post-claim "follow this producer" CTA — same exposure as /u/{handle};
+// null when the owner has no handle or is inactive.
 public sealed record VersionViewDto(
     Guid VersionId,
     string SongName,
@@ -66,4 +69,6 @@ public sealed record VersionViewDto(
     bool ShowVerdicts,
     string? Grade,
     int? Score,
-    GatesDto Gates);
+    GatesDto Gates,
+    string? OwnerHandle,
+    string? OwnerDisplayName);

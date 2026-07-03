@@ -75,4 +75,19 @@ describe('CommentsPanel (story 11.1)', () => {
     const html = render([], ME, false, closed);
     expect(html).toContain('Comments are closed');
   });
+
+  // Story 11.11 AC2/AC4 — author avatars deep-link to public profiles.
+  it('links authed authors to /u/{handle} and leaves anon authors unlinked', () => {
+    const html = render(
+      [
+        comment({ id: 'a' }), // user author, handle kojo
+        comment({ id: 'b', author: { type: 'anon', userId: null, handle: null, displayName: 'ghost', hue: 20 } }),
+      ],
+      ME,
+      false,
+    );
+    expect(html).toContain('href="/u/kojo"');
+    expect(html).toContain('ghost');
+    expect(html).not.toContain('href="/u/ghost"');
+  });
 });

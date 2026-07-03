@@ -546,7 +546,19 @@ public static class RoomEndpoints
                 row.Body, row.Status, null, row.CreatedAt));
         }
         if (created.Count == 0) return Results.BadRequest(new { error = "No valid moments selected." });
-        await db.SaveChangesAsync(ct);
+
+        // One transaction: recap comments + the 11.10 publish stamp commit or
+        // roll back together (a stamp without comments would announce a recap
+        // to feeds that publish actually failed to produce, and vice versa).
+        // Only the first publish stamps, so re-publishing never reorders feeds.
+        await using (var tx = await db.Database.BeginTransactionAsync(ct))
+        {
+            await db.SaveChangesAsync(ct);
+            await db.ListeningSessions
+                .Where(x => x.Id == id && x.RecapPublishedAt == null)
+                .ExecuteUpdateAsync(u => u.SetProperty(x => x.RecapPublishedAt, DateTimeOffset.UtcNow), ct);
+            await tx.CommitAsync(ct);
+        }
 
         foreach (var c in created)
             await gamePlan.InsertDrainItemAsync(s.SongVersionId, "recap", "comment", c.Id.ToString(), ct);

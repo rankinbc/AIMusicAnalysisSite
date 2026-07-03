@@ -62,4 +62,19 @@ describe('AnonCommentList', () => {
   it('renders the empty state', () => {
     expect(renderToStaticMarkup(<AnonCommentList comments={[]} />)).toContain('No comments yet');
   });
+
+  // Story 11.11 AC2/AC4 — authed authors deep-link to /u/{handle}; anon don't.
+  it('links user authors to their public profile, never anon authors', () => {
+    const html = renderToStaticMarkup(
+      <AnonCommentList
+        comments={[
+          comment(), // anon-river, anon
+          comment({ id: 'c2', author: { type: 'user', userId: 'u1', handle: 'vela', displayName: null, hue: 220 } }),
+        ]}
+      />,
+    );
+    expect(html).toContain('href="/u/vela"');
+    expect(html).toContain('anon-river');
+    expect(html).not.toContain('href="/u/anon-river"');
+  });
 });

@@ -98,8 +98,17 @@ public static class VersionViewEndpoints
         var info = await (
             from v in db.SongVersions.AsNoTracking()
             join s in db.Songs.AsNoTracking() on v.SongId equals s.Id
+            join u in db.Users.AsNoTracking() on s.UserId equals u.Id
             where v.Id == versionId
-            select new { v.VersionNumber, SongName = s.Name }).FirstOrDefaultAsync(ct);
+            select new
+            {
+                v.VersionNumber,
+                SongName = s.Name,
+                // Story 11.11 — owner public identity for the follow CTA.
+                // Only when the owner is followable (/u/{handle} convention).
+                OwnerHandle = u.IsActive ? u.Handle : null,
+                OwnerDisplayName = u.IsActive ? u.DisplayName : null,
+            }).FirstOrDefaultAsync(ct);
         if (info is null) return Results.NotFound();
 
         var settings = await db.ShareSettings.AsNoTracking()
@@ -114,7 +123,8 @@ public static class VersionViewEndpoints
             settings?.Visibility ?? "private",
             settings?.ShowVerdicts ?? false,
             Grade: null, Score: null,
-            acc.Gates));
+            acc.Gates,
+            info.OwnerHandle, info.OwnerDisplayName));
     }
 
     private static async Task<IResult> StreamVersionAudio(
