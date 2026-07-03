@@ -11,8 +11,10 @@ public static class ProfileEndpoints
 {
     public static IEndpointRouteBuilder MapProfileEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGroup("/u").WithTags("profiles").AllowAnonymous()
-            .MapGet("/{handle}", GetPublicProfile);
+        var g = app.MapGroup("/u").WithTags("profiles").AllowAnonymous();
+        g.MapGet("/{handle}", GetPublicProfile);
+        // Story 11.11 — handle prefix search for @mention autocomplete.
+        g.MapGet("/", SearchHandles);
         return app;
     }
 
@@ -63,5 +65,54 @@ public static class ProfileEndpoints
         return Results.Ok(new PublicProfileDto(
             user.Handle, user.DisplayName, user.Bio, user.PublicLink,
             user.AvatarHue, user.BannerHue, user.Accent, versions));
+    }
+
+    public sealed record HandleSearchItemDto(string Handle, string? DisplayName, int? AvatarHue);
+    public sealed record HandleSearchDto(IReadOnlyList<HandleSearchItemDto> Items);
+
+    // Story 11.11 — GET /api/u/?q=<prefix>. Suggests handles the MentionParser
+    // will subsequently match (same charset), so we validate q against the
+    // mention token grammar instead of erroring on junk. Anonymous (the anon
+    // composer on /v/{token} can mention too) + ip-rate-limited. Filters
+    // IsActive per the /u/{handle} + follow convention — suggesting a user
+    // whose profile 404s is a trap (MentionParser itself deliberately doesn't
+    // filter IsActive; that asymmetry is fine: parsing is lenient, suggesting
+    // is curated).
+    private static async Task<IResult> SearchHandles(
+        string? q,
+        HttpContext http,
+        AppDbContext db,
+        IRateLimiter limiter,
+        CancellationToken ct)
+    {
+        var ip = http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var rl = await limiter.CheckAsync($"ip:{ip}", ip, "handle_search",
+            limit: 60, TimeSpan.FromMinutes(1), ct);
+        if (!rl.Allowed)
+            return ErrorEnvelope.Build(429, "rate_limited", "Too many requests — slow down.");
+
+        var query = (q ?? "").Trim();
+        // Mention token grammar (MentionParser): 1-30 of [A-Za-z0-9._-],
+        // starting alphanumeric. Anything else can't be a mention — empty list.
+        if (query.Length is 0 or > 30
+            || !char.IsAsciiLetterOrDigit(query[0])
+            || !query.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-'))
+        {
+            return Results.Ok(new HandleSearchDto([]));
+        }
+
+        // The grammar above excludes %/_-wildcard abuse except '_', which is a
+        // legal handle char — escape it so it matches literally under ILike.
+        var pattern = query.Replace("_", "\\_") + "%";
+
+        var items = await db.Users.AsNoTracking()
+            .Where(u => u.Handle != null && u.IsActive
+                && EF.Functions.ILike(u.Handle, pattern, "\\"))
+            .OrderBy(u => u.Handle)
+            .Take(8)
+            .Select(u => new HandleSearchItemDto(u.Handle!, u.DisplayName, u.AvatarHue))
+            .ToListAsync(ct);
+
+        return Results.Ok(new HandleSearchDto(items));
     }
 }

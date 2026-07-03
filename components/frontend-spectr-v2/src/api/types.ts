@@ -457,6 +457,10 @@ export interface VersionViewDto {
   grade: string | null;
   score: number | null;
   gates: GatesDto;
+  // Story 11.11 — owner public identity for the follow-producer CTA
+  // (null when the owner has no handle or is inactive).
+  ownerHandle: string | null;
+  ownerDisplayName: string | null;
 }
 
 // ── Listen V3 — View feedback: comments + suggestions (PRP-3) ────────────────

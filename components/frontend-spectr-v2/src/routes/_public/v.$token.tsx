@@ -2,9 +2,15 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import { getAccessToken } from '../../api/fetcher';
+import { useMe } from '../../api/hooks';
 import { AnonCommentList, AnonGatePills } from '../../features/listen/AnonReviewerSurface';
+import { FollowProducerCta, RegisterCta } from '../../features/listen/ProducerCta';
 import { useAnonBookmark, useAnonComments, usePostAnonComment } from '../../features/listen/useAnonFeedback';
 import { useVersionView } from '../../features/listen/useVersionShare';
+import { MentionSuggestList } from '../../features/mentions/MentionSuggestList';
+import { useMentionAutocomplete } from '../../features/mentions/useMentionAutocomplete';
+import { useFollow, useFollowState, useUnfollow } from '../../features/profiles/useFollow';
 import { Pill } from '../../ui/Pill';
 
 // Story 11.4 — the anonymous reviewer surface on a version share token.
@@ -28,6 +34,16 @@ function VersionViewPage() {
   const [pinTime, setPinTime] = useState(true);
   const [name, setName] = useState('');
   const [body, setBody] = useState('');
+  // Story 11.11 — @mention autocomplete in the anon composer.
+  const mention = useMentionAutocomplete(setBody);
+  // Story 11.11 — post-claim follow CTA: the register CTA carries
+  // next=/v/{token}, so a fresh registrant lands back here authed.
+  const authed = Boolean(getAccessToken());
+  const { data: me } = useMe(authed);
+  const ownerHandle = data?.ownerHandle ?? '';
+  const { data: followState } = useFollowState(authed ? ownerHandle : '');
+  const followMut = useFollow(ownerHandle);
+  const unfollowMut = useUnfollow(ownerHandle);
 
   useEffect(() => {
     const a = audioRef.current;
@@ -97,6 +113,23 @@ function VersionViewPage() {
         <p className="mono" style={{ color: 'var(--muted)', fontSize: 12 }}>
           v{data.versionNumber} · {data.visibility}
         </p>
+        {/* Story 11.11 — the discovery loop: anon → register (attribution +
+            next back here); authed non-owner → follow the producer. */}
+        <div style={{ marginTop: 10 }}>
+          {!authed ? (
+            <RegisterCta token={token} ownerHandle={data.ownerHandle} />
+          ) : data.ownerHandle
+              && me?.handle?.toLowerCase() !== data.ownerHandle.toLowerCase() ? (
+            <FollowProducerCta
+              ownerHandle={data.ownerHandle}
+              ownerDisplayName={data.ownerDisplayName}
+              isFollowing={followState?.isFollowing ?? false}
+              pending={followMut.isPending || unfollowMut.isPending}
+              onToggle={() =>
+                (followState?.isFollowing ? unfollowMut.mutate() : followMut.mutate())}
+            />
+          ) : null}
+        </div>
       </header>
 
       <section className="card" style={{ padding: 16, display: 'grid', gap: 12 }}>
@@ -132,13 +165,20 @@ function VersionViewPage() {
               onChange={(e) => setName(e.target.value)}
               maxLength={120}
             />
-            <textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder="What did you hear?"
-              maxLength={2000}
-              rows={3}
-            />
+            <div style={{ position: 'relative', display: 'grid' }}>
+              {mention.open && (
+                <MentionSuggestList items={mention.items} activeIndex={mention.activeIndex} onPick={mention.pick} />
+              )}
+              <textarea
+                value={body}
+                onChange={(e) => { setBody(e.target.value); mention.onChange(e.target.value, e.target.selectionStart); }}
+                onKeyDown={(e) => { mention.handleKeyDown(e); }}
+                onBlur={mention.close}
+                placeholder="What did you hear? Use @handle to mention someone"
+                maxLength={2000}
+                rows={3}
+              />
+            </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <label className="mono" style={{ fontSize: 11, display: 'flex', gap: 6, alignItems: 'center' }}>
                 <input type="checkbox" checked={pinTime} onChange={(e) => setPinTime(e.target.checked)} />

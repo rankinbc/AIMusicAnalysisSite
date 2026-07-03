@@ -56,7 +56,14 @@ export function AnonCommentList({
             @{fmt(c.t)}
           </button>
         )}
-        <span>{c.author.handle ?? c.author.displayName ?? 'anon'}</span>
+        {/* Story 11.11 — authed authors deep-link to their public profile. */}
+        {c.author.type === 'user' && c.author.handle ? (
+          <a href={`/u/${c.author.handle}`} style={{ color: 'var(--violet)', textDecoration: 'none' }}>
+            @{c.author.handle}
+          </a>
+        ) : (
+          <span>{c.author.displayName ?? 'anon'}</span>
+        )}
         {c.status !== 'open' &&
           (c.status === 'pinned'
             ? <Pill tone="cyan">{c.status}</Pill>

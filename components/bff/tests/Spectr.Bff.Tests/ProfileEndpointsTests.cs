@@ -81,4 +81,64 @@ public sealed class ProfileEndpointsTests(WebApplicationFactory<Program> factory
         var upper = await anon.GetAsync($"/api/u/{handle.ToUpperInvariant()}");
         Assert.Equal(HttpStatusCode.OK, upper.StatusCode);
     }
+
+    // ── Story 11.11 — handle search for @mention autocomplete ───────────────
+
+    private async Task<string> SeedHandleAsync(string prefix, bool active = true)
+    {
+        var client = _factory.CreateClient();
+        var (userId, _) = await TestAuth.RegisterAsync(client);
+        var handle = $"{prefix}{Guid.NewGuid():N}"[..Math.Min(14, prefix.Length + 10)];
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = await db.Users.SingleAsync(u => u.Id == userId);
+        user.Handle = handle;
+        user.IsActive = active;
+        await db.SaveChangesAsync();
+        return handle;
+    }
+
+    private static async Task<List<string>> Search(HttpClient c, string q)
+    {
+        var resp = await c.GetAsync($"/api/u/?q={Uri.EscapeDataString(q)}");
+        resp.EnsureSuccessStatusCode();
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        return body.GetProperty("items").EnumerateArray()
+            .Select(i => i.GetProperty("handle").GetString()!).ToList();
+    }
+
+    [Fact]
+    public async Task Handle_Search_Prefix_Matches_Case_Insensitive_Active_Only()
+    {
+        if (!await TestDb.Reachable(_factory)) { return; }
+
+        // Distinct prefix per run so parallel test data can't collide.
+        var p = $"zq{Guid.NewGuid():N}"[..8];
+        var hit = await SeedHandleAsync(p);
+        var ghost = await SeedHandleAsync(p, active: false); // deactivated — never suggested
+
+        var anon = _factory.CreateClient();
+
+        var results = await Search(anon, p.ToUpperInvariant()); // citext: case-insensitive
+        Assert.Contains(hit, results);
+        Assert.DoesNotContain(ghost, results);
+        Assert.True(results.Count <= 8);
+
+        // Non-prefix never matches (prefix search, not substring).
+        var tail = hit[2..];
+        Assert.DoesNotContain(hit, await Search(anon, tail));
+    }
+
+    [Fact]
+    public async Task Handle_Search_Rejects_Junk_As_Empty_Not_Error()
+    {
+        if (!await TestDb.Reachable(_factory)) { return; }
+        var anon = _factory.CreateClient();
+
+        Assert.Empty(await Search(anon, ""));                    // empty
+        Assert.Empty(await Search(anon, ".dot"));                // must start alphanumeric
+        Assert.Empty(await Search(anon, "has space"));           // outside mention charset
+        Assert.Empty(await Search(anon, "%"));                   // wildcard junk
+        Assert.Empty(await Search(anon, new string('a', 31)));   // > 30 chars
+    }
 }
