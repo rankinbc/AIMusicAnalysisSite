@@ -70,6 +70,10 @@ class User(Base):
     notify_analysis_complete: Mapped[bool] = mapped_column(
         "notify_analysis_complete", Boolean, nullable=False, default=True
     )
+    # Story 4.6 — JWT token-versioning mirror (worker never bumps it).
+    token_version: Mapped[int] = mapped_column(
+        "token_version", Integer, nullable=False, default=1
+    )
     handle: Mapped[Optional[str]] = mapped_column("handle", String(32), nullable=True)
     display_name: Mapped[Optional[str]] = mapped_column("display_name", String(80), nullable=True)
     bio: Mapped[Optional[str]] = mapped_column("bio", String(500), nullable=True)

@@ -79,6 +79,33 @@ Set `SPECTR_REQUIRE_EMAIL=1` on BOTH services in prod:
   `email_suppressions` for the user's address; removal only with the user's
   explicit re-consent (complaints especially).
 
+## GDPR: export, deletion, and the retention policy (story 4.6)
+
+- **Export**: `GET /api/me/export` — synchronous JSON (account, songs,
+  versions, reports, verdicts, conversations) + media manifest with 15-min
+  presigned links. Rate-limited 2/hour per user.
+- **Deletion**: `POST /api/me/delete` (password re-auth; typed confirmation
+  in the UI). Synchronous: audit row (`audit_log`, action=account_delete),
+  token-version bump, refresh/auth-token revocation, user-row delete (fires
+  the social FK cascades). Asynchronous: the `delete_account_data` actor
+  (maintenance queue) removes the content subtree + storage objects —
+  idempotent, safe to replay by re-enqueuing with the user id.
+- **Active subscription**: deletion cancels the Stripe subscription
+  IMMEDIATELY (no refund for the remaining period) and only after the user
+  explicitly confirms (409 → confirmCancel round-trip).
+- **RETENTION POLICY (the "detached per policy" definition)**: Stripe-side
+  customer/invoice records are RETAINED (Tax/NFR23 — financial records,
+  legitimate interest). Local billing tables — `subscriptions`,
+  `credit_ledger`, `usage_events`, `webhook_events`, `llm_calls` — are
+  RETAINED keyed by the orphaned user id, which is pseudonymous once the
+  user row is gone (no PII in those tables). `audit_log` rows are permanent.
+  Everything content-shaped (audio, stems, .als, reports, verdicts, chats,
+  reference library, social rows) deletes.
+- **Token-versioning**: `users.token_version` + the `tver` JWT claim.
+  Password reset and account deletion bump it; OnTokenValidated rejects
+  stale tokens within a 60 s cache window (instant same-process). A support
+  "kill all sessions for user X" = bump the column manually.
+
 ## Secret rotation (stub — 10.1 expands)
 
 - JWT signing key (`Jwt__Key`): rotation invalidates all access tokens

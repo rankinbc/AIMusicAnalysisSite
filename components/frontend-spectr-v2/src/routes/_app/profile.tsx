@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 
 import { toast } from 'sonner';
 
+import { DangerZone } from '../../features/account/DangerZone';
 import {
   useMeActivity,
   useMeProfile,
@@ -367,17 +368,11 @@ function SettingsTab({ displayName, handle, email, onSignOut }: SettingsProps) {
         <div className="card card-body">
           <SectionTitle accent="orange">Danger zone</SectionTitle>
           <p className={s.dangerNote}>
-            Export and account-deletion endpoints will land with the Discover slice. The
-            buttons below are placeholders.
+            Export downloads everything you own as JSON (with signed media links).
+            Deletion is permanent: audio, stems, projects, reports, and chats are
+            all removed.
           </p>
-          <div className={s.dangerActions}>
-            <button type="button" className="btn sm" disabled>
-              ⇣ Export all data
-            </button>
-            <button type="button" className={`btn sm ${s.dangerBtn}`} disabled>
-              Delete account
-            </button>
-          </div>
+          <DangerZone onDeleted={onSignOut} />
         </div>
       </div>
     </div>

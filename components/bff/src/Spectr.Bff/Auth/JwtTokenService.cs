@@ -27,6 +27,10 @@ public sealed class JwtTokenService(IConfiguration config)
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new(JwtRegisteredClaimNames.Email, user.Email),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            // Story 4.6 — token-versioning: OnTokenValidated rejects tokens
+            // whose tver no longer matches users.token_version (bumped on
+            // password reset + account deletion).
+            new("tver", user.TokenVersion.ToString()),
         };
         if (!string.IsNullOrEmpty(user.Handle))
             claims.Add(new Claim("handle", user.Handle));

@@ -50,6 +50,7 @@ from . import recap_actor  # noqa: E402,F401
 from . import fix_rack_actor  # noqa: E402,F401
 from . import retention_actor  # noqa: E402,F401  (story 3.4 — sweep_retention)
 from . import send_email_actor  # noqa: E402,F401  (story 4.2 — send_email)
+from . import account_deletion_actor  # noqa: E402,F401  (story 4.6 — delete_account_data)
 
 # Story 2.5 (AR23) / 3.4 / 4.2: `maintenance` carries sweep_retention +
 # send_email (declared by their decorators); the explicit declare stays

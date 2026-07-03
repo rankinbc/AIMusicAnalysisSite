@@ -566,6 +566,9 @@ public static class AuthEndpoints
         // Consuming an emailed reset link proves mailbox control — at least
         // as strong as the verify link. Don't make this user re-verify.
         user.EmailVerifiedAt ??= DateTimeOffset.UtcNow;
+        // Story 4.6 — kill outstanding ACCESS tokens too (the 4.3 gap):
+        // OnTokenValidated rejects the old tver within the 60 s cache window.
+        user.TokenVersion++;
         await db.SaveChangesAsync(ct);
 
         // AC2 (refresh sessions): every live refresh token dies + any
@@ -575,6 +578,11 @@ public static class AuthEndpoints
         var revoked = await refresh.RevokeAllForUserAsync(user.Id, ct);
         await tokens.InvalidateOutstandingAsync(user.Id, AuthTokenService.PurposeResetPassword, ct);
         await tx.CommitAsync(ct);
+
+        // Same-process instant revocation: evict the token-version cache.
+        httpCtx.RequestServices
+            .GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()
+            .Remove($"tver:{user.Id:N}");
 
         var authLogger = httpCtx.RequestServices.GetRequiredService<ILoggerFactory>()
             .CreateLogger("Auth");

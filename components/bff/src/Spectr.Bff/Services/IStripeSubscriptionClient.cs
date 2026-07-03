@@ -31,6 +31,11 @@ public interface IStripeSubscriptionClient
     // gone from Stripe (resource_missing); rethrows any other exception.
     Task<Subscription?> GetSubscriptionAsync(string subscriptionId, CancellationToken ct);
     Task<Price?> GetPriceAsync(string priceId, CancellationToken ct);
+
+    // Story 4.6 — account deletion cancels IMMEDIATELY (an account about to
+    // not exist has no period-end to wait for). Idempotent: already-canceled
+    // (resource_missing / canceled state) is success, not an error.
+    Task CancelImmediatelyAsync(string subscriptionId, Guid userId, CancellationToken ct);
 }
 
 internal sealed class StripeSubscriptionClient : IStripeSubscriptionClient
@@ -80,6 +85,25 @@ internal sealed class StripeSubscriptionClient : IStripeSubscriptionClient
         catch (StripeException ex) when (ex.StripeError?.Code == "resource_missing")
         {
             return null;
+        }
+    }
+
+    public async Task CancelImmediatelyAsync(string subscriptionId, Guid userId, CancellationToken ct)
+    {
+        try
+        {
+            await _subscriptions.CancelAsync(
+                subscriptionId,
+                new SubscriptionCancelOptions(),
+                new RequestOptions { IdempotencyKey = $"account-delete-cancel:{userId:N}:{subscriptionId}" },
+                cancellationToken: ct);
+        }
+        catch (StripeException ex) when (
+            ex.StripeError?.Code == "resource_missing"
+            // Stripe rejects canceling an already-canceled sub with this code.
+            || ex.StripeError?.Code == "subscription_canceled")
+        {
+            // Idempotent success — the goal state already holds.
         }
     }
 }

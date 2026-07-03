@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
@@ -118,6 +119,34 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     if (!string.IsNullOrEmpty(t)) ctx.Token = t;
                 }
                 return Task.CompletedTask;
+            },
+            // Story 4.6 — token-versioning: reject access tokens whose tver
+            // claim is stale (password reset / account deletion bumped
+            // users.token_version). DB value cached 60 s per user
+            // (EntitlementService precedent); same-process bumps evict the
+            // cache entry, so revocation is instant locally and ≤60 s
+            // cross-replica — vs the token's 15-minute natural TTL.
+            OnTokenValidated = async ctx =>
+            {
+                var tverClaim = ctx.Principal?.FindFirst("tver")?.Value;
+                var sub = ctx.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                    ?? ctx.Principal?.FindFirst("sub")?.Value;
+                if (tverClaim is null || sub is null || !Guid.TryParse(sub, out var uid))
+                    return; // pre-4.6 token without tver: honored until natural expiry (≤15 min, one-time rollout window)
+
+                var cache = ctx.HttpContext.RequestServices
+                    .GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
+                var current = await cache.GetOrCreateAsync($"tver:{uid:N}", async e =>
+                {
+                    e.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(60);
+                    var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                    return await db.Users.AsNoTracking()
+                        .Where(u => u.Id == uid)
+                        .Select(u => (int?)u.TokenVersion)
+                        .FirstOrDefaultAsync();
+                });
+                if (current is null || tverClaim != current.Value.ToString())
+                    ctx.Fail("stale token version");
             },
         };
     });
@@ -378,6 +407,7 @@ api.MapFeedbackEndpoints();
 api.MapRoomEndpoints();
 api.MapBillingEndpoints();
 api.MapHealthEndpoints();
+api.MapAccountEndpoints();       // story 4.6 — /api/me/export + /api/me/delete
 app.MapEmailWebhookEndpoints();  // story 4.2 — POST /api/email/webhook (svix-verified)
 
 app.MapGet("/", () => Results.Json(new { status = "ok", version = "2.0.0" }))
