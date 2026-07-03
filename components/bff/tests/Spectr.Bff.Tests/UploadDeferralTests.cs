@@ -25,23 +25,24 @@ internal sealed class RecordingJobQueue : IJobQueue
     public ConcurrentQueue<(string Task, string Queue)> Enqueues { get; } = new();
 
     public Task EnqueueAsync(string taskName, object[] args, CancellationToken ct = default)
-    {
-        Calls.Enqueue(taskName);
-        Enqueues.Enqueue((taskName, DramatiqQueues.Default));
-        return Task.CompletedTask;
-    }
+        => Record(taskName, DramatiqQueues.Default);
 
     public Task EnqueueAsync(string taskName, object[] args, string queueName, CancellationToken ct = default)
-    {
-        Calls.Enqueue(taskName);
-        Enqueues.Enqueue((taskName, queueName));
-        return Task.CompletedTask;
-    }
+        => Record(taskName, queueName);
 
     public Task EnqueueDelayedAsync(string taskName, object[] args, string queueName, TimeSpan delay, CancellationToken ct = default)
+        => Record(taskName, queueName);
+
+    private Task Record(string taskName, string queueName)
     {
-        Calls.Enqueue(taskName);
-        Enqueues.Enqueue((taskName, queueName));
+        // Story 4.3: registration now enqueues a verification send_email on
+        // this same interface — irrelevant to every dispatch-count assertion
+        // here, so filter it (these tests assert ANALYSIS dispatch only).
+        if (taskName != DramatiqTasks.SendEmail)
+        {
+            Calls.Enqueue(taskName);
+            Enqueues.Enqueue((taskName, queueName));
+        }
         return Task.CompletedTask;
     }
 }

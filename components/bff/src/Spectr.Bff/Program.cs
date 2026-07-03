@@ -127,6 +127,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddSingleton<PasswordHasher>();
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<RefreshTokenService>();
+builder.Services.AddScoped<AuthTokenService>();  // story 4.3 — verify/reset tokens
 builder.Services.AddScoped<HandleSeeder>();
 
 // File storage — swap LocalDiskFileStorage for R2FileStorage via config when public.

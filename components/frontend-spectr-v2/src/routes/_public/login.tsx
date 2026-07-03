@@ -107,6 +107,10 @@ function LoginPage() {
         No account?
         <Link to="/register">Create one</Link>
       </p>
+      <p className={s.footerLink}>
+        Forgot your password?
+        <Link to="/forgot-password">Reset it</Link>
+      </p>
     </div>
   );
 }

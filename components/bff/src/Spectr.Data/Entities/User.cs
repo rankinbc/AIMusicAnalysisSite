@@ -18,6 +18,12 @@ public sealed class User
     [Column("is_active")]
     public bool IsActive { get; set; } = true;
 
+    // Story 4.3 (FR26): set when the verification link is consumed.
+    // Timestamp (not bool) for audit. Does NOT gate login or report viewing;
+    // AR26's second-analysis gate reads it in the device story (4.5).
+    [Column("email_verified_at")]
+    public DateTimeOffset? EmailVerifiedAt { get; set; }
+
     // Identity / public profile fields (added in v2 — see REQUIREMENTS_ARCHITECTURE.md §Identity)
     [Column("handle"), MaxLength(32)]
     public string? Handle { get; set; }

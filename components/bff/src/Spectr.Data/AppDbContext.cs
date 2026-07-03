@@ -88,6 +88,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     // Email suppression list (story 4.2 — bounce/complaint webhook appends)
     public DbSet<EmailSuppression> EmailSuppressions => Set<EmailSuppression>();
 
+    // Single-use auth tokens: email verification + password reset (story 4.3)
+    public DbSet<AuthToken> AuthTokens => Set<AuthToken>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         builder.HasPostgresExtension("pgcrypto");      // gen_random_uuid()
@@ -119,6 +122,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             .HasIndex(a => a.JobId).IsUnique();
         builder.Entity<Analysis>()
             .HasIndex(a => a.ShareToken).IsUnique();
+        // Story 4.3: token lookup is by hash; unique doubles as the guard
+        // against a (vanishingly unlikely) duplicate raw token.
+        builder.Entity<AuthToken>()
+            .HasIndex(t => t.TokenHash).IsUnique();
+        builder.Entity<AuthToken>()
+            .HasIndex(t => new { t.UserId, t.Purpose });
         builder.Entity<CompareCache>()
             .HasIndex(c => new { c.TrackVersionId, c.ReferenceId }).IsUnique();
         // Story 1.5: one conversation per (analysis, user) — keeps the

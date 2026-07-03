@@ -65,6 +65,13 @@ public sealed class RefreshTokenService(AppDbContext db, IConfiguration config)
         }
     }
 
+    // Story 4.3 (AC2): completing a password reset invalidates EVERY live
+    // session for the user — set-based, no row loading.
+    public async Task<int> RevokeAllForUserAsync(Guid userId, CancellationToken ct = default)
+        => await db.RefreshTokens
+            .Where(t => t.UserId == userId && t.RevokedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, DateTimeOffset.UtcNow), ct);
+
     public CookieOptions CookieOptions() => new()
     {
         HttpOnly = true,

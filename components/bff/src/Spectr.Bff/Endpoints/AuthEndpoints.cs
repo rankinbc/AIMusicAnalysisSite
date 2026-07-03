@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Spectr.Bff.Auth;
 using Spectr.Bff.DTOs;
+using Spectr.Bff.Services;
 using Spectr.Data;
 using Spectr.Data.Entities;
 using System.Security.Claims;
@@ -22,7 +23,77 @@ public static class AuthEndpoints
         g.MapGet("/me", Me).RequireAuthorization();
         g.MapPatch("/me", PatchMe).RequireAuthorization();
 
+        // Story 4.3 — verification + reset flows.
+        g.MapPost("/verify-email", VerifyEmail).AllowAnonymous();
+        g.MapPost("/resend-verification", ResendVerification).RequireAuthorization();
+        g.MapPost("/forgot-password", ForgotPassword).AllowAnonymous();
+        g.MapPost("/reset-password", ResetPassword).AllowAnonymous();
+
         return app;
+    }
+
+    // ── Story 4.3 helpers ─────────────────────────────────────────────────────
+
+    private static string ClientIp(HttpContext ctx)
+        => ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+    // NFR8: both arms (per-IP + per-actor) must pass; 429 envelope on deny.
+    // RateLimits:Enabled=false (appsettings.Development.json) turns the auth
+    // limits off for dev + the test suite — hundreds of same-IP registrations
+    // per minute are normal there and would trip any honest ceiling. Any
+    // non-Development environment enforces (default true).
+    private static async Task<IResult?> RateLimitAsync(
+        IRateLimiter limiter, HttpContext ctx, string action, string actorKey,
+        int limit, TimeSpan window, CancellationToken ct)
+    {
+        var cfg = ctx.RequestServices.GetRequiredService<IConfiguration>();
+        if (string.Equals(cfg["RateLimits:Enabled"], "false", StringComparison.OrdinalIgnoreCase))
+            return null;
+        try
+        {
+            var verdict = await limiter.CheckAsync(actorKey, ClientIp(ctx), action, limit, window, ct);
+            return verdict.Allowed
+                ? null
+                : ErrorEnvelope.Build(429, "rate_limited", "Too many attempts — slow down.");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // FAIL-OPEN: a Redis blip must not take down login/register/reset.
+            // Availability of auth beats the limiter; the outage window is
+            // short and logged loudly.
+            ctx.RequestServices.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("Auth").LogError(ex,
+                    "Rate limiter unavailable for {Action} — failing OPEN.", action);
+            return null;
+        }
+    }
+
+    // Single source for the email-link base. A missing App:FrontendOrigin in
+    // prod would ship localhost links — log loudly (boot-time validation is
+    // 10.1's full-config sweep).
+    private static string FrontendOrigin(IConfiguration cfg, ILoggerFactory lf)
+    {
+        var origin = cfg["App:FrontendOrigin"];
+        if (string.IsNullOrWhiteSpace(origin))
+        {
+            lf.CreateLogger("Auth").LogWarning(
+                "App:FrontendOrigin not configured — email links will point at localhost.");
+            return "http://localhost:5174";
+        }
+        return origin;
+    }
+
+    private static async Task SendVerificationEmailAsync(
+        IEmailSender email, AuthTokenService tokens, IConfiguration cfg,
+        ILoggerFactory lf, Guid userId, string toEmail, CancellationToken ct)
+    {
+        var raw = await tokens.IssueAsync(
+            userId, AuthTokenService.PurposeVerifyEmail, AuthTokenService.VerifyEmailTtl, ct);
+        await email.SendAsync(toEmail, EmailTemplates.Verification, new Dictionary<string, string>
+        {
+            ["verifyUrl"] = $"{FrontendOrigin(cfg, lf)}/verify-email?token={raw}",
+            ["expiresHours"] = ((int)AuthTokenService.VerifyEmailTtl.TotalHours).ToString(),
+        }, ct);
     }
 
     // POST /api/auth/register
@@ -33,15 +104,28 @@ public static class AuthEndpoints
         JwtTokenService jwt,
         RefreshTokenService refresh,
         HandleSeeder seeder,
+        AuthTokenService authTokens,
+        IEmailSender email,
+        IConfiguration cfg,
+        IRateLimiter limiter,
+        ILoggerFactory loggerFactory,
+        HttpContext httpCtx,
         HttpResponse resp,
         CancellationToken ct)
     {
+        if (await RateLimitAsync(limiter, httpCtx, "auth_register",
+                $"ip:{ClientIp(httpCtx)}", 5, TimeSpan.FromMinutes(1), ct) is { } denied)
+            return denied;
+
         if (string.IsNullOrWhiteSpace(req.Email) || !req.Email.Contains('@'))
             return Results.ValidationProblem(new Dictionary<string, string[]>
                 { ["email"] = ["Valid email required."] });
         if (string.IsNullOrEmpty(req.Password) || req.Password.Length < 8)
             return Results.ValidationProblem(new Dictionary<string, string[]>
                 { ["password"] = ["At least 8 characters required."] });
+        if (req.Password.Length > 256)
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+                { ["password"] = ["At most 256 characters."] }); // BCrypt truncates at 72 bytes; a MB-sized value is a hash-DoS
 
         var normalizedEmail = req.Email.Trim();
         var existing = await db.Users.AnyAsync(u => u.Email == normalizedEmail, ct);
@@ -62,6 +146,19 @@ public static class AuthEndpoints
         var (rawRefresh, _) = await refresh.IssueAsync(user.Id, ct);
         resp.Cookies.Append(RefreshTokenService.CookieName, rawRefresh, refresh.CookieOptions());
 
+        // Story 4.3 (AC1) — verification email, BEST-EFFORT: an email-path
+        // failure (Redis down, template bug) must never fail registration;
+        // /resend-verification is the recovery.
+        try
+        {
+            await SendVerificationEmailAsync(email, authTokens, cfg, loggerFactory, user.Id, user.Email, ct);
+        }
+        catch (Exception ex)
+        {
+            loggerFactory.CreateLogger("Auth").LogError(ex,
+                "Verification email failed for new user {UserId}.", user.Id);
+        }
+
         var access = jwt.Issue(user);
         return Results.Ok(new AuthResponse(access,
             new AuthedUser(user.Id, user.Email, user.Handle, user.DisplayName,
@@ -75,11 +172,19 @@ public static class AuthEndpoints
         PasswordHasher hasher,
         JwtTokenService jwt,
         RefreshTokenService refresh,
+        IRateLimiter limiter,
+        HttpContext httpCtx,
         HttpResponse resp,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(req.Email) || string.IsNullOrEmpty(req.Password))
             return Results.BadRequest(new { error = "Email and password required." });
+
+        // NFR8: per-IP ceiling + per-email actor arm (a distributed guesser
+        // burning one address still hits the actor arm).
+        if (await RateLimitAsync(limiter, httpCtx, "auth_login",
+                $"email:{req.Email.Trim().ToLowerInvariant()}", 10, TimeSpan.FromMinutes(1), ct) is { } denied)
+            return denied;
 
         var normalizedEmail = req.Email.Trim();
         var user = await db.Users.FirstOrDefaultAsync(u => u.Email == normalizedEmail, ct);
@@ -143,8 +248,16 @@ public static class AuthEndpoints
         AppDbContext db,
         JwtTokenService jwt,
         RefreshTokenService refresh,
+        IRateLimiter limiter,
+        HttpContext httpCtx,
         CancellationToken ct)
     {
+        // Generous — silent refresh is legit high-frequency; this only stops
+        // cookie brute-forcing (NFR8).
+        if (await RateLimitAsync(limiter, httpCtx, "auth_refresh",
+                $"ip:{ClientIp(httpCtx)}", 60, TimeSpan.FromMinutes(1), ct) is { } denied)
+            return denied;
+
         if (!httpReq.Cookies.TryGetValue(RefreshTokenService.CookieName, out var raw) || string.IsNullOrEmpty(raw))
             return Results.Unauthorized();
 
@@ -232,6 +345,188 @@ public static class AuthEndpoints
             "active" or "trialing" or "past_due" => "pro",
             _ => "free",
         };
+    }
+
+    // ── Story 4.3 — verification + reset handlers ─────────────────────────────
+
+    // POST /api/auth/verify-email {token}
+    private static async Task<IResult> VerifyEmail(
+        VerifyEmailRequest req,
+        AppDbContext db,
+        AuthTokenService tokens,
+        IRateLimiter limiter,
+        HttpContext httpCtx,
+        CancellationToken ct)
+    {
+        if (await RateLimitAsync(limiter, httpCtx, "auth_verify",
+                $"ip:{ClientIp(httpCtx)}", 10, TimeSpan.FromMinutes(1), ct) is { } denied)
+            return denied;
+
+        // Transaction: consume + stamp commit together — a failure after the
+        // consume must roll the token back, never strand a burned link.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var userId = await tokens.ConsumeAsync(
+            req.Token ?? "", AuthTokenService.PurposeVerifyEmail, ct);
+        if (userId is null)
+            return ErrorEnvelope.Build(400, "invalid_token",
+                "This verification link is invalid, expired, or already used.");
+
+        // IsActive: a deactivated account must not gain a verified stamp.
+        await db.Users.Where(u => u.Id == userId && u.IsActive && u.EmailVerifiedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(u => u.EmailVerifiedAt, DateTimeOffset.UtcNow), ct);
+        await tx.CommitAsync(ct);
+        return Results.NoContent();
+    }
+
+    // POST /api/auth/resend-verification (auth) — no-op when already verified.
+    private static async Task<IResult> ResendVerification(
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        AuthTokenService tokens,
+        IEmailSender email,
+        IConfiguration cfg,
+        IRateLimiter limiter,
+        HttpContext httpCtx,
+        CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        if (await RateLimitAsync(limiter, httpCtx, "auth_resend_verify",
+                $"user:{userId}", 3, TimeSpan.FromMinutes(15), ct) is { } denied)
+            return denied;
+
+        var user = await db.Users.AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null) return Results.Unauthorized();
+        if (user.EmailVerifiedAt is not null) return Results.NoContent(); // already done
+
+        var lf = httpCtx.RequestServices.GetRequiredService<ILoggerFactory>();
+        await SendVerificationEmailAsync(email, tokens, cfg, lf, user.Id, user.Email, ct);
+        return Results.NoContent();
+    }
+
+    // POST /api/auth/forgot-password {email} — ALWAYS 204 (no user
+    // enumeration): identical response whether or not the account exists.
+    private static async Task<IResult> ForgotPassword(
+        ForgotPasswordRequest req,
+        AppDbContext db,
+        AuthTokenService tokens,
+        IEmailSender email,
+        IConfiguration cfg,
+        IRateLimiter limiter,
+        ILoggerFactory loggerFactory,
+        HttpContext httpCtx,
+        CancellationToken ct)
+    {
+        var address = (req.Email ?? "").Trim();
+        if (address.Length == 0 || address.Length > 320 || !address.Contains('@'))
+            return Results.NoContent(); // same shape as success — no oracle
+
+        if (await RateLimitAsync(limiter, httpCtx, "auth_forgot",
+                $"email:{address.ToLowerInvariant()}", 3, TimeSpan.FromMinutes(15), ct) is { } denied)
+            return denied;
+        // Daily ceiling per address: 3/15min alone allows 288 unsolicited
+        // reset emails/day at a victim's inbox.
+        if (await RateLimitAsync(limiter, httpCtx, "auth_forgot_daily",
+                $"email:{address.ToLowerInvariant()}", 10, TimeSpan.FromHours(24), ct) is { } deniedDaily)
+            return deniedDaily;
+
+        // FIRE-AND-FORGET in a fresh DI scope: the token insert + enqueue for
+        // an EXISTING account took measurably longer than the no-account path,
+        // making response timing an enumeration oracle. Now every caller gets
+        // an identical, immediate 204; the work happens off-request.
+        var scopeFactory = httpCtx.RequestServices.GetRequiredService<IServiceScopeFactory>();
+        var logger = loggerFactory.CreateLogger("Auth");
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = scopeFactory.CreateScope();
+                var sdb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var stokens = scope.ServiceProvider.GetRequiredService<AuthTokenService>();
+                var semail = scope.ServiceProvider.GetRequiredService<IEmailSender>();
+                var scfg = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+                var slf = scope.ServiceProvider.GetRequiredService<ILoggerFactory>();
+
+                var user = await sdb.Users.AsNoTracking()
+                    .FirstOrDefaultAsync(u => u.Email == address && u.IsActive);
+                if (user is null) return;
+
+                var raw = await stokens.IssueAsync(
+                    user.Id, AuthTokenService.PurposeResetPassword,
+                    AuthTokenService.ResetPasswordTtl);
+                await semail.SendAsync(user.Email, EmailTemplates.Reset, new Dictionary<string, string>
+                {
+                    ["resetUrl"] = $"{FrontendOrigin(scfg, slf)}/reset-password?token={raw}",
+                    ["expiresMinutes"] = ((int)AuthTokenService.ResetPasswordTtl.TotalMinutes).ToString(),
+                });
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Password-reset issue/send failed (background).");
+            }
+        }, CancellationToken.None);
+
+        return Results.NoContent();
+    }
+
+    // POST /api/auth/reset-password {token, newPassword}
+    private static async Task<IResult> ResetPassword(
+        ResetPasswordRequest req,
+        AppDbContext db,
+        PasswordHasher hasher,
+        AuthTokenService tokens,
+        RefreshTokenService refresh,
+        IRateLimiter limiter,
+        HttpContext httpCtx,
+        CancellationToken ct)
+    {
+        if (await RateLimitAsync(limiter, httpCtx, "auth_reset",
+                $"ip:{ClientIp(httpCtx)}", 10, TimeSpan.FromMinutes(1), ct) is { } denied)
+            return denied;
+
+        if (string.IsNullOrEmpty(req.NewPassword) || req.NewPassword.Length < 8)
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+                { ["newPassword"] = ["At least 8 characters required."] });
+        if (req.NewPassword.Length > 256)
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+                { ["newPassword"] = ["At most 256 characters."] });
+
+        // ONE transaction around consume → rehash → revoke: a crash after the
+        // consume must roll the token back (an inactive-user dead link stays
+        // retryable), and "password changed but attacker sessions survive"
+        // cannot be a committed state.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+        var userId = await tokens.ConsumeAsync(
+            req.Token ?? "", AuthTokenService.PurposeResetPassword, ct);
+        if (userId is null)
+            return ErrorEnvelope.Build(400, "invalid_token",
+                "This reset link is invalid, expired, or already used.");
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId && u.IsActive, ct);
+        if (user is null)
+            return ErrorEnvelope.Build(400, "invalid_token",
+                "This reset link is invalid, expired, or already used.");
+
+        user.HashedPassword = hasher.Hash(req.NewPassword);
+        // Consuming an emailed reset link proves mailbox control — at least
+        // as strong as the verify link. Don't make this user re-verify.
+        user.EmailVerifiedAt ??= DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+
+        // AC2 (refresh sessions): every live refresh token dies + any
+        // concurrently-issued reset links die. NOTE: outstanding ACCESS JWTs
+        // are stateless and survive until natural expiry (≤15 min) — bounded,
+        // recorded; token-versioning lands with 4.6's account deletion.
+        var revoked = await refresh.RevokeAllForUserAsync(user.Id, ct);
+        await tokens.InvalidateOutstandingAsync(user.Id, AuthTokenService.PurposeResetPassword, ct);
+        await tx.CommitAsync(ct);
+
+        httpCtx.RequestServices.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("Auth").LogInformation(
+                "Password reset completed for {UserId}; {Count} refresh session(s) revoked.",
+                user.Id, revoked);
+        return Results.NoContent();
     }
 
     // Convenience for register/login/refresh/patch paths that already have

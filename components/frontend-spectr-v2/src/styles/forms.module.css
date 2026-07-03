@@ -18,6 +18,8 @@
   outline: none;
   border-color: var(--cyan);
   background: var(--card-2);
+  /* UX-DR41 (story 4.3): the literal cyan focus ring. */
+  box-shadow: 0 0 0 3px var(--cyan-dim);
 }
 
 .input:disabled {
@@ -25,12 +27,16 @@
   cursor: not-allowed;
 }
 
+/* UX-DR41 (story 4.3): mono overline labels — uppercase, monospace, wide
+   tracking. The wrapped input text keeps the app font (inherit on .input). */
 .label {
   display: grid;
   gap: 6px;
-  font-size: 12px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 11px;
+  text-transform: uppercase;
   color: var(--text-2);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.12em;
 }
 
 .field {

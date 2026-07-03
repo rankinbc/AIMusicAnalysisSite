@@ -214,6 +214,37 @@ def test_anon_guard_noops_without_devices_table(db):
     assert stats["anon_purged"] == 0  # AC3 — safe before Epic 4
 
 
+def test_auth_tokens_purge_and_absent_table_tolerance(db):
+    """Story 4.3: consumed + long-expired auth tokens are deleted; live ones
+    survive; a DB without the table (sqlite mirrors) is a logged no-op."""
+    factory, _ = db
+    # Absent table → tolerated.
+    assert ra.run_sweep(now=NOW)["auth_tokens_purged"] == 0
+
+    with factory.begin() as s:
+        s.execute(text(
+            "CREATE TABLE auth_tokens (id CHAR(32) PRIMARY KEY, user_id CHAR(32), "
+            "purpose TEXT, token_hash TEXT, expires_at TIMESTAMP, "
+            "consumed_at TIMESTAMP, created_at TIMESTAMP)"
+        ))
+        s.execute(text(
+            "INSERT INTO auth_tokens VALUES "
+            "('a1','u1','verify_email','h1',:live,NULL,:now),"      # live — kept
+            "('a2','u1','verify_email','h2',:old,NULL,:now),"       # expired > 7d — purged
+            "('a3','u1','reset_password','h3',:live,:now,:now)"     # consumed — purged
+        ), {
+            "live": NOW + timedelta(hours=1),
+            "old": NOW - timedelta(days=8),
+            "now": NOW,
+        })
+
+    stats = ra.run_sweep(now=NOW)
+    assert stats["auth_tokens_purged"] == 2
+    with factory() as s:
+        remaining = s.execute(text("SELECT id FROM auth_tokens")).scalars().all()
+        assert remaining == ["a1"]
+
+
 def test_unknown_subscription_status_is_protected(db):
     """Stripe statuses outside both lists (paused, incomplete, future ones)
     must fail SAFE — never fall through to the shorter free-tier rule."""

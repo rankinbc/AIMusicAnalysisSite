@@ -40,13 +40,17 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
 
         public Task EnqueueAsync(string taskName, object[] args, string queueName, CancellationToken ct = default)
         {
-            Calls.Add((taskName, args, queueName));
+            // Story 4.3: registration enqueues a verification send_email on
+            // this interface — irrelevant to coach-dispatch assertions.
+            if (taskName != DramatiqTasks.SendEmail)
+                Calls.Add((taskName, args, queueName));
             return Task.CompletedTask;
         }
 
         public Task EnqueueDelayedAsync(string taskName, object[] args, string queueName, TimeSpan delay, CancellationToken ct = default)
         {
-            Calls.Add((taskName, args, queueName));
+            if (taskName != DramatiqTasks.SendEmail)
+                Calls.Add((taskName, args, queueName));
             return Task.CompletedTask;
         }
     }
