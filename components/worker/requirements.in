@@ -10,6 +10,9 @@
 
 # worker (components/worker/requirements.txt)
 anthropic>=0.69,<1
+# Story 4.2: send_email actor POSTs to Resend's HTTP API. Already in the lock
+# transitively via anthropic — declared here so the dep is intentional.
+httpx>=0.27
 dramatiq[redis]>=1.16
 pydantic-settings>=2.0
 redis>=5.0.0

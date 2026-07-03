@@ -18,6 +18,8 @@ regexes = [
   # Stripe test fixtures used across BFF billing tests + docs (exact values)
   '''^sk_test_(fake|unit|x|4eC39HqLyjWDarjtT1zdp7dc)$''',
   '''^whsec_(unit|test_secret(_do_not_use_in_prod)?)$''',
+  # 4.2 EmailPipelineTests svix fixture (base64 of "test-secret-for-unit-tests")
+  '''^whsec_dGVzdC1zZWNyZXQtZm9yLXVuaXQtdGVzdHM=$''',
   '''^sk_test_<[^>]+>$''',
   '''^whsec_<[^>]+>$''',
   # Dev compose / MinIO / worker credentials (documented dev-only, exact)

@@ -49,9 +49,10 @@ from . import structure_actor  # noqa: E402,F401
 from . import recap_actor  # noqa: E402,F401
 from . import fix_rack_actor  # noqa: E402,F401
 from . import retention_actor  # noqa: E402,F401  (story 3.4 — sweep_retention)
+from . import send_email_actor  # noqa: E402,F401  (story 4.2 — send_email)
 
-# Story 2.5 (AR23) / 3.4: `maintenance` now carries the sweep_retention actor
-# (declared by its decorator); the explicit declare stays harmless and keeps
-# W2's `--queues analysis-free maintenance` whitelist resolving even if the
-# actor import order changes. Epic 4 adds send_email here too.
+# Story 2.5 (AR23) / 3.4 / 4.2: `maintenance` carries sweep_retention +
+# send_email (declared by their decorators); the explicit declare stays
+# harmless and keeps W2's `--queues analysis-free maintenance` whitelist
+# resolving even if the actor import order changes.
 broker.declare_queue("maintenance")

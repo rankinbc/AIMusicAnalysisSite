@@ -134,6 +134,8 @@ services:
       # LLM gateway (story 1.3): fake by default so the dev stack needs no key.
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
       LLM_FAKE: "${LLM_FAKE:-1}"
+      # Story 4.2: empty = send_email actor stubs (logs) instead of sending.
+      RESEND_API_KEY: "${RESEND_API_KEY:-}"
       # Story 3.1: fetch presigned-uploaded sources from MinIO (compose-internal host).
       # Story 3.2 (AR21): worker-OWN credentials (minio-init creates the user) —
       # never the BFF's. In prod R2 use a separate scoped API token here (10.1).
