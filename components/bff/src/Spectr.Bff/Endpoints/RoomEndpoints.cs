@@ -548,6 +548,12 @@ public static class RoomEndpoints
         if (created.Count == 0) return Results.BadRequest(new { error = "No valid moments selected." });
         await db.SaveChangesAsync(ct);
 
+        // Story 11.10 — mark published for the activity feed. Only the first
+        // publish stamps the timestamp so re-publishing never reorders the feed.
+        await db.ListeningSessions
+            .Where(x => x.Id == id && x.RecapPublishedAt == null)
+            .ExecuteUpdateAsync(u => u.SetProperty(x => x.RecapPublishedAt, DateTimeOffset.UtcNow), ct);
+
         foreach (var c in created)
             await gamePlan.InsertDrainItemAsync(s.SongVersionId, "recap", "comment", c.Id.ToString(), ct);
         return Results.Ok(created);

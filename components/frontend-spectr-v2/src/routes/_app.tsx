@@ -102,6 +102,10 @@ function AppLayout() {
           <Link to="/library" className={s.navTab} data-active={isLibraryActive}>
             Library
           </Link>
+          {/* Story 11.10 — followed-users activity feed. */}
+          <Link to="/feed" className={s.navTab} data-active={pathname === '/feed'}>
+            Feed
+          </Link>
         </nav>
 
         <div className={s.navRight}>
