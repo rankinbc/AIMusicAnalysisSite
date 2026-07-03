@@ -8,6 +8,7 @@ import {
   useSharedAnalysis,
 } from '../../api/hooks';
 import { isFinalJson, type FinalJson, type Phase1Data } from '../../api/types';
+import { createMediaRetry } from '../../features/listen/media-retry';
 import { GradePill } from '../../ui/GradePill';
 import { Pill } from '../../ui/Pill';
 import s from './r.module.css';
@@ -50,15 +51,21 @@ function SharedReviewerPage() {
     if (!a) return;
     const onTime = () => setPosition(a.currentTime);
     const onDur = () => Number.isFinite(a.duration) && setDuration(a.duration);
+    // Story 3.3 (AC4): expired presigned URL on resume → re-request the same
+    // API URL (the server mints a fresh presign) and restore the position.
+    const retry = createMediaRetry({ getSrc: () => `/api/share/${token}/audio` });
+    const onErr = () => { retry.handleError(a); };
     a.addEventListener('timeupdate', onTime);
     a.addEventListener('loadedmetadata', onDur);
     a.addEventListener('durationchange', onDur);
+    a.addEventListener('error', onErr);
     return () => {
       a.removeEventListener('timeupdate', onTime);
       a.removeEventListener('loadedmetadata', onDur);
       a.removeEventListener('durationchange', onDur);
+      a.removeEventListener('error', onErr);
     };
-  }, []);
+  }, [token]);
 
   const fj: FinalJson = useMemo(() => {
     return isFinalJson(data?.finalJson) ? (data.finalJson as FinalJson) : {};

@@ -36,6 +36,10 @@ public interface IMultipartObjectStore
     // ACTUAL object size against the per-kind caps (the client-declared
     // fileSize at init is advisory only).
     Task<long?> GetObjectSizeAsync(string key, CancellationToken ct = default);
+
+    // Story 3.3 (NFR5) — short-lived presigned GET for playback/download 302s.
+    // downloadName sets a Content-Disposition override (als/reference downloads).
+    string PresignGetUrl(string key, string? downloadName = null, CancellationToken ct = default);
 }
 
 public sealed record PresignedPart(int PartNumber, string Url);
@@ -151,6 +155,25 @@ internal sealed class S3ObjectStore : IMultipartObjectStore, IDisposable
             Verb = HttpVerb.PUT,
             Expires = DateTime.UtcNow.AddMinutes(_opts.UrlExpiryMinutes),
         });
+    }
+
+    public string PresignGetUrl(string key, string? downloadName = null, CancellationToken ct = default)
+    {
+        var req = new GetPreSignedUrlRequest
+        {
+            BucketName = _opts.Bucket,
+            Key = key,
+            Verb = HttpVerb.GET,
+            Expires = DateTime.UtcNow.AddMinutes(_opts.ReadUrlExpiryMinutes),
+        };
+        if (!string.IsNullOrWhiteSpace(downloadName))
+        {
+            // Signed response-header override — the attachment name rides the
+            // URL, so no object metadata is needed.
+            req.ResponseHeaderOverrides.ContentDisposition =
+                $"attachment; filename=\"{downloadName.Replace("\"", "")}\"";
+        }
+        return _client.Value.GetPreSignedURL(req);
     }
 
     public async Task<bool> ObjectExistsAsync(string key, CancellationToken ct = default)

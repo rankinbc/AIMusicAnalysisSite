@@ -101,3 +101,27 @@ def cleanup_all(fetched: list[Path]) -> None:
     """cleanup_local over a batch of resolve_local fetches."""
     for f in fetched:
         cleanup_local(f)
+
+
+def put_json(key: str, obj: object) -> None:
+    """Story 3.3 (AR20) — upload a JSON document (e.g. reports/{jobId}.json).
+
+    Callers treat this as BEST-EFFORT: the canonical report store is Postgres
+    (analyses.final_json); a failed upload must never fail a completed job.
+    """
+    import json
+
+    bucket = os.environ.get("S3_BUCKET", "spectr")
+    body = json.dumps(obj, indent=2, default=str).encode("utf-8")
+    _client().put_object(Bucket=bucket, Key=key, Body=body, ContentType="application/json")
+    logger.info("object_store: put s3://%s/%s (%d bytes)", bucket, key, len(body))
+
+
+def put_file(key: str, path: str | Path, content_type: str = "application/octet-stream") -> None:
+    """Story 3.3 — upload a local file under ``key`` (result images use their
+    EXISTING local keys so the BFF's media routes serve them unchanged)."""
+    bucket = os.environ.get("S3_BUCKET", "spectr")
+    _client().upload_file(
+        str(path), bucket, key, ExtraArgs={"ContentType": content_type}
+    )
+    logger.info("object_store: put s3://%s/%s (from %s)", bucket, key, path)

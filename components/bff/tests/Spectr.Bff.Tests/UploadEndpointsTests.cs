@@ -67,6 +67,14 @@ internal sealed class FakeMultipartObjectStore : IMultipartObjectStore
         PresignedPuts.Enqueue(key);
         return $"https://fake-s3.test/{key}?put=1";
     }
+
+    public ConcurrentQueue<(string Key, string? DownloadName)> PresignedGets { get; } = new();
+
+    public string PresignGetUrl(string key, string? downloadName = null, CancellationToken ct = default)
+    {
+        PresignedGets.Enqueue((key, downloadName));
+        return $"https://fake-s3.test/{key}?get=1&X-Amz-Expires=900";
+    }
 }
 
 public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)

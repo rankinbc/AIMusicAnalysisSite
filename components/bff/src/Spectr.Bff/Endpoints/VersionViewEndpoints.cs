@@ -129,7 +129,7 @@ public static class VersionViewEndpoints
 
     private static async Task<IResult> StreamVersionAudio(
         string token, ClaimsPrincipal user, ResourceTokenAuth tokenAuth, AccessService access,
-        AppDbContext db, IFileStorage storage, CancellationToken ct)
+        AppDbContext db, IFileStorage storage, IMultipartObjectStore objectStore, CancellationToken ct)
     {
         var hit = await ResolveViewableAsync(token, user, tokenAuth, access, ct);
         if (hit is null) return Results.NotFound();
@@ -139,20 +139,11 @@ public static class VersionViewEndpoints
             .Where(v => v.Id == versionId)
             .Select(v => v.FilePath)
             .FirstOrDefaultAsync(ct);
-        if (filePath is null || !await storage.ExistsAsync(filePath, ct)) return Results.NotFound();
+        if (filePath is null) return Results.NotFound();
 
-        var stream = await storage.OpenReadAsync(filePath, ct);
-        var ext = Path.GetExtension(filePath).ToLowerInvariant();
-        var contentType = ext switch
-        {
-            ".wav" => "audio/wav",
-            ".flac" => "audio/flac",
-            ".mp3" => "audio/mpeg",
-            ".aif" or ".aiff" => "audio/aiff",
-            ".ogg" or ".oga" => "audio/ogg",
-            ".m4a" => "audio/mp4",
-            _ => "application/octet-stream",
-        };
-        return Results.File(stream, contentType, enableRangeProcessing: true);
+        // Story 3.3: local-first proxy, else 302 to a short-lived presigned GET
+        // (the share token authorized this request; the presign carries no auth).
+        return await MediaDelivery.ServeAsync(
+            storage, objectStore, filePath, MediaDelivery.AudioContentType(filePath), ct);
     }
 }

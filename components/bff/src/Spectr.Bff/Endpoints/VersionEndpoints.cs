@@ -256,6 +256,7 @@ public static class VersionEndpoints
         ClaimsPrincipal currentUser,
         AppDbContext db,
         IFileStorage storage,
+        IMultipartObjectStore objectStore,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -267,23 +268,9 @@ public static class VersionEndpoints
         ).FirstOrDefaultAsync(ct);
         if (row is null) return Results.NotFound();
 
-        var key = row.FilePath;
-        if (!await storage.ExistsAsync(key, ct)) return Results.NotFound();
-
-        var stream = await storage.OpenReadAsync(key, ct);
-        var ext = Path.GetExtension(key).ToLowerInvariant();
-        var contentType = ext switch
-        {
-            ".wav" => "audio/wav",
-            ".flac" => "audio/flac",
-            ".mp3" => "audio/mpeg",
-            ".aif" or ".aiff" => "audio/aiff",
-            ".ogg" or ".oga" => "audio/ogg",
-            ".m4a" => "audio/mp4",
-            _ => "application/octet-stream",
-        };
-
-        return Results.File(stream, contentType, enableRangeProcessing: true);
+        // Story 3.3: local-first proxy, else 302 to a short-lived presigned GET.
+        return await MediaDelivery.ServeAsync(
+            storage, objectStore, row.FilePath, MediaDelivery.AudioContentType(row.FilePath), ct);
     }
 
     // POST /api/versions  (multipart/form-data: file [required], song_id?, genre_hint?, analyze?)
@@ -461,6 +448,7 @@ public static class VersionEndpoints
         ClaimsPrincipal currentUser,
         AppDbContext db,
         IFileStorage storage,
+        IMultipartObjectStore objectStore,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -471,12 +459,10 @@ public static class VersionEndpoints
             select v
         ).FirstOrDefaultAsync(ct);
         if (row is null || string.IsNullOrEmpty(row.AlsFilePath)) return Results.NotFound();
-        if (!await storage.ExistsAsync(row.AlsFilePath, ct)) return Results.NotFound();
 
-        var stream = await storage.OpenReadAsync(row.AlsFilePath, ct);
-        return Results.File(stream, "application/octet-stream",
-            fileDownloadName: Path.GetFileName(row.AlsFilePath),
-            enableRangeProcessing: false);
+        return await MediaDelivery.ServeAsync(
+            storage, objectStore, row.AlsFilePath, "application/octet-stream", ct,
+            rangeProcessing: false, downloadName: Path.GetFileName(row.AlsFilePath));
     }
 
     // ── GET /api/versions/{id}/reference — download the reference audio ───────
@@ -485,6 +471,7 @@ public static class VersionEndpoints
         ClaimsPrincipal currentUser,
         AppDbContext db,
         IFileStorage storage,
+        IMultipartObjectStore objectStore,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -495,20 +482,11 @@ public static class VersionEndpoints
             select v
         ).FirstOrDefaultAsync(ct);
         if (row is null || string.IsNullOrEmpty(row.ReferencePath)) return Results.NotFound();
-        if (!await storage.ExistsAsync(row.ReferencePath, ct)) return Results.NotFound();
 
-        var stream = await storage.OpenReadAsync(row.ReferencePath, ct);
-        var ext = Path.GetExtension(row.ReferencePath).ToLowerInvariant();
-        var contentType = ext switch
-        {
-            ".wav" => "audio/wav",
-            ".flac" => "audio/flac",
-            ".mp3" => "audio/mpeg",
-            _ => "application/octet-stream",
-        };
-        return Results.File(stream, contentType,
-            fileDownloadName: Path.GetFileName(row.ReferencePath),
-            enableRangeProcessing: false);
+        return await MediaDelivery.ServeAsync(
+            storage, objectStore, row.ReferencePath,
+            MediaDelivery.AudioContentType(row.ReferencePath), ct,
+            rangeProcessing: false, downloadName: Path.GetFileName(row.ReferencePath));
     }
 
     // ── POST /api/versions/{id}/stems ───────────────────────────────────────
@@ -986,17 +964,16 @@ public static class VersionEndpoints
     // the path contains "/audio", which the JwtBearer OnMessageReceived hook whitelists).
     private static async Task<IResult> StreamStemAudio(
         Guid versionId, string stemId, ClaimsPrincipal currentUser,
-        AppDbContext db, IFileStorage storage, CancellationToken ct)
+        AppDbContext db, IFileStorage storage, IMultipartObjectStore objectStore, CancellationToken ct)
     {
         var userId = currentUser.UserId();
         var version = await OwnedVersion(db, versionId, userId, ct);
         if (version is null) return Results.NotFound();
         var entry = ReadRaw(version.StemPathsRaw).FirstOrDefault(e => e.Id == stemId);
-        if (entry is null || !await storage.ExistsAsync(entry.Key, ct)) return Results.NotFound();
-        var stream = await storage.OpenReadAsync(entry.Key, ct);
-        var ext = Path.GetExtension(entry.Key).ToLowerInvariant();
-        var contentType = ext == ".wav" ? "audio/wav" : ext == ".flac" ? "audio/flac" : "application/octet-stream";
-        return Results.File(stream, contentType, enableRangeProcessing: true);
+        if (entry is null) return Results.NotFound();
+        // Story 3.3: local-first proxy, else 302 to a short-lived presigned GET.
+        return await MediaDelivery.ServeAsync(
+            storage, objectStore, entry.Key, MediaDelivery.AudioContentType(entry.Key), ct);
     }
 
     // ── Story 3.1: shared song/version row creation ─────────────────────────

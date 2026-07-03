@@ -324,6 +324,7 @@ def analyze_audio_job(job_id: str) -> None:
                 bref.used_count = (bref.used_count or 0) + 1
 
     _try_write_artifact(job_id, result_dict)
+    _try_upload_durables(job_id, result_dict, spectrogram_path, waveform_path)
 
     # ── Phase C2 — deterministic Problem engine on the completed analysis ────
     # Runs on EVERY successful analysis (not just degraded), so every track gets
@@ -518,3 +519,35 @@ def _try_write_artifact(job_id: str, result_dict: dict) -> None:
         out.write_text(json.dumps(result_dict, indent=2, default=str), encoding="utf-8")
     except Exception:
         logger.debug("artifact write failed (non-fatal)", exc_info=True)
+
+
+def _try_upload_durables(
+    job_id: str,
+    result_dict: dict,
+    spectrogram_key: str | None,
+    waveform_key: str | None,
+) -> None:
+    """Story 3.3 (AC2/AR20) — durable copies in object storage, best-effort.
+
+    ``reports/{jobId}.json`` is the AR20 durable report; the result images go
+    up under their EXISTING local keys so the BFF's media routes (local-first,
+    presigned-GET fallback) serve them unchanged in prod, where the worker box
+    and the BFF box do not share a disk. The canonical report store remains
+    ``analyses.final_json`` — failures here never fail a completed job.
+    """
+    if not object_store.s3_enabled():
+        return
+    try:
+        object_store.put_json(f"reports/{job_id}.json", result_dict)
+    except Exception:
+        logger.warning("durable report upload failed job=%s (non-fatal)", job_id, exc_info=True)
+    for key in (spectrogram_key, waveform_key):
+        if not key:
+            continue
+        local = Path(LOCAL_ROOT) / key
+        if not local.exists():
+            continue
+        try:
+            object_store.put_file(key, local, content_type="image/webp")
+        except Exception:
+            logger.warning("image upload failed key=%s (non-fatal)", key, exc_info=True)

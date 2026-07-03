@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { getAccessToken } from '../../api/fetcher';
 import { useStemProposals } from '../../api/hooks';
 import { useAudioGraph, type AudioFrame } from '../listen/useAudioGraph';
+import { createMediaRetry } from '../listen/media-retry';
 import { StemDeck, type DeckStem } from '../listen/StemDeck';
 import { useStemEngine } from '../listen/useStemEngine';
 import { CoverArt } from '../../ui/CoverArt';
@@ -416,7 +417,20 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     const onTime = () => setPosition(a.currentTime);
     const onDur = () => { if (Number.isFinite(a.duration)) setDuration(a.duration); };
     const onEnd = () => setPlaying(false);
-    const onErr = () => { setPlaying(false); toast.error('Could not load audio. Try refreshing.'); };
+    // Story 3.3 (AC4): a resumed session after the presigned URL expired
+    // surfaces here — re-request the API URL with a fresh token (the server
+    // mints a fresh presign) and restore position. Toast only when the retry
+    // itself is refused (guard tripped = the error is real, not expiry).
+    const retry = createMediaRetry({
+      getSrc: () => {
+        const token = getAccessToken();
+        return versionId && token
+          ? `/api/versions/${versionId}/audio?t=${encodeURIComponent(token)}`
+          : null;
+      },
+      onGiveUp: () => { setPlaying(false); toast.error('Could not load audio. Try refreshing.'); },
+    });
+    const onErr = () => { if (!retry.handleError(a)) setPlaying(false); };
     a.addEventListener('timeupdate', onTime);
     a.addEventListener('loadedmetadata', onDur);
     a.addEventListener('durationchange', onDur);
@@ -429,7 +443,8 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
       a.removeEventListener('ended', onEnd);
       a.removeEventListener('error', onErr);
     };
-  }, [audioUrl]);
+    // versionId feeds the AC4 retry's getSrc; audioUrl already derives from it.
+  }, [audioUrl, versionId]);
 
   // ── Real meter loop (Phase 2 Task 2). rAF reads the post-rack AnalyserNode and
   // publishes a throttled frame to the meter rail. Real mode + playing only. ──
