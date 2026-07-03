@@ -212,3 +212,81 @@ def test_anon_guard_noops_without_devices_table(db):
     factory, _ = db
     stats = ra.run_sweep(now=NOW)
     assert stats["anon_purged"] == 0  # AC3 — safe before Epic 4
+
+
+def test_unknown_subscription_status_is_protected(db):
+    """Stripe statuses outside both lists (paused, incomplete, future ones)
+    must fail SAFE — never fall through to the shorter free-tier rule."""
+    factory, tmp_path = db
+    uid, vid, files = _seed_user_version(
+        factory, tmp_path, created_at=NOW - timedelta(days=400))
+    with factory.begin() as s:
+        s.execute(text("INSERT INTO subscriptions VALUES (:u, 'paused', :pe)"),
+                  {"u": uid.hex, "pe": NOW - timedelta(days=200)})
+
+    stats = ra.run_sweep(now=NOW)
+
+    assert stats["purged_versions"] == 0
+    assert all(f.exists() for f in files)
+    assert _purged_at(factory, vid) is None
+
+
+def test_all_deletes_failed_leaves_version_unmarked(db, monkeypatch):
+    """A version whose EVERY delete failed must retry next night — marking it
+    would hide the objects behind the idempotency filter forever."""
+    factory, tmp_path = db
+    _, vid, files = _seed_user_version(
+        factory, tmp_path, created_at=NOW - timedelta(days=31))
+
+    def _boom(_key, _root):
+        raise RuntimeError("s3 down")
+
+    monkeypatch.setattr(ra.object_store, "delete_object", _boom)
+    stats = ra.run_sweep(now=NOW)
+
+    assert stats["failed_versions"] == 1
+    assert stats["purged_versions"] == 0
+    assert _purged_at(factory, vid) is None  # retried on the next run
+
+
+def test_absolute_stored_path_is_rejected_not_deleted(db, tmp_path):
+    """A poisoned absolute file_path must never delete outside the root."""
+    factory, root = db
+    outside = tmp_path / "outside.wav"
+    outside.write_bytes(b"RIFF....WAVE")
+    uid, sid, vid = __import__("uuid").uuid4(), __import__("uuid").uuid4(), __import__("uuid").uuid4()
+    with factory.begin() as s:
+        s.add(User(id=uid, email=f"{uid}@t.test", hashed_password="x"))
+        s.add(Song(id=sid, user_id=uid, name="T"))
+        s.add(SongVersion(id=vid, song_id=sid, version_number=1,
+                          file_path=str(outside), created_at=NOW - timedelta(days=100)))
+
+    stats = ra.run_sweep(now=NOW)
+
+    assert outside.exists()                    # file outside the root untouched
+    assert stats["failed_versions"] == 1       # delete rejected -> unmarked
+    assert _purged_at(factory, vid) is None
+
+
+def test_paid_signal_at_purge_time_spares_the_user(db):
+    """Credits bought AFTER classification (e.g. prompted by the warning
+    email) spare the user within the same run."""
+    factory, tmp_path = db
+    uid, vid, files = _seed_user_version(
+        factory, tmp_path, created_at=NOW - timedelta(days=31))
+    # Classification snapshot sees no credits... but the re-check does.
+    original = ra._classify_users
+
+    def _classify_then_pay(session, now, lapsed_days):
+        result = original(session, now, lapsed_days)
+        with factory.begin() as s:
+            s.execute(text("INSERT INTO credit_ledger VALUES (:u, 1)"), {"u": uid.hex})
+        return result
+
+    import unittest.mock as mock
+    with mock.patch.object(ra, "_classify_users", _classify_then_pay):
+        stats = ra.run_sweep(now=NOW)
+
+    assert stats["purged_versions"] == 0
+    assert all(f.exists() for f in files)
+    assert _purged_at(factory, vid) is None

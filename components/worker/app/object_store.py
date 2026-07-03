@@ -103,19 +103,34 @@ def cleanup_all(fetched: list[Path]) -> None:
         cleanup_local(f)
 
 
-def delete_object(key: str, local_root: str) -> None:
+def delete_object(key: str, local_root: str) -> bool:
     """Story 3.4 — remove a stored object EVERYWHERE it may live.
 
     Deletes the local file under ``local_root`` (missing-ok) AND, when S3 is
-    enabled, the bucket object. Exact keys only — callers must never pass
-    prefixes; the traversal guard mirrors resolve_local. Idempotent: deleting
-    an absent object is success (the sweep re-runs nightly).
+    enabled, the bucket object. Exact RELATIVE keys only — absolute paths are
+    rejected (``Path(root) / abs_path`` silently DISCARDS the root, which
+    would let a poisoned row delete files anywhere), as are dot-segments and
+    anything that resolves outside ``local_root``. Idempotent: deleting an
+    absent object is success (the sweep re-runs nightly).
+
+    Returns True when something was actually removed (local file existed
+    and/or an S3 delete was issued) — the sweep uses this to detect a
+    misconfigured root silently no-opping retention.
     """
-    if ".." in Path(key).parts:
-        raise ValueError(f"path traversal in stored path: {key!r}")
+    p = Path(key)
+    if p.is_absolute() or p.drive or ".." in p.parts:
+        raise ValueError(f"unsafe stored path (absolute/traversal): {key!r}")
+    removed = False
     try:
-        local = (Path(local_root) / key).resolve()
-        local.unlink(missing_ok=True)
+        root = Path(local_root).resolve()
+        local = (root / key).resolve()
+        if not local.is_relative_to(root):
+            raise ValueError(f"stored path escapes local root: {key!r}")
+        if local.exists():
+            local.unlink()
+            removed = True
+    except ValueError:
+        raise
     except OSError:
         logger.warning("object_store: local delete failed for %s", key, exc_info=True)
     if s3_enabled():
@@ -123,3 +138,5 @@ def delete_object(key: str, local_root: str) -> None:
         # S3 DeleteObject on a missing key is a success (204) — idempotent.
         _client().delete_object(Bucket=bucket, Key=key)
         logger.info("object_store: deleted s3://%s/%s", bucket, key)
+        removed = True
+    return removed

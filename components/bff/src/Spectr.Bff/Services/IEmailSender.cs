@@ -27,9 +27,13 @@ internal sealed class LoggingEmailSender(ILogger<LoggingEmailSender> logger) : I
         IReadOnlyDictionary<string, string> data,
         CancellationToken ct = default)
     {
+        // Mask the address — retention logs are long-lived and a raw email in
+        // them is PII the GDPR-deletion story would then have to chase.
+        var at = toEmail.IndexOf('@');
+        var masked = at > 1 ? $"{toEmail[..2]}***{toEmail[at..]}" : "***";
         _logger.LogInformation(
             "EmailStub: template={Template} to={To} data={Data}",
-            template, toEmail, string.Join(";", data.Select(kv => $"{kv.Key}={kv.Value}")));
+            template, masked, string.Join(";", data.Select(kv => $"{kv.Key}={kv.Value}")));
         return Task.CompletedTask;
     }
 }

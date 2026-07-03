@@ -89,11 +89,14 @@ internal sealed class RetentionSweepScheduler(
         var email = scope.ServiceProvider.GetRequiredService<IEmailSender>();
         var queue = scope.ServiceProvider.GetRequiredService<IJobQueue>();
 
-        await SendDueWarningsAsync(db, email, opts, ct);
-
+        // Enqueue the AUTHORITATIVE purge first — a warning-pass failure must
+        // never block the sweep. LapsedDays rides as an actor arg so warnings
+        // and purge share ONE policy value (no BFF-config/worker-env drift).
         await queue.EnqueueAsync(
-            DramatiqTasks.SweepRetention, [], DramatiqQueues.Maintenance, ct);
+            DramatiqTasks.SweepRetention, [opts.LapsedDays], DramatiqQueues.Maintenance, ct);
         _logger.LogInformation("Retention sweep enqueued on {Queue}.", DramatiqQueues.Maintenance);
+
+        await SendDueWarningsAsync(db, email, opts, ct);
     }
 
     private async Task SendDueWarningsAsync(
@@ -112,29 +115,70 @@ internal sealed class RetentionSweepScheduler(
 
         foreach (var sub in lapsed)
         {
-            // A paid signal (re-subscribe, credits) always wins — no warning.
-            var isPaid = await db.Subscriptions.AsNoTracking()
-                    .AnyAsync(s => s.UserId == sub.UserId && PaidStatuses.Contains(s.Status), ct)
-                || await db.CreditLedger.AsNoTracking()
-                    .Where(e => e.UserId == sub.UserId)
-                    .SumAsync(e => (int?)e.Amount, ct) > 0;
-            if (isPaid) continue;
-
-            var purgeDate = sub.CurrentPeriodEnd.AddDays(opts.LapsedDays);
-            var daysLeft = (int)Math.Ceiling((purgeDate - now).TotalDays);
-            if (!opts.WarnAtDays.Contains(daysLeft)) continue;
-
-            var address = await db.Users.AsNoTracking()
-                .Where(u => u.Id == sub.UserId && u.IsActive)
-                .Select(u => u.Email)
-                .FirstOrDefaultAsync(ct);
-            if (address is null) continue;
-
-            await email.SendAsync(address, "retention-warning", new Dictionary<string, string>
+            try
             {
-                ["purgeDate"] = purgeDate.ToString("yyyy-MM-dd"),
-                ["daysLeft"] = daysLeft.ToString(),
-            }, ct);
+                await WarnOneAsync(db, email, opts, sub.UserId, sub.CurrentPeriodEnd, now, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // One bad address/row must never block the remaining warnings
+                // (nor the sweep — already enqueued above).
+                _logger.LogError(ex, "Retention warning failed for user {UserId}.", sub.UserId);
+            }
         }
+    }
+
+    private static async Task WarnOneAsync(
+        AppDbContext db, IEmailSender email, RetentionOptions opts,
+        Guid userId, DateTimeOffset periodEnd, DateTimeOffset now, CancellationToken ct)
+    {
+        // A paid signal (re-subscribe, credits) always wins — no warning.
+        var isPaid = await db.Subscriptions.AsNoTracking()
+                .AnyAsync(s => s.UserId == userId && PaidStatuses.Contains(s.Status), ct)
+            || await db.CreditLedger.AsNoTracking()
+                .Where(e => e.UserId == userId)
+                .SumAsync(e => (int?)e.Amount, ct) > 0;
+        if (isPaid) return;
+
+        var purgeDate = periodEnd.AddDays(opts.LapsedDays);
+        var daysLeft = (int)Math.Ceiling((purgeDate - now).TotalDays);
+        // The notice TIER currently due: the smallest boundary >= daysLeft.
+        // `<=` (not equality) so a skipped nightly run — downtime, redeploy
+        // drift — still sends the notice on the next run instead of never.
+        var due = opts.WarnAtDays.Where(b => daysLeft <= b).DefaultIfEmpty(0).Min();
+        if (due == 0) return;
+
+        var address = await db.Users.AsNoTracking()
+            .Where(u => u.Id == userId && u.IsActive)
+            .Select(u => u.Email)
+            .FirstOrDefaultAsync(ct);
+        if (address is null) return;
+
+        // Send-ledger + in-app surface in one: a digest-keyed notifications
+        // row. The partial-unique index on digest_key makes the insert the
+        // dedupe — restarts, extra runs, and multiple BFF replicas all
+        // collapse to ONE email per (user, lapse cycle, notice tier).
+        db.Notifications.Add(new Spectr.Data.Entities.Notification
+        {
+            RecipientUserId = userId,
+            EventType = "retention_warning",
+            DigestKey = $"retention_warn:{userId}:{periodEnd:yyyyMMdd}:{due}",
+            PayloadJson = $"{{\"purgeDate\":\"{purgeDate:yyyy-MM-dd}\",\"daysLeft\":{daysLeft}}}",
+        });
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            db.ChangeTracker.Clear();
+            return; // this notice tier was already sent for this lapse cycle
+        }
+
+        await email.SendAsync(address, "retention-warning", new Dictionary<string, string>
+        {
+            ["purgeDate"] = purgeDate.ToString("yyyy-MM-dd"),
+            ["daysLeft"] = daysLeft.ToString(),
+        }, ct);
     }
 }

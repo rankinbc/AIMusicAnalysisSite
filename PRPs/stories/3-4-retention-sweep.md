@@ -111,6 +111,26 @@ claude-fable-5 (Claude Code)
 - `components/shared/aimusic_shared/models.py` (raw_audio_purged_at mirror)
 - `docker/docker-compose.yml` (ilm rules + comments)
 
+### Senior Developer Review (AI)
+
+2026-07-03 — bmad-code-review (Blind Hunter + Edge Case Hunter + Acceptance Auditor; auditor independently ran the worker tests). Outcome: **Approve after patches** — all 5 ACs met, but the blind/edge layers found real data-safety issues in a feature that deletes user files. 12 patches applied same day:
+
+- [x] [High] Absolute-path keys escaped `local_root` (`Path(root)/abs` DISCARDS the root — a poisoned row could delete files anywhere) → `delete_object` rejects absolute/drive/`..` keys AND verifies containment via `is_relative_to`; test proves an outside file survives
+- [x] [High] Marker was stamped even when EVERY delete failed → all-failed versions stay unmarked and retry nightly (test); partial failure still marks (documented residue policy)
+- [x] [High] Single long transaction held across S3 deletes + one end-commit (crash/time-limit lost every marker after files were gone; anon probe could poison the tx) → per-version short transactions, classification/candidates/probe each in their own session, deletes outside any tx
+- [x] [High] **Blanket 180-day lifecycle rules would delete PAID users' content** (`audio/`/`stems/`/`als/` hold age-unbounded paid mixes AND `audio/reference/` library assets) → ilm rules REMOVED; compose comment documents why prefix-expiry is unsafe and defers the correct TAG-based backstop to 10.1 (AC4 honestly downgraded to documented-config)
+- [x] [High] One failing email aborted remaining warnings AND the sweep enqueue → sweep enqueued FIRST; per-user try/catch
+- [x] [Med] Exact-equality warn boundaries skipped notices across downtime and duplicated them on redeploys/replicas → `daysLeft <= tier` semantics + a digest-keyed `notifications` row as the send-ledger (partial-unique index = cross-replica dedupe, plus an in-app notice for free); second-run test asserts zero duplicates
+- [x] [Med] Unknown/new Stripe statuses (paused, incomplete) fell to the 30-day free rule → any non-lapsed status is PROTECTED (test)
+- [x] [Med] Policy defined twice (BFF `LapsedDays` vs worker env) → BFF passes `LapsedDays` as the actor arg; env is fallback only
+- [x] [Med] Unbounded unpurged-table scan → candidates bounded in SQL (free window OR lapsed-user IN list)
+- [x] [Med] User who pays mid-sweep (prompted by the warning) still purged → per-user paid re-check at purge time (test simulates credits bought after classification)
+- [x] [Low] Silent-no-op detection: stats split deleted/missing; loud warning when purges marked but ZERO objects actually deleted (LOCAL_ROOT drift signal); legacy string-list `stem_paths_raw` shape handled
+- [x] [Low] PII: LoggingEmailSender masks addresses; Procfile maintenance comment updated; Dev Record test count corrected (7→ now 12 worker tests)
+- Deferred: N+1 queries in the warning pass (beta scale); tag-based lifecycle backstop + prod R2 config (10.1); free-tier users get no warning email (per epic — only lapsed-paid notice is specified; flagged for product review in Epic 4's lifecycle-email story); credits-spent-to-zero users fall to the free window (product sign-off item, noted).
+- Rejected: legacy v1 `upload_jobs` shared-file concern (v1 excluded from release); compose worker Dockerfile reference (pre-existing; dev runs via Procfile).
+
 ### Change Log
 
 - 2026-07-03: implemented on `storage/3-4-retention-sweep`. Gates: BFF build 0-warn + 271/271 (3 new); worker 557 + 3 xfail (9 new); shared 27; ruff clean; frontend untouched. Status → review.
+- 2026-07-03 (review): 12 code-review patches applied (see Senior Developer Review). Gates after patches: BFF 271/271, worker 561 + 3 xfail (12 sweep tests), ruff clean.

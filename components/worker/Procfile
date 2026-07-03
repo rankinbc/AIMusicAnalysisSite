@@ -9,7 +9,7 @@
 #   analysis-paid : pro/credits analysis + all 5 auxiliary actors
 #   analysis-free : free/anon analysis (sole declarer = analyze_audio_job)
 #   coach         : coach_reply
-#   maintenance   : provisioned-but-empty (Epic 3/4 add sweep_retention/send_email)
+#   maintenance   : sweep_retention (story 3.4); Epic 4 adds send_email
 # `default` is dropped — no producer remains after story 2.5. If you run against
 # a long-lived dev Redis that may hold stray `default` messages, append `default`.
 worker: python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues coach analysis-paid analysis-free maintenance

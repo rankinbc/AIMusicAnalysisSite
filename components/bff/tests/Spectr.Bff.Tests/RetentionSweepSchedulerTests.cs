@@ -104,31 +104,51 @@ public sealed class RetentionSweepSchedulerTests(WebApplicationFactory<Program> 
     }
 
     [Fact]
-    public async Task Warns_At_Exactly_The_Configured_Boundaries_And_Enqueues_Sweep()
+    public async Task Warns_Due_Tiers_Once_And_Enqueues_Sweep()
     {
         if (!await TestDb.Reachable(_factory)) { return; }
 
         var (scheduler, email, queue, f) = Build();
         var warnUser = await SeedLapsedUserAsync(f, daysUntilPurge: 7, lapsedDays: 90);
-        var quietUser = await SeedLapsedUserAsync(f, daysUntilPurge: 5, lapsedDays: 90);
+        // 5 days left: the 7-day tier is DUE (<= semantics — a host down on
+        // the exact boundary day must not mean "never warned").
+        var lateUser = await SeedLapsedUserAsync(f, daysUntilPurge: 5, lapsedDays: 90);
+        // 20 days left: no tier due yet.
+        var earlyUser = await SeedLapsedUserAsync(f, daysUntilPurge: 20, lapsedDays: 90);
         try
         {
             await scheduler.RunOnceAsync(CancellationToken.None);
 
             var sent = email.Sent.ToList();
-            Assert.Contains(sent, s => s.To.Contains($"{warnUser:N}") && s.Template == "retention-warning"
-                && s.Data["daysLeft"] == "7");
-            Assert.DoesNotContain(sent, s => s.To.Contains($"{quietUser:N}"));
+            Assert.Contains(sent, s => s.To.Contains($"{warnUser:N}") && s.Template == "retention-warning");
+            Assert.Contains(sent, s => s.To.Contains($"{lateUser:N}"));
+            Assert.DoesNotContain(sent, s => s.To.Contains($"{earlyUser:N}"));
 
-            // The authoritative sweep always enqueues, on the maintenance lane.
+            // The authoritative sweep always enqueues, on the maintenance
+            // lane, carrying the policy value (single source, no drift).
             Assert.Contains(queue.Calls, c =>
                 c.Task == DramatiqTasks.SweepRetention && c.Queue == DramatiqQueues.Maintenance);
+
+            // Ledger dedupe: a second run (redeploy / extra replica) sends
+            // NOTHING new — the digest-keyed notifications row absorbs it.
+            var before = email.Sent.Count;
+            await scheduler.RunOnceAsync(CancellationToken.None);
+            Assert.Equal(before, email.Sent.Count);
         }
         finally
         {
+            await CleanupNotificationsAsync(f, warnUser, lateUser, earlyUser);
             await CleanupAsync(f, warnUser);
-            await CleanupAsync(f, quietUser);
+            await CleanupAsync(f, lateUser);
+            await CleanupAsync(f, earlyUser);
         }
+    }
+
+    private static async Task CleanupNotificationsAsync(WebApplicationFactory<Program> f, params Guid[] userIds)
+    {
+        using var scope = f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await db.Notifications.Where(n => userIds.Contains(n.RecipientUserId)).ExecuteDeleteAsync();
     }
 
     [Fact]
