@@ -34,6 +34,7 @@ from aimusic_shared.models import (
     SongVersion,
 )
 
+from . import object_store
 from .db_sync import SessionFactory
 from .tasks_dramatiq import LOCAL_ROOT, _utc_now
 
@@ -153,11 +154,13 @@ def detect_structure_job(structure_job_id: str, analysis_id: str) -> None:
         raise
 
     # ── Phase C — write merged result back + flip the structure job complete ─
+    report_job_id: uuid.UUID | None = None
     with SessionFactory.begin() as s:
         row = s.get(Analysis, aid)
         if row is None:
             raise RuntimeError(f"analysis {analysis_id} disappeared mid-structure-detect")
         row.final_json = merged_safe
+        report_job_id = getattr(row, "job_id", None)
 
         j = s.get(AnalysisJob, sjid)
         if j is not None:
@@ -167,6 +170,14 @@ def detect_structure_job(structure_job_id: str, analysis_id: str) -> None:
             j.completed_at = _utc_now()
             j.error_message = None
             j.failed_at = None
+
+    # Story 3.3 (AC2) — refresh the durable R2 report; without this the
+    # deferred structure merge leaves reports/{jobId}.json stale on every job.
+    if report_job_id is not None and object_store.s3_enabled():
+        try:
+            object_store.put_json(f"reports/{report_job_id}.json", merged_safe)
+        except Exception:  # best-effort — never fail a completed merge over it
+            logger.warning("durable report refresh failed job=%s", report_job_id, exc_info=True)
 
     logger.info(
         "detect_structure_job: complete job=%s analysis=%s", structure_job_id, analysis_id

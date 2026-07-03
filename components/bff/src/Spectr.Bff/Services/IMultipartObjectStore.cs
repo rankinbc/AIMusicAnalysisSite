@@ -36,6 +36,12 @@ public interface IMultipartObjectStore
     // ACTUAL object size against the per-kind caps (the client-declared
     // fileSize at init is advisory only).
     Task<long?> GetObjectSizeAsync(string key, CancellationToken ct = default);
+
+    // Story 3.3 (NFR5) — short-lived presigned GET for playback/download 302s.
+    // downloadName sets a Content-Disposition override (als/reference downloads);
+    // contentType sets a Content-Type override (attachments were PUT without one,
+    // so the stored type is octet-stream — the override keeps players honest).
+    string PresignGetUrl(string key, string? downloadName = null, string? contentType = null);
 }
 
 public sealed record PresignedPart(int PartNumber, string Url);
@@ -151,6 +157,34 @@ internal sealed class S3ObjectStore : IMultipartObjectStore, IDisposable
             Verb = HttpVerb.PUT,
             Expires = DateTime.UtcNow.AddMinutes(_opts.UrlExpiryMinutes),
         });
+    }
+
+    public string PresignGetUrl(string key, string? downloadName = null, string? contentType = null)
+    {
+        var req = new GetPreSignedUrlRequest
+        {
+            BucketName = _opts.Bucket,
+            Key = key,
+            Verb = HttpVerb.GET,
+            // Clamp: a misconfigured non-positive expiry would mint every URL
+            // pre-expired and kill all S3-backed playback silently.
+            Expires = DateTime.UtcNow.AddMinutes(Math.Max(1, _opts.ReadUrlExpiryMinutes)),
+        };
+        if (!string.IsNullOrWhiteSpace(downloadName))
+        {
+            // Signed response-header override. Allowlist-sanitize: filenames can
+            // carry user input; quotes/backslashes/CR-LF/non-ASCII would mangle
+            // (or get rejected by S3 in) the signed header.
+            var safe = new string(downloadName
+                .Select(c => c is >= ' ' and <= '~' && c is not ('"' or '\\') ? c : '_')
+                .ToArray());
+            req.ResponseHeaderOverrides.ContentDisposition = $"attachment; filename=\"{safe}\"";
+        }
+        if (!string.IsNullOrWhiteSpace(contentType))
+        {
+            req.ResponseHeaderOverrides.ContentType = contentType;
+        }
+        return _client.Value.GetPreSignedURL(req);
     }
 
     public async Task<bool> ObjectExistsAsync(string key, CancellationToken ct = default)

@@ -296,6 +296,7 @@ public static class JobEndpoints
         ClaimsPrincipal currentUser,
         AppDbContext db,
         IFileStorage storage,
+        IMultipartObjectStore objectStore,
         HttpResponse response,
         CancellationToken ct)
     {
@@ -307,11 +308,13 @@ public static class JobEndpoints
             .Select(a => kind == "spectrogram" ? a.SpectrogramImagePath : a.WaveformImagePath)
             .FirstOrDefaultAsync(ct);
         if (string.IsNullOrEmpty(key)) return Results.NotFound();
-        if (!await storage.ExistsAsync(key, ct)) return Results.NotFound();
 
-        // Content is immutable for a given analysis — let the browser cache hard.
-        response.Headers.CacheControl = "public, max-age=31536000, immutable";
-        var stream = await storage.OpenReadAsync(key, ct);
-        return Results.File(stream, "image/webp");
+        // Content is immutable for a given analysis — the LOCAL-proxy branch
+        // may cache hard; MediaDelivery sets the header from the same existence
+        // check that picks the branch (a separate check here could race a
+        // deletion and immutable-cache an expiring 302 for a year).
+        return await MediaDelivery.ServeAsync(
+            storage, objectStore, key, "image/webp", response, ct,
+            rangeProcessing: false, immutableCacheOnLocal: true);
     }
 }

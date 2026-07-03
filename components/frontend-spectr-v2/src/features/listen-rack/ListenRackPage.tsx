@@ -14,9 +14,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import { getAccessToken } from '../../api/fetcher';
+import { fetcher, getAccessToken } from '../../api/fetcher';
 import { useStemProposals } from '../../api/hooks';
 import { useAudioGraph, type AudioFrame } from '../listen/useAudioGraph';
+import { createMediaRetry } from '../listen/media-retry';
 import { StemDeck, type DeckStem } from '../listen/StemDeck';
 import { useStemEngine } from '../listen/useStemEngine';
 import { CoverArt } from '../../ui/CoverArt';
@@ -416,7 +417,26 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     const onTime = () => setPosition(a.currentTime);
     const onDur = () => { if (Number.isFinite(a.duration)) setDuration(a.duration); };
     const onEnd = () => setPlaying(false);
-    const onErr = () => { setPlaying(false); toast.error('Could not load audio. Try refreshing.'); };
+    // Story 3.3 (AC4): a resumed session after the presigned URL expired
+    // surfaces here — re-request the API URL with a fresh token (the server
+    // mints a fresh presign) and restore position. After a long idle BOTH the
+    // presign AND the access token are expired, so getSrc first forces a
+    // silent refresh via a cheap authed call (fetcher owns 401→refresh→retry).
+    // Toast only when the retry itself is refused (cap/guard = real failure).
+    const retry = createMediaRetry({
+      getSrc: async () => {
+        try { await fetcher<unknown>({ url: '/auth/me', method: 'GET' }); } catch { /* give up below */ }
+        const token = getAccessToken();
+        return versionId && token
+          ? `/api/versions/${versionId}/audio?t=${encodeURIComponent(token)}`
+          : null;
+      },
+      onGiveUp: () => { setPlaying(false); toast.error('Could not load audio. Try refreshing.'); },
+      onResumeBlocked: () => setPlaying(false),
+    });
+    const onErr = () => {
+      void retry.handleError(a).then((retried) => { if (!retried) setPlaying(false); });
+    };
     a.addEventListener('timeupdate', onTime);
     a.addEventListener('loadedmetadata', onDur);
     a.addEventListener('durationchange', onDur);
@@ -428,8 +448,10 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
       a.removeEventListener('durationchange', onDur);
       a.removeEventListener('ended', onEnd);
       a.removeEventListener('error', onErr);
+      retry.dispose(); // disarm any pending restore — it must not replay onto a future src
     };
-  }, [audioUrl]);
+    // versionId feeds the AC4 retry's getSrc; audioUrl already derives from it.
+  }, [audioUrl, versionId]);
 
   // ── Real meter loop (Phase 2 Task 2). rAF reads the post-rack AnalyserNode and
   // publishes a throttled frame to the meter rail. Real mode + playing only. ──

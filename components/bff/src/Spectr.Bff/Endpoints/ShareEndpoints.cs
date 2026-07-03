@@ -188,10 +188,12 @@ public static class ShareEndpoints
         string token,
         AppDbContext db,
         IFileStorage storage,
+        IMultipartObjectStore objectStore,
+        HttpResponse response,
         CancellationToken ct)
     {
         // Resolve token → analysis → version → file. Same Range-friendly
-        // streaming as /api/versions/{id}/audio but without auth (the
+        // delivery as /api/versions/{id}/audio but without auth (the
         // share_token IS the access grant).
         var versionId = await (
             from a in db.Analyses.AsNoTracking()
@@ -203,27 +205,18 @@ public static class ShareEndpoints
             .Select(v => v.FilePath)
             .FirstOrDefaultAsync(ct);
         if (string.IsNullOrEmpty(key)) return Results.NotFound();
-        if (!await storage.ExistsAsync(key, ct)) return Results.NotFound();
 
-        var stream = await storage.OpenReadAsync(key, ct);
-        var ext = Path.GetExtension(key).ToLowerInvariant();
-        var contentType = ext switch
-        {
-            ".wav" => "audio/wav",
-            ".flac" => "audio/flac",
-            ".mp3" => "audio/mpeg",
-            ".aif" or ".aiff" => "audio/aiff",
-            ".ogg" or ".oga" => "audio/ogg",
-            ".m4a" => "audio/mp4",
-            _ => "application/octet-stream",
-        };
-        return Results.File(stream, contentType, enableRangeProcessing: true);
+        // Story 3.3: local-first proxy, else 302 to a short-lived presigned GET.
+        return await MediaDelivery.ServeAsync(
+            storage, objectStore, key, MediaDelivery.AudioContentType(key), response, ct);
     }
 
     private static async Task<IResult> GetSharePeaks(
         string token,
         AppDbContext db,
         IFileStorage storage,
+        IMultipartObjectStore objectStore,
+        HttpResponse response,
         CancellationToken ct)
     {
         var peaksKey = await (
@@ -234,9 +227,8 @@ public static class ShareEndpoints
         // Waveform peaks generation is a future slice; respond 404 cleanly
         // until the producer-side waveform-peaks pipeline lands.
         if (string.IsNullOrEmpty(peaksKey)) return Results.NotFound();
-        if (!await storage.ExistsAsync(peaksKey, ct)) return Results.NotFound();
-        var stream = await storage.OpenReadAsync(peaksKey, ct);
-        return Results.File(stream, "application/json");
+        return await MediaDelivery.ServeAsync(
+            storage, objectStore, peaksKey, "application/json", response, ct, rangeProcessing: false);
     }
 
     private static async Task<IResult> GetShareComments(

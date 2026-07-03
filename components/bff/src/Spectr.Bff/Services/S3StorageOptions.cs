@@ -23,5 +23,10 @@ public sealed class S3StorageOptions
     // parts without a re-sign endpoint (story decision 5; revisited in 3.5).
     public int UrlExpiryMinutes { get; set; } = 120;
 
+    // Story 3.3 (NFR5): presigned READ lifetime. Short — playback URLs are
+    // minted per request via a 302 from the authorized media endpoints, and
+    // the client transparently re-requests on expiry (AC4).
+    public int ReadUrlExpiryMinutes { get; set; } = 15;
+
     public bool IsConfigured => !string.IsNullOrWhiteSpace(ServiceUrl);
 }
