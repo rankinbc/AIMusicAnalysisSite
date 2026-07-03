@@ -107,9 +107,16 @@ public static class AuthEndpoints
         JwtTokenService jwt,
         RefreshTokenService refresh,
         HttpResponse resp,
+        HttpContext ctx,
         CancellationToken ct)
     {
         if (!env.IsDevelopment()) return Results.NotFound();
+        // Story 4.1 review: passwordless token minting must never answer a
+        // LAN peer — compose publishes :5000 on 0.0.0.0, so IsDevelopment
+        // alone isn't enough on an exposed dev box.
+        var remote = ctx.Connection.RemoteIpAddress;
+        if (remote is not null && !System.Net.IPAddress.IsLoopback(remote))
+            return Results.NotFound();
 
         var email = string.IsNullOrWhiteSpace(req?.Email)
             ? "brankin92@yahoo.com"

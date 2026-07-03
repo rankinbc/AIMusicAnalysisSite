@@ -77,6 +77,24 @@ claude-fable-5 (Claude Code)
 - `.env.example` (new, root) + `components/worker/.env.example` (gap fill)
 - `.gitleaks.toml` (new) + `.github/workflows/ci.yml` (secrets job)
 
+### Senior Developer Review (AI)
+
+2026-07-03 — bmad-code-review (Blind Hunter security-mindset + Edge Case Hunter/Acceptance Auditor combined; auditor ran the new tests against live Postgres, 5/5). Outcome: **Approve after patches** — fail-fast core sound, but both new security gates were bypassable as written. 13 patches applied:
+
+- [x] [High] **env=Development-on-prod bypass**: publicly-committed dev keys + `dotnet publish` shipping Development.json meant one env var flipped prod to forgeable JWTs → (a) `RequireSigningKey` rejects the committed dev-key literals outside Development, (b) `appsettings.Development.json` excluded from publish (`CopyToPublishDirectory=Never`), (c) compose bff gets `Anon__SigningKey` env (publish exclusion removed its config source), (d) prod overlay `docker-compose.prod.yml` now overrides bff with `ASPNETCORE_ENVIRONMENT=Production` + required `${JWT_KEY:?}`/`${ANON_SIGNING_KEY:?}`; boot test proves dev-key rejection
+- [x] [High] **Allowlist over-breadth**: unanchored substrings (`minioadmin`, `sk_test_x`) could mask real credentials containing them → every regex anchored `^...$` with `regexTarget="secret"`; blanket `PRPs/.*` exclusion (permanent blind spot exactly where secrets get pasted) → narrowed to the ONE story file whose prose trips generic-api-key
+- [x] [High] **Unpinned gitleaks binary in the secret-scan job itself** → SHA256 checksum verified before extraction (hash computed from the official release asset); timeout-minutes + checkout@v5 consistency
+- [x] [Med] Placeholder keys (32 chars) passed the length check — copying .env.example unmodified booted "Production" → `REPLACE_*` prefixes rejected in ALL environments
+- [x] [Med] `Jwt:Key == Anon:SigningKey` accepted despite .env.example demanding different → boot-rejected; test added
+- [x] [Med] Cookie tests could pass via the handler's cookie container rather than server-side rotation → `HandleCookies=false` client; cookie extraction matches `RefreshTokenService.CookieName` exactly (not a substring guess)
+- [x] [Med] `ThrowsAny<Exception>` + message substring too broad → asserts `InvalidOperationException` in the chain; `Flatten` AggregateException double-count fixed
+- [x] [Low] Short-key test now a Theory over Production AND Development (config-precedence coverage); boot tests isolate from ambient host `Jwt__Key` env vars via in-memory nulls
+- [x] [Low] dev-login (passwordless minting, IsDevelopment-gated) now also requires a LOOPBACK remote — compose publishes :5000 on 0.0.0.0, so env-gating alone leaked token minting to the LAN
+- [x] [Low] `.env.example`: `ASPNETCORE_ENVIRONMENT` documented as load-bearing; `JWT_KEY`/`Jwt__Key` same-secret note; `ANON_SIGNING_KEY` compose var added
+- Deferred (10.1 line items): Postgres service in the CI bff job (silent-skip pattern is project-wide), `Password=spectr` connection-string fallback hardening, Development.json-in-image already mitigated but full prod topology owns the final shape.
+- Rejected: entropy scoring beyond blacklists (heuristic theater; the placeholder/dev-literal rejections catch the realistic failure modes).
+
 ### Change Log
 
 - 2026-07-03: implemented on `account/4-1-secrets-hardening`. Gates: BFF 284/284; gitleaks clean over 493 commits. Status → review.
+- 2026-07-03 (review): 13 patches applied. Gates: BFF 287/287 (8 secrets tests; one parallel flake re-ran green); gitleaks re-verified post-commit.
