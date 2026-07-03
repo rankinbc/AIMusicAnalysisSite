@@ -6,9 +6,12 @@
  * The composer calls onChange(text, caret) from its input's onChange and
  * routes onKeyDown FIRST through handleKeyDown — a true return means the
  * dropdown consumed the key (Enter picks instead of submitting; the 11.1
- * isComposing Enter-guard stays in the composer). */
-import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+ * isComposing Enter-guard stays in the composer, and this hook ignores keys
+ * mid-IME-composition too). Call close() whenever the composer clears its
+ * text programmatically (submit success) so a late search response can't
+ * resurrect a stale dropdown. */
+import { useEffect, useState, type RefObject } from 'react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
 import { fetcher } from '../../api/fetcher';
 
@@ -24,6 +27,8 @@ interface HandleSearchDto {
   items: HandleSearchItemDto[];
 }
 
+type MentionInput = HTMLInputElement | HTMLTextAreaElement;
+
 function useDebounced<T>(value: T, ms: number): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -33,7 +38,10 @@ function useDebounced<T>(value: T, ms: number): T {
   return debounced;
 }
 
-export function useMentionAutocomplete(setText: (t: string) => void) {
+export function useMentionAutocomplete(
+  setText: (t: string) => void,
+  inputRef?: RefObject<MentionInput | null>,
+) {
   const [active, setActive] = useState<ActiveMention | null>(null);
   const [snapshot, setSnapshot] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
@@ -43,14 +51,23 @@ export function useMentionAutocomplete(setText: (t: string) => void) {
   const enabled = active !== null && debounced.length > 0;
 
   const search = useQuery({
-    queryKey: ['u', 'search', debounced],
+    // NOT ['u', ...] — a user whose handle is literally 'search' would make
+    // ['u','search',q] collide with followKey('search') = ['u','search','follow'].
+    queryKey: ['handle-search', debounced],
     queryFn: () => fetcher<HandleSearchDto>({ url: '/u/', method: 'GET', params: { q: debounced } }),
     enabled,
     staleTime: 30_000,
+    retry: false, // a 429 from the limiter must not be amplified by retries
+    placeholderData: keepPreviousData, // no flicker-closed between keystrokes
   });
 
   const items = enabled ? (search.data?.items ?? []) : [];
   const open = active !== null && items.length > 0;
+
+  // Keep the highlighted row inside the list when results shrink mid-typing.
+  useEffect(() => {
+    setActiveIndex((i) => Math.min(i, Math.max(items.length - 1, 0)));
+  }, [items.length]);
 
   const onChange = (text: string, caret: number | null) => {
     setSnapshot(text);
@@ -66,11 +83,21 @@ export function useMentionAutocomplete(setText: (t: string) => void) {
     const r = applyMention(snapshot, active, handle);
     setText(r.text);
     setActive(null);
+    // Restore the caret after React re-renders the controlled input — without
+    // this a mid-text pick dumps the cursor at the end of the message.
+    const el = inputRef?.current;
+    if (el) {
+      requestAnimationFrame(() => {
+        el.focus();
+        el.setSelectionRange(r.caret, r.caret);
+      });
+    }
   };
 
   /** Returns true when the key was consumed by the dropdown. */
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!open) return false;
+    if (e.nativeEvent.isComposing) return false; // never hijack IME candidate keys
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setActiveIndex((i) => (i + 1) % items.length);

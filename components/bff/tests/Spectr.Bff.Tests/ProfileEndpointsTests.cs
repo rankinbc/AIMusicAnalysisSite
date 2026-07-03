@@ -122,11 +122,39 @@ public sealed class ProfileEndpointsTests(WebApplicationFactory<Program> factory
         var results = await Search(anon, p.ToUpperInvariant()); // citext: case-insensitive
         Assert.Contains(hit, results);
         Assert.DoesNotContain(ghost, results);
-        Assert.True(results.Count <= 8);
 
         // Non-prefix never matches (prefix search, not substring).
         var tail = hit[2..];
         Assert.DoesNotContain(hit, await Search(anon, tail));
+    }
+
+    [Fact]
+    public async Task Handle_Search_Caps_At_Eight_Results()
+    {
+        if (!await TestDb.Reachable(_factory)) { return; }
+
+        var p = $"zc{Guid.NewGuid():N}"[..8];
+        for (var i = 0; i < 9; i++) await SeedHandleAsync(p);
+
+        var anon = _factory.CreateClient();
+        Assert.Equal(8, (await Search(anon, p)).Count);
+    }
+
+    [Fact]
+    public async Task Handle_Search_Underscore_Matches_Literally_Not_As_Wildcard()
+    {
+        if (!await TestDb.Reachable(_factory)) { return; }
+
+        // 'ab_...' must be matched by q='ab_' ; 'abX...' must NOT (an
+        // unescaped '_' would be a single-char ILIKE wildcard and match both).
+        var p = $"zu{Guid.NewGuid():N}"[..6];
+        var literal = await SeedHandleAsync($"{p}_");
+        var decoy = await SeedHandleAsync($"{p}x");
+
+        var anon = _factory.CreateClient();
+        var results = await Search(anon, $"{p}_");
+        Assert.Contains(literal, results);
+        Assert.DoesNotContain(decoy, results);
     }
 
     [Fact]

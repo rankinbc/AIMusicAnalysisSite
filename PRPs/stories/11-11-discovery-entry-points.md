@@ -119,6 +119,26 @@ claude-fable-5 (Claude Code)
 - `components/frontend-spectr-v2/src/routes/_public/v.$token.tsx` (mention wiring + CTAs)
 - `components/frontend-spectr-v2/src/api/types.ts` (VersionViewDto owner fields)
 
+### Senior Developer Review (AI)
+
+2026-07-03 — bmad-code-review (Blind Hunter + Edge Case Hunter + Acceptance Auditor). Outcome: **Approve with patches**; all 4 ACs met. 12 patches applied same day, 3 defers, rest rejected with evidence:
+
+- [x] [High] Raw share token interpolated into the register URL (param-smuggling `x&next=//evil` — safeNext would still reject the redirect, but encode anyway) → `encodeURIComponent` on `via` + `next`
+- [x] [Med] Mid-token pick left tail garbage (`hey @aurora ur ok`) → `applyMention` scans to the token end
+- [x] [Med] Returned caret was discarded — cursor jumped to end after a pick → composers pass their input ref; hook restores selection via rAF
+- [x] [Med] Dropdown hijacked IME candidate keys → `isComposing` bail at the top of `handleKeyDown`
+- [x] [Med] `authed` was a one-shot `getAccessToken()` read — the freshly-claimed registrant (THE AC3 moment) could keep seeing RegisterCta → reactive `useMe(true)`; CTAs render only after `/auth/me` settles
+- [x] [Med] Owner briefly saw "+ Follow @themself" (handle compare vs unloaded `me`) → gate on server `followState.isSelf`
+- [x] [Low] `activeIndex` unclamped when results shrink → effect clamp
+- [x] [Low] Dropdown flickered closed between keystrokes → `placeholderData: keepPreviousData`
+- [x] [Low] Stale dropdown after submit cleared the text externally → `mention.close()` in both submit onSuccess handlers
+- [x] [Low] Unicode boundary divergence (`é@aur` triggered in JS but .NET `\w` is unicode → dead mention) → `WORD = /[\p{L}\p{N}_]/u`
+- [x] [Low] Query-key collision: `['u','search',q]` collides with `followKey('search')` for a user handled 'search' → `['handle-search', q]`; also `retry: false` so 429s aren't amplified
+- [x] [Low] Vacuous limit-8 assertion + untested `_` escaping + misleading test comment → seed-9 cap test, literal-underscore vs decoy test, comment fixed
+- Deferred: reverse-proxy ForwardedHeaders for ip rate-limit keying (Epic 10.1 owns deploy topology); trigram/text_pattern_ops index for prefix ILike (beta scale, noted in Dev Notes); attribution stash lost on middle-click (6.5 owns funnel instrumentation).
+- Rejected (verified): Users inner-join orphan risk (FK cascade makes orphaned owners impossible); owner-identity "leak" (response only reachable via valid share token — intended exposure); raw `<a href>` for public routes (project precedent); mock roster 404 links (story-documented); follow-toggle stale window + Escape-reopen + maxLength-bypass (negligible/server-validated).
+
 ### Change Log
 
 - 2026-07-03: implemented on `social/11-10-activity-feed` (PR #4, batched with 11.10). Gates: BFF build 0-warn + 260/260; frontend vite build + tsc -b + lint + lint:css + vitest 659/659; no python change (no schema). Status → review.
+- 2026-07-03 (review): 12 code-review patches applied (see Senior Developer Review). Gates after patches: BFF 262/262, vitest 661/661, build/tsc/lint/lint:css clean.

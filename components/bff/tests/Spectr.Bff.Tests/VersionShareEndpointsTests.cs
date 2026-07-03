@@ -173,7 +173,8 @@ public sealed class VersionShareEndpointsTests(WebApplicationFactory<Program> fa
         var token = s!.ShareToken!;
         var anon = _factory.CreateClient();
 
-        // Registration seeds a handle, so the owner identity is present.
+        // Registration auto-seeds a handle; overwrite it with a known value
+        // so the assertion is deterministic.
         var handle = $"own{Guid.NewGuid():N}"[..14];
         using (var scope = _factory.Services.CreateScope())
         {

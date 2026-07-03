@@ -6,7 +6,7 @@
  *   coachReply    → real coach analysis feed (each item keeps an `apply` patch).
  *   People/Chat   → real-time presence + messages + grant-control.
  */
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
 import {
   railTabsFor, type AccessDto, type ActorRef, type ModeId,
@@ -619,7 +619,8 @@ export function CommentsPanel({ versionId, access, isOwner, position, onSeek }: 
   const [replyTo, setReplyTo] = useState<string | null>(null);
   // Story 11.11 — @handle autocomplete; keydown routes through the dropdown
   // first so Enter picks a suggestion instead of submitting.
-  const mention = useMentionAutocomplete(setText);
+  const commentInputRef = useRef<HTMLInputElement>(null);
+  const mention = useMentionAutocomplete(setText, commentInputRef);
 
   const suggestionsQ = useSuggestions(vid);
   const { byCommentId: suggestionByComment, standalone: standaloneSuggestions } = useMemo(
@@ -640,7 +641,7 @@ export function CommentsPanel({ versionId, access, isOwner, position, onSeek }: 
     if (!body || !vid || postMut.isPending) return;
     postMut.mutate(
       { body, t: pinTime && Number.isFinite(position) ? Math.round(position) : null, parentId: replyTo },
-      { onSuccess: () => { setText(''); setPinTime(false); setReplyTo(null); } },
+      { onSuccess: () => { setText(''); mention.close(); setPinTime(false); setReplyTo(null); } },
     );
   };
 
@@ -729,7 +730,7 @@ export function CommentsPanel({ versionId, access, isOwner, position, onSeek }: 
               {mention.open && (
                 <MentionSuggestList items={mention.items} activeIndex={mention.activeIndex} onPick={mention.pick} />
               )}
-              <input value={text} onChange={(e) => { setText(e.target.value); mention.onChange(e.target.value, e.target.selectionStart); }} onKeyDown={(e) => { if (mention.handleKeyDown(e)) return; if (!e.nativeEvent.isComposing && e.key === 'Enter') submit(); }} onBlur={mention.close} placeholder={replyTo ? 'Reply…' : 'Leave feedback…'} style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 12, fontFamily: 'inherit' }} />
+              <input ref={commentInputRef} value={text} onChange={(e) => { setText(e.target.value); mention.onChange(e.target.value, e.target.selectionStart); }} onKeyDown={(e) => { if (mention.handleKeyDown(e)) return; if (!e.nativeEvent.isComposing && e.key === 'Enter') submit(); }} onBlur={mention.close} placeholder={replyTo ? 'Reply…' : 'Leave feedback…'} style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 12, fontFamily: 'inherit' }} />
             </div>
             <button type="button" onClick={() => setPinTime((p) => !p)} title="pin to current time" className="mono" style={{ fontSize: 9.5, color: pinTime ? 'var(--cyan)' : 'var(--muted)', background: 'none', padding: 0 }}>@{fmtTime(position)}</button>
             <button type="button" onClick={submit} disabled={postMut.isPending || !text.trim()} className="btn sm primary" style={{ padding: '4px 12px', fontSize: 11 }}>Post</button>

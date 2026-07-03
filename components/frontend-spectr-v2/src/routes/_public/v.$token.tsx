@@ -2,7 +2,6 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import { getAccessToken } from '../../api/fetcher';
 import { useMe } from '../../api/hooks';
 import { AnonCommentList, AnonGatePills } from '../../features/listen/AnonReviewerSurface';
 import { FollowProducerCta, RegisterCta } from '../../features/listen/ProducerCta';
@@ -35,11 +34,16 @@ function VersionViewPage() {
   const [name, setName] = useState('');
   const [body, setBody] = useState('');
   // Story 11.11 — @mention autocomplete in the anon composer.
-  const mention = useMentionAutocomplete(setBody);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const mention = useMentionAutocomplete(setBody, composerRef);
   // Story 11.11 — post-claim follow CTA: the register CTA carries
-  // next=/v/{token}, so a fresh registrant lands back here authed.
-  const authed = Boolean(getAccessToken());
-  const { data: me } = useMe(authed);
+  // next=/v/{token}, so a fresh registrant lands back here where the silent
+  // refresh resolves /auth/me. useMe(true) is the REACTIVE auth signal — a
+  // one-shot getAccessToken() read misses the refresh finishing after first
+  // render, which is exactly the post-claim moment (review patch). Anon
+  // visitors just get a failed /auth/me (no session) → me stays undefined.
+  const { data: me, isFetched: meFetched } = useMe(true);
+  const authed = Boolean(me);
   const ownerHandle = data?.ownerHandle ?? '';
   const { data: followState } = useFollowState(authed ? ownerHandle : '');
   const followMut = useFollow(ownerHandle);
@@ -87,7 +91,7 @@ function VersionViewPage() {
         authorDisplayName: name.trim() || null,
       },
       {
-        onSuccess: () => setBody(''),
+        onSuccess: () => { setBody(''); mention.close(); },
         onError: (err) => toast.error(err instanceof Error ? err.message : 'Could not post comment'),
       },
     );
@@ -114,19 +118,21 @@ function VersionViewPage() {
           v{data.versionNumber} · {data.visibility}
         </p>
         {/* Story 11.11 — the discovery loop: anon → register (attribution +
-            next back here); authed non-owner → follow the producer. */}
+            next back here); authed non-owner → follow the producer. Nothing
+            renders until /auth/me settles (no RegisterCta flash for a
+            returning registrant, no self-follow flash for the owner) and
+            self-detection uses the server's isSelf, not a handle compare. */}
         <div style={{ marginTop: 10 }}>
-          {!authed ? (
+          {!meFetched ? null : !authed ? (
             <RegisterCta token={token} ownerHandle={data.ownerHandle} />
-          ) : data.ownerHandle
-              && me?.handle?.toLowerCase() !== data.ownerHandle.toLowerCase() ? (
+          ) : data.ownerHandle && followState && !followState.isSelf ? (
             <FollowProducerCta
               ownerHandle={data.ownerHandle}
               ownerDisplayName={data.ownerDisplayName}
-              isFollowing={followState?.isFollowing ?? false}
+              isFollowing={followState.isFollowing}
               pending={followMut.isPending || unfollowMut.isPending}
               onToggle={() =>
-                (followState?.isFollowing ? unfollowMut.mutate() : followMut.mutate())}
+                (followState.isFollowing ? unfollowMut.mutate() : followMut.mutate())}
             />
           ) : null}
         </div>
@@ -170,6 +176,7 @@ function VersionViewPage() {
                 <MentionSuggestList items={mention.items} activeIndex={mention.activeIndex} onPick={mention.pick} />
               )}
               <textarea
+                ref={composerRef}
                 value={body}
                 onChange={(e) => { setBody(e.target.value); mention.onChange(e.target.value, e.target.selectionStart); }}
                 onKeyDown={(e) => { mention.handleKeyDown(e); }}

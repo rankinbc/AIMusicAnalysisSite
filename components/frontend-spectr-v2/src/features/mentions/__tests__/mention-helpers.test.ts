@@ -49,4 +49,16 @@ describe('applyMention', () => {
     expect(r.text).toBe('cc @kepler ');
     expect(r.caret).toBe('cc @kepler '.length);
   });
+
+  it('replaces the WHOLE token when picking from a mid-token caret', () => {
+    // caret after '@a' (query 'a') inside token 'aur' — the tail 'ur' must not survive
+    const r = applyMention('hey @aur ok', { start: 4, query: 'a' }, 'aurora');
+    expect(r.text).toBe('hey @aurora ok');
+  });
+});
+
+describe('unicode boundary parity with MentionParser', () => {
+  it("does not trigger after a non-ASCII word char (é@aur — .NET \\w is unicode)", () => {
+    expect(activeMentionQuery('é@aur', 5)).toBeNull();
+  });
 });

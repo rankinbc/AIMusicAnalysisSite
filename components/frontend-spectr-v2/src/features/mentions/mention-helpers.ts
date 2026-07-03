@@ -13,7 +13,9 @@ export interface ActiveMention {
 
 const TOKEN_CHAR = /[A-Za-z0-9._-]/;
 const ALNUM = /[A-Za-z0-9]/;
-const WORD = /[A-Za-z0-9_]/;
+// Unicode, to match .NET's \w in the parser's lookbehind: 'é@aur' must NOT
+// trigger here because MentionParser won't resolve it (é is a word char).
+const WORD = /[\p{L}\p{N}_]/u;
 
 /** The @token the caret is currently inside/at the end of, or null. */
 export function activeMentionQuery(text: string, caret: number): ActiveMention | null {
@@ -37,15 +39,17 @@ export function activeMentionQuery(text: string, caret: number): ActiveMention |
   return { start: i, query };
 }
 
-/** Replace the active token with '@handle ' and return the new text + caret.
- * The trailing space is skipped when one already follows the token (no
- * double-space); the caret still lands after that space. */
+/** Replace the WHOLE active token (not just up to the caret — picking from a
+ * mid-token caret must not leave tail garbage like 'hey @aurora ur ok') with
+ * '@handle ' and return the new text + caret. The trailing space is skipped
+ * when one already follows the token; the caret still lands after it. */
 export function applyMention(
   text: string,
   active: ActiveMention,
   handle: string,
 ): { text: string; caret: number } {
-  const end = active.start + 1 + active.query.length;
+  let end = active.start + 1 + active.query.length;
+  while (end < text.length && TOKEN_CHAR.test(text[end]!)) end++;
   const spaceFollows = end < text.length && /\s/.test(text[end]!);
   const inserted = `@${handle}` + (spaceFollows ? '' : ' ');
   return {

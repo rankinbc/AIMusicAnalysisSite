@@ -6,11 +6,14 @@
 
 export function RegisterCta({ token, ownerHandle }: { token: string; ownerHandle: string | null }) {
   const next = `/v/${token}`;
+  // token is attacker-choosable path input — encode it so a crafted token
+  // can't smuggle extra query params (e.g. `x&next=//evil`) into the URL.
+  const via = encodeURIComponent(`share_${token}`);
   return (
     <a
       className="btn primary sm"
       data-testid="register-cta"
-      href={`/register?via=share_${token}&next=${encodeURIComponent(next)}`}
+      href={`/register?via=${via}&next=${encodeURIComponent(next)}`}
       onClick={() => {
         // 7.4 attribution carry — write-only stash until 6.5 instrumentation.
         try { localStorage.setItem('spectr_attribution', `share_${token}`); } catch { /* private mode */ }
