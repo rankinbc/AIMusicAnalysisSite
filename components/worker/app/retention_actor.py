@@ -195,6 +195,23 @@ def _load_candidates(session, free_cutoff: datetime, lapsed_purgeable: set):
     return [r for r in rows if not (r.id in seen or seen.add(r.id))]
 
 
+def _purge_stale_auth_tokens(now: datetime) -> int:
+    """Story 4.3 review — auth_tokens (verify/reset) grows unbounded without
+    this: delete consumed rows and rows expired > 7 days (the trailing window
+    keeps very-recent history for support diagnosis). Own session; tolerant of
+    the table being absent (sqlite test DBs mirror only worker-read tables)."""
+    try:
+        with SessionFactory.begin() as s:
+            result = s.execute(text(
+                "DELETE FROM auth_tokens "
+                "WHERE consumed_at IS NOT NULL OR expires_at < :cutoff"
+            ), {"cutoff": now - timedelta(days=7)})
+            return result.rowcount or 0
+    except Exception:
+        logger.info("sweep_retention: auth_tokens purge skipped", exc_info=True)
+        return 0
+
+
 def run_sweep(now: datetime | None = None, lapsed_days: int | None = None) -> dict:
     """One idempotent sweep pass. Returns stats for logging/tests."""
     now = now or datetime.now(timezone.utc)
@@ -274,6 +291,7 @@ def run_sweep(now: datetime | None = None, lapsed_days: int | None = None) -> di
         )
 
     stats["anon_purged"] = _purge_unclaimed_anonymous(now)
+    stats["auth_tokens_purged"] = _purge_stale_auth_tokens(now)
 
     logger.info(
         "sweep_retention: purged=%d deleted=%d missing=%d failed=%d anon=%d skipped=%s",

@@ -23,6 +23,11 @@ public sealed class AuthTokenService(AppDbContext db)
     public async Task<string> IssueAsync(
         Guid userId, string purpose, TimeSpan ttl, CancellationToken ct = default)
     {
+        // Review-hardened: ONE active token per (user, purpose). Issuing
+        // invalidates priors, so a resend means the old link in a possibly
+        // compromised inbox dies instead of accumulating (up to 6 concurrent
+        // 30-min reset links otherwise).
+        await InvalidateOutstandingAsync(userId, purpose, ct);
         var raw = GenerateRawToken();
         db.AuthTokens.Add(new AuthToken
         {

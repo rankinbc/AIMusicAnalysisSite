@@ -16,18 +16,22 @@ export const Route = createFileRoute('/_public/verify-email')({
 
 function VerifyEmailPage() {
   const { token } = Route.useSearch();
-  const [status, setStatus] = useState<VerifyStatus>(token ? 'verifying' : 'missing');
+  // Capture once — the URL is stripped below so the single-use token never
+  // lingers in the address bar or browser history.
+  const [captured] = useState(() => token);
+  const [status, setStatus] = useState<VerifyStatus>(captured ? 'verifying' : 'missing');
   // StrictMode double-mount guard: the token is single-use — the second
   // (dev-only) effect run must not consume-then-fail it.
   const fired = useRef(false);
 
   useEffect(() => {
-    if (!token || fired.current) return;
+    if (!captured || fired.current) return;
     fired.current = true;
-    fetcher<void>({ url: '/auth/verify-email', method: 'POST', data: { token } })
+    window.history.replaceState(null, '', window.location.pathname);
+    fetcher<void>({ url: '/auth/verify-email', method: 'POST', data: { token: captured } })
       .then(() => setStatus('success'))
       .catch(() => setStatus('error'));
-  }, [token]);
+  }, [captured]);
 
   return (
     <VerifyEmailView

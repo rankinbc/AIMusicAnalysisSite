@@ -78,6 +78,26 @@ claude-fable-5 (Claude Code)
 - Frontend: `styles/forms.module.css`, `features/auth/AuthFlowViews.tsx` (new) + test, routes `_public/{verify-email,forgot-password,reset-password}.tsx` (new), `_public/login.tsx`, routeTree.gen
 - Config: `.env.example` (RateLimits__Enabled)
 
+### Senior Developer Review (AI)
+
+2026-07-03 — bmad-code-review (Blind Hunter auth-security + Edge Case Hunter/Acceptance Auditor; auditor confirmed the atomic-consume path executed against real Postgres via token-row inspection and ran both suites). Outcome: **Approve after patches** — 15 patches applied:
+
+- [x] [High] **Consume→write not transactional**: a crash between password-save and RevokeAll could commit "password changed, attacker sessions alive"; an inactive user burned their only link on a dead end → BOTH verify-email and reset-password now wrap consume+writes in one transaction (rollback leaves the token retryable)
+- [x] [High] **forgot-password timing oracle**: existing accounts did token-insert + enqueue in-request (measurable delta vs unknown accounts) → issue/send moved to a fire-and-forget background scope; every caller gets an identical immediate 204; tests poll for the recorded email
+- [x] [High] **Access-JWT survival overclaim**: reset revokes refresh tokens but outstanding access JWTs live ≤15 min → copy/comments now say so honestly; token-versioning deferred to 4.6 (account deletion needs the same mechanism); revoke count logged
+- [x] [Med] Unbounded token issuance → `IssueAsync` invalidates prior same-purpose tokens (ONE active link per purpose — a resend kills the old link in a possibly-compromised inbox); `sweep_retention` purges consumed/7-day-expired `auth_tokens` (worker test incl. absent-table tolerance)
+- [x] [Med] Redis outage 500'd every auth endpoint → rate limiter fails OPEN with loud log (availability of login beats the limiter)
+- [x] [Med] forgot-password spam ceiling: +10/24 h per-email daily cap (3/15 min alone = 288 unsolicited emails/day at a victim)
+- [x] [Med] Raw tokens lingered in URL/browser history → both pages capture-then-`history.replaceState` strip the token before any network call
+- [x] [Med] No max password length (BCrypt hash-DoS / 72-byte truncation) → 256-char cap on register AND reset
+- [x] [Med] `App:FrontendOrigin` localhost fallback duplicated + silent → single `FrontendOrigin` helper with loud warning (boot validation → 10.1)
+- [x] [Low] Verify stamps skipped for inactive users (IsActive in the UPDATE predicate); reset now stamps `EmailVerifiedAt` (consuming an emailed link proves mailbox control — no pointless re-verification at the AR26 gate)
+- [x] [Low] Frontend raw "HTTP 400" leaked to users → friendly copy always on forgot/reset; verify-email error copy no longer points at a profile-resend UI that doesn't exist yet
+- [x] [Low] Cross-purpose test added (verify token worthless on reset endpoint AND not consumed by the attempt); story decision-4 login-limit text reconciled (10/min both arms)
+- Deferred: JWT token-versioning/password_changed_at claim (4.6 — per-request DB check needs design); ForwardedHeaders/trusted-proxy for per-IP arms + `Retry-After` header + `SkippableFact` semantics (10.1/10.2); password-changed notification email (4.4 lifecycle emails); `SqlQuery` composability note accepted (empirically verified on EF10/Npgsql, no LINQ composition wraps it — comment documents the constraint).
+- Rejected: FK on auth_tokens.user_id (repo convention: no DB-level FKs — story 1.5 B-M1 precedent; 4.6 delete story owns cleanup); per-email login-arm removal (victim-lockout tradeoff beats unmitigated cross-IP credential stuffing; 1-min window).
+
 ### Change Log
 
 - 2026-07-03: implemented on `account/4-3-verify-reset`. Gates: BFF 308/308, vitest 677, shared 27, tsc/lint/lint:css/ruff clean. Status → review.
+- 2026-07-03 (review): 15 patches applied. Gates after: BFF 309/309 (7 auth-flow tests), worker 576 + 3 xfail, vitest 677, all linters clean.

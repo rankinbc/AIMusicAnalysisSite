@@ -20,8 +20,8 @@ export function VerifyEmailView(props: { status: VerifyStatus; loginLink: ReactN
         )}
         {status === 'error' && (
           <p className={s.subtitle}>
-            This link is invalid, expired, or already used. Sign in and request a
-            fresh one from your profile.
+            This link is invalid, expired, or already used — sign in and
+            request a fresh one.
           </p>
         )}
         {status === 'missing' && (

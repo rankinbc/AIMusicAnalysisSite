@@ -93,6 +93,30 @@ public sealed class AuthFlowTests(WebApplicationFactory<Program> factory)
     }
 
     [Fact]
+    public async Task Tokens_Are_Purpose_Bound()
+    {
+        if (!await TestDb.Reachable(_factory)) { return; }
+
+        var (f, email) = Build();
+        var client = f.CreateClient();
+        var address = $"xp+{Guid.NewGuid():N}@spectr.test";
+        var reg = await client.PostAsJsonAsync("/api/auth/register",
+            new { email = address, password = "CorrectHorse9!" });
+        reg.EnsureSuccessStatusCode();
+
+        // A VERIFY token must be worthless on the RESET endpoint.
+        var verifyToken = TokenFromUrl(
+            email.Sent.Single(s => s.Template == EmailTemplates.Verification).Data["verifyUrl"]);
+        var cross = await client.PostAsJsonAsync("/api/auth/reset-password",
+            new { token = verifyToken, newPassword = "NewPassword9!" });
+        Assert.Equal(HttpStatusCode.BadRequest, cross.StatusCode);
+
+        // And it still works for its OWN purpose (the cross attempt did not consume it).
+        var verify = await client.PostAsJsonAsync("/api/auth/verify-email", new { token = verifyToken });
+        Assert.Equal(HttpStatusCode.NoContent, verify.StatusCode);
+    }
+
+    [Fact]
     public async Task Forgot_Password_Never_Reveals_Account_Existence()
     {
         if (!await TestDb.Reachable(_factory)) { return; }
@@ -103,6 +127,7 @@ public sealed class AuthFlowTests(WebApplicationFactory<Program> factory)
         var unknown = await client.PostAsJsonAsync("/api/auth/forgot-password",
             new { email = $"ghost+{Guid.NewGuid():N}@spectr.test" });
         Assert.Equal(HttpStatusCode.NoContent, unknown.StatusCode);
+        await Task.Delay(400); // issue/send runs off-request now — give it a beat
         Assert.DoesNotContain(email.Sent, s => s.Template == EmailTemplates.Reset);
 
         // Malformed input: same 204 shape — no oracle.
@@ -125,11 +150,19 @@ public sealed class AuthFlowTests(WebApplicationFactory<Program> factory)
         reg.EnsureSuccessStatusCode();
         var oldCookie = ExtractRefreshCookie(reg)!;
 
-        // Request reset — email recorded with the raw token.
+        // Request reset — the issue/send now runs OFF-REQUEST (timing-oracle
+        // fix), so poll briefly for the recorded email.
         var forgot = await client.PostAsJsonAsync("/api/auth/forgot-password", new { email = address });
         Assert.Equal(HttpStatusCode.NoContent, forgot.StatusCode);
-        var resetMail = email.Sent.Single(s => s.Template == EmailTemplates.Reset);
-        var token = TokenFromUrl(resetMail.Data["resetUrl"]);
+        (string To, string Template, IReadOnlyDictionary<string, string> Data) resetMail = default;
+        for (var i = 0; i < 50; i++)
+        {
+            resetMail = email.Sent.FirstOrDefault(s => s.Template == EmailTemplates.Reset);
+            if (resetMail.Template is not null) break;
+            await Task.Delay(100);
+        }
+        Assert.Equal(EmailTemplates.Reset, resetMail.Template);
+        var token = TokenFromUrl(resetMail.Data!["resetUrl"]);
 
         // Weak new password rejected without consuming the token.
         var weak = await client.PostAsJsonAsync("/api/auth/reset-password",

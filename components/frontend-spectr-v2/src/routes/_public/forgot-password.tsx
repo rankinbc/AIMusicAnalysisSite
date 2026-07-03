@@ -21,8 +21,9 @@ function ForgotPasswordPage() {
     try {
       await fetcher<void>({ url: '/auth/forgot-password', method: 'POST', data: { email } });
       setSent(true); // server always 204s — same message either way (no oracle)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong — try again.');
+    } catch {
+      // Friendly copy always (a 429 here just means slow down).
+      setError('Something went wrong — wait a moment and try again.');
     } finally {
       setPending(false);
     }
