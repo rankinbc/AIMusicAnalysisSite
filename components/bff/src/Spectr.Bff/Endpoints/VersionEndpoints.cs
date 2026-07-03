@@ -256,6 +256,8 @@ public static class VersionEndpoints
         ClaimsPrincipal currentUser,
         AppDbContext db,
         IFileStorage storage,
+        IMultipartObjectStore objectStore,
+        HttpResponse response,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -267,23 +269,10 @@ public static class VersionEndpoints
         ).FirstOrDefaultAsync(ct);
         if (row is null) return Results.NotFound();
 
-        var key = row.FilePath;
-        if (!await storage.ExistsAsync(key, ct)) return Results.NotFound();
-
-        var stream = await storage.OpenReadAsync(key, ct);
-        var ext = Path.GetExtension(key).ToLowerInvariant();
-        var contentType = ext switch
-        {
-            ".wav" => "audio/wav",
-            ".flac" => "audio/flac",
-            ".mp3" => "audio/mpeg",
-            ".aif" or ".aiff" => "audio/aiff",
-            ".ogg" or ".oga" => "audio/ogg",
-            ".m4a" => "audio/mp4",
-            _ => "application/octet-stream",
-        };
-
-        return Results.File(stream, contentType, enableRangeProcessing: true);
+        // Story 3.3: local-first proxy, else 302 to a short-lived presigned GET.
+        return await MediaDelivery.ServeAsync(
+            storage, objectStore, row.FilePath, MediaDelivery.AudioContentType(row.FilePath),
+            response, ct);
     }
 
     // POST /api/versions  (multipart/form-data: file [required], song_id?, genre_hint?, analyze?)
@@ -398,6 +387,7 @@ public static class VersionEndpoints
         ClaimsPrincipal currentUser,
         AppDbContext db,
         IFileStorage storage,
+        IMultipartObjectStore objectStore,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -409,47 +399,49 @@ public static class VersionEndpoints
         ).FirstOrDefaultAsync(ct);
         if (row is null) return Results.NotFound();
 
+        // Story 3.3 — availability = local OR object storage. Without the S3
+        // arm, every S3-only file shows "Expired" in FilesTab and the new
+        // presigned download path is unreachable from the UI.
+        async Task<(long? Size, bool Exists)> ProbeAsync(string key)
+        {
+            if (await storage.ExistsAsync(key, ct))
+                return (await storage.GetFileSizeAsync(key, ct), true);
+            if (objectStore.IsConfigured)
+            {
+                var size = await objectStore.GetObjectSizeAsync(key, ct);
+                if (size is not null) return (size, true);
+            }
+            return (null, false);
+        }
+
         var files = new List<VersionFileEntry>();
 
         // Mix audio
         var mixExt = Path.GetExtension(row.FilePath);
-        files.Add(new VersionFileEntry(
-            "mix",
-            $"mix{mixExt}",
-            await storage.GetFileSizeAsync(row.FilePath, ct),
-            await storage.ExistsAsync(row.FilePath, ct)));
+        var mix = await ProbeAsync(row.FilePath);
+        files.Add(new VersionFileEntry("mix", $"mix{mixExt}", mix.Size, mix.Exists));
 
         // Ableton project
         if (!string.IsNullOrEmpty(row.AlsFilePath))
         {
             var alsExt = Path.GetExtension(row.AlsFilePath);
-            files.Add(new VersionFileEntry(
-                "als",
-                $"project{alsExt}",
-                await storage.GetFileSizeAsync(row.AlsFilePath, ct),
-                await storage.ExistsAsync(row.AlsFilePath, ct)));
+            var als = await ProbeAsync(row.AlsFilePath);
+            files.Add(new VersionFileEntry("als", $"project{alsExt}", als.Size, als.Exists));
         }
 
         // Reference track
         if (!string.IsNullOrEmpty(row.ReferencePath))
         {
             var refExt = Path.GetExtension(row.ReferencePath);
-            files.Add(new VersionFileEntry(
-                "reference",
-                $"reference{refExt}",
-                await storage.GetFileSizeAsync(row.ReferencePath, ct),
-                await storage.ExistsAsync(row.ReferencePath, ct)));
+            var reference = await ProbeAsync(row.ReferencePath);
+            files.Add(new VersionFileEntry("reference", $"reference{refExt}", reference.Size, reference.Exists));
         }
 
         // Staged / confirmed stems (bulk flow)
         foreach (var entry in ReadRaw(row.StemPathsRaw))
         {
-            files.Add(new VersionFileEntry(
-                "stem",
-                entry.OriginalFilename,
-                await storage.GetFileSizeAsync(entry.Key, ct),
-                await storage.ExistsAsync(entry.Key, ct),
-                entry.Id));
+            var stem = await ProbeAsync(entry.Key);
+            files.Add(new VersionFileEntry("stem", entry.OriginalFilename, stem.Size, stem.Exists, entry.Id));
         }
 
         return Results.Ok(new VersionFilesResponse(versionId, files));
@@ -461,6 +453,8 @@ public static class VersionEndpoints
         ClaimsPrincipal currentUser,
         AppDbContext db,
         IFileStorage storage,
+        IMultipartObjectStore objectStore,
+        HttpResponse response,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -471,12 +465,10 @@ public static class VersionEndpoints
             select v
         ).FirstOrDefaultAsync(ct);
         if (row is null || string.IsNullOrEmpty(row.AlsFilePath)) return Results.NotFound();
-        if (!await storage.ExistsAsync(row.AlsFilePath, ct)) return Results.NotFound();
 
-        var stream = await storage.OpenReadAsync(row.AlsFilePath, ct);
-        return Results.File(stream, "application/octet-stream",
-            fileDownloadName: Path.GetFileName(row.AlsFilePath),
-            enableRangeProcessing: false);
+        return await MediaDelivery.ServeAsync(
+            storage, objectStore, row.AlsFilePath, "application/octet-stream", response, ct,
+            rangeProcessing: false, downloadName: Path.GetFileName(row.AlsFilePath));
     }
 
     // ── GET /api/versions/{id}/reference — download the reference audio ───────
@@ -485,6 +477,8 @@ public static class VersionEndpoints
         ClaimsPrincipal currentUser,
         AppDbContext db,
         IFileStorage storage,
+        IMultipartObjectStore objectStore,
+        HttpResponse response,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -495,20 +489,11 @@ public static class VersionEndpoints
             select v
         ).FirstOrDefaultAsync(ct);
         if (row is null || string.IsNullOrEmpty(row.ReferencePath)) return Results.NotFound();
-        if (!await storage.ExistsAsync(row.ReferencePath, ct)) return Results.NotFound();
 
-        var stream = await storage.OpenReadAsync(row.ReferencePath, ct);
-        var ext = Path.GetExtension(row.ReferencePath).ToLowerInvariant();
-        var contentType = ext switch
-        {
-            ".wav" => "audio/wav",
-            ".flac" => "audio/flac",
-            ".mp3" => "audio/mpeg",
-            _ => "application/octet-stream",
-        };
-        return Results.File(stream, contentType,
-            fileDownloadName: Path.GetFileName(row.ReferencePath),
-            enableRangeProcessing: false);
+        return await MediaDelivery.ServeAsync(
+            storage, objectStore, row.ReferencePath,
+            MediaDelivery.AudioContentType(row.ReferencePath), response, ct,
+            rangeProcessing: false, downloadName: Path.GetFileName(row.ReferencePath));
     }
 
     // ── POST /api/versions/{id}/stems ───────────────────────────────────────
@@ -986,17 +971,17 @@ public static class VersionEndpoints
     // the path contains "/audio", which the JwtBearer OnMessageReceived hook whitelists).
     private static async Task<IResult> StreamStemAudio(
         Guid versionId, string stemId, ClaimsPrincipal currentUser,
-        AppDbContext db, IFileStorage storage, CancellationToken ct)
+        AppDbContext db, IFileStorage storage, IMultipartObjectStore objectStore,
+        HttpResponse response, CancellationToken ct)
     {
         var userId = currentUser.UserId();
         var version = await OwnedVersion(db, versionId, userId, ct);
         if (version is null) return Results.NotFound();
         var entry = ReadRaw(version.StemPathsRaw).FirstOrDefault(e => e.Id == stemId);
-        if (entry is null || !await storage.ExistsAsync(entry.Key, ct)) return Results.NotFound();
-        var stream = await storage.OpenReadAsync(entry.Key, ct);
-        var ext = Path.GetExtension(entry.Key).ToLowerInvariant();
-        var contentType = ext == ".wav" ? "audio/wav" : ext == ".flac" ? "audio/flac" : "application/octet-stream";
-        return Results.File(stream, contentType, enableRangeProcessing: true);
+        if (entry is null) return Results.NotFound();
+        // Story 3.3: local-first proxy, else 302 to a short-lived presigned GET.
+        return await MediaDelivery.ServeAsync(
+            storage, objectStore, entry.Key, MediaDelivery.AudioContentType(entry.Key), response, ct);
     }
 
     // ── Story 3.1: shared song/version row creation ─────────────────────────

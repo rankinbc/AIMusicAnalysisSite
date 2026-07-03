@@ -31,6 +31,7 @@ def s3_enabled() -> bool:
 
 def _client():
     import boto3  # lazy: keeps the module importable when boto3 isn't installed
+    from botocore.config import Config
 
     return boto3.client(
         "s3",
@@ -38,6 +39,10 @@ def _client():
         aws_access_key_id=os.environ.get("S3_ACCESS_KEY"),
         aws_secret_access_key=os.environ.get("S3_SECRET_KEY"),
         region_name=os.environ.get("S3_REGION", "auto"),
+        # Bounded: this worker runs concurrency=1 — botocore's default
+        # timeouts/retries would stall the whole queue for minutes when the
+        # endpoint hangs (best-effort uploads must fail fast instead).
+        config=Config(connect_timeout=5, read_timeout=60, retries={"max_attempts": 2}),
     )
 
 
@@ -101,3 +106,31 @@ def cleanup_all(fetched: list[Path]) -> None:
     """cleanup_local over a batch of resolve_local fetches."""
     for f in fetched:
         cleanup_local(f)
+
+
+def put_json(key: str, obj: object) -> None:
+    """Story 3.3 (AR20) — upload a JSON document (e.g. reports/{jobId}.json).
+
+    Callers treat this as BEST-EFFORT: the canonical report store is Postgres
+    (analyses.final_json); a failed upload must never fail a completed job.
+    NaN/Infinity floats (common in audio metrics) are coerced to null so the
+    durable artifact is STRICT JSON — Python's default allow_nan would emit
+    tokens that System.Text.Json and browsers reject.
+    """
+    import json
+
+    bucket = os.environ.get("S3_BUCKET", "spectr")
+    strict = json.loads(json.dumps(obj, default=str), parse_constant=lambda _c: None)
+    body = json.dumps(strict, default=str).encode("utf-8")
+    _client().put_object(Bucket=bucket, Key=key, Body=body, ContentType="application/json")
+    logger.info("object_store: put s3://%s/%s (%d bytes)", bucket, key, len(body))
+
+
+def put_file(key: str, path: str | Path, content_type: str = "application/octet-stream") -> None:
+    """Story 3.3 — upload a local file under ``key`` (result images use their
+    EXISTING local keys so the BFF's media routes serve them unchanged)."""
+    bucket = os.environ.get("S3_BUCKET", "spectr")
+    _client().upload_file(
+        str(path), bucket, key, ExtraArgs={"ContentType": content_type}
+    )
+    logger.info("object_store: put s3://%s/%s (from %s)", bucket, key, path)

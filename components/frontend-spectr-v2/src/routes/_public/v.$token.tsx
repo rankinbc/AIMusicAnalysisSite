@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 
 import { useMe } from '../../api/hooks';
 import { AnonCommentList, AnonGatePills } from '../../features/listen/AnonReviewerSurface';
+import { createMediaRetry } from '../../features/listen/media-retry';
 import { FollowProducerCta, RegisterCta } from '../../features/listen/ProducerCta';
 import { useAnonBookmark, useAnonComments, usePostAnonComment } from '../../features/listen/useAnonFeedback';
 import { useVersionView } from '../../features/listen/useVersionShare';
@@ -53,9 +54,21 @@ function VersionViewPage() {
     const a = audioRef.current;
     if (!a) return;
     const onTime = () => setPosition(a.currentTime);
+    // Story 3.3 (AC4): expired presigned URL on resume → re-request the same
+    // API URL (the server mints a fresh presign) and restore the position.
+    const retry = createMediaRetry({
+      getSrc: () => `/api/v/${token}/audio`,
+      onGiveUp: () => toast.error('Could not load audio.'),
+    });
+    const onErr = () => { void retry.handleError(a); };
     a.addEventListener('timeupdate', onTime);
-    return () => a.removeEventListener('timeupdate', onTime);
-  }, [data]);
+    a.addEventListener('error', onErr);
+    return () => {
+      a.removeEventListener('timeupdate', onTime);
+      a.removeEventListener('error', onErr);
+      retry.dispose();
+    };
+  }, [data, token]);
 
   if (isLoading) {
     return (

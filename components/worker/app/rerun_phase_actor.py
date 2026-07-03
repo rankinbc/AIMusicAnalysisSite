@@ -194,6 +194,7 @@ def rerun_phase(
         if row is None:
             raise RuntimeError(f"analysis {analysis_id} disappeared mid-rerun")
         row.final_json = merged_safe
+        report_job_id = getattr(row, "job_id", None)
 
         j = s.get(AnalysisJob, rerun_jid)
         if j is not None:
@@ -203,6 +204,14 @@ def rerun_phase(
             j.completed_at = _utc_now()
             j.error_message = None
             j.failed_at = None
+
+    # Story 3.3 (AC2) — keep the durable R2 report in step with the merged
+    # final_json (best-effort; Postgres stays canonical).
+    if report_job_id is not None and object_store.s3_enabled():
+        try:
+            object_store.put_json(f"reports/{report_job_id}.json", merged_safe)
+        except Exception:
+            logger.warning("durable report refresh failed job=%s", report_job_id, exc_info=True)
 
     logger.info(
         "rerun_phase: complete rerun_job=%s analysis=%s phase=%s",
