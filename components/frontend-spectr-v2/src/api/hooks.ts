@@ -2,6 +2,7 @@
 // these once the BFF emits openapi.json against a live database.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { capture } from '../lib/analytics';
 import { fetcher } from './fetcher';
 import type {
   ActivityItemDto,
@@ -623,7 +624,10 @@ export function useFeedbackVerdict(jobId: string) {
         method: 'POST',
         data: { feedback },
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['verdicts', jobId] }),
+    onSuccess: (_d, vars) => {
+      capture('verdict_feedback', { feedback: vars.feedback }); // KPI: helpful/wrong
+      void qc.invalidateQueries({ queryKey: ['verdicts', jobId] });
+    },
   });
 }
 

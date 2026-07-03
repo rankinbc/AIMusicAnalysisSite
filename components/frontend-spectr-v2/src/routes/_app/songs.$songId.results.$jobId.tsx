@@ -1,6 +1,9 @@
 import { Link, createFileRoute } from '@tanstack/react-router';
+import { useEffect, useRef } from 'react';
 
 import { useJob, useJobResults } from '../../api/hooks';
+import { capture } from '../../lib/analytics';
+import { setCorrelation } from '../../lib/sentry';
 import { ReportView } from '../../features/results/ReportView';
 import {
   DEFAULT_RESULTS_TAB,
@@ -34,6 +37,23 @@ function ResultsPage() {
   const isComplete = job.data?.status === 'complete';
   const isFailed = job.data?.status === 'failed';
   const results = useJobResults(jobId, isComplete);
+
+  // Story 10.3 (NFR30): frontend joins the correlation chain — render errors
+  // on this page carry the job id; report_viewed pairs with job timestamps
+  // for the time-to-first-insight KPI.
+  useEffect(() => {
+    setCorrelation(jobId);
+    return () => setCorrelation(null);
+  }, [jobId]);
+  const viewCaptured = useRef<string | null>(null);
+  useEffect(() => {
+    // Once per job per mount-session — remounts/StrictMode must not inflate
+    // the TTFI denominator.
+    if (isComplete && viewCaptured.current !== jobId) {
+      viewCaptured.current = jobId;
+      capture('report_viewed', { job_id: jobId });
+    }
+  }, [isComplete, jobId]);
 
   if (job.error) {
     return (

@@ -27,6 +27,29 @@ public sealed class DeployTopologyTests(WebApplicationFactory<Program> factory)
     }
 
     [Fact]
+    public async Task Metrics_Endpoint_Exposes_Http_And_Queue_Depth_Gauges()
+    {
+        if (!await TestDb.Reachable(_factory)) { return; }
+
+        // Warm one HTTP request so http metrics families exist, then scrape.
+        var client = _factory.CreateClient();
+        await client.GetAsync("/healthz");
+        var resp = await client.GetAsync("/metrics");
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var body = await resp.Content.ReadAsStringAsync();
+        Assert.Contains("spectr_queue_depth", body);            // 10.3 gauge family (always registered)
+        Assert.Contains("http_request_duration_seconds", body); // prometheus-net HTTP metrics
+        // Label samples only materialize when the before-collect LLEN
+        // succeeds — don't couple the suite to a live Redis (review).
+        using var scope = _factory.Services.CreateScope();
+        var redis = scope.ServiceProvider.GetRequiredService<StackExchange.Redis.IConnectionMultiplexer>();
+        if (redis.IsConnected)
+        {
+            Assert.Contains("queue=\"analysis-paid\"", body);
+        }
+    }
+
+    [Fact]
     public async Task BootMigrator_Is_A_NoOp_On_A_Migrated_Schema_And_Reruns_Safely()
     {
         if (!await TestDb.Reachable(_factory)) { return; }

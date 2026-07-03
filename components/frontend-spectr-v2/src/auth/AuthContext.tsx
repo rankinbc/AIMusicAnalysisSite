@@ -10,6 +10,7 @@ import {
 } from 'react';
 
 import { fetcher, onAuthCleared, onTokenRefreshed, setAccessToken } from '../api/fetcher';
+import { identifyUser } from '../lib/analytics';
 import type { AuthResponse, AuthedUser } from '../api/types';
 
 interface AuthState {
@@ -75,6 +76,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mountedRef.current = false;
     };
   }, [refresh]);
+
+  // Story 10.3 — PostHog identity follows the auth state (no-op without a
+  // key): events join to the user id; logout resets the device identity so
+  // shared machines don't bleed.
+  useEffect(() => {
+    if (!state.isLoading) identifyUser(state.user?.id ?? null);
+  }, [state.user?.id, state.isLoading]);
 
   // Listen to fetcher events — tokens refreshed by the 401 handler, or
   // refresh-failed events that should clear our state.

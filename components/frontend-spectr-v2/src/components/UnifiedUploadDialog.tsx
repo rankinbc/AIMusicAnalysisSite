@@ -4,6 +4,8 @@ import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
 import { toast } from 'sonner';
 
+import { capture } from '../lib/analytics';
+
 import { ApiError, fetcher } from '../api/fetcher';
 import {
   useCreateSong,
@@ -259,6 +261,12 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
   };
 
   const finishNavigate = (sid: string, jobId: string) => {
+    // KPI: upload_completed + attachment adoption (.als attach rate row).
+    capture('upload_completed', {
+      als_attached: !!als,
+      stems_attached: stemRows.length > 0,
+      reference_attached: !!refFile,
+    });
     onOpenChange(false);
     reset();
     void navigate({ to: '/songs/$songId/results/$jobId', params: { songId: sid, jobId } });

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { getAccessToken } from '../../api/fetcher';
+import { capture } from '../../lib/analytics';
 import type {
   CoachCapsDto,
   CoachConversationDto,
@@ -298,6 +299,7 @@ export function CoachChat({
         signal: ac.signal,
       });
 
+      if (postRes.ok) capture('coach_message_sent'); // KPI: follow-up rate
       if (!postRes.ok) {
         const errBody = await postRes.json().catch(() => null as unknown);
         const code = extractErrorCode(errBody);
