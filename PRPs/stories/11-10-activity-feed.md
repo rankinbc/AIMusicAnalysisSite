@@ -1,6 +1,6 @@
 # Story 11.10: Activity Feed
 
-Status: review
+Status: done
 
 ## Story
 

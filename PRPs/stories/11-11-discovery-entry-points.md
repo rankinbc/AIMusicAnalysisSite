@@ -1,6 +1,6 @@
 # Story 11.11: Discovery Entry-Points
 
-Status: review
+Status: done
 
 ## Story
 

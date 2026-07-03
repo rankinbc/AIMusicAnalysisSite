@@ -1,6 +1,6 @@
 # Story 3.2: Worker-Side Validation & Attachments via R2
 
-Status: review
+Status: done
 
 ## Story
 
