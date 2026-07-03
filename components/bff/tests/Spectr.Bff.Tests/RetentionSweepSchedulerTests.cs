@@ -192,6 +192,7 @@ public sealed class RetentionSweepSchedulerTests(WebApplicationFactory<Program> 
         {
             using var scope = f.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await TestAuth.AllowPurgeAsync(db);
             await db.CreditLedger.Where(e => e.UserId == userId).ExecuteDeleteAsync();
             await CleanupAsync(f, userId);
         }

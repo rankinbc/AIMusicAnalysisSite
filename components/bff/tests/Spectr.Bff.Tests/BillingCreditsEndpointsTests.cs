@@ -110,6 +110,7 @@ public sealed class BillingCreditsEndpointsTests(WebApplicationFactory<Program> 
     {
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await TestAuth.AllowPurgeAsync(db);
         await db.CreditLedger.Where(e => e.UserId == userId).ExecuteDeleteAsync();
         await db.UsageEvents.Where(e => e.UserId == userId).ExecuteDeleteAsync();
         await db.WebhookEvents

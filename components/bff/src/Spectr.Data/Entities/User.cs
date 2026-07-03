@@ -38,6 +38,14 @@ public sealed class User
     [Column("token_version")]
     public int TokenVersion { get; set; } = 1;
 
+    // Story 10.5 — operator ban (FR46/10.6 AC2). Non-null = banned. Bans bump
+    // TokenVersion (sessions die ≤60 s) and block login/refresh with 403.
+    [Column("banned_at")]
+    public DateTimeOffset? BannedAt { get; set; }
+
+    [Column("ban_reason"), MaxLength(500)]
+    public string? BanReason { get; set; }
+
     // Identity / public profile fields (added in v2 — see REQUIREMENTS_ARCHITECTURE.md §Identity)
     [Column("handle"), MaxLength(32)]
     public string? Handle { get; set; }

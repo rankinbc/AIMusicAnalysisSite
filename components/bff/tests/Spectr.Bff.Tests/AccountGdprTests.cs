@@ -165,6 +165,7 @@ public sealed class AccountGdprTests(WebApplicationFactory<Program> factory)
             using var scope = f.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             await db.Subscriptions.Where(s => s.UserId == userId).ExecuteDeleteAsync();
+            await TestAuth.AllowPurgeAsync(db);
             await db.AuditLogs.Where(a => a.ActorUserId == userId).ExecuteDeleteAsync();
             await db.Users.Where(u => u.Id == userId).ExecuteDeleteAsync();
         }

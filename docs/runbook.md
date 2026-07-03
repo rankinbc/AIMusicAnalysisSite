@@ -123,6 +123,39 @@ migration means merge == deploy == applied.
 | Share-link k-factor | Epic 6 share instrumentation (not yet) |
 | Failed-payment recovery | `subscriptions.next_payment_attempt` + Stripe |
 
+## Admin surface (story 10.5 / FR46 / NFR7)
+
+Elevated auth = `X-Admin-Key` header (env `ADMIN_API_KEY`, generate with
+`openssl rand -base64 48`; ≥32 chars boot-enforced outside Development).
+UNSET = every `/api/admin/*` route 404s (surface invisible). Rotation:
+edit `.env` → `./deploy.sh redeploy`. curl console (no UI in v1):
+
+```bash
+H='-H "X-Admin-Key: $ADMIN_API_KEY"'
+# Billing trail (id or email) — the refund-decision evidence
+curl -s $H https://<domain>/api/admin/users/user@example.com/billing | jq
+# Refund: credits back and/or a Stripe payment-intent refund (idempotent per intent)
+curl -s $H -X POST https://<domain>/api/admin/refunds \
+  -d '{"userId":"<uuid>","credits":2,"paymentIntentId":"pi_...","reason":"double charge #1234"}' \
+  -H 'Content-Type: application/json'
+# Ban / unban (bans kill live sessions <=60s + block login/refresh with 403 account_banned)
+curl -s $H -X POST https://<domain>/api/admin/users/<uuid>/ban -d '{"reason":"scripted abuse"}' -H 'Content-Type: application/json'
+# Feature flag (BFF cache evicted instantly; worker TTL <=60s)
+curl -s $H -X PUT https://<domain>/api/admin/flags/llm_budget_global_usd -d '{"value":"250","reason":"raise ceiling"}' -H 'Content-Type: application/json'
+# Prompt rollback without redeploy (worker pin TTL <=60s; null = live version)
+curl -s $H -X PUT https://<domain>/api/admin/prompts/low_end -d '{"pinnedVersion":"1.2.0","reason":"v1.3 regression"}' -H 'Content-Type: application/json'
+# The evidence trail
+curl -s $H "https://<domain>/api/admin/audit?target=<uuid>" | jq
+```
+
+- Every mutation REQUIRES a reason and writes an `audit_log` row
+  (actor `00000000-…` = the operator sentinel) in the same transaction.
+- `audit_log` and `credit_ledger` are TRIGGER-enforced append-only.
+  Deliberate escape hatch for a court-ordered purge:
+  `SET spectr.allow_purge = '1'` in the session first (greppable act).
+- `webhook_events` carries no user_id (payload hashes only) — the trail
+  endpoint returns the user's Stripe ids + recent events for correlation.
+
 ## Alerting & status (story 10.4 / FR49 / NFR16)
 
 **Phone pushes**: install the ntfy app, subscribe to a PRIVATE topic

@@ -246,6 +246,11 @@ public static class AuthEndpoints
             return Results.Unauthorized();
         if (!user.IsActive)
             return Results.Unauthorized();
+        // Story 10.5 — bans block login with an EXPLICIT code (not a silent
+        // 401: a banned user retrying passwords is noise for support).
+        if (user.BannedAt is not null)
+            return ErrorEnvelope.Build(403, "account_banned",
+                "This account is suspended. Contact support.");
 
         var (rawRefresh, _) = await refresh.IssueAsync(user.Id, ct);
         resp.Cookies.Append(RefreshTokenService.CookieName, rawRefresh, refresh.CookieOptions());
@@ -320,6 +325,10 @@ public static class AuthEndpoints
 
         var user = await db.Users.FirstOrDefaultAsync(u => u.Id == row.UserId, ct);
         if (user is null || !user.IsActive) return Results.Unauthorized();
+        // Story 10.5 — a banned account must not mint fresh access tokens.
+        if (user.BannedAt is not null)
+            return ErrorEnvelope.Build(403, "account_banned",
+                "This account is suspended. Contact support.");
 
         var (newRaw, _) = await refresh.RotateAsync(row, ct);
         resp.Cookies.Append(RefreshTokenService.CookieName, newRaw, refresh.CookieOptions());
