@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Spectr.Bff.Endpoints;
 using Spectr.Bff.Services;
 using Spectr.Data;
 using Spectr.Data.Entities;
@@ -33,12 +34,16 @@ public sealed class AdminEndpointsTests(WebApplicationFactory<Program> factory)
     private sealed class FakeRefunds : IStripeRefundClient
     {
         public string? LastIntent { get; private set; }
+        public string IntentCustomer { get; set; } = "cus_test";
 
         public Task<Stripe.Refund> CreateRefundAsync(string paymentIntentId, CancellationToken ct)
         {
             LastIntent = paymentIntentId;
             return Task.FromResult(new Stripe.Refund { Id = $"re_{paymentIntentId}" });
         }
+
+        public Task<string?> GetIntentCustomerIdAsync(string paymentIntentId, CancellationToken ct)
+            => Task.FromResult<string?>(IntentCustomer);
     }
 
     private static HttpRequestMessage Req(HttpMethod m, string url, object? body = null, string? key = Key)
@@ -107,6 +112,12 @@ public sealed class AdminEndpointsTests(WebApplicationFactory<Program> factory)
         using var f = WithAdmin(out var refunds);
         var client = f.CreateClient();
         var (userId, _) = await TestAuth.RegisterAsync(client);
+        using (var seed = f.Services.CreateScope())
+        {
+            var db = seed.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.Users.Where(u => u.Id == userId)
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.StripeCustomerId, "cus_test"));
+        }
 
         try
         {
@@ -114,6 +125,19 @@ public sealed class AdminEndpointsTests(WebApplicationFactory<Program> factory)
             var noReason = await client.SendAsync(Req(HttpMethod.Post, "/api/admin/refunds",
                 new { userId, credits = 1, reason = "" }));
             Assert.Equal(HttpStatusCode.BadRequest, noReason.StatusCode);
+
+            // Credits bounded (the ledger is append-only — typos are forever).
+            Assert.Equal(HttpStatusCode.BadRequest,
+                (await client.SendAsync(Req(HttpMethod.Post, "/api/admin/refunds",
+                    new { userId, credits = 2000000, reason = "fat finger" }))).StatusCode);
+
+            // Ownership mismatch → 409, no refund issued.
+            refunds.IntentCustomer = "cus_SOMEONE_ELSE";
+            var mismatch = await client.SendAsync(Req(HttpMethod.Post, "/api/admin/refunds",
+                new { userId, paymentIntentId = "pi_not_mine", reason = "wrong paste" }));
+            Assert.Equal(HttpStatusCode.Conflict, mismatch.StatusCode);
+            Assert.Null(refunds.LastIntent);
+            refunds.IntentCustomer = "cus_test";
 
             var ok = await client.SendAsync(Req(HttpMethod.Post, "/api/admin/refunds",
                 new { userId, credits = 2, paymentIntentId = "pi_double_charge", reason = "double charge #1234" }));
@@ -127,7 +151,7 @@ public sealed class AdminEndpointsTests(WebApplicationFactory<Program> factory)
             Assert.Equal(2, entry.Amount);
             var audit = await db.AuditLogs.AsNoTracking()
                 .SingleAsync(a => a.Action == "refund" && a.Target == userId.ToString());
-            Assert.Equal(AdminEndpointsTestsHelpers.OperatorActor, audit.ActorUserId);
+            Assert.Equal(AdminEndpoints.OperatorActor, audit.ActorUserId);
             Assert.Contains("double charge", audit.Reason);
         }
         finally { await Cleanup(f, userId); }
@@ -276,8 +300,3 @@ public sealed class AdminEndpointsTests(WebApplicationFactory<Program> factory)
     }
 }
 
-// The operator sentinel is internal to the endpoints class; mirror it here.
-internal static class AdminEndpointsTestsHelpers
-{
-    public static readonly Guid OperatorActor = Guid.Empty;
-}

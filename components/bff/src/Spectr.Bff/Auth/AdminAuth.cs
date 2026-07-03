@@ -30,10 +30,11 @@ public static class AdminAuth
 
     private static bool FixedEquals(string a, string b)
     {
-        var ab = Encoding.UTF8.GetBytes(a);
-        var bb = Encoding.UTF8.GetBytes(b);
-        // FixedTimeEquals requires equal lengths; comparing lengths first
-        // leaks only length, which is not secret-grade information here.
-        return ab.Length == bb.Length && CryptographicOperations.FixedTimeEquals(ab, bb);
+        // Hash both sides first: fixed 32-byte comparison, no length branch
+        // at all (review nicety — the length leak was negligible, the fix is
+        // free).
+        var ah = SHA256.HashData(Encoding.UTF8.GetBytes(a));
+        var bh = SHA256.HashData(Encoding.UTF8.GetBytes(b));
+        return CryptographicOperations.FixedTimeEquals(ah, bh);
     }
 }

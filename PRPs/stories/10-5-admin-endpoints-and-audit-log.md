@@ -72,6 +72,20 @@ claude-fable-5 (Claude Code)
 - Tests: `AdminEndpointsTests.cs` (new, 6), `TestSupport.cs` (AllowPurgeAsync), 7 cleanup sites armed
 - Docs: `docs/runbook.md` (Admin surface), `.env.example`, `infra/compose.prod.yml` (Admin__ApiKey)
 
+### Senior Developer Review (AI)
+
+2026-07-03 — bmad-code-review (Blind Hunter security pass + Edge Case Hunter/Acceptance Auditor; the auditor EMPIRICALLY disproved the GUC-pool-leak hypothesis with a live probe — Npgsql resets session state on pool reuse, pid-verified across 10 reuses — and re-ran 43 tests across all touched suites). Outcome: **Approve after patches** — 12 applied:
+
+- [x] [High] **TRUNCATE bypassed the "DB-enforced" append-only claim** (row triggers don't fire on TRUNCATE — the whole evidence trail was one statement from gone) → statement-level BEFORE TRUNCATE triggers on both tables (+ TG_OP=TRUNCATE branch in the escape hatch); migration rollback-edited-reapplied
+- [x] [High] **Composed audit reasons could overflow varchar(500) AFTER a Stripe refund succeeded** (SaveChanges throws → money moved, zero evidence — deterministic, not a rare crash) → reason input bounded ≤300 in ALL handlers before any side effect; composed strings Fit() to 500
+- [x] [High] **Refund validation ran after the Stripe call in spirit** → ALL validation now precedes Stripe: credits capped at 1000 (the ledger is append-only — a fat-fingered 2000000 would be forever), reason bounds, and **payment-intent OWNERSHIP verified** (`GetIntentCustomerIdAsync` vs the user's stripe_customer_id — a pasted-wrong pi_ must not refund another customer with the audit pointing at this user); 502 body documents the retry semantics (Stripe leg idempotent, credits leg NOT — check the trail first)
+- [x] [Med] Flag typing: non-numeric `llm_budget_*` values would detonate the 10.4 budget alert (::float cast → rule Error state) while the worker silently fell to env — numeric-flag families now validated
+- [x] [Med] Concurrent PUT create races (flag/pin PK collisions) → 409 instead of unhandled 500
+- [x] [Low] FixedEquals → hash-then-compare (no length branch at all); runbook curl console was broken shell AND leaked the key to argv (`-K keyfile` pattern now); ban-timing honesty (≤15 min worst case for pre-4.6 tokens); one-human-per-key-era constraint; `No Reset On Close` prohibition documented (the pool reset is what confines the purge hatch); IP-allowlist Caddy snippet documented but deliberately not shipped (a moving operator IP mid-incident = lockout); test-helper mirror deleted (references `AdminEndpoints.OperatorActor`)
+- Verified-clean: no prod writer UPDATEs/DELETEs either audited table (deletion actor retains both; reversals INSERT; sweeps read); ban check ordered AFTER password verify (no unauthenticated ban oracle); group filter covers every route; EF parameterization on the audit filter; unban-resurrects-refresh-sessions noted as intended (appeal UX); GUC pooling empirically safe.
+- Accepted: admin surface public-with-key (mitigations: 404-invisible, 32-char boot gate, constant-time, documented allowlist option); refund crash window narrowed to genuine process-death (validation-first) with a documented retry.
+
 ### Change Log
 
 - 2026-07-03: implemented on `ops/10-5-admin`. Gates: BFF 334/334, worker 583+3xf, shared 27, ruff clean. Status → review.
+- 2026-07-03 (review): 12 patches incl. TRUNCATE closure + refund hardening. BFF 334/334 re-verified.

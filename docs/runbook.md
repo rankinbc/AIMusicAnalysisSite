@@ -131,30 +131,51 @@ UNSET = every `/api/admin/*` route 404s (surface invisible). Rotation:
 edit `.env` → `./deploy.sh redeploy`. curl console (no UI in v1):
 
 ```bash
-H='-H "X-Admin-Key: $ADMIN_API_KEY"'
+# Keep the key OUT of argv/history: put it in a file once.
+printf 'header = "X-Admin-Key: %s"\n' "$ADMIN_API_KEY" > ~/.spectr-admin; chmod 600 ~/.spectr-admin
+A() { curl -sK ~/.spectr-admin "$@"; }
 # Billing trail (id or email) — the refund-decision evidence
-curl -s $H https://<domain>/api/admin/users/user@example.com/billing | jq
-# Refund: credits back and/or a Stripe payment-intent refund (idempotent per intent)
-curl -s $H -X POST https://<domain>/api/admin/refunds \
-  -d '{"userId":"<uuid>","credits":2,"paymentIntentId":"pi_...","reason":"double charge #1234"}' \
-  -H 'Content-Type: application/json'
-# Ban / unban (bans kill live sessions <=60s + block login/refresh with 403 account_banned)
-curl -s $H -X POST https://<domain>/api/admin/users/<uuid>/ban -d '{"reason":"scripted abuse"}' -H 'Content-Type: application/json'
-# Feature flag (BFF cache evicted instantly; worker TTL <=60s)
-curl -s $H -X PUT https://<domain>/api/admin/flags/llm_budget_global_usd -d '{"value":"250","reason":"raise ceiling"}' -H 'Content-Type: application/json'
+A https://<domain>/api/admin/users/user@example.com/billing | jq
+# Refund: credits back and/or a FULL Stripe payment-intent refund
+# (ownership-checked against the user's Stripe customer; idempotent per intent)
+A -X POST https://<domain>/api/admin/refunds -H 'Content-Type: application/json' \
+  -d '{"userId":"<uuid>","credits":2,"paymentIntentId":"pi_...","reason":"double charge #1234"}'
+# Ban / unban
+A -X POST https://<domain>/api/admin/users/<uuid>/ban -H 'Content-Type: application/json' -d '{"reason":"scripted abuse"}'
+# Feature flag (BFF cache evicted instantly; worker TTL <=60s; llm_budget_* must be numeric)
+A -X PUT https://<domain>/api/admin/flags/llm_budget_global_usd -H 'Content-Type: application/json' -d '{"value":"250","reason":"raise ceiling"}'
 # Prompt rollback without redeploy (worker pin TTL <=60s; null = live version)
-curl -s $H -X PUT https://<domain>/api/admin/prompts/low_end -d '{"pinnedVersion":"1.2.0","reason":"v1.3 regression"}' -H 'Content-Type: application/json'
+A -X PUT https://<domain>/api/admin/prompts/low_end -H 'Content-Type: application/json' -d '{"pinnedVersion":"1.2.0","reason":"v1.3 regression"}'
 # The evidence trail
-curl -s $H "https://<domain>/api/admin/audit?target=<uuid>" | jq
+A "https://<domain>/api/admin/audit?target=<uuid>" | jq
 ```
 
-- Every mutation REQUIRES a reason and writes an `audit_log` row
-  (actor `00000000-…` = the operator sentinel) in the same transaction.
-- `audit_log` and `credit_ledger` are TRIGGER-enforced append-only.
-  Deliberate escape hatch for a court-ordered purge:
-  `SET spectr.allow_purge = '1'` in the session first (greppable act).
+- Every mutation REQUIRES a reason (≤300 chars) and writes an `audit_log`
+  row (actor `00000000-…` = the operator sentinel) in the same transaction.
+- **Bans**: live sessions die ≤60 s for current tokens (≤15 min worst case
+  for pre-4.6 tokens without the tver claim, until they age out); login +
+  refresh return 403 `account_banned`.
+- **Refund 5xx**: retry the IDENTICAL call — the Stripe leg is idempotent
+  per intent (≈24 h key lifetime); the CREDITS leg is NOT — check the
+  trail endpoint before retrying a credits refund. Stripe refunds are
+  full-amount only in v1. Credits are capped at 1000/call (the ledger is
+  append-only; correct a mistake with a compensating entry, never a purge).
+- **One human per key era**: the audit actor is a shared sentinel — if a
+  second person ever gets the key, rotate to per-person keys first or the
+  trail can't attribute actions.
+- `audit_log` and `credit_ledger` are TRIGGER-enforced append-only
+  (UPDATE, DELETE, and TRUNCATE all raise). Deliberate escape hatch for a
+  court-ordered purge: `SET spectr.allow_purge = '1'` in the session
+  first (greppable act). NEVER set `No Reset On Close=true` on the Npgsql
+  connection string — the pool's session reset is what confines the hatch.
 - `webhook_events` carries no user_id (payload hashes only) — the trail
   endpoint returns the user's Stripe ids + recent events for correlation.
+- Exposure posture: the surface rides the public edge, protected by the
+  key alone (404-invisible unconfigured, ≥32-char boot gate,
+  constant-time compare). For defense-in-depth add a Caddy IP allowlist:
+  `@adminOutside { path /api/admin/* not remote_ip <your-ip>/32 }` +
+  `handle @adminOutside { respond 403 }` — deliberately NOT shipped by
+  default (a moving operator IP would lock you out mid-incident).
 
 ## Alerting & status (story 10.4 / FR49 / NFR16)
 

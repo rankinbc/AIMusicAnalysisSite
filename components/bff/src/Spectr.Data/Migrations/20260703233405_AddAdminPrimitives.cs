@@ -37,6 +37,7 @@ namespace Spectr.Data.Migrations
                     -- DELETE from app code still dies.
                     IF current_setting('spectr.allow_purge', true) = '1' THEN
                         IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+                        IF TG_OP = 'TRUNCATE' THEN RETURN NULL; END IF;
                         RETURN NEW;
                     END IF;
                     RAISE EXCEPTION '% is append-only (story 10.5)', TG_TABLE_NAME;
@@ -50,6 +51,16 @@ namespace Spectr.Data.Migrations
                 CREATE TRIGGER trg_credit_ledger_append_only
                     BEFORE UPDATE OR DELETE ON credit_ledger
                     FOR EACH ROW EXECUTE FUNCTION spectr_forbid_mutation();
+
+                -- Row triggers do NOT fire on TRUNCATE (review High): without
+                -- these, the whole evidence trail was one statement from gone.
+                CREATE TRIGGER trg_audit_log_no_truncate
+                    BEFORE TRUNCATE ON audit_log
+                    FOR EACH STATEMENT EXECUTE FUNCTION spectr_forbid_mutation();
+
+                CREATE TRIGGER trg_credit_ledger_no_truncate
+                    BEFORE TRUNCATE ON credit_ledger
+                    FOR EACH STATEMENT EXECUTE FUNCTION spectr_forbid_mutation();
                 """);
         }
 
@@ -59,6 +70,8 @@ namespace Spectr.Data.Migrations
             migrationBuilder.Sql("""
                 DROP TRIGGER IF EXISTS trg_audit_log_append_only ON audit_log;
                 DROP TRIGGER IF EXISTS trg_credit_ledger_append_only ON credit_ledger;
+                DROP TRIGGER IF EXISTS trg_audit_log_no_truncate ON audit_log;
+                DROP TRIGGER IF EXISTS trg_credit_ledger_no_truncate ON credit_ledger;
                 DROP FUNCTION IF EXISTS spectr_forbid_mutation();
                 """);
 
