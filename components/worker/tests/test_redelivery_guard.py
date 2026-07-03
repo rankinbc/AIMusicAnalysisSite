@@ -63,3 +63,34 @@ def test_completed_job_redelivery_is_a_noop(monkeypatch, tmp_path):
     assert job.status == JOB_STATUS_COMPLETE   # no regression to processing
     assert job.phase_pct == 1.0
     assert added == []                          # no second analyses row attempted
+
+
+def test_reaper_failed_job_redelivery_is_a_noop(monkeypatch, tmp_path):
+    """A job the reaper already failed (worker_unavailable) must NOT be
+    silently resurrected by a late message — the user was told to re-run,
+    and a resurrection could double-run against that manual retry."""
+    from aimusic_shared.models import JOB_STATUS_FAILED
+
+    version_id, song_id = uuid.uuid4(), uuid.uuid4()
+    job = AnalysisJob(
+        id=uuid.uuid4(), user_id=uuid.uuid4(), version_id=version_id,
+        status=JOB_STATUS_FAILED, error_code="worker_unavailable",
+        current_phase="failed",
+    )
+    registry = {
+        AnalysisJob: job,
+        SongVersion: SongVersion(id=version_id, song_id=song_id, version_number=1, file_path="x.wav"),
+        Song: Song(id=song_id, user_id=job.user_id, name="T"),
+    }
+    added: list = []
+    monkeypatch.setattr(td, "LOCAL_ROOT", str(tmp_path))
+    monkeypatch.setattr(td.SessionFactory, "begin", lambda: _FakeSession(registry, added))
+    monkeypatch.setattr(
+        td, "run_pipeline",
+        lambda **_k: (_ for _ in ()).throw(AssertionError("pipeline must not run")),
+    )
+
+    td.analyze_audio_job(str(job.id))
+
+    assert job.status == JOB_STATUS_FAILED     # stays failed — no resurrection
+    assert added == []

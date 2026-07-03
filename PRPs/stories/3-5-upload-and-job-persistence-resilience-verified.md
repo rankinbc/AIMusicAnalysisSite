@@ -76,6 +76,26 @@ claude-fable-5 (Claude Code)
 - `components/worker/tests/test_redelivery_guard.py` (new)
 - `components/frontend-spectr-v2/src/features/upload/__tests__/multipart-upload-helpers.test.ts` (190 MB case)
 
+### Senior Developer Review (AI)
+
+2026-07-03 — bmad-code-review (Blind Hunter + Edge Case Hunter + Acceptance Auditor; auditor ran the worker/frontend/BFF tests against live Postgres). Outcome: **Approve after patches** — all 3 ACs pass (AC2 "resume" with caveat below). 10 patches applied:
+
+- [x] [High] Reaper-failed job resurrection: a job the reaper failed (`worker_unavailable`) whose message later arrived would silently flip failed → processing → complete, potentially double-running against the user's manual retry → guard extended to no-op on `failed + worker_unavailable` (other failure codes stay retryable — dramatiq max_retries is their legitimate re-entry); test added
+- [x] [High] Messageless pending row: enqueue failure (Redis down) after the job row committed would now wait the FULL 4 h grace with credits never reversed → `DispatchAnalysisAsync` catches enqueue failure, fails the row `dispatch_failed`, rethrows
+- [x] [Med] Same redelivery gap in `rerun_phase` + `detect_structure_job` → same complete-guard added to both
+- [x] [Med] recover-jobs regression for genuine Redis queue loss (volume wipe/FLUSHALL — the old behavior's one legitimate case) → `-IncludePending` switch restores it explicitly; default stays processing-only
+- [x] [Med] `PendingGraceMinutes < StaleJobMinutes` misconfig would fail QUEUED jobs faster than started ones → clamped via `Math.Max` in ReapAsync
+- [x] [Low] Doc drift: recover-jobs `.DESCRIPTION`/`.EXAMPLE`s, start-spectr `Invoke-Recovery` comment, `WorkerOptions.StaleJobMinutes` comment (fallback now documented) — all updated
+- [x] [Low] `appsettings.json` gets `PendingGraceMinutes: 240` (script treats appsettings as the knob source of truth)
+- [x] [Low] 190 MB test comment rewritten honestly: it pins the part plan; the re-sign verdict is timing analysis in decision 4, not something the test proves
+- [x] [Low] `[ValidateRange(1,10080)]` on recover-jobs `$StaleMinutes`
+- [x] [Honesty] AC2 caveat recorded below.
+- Deferred: TOCTOU row-lock on the Phase A guard (concurrent duplicate delivery while original consumer still runs) — each analysis lane has exactly ONE consumer process (`--processes 1`, W1/W2 split), so concurrent same-job delivery cannot occur in the current topology; revisit if consumers scale. Heartbeat-aware processing reap (time_limit 60 min > StaleJobMinutes 30 tension) — pre-existing, documented in WorkerOptions; ops knob. Boundary-adjacent (±10 min) reaper tests. StaleJobReaperTests hosted-reaper coexistence (deterministic today — same outcomes).
+- Rejected: NULL dispatched_at immortal-row claim (column is non-nullable with DB default — verified); `TestDb.Reachable` silent-green pattern (project-wide convention, not this story's to change).
+
+**AC2 honesty note**: "queued jobs remain queued (not failed)" is fixed and directly tested. "and resume" rests on dramatiq's Redis LIST persistence (messages survive worker death until consumed) — asserted by mechanism, not demonstrated end-to-end in an automated test. Manual verification path: stop worker, dispatch, restart worker, job completes (dev-verified behavior of the queue topology since 2.5).
+
 ### Change Log
 
 - 2026-07-03: implemented on `storage/3-5-resilience`. Gates: BFF 279/279; worker 566 + 3 xfail; vitest 674; tsc/lint/ruff clean. Status → review.
+- 2026-07-03 (review): 10 patches applied (see Senior Developer Review). Gates after patches: BFF 279/279 (one parallel-run flake pair re-ran green), worker 567 + 3 xfail, vitest upload suite 49/49, ruff clean.

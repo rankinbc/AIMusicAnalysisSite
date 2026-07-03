@@ -11,10 +11,11 @@ public sealed class WorkerOptions
     public const string SectionName = "Worker";
 
     /// <summary>
-    /// A PROCESSING job whose started_at is older than this is treated as
-    /// abandoned by a dead worker and marked failed. Must exceed the longest
-    /// legitimate single job (structure/demucs ~20 min measured from started_at)
-    /// so a slow-but-live job is never false-failed.
+    /// A PROCESSING job whose started_at (falling back to dispatched_at for
+    /// rows whose status flipped before started_at committed) is older than
+    /// this is treated as abandoned by a dead worker and marked failed. Must
+    /// exceed the longest legitimate single job (structure/demucs ~20 min
+    /// measured from started_at) so a slow-but-live job is never false-failed.
     /// </summary>
     public int StaleJobMinutes { get; init; } = 30;
 

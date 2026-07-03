@@ -62,7 +62,10 @@ internal sealed class StaleJobReaper(
     {
         var now = DateTimeOffset.UtcNow;
         var startedCutoff = now - TimeSpan.FromMinutes(_workerOpts.Value.StaleJobMinutes);
-        var pendingCutoff = now - TimeSpan.FromMinutes(_workerOpts.Value.PendingGraceMinutes);
+        // Clamp: a misconfigured grace below the processing window would fail
+        // QUEUED jobs faster than started ones — inverting NFR16 entirely.
+        var pendingCutoff = now - TimeSpan.FromMinutes(
+            Math.Max(_workerOpts.Value.PendingGraceMinutes, _workerOpts.Value.StaleJobMinutes));
 
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();

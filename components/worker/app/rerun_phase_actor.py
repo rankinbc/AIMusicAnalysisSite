@@ -74,6 +74,11 @@ def rerun_phase(
         job = s.get(AnalysisJob, rerun_jid)
         if job is None:
             raise ValueError(f"rerun job {rerun_job_id} not found")
+        # Story 3.5 — redelivery guard (mirrors analyze_audio_job): a
+        # duplicate message for a finished re-run must not regress it.
+        if job.status == JOB_STATUS_COMPLETE:
+            logger.info("rerun_phase: job=%s already complete — redelivery no-op", rerun_job_id)
+            return
         analysis = s.get(Analysis, aid)
         if analysis is None:
             raise ValueError(f"analysis {analysis_id} not found")

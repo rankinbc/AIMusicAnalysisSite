@@ -89,6 +89,13 @@ def detect_structure_job(structure_job_id: str, analysis_id: str) -> None:
                 "message) — skipping", structure_job_id,
             )
             return
+        # Story 3.5 — redelivery guard (mirrors analyze_audio_job).
+        if job.status == JOB_STATUS_COMPLETE:
+            logger.info(
+                "detect_structure_job: job=%s already complete — redelivery no-op",
+                structure_job_id,
+            )
+            return
         analysis = s.get(Analysis, aid)
         if analysis is None:
             logger.warning(

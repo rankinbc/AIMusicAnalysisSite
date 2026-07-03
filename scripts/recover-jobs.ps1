@@ -9,10 +9,12 @@
     requeues them. The UI then spins with no error (it only shows an error once a
     job reaches `failed`).
 
-    This script finds non-terminal jobs (`pending` / `processing`) older than a
-    staleness threshold and marks them `failed` with a clear, UI-visible message
-    (`error_code = worker_unavailable`). The user then sees "worker stopped — re-run"
-    instead of an infinite spinner, and can re-trigger the analysis.
+    Story 3.5 (NFR16): this script fails abandoned PROCESSING jobs only. A
+    pending job's message still sits in the Redis LIST and resumes when the
+    worker starts — failing pending rows at launch was defeating queue-resume.
+    Marks matches `failed` with a clear, UI-visible message
+    (`error_code = worker_unavailable`) so the user sees "worker stopped —
+    re-run" instead of an infinite spinner.
 
     We deliberately FAIL-and-resurface rather than reverse-engineer dramatiq's
     Redis ack internals to requeue — that path is fragile across dramatiq versions.
@@ -21,10 +23,16 @@
     Talks to Postgres through the docker-compose `postgres` service (dev stack).
 
 .PARAMETER StaleMinutes
-    Age threshold. Jobs whose most-recent activity (started_at, else dispatched_at)
-    is older than this are considered abandoned. When omitted, this is read from
-    the BFF's appsettings.json `Worker:StaleJobMinutes` (the single source of truth
-    shared with the runtime StaleJobReaper), falling back to 30 if unreadable.
+    Age threshold. Processing jobs whose most-recent activity (started_at, else
+    dispatched_at) is older than this are considered abandoned. When omitted,
+    read from the BFF's appsettings.json `Worker:StaleJobMinutes` (the single
+    source of truth shared with the runtime StaleJobReaper), falling back to 30.
+
+.PARAMETER IncludePending
+    ALSO fail pending jobs older than the threshold. Use ONLY when the Redis
+    queue itself was lost (volume wipe, FLUSHALL) — then pending rows are truly
+    orphaned and waiting out the runtime reaper's 4 h pending grace is pointless.
+    Never needed for a normal worker restart.
 
 .PARAMETER DryRun
     Show what WOULD be failed without changing anything.
@@ -34,19 +42,20 @@
 
 .EXAMPLE
     ./scripts/recover-jobs.ps1 -DryRun
-        Preview abandoned jobs.
+        Preview abandoned processing jobs.
 
 .EXAMPLE
     ./scripts/recover-jobs.ps1
-        Fail all abandoned jobs older than 30 min.
+        Fail abandoned processing jobs older than 30 min.
 
 .EXAMPLE
-    ./scripts/recover-jobs.ps1 -StaleMinutes 5
-        Tighter threshold (e.g. right after a known worker crash).
+    ./scripts/recover-jobs.ps1 -IncludePending
+        Redis queue was lost — also fail orphaned pending jobs.
 #>
 [CmdletBinding()]
 param(
-    [int]$StaleMinutes,
+    [ValidateRange(1, 10080)][int]$StaleMinutes,
+    [switch]$IncludePending,
     [switch]$DryRun,
     [string]$ComposeFile
 )
@@ -94,12 +103,14 @@ Write-Host 'SPECTR job recovery' -ForegroundColor Magenta
 Info "stale threshold: $StaleMinutes min  (mode: $(if ($DryRun) {'DRY-RUN'} else {'apply'}))"
 
 # Predicate shared by the preview + the update. Story 3.5 (NFR16): PROCESSING
-# only — a pending job's message still sits in the Redis queue and the worker
-# this launcher is about to start WILL consume it; failing pending jobs here
-# was defeating queue-resume by design. (The runtime StaleJobReaper still
-# catches truly orphaned pending rows after its long PendingGraceMinutes.)
+# only by default — a pending job's message still sits in the Redis queue and
+# the worker this launcher is about to start WILL consume it; failing pending
+# jobs here was defeating queue-resume by design. (The runtime StaleJobReaper
+# still catches truly orphaned pending rows after its long PendingGraceMinutes;
+# -IncludePending is the manual override for genuine Redis queue loss.)
+$statuses = if ($IncludePending) { "('processing','pending')" } else { "('processing')" }
 $where = @"
-status = 'processing'
+status IN $statuses
 AND COALESCE(started_at, dispatched_at, TIMESTAMPTZ '2000-01-01')
     < now() - (INTERVAL '1 minute' * $StaleMinutes)
 "@
