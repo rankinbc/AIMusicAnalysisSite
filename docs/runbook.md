@@ -15,8 +15,8 @@ publishes ports; the BFF has no direct ingress (which is what makes
 ### First-time VPS setup
 
 1. Docker + compose plugin; `mkdir -p /opt/spectr`.
-2. Copy `infra/compose.prod.yml` + `infra/deploy.sh` (CI re-ships these on
-   every deploy); `chmod +x deploy.sh`.
+2. Copy `infra/{compose.prod.yml,deploy.sh,backup.sh,restore-test.sh}` (CI
+   re-ships all four on every deploy); `chmod +x *.sh`.
 3. Create `/opt/spectr/.env` — **chmod 600** (AR31). Required keys are
    listed in the compose header; generate signing keys with
    `openssl rand -base64 48`. `SPECTR_REQUIRE_STRIPE=1` and
@@ -83,6 +83,10 @@ formalizes alerting).
    ```
 3. R2 lifecycle rule: `backups/` prefix, expire after 30 d (the script
    prunes too — either alone suffices, together they're safe).
+4. Knobs (optional, in `.env`): `RETENTION_DAYS` (default 30),
+   `AGE_HOURS_MAX` (staleness gate, default 30). Add logrotate for
+   `backup.log`/`restore-test.log` or truncate quarterly — cron `>>` grows
+   unbounded.
 
 ### Restore drill (the launch gate, NFR15)
 
@@ -92,10 +96,18 @@ once pre-launch and log it below):
 1. `./restore-test.sh` on the VPS — fetches newest dump, restores into a
    scratch container, asserts `__EFMigrationsHistory` ≥ 1, tables ≥ 20,
    `users` queryable.
-2. For a REAL disaster restore: stop the stack, `docker volume rm` the
-   postgres volume, `up -d postgres`, then
-   `gunzip -c dump.sql.gz | docker compose exec -T postgres psql -U spectr -d spectr`
-   (dumps are `--clean --if-exists` — idempotent replay), then `up -d`.
+2. For a REAL disaster restore (all commands from `/opt/spectr`):
+   ```
+   docker compose -f compose.prod.yml --env-file .env down
+   docker volume rm spectr_postgres_data     # verify name: docker volume ls
+   IMAGE_TAG=$(sed -n 's/^CURRENT_TAG=//p' .deploy-state) \
+     docker compose -f compose.prod.yml --env-file .env up -d postgres
+   gunzip -c dump.sql.gz | docker compose -f compose.prod.yml --env-file .env \
+     exec -T postgres psql -U spectr -d spectr -v ON_ERROR_STOP=1
+   ./restore-test.sh --dump dump.sql.gz      # prove it before serving traffic
+   ./deploy.sh redeploy                      # bring the full stack back
+   ```
+   Dumps are `--clean --if-exists` — idempotent replay.
 3. Log the drill:
 
 | Date | Dump | Result | Notes |

@@ -67,6 +67,22 @@ claude-fable-5 (Claude Code)
 - `infra/backup.sh` (new), `infra/restore-test.sh` (new)
 - `docs/runbook.md` (Backups section), `.env.example` (R2_BACKUP_*/NTFY_URL)
 
+### Senior Developer Review (AI)
+
+2026-07-03 — bmad-code-review (combined adversarial pass; reviewer EXECUTED the .env-sourcing hypothesis and the date-UTC semantics experimentally). Outcome: **Changes requested → all applied** (11 patches):
+
+- [x] [CRITICAL] **`.env` sourcing was a prod time bomb**: `set -a; . ./.env` explodes on the REQUIRED compose-format `RESEND_FROM=SPECTR <noreply@…>` value (bash parses `<…>` as redirection, aborts sourcing MID-FILE, silently drops every var below — including `R2_BACKUP_*` → every nightly dies at "no credentials", and the dev drill never caught it because infra/.env didn't exist) → literal per-key extraction loop in both scripts; regression-tested with a hostile `.env` planted
+- [x] [High] **Scripts were never shipped**: CI scp'd only compose+deploy.sh — the documented crons pointed at files that wouldn't exist → CI ships all four, chmod +x'd; runbook setup updated
+- [x] [High] **Scratch container leaked the FULL restored database for up to 7 days** on assertion-failure exits (`exit 1` doesn't fire ERR; cleanup was success-path + ERR only) → `trap cleanup EXIT` + per-run `-$$` name (also fixes concurrent-run mutual sabotage); leak-checked post-run
+- [x] [High] **`ON_ERROR_STOP=0` made the proof an attempt** (half-failed COPY still passed the ≥20-tables check) → `=1` + explicit replay-failure alert; no benign-error class exists (--clean --if-exists --no-owner + scratch superuser), verified clean on the real 42-table dump
+- [x] [Med] Decision-3 drift: `≥1` migrations was quietly weaker than "matches live applied set" → best-effort live-DB parity check (tolerates one raced deploy; scratch proof stands alone in --dump mode); proven live=40 restored=40
+- [x] [Med] Secrets off docker argv (`ps`-visible for the whole multi-minute upload) → exported env + name-only `-e`
+- [x] [Med] Runbook disaster-restore was un-runnable as written (no compose flags, no IMAGE_TAG, no ON_ERROR_STOP, no post-verify) → full command block incl. `.deploy-state` tag read + `restore-test.sh --dump` proof + `deploy.sh redeploy`
+- [x] [Low] Staleness gate: malformed newest-object now FAILS instead of silently skipping (grep filter + parse-or-die); ` UTC` suffix on date input (experimentally verified equivalent on GNU, explicit anyway); prune failure after successful upload downgraded to a WARN (operator must not believe there's no backup when there is one); grep-empty pipefail guard; AGE_HOURS_MAX/RETENTION_DAYS + logrotate documented; shellcheck disables annotated
+- Verified-clean: ERR/EXIT trap coexistence, pipefail through gzip, awk column math + decimal compare, cron spacing headroom (25.25 h max normal age vs 30 h gate).
+- Re-validated end-to-end after patches: backup with hostile .env present → upload OK; restore-test → ON_ERROR_STOP=1 replay clean, 40/42/t assertions, live parity ✓, zero leaked containers.
+
 ### Change Log
 
 - 2026-07-03: implemented + dev-stack-proven on `ops/10-2-backups`. Status → review.
+- 2026-07-03 (review): 11 patches applied incl. the CRITICAL .env-sourcing fix; full cycle re-executed.
