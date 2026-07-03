@@ -20,29 +20,28 @@ public static class BootMigrator
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var pending = (await db.Database.GetPendingMigrationsAsync()).ToList();
-        if (pending.Count == 0)
-        {
-            logger.LogInformation("BootMigrator: schema up to date.");
-            return;
-        }
-
-        // A dedicated open connection: the advisory lock is session-scoped
-        // and must live for exactly the duration of MigrateAsync.
+        // ALWAYS take the lock (no pre-lock fast path): the check-then-lock
+        // shortcut left the lock path untested and only saved one no-op
+        // round-trip per boot. Opening the context's connection here means
+        // the lock session and EF's migration session are the same Postgres
+        // session (GetDbConnection returns the context-owned connection;
+        // a manual Open makes EF reuse it).
         var conn = db.Database.GetDbConnection();
         await conn.OpenAsync();
         try
         {
+            logger.LogInformation("BootMigrator: waiting for advisory lock {Key}…", LockKey);
             await using (var acquire = conn.CreateCommand())
             {
                 acquire.CommandText = $"SELECT pg_advisory_lock({LockKey})";
+                // A peer's migration may legitimately run for minutes — the
+                // default 30 s command timeout would crash-loop the waiter.
+                acquire.CommandTimeout = 0;
                 await acquire.ExecuteNonQueryAsync(); // blocks until the peer finishes
             }
             try
             {
-                // Re-check under the lock — the peer that held it may have
-                // just applied everything.
-                pending = (await db.Database.GetPendingMigrationsAsync()).ToList();
+                var pending = (await db.Database.GetPendingMigrationsAsync()).ToList();
                 if (pending.Count > 0)
                 {
                     logger.LogInformation(
@@ -53,14 +52,23 @@ public static class BootMigrator
                 }
                 else
                 {
-                    logger.LogInformation("BootMigrator: peer already applied — nothing to do.");
+                    logger.LogInformation("BootMigrator: schema up to date.");
                 }
             }
             finally
             {
-                await using var release = conn.CreateCommand();
-                release.CommandText = $"SELECT pg_advisory_unlock({LockKey})";
-                await release.ExecuteNonQueryAsync();
+                try
+                {
+                    await using var release = conn.CreateCommand();
+                    release.CommandText = $"SELECT pg_advisory_unlock({LockKey})";
+                    await release.ExecuteNonQueryAsync();
+                }
+                catch (Exception ex)
+                {
+                    // Never mask the real migration failure — closing the
+                    // session releases the lock anyway.
+                    logger.LogWarning(ex, "BootMigrator: unlock failed (session close releases it).");
+                }
             }
         }
         finally

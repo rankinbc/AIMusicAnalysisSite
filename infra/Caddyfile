@@ -4,8 +4,14 @@
 # container in prod — the UA-split below is ported from
 # components/frontend-spectr-v2/nginx.conf (story 7.2).
 
+# www → apex (a bare CNAME visitor must not hit a TLS error).
+www.{$SPECTR_DOMAIN} {
+	redir https://{$SPECTR_DOMAIN}{uri} permanent
+}
+
 {$SPECTR_DOMAIN} {
 	encode zstd gzip
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 
 	# Crawlers get the BFF's prerendered OG shell so share links unfurl;
 	# humans get the SPA shell (story 7.2 split).

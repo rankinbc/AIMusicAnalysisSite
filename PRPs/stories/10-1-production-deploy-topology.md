@@ -83,6 +83,26 @@ claude-fable-5 (Claude Code)
 - Tests: `DeployTopologyTests.cs` (new, 2)
 - Docs: `docs/runbook.md` (deploy/rollback/VPS/R2/rotation), `.env.example` (prod section)
 
+### Senior Developer Review (AI)
+
+2026-07-03 — bmad-code-review (Blind Hunter ops/security + Edge Case Hunter/Acceptance Auditor; infra is untestable locally so this pass WAS the integration gate — the auditor executed `docker compose config` validation, verified every env name against the reading code, confirmed LF storage via `git ls-files --eol`, and reproduced the 327/327 gate). Outcome: **Changes requested → all applied** (17 patches):
+
+- [x] [CRITICAL] **The health verify was a permanent false positive**: `curl http://localhost/healthz` hit caddy with a Host that matches no site → empty-200/308, curl exits 0 WITHOUT reaching the BFF — AC3's smoke and AC4's auto-rollback were theater → deploy.sh probes the BFF directly inside the compose network (`compose exec bff curl localhost:5000/healthz` + `grep '"status":"ok"'`), retries env-tunable (default 60×5 s for first-boot migrations/ACME)
+- [x] [High] `ForcePathStyle=true` contradicted S3StorageOptions' own "R2 must stay FALSE" doc → false in prod compose
+- [x] [High] VPS couldn't pull (GHCR private, no login anywhere) → runbook first-time step 3b (read-scoped PAT)
+- [x] [High] `worker_models` volume root-owned vs uid-10001 worker → mkdir+chown pre-USER; worker also gains a Redis-ping HEALTHCHECK
+- [x] [High] Runbook's rotation procedure would die on the `IMAGE_TAG:?` substitution → `deploy.sh redeploy` verb (re-applies the current pin); runbook corrected
+- [x] [Med] Concurrent master merges raced the VPS → CI `concurrency: deploy-production` + `flock` in deploy.sh; same-tag redeploy no longer erases the rollback target; `.env`-missing fails with an actionable message; `sed` replaces GNU-only `grep -oP`
+- [x] [Med] **Images were pushed BEFORE trivy scanned them** (a CRITICAL-vuln image would already own `:latest`) → build `load:true` → scan → push post-scan
+- [x] [Med] BootMigrator's pre-lock fast path left the lock UNTESTED and dodged the only unexercisable-in-prod code → always-lock (the double-run test now genuinely exercises acquire/release); `CommandTimeout=0` on the acquire (a peer's long migration must not crash-loop waiters); wait-log before the block; unlock failure never masks the migration error
+- [x] [Med] Edge hardening: HSTS + www→apex redirect; `443/udp` (h3 was advertised but QUIC-unroutable); log rotation anchor on all 6 services; `RESEND_FROM` now `:?` (sandbox sender in prod = DMARC garbage); caddy pinned 2.8
+- [x] [Med] **`Storage__Provider: s3` was DEAD CONFIG** (IFileStorage is hardcoded LocalDisk) — prod would write residual files into the container FS → explicit `local` + `/data` volume + honest comment (S3-backed IFileStorage = 10.x follow-up)
+- [x] [Low] Root `.dockerignore` (repo-root web context uploaded .git + Windows node_modules); /healthz 3 s hard timeouts (wedged ≠ refused); BFF start-period 120 s (boot migrations); dropped `chown -R /app` (runtime user must not own its binaries); ssh-keyscan fails loud; compose header doc drift fixed; `.gitattributes` added to File List
+- Verified-clean by the review: YAML anchor override (executed via compose config), rollback state math incl. failed-deploy and double-rollback paths, BootMigrator connection semantics (lock session == migration session; serialization holds regardless), worker Dockerfile paths/prompts/PATH all cross-checked, Caddyfile syntax + handle precedence, env names vs reading code (S3_*, SPECTR_REQUIRE_EMAIL, RESEND), CI bff context files, IMAGE_TAG env-over-env-file precedence.
+- Known-flake note: `Concurrent_Posts_Converge_On_Same_Conversation_No_500` is bimodal (~1-in-4; "expected 3 enqueues, got 1" under the 3-way race) — pre-existing, unrelated to 10.1 (no coach paths touched), logged for a dedicated fix.
+- Honest scope: live-VPS deploy remains the first real integration test (runbook is the procedure); `caddy validate` unavailable locally (syntax desk-checked).
+
 ### Change Log
 
 - 2026-07-03: implemented on `ops/10-1-deploy-topology`. Gates: BFF 327/327; others untouched. Status → review.
+- 2026-07-03 (review): 17 patches applied incl. the CRITICAL vacuous-health-check fix. Gates: BFF 327/327 re-verified.

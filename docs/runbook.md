@@ -22,6 +22,10 @@ publishes ports; the BFF has no direct ingress (which is what makes
    `openssl rand -base64 48`. `SPECTR_REQUIRE_STRIPE=1` and
    `SPECTR_REQUIRE_EMAIL=1` are baked into the compose — boot fails on
    missing billing/email config by design.
+3b. **GHCR pull auth** — the images are private by default:
+   `docker login ghcr.io -u <github-user> -p <read-only PAT (read:packages)>`
+   once on the VPS (credentials persist in ~/.docker). Without this the
+   first `deploy.sh` dies at `pull` with `denied`.
 4. Point DNS at the VPS; `SPECTR_DOMAIN` drives Caddy's auto-ACME.
 5. GitHub repo secrets: `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` (deploy key,
    `/opt/spectr` writable). Until set, CI pushes images and skips the
@@ -163,8 +167,9 @@ Set `SPECTR_REQUIRE_EMAIL=1` on BOTH services in prod:
 ## Secret rotation (story 10.1 expansion)
 
 All prod secrets live in `/opt/spectr/.env` (chmod 600). Rotation =
-edit `.env` → `docker compose -f compose.prod.yml up -d` (recreates only
-services whose env changed).
+edit `.env` → `./deploy.sh redeploy` (re-applies the CURRENT image tag —
+`IMAGE_TAG` is deploy-state-managed, never in `.env`, so a bare
+`docker compose up -d` would refuse on the `:?` substitution).
 
 - `JWT_KEY` (`Jwt__Key`): invalidates all access tokens (≤15 min blast
   radius); refresh tokens are DB-hashed and unaffected. For a

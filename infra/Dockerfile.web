@@ -8,6 +8,7 @@ RUN npm ci
 COPY components/frontend-spectr-v2/ ./
 RUN npm run build
 
-FROM caddy:2
+# Minor-pinned: the TLS edge must not absorb unreviewed major/minor bumps.
+FROM caddy:2.8
 COPY infra/Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/dist /srv

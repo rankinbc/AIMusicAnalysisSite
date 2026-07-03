@@ -141,6 +141,11 @@ jobs:
     needs: [secrets, bff, frontend, python]
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # One deploy at a time, in order — concurrent master merges must not
+    # interleave pulls/state writes on the VPS.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
@@ -153,57 +158,63 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build + push spectr-bff
+      # SCAN BEFORE PUSH: a CRITICAL-vuln image must never overwrite
+      # :latest in the registry. Build locally (load), trivy, then push.
+      - name: Build spectr-bff (local)
         uses: docker/build-push-action@v6
         with:
           context: components/bff
           file: components/bff/src/Spectr.Bff/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/spectr-bff:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/spectr-bff:latest
-      - name: Build + push spectr-worker
+          load: true
+          tags: ghcr.io/${{ github.repository_owner }}/spectr-bff:${{ github.sha }}
+      - name: Build spectr-worker (local)
         uses: docker/build-push-action@v6
         with:
           context: components
           file: components/worker/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/spectr-worker:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/spectr-worker:latest
-      - name: Build + push spectr-web
+          load: true
+          tags: ghcr.io/${{ github.repository_owner }}/spectr-worker:${{ github.sha }}
+      - name: Build spectr-web (local)
         uses: docker/build-push-action@v6
         with:
           context: .
           file: infra/Dockerfile.web
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/spectr-web:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/spectr-web:latest
+          load: true
+          tags: ghcr.io/${{ github.repository_owner }}/spectr-web:${{ github.sha }}
 
-      # Built-image scanning (story 4.1 deferral): CRITICAL vulns fail the
-      # deploy; unfixed-upstream noise ignored.
-      - name: Trivy scan built images
+      # Built-image scanning (story 4.1 deferral lands here): CRITICAL
+      # vulns fail the deploy; unfixed-upstream noise ignored.
+      - name: Trivy scan spectr-bff
         uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: ghcr.io/${{ github.repository_owner }}/spectr-bff:${{ github.sha }}
           severity: CRITICAL
           ignore-unfixed: true
           exit-code: "1"
-      - name: Trivy scan worker image
+      - name: Trivy scan spectr-worker
         uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: ghcr.io/${{ github.repository_owner }}/spectr-worker:${{ github.sha }}
           severity: CRITICAL
           ignore-unfixed: true
           exit-code: "1"
-      - name: Trivy scan web image
+      - name: Trivy scan spectr-web
         uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: ghcr.io/${{ github.repository_owner }}/spectr-web:${{ github.sha }}
           severity: CRITICAL
           ignore-unfixed: true
           exit-code: "1"
+
+      - name: Push images (post-scan)
+        run: |
+          set -euo pipefail
+          for img in spectr-bff spectr-worker spectr-web; do
+            ref="ghcr.io/${{ github.repository_owner }}/$img"
+            docker tag "$ref:${{ github.sha }}" "$ref:latest"
+            docker push "$ref:${{ github.sha }}"
+            docker push "$ref:latest"
+          done
 
       - name: Deploy over SSH
         env:
@@ -218,9 +229,9 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H "$VPS_HOST" > ~/.ssh/known_hosts || { echo "!! ssh-keyscan failed" >&2; exit 1; }
           # Ship the infra bundle (self-updating compose/Caddyfile/deploy.sh),
-          # then pin + pull + up + /healthz verify (deploy.sh auto-rolls-back).
+          # then pin + pull + up + health verify (deploy.sh auto-rolls-back).
           scp -i ~/.ssh/deploy_key infra/compose.prod.yml infra/deploy.sh "$VPS_USER@$VPS_HOST:/opt/spectr/"
           ssh -i ~/.ssh/deploy_key "$VPS_USER@$VPS_HOST" \
             "chmod +x /opt/spectr/deploy.sh && /opt/spectr/deploy.sh ${{ github.sha }}"

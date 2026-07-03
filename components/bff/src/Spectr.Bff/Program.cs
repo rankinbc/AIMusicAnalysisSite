@@ -463,12 +463,21 @@ app.MapGet("/", () => Results.Json(new { status = "ok", version = "2.0.0" }))
 // the two hard dependencies. 200 {"status":"ok"} or 503 naming the failure.
 app.MapGet("/healthz", async (AppDbContext db, IConnectionMultiplexer redis) =>
 {
+    // Short hard timeouts: a WEDGED (not refused) dependency must yield a
+    // fast 503, not a driver-default multi-second hang per probe.
     string? failing = null;
-    try { await db.Database.ExecuteSqlRawAsync("SELECT 1"); }
+    try
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        await db.Database.ExecuteSqlRawAsync("SELECT 1", cts.Token);
+    }
     catch { failing = "postgres"; }
     if (failing is null)
     {
-        try { await redis.GetDatabase().PingAsync(); }
+        try
+        {
+            await redis.GetDatabase().PingAsync().WaitAsync(TimeSpan.FromSeconds(3));
+        }
         catch { failing = "redis"; }
     }
     return failing is null

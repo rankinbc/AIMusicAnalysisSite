@@ -8,17 +8,28 @@
 # Supersedes docker/docker-compose.prod.yml's queue-split overlay (that
 # overlay remains for DEV prod-parity runs).
 #
-# Required in .env (see .env.example): SPECTR_DOMAIN, IMAGE_TAG, JWT_KEY,
-# ANON_SIGNING_KEY, POSTGRES_PASSWORD, R2_* (S3 config), RESEND_*, Stripe
-# keys, App__FrontendOrigin.
+# Required in .env (see .env.example): SPECTR_DOMAIN, JWT_KEY,
+# ANON_SIGNING_KEY, POSTGRES_PASSWORD, R2_*, RESEND_* (incl. RESEND_FROM),
+# Stripe keys, ANTHROPIC_API_KEY. IMAGE_TAG is managed by deploy.sh (env
+# var, not .env); App__FrontendOrigin derives from SPECTR_DOMAIN below.
+
+# Bounded container logs on a single VPS — unrotated json-file logs are the
+# classic slow-motion full-disk outage.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
 
 services:
   caddy:
     image: ghcr.io/rankinbc/spectr-web:${IMAGE_TAG:?set by deploy.sh}
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "80:80"
       - "443:443"
+      - "443:443/udp"   # HTTP/3 — caddy advertises h3; unmapped UDP = silent QUIC timeouts
     environment:
       SPECTR_DOMAIN: "${SPECTR_DOMAIN:?}"
     volumes:
@@ -30,6 +41,12 @@ services:
   bff:
     image: ghcr.io/rankinbc/spectr-bff:${IMAGE_TAG:?}
     restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      # IFileStorage is LocalDisk-backed for legacy/auxiliary writes even in
+      # prod (the presigned R2 path is primary; an S3-backed IFileStorage is
+      # a 10.x follow-up) — persist it, don't let it die with the container.
+      - bff_data:/data
     environment:
       ASPNETCORE_ENVIRONMENT: "Production"
       ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=spectr;Username=spectr;Password=${POSTGRES_PASSWORD:?}"
@@ -43,14 +60,17 @@ services:
       Migrations__ApplyAtBoot: "true"
       ForwardedHeaders__Enabled: "true"
       App__FrontendOrigin: "https://${SPECTR_DOMAIN:?}"
-      # Object storage = Cloudflare R2 (S3 API).
-      Storage__Provider: "s3"
+      # Object storage = Cloudflare R2 (S3 API). Local root backs the
+      # residual IFileStorage writes (volume above).
+      Storage__Provider: "local"
+      Storage__LocalRoot: "/data"
       Storage__S3__ServiceUrl: "${R2_ENDPOINT:?}"
       Storage__S3__AccessKey: "${R2_BFF_ACCESS_KEY:?}"
       Storage__S3__SecretKey: "${R2_BFF_SECRET_KEY:?}"
       Storage__S3__Bucket: "${R2_BUCKET:-spectr}"
       Storage__S3__Region: "auto"
-      Storage__S3__ForcePathStyle: "true"
+      # S3StorageOptions doc: "MinIO REQUIRES true; R2 must stay FALSE."
+      Storage__S3__ForcePathStyle: "false"
       # Prod boot gates (4.1/4.2): missing billing/email config refuses boot.
       SPECTR_REQUIRE_STRIPE: "1"
       SPECTR_REQUIRE_EMAIL: "1"
@@ -60,7 +80,9 @@ services:
       Stripe__PriceProAnnual: "${STRIPE_PRICE_PRO_ANNUAL:?}"
       Resend__ApiKey: "${RESEND_API_KEY:?}"
       Resend__WebhookSecret: "${RESEND_WEBHOOK_SECRET:?}"
-      Resend__FromAddress: "${RESEND_FROM:-SPECTR <onboarding@resend.dev>}"
+      # Required (:?) — the onboarding@resend.dev sandbox sender in prod
+      # would be a deliverability/DMARC disaster.
+      Resend__FromAddress: "${RESEND_FROM:?}"
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -69,6 +91,7 @@ services:
   worker-paid:
     image: ghcr.io/rankinbc/spectr-worker:${IMAGE_TAG:?}
     restart: unless-stopped
+    logging: *default-logging
     environment: &worker-env
       DATABASE_URL: "postgresql+psycopg2://spectr:${POSTGRES_PASSWORD:?}@postgres:5432/spectr"
       REDIS_URL: "redis://redis:6379/0"
@@ -94,6 +117,7 @@ services:
   worker-free:
     image: ghcr.io/rankinbc/spectr-worker:${IMAGE_TAG:?}
     restart: unless-stopped
+    logging: *default-logging
     environment:
       <<: *worker-env
       WORKER_QUEUES: "analysis-free maintenance"
@@ -106,6 +130,7 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_DB: spectr
       POSTGRES_USER: spectr
@@ -121,6 +146,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    logging: *default-logging
     # AOF: dramatiq queues ARE durable state (NFR16 queued-jobs-survive).
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -137,3 +163,4 @@ volumes:
   postgres_data:
   redis_data:
   worker_models:
+  bff_data:

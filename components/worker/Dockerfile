@@ -24,9 +24,18 @@ RUN pip install --no-cache-dir -e ./shared -c worker/requirements.lock.txt \
 COPY worker/app/ ./app/
 COPY worker/prompts/ ./prompts/
 
-# Non-root (AR31 hygiene).
-RUN useradd --create-home --uid 10001 spectr
+# Non-root (AR31 hygiene). TORCH_HOME mountpoint pre-created + owned —
+# Docker would otherwise create the volume mount root-owned and the first
+# model download EACCESes.
+RUN useradd --create-home --uid 10001 spectr \
+    && mkdir -p /data/models \
+    && chown -R spectr /data
 USER spectr
+
+# Liveness: a wedged dramatiq master that can't reach Redis is dead weight —
+# let compose restart it.
+HEALTHCHECK --interval=60s --timeout=10s --start-period=60s --retries=3 \
+    CMD python -c "import os, redis; redis.Redis.from_url(os.environ['REDIS_URL']).ping()"
 
 ENV PYTHONUNBUFFERED=1 \
     TORCH_HOME=/data/models \
