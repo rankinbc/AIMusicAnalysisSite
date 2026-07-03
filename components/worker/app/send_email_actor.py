@@ -17,6 +17,7 @@ BFF's ResendOptions.FromAddress is the single source of truth).
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 
@@ -32,9 +33,31 @@ def _mask(email: str) -> str:
     return f"{email[:2]}***{email[at:]}" if at > 1 else "***"
 
 
+def _is_suppressed(to: str) -> bool:
+    """Send-time recheck of the suppression list — closes the race where a
+    bounce lands between enqueue (BFF check) and delivery/retries. FAIL-OPEN:
+    the BFF's primary check already passed, so a DB blip must not eat a
+    password reset; a suppressed-in-the-last-minutes send is the lesser harm.
+    """
+    try:
+        from sqlalchemy import text
+
+        from .db_sync import SessionFactory
+
+        with SessionFactory() as s:
+            row = s.execute(
+                text("SELECT 1 FROM email_suppressions WHERE email = :e LIMIT 1"),
+                {"e": to.strip().lower()},
+            ).first()
+            return row is not None
+    except Exception:
+        logger.warning("send_email: suppression recheck failed — sending anyway", exc_info=True)
+        return False
+
+
 def deliver(to: str, subject: str, html: str, template: str, from_address: str) -> str:
-    """One delivery attempt. Returns 'stubbed' | 'sent' | 'rejected'.
-    Raises on retryable failures (5xx/429/network)."""
+    """One delivery attempt. Returns 'stubbed' | 'sent' | 'rejected' |
+    'suppressed'. Raises on retryable failures (5xx/429/network)."""
     api_key = os.environ.get("RESEND_API_KEY", "").strip()
     if not api_key:
         logger.info(
@@ -43,22 +66,39 @@ def deliver(to: str, subject: str, html: str, template: str, from_address: str) 
         )
         return "stubbed"
 
+    if _is_suppressed(to):
+        logger.info("send_email: suppressed at send time template=%s to=%s", template, _mask(to))
+        return "suppressed"
+
     import httpx  # declared dep; imported lazily so stub mode needs nothing
+
+    # Content-derived idempotency key: stable across dramatiq retries AND
+    # same-day duplicate enqueues, so a timeout-after-accept never
+    # double-sends (Resend dedupes for 24 h).
+    idempotency_key = hashlib.sha256(
+        f"{to}|{template}|{subject}|{html}".encode()
+    ).hexdigest()[:32]
 
     resp = httpx.post(
         RESEND_API_URL,
-        headers={"Authorization": f"Bearer {api_key}"},
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Idempotency-Key": f"spectr/{idempotency_key}",
+        },
         json={"from": from_address, "to": [to], "subject": subject, "html": html},
         timeout=30.0,
     )
     if resp.status_code >= 500 or resp.status_code == 429:
-        # Transient — raise so dramatiq retries with backoff.
+        # Transient — raise so dramatiq retries with backoff. Status only:
+        # never echo the response body (it can contain the address) and the
+        # exception text ends up in dramatiq's failure logs.
         raise RuntimeError(f"resend transient failure: HTTP {resp.status_code}")
     if resp.status_code >= 400:
         # Permanent (bad address, validation) — never spin the queue on it.
+        # Status only — Resend validation bodies echo the recipient address.
         logger.warning(
-            "send_email: REJECTED template=%s to=%s status=%d body=%s",
-            template, _mask(to), resp.status_code, resp.text[:500],
+            "send_email: REJECTED template=%s to=%s status=%d",
+            template, _mask(to), resp.status_code,
         )
         return "rejected"
     logger.info("send_email: sent template=%s to=%s", template, _mask(to))

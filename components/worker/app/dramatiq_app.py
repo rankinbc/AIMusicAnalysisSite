@@ -56,3 +56,16 @@ from . import send_email_actor  # noqa: E402,F401  (story 4.2 — send_email)
 # harmless and keeps W2's `--queues analysis-free maintenance` whitelist
 # resolving even if the actor import order changes.
 broker.declare_queue("maintenance")
+
+# Story 4.2 review — prod email gate, WORKER side. The BFF's
+# SPECTR_REQUIRE_EMAIL check validates the BFF's Resend options, but the
+# component that actually SENDS is this worker via RESEND_API_KEY. Without
+# this, a configured-BFF/unconfigured-worker deploy passes the gate and every
+# prod email silently becomes a stub log line.
+import os as _os  # noqa: E402
+
+if _os.environ.get("SPECTR_REQUIRE_EMAIL") == "1" and not _os.environ.get("RESEND_API_KEY", "").strip():
+    raise RuntimeError(
+        "SPECTR_REQUIRE_EMAIL=1 but RESEND_API_KEY is not set — the send_email "
+        "actor would stub every email. Set RESEND_API_KEY on the worker."
+    )

@@ -76,6 +76,35 @@ public sealed class EmailPipelineTests(WebApplicationFactory<Program> factory)
             () => EmailTemplates.Render("no-such-template", new Dictionary<string, string>()));
     }
 
+    [Fact]
+    public void Subject_Strips_Control_Characters_And_Falls_Back_When_Missing()
+    {
+        var (subject, _) = EmailTemplates.Render(EmailTemplates.AnalysisComplete,
+            new Dictionary<string, string>
+            {
+                ["songName"] = "My\r\nTrack\x1b",
+                ["grade"] = "A",
+                ["reportUrl"] = "https://x/r",
+            });
+        Assert.Equal("Your analysis is ready — MyTrack", subject); // no CR/LF/ESC
+
+        var (fallback, _) = EmailTemplates.Render(EmailTemplates.AnalysisComplete,
+            new Dictionary<string, string> { ["grade"] = "A", ["reportUrl"] = "https://x/r" });
+        Assert.Equal("Your analysis is ready", fallback); // no dangling em-dash
+    }
+
+    [Fact]
+    public void Url_Slots_Reject_Non_Http_Schemes()
+    {
+        var (_, html) = EmailTemplates.Render(EmailTemplates.Verification,
+            new Dictionary<string, string>
+            {
+                ["verifyUrl"] = "javascript:alert(1)",
+                ["expiresHours"] = "24",
+            });
+        Assert.DoesNotContain("javascript:", html); // empty href, never a DKIM-signed phish
+    }
+
     // ── QueueEmailSender (AC1 + AC3 skip) ────────────────────────────────────
 
     private sealed class RecordingQueue : IJobQueue
@@ -251,6 +280,41 @@ public sealed class EmailPipelineTests(WebApplicationFactory<Program> factory)
             await db.EmailSuppressions.Where(s => s.Email == email.ToLowerInvariant()).ExecuteDeleteAsync();
             await db.WebhookEvents.Where(w => w.Id == eventId).ExecuteDeleteAsync();
         }
+    }
+
+    [Fact]
+    public async Task Webhook_Missing_Headers_Or_Stale_Timestamp_Is_Unauthorized()
+    {
+        if (!await TestDb.Reachable(_factory)) { return; }
+
+        using var f = WebhookFactory();
+        var client = f.CreateClient();
+
+        // No svix headers at all.
+        var bare = await client.PostAsync("/api/email/webhook",
+            new StringContent("{}", Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.Unauthorized, bare.StatusCode);
+
+        // Correctly signed but 10-minute-old timestamp (outside the window).
+        var id = $"msg_{Guid.NewGuid():N}";
+        var body = """{"type":"email.bounced","data":{"to":["x@y.test"]}}""";
+        var stale = DateTimeOffset.UtcNow.AddMinutes(-10).ToUnixTimeSeconds().ToString();
+        var key = Convert.FromBase64String(WebhookSecret[6..]);
+        var sig = Convert.ToBase64String(HMACSHA256.HashData(
+            key, Encoding.UTF8.GetBytes($"{id}.{stale}.{body}")));
+        var req = new HttpRequestMessage(HttpMethod.Post, "/api/email/webhook")
+        { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+        req.Headers.Add("svix-id", id);
+        req.Headers.Add("svix-timestamp", stale);
+        req.Headers.Add("svix-signature", $"v1,{sig}");
+        var resp = await client.SendAsync(req);
+        Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+
+        // Absurd timestamp must be 401, not a 500 (FromUnixTimeSeconds range).
+        var absurd = SignedWebhook(id, body);
+        absurd.Headers.Remove("svix-timestamp");
+        absurd.Headers.Add("svix-timestamp", "99999999999999999");
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.SendAsync(absurd)).StatusCode);
     }
 
     [Fact]

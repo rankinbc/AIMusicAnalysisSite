@@ -18,7 +18,7 @@ So that every product email is deliverable and brand-consistent.
 ## Decisions of record (recon 2026-07-03)
 
 1. **Render in the BFF, send in the worker.** The template registry is BFF-side per AR27 ("Resend via BFF IEmailSender + template registry"); the worker must not duplicate it. `QueueEmailSender : IEmailSender` (replaces `LoggingEmailSender` as the DI registration): checks suppression → renders via `EmailTemplates` → enqueues `send_email(to, subject, html, template)` on `maintenance`. The worker actor is deliberately dumb: POST to Resend's HTTP API; without `RESEND_API_KEY` it logs the send (masked) and succeeds — dev stays zero-config.
-2. **Retry semantics** live on the actor: `max_retries=3` (dramatiq exponential backoff); 5xx/429/network → raise (retry); 4xx → log + swallow (a bad address must not spin the queue). Producers never block on SMTP/HTTP latency (architecture D6).
+2. **Retry semantics** live on the actor: `max_retries=3` (dramatiq exponential backoff); 5xx/429/network → raise (retry); 4xx → log + swallow (a bad address must not spin the queue). Producers never block on SMTP/HTTP latency (architecture D6). *(Review amendment: the From address rides as the 5th actor arg from `ResendOptions.FromAddress` — single source of truth — rather than a worker `EMAIL_FROM` env as originally drafted.)*
 3. **Template registry** = `EmailTemplates.Render(template, data) -> (subject, html)`: the 5 AR27 templates (`verification`, `reset`, `analysis-complete`, `dunning`, `retention-warning`), EmailShell wrapper (dark header band, system-font stack, mono accents — UX-DR37 "consistent in spirit, not in tokens"), all data values HTML-encoded (injection guard), unknown template → throw (producer bug, fail loud).
 4. **Suppression** = new `email_suppressions` table (email PK lowercase, reason, source event id, created_at). Checked in the BFF at enqueue time — a bounce landing between enqueue and send is a negligible race vs. a per-send worker DB query; documented. No python mirror needed (worker never reads it).
 5. **Webhook** = `POST /api/email/webhook` (AllowAnonymous): Resend signs via Svix — custom constant-time HMAC-SHA256 verifier over `"{svix-id}.{svix-timestamp}.{body}"` with the base64 `whsec_` secret, ±5 min timestamp window (no in-repo Svix helper; Stripe's `EventUtility` doesn't apply). Dedupe via the existing `webhook_events` pattern (INSERT ON CONFLICT DO NOTHING + conditional `processed_at` skip — story 2.1 rule). Handles `email.bounced` + `email.complained` → suppression upsert. 503 when `Resend:WebhookSecret` unconfigured (Stripe precedent).
@@ -78,6 +78,25 @@ claude-fable-5 (Claude Code)
 - Worker: `app/send_email_actor.py` (new), `app/dramatiq_app.py`, `tests/{test_send_email.py (new),test_actor_queues.py}`, `requirements.{in,txt}`
 - Config/docs: `.env.example`, `docker/docker-compose.yml`, `.gitleaks.toml`, `docs/runbook.md` (new)
 
+### Senior Developer Review (AI)
+
+2026-07-03 — bmad-code-review (Blind Hunter security-mindset + Edge Case Hunter/Acceptance Auditor combined; auditor ran BFF 13/13 + worker 11/11 live). Outcome: **Approve after patches** — svix verifier itself judged sound (constant-time, per-spec), but the pathway had real gaps. 14 patches applied:
+
+- [x] [High] **Prod gate validated the key nobody uses**: `SPECTR_REQUIRE_EMAIL` checked the BFF's `Resend__ApiKey`, but the WORKER sends via `RESEND_API_KEY` (ungated) — a configured-BFF/unconfigured-worker deploy would silently stub every prod email → worker-side gate in dramatiq_app (startup RuntimeError when `SPECTR_REQUIRE_EMAIL=1` without `RESEND_API_KEY`); runbook documents BOTH gates
+- [x] [High] Signed payload without `"type"` (schema drift) threw KeyNotFoundException pre-dedupe → 500 + infinite Resend retry loop → TryGetProperty + non-object/empty-type → 400
+- [x] [Med] No Resend idempotency → timeout-after-accept could double-send on retry → content-derived `Idempotency-Key` (SHA-256 of to|template|subject|html — stable across dramatiq retries AND same-day duplicate enqueues; Resend dedupes 24 h)
+- [x] [Med] Subject built from RAW user songName (comment claimed "everything encoded") → subject slot strips control chars (CR/LF header hygiene) + fallback subject when absent; misleading comment rewritten; tests
+- [x] [Med] `href="{HtmlEncode(url)}"` passes `javascript:` untouched → URL slots require absolute http(s) (`Uri.TryCreate`) or render empty — never a DKIM-signed phishing link; test
+- [x] [Med] Suppression checked only at enqueue → send-time recheck in the actor (SQLAlchemy text(), FAIL-OPEN with logged warning — a DB blip must not eat a password reset; BFF check is primary)
+- [x] [Low] Absurd unix timestamp → FromUnixTimeSeconds throw → 500; malformed base64 secret → FormatException storm; oversize svix-id (>64) and recipient (>320) → Postgres error retry loops — all now clean 401/400/skip paths; headers checked BEFORE the body read; 256 KB RequestSizeLimit (app-wide Kestrel cap is 250 MB for audio)
+- [x] [Low] 4xx branch logged `resp.text` (Resend validation bodies echo the address — defeating the masking) → status only; transient raise already status-only
+- [x] [Low] Tests added: stale-timestamp 401, missing-headers 401, absurd-timestamp 401 (not 500), subject sanitization, javascript: rejection
+- [x] [Low] Runbook: dead-letter `dramatiq:maintenance.XQ` (7-day TTL, monitoring hook 10.2), maintenance-lane latency note (REVISIT before 4.3 puts expiring reset links here), queue-payload visibility (outbox-pattern decision deferred to 4.3 — today's producers carry no secrets), suppressed-=-unreachable support diagnosis
+- [x] [Low] Story decision 6 corrected (From rides as actor arg, not worker env)
+- Deferred: outbox/reference pattern for secret-bearing emails (4.3 — its producers don't exist yet, decision recorded); `email = lower(email)` CHECK constraint (both writers normalize + tested; revisit if a third writer appears); `email_sends` audit table (10.2 observability); payload_hash-consulting drift detection (matches billing's pattern — consistent by design).
+- Rejected: scoped-DI captive-dependency concern (verified: scheduler resolves per-scope; full app boot in tests passes DI validation).
+
 ### Change Log
 
 - 2026-07-03: implemented on `account/4-2-email-foundation`. Gates: BFF 300/300, worker 575 + 3 xfail, ruff clean. Status → review.
+- 2026-07-03 (review): 14 patches applied. Gates after: BFF 303/303 (16 email tests), worker 575 + 3 xfail, ruff clean.

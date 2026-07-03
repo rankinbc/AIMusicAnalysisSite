@@ -23,7 +23,12 @@ public static class EmailWebhookEndpoints
 
     public static void MapEmailWebhookEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/email/webhook", HandleWebhook).AllowAnonymous();
+        // 256 KB cap: webhook payloads are small JSON; the app-wide Kestrel
+        // limit is 250 MB (audio uploads) and must not apply to an anonymous
+        // endpoint that buffers the body for HMAC verification.
+        app.MapPost("/api/email/webhook", HandleWebhook)
+            .AllowAnonymous()
+            .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(256 * 1024));
     }
 
     private static async Task<IResult> HandleWebhook(
@@ -40,20 +45,27 @@ public static class EmailWebhookEndpoints
             // the secret is configured (Stripe-webhook precedent).
             return Results.StatusCode(503);
 
-        using var reader = new StreamReader(request.Body, Encoding.UTF8);
-        var body = await reader.ReadToEndAsync(ct);
-
+        // Headers first — reject before spending a body read on anon traffic.
         var svixId = request.Headers["svix-id"].ToString();
         var svixTimestamp = request.Headers["svix-timestamp"].ToString();
         var svixSignature = request.Headers["svix-signature"].ToString();
         if (string.IsNullOrEmpty(svixId) || string.IsNullOrEmpty(svixTimestamp)
             || string.IsNullOrEmpty(svixSignature))
             return Results.Unauthorized();
+        if (svixId.Length > 64) // webhook_events.id is varchar(64)
+            return Results.BadRequest();
 
+        // FromUnixTimeSeconds throws outside ±~292 billion years of range —
+        // a scanner sending "99999999999999999" must get a 401, not a 500.
         if (!long.TryParse(svixTimestamp, out var unix)
-            || Math.Abs((DateTimeOffset.UtcNow - DateTimeOffset.FromUnixTimeSeconds(unix)).TotalMinutes)
-               > TimestampTolerance.TotalMinutes)
+            || unix < 0 || unix > 253_402_300_799) // year 9999
             return Results.Unauthorized();
+        if (Math.Abs((DateTimeOffset.UtcNow - DateTimeOffset.FromUnixTimeSeconds(unix)).TotalMinutes)
+            > TimestampTolerance.TotalMinutes)
+            return Results.Unauthorized();
+
+        using var reader = new StreamReader(request.Body, Encoding.UTF8);
+        var body = await reader.ReadToEndAsync(ct);
 
         if (!VerifySvixSignature(secret, svixId, svixTimestamp, body, svixSignature))
             return Results.Unauthorized();
@@ -66,7 +78,14 @@ public static class EmailWebhookEndpoints
         try
         {
             using var doc = JsonDocument.Parse(body);
-            eventType = doc.RootElement.GetProperty("type").GetString() ?? "";
+            // TryGetProperty — a SIGNED payload with a surprising shape (new
+            // Resend event type, schema drift) must be a 400, never an
+            // unhandled 500 that Resend retries forever.
+            eventType = doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("type", out var typeEl)
+                    ? typeEl.GetString() ?? ""
+                    : "";
+            if (eventType.Length == 0) return Results.BadRequest();
             email = ExtractRecipient(doc.RootElement);
         }
         catch (JsonException)
@@ -92,7 +111,8 @@ public static class EmailWebhookEndpoints
         try
         {
             if (eventType is "email.bounced" or "email.complained"
-                && !string.IsNullOrWhiteSpace(email))
+                && !string.IsNullOrWhiteSpace(email)
+                && email.Trim().Length <= 320) // column cap — never a 500 loop on a hostile payload
             {
                 var reason = eventType == "email.bounced" ? "bounced" : "complained";
                 var normalized = email.Trim().ToLowerInvariant();
@@ -138,8 +158,18 @@ public static class EmailWebhookEndpoints
     internal static bool VerifySvixSignature(
         string secret, string id, string timestamp, string body, string signatureHeader)
     {
-        var key = Convert.FromBase64String(
-            secret.StartsWith("whsec_", StringComparison.Ordinal) ? secret[6..] : secret);
+        byte[] key;
+        try
+        {
+            key = Convert.FromBase64String(
+                secret.StartsWith("whsec_", StringComparison.Ordinal) ? secret[6..] : secret);
+        }
+        catch (FormatException)
+        {
+            // A malformed configured secret must be an auth failure per
+            // request, not an unhandled 500 storm Resend retries forever.
+            return false;
+        }
         var signedContent = $"{id}.{timestamp}.{body}";
         var expected = HMACSHA256.HashData(key, Encoding.UTF8.GetBytes(signedContent));
 

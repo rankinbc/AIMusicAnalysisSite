@@ -20,10 +20,12 @@ public static class EmailTemplates
         [Verification, Reset, AnalysisComplete, Dunning, RetentionWarning];
 
     /// <summary>
-    /// Render a registered template. Every data value is HTML-encoded —
-    /// producers pass raw strings and cannot inject markup. Unknown template
-    /// names throw: that's a producer bug and must fail loud, not send a
-    /// blank email.
+    /// Render a registered template. Body values are HTML-encoded; URL slots
+    /// additionally require an absolute http(s) URI (a producer passing
+    /// "javascript:..." renders an empty href, never a DKIM-signed phishing
+    /// link); subject values get control characters stripped (header-
+    /// injection hygiene — subjects aren't HTML but they are header
+    /// material). Unknown template names throw: producer bug, fail loud.
     /// </summary>
     public static (string Subject, string Html) Render(
         string template, IReadOnlyDictionary<string, string> data)
@@ -32,6 +34,23 @@ public static class EmailTemplates
             ? WebUtility.HtmlEncode(v)
             : "";
 
+        // URL slot: absolute http/https only, then HTML-encoded for the href.
+        string U(string key)
+        {
+            if (!data.TryGetValue(key, out var v)) return "";
+            return Uri.TryCreate(v, UriKind.Absolute, out var uri)
+                && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+                    ? WebUtility.HtmlEncode(v)
+                    : "";
+        }
+
+        // Subject slot: raw text with CR/LF + control chars stripped.
+        string S(string key)
+        {
+            if (!data.TryGetValue(key, out var v)) return "";
+            return string.Concat(v.Where(c => !char.IsControl(c)));
+        }
+
         return template switch
         {
             Verification => (
@@ -39,7 +58,7 @@ public static class EmailTemplates
                 Shell("Verify your email",
                     $"""
                     <p>One click and your account is provably yours.</p>
-                    <p style="margin:28px 0;"><a href="{D("verifyUrl")}" style="{ButtonCss}">VERIFY EMAIL</a></p>
+                    <p style="margin:28px 0;"><a href="{U("verifyUrl")}" style="{ButtonCss}">VERIFY EMAIL</a></p>
                     <p style="{MutedCss}">Link expires in {D("expiresHours")} hours. If you didn't create a SPECTR account, ignore this.</p>
                     """)),
             Reset => (
@@ -47,16 +66,18 @@ public static class EmailTemplates
                 Shell("Password reset",
                     $"""
                     <p>Someone (hopefully you) asked to reset this account's password.</p>
-                    <p style="margin:28px 0;"><a href="{D("resetUrl")}" style="{ButtonCss}">RESET PASSWORD</a></p>
+                    <p style="margin:28px 0;"><a href="{U("resetUrl")}" style="{ButtonCss}">RESET PASSWORD</a></p>
                     <p style="{MutedCss}">Link is single-use and expires in {D("expiresMinutes")} minutes. If this wasn't you, your password is unchanged.</p>
                     """)),
             AnalysisComplete => (
-                $"Your analysis is ready — {Decode(data, "songName")}",
+                S("songName") is { Length: > 0 } song
+                    ? $"Your analysis is ready — {song}"
+                    : "Your analysis is ready",
                 Shell("Analysis complete",
                     $"""
                     <p><span style="{MonoCss}">{D("songName")}</span> finished its 7-phase analysis.</p>
                     <p>Grade: <span style="{MonoCss}">{D("grade")}</span></p>
-                    <p style="margin:28px 0;"><a href="{D("reportUrl")}" style="{ButtonCss}">OPEN REPORT</a></p>
+                    <p style="margin:28px 0;"><a href="{U("reportUrl")}" style="{ButtonCss}">OPEN REPORT</a></p>
                     <p style="{MutedCss}">You can turn these emails off in your profile.</p>
                     """)),
             Dunning => (
@@ -65,7 +86,7 @@ public static class EmailTemplates
                     $"""
                     <p>Your last payment didn't go through. Your Pro features keep working while we retry.</p>
                     <p>Next attempt: <span style="{MonoCss}">{D("nextAttempt")}</span></p>
-                    <p style="margin:28px 0;"><a href="{D("billingUrl")}" style="{ButtonCss}">UPDATE PAYMENT METHOD</a></p>
+                    <p style="margin:28px 0;"><a href="{U("billingUrl")}" style="{ButtonCss}">UPDATE PAYMENT METHOD</a></p>
                     <p style="{MutedCss}">Reports you've already generated are yours forever, whatever happens.</p>
                     """)),
             RetentionWarning => (
@@ -74,15 +95,12 @@ public static class EmailTemplates
                     $"""
                     <p>Your subscription lapsed, and per our retention policy your <b>raw audio files</b> will be removed on <span style="{MonoCss}">{D("purgeDate")}</span> ({D("daysLeft")} days from this notice).</p>
                     <p>Your <b>reports, verdicts, and coach chats are never deleted</b> — only the audio.</p>
-                    <p style="margin:28px 0;"><a href="{D("billingUrl")}" style="{ButtonCss}">KEEP MY FILES</a></p>
+                    <p style="margin:28px 0;"><a href="{U("billingUrl")}" style="{ButtonCss}">KEEP MY FILES</a></p>
                     <p style="{MutedCss}">Re-subscribing (or buying credits) before the date cancels the cleanup automatically.</p>
                     """)),
             _ => throw new InvalidOperationException(
                 $"Unknown email template '{template}'. Registered: {string.Join(", ", All)}."),
         };
-
-        static string Decode(IReadOnlyDictionary<string, string> data, string key)
-            => data.TryGetValue(key, out var v) ? v : "";
     }
 
     // System-font stack + dark header band + mono accents (UX-DR37).

@@ -53,9 +53,31 @@ Resend shows the exact records under Domains → your domain. Verify each:
 
 ### Prod boot gate
 
-Set `SPECTR_REQUIRE_EMAIL=1` in prod: boot then fails unless
-`Resend__ApiKey` AND `Resend__WebhookSecret` are configured
-(same pattern as `SPECTR_REQUIRE_STRIPE`).
+Set `SPECTR_REQUIRE_EMAIL=1` on BOTH services in prod:
+- BFF: boot fails unless `Resend__ApiKey` AND `Resend__WebhookSecret` are set.
+- Worker: dramatiq startup fails unless `RESEND_API_KEY` is set — the worker
+  is the component that actually sends; without this gate a configured-BFF /
+  unconfigured-worker deploy silently stubs every email.
+
+### Operational notes
+
+- **Dead letters**: after `max_retries=3` transient failures, dramatiq moves
+  the message to the `dramatiq:maintenance.XQ` dead-letter queue (7-day TTL).
+  A lost dunning/retention email is recoverable from there — check XQ depth
+  when Resend has an outage. (Monitoring hook: 10.2.)
+- **Latency**: `send_email` shares the maintenance lane with `sweep_retention`
+  on a 1-process worker — an email enqueued mid-sweep waits. Fine for today's
+  producers (retention warnings); REVISIT before 4.3 puts time-sensitive
+  reset links ("expires in N minutes") on this lane.
+- **Queue payload visibility**: enqueued messages carry recipient + rendered
+  HTML in Redis until consumed, and dramatiq failure logs include actor args.
+  Today's producers embed no secrets; 4.3 (verification/reset links) must
+  either accept short-token-expiry exposure or move to an outbox-reference
+  pattern. Decision recorded in story 4.2 review.
+- **Suppressed = unreachable**: a suppressed address silently receives
+  NOTHING — including password resets. Support diagnosis: check
+  `email_suppressions` for the user's address; removal only with the user's
+  explicit re-consent (complaints especially).
 
 ## Secret rotation (stub — 10.1 expands)
 
