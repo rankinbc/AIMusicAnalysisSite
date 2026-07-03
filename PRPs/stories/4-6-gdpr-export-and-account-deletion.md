@@ -1,6 +1,6 @@
 # Story 4.6: GDPR Export & Account Deletion
 
-Status: review
+Status: done
 
 ## Story
 
