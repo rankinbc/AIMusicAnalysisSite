@@ -131,6 +131,15 @@ def analyze_audio_job(job_id: str) -> None:
         job = s.get(AnalysisJob, jid)
         if job is None:
             raise ValueError(f"job {job_id} not found")
+        # Story 3.5 — redelivery guard: a duplicate/redelivered message for an
+        # already-completed job must be a clean no-op. Without this it would
+        # regress the job to processing, re-run the whole pipeline, and then
+        # Phase C's insert would hit the unique analyses.job_id index → an
+        # unhandled IntegrityError retry-loop. (A mid-run crash redelivery is
+        # NOT complete yet and correctly re-runs.)
+        if job.status == JOB_STATUS_COMPLETE:
+            logger.info("analyze_audio_job: job=%s already complete — redelivery no-op", job_id)
+            return
         if job.version_id is None:
             raise ValueError(f"job {job_id} has no version_id")
         version = s.get(SongVersion, job.version_id)

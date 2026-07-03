@@ -11,13 +11,21 @@ public sealed class WorkerOptions
     public const string SectionName = "Worker";
 
     /// <summary>
-    /// A non-terminal job (pending/processing) whose most-recent activity
-    /// (started_at, else dispatched_at) is older than this is treated as
+    /// A PROCESSING job whose started_at is older than this is treated as
     /// abandoned by a dead worker and marked failed. Must exceed the longest
     /// legitimate single job (structure/demucs ~20 min measured from started_at)
     /// so a slow-but-live job is never false-failed.
     /// </summary>
     public int StaleJobMinutes { get; init; } = 30;
+
+    /// <summary>
+    /// Story 3.5 (NFR16): a PENDING job's message still sits in the Redis
+    /// queue and resumes when the worker returns — it must NOT be failed on
+    /// the short processing window just because the worker was down. This
+    /// much longer grace (from dispatched_at) only catches truly orphaned
+    /// rows whose message was lost.
+    /// </summary>
+    public int PendingGraceMinutes { get; init; } = 240;
 
     /// <summary>
     /// The worker is considered offline if the most recent dramatiq heartbeat

@@ -93,9 +93,13 @@ function Invoke-Scalar ([string]$sql) {
 Write-Host 'SPECTR job recovery' -ForegroundColor Magenta
 Info "stale threshold: $StaleMinutes min  (mode: $(if ($DryRun) {'DRY-RUN'} else {'apply'}))"
 
-# Predicate shared by the preview + the update: abandoned non-terminal jobs.
+# Predicate shared by the preview + the update. Story 3.5 (NFR16): PROCESSING
+# only — a pending job's message still sits in the Redis queue and the worker
+# this launcher is about to start WILL consume it; failing pending jobs here
+# was defeating queue-resume by design. (The runtime StaleJobReaper still
+# catches truly orphaned pending rows after its long PendingGraceMinutes.)
 $where = @"
-status IN ('pending','processing')
+status = 'processing'
 AND COALESCE(started_at, dispatched_at, TIMESTAMPTZ '2000-01-01')
     < now() - (INTERVAL '1 minute' * $StaleMinutes)
 "@
