@@ -1,8 +1,62 @@
 # SPECTR Operations Runbook
 
 Operational checklists the architecture references (architecture.md "Repo
-additions"). Sections land with the story that creates the concern; 10.1
-(production topology) extends this file.
+additions"). Sections land with the story that creates the concern.
+
+## Production deploy & rollback (story 10.1)
+
+Topology (AR29): single VPS, `infra/compose.prod.yml` — caddy (auto-TLS,
+SPA/funnel statics, `/api` + crawler-`/r/*` proxy), bff, worker-paid (W1:
+coach + analysis-paid), worker-free (W2: analysis-free + maintenance),
+postgres:16, redis:7 (AOF on — the queue IS durable state). Only caddy
+publishes ports; the BFF has no direct ingress (which is what makes
+`ForwardedHeaders__Enabled=true` safe).
+
+### First-time VPS setup
+
+1. Docker + compose plugin; `mkdir -p /opt/spectr`.
+2. Copy `infra/compose.prod.yml` + `infra/deploy.sh` (CI re-ships these on
+   every deploy); `chmod +x deploy.sh`.
+3. Create `/opt/spectr/.env` — **chmod 600** (AR31). Required keys are
+   listed in the compose header; generate signing keys with
+   `openssl rand -base64 48`. `SPECTR_REQUIRE_STRIPE=1` and
+   `SPECTR_REQUIRE_EMAIL=1` are baked into the compose — boot fails on
+   missing billing/email config by design.
+4. Point DNS at the VPS; `SPECTR_DOMAIN` drives Caddy's auto-ACME.
+5. GitHub repo secrets: `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` (deploy key,
+   `/opt/spectr` writable). Until set, CI pushes images and skips the
+   deploy step gracefully.
+6. First boot applies EF migrations automatically
+   (`Migrations__ApplyAtBoot=true`, advisory-lock-serialized).
+
+### Deploy + rollback (NFR29)
+
+- CI on master: gates → images pushed to GHCR (`spectr-{bff,worker,web}`,
+  `:sha` + `:latest`) → trivy CRITICAL scan → SSH →
+  `/opt/spectr/deploy.sh <sha>` (pin, pull, up, `/healthz` verify with
+  AUTO-rollback on failure).
+- Manual rollback — one command: `ssh <vps> '/opt/spectr/deploy.sh rollback'`
+  (repins the previous image set from `.deploy-state`).
+- Prompt rollback needs NO deploy: flip the `prompt_versions` flag row.
+
+### Destructive-migration rule (architecture L189)
+
+A migration that DROPS or rewrites data requires: (1) a runbook entry
+below describing the change, (2) a confirmed fresh backup (10.2's
+`backup.sh`) BEFORE merging to master. No exceptions — boot-time
+migration means merge == deploy == applied.
+
+### Prod R2 checklist (the 3.x deferrals)
+
+- [ ] Bucket CORS: `PUT/GET/HEAD` from `https://<domain>`, `ExposeHeaders:
+      ETag` (mirror of the minio-init dev rule — multipart Complete needs it).
+- [ ] TWO scoped API tokens (AR21): BFF token (`R2_BFF_*`) and a separate
+      worker token (`R2_WORKER_*`) — never share.
+- [ ] Lifecycle: NO blanket prefix expiry (paid content is age-unbounded —
+      3.4's lesson). Optional tag-based rule: expire objects tagged
+      `spectr-purge-residue` after 30 d once the sweep starts tagging
+      failed deletes (future).
+- [ ] `backups/` prefix: 30-day expiry (10.2 wires the nightly pg_dump).
 
 ## Email deliverability (story 4.2 / NFR25)
 
@@ -106,11 +160,25 @@ Set `SPECTR_REQUIRE_EMAIL=1` on BOTH services in prod:
   stale tokens within a 60 s cache window (instant same-process). A support
   "kill all sessions for user X" = bump the column manually.
 
-## Secret rotation (stub — 10.1 expands)
+## Secret rotation (story 10.1 expansion)
 
-- JWT signing key (`Jwt__Key`): rotation invalidates all access tokens
-  (≤15 min blast radius); refresh tokens are DB-hashed and unaffected.
-- `Anon__SigningKey`: rotation orphans anonymous device cookies — rotate
-  only with a migration plan (Epic 4.5+).
-- `RESEND_API_KEY` / `Resend__WebhookSecret`: rotate freely; update env and
-  restart worker/BFF.
+All prod secrets live in `/opt/spectr/.env` (chmod 600). Rotation =
+edit `.env` → `docker compose -f compose.prod.yml up -d` (recreates only
+services whose env changed).
+
+- `JWT_KEY` (`Jwt__Key`): invalidates all access tokens (≤15 min blast
+  radius); refresh tokens are DB-hashed and unaffected. For a
+  kill-all-sessions instead, bump `users.token_version` (4.6).
+- `ANON_SIGNING_KEY`: rotation orphans anon device + reviewer cookies —
+  anon analyses in their 72 h window become unclaimable. Rotate only on
+  suspected compromise.
+- `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET`: create the new key in the
+  dashboard first, swap, then revoke the old (webhook secret: roll the
+  endpoint secret in Stripe → update env → restart — a mismatch window
+  5xxes webhooks, which Stripe retries).
+- `ANTHROPIC_API_KEY`: rotate freely; only the workers read it.
+- `R2_BFF_*` / `R2_WORKER_*`: create replacement token, swap, revoke.
+  Presigned URLs signed by the old token die at revocation (≤2 h upload /
+  ≤15 min read windows).
+- `RESEND_API_KEY` / `RESEND_WEBHOOK_SECRET`: rotate freely; update env and
+  restart worker + BFF.

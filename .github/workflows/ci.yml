@@ -131,3 +131,96 @@ jobs:
       - name: Mypy (relocated pipeline)
         run: python -m mypy app/verdict_lib/ --ignore-missing-imports
         working-directory: components/worker
+
+  # ── Story 10.1 (AR30/AC3): master-only — build+push GHCR, trivy-scan the
+  # BUILT images (the 4.1 deferral lands here), SSH deploy + /healthz smoke.
+  # The SSH step skips gracefully when the VPS secrets aren't configured, so
+  # the pipeline is green before a VPS exists.
+  deploy:
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    needs: [secrets, bff, frontend, python]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build + push spectr-bff
+        uses: docker/build-push-action@v6
+        with:
+          context: components/bff
+          file: components/bff/src/Spectr.Bff/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/spectr-bff:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/spectr-bff:latest
+      - name: Build + push spectr-worker
+        uses: docker/build-push-action@v6
+        with:
+          context: components
+          file: components/worker/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/spectr-worker:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/spectr-worker:latest
+      - name: Build + push spectr-web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/Dockerfile.web
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/spectr-web:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/spectr-web:latest
+
+      # Built-image scanning (story 4.1 deferral): CRITICAL vulns fail the
+      # deploy; unfixed-upstream noise ignored.
+      - name: Trivy scan built images
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ghcr.io/${{ github.repository_owner }}/spectr-bff:${{ github.sha }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Trivy scan worker image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ghcr.io/${{ github.repository_owner }}/spectr-worker:${{ github.sha }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Trivy scan web image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ghcr.io/${{ github.repository_owner }}/spectr-web:${{ github.sha }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Deploy over SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          if [ -z "$VPS_HOST" ] || [ -z "$VPS_USER" ] || [ -z "$VPS_SSH_KEY" ]; then
+            echo "VPS secrets not configured — images pushed, deploy skipped."
+            exit 0
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          # Ship the infra bundle (self-updating compose/Caddyfile/deploy.sh),
+          # then pin + pull + up + /healthz verify (deploy.sh auto-rolls-back).
+          scp -i ~/.ssh/deploy_key infra/compose.prod.yml infra/deploy.sh "$VPS_USER@$VPS_HOST:/opt/spectr/"
+          ssh -i ~/.ssh/deploy_key "$VPS_USER@$VPS_HOST" \
+            "chmod +x /opt/spectr/deploy.sh && /opt/spectr/deploy.sh ${{ github.sha }}"

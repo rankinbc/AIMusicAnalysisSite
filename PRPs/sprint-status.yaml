@@ -150,8 +150,8 @@ development_status:
   9-2-partner-dashboard-and-payout-reporting: backlog
   epic-9-retrospective: optional
 
-  epic-10: backlog
-  10-1-production-deploy-topology: backlog
+  epic-10: in-progress  # started 2026-07-03
+  10-1-production-deploy-topology: review  # implemented 2026-07-03 (branch ops/10-1-deploy-topology): infra/{compose.prod.yml,Caddyfile,Dockerfile.web,deploy.sh} + worker Dockerfile (deferred since 1.1) + /healthz + BootMigrator advisory lock + ForwardedHeaders/FrontendOrigin gates + CI deploy job (GHCR x3 + trivy + SSH w/ graceful skip) + runbook deploy/rollback/R2/rotation; BFF 327
   10-2-backups-and-restore-proof: backlog
   10-3-observability-stack: backlog
   10-4-phone-grade-alerting-and-status: backlog

@@ -67,6 +67,15 @@ if (jwtKey == anonSigningKey)
         "Anon:SigningKey must DIFFER from Jwt:Key — one HMAC key serving two "
         + "token formats invites cross-protocol confusion.");
 
+// Story 10.1 (4.3/4.4 deferral paid): outside Development, a missing
+// App:FrontendOrigin means every verification/reset/report email ships
+// localhost links — that's a boot failure, not a warning.
+if (!isDevEnv && string.IsNullOrWhiteSpace(builder.Configuration["App:FrontendOrigin"]))
+    throw new InvalidOperationException(
+        "Missing App:FrontendOrigin. Outside Development this MUST be the "
+        + "public site origin (email deep links are built from it). Set "
+        + "App__FrontendOrigin, e.g. https://spectr.example.com.");
+
 // Allow 250 MB uploads for long FLACs.
 builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 250L * 1024 * 1024);
 
@@ -377,6 +386,25 @@ builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
 var app = builder.Build();
 
 // ── Pipeline ───────────────────────────────────────────────────────────────────
+// Story 10.1 — proxy header trust, config-gated (prod compose only). FIRST
+// in the pipeline so rate-limit per-IP arms and logs see the client, not
+// caddy. Clearing KnownNetworks/Proxies + ForwardLimit 1 is safe ONLY
+// because the prod compose publishes NO BFF port — caddy is the sole
+// ingress; a direct spoof path does not exist. Never enable this on a
+// directly-exposed BFF.
+if (string.Equals(app.Configuration["ForwardedHeaders:Enabled"], "true", StringComparison.OrdinalIgnoreCase))
+{
+    var fwd = new ForwardedHeadersOptions
+    {
+        ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor
+            | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto,
+        ForwardLimit = 1,
+    };
+    fwd.KnownIPNetworks.Clear();
+    fwd.KnownProxies.Clear();
+    app.UseForwardedHeaders(fwd);
+}
+
 // OpenAPI doc is mapped unconditionally — orval codegen needs to fetch it from
 // whatever environment is running (dev + CI). Lock down before public exposure.
 app.MapOpenApi();
@@ -430,6 +458,33 @@ app.MapEmailWebhookEndpoints();  // story 4.2 — POST /api/email/webhook (svix-
 
 app.MapGet("/", () => Results.Json(new { status = "ok", version = "2.0.0" }))
    .AllowAnonymous();
+
+// Story 10.1 (AC3) — the deploy smoke + external-probe endpoint: verifies
+// the two hard dependencies. 200 {"status":"ok"} or 503 naming the failure.
+app.MapGet("/healthz", async (AppDbContext db, IConnectionMultiplexer redis) =>
+{
+    string? failing = null;
+    try { await db.Database.ExecuteSqlRawAsync("SELECT 1"); }
+    catch { failing = "postgres"; }
+    if (failing is null)
+    {
+        try { await redis.GetDatabase().PingAsync(); }
+        catch { failing = "redis"; }
+    }
+    return failing is null
+        ? Results.Json(new { status = "ok" })
+        : Results.Json(new { status = "degraded", failing }, statusCode: 503);
+}).AllowAnonymous();
+
+// Story 10.1 (AC2) — migrations at boot under advisory lock (prod compose
+// sets Migrations:ApplyAtBoot; dev keeps the CLI/launcher flow). A failure
+// here must CRASH the container — serving requests against a half-migrated
+// schema is worse than a restart loop.
+if (string.Equals(app.Configuration["Migrations:ApplyAtBoot"], "true", StringComparison.OrdinalIgnoreCase))
+{
+    await BootMigrator.ApplyAsync(app.Services,
+        app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("BootMigrator"));
+}
 
 app.Run();
 

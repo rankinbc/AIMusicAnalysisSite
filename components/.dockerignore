@@ -1,0 +1,14 @@
+# Story 10.1 (AR31). Context = components/ (see worker/Dockerfile).
+**/__pycache__/
+**/.pytest_cache/
+**/*.pyc
+**/.env
+**/.env.*
+worker/tests/
+shared/tests/
+analysis/tests/
+frontend-spectr-v2/
+frontend-spectr/
+frontend/
+api/
+bff/

@@ -1,0 +1,44 @@
+# Story 10.1 (AR29/D8) — the production edge. Caddy terminates TLS
+# (auto-ACME via {$SPECTR_DOMAIN}), serves the SPA + funnel statics, and
+# proxies /api + crawler /r/* to the BFF. This REPLACES the dev nginx
+# container in prod — the UA-split below is ported from
+# components/frontend-spectr-v2/nginx.conf (story 7.2).
+
+{$SPECTR_DOMAIN} {
+	encode zstd gzip
+
+	# Crawlers get the BFF's prerendered OG shell so share links unfurl;
+	# humans get the SPA shell (story 7.2 split).
+	@share_bots {
+		path /r/*
+		header_regexp ua User-Agent (?i)(discordbot|slackbot|twitterbot|facebookexternalhit|whatsapp|telegrambot|linkedinbot|googlebot|bingbot|embedly|pinterest|skypeuripreview)
+	}
+	handle @share_bots {
+		reverse_proxy bff:5000
+	}
+
+	handle /api/* {
+		reverse_proxy bff:5000 {
+			# SSE (job/coach streams): no buffering, no idle cutoff.
+			flush_interval -1
+			transport http {
+				read_timeout 24h
+			}
+		}
+	}
+
+	# /healthz for external probes (10.4 healthchecks.io) + deploy smoke.
+	handle /healthz {
+		reverse_proxy bff:5000
+	}
+
+	# Everything else: SPA + funnel statics with far-future caching on
+	# hashed assets ("funnel statics via Caddy with cache headers" — D8).
+	handle {
+		root * /srv
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		try_files {path} /index.html
+		file_server
+	}
+}

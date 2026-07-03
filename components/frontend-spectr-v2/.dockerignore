@@ -1,0 +1,5 @@
+# Story 10.1 (AR31)
+node_modules/
+dist/
+.env
+.env.*

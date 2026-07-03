@@ -1,4 +1,6 @@
-# Production worker-topology overlay (AR23 / story 2.5).
+# DEV prod-parity overlay (AR23 / story 2.5). NOTE (story 10.1): the REAL
+# production stack is infra/compose.prod.yml — this overlay remains only for
+# exercising the W1/W2 queue split against the local dev stack.
 #
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up
@@ -38,8 +40,8 @@ services:
   # W1 — paid-priority pool: paid/credit analysis + coach + auxiliary actors.
   worker-paid:
     build:
-      context: ../components/worker
-      dockerfile: Dockerfile
+      context: ../components
+      dockerfile: worker/Dockerfile
     command: python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues coach analysis-paid
     depends_on:
       postgres: { condition: service_healthy }
@@ -58,8 +60,8 @@ services:
   # W2 — free pool: absorbs the free/anon analysis flood + maintenance.
   worker-free:
     build:
-      context: ../components/worker
-      dockerfile: Dockerfile
+      context: ../components
+      dockerfile: worker/Dockerfile
     command: python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues analysis-free maintenance
     depends_on:
       postgres: { condition: service_healthy }
