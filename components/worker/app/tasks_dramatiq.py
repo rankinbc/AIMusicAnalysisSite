@@ -163,6 +163,10 @@ def analyze_audio_job(job_id: str) -> None:
 
         file_rel = version.file_path
         user_id = job.user_id
+        # Story 4.5 (AR24): anon jobs carry device_id instead of user_id; the
+        # analyses insert must propagate it or ck_analyses_owner_xor fires the
+        # moment 6.3 dispatches a device-owned job.
+        device_id = job.device_id
         tier = job.tier  # billing tier stamped by the BFF at dispatch (story 2.4)
         version_id = version.id
         song_id = version.song_id
@@ -309,6 +313,8 @@ def analyze_audio_job(job_id: str) -> None:
             id=analysis_id,
             job_id=jid,
             user_id=user_id,
+            # AR24 exactly-one: anon jobs propagate device ownership.
+            device_id=device_id if user_id is None else None,
             version_id=version_id,
             song_id=song_id,
             song_name=song_name,
@@ -391,7 +397,10 @@ def analyze_audio_job(job_id: str) -> None:
     # The fast phases are now persisted + the job is COMPLETE. Enqueue the heavy
     # allin1 step as its own job so Phase 7 fills in later (best-effort: a
     # failure here never undoes the successful analysis).
-    if version_id is not None:
+    # Story 4.5: anon (device-owned) jobs skip the structure follow-up — the
+    # progress-vehicle AnalysisJob it creates is user-owned by shape, and the
+    # anon funnel's report doesn't surface Phase 7 (6.3 revisits if needed).
+    if version_id is not None and user_id is not None:
         try:
             _enqueue_structure_detection(user_id, version_id, analysis_id)
         except Exception:  # pragma: no cover — never fail a done analysis over this

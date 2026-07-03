@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Spectr.Data.Entities;
@@ -16,8 +17,13 @@ public sealed class Conversation
     [Column("analysis_id")]
     public Guid AnalysisId { get; set; }
 
+    // Story 4.5 (AR24): nullable — anonymous conversations own device_id
+    // instead (DB CHECK exactly-one).
     [Column("user_id")]
-    public Guid UserId { get; set; }
+    public Guid? UserId { get; set; }
+
+    [Column("device_id"), MaxLength(26)]
+    public string? DeviceId { get; set; }
 
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

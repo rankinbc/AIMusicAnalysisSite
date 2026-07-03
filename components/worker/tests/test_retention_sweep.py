@@ -211,7 +211,50 @@ def test_billing_failure_fails_closed(db, monkeypatch):
 def test_anon_guard_noops_without_devices_table(db):
     factory, _ = db
     stats = ra.run_sweep(now=NOW)
-    assert stats["anon_purged"] == 0  # AC3 — safe before Epic 4
+    assert stats["anon_purged"] == 0  # no stale devices — nothing to purge
+
+
+def test_unclaimed_devices_purge_with_owned_rows(db):
+    """Story 4.5 (AR26): unclaimed >72h devices purge WITH their jobs,
+    reports, conversations, coach messages, and verdicts; claimed and fresh
+    devices survive untouched."""
+    from aimusic_shared.models import (
+        Analysis, AnalysisJob, CoachMessage, Conversation, Device, Verdict,
+    )
+
+    factory, _ = db
+    stale_dev, fresh_dev, claimed_dev = "D" * 26, "F" * 26, "C" * 26
+    aid, cid, jid = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    with factory.begin() as s:
+        s.add(Device(id=stale_dev, ip_hash="i", ua_hash="u",
+                     created_at=NOW - timedelta(hours=73)))
+        s.add(Device(id=fresh_dev, ip_hash="i", ua_hash="u",
+                     created_at=NOW - timedelta(hours=1)))
+        s.add(Device(id=claimed_dev, ip_hash="i", ua_hash="u",
+                     created_at=NOW - timedelta(hours=100),
+                     claimed_at=NOW - timedelta(hours=99)))
+        s.add(AnalysisJob(id=jid, device_id=stale_dev, status="complete"))
+        s.add(Analysis(id=aid, job_id=jid, device_id=stale_dev,
+                       final_json={}, created_at=NOW))
+        s.add(Verdict(id="vrd_anonpurge_test_000000001", analysis_id=aid,
+                      specialist="mix_down", prompt_version="v1", model="t",
+                      severity="moderate", category="low_end", confidence=0.5,
+                      priority_score=10, impact="med", headline="h", created_at=NOW))
+        s.add(Conversation(id=cid, analysis_id=aid, device_id=stale_dev, created_at=NOW))
+        s.add(CoachMessage(id=uuid.uuid4(), conversation_id=cid, role="user",
+                           content="hi", created_at=NOW))
+
+    stats = ra.run_sweep(now=NOW)
+
+    assert stats["anon_purged"] == 1
+    with factory() as s:
+        remaining = s.execute(text("SELECT id FROM devices")).scalars().all()
+        assert sorted(remaining) == sorted([fresh_dev, claimed_dev])
+        assert s.execute(text("SELECT count(*) FROM analysis_jobs WHERE device_id IS NOT NULL")).scalar() == 0
+        assert s.execute(text("SELECT count(*) FROM analyses")).scalar() == 0
+        assert s.execute(text("SELECT count(*) FROM conversations")).scalar() == 0
+        assert s.execute(text("SELECT count(*) FROM coach_messages")).scalar() == 0
+        assert s.execute(text("SELECT count(*) FROM verdicts")).scalar() == 0
 
 
 def test_auth_tokens_purge_and_absent_table_tolerance(db):

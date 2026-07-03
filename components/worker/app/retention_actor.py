@@ -158,20 +158,91 @@ def _is_paid_now(session, user_id) -> bool:
     return (balance or 0) > 0
 
 
+def _anon_hours() -> int:
+    return int(os.environ.get("RETENTION_ANON_HOURS", "72"))
+
+
 def _purge_unclaimed_anonymous(now: datetime) -> int:
-    """AC3 — anonymous DEVICE uploads unclaimed >72 h. The devices table lands
-    with Epic 4 (story 4.5); until then this guard no-ops safely. Runs in its
-    OWN session so a failed probe can never poison the sweep's transactions."""
+    """Story 4.5 (AR26) — devices unclaimed for > RETENTION_ANON_HOURS purge
+    WITH their owned rows (jobs, reports, conversations + coach messages).
+    NFR20's reports-live-forever guarantee does NOT apply here: unclaimed
+    means there is no owner to keep a report for — that IS the 72 h deal the
+    anonymous funnel offers. Claimed devices' rows were already re-parented
+    to a user (device_id NULL) so they can never match. Runs in its OWN
+    session; any failure is logged and never poisons the sweep. Storage
+    objects for anon jobs are deleted when 6.3 fixes the anon key
+    convention — today anon rows have no uploaded keys to chase (row purge
+    is the complete story until then).
+
+    Returns the number of devices purged. Tolerates the table being absent
+    (pre-4.5 databases, partial sqlite test mirrors).
+    """
+    cutoff = now - timedelta(hours=_anon_hours())
+    total = 0
     try:
-        with SessionFactory() as s:
-            probe = s.execute(text("SELECT to_regclass('public.devices')")).scalar()
+        while True:  # batches of 500 — expanding IN must never blow the param limit
+            with SessionFactory.begin() as s:
+                is_pg = s.get_bind().dialect.name == "postgresql"
+                # Device rows locked FIRST (same first-lock as the claim tx —
+                # no lock-order inversion) and SKIP LOCKED: a device mid-claim
+                # is simply not this sweep's business. Active jobs exclude the
+                # device — a 72h-old device mid-analysis keeps its work.
+                select_sql = (
+                    "SELECT id FROM devices d "
+                    "WHERE claimed_at IS NULL AND created_at < :cutoff "
+                    "AND NOT EXISTS (SELECT 1 FROM analysis_jobs j "
+                    "  WHERE j.device_id = d.id AND j.status IN "
+                    "  ('pending','processing','awaiting_stem_mapping')) "
+                    "LIMIT 500"
+                )
+                if is_pg:
+                    select_sql += " FOR UPDATE SKIP LOCKED"
+                stale = [r.id for r in s.execute(text(select_sql), {"cutoff": cutoff}).all()]
+                if not stale:
+                    break
+
+                s.execute(
+                    text(
+                        "DELETE FROM coach_messages WHERE conversation_id IN "
+                        "(SELECT id FROM conversations WHERE device_id IN :dids)"
+                    ).bindparams(bindparam("dids", expanding=True)),
+                    {"dids": stale},
+                )
+                # Verdicts hang off analyses with no DB-level FK (repo
+                # convention) — delete them explicitly or they orphan.
+                s.execute(
+                    text(
+                        "DELETE FROM verdicts WHERE analysis_id IN "
+                        "(SELECT id FROM analyses WHERE device_id IN :dids)"
+                    ).bindparams(bindparam("dids", expanding=True)),
+                    {"dids": stale},
+                )
+                # Child order matches the claim tx (jobs → analyses →
+                # conversations) so concurrent claim/purge can't deadlock.
+                for table in ("analysis_jobs", "analyses", "conversations"):
+                    stmt = text(
+                        f"DELETE FROM {table} WHERE device_id IN :dids"  # noqa: S608 — fixed table list
+                    ).bindparams(bindparam("dids", expanding=True))
+                    s.execute(stmt, {"dids": stale})
+                # Belt on top of the row lock: never delete a device that got
+                # claimed since the SELECT (non-PG test dialects have no lock).
+                s.execute(
+                    text("DELETE FROM devices WHERE id IN :dids AND claimed_at IS NULL")
+                    .bindparams(bindparam("dids", expanding=True)),
+                    {"dids": stale},
+                )
+                total += len(stale)
+            if len(stale) < 500:
+                break
+        if total:
+            logger.info("sweep_retention: purged %d unclaimed anon device(s)", total)
+        return total
     except Exception:
-        probe = None
-    if probe is None:
-        logger.info("sweep_retention: no devices table yet — anon purge no-op")
-        return 0
-    # Epic 4 will implement the actual purge here (RETENTION_ANON_HOURS).
-    return 0
+        # WARNING, not info: a recurring failure here silently breaks the
+        # 72 h retention promise. (Absent table — pre-4.5 DBs, partial sqlite
+        # mirrors — also lands here; acceptable noise in those environments.)
+        logger.warning("sweep_retention: anon purge failed", exc_info=True)
+        return total
 
 
 def _load_candidates(session, free_cutoff: datetime, lapsed_purgeable: set):

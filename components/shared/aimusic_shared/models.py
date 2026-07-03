@@ -200,11 +200,16 @@ class AnalysisJob(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(
+    # Story 4.5 (AR24): nullable — anonymous jobs own device_id instead
+    # (DB CHECK exactly-one, EF-side).
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         "user_id",
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
+    )
+    device_id: Mapped[Optional[str]] = mapped_column(
+        "device_id", String(26), nullable=True
     )
     version_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         "version_id",
@@ -250,11 +255,15 @@ class Analysis(Base):
         ForeignKey("analysis_jobs.id", ondelete="CASCADE"),
         nullable=False,
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(
+    # Story 4.5 (AR24): nullable — anonymous reports own device_id instead.
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         "user_id",
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
+    )
+    device_id: Mapped[Optional[str]] = mapped_column(
+        "device_id", String(26), nullable=True
     )
     version_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         "version_id",
@@ -423,11 +432,36 @@ class Conversation(Base):
         ForeignKey("analyses.id"),
         nullable=False,
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(
+    # Story 4.5 (AR24): nullable — anonymous conversations own device_id.
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         "user_id",
         UUID(as_uuid=True),
         ForeignKey("users.id"),
-        nullable=False,
+        nullable=True,
+    )
+    device_id: Mapped[Optional[str]] = mapped_column(
+        "device_id", String(26), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        "created_at", DateTime(timezone=True), nullable=False,
+        server_default=func.now(),
+    )
+
+
+class Device(Base):
+    """Story 4.5 (AR24) — anonymous device identity (mirror of EF Device).
+    Worker reads it only for the 72 h unclaimed purge in sweep_retention."""
+
+    __tablename__ = "devices"
+
+    id: Mapped[str] = mapped_column("id", String(26), primary_key=True)
+    ip_hash: Mapped[str] = mapped_column("ip_hash", String(64), nullable=False)
+    ua_hash: Mapped[str] = mapped_column("ua_hash", String(64), nullable=False)
+    claimed_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "claimed_by_user_id", UUID(as_uuid=True), nullable=True
+    )
+    claimed_at: Mapped[Optional[datetime]] = mapped_column(
+        "claimed_at", DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         "created_at", DateTime(timezone=True), nullable=False,
