@@ -1,6 +1,6 @@
 # Story 4.3: Email Verification & Password Reset
 
-Status: review
+Status: done
 
 ## Story
 
