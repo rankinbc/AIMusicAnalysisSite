@@ -1,6 +1,6 @@
 # Story 3.5: Upload & Job Persistence Resilience Verified
 
-Status: review
+Status: done
 
 ## Story
 
