@@ -1,6 +1,6 @@
 # Story 3.3: Signed Playback & Durable Reports
 
-Status: review
+Status: done
 
 ## Story
 

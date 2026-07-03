@@ -1,6 +1,6 @@
 # Story 3.4: Retention Sweep
 
-Status: review
+Status: done
 
 ## Story
 
