@@ -1,6 +1,6 @@
 # Story 10.2: Backups & Restore Proof
 
-Status: review
+Status: done
 
 ## Story
 
