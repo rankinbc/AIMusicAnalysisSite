@@ -60,6 +60,11 @@ class User(Base):
     email: Mapped[str] = mapped_column("email", String(255), nullable=False)
     hashed_password: Mapped[str] = mapped_column("hashed_password", String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column("is_active", Boolean, nullable=False, default=True)
+    # Story 4.3 — mirror of EF AddAuthTokensAndEmailVerified (users side only;
+    # auth_tokens itself has no mirror — the worker never reads it).
+    email_verified_at: Mapped[Optional[datetime]] = mapped_column(
+        "email_verified_at", DateTime(timezone=True), nullable=True
+    )
     handle: Mapped[Optional[str]] = mapped_column("handle", String(32), nullable=True)
     display_name: Mapped[Optional[str]] = mapped_column("display_name", String(80), nullable=True)
     bio: Mapped[Optional[str]] = mapped_column("bio", String(500), nullable=True)

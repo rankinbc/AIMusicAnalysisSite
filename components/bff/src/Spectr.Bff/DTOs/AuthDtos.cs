@@ -18,3 +18,8 @@ public sealed record AuthedUser(
 // PATCH /api/auth/me. Null = leave unchanged. Empty string for DisplayName
 // is treated as "clear it"; Handle has no clearing path (must always be set).
 public sealed record PatchMeRequest(string? DisplayName, string? Handle);
+
+// Story 4.3 — verification + reset flows (tokens are the emailed raw values).
+public sealed record VerifyEmailRequest(string? Token);
+public sealed record ForgotPasswordRequest(string? Email);
+public sealed record ResetPasswordRequest(string? Token, string? NewPassword);
