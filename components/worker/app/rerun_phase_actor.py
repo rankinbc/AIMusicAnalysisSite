@@ -30,6 +30,7 @@ from aimusic_shared.models import (
     SongVersion,
 )
 
+from . import object_store
 from .db_sync import SessionFactory
 from .tasks_dramatiq import LOCAL_ROOT, _utc_now
 
@@ -40,10 +41,6 @@ try:
 except ImportError:  # pragma: no cover
     logger.warning("audio_analysis not installed — rerun_phase actor will raise on dispatch")
     rerun_single_phase = None  # type: ignore[assignment]
-
-
-def _join(rel: str | None) -> str | None:
-    return str(Path(LOCAL_ROOT) / rel) if rel else None
 
 
 @dramatiq.actor(
@@ -88,13 +85,42 @@ def rerun_phase(
         job.phase_pct = 0.0
 
         prior_final = analysis.final_json
-        file_abs = (
-            str((Path(LOCAL_ROOT) / version.file_path).resolve()) if version else None
-        )
-        reference_abs = _join(version.reference_path) if version else None
-        als_abs = _join(version.als_file_path) if version else None
+        file_rel = version.file_path if version else None
+        reference_rel = version.reference_path if version else None
+        als_rel = version.als_file_path if version else None
         stem_paths = version.stem_paths if version else None
         stem_mode = (version.stem_analysis_mode or "grouped") if version else "grouped"
+
+    # Story 3.2 — resolve source/attachments local-first with S3 fetch fallback
+    # (presigned-uploaded versions have R2 keys, not local paths).
+    fetched: list[Path] = []
+    file_abs = None
+    if file_rel:
+        file_abs, f = object_store.resolve_local(file_rel, LOCAL_ROOT)
+        if f is not None:
+            fetched.append(f)
+    reference_abs = None
+    if reference_rel:
+        reference_abs, f = object_store.resolve_local(reference_rel, LOCAL_ROOT)
+        if f is not None:
+            fetched.append(f)
+    als_abs = None
+    if als_rel:
+        als_abs, f = object_store.resolve_local(als_rel, LOCAL_ROOT)
+        if f is not None:
+            fetched.append(f)
+    if stem_paths:
+        resolved_stems: dict = {}
+        for role, entry in stem_paths.items():
+            keys = entry if isinstance(entry, list) else [entry]
+            out: list[str] = []
+            for k in keys:
+                local, f = object_store.resolve_local(str(k), LOCAL_ROOT)
+                if f is not None:
+                    fetched.append(f)
+                out.append(local)
+            resolved_stems[role] = out if isinstance(entry, list) else out[0]
+        stem_paths = resolved_stems
 
     # Phase 8 (ALS) needs no source audio; phases 2–7 do.
     if file_abs is None and phase != 8:
@@ -144,6 +170,8 @@ def rerun_phase(
                 j.failed_at = _utc_now()
                 j.current_phase = "failed"
         raise
+    finally:
+        object_store.cleanup_all(fetched)
 
     # ── Phase C — write merged result back + flip the rerun job complete ─────
     with SessionFactory.begin() as s:

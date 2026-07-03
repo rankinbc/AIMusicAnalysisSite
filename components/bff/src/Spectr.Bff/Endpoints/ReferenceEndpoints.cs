@@ -24,6 +24,8 @@ public static class ReferenceEndpoints
         refs.MapPost("/batch", UploadBatch)
             .DisableAntiforgery()
             .WithMetadata(new RequestSizeLimitAttribute(MaxUploadBytes * 100));
+        // Story 3.2 — register a reference already PUT via the presigned path.
+        refs.MapPost("/complete-key", CompleteKey);
         refs.MapPost("/analyze", AnalyzeBatch);
         refs.MapGet("/{referenceId:guid}", GetById);
         refs.MapPatch("/{referenceId:guid}", Patch);
@@ -115,6 +117,53 @@ public static class ReferenceEndpoints
         db.ReferenceTracks.Add(row);
         await db.SaveChangesAsync(ct);
         return Results.Created($"/api/references/{refId}", ToDto(row));
+    }
+
+    public sealed record CompleteKeyRequest(
+        Guid ReferenceId, string Key, string FileName, string? Title, string? Artist, string? Genre);
+
+    // Story 3.2 — POST /api/references/complete-key. The client PUT the bytes
+    // straight to object storage (key minted by /uploads/attachments/init as
+    // reference/{refId}/source.*); this registers the row. Prefix + existence
+    // are re-verified so a forged key can't reference someone else's object.
+    private static async Task<IResult> CompleteKey(
+        CompleteKeyRequest body,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        IMultipartObjectStore store,
+        CancellationToken ct)
+    {
+        if (!store.IsConfigured)
+            return ErrorEnvelope.Build(501, "presigned_unavailable",
+                "Presigned upload storage is not configured; use the legacy upload endpoint.");
+
+        var userId = currentUser.UserId();
+        var expectedPrefix = $"reference/{body.ReferenceId}/";
+        if (string.IsNullOrWhiteSpace(body.Key)
+            || !body.Key.StartsWith(expectedPrefix, StringComparison.Ordinal))
+            return Results.BadRequest(new { error = "Key does not match this reference upload." });
+        if (await db.ReferenceTracks.AsNoTracking().AnyAsync(r => r.Id == body.ReferenceId, ct))
+            return Results.Conflict(new { error = "Reference already registered." });
+        if (!await store.ObjectExistsAsync(body.Key, ct))
+            return ErrorEnvelope.Build(502, "upload_not_found", "Object not found in storage.");
+
+        var titleClean = (body.Title ?? Path.GetFileNameWithoutExtension(body.FileName) ?? "Untitled").Trim();
+        if (string.IsNullOrEmpty(titleClean)) titleClean = "Untitled";
+        if (titleClean.Length > 200) titleClean = titleClean[..200];
+
+        var row = new ReferenceTrack
+        {
+            Id = body.ReferenceId,
+            UserId = userId,
+            Title = titleClean,
+            Artist = string.IsNullOrWhiteSpace(body.Artist) ? null : body.Artist!.Trim(),
+            Genre = string.IsNullOrWhiteSpace(body.Genre) ? null : body.Genre!.Trim(),
+            Source = "file",
+            FilePath = body.Key,
+        };
+        db.ReferenceTracks.Add(row);
+        await db.SaveChangesAsync(ct);
+        return Results.Created($"/api/references/{row.Id}", ToDto(row));
     }
 
     private static async Task<IResult> GetById(

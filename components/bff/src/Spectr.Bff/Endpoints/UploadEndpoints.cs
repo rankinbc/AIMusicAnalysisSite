@@ -29,6 +29,8 @@ public static class UploadEndpoints
         g.MapPost("/init", Init);
         g.MapPost("/complete", Complete);
         g.MapPost("/abort", Abort);
+        // Story 3.2 — single-PUT presign for attachments (stems/.als/reference).
+        g.MapPost("/attachments/init", AttachmentInit);
         return app;
     }
 
@@ -157,6 +159,111 @@ public static class UploadEndpoints
         }
 
         return Results.Ok(new CompleteResponse(songGuid, versionId, null));
+    }
+
+    public sealed record AttachmentInitRequest(string Kind, Guid? VersionId, string FileName, long FileSize);
+    public sealed record AttachmentInitResponse(string Key, string Url, string? StemId, Guid? ReferenceId);
+
+    private const long MaxAlsBytes = 50L * 1024 * 1024;
+    private static readonly HashSet<string> StemExts =
+        new(StringComparer.OrdinalIgnoreCase) { ".wav", ".flac" };
+    private static readonly HashSet<string> AlsExts =
+        new(StringComparer.OrdinalIgnoreCase) { ".als", ".gz" };
+    private static readonly HashSet<string> ReferenceExts =
+        new(StringComparer.OrdinalIgnoreCase) { ".wav", ".flac", ".mp3", ".aiff", ".aif", ".m4a", ".ogg" };
+
+    // Story 3.2 (AR20) — the jobId embedded in a version's source key. Both
+    // the 3.1 presigned layout (audio/{userId}/{jobId}/source.*) and the
+    // legacy proxy layout (audio/upload/{jobId}/source.*) carry it at seg[2].
+    internal static Guid? JobIdFromSourceKey(string? filePath)
+    {
+        if (string.IsNullOrEmpty(filePath)) return null;
+        var seg = filePath.Split('/');
+        if (seg.Length >= 4 && seg[0] == "audio" && Guid.TryParse(seg[2], out var jid)) return jid;
+        return null;
+    }
+
+    // ── POST /api/uploads/attachments/init ─────────────────────────────────
+    // Mints a single presigned PUT for a stem/.als/reference (AR20 keys:
+    // stems/{jobId}/…, als/{jobId}/project.*, reference/{refId}/source.*).
+    // jobId is derived SERVER-SIDE from the caller's own version — never
+    // trusted from the client. Registration (DB rows) happens on the
+    // kind-specific endpoints AFTER the PUT (stage-keys / als-key /
+    // references/complete-key), each of which re-verifies key prefix +
+    // object existence.
+    private static async Task<IResult> AttachmentInit(
+        AttachmentInitRequest body,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        IMultipartObjectStore store,
+        CancellationToken ct)
+    {
+        if (!store.IsConfigured)
+            return ErrorEnvelope.Build(501, "presigned_unavailable",
+                "Presigned upload storage is not configured; use the legacy upload endpoint.");
+
+        if (string.IsNullOrWhiteSpace(body.FileName))
+            return Results.BadRequest(new { error = "fileName required." });
+        if (body.FileSize <= 0)
+            return Results.BadRequest(new { error = "fileSize must be positive." });
+
+        var userId = currentUser.UserId();
+        var ext = Path.GetExtension(body.FileName).ToLowerInvariant();
+
+        switch (body.Kind)
+        {
+            case "stem":
+            case "als":
+            {
+                if (body.VersionId is not Guid vid)
+                    return Results.BadRequest(new { error = "versionId required for this kind." });
+                var version = await (
+                    from v in db.SongVersions.AsNoTracking()
+                    join s in db.Songs.AsNoTracking() on v.SongId equals s.Id
+                    where v.Id == vid && s.UserId == userId
+                    select new { v.FilePath }).FirstOrDefaultAsync(ct);
+                if (version is null) return Results.NotFound();
+                var jobId = JobIdFromSourceKey(version.FilePath);
+                if (jobId is null)
+                    // Pre-AR20 version with no jobId in its key — the legacy
+                    // proxy path still works; signal fallback like unconfigured S3.
+                    return ErrorEnvelope.Build(501, "presigned_unavailable",
+                        "This version predates the presigned key layout; use the legacy upload endpoint.");
+
+                if (body.Kind == "stem")
+                {
+                    if (!StemExts.Contains(ext))
+                        return Results.BadRequest(new { error = "Only .wav / .flac stems are supported." });
+                    if (body.FileSize > MaxUploadBytes)
+                        return Results.BadRequest(new { error = "File exceeds 250 MB limit." });
+                    var stemId = Guid.NewGuid().ToString();
+                    var stemKey = $"stems/{jobId}/{stemId}{ext}";
+                    return Results.Ok(new AttachmentInitResponse(
+                        stemKey, store.PresignPutUrl(stemKey, ct), stemId, null));
+                }
+
+                if (!AlsExts.Contains(ext))
+                    return Results.BadRequest(new { error = ".als (or gzip-compressed) file required." });
+                if (body.FileSize > MaxAlsBytes)
+                    return Results.BadRequest(new { error = "File exceeds 50 MB limit." });
+                var alsKey = $"als/{jobId}/project{ext}";
+                return Results.Ok(new AttachmentInitResponse(
+                    alsKey, store.PresignPutUrl(alsKey, ct), null, null));
+            }
+            case "reference":
+            {
+                if (!ReferenceExts.Contains(ext))
+                    return Results.BadRequest(new { error = "Unsupported reference audio format." });
+                if (body.FileSize > MaxUploadBytes)
+                    return Results.BadRequest(new { error = "File exceeds 250 MB limit." });
+                var refId = Guid.NewGuid();
+                var refKey = $"reference/{refId}/source{ext}";
+                return Results.Ok(new AttachmentInitResponse(
+                    refKey, store.PresignPutUrl(refKey, ct), null, refId));
+            }
+            default:
+                return Results.BadRequest(new { error = "kind must be stem, als, or reference." });
+        }
     }
 
     // ── POST /api/uploads/abort ─────────────────────────────────────────────

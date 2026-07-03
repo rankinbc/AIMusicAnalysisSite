@@ -53,6 +53,11 @@ public static class VersionEndpoints
             .DisableAntiforgery()
             .WithMetadata(new RequestSizeLimitAttribute(50L * 1024 * 1024));    // .als files are small
 
+        // Story 3.2 — register attachments already PUT to object storage via
+        // the presigned path (/uploads/attachments/init). JSON-only (no bytes).
+        g.MapPost("/{versionId:guid}/stems/stage-keys", StageStemKeys);
+        g.MapPost("/{versionId:guid}/als-key", RegisterAlsKey);
+
         // Personal score — per-user × per-version rating (Change B)
         g.MapPut("/{versionId:guid}/rating", SetRating);
         g.MapDelete("/{versionId:guid}/rating", ClearRating);
@@ -764,6 +769,127 @@ public static class VersionEndpoints
         version.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
         return Results.Ok(new StageStemsResponse(versionId, entries.Select(ToDto).ToList()));
+    }
+
+    // ── Story 3.2 — presigned-attachment registration (JSON, no file bytes) ──
+
+    public sealed record StageStemKeyItem(string StemId, string Key, string FileName);
+    public sealed record StageStemKeysRequest(List<StageStemKeyItem> Stems);
+    public sealed record RegisterAlsKeyRequest(string Key, string? ProjectJson, bool? Analyze);
+
+    // POST /api/versions/{id}/stems/stage-keys — register stems the client PUT
+    // directly to object storage. Trust chain: key prefix must be the AR20
+    // stems/{jobId}/ prefix for THIS version's jobId (derived server-side from
+    // the source key, never the client), and each object must actually exist.
+    private static async Task<IResult> StageStemKeys(
+        Guid versionId, StageStemKeysRequest body, ClaimsPrincipal currentUser,
+        AppDbContext db, IMultipartObjectStore store, CancellationToken ct)
+    {
+        if (!store.IsConfigured)
+            return ErrorEnvelope.Build(501, "presigned_unavailable",
+                "Presigned upload storage is not configured; use the legacy upload endpoint.");
+        if (body?.Stems is null || body.Stems.Count == 0)
+            return Results.BadRequest(new { error = "At least one stem key required." });
+
+        var userId = currentUser.UserId();
+        var version = await OwnedVersion(db, versionId, userId, ct);
+        if (version is null) return Results.NotFound();
+
+        var jobId = UploadEndpoints.JobIdFromSourceKey(version.FilePath);
+        if (jobId is null)
+            return ErrorEnvelope.Build(501, "presigned_unavailable",
+                "This version predates the presigned key layout; use the legacy upload endpoint.");
+        var expectedPrefix = $"stems/{jobId}/";
+
+        var entries = ReadRaw(version.StemPathsRaw);
+        if (entries.Count + body.Stems.Count > MaxStems)
+            return Results.BadRequest(new { error = $"Up to {MaxStems} stems per version." });
+
+        foreach (var item in body.Stems)
+        {
+            if (string.IsNullOrWhiteSpace(item.Key)
+                || !item.Key.StartsWith(expectedPrefix, StringComparison.Ordinal))
+                return Results.BadRequest(new { error = $"Key does not match this version's upload." });
+            var ext = Path.GetExtension(item.Key).ToLowerInvariant();
+            if (!StemAudioExts.Contains(ext))
+                return Results.BadRequest(new { error = $"'{item.FileName}': only .wav / .flac stems are supported." });
+            if (!await store.ObjectExistsAsync(item.Key, ct))
+                return ErrorEnvelope.Build(502, "upload_not_found",
+                    $"Object for '{item.FileName}' not found in storage.");
+            entries.Add(new StemRawEntry
+            {
+                Id = string.IsNullOrWhiteSpace(item.StemId) ? Guid.NewGuid().ToString() : item.StemId,
+                OriginalFilename = item.FileName,
+                Key = item.Key,
+            });
+        }
+
+        version.StemPathsRaw = JsonSerializer.Serialize(entries);
+        version.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new StageStemsResponse(versionId, entries.Select(ToDto).ToList()));
+    }
+
+    // POST /api/versions/{id}/als-key — register a presigned-uploaded .als.
+    // Mirrors UploadAls minus the byte proxy; analyze semantics identical.
+    private static async Task<IResult> RegisterAlsKey(
+        Guid versionId, RegisterAlsKeyRequest body, ClaimsPrincipal currentUser,
+        AppDbContext db, IMultipartObjectStore store, IJobQueue queue,
+        EntitlementService ents, CreditLedgerService credits, CancellationToken ct)
+    {
+        if (!store.IsConfigured)
+            return ErrorEnvelope.Build(501, "presigned_unavailable",
+                "Presigned upload storage is not configured; use the legacy upload endpoint.");
+
+        var userId = currentUser.UserId();
+        var version = await OwnedVersion(db, versionId, userId, ct);
+        if (version is null) return Results.NotFound();
+
+        var jobId = UploadEndpoints.JobIdFromSourceKey(version.FilePath);
+        if (jobId is null)
+            return ErrorEnvelope.Build(501, "presigned_unavailable",
+                "This version predates the presigned key layout; use the legacy upload endpoint.");
+        if (string.IsNullOrWhiteSpace(body.Key)
+            || !body.Key.StartsWith($"als/{jobId}/", StringComparison.Ordinal))
+            return Results.BadRequest(new { error = "Key does not match this version's upload." });
+        var ext = Path.GetExtension(body.Key).ToLowerInvariant();
+        if (ext != ".als" && ext != ".gz")
+            return Results.BadRequest(new { error = ".als (or gzip-compressed) file required." });
+        if (!await store.ObjectExistsAsync(body.Key, ct))
+            return ErrorEnvelope.Build(502, "upload_not_found", "Object not found in storage.");
+
+        // Same size-bounded JSON-object validation as the multipart UploadAls.
+        string? normalizedProjectJson = null;
+        if (!string.IsNullOrWhiteSpace(body.ProjectJson))
+        {
+            if (System.Text.Encoding.UTF8.GetByteCount(body.ProjectJson) > MaxProjectJsonBytes)
+                return Results.BadRequest(new { error = "Project metadata is too large." });
+            try
+            {
+                using var probe = JsonDocument.Parse(body.ProjectJson);
+                if (probe.RootElement.ValueKind != JsonValueKind.Object)
+                    return Results.BadRequest(new { error = "project_json must be a JSON object." });
+            }
+            catch (JsonException)
+            {
+                return Results.BadRequest(new { error = "project_json is not valid JSON." });
+            }
+            normalizedProjectJson = body.ProjectJson;
+        }
+
+        version.AlsFilePath = body.Key;
+        if (normalizedProjectJson is not null) version.AlsProjectJson = normalizedProjectJson;
+        version.UpdatedAt = DateTimeOffset.UtcNow;
+        var shouldAnalyze = body.Analyze ?? true;
+        await db.SaveChangesAsync(ct);
+
+        if (shouldAnalyze)
+        {
+            var (dispatchedJobId, err) = await DispatchAnalysisAsync(userId, versionId, null, db, ents, credits, queue, ct);
+            if (err is not null) return err;
+            return Results.Ok(new AlsUploadResponse(versionId, body.Key, dispatchedJobId));
+        }
+        return Results.Ok(new AlsUploadResponse(versionId, body.Key, null));
     }
 
     // POST /api/versions/{id}/stems/classify — enqueue audio-content classification.

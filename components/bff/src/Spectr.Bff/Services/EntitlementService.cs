@@ -79,13 +79,20 @@ public class EntitlementService(
             .Where(e => e.UserId == userId)
             .SumAsync(e => (int?)e.Amount, ct) ?? 0;
 
-        // 3. Period usage (analyses this calendar month)
+        // 3. Period usage (analyses this calendar month). Story 3.2 (AR16):
+        // an invalid_file failure must not consume the free monthly cap —
+        // credits get a ledger reversal (JobEndpoints hook), and the free/pro
+        // meter compensates HERE at read time by excluding usage events whose
+        // job failed validation. Read-side exclusion = no second write path,
+        // no idempotency race.
         var billingPeriod = DateTimeOffset.UtcNow.ToString("yyyy-MM");
         var usedThisPeriod = await db.UsageEvents
             .AsNoTracking()
             .CountAsync(e => e.UserId == userId
                 && e.EventType == "analysis"
-                && e.BillingPeriod == billingPeriod, ct);
+                && e.BillingPeriod == billingPeriod
+                && !db.AnalysisJobs.Any(j =>
+                    j.ErrorCode == "invalid_file" && j.Id.ToString() == e.Reference), ct);
 
         // 4. Feature flags
         Dictionary<string, string> flagMap;

@@ -26,6 +26,10 @@ public interface IMultipartObjectStore
     Task AbortMultipartAsync(string key, string uploadId, CancellationToken ct = default);
 
     Task<bool> ObjectExistsAsync(string key, CancellationToken ct = default);
+
+    // Story 3.2 — single-object presigned PUT for attachments (stems/.als/
+    // reference are ≤250 MB and fit one PUT; multipart/resume was the mix).
+    string PresignPutUrl(string key, CancellationToken ct = default);
 }
 
 public sealed record PresignedPart(int PartNumber, string Url);
@@ -128,6 +132,19 @@ internal sealed class S3ObjectStore : IMultipartObjectStore, IDisposable
             Key = key,
             UploadId = uploadId,
         }, ct);
+    }
+
+    public string PresignPutUrl(string key, CancellationToken ct = default)
+    {
+        // Same checksum footgun as part presigns: the client must PUT raw
+        // bytes with no checksum headers (config disables SDK injection).
+        return _client.Value.GetPreSignedURL(new GetPreSignedUrlRequest
+        {
+            BucketName = _opts.Bucket,
+            Key = key,
+            Verb = HttpVerb.PUT,
+            Expires = DateTime.UtcNow.AddMinutes(_opts.UrlExpiryMinutes),
+        });
     }
 
     public async Task<bool> ObjectExistsAsync(string key, CancellationToken ct = default)
