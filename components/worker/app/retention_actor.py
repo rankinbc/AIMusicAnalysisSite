@@ -178,43 +178,71 @@ def _purge_unclaimed_anonymous(now: datetime) -> int:
     (pre-4.5 databases, partial sqlite test mirrors).
     """
     cutoff = now - timedelta(hours=_anon_hours())
+    total = 0
     try:
-        with SessionFactory.begin() as s:
-            stale = [r.id for r in s.execute(text(
-                "SELECT id FROM devices WHERE claimed_at IS NULL AND created_at < :cutoff"
-            ), {"cutoff": cutoff}).all()]
-            if not stale:
-                return 0
+        while True:  # batches of 500 — expanding IN must never blow the param limit
+            with SessionFactory.begin() as s:
+                is_pg = s.get_bind().dialect.name == "postgresql"
+                # Device rows locked FIRST (same first-lock as the claim tx —
+                # no lock-order inversion) and SKIP LOCKED: a device mid-claim
+                # is simply not this sweep's business. Active jobs exclude the
+                # device — a 72h-old device mid-analysis keeps its work.
+                select_sql = (
+                    "SELECT id FROM devices d "
+                    "WHERE claimed_at IS NULL AND created_at < :cutoff "
+                    "AND NOT EXISTS (SELECT 1 FROM analysis_jobs j "
+                    "  WHERE j.device_id = d.id AND j.status IN "
+                    "  ('pending','processing','awaiting_stem_mapping')) "
+                    "LIMIT 500"
+                )
+                if is_pg:
+                    select_sql += " FOR UPDATE SKIP LOCKED"
+                stale = [r.id for r in s.execute(text(select_sql), {"cutoff": cutoff}).all()]
+                if not stale:
+                    break
 
-            ids = text(
-                "DELETE FROM coach_messages WHERE conversation_id IN "
-                "(SELECT id FROM conversations WHERE device_id IN :dids)"
-            ).bindparams(bindparam("dids", expanding=True))
-            s.execute(ids, {"dids": stale})
-            # Verdicts hang off analyses with no DB-level FK (repo convention)
-            # — delete them explicitly or they orphan.
-            s.execute(
-                text(
-                    "DELETE FROM verdicts WHERE analysis_id IN "
-                    "(SELECT id FROM analyses WHERE device_id IN :dids)"
-                ).bindparams(bindparam("dids", expanding=True)),
-                {"dids": stale},
-            )
-            for table in ("conversations", "analyses", "analysis_jobs"):
-                stmt = text(
-                    f"DELETE FROM {table} WHERE device_id IN :dids"  # noqa: S608 — fixed table list
-                ).bindparams(bindparam("dids", expanding=True))
-                s.execute(stmt, {"dids": stale})
-            s.execute(
-                text("DELETE FROM devices WHERE id IN :dids")
-                .bindparams(bindparam("dids", expanding=True)),
-                {"dids": stale},
-            )
-            logger.info("sweep_retention: purged %d unclaimed anon device(s)", len(stale))
-            return len(stale)
+                s.execute(
+                    text(
+                        "DELETE FROM coach_messages WHERE conversation_id IN "
+                        "(SELECT id FROM conversations WHERE device_id IN :dids)"
+                    ).bindparams(bindparam("dids", expanding=True)),
+                    {"dids": stale},
+                )
+                # Verdicts hang off analyses with no DB-level FK (repo
+                # convention) — delete them explicitly or they orphan.
+                s.execute(
+                    text(
+                        "DELETE FROM verdicts WHERE analysis_id IN "
+                        "(SELECT id FROM analyses WHERE device_id IN :dids)"
+                    ).bindparams(bindparam("dids", expanding=True)),
+                    {"dids": stale},
+                )
+                # Child order matches the claim tx (jobs → analyses →
+                # conversations) so concurrent claim/purge can't deadlock.
+                for table in ("analysis_jobs", "analyses", "conversations"):
+                    stmt = text(
+                        f"DELETE FROM {table} WHERE device_id IN :dids"  # noqa: S608 — fixed table list
+                    ).bindparams(bindparam("dids", expanding=True))
+                    s.execute(stmt, {"dids": stale})
+                # Belt on top of the row lock: never delete a device that got
+                # claimed since the SELECT (non-PG test dialects have no lock).
+                s.execute(
+                    text("DELETE FROM devices WHERE id IN :dids AND claimed_at IS NULL")
+                    .bindparams(bindparam("dids", expanding=True)),
+                    {"dids": stale},
+                )
+                total += len(stale)
+            if len(stale) < 500:
+                break
+        if total:
+            logger.info("sweep_retention: purged %d unclaimed anon device(s)", total)
+        return total
     except Exception:
-        logger.info("sweep_retention: anon purge skipped", exc_info=True)
-        return 0
+        # WARNING, not info: a recurring failure here silently breaks the
+        # 72 h retention promise. (Absent table — pre-4.5 DBs, partial sqlite
+        # mirrors — also lands here; acceptable noise in those environments.)
+        logger.warning("sweep_retention: anon purge failed", exc_info=True)
+        return total
 
 
 def _load_candidates(session, free_cutoff: datetime, lapsed_purgeable: set):

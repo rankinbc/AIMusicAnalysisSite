@@ -76,6 +76,22 @@ claude-fable-5 (Claude Code)
 - Shared: `models.py` (Device + device_id/nullable user_id ×3)
 - Worker: `retention_actor.py` (anon purge), `tests/test_retention_sweep.py` (+1)
 
+### Senior Developer Review (AI)
+
+2026-07-03 — bmad-code-review (Blind Hunter data-integrity + Edge Case Hunter/Acceptance Auditor; ULID bit-packing hand-traced clean, ExecuteUpdate-tx-enlistment and claim-race verified clean, every nullable-UserId use-site audited clean). Outcome: **Approve after patches** — the primitives were sound, the transactional choreography had real holes. 12 patches applied:
+
+- [x] [High] **Claim could abort registration**: `uq_conversations_analysis_user` treats NULL users as distinct, so a device with two conversations on one analysis would collide on re-parent and roll back the USER INSERT → registration restructured: user commits first; the claim is its own AR25-single transaction with catch-log (a failed claim leaves the device claimable, never a lost account); new partial-unique `ux_conversations_analysis_device` closes the duplicate source
+- [x] [High] **Purge deleted in-flight work**: 72 h sweep keyed on created_at only — a device mid-analysis lost its pending/processing job rows → active-job `NOT EXISTS` exclusion
+- [x] [High] **Claim↔purge deadlock + claimed-mid-sweep strand**: purge locked tables in the exact reverse order of the claim tx, and the device DELETE didn't re-check claimed_at → purge now locks device rows FIRST with `FOR UPDATE SKIP LOCKED` (a device mid-claim is simply not this sweep's business; PG-only, dialect-guarded), children delete in claim order, device delete re-checks `claimed_at IS NULL`, batches of 500 (bind-param limit), failures log WARNING (not info — a recurring failure silently breaks the retention promise)
+- [x] [High] **The 6.3 XOR landmine defused NOW**: the worker's Analysis insert didn't propagate `device_id` — the first real anon job would have completed its pipeline then died on `ck_analyses_owner_xor` → Phase A captures `job.device_id`, Phase C propagates it when user_id is null; structure follow-up skipped for anon jobs (its progress-vehicle is user-owned by shape; 6.3 revisits)
+- [x] [Med] Verify gate no longer counts FAILED jobs (a user whose one free analysis died on infra error can retry unverified). Registering-to-claim counting as the first analysis = intended AR26 semantics, now stated
+- [x] [Med] Claim fingerprint telemetry: ip_hash mismatch at claim time logs a warning (never gates — mobile/CGNAT churn would break FR28; the stored hashes finally have a reader)
+- [x] [Low] Invalid/garbage device cookie now cleared on register regardless of verification; cookie-clear test asserts the DELETION shape (empty value), not just `expires=`; migration `Down()` deletes device-owned rows before the NOT NULL restore (the zero-GUID backfill was a rollback landmine); `ix_devices_unclaimed_created` partial index (the sweep's only query shape); GetOrCreate branch test added (fresh/valid-unclaimed/claimed/purged — caught an identity-map staleness bug: the claimed check now reads AsNoTracking)
+- Verified-clean (no change): UlidGen base32 math + sortability; ExecuteUpdate enlists in the ambient tx; concurrent-claim race (ClaimedAt-null gate, loser registers cleanly); all 8 nullable-UserId BFF use-sites + credit-reversal path (uses the authed principal, not job.UserId); verify-gate choke-point coverage (all 7 dispatch sites route through DispatchAnalysisAsync; rerun/reference/structure correctly excluded).
+- Deferred to 6.3 (breadcrumbs recorded): device-creation rate limit at the GetOrCreate call site; anon storage-key deletion in the purge; claim-on-LOGIN (product decision — today only registration claims); worker sites safe-with-None audited (coach/triage/identifiers tolerate; only the two patched sites broke).
+- Accepted + documented: cookie theft/fixation = LOW (httpOnly+Secure+Lax; prize is one ≤72 h anon analysis, no PII; ip-binding too brittle — telemetry instead); verify-gate TOCTOU (two concurrent first dispatches — advisory gate); duplicate device rows under concurrent first requests (purged at 72 h).
+
 ### Change Log
 
 - 2026-07-03: implemented on `account/4-5-devices-claim`. Gates: BFF 321/321, worker 577 + 3 xfail, shared 27, ruff clean. Status → review.
+- 2026-07-03 (review): 12 patches applied (migration amended via rollback/re-apply — dev DB only). Gates after: BFF 322/322 (6 device tests), worker 577 + 3 xfail, ruff clean.

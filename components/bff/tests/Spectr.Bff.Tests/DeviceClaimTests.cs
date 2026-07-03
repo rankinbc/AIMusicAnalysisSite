@@ -119,9 +119,11 @@ public sealed class DeviceClaimTests(WebApplicationFactory<Program> factory)
             var body = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
             userId = body.GetProperty("user").GetProperty("id").GetGuid();
 
-            // Cookie cleared on the response.
+            // Cookie CLEARED (empty value) — a re-issued 30-day cookie would
+            // also carry expires=, so assert the deletion shape specifically.
             Assert.Contains(resp.Headers.GetValues("Set-Cookie"),
-                c => c.StartsWith($"{DeviceService.CookieName}=") && c.Contains("expires=", StringComparison.OrdinalIgnoreCase));
+                c => c.StartsWith($"{DeviceService.CookieName}=;")
+                  || c.StartsWith($"{DeviceService.CookieName}=; "));
 
             using var scope = _factory.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -161,6 +163,64 @@ public sealed class DeviceClaimTests(WebApplicationFactory<Program> factory)
             await db.Analyses.Where(a => a.Id == analysisId).ExecuteDeleteAsync();
             await db.AnalysisJobs.Where(j => j.Id == jobId).ExecuteDeleteAsync();
             await db.Devices.Where(d => d.Id == device.Id).ExecuteDeleteAsync();
+        }
+    }
+
+    // ── GetOrCreate branches (AC1 service-level) ───────────────────────────
+
+    [Fact]
+    public async Task GetOrCreate_Reuses_Valid_Unclaimed_And_Mints_Fresh_For_Claimed_Or_Purged()
+    {
+        if (!await TestDb.Reachable(_factory)) { return; }
+
+        using var scope = _factory.Services.CreateScope();
+        var svc = scope.ServiceProvider.GetRequiredService<DeviceService>();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var cfg = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+        var key = cfg["Anon:SigningKey"]!;
+
+        Microsoft.AspNetCore.Http.DefaultHttpContext Ctx(string? cookie)
+        {
+            var ctx = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+            if (cookie is not null)
+                ctx.Request.Headers.Cookie = $"{DeviceService.CookieName}={cookie}";
+            return ctx;
+        }
+
+        var created = new List<string>();
+        try
+        {
+            // No cookie → fresh row + Set-Cookie.
+            var ctx1 = Ctx(null);
+            var d1 = await svc.GetOrCreateAsync(ctx1);
+            created.Add(d1.Id);
+            Assert.Contains("spectr_device=", ctx1.Response.Headers.SetCookie.ToString());
+
+            // Valid unclaimed cookie → SAME row, no new cookie needed.
+            var ctx2 = Ctx(DeviceService.Sign(d1.Id, key));
+            var d2 = await svc.GetOrCreateAsync(ctx2);
+            Assert.Equal(d1.Id, d2.Id);
+
+            // Claimed device cookie → FRESH identity (claimed rows must not
+            // re-accumulate anonymous children).
+            await db.Devices.Where(d => d.Id == d1.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(d => d.ClaimedAt, DateTimeOffset.UtcNow));
+            db.ChangeTracker.Clear(); // ExecuteUpdate bypasses the tracker
+            var ctx3 = Ctx(DeviceService.Sign(d1.Id, key));
+            var d3 = await svc.GetOrCreateAsync(ctx3);
+            created.Add(d3.Id);
+            Assert.NotEqual(d1.Id, d3.Id);
+
+            // Cookie for a PURGED (deleted) row → fresh identity too.
+            await db.Devices.Where(d => d.Id == d3.Id).ExecuteDeleteAsync();
+            var ctx4 = Ctx(DeviceService.Sign(d3.Id, key));
+            var d4 = await svc.GetOrCreateAsync(ctx4);
+            created.Add(d4.Id);
+            Assert.NotEqual(d3.Id, d4.Id);
+        }
+        finally
+        {
+            await db.Devices.Where(d => created.Contains(d.Id)).ExecuteDeleteAsync();
         }
     }
 

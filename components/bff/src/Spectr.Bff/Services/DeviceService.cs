@@ -46,7 +46,9 @@ public sealed class DeviceService(
         var existingId = ReadDeviceId(ctx.Request);
         if (existingId is not null)
         {
-            var existing = await _db.Devices
+            // AsNoTracking: the claimed check must see the DB, not a stale
+            // identity-map entry from earlier in the same scope.
+            var existing = await _db.Devices.AsNoTracking()
                 .FirstOrDefaultAsync(d => d.Id == existingId, ct);
             // A claimed device keeps working as a cookie (harmless) but new
             // anonymous work needs a FRESH identity — claimed rows must never
@@ -95,6 +97,10 @@ public sealed class DeviceService(
     private string Pepper(string value)
         => Convert.ToHexString(SHA256.HashData(
             Encoding.UTF8.GetBytes(value + "|" + _key))).ToLowerInvariant();
+
+    /// <summary>Same pepper, exposed for claim-time fingerprint TELEMETRY
+    /// (never gating — mobile/CGNAT churn makes ip matching too brittle).</summary>
+    public string PepperForTelemetry(string value) => Pepper(value);
 
     // Same scheme as AnonIdentity (constant-time verify).
     internal static string Sign(string deviceId, string key)

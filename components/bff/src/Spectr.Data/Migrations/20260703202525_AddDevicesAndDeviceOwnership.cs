@@ -86,6 +86,17 @@ namespace Spectr.Data.Migrations
             migrationBuilder.Sql("CREATE INDEX ix_analysis_jobs_device_id ON analysis_jobs (device_id) WHERE device_id IS NOT NULL;");
             migrationBuilder.Sql("CREATE INDEX ix_analyses_device_id ON analyses (device_id) WHERE device_id IS NOT NULL;");
             migrationBuilder.Sql("CREATE INDEX ix_conversations_device_id ON conversations (device_id) WHERE device_id IS NOT NULL;");
+
+            // Review-hardening: uq_conversations_analysis_user treats NULL
+            // user_ids as distinct, so nothing stopped a device accumulating
+            // two conversations on one analysis — the claim re-parent would
+            // then collide on that unique index and abort the registration.
+            // Mirror the guarantee for the anon side.
+            migrationBuilder.Sql(
+                "CREATE UNIQUE INDEX ux_conversations_analysis_device ON conversations (analysis_id, device_id) WHERE device_id IS NOT NULL;");
+            // The sweep's only query shape.
+            migrationBuilder.Sql(
+                "CREATE INDEX ix_devices_unclaimed_created ON devices (created_at) WHERE claimed_at IS NULL;");
         }
 
         /// <inheritdoc />
@@ -94,6 +105,15 @@ namespace Spectr.Data.Migrations
             migrationBuilder.Sql("ALTER TABLE analysis_jobs DROP CONSTRAINT IF EXISTS ck_analysis_jobs_owner_xor;");
             migrationBuilder.Sql("ALTER TABLE analyses DROP CONSTRAINT IF EXISTS ck_analyses_owner_xor;");
             migrationBuilder.Sql("ALTER TABLE conversations DROP CONSTRAINT IF EXISTS ck_conversations_owner_xor;");
+
+            // Device-owned rows cannot survive the NOT NULL restore (the
+            // scaffolded zero-GUID backfill would just violate other
+            // invariants) — a rollback consciously drops anonymous work.
+            migrationBuilder.Sql("DELETE FROM coach_messages WHERE conversation_id IN (SELECT id FROM conversations WHERE device_id IS NOT NULL);");
+            migrationBuilder.Sql("DELETE FROM verdicts WHERE analysis_id IN (SELECT id FROM analyses WHERE device_id IS NOT NULL);");
+            migrationBuilder.Sql("DELETE FROM conversations WHERE device_id IS NOT NULL;");
+            migrationBuilder.Sql("DELETE FROM analyses WHERE device_id IS NOT NULL;");
+            migrationBuilder.Sql("DELETE FROM analysis_jobs WHERE device_id IS NOT NULL;");
 
             migrationBuilder.DropTable(
                 name: "devices");

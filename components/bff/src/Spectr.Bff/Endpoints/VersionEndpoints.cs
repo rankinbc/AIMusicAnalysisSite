@@ -1098,8 +1098,11 @@ public static class VersionEndpoints
                 .Where(u => u.Id == userId)
                 .Select(u => u.EmailVerifiedAt)
                 .FirstOrDefaultAsync(ct);
+            // Failed jobs don't count — a user whose one free analysis died
+            // on an infrastructure error must be able to retry unverified.
             if (verified is null
-                && await db.AnalysisJobs.AsNoTracking().AnyAsync(j => j.UserId == userId, ct))
+                && await db.AnalysisJobs.AsNoTracking()
+                    .AnyAsync(j => j.UserId == userId && j.Status != "failed", ct))
                 return (Guid.Empty, ErrorEnvelope.Build(403, "email_verification_required",
                     "Verify your email to run another analysis. Check your inbox for the link."));
         }
