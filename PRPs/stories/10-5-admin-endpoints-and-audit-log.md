@@ -1,6 +1,6 @@
 # Story 10.5: Admin Endpoints & Audit Log
 
-Status: review
+Status: done
 
 ## Story
 
