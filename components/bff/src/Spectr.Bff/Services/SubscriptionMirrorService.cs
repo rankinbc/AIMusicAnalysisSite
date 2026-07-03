@@ -71,6 +71,36 @@ public sealed class SubscriptionMirrorService(
         // to Stripe just to learn the item id.
         var itemId = firstItem?.Id;
 
+        // Story 2.2 review-fix P9 — only overwrite StripeItemId when the
+        // incoming webhook carries one. Some Stripe events
+        // (subscription.deleted, certain edge-case payloads) deliver empty
+        // items arrays; unconditional assignment would wipe a valid si_* id
+        // and re-introduce `subscription_not_ready` 409 for the user until
+        // the next item-bearing webhook.
+        void ApplyTo(SubscriptionEntity row)
+        {
+            row.StripeCustomerId = stripeSub.CustomerId;
+            row.StripeSubscriptionId = stripeSub.Id;
+            if (itemId is not null)
+            {
+                row.StripeItemId = itemId;
+            }
+            row.Status = stripeSub.Status;
+            row.PriceId = priceId;
+            row.CurrentPeriodEnd = periodEnd;
+            row.CancelAt = cancelAt;
+            // Story 2.9 — recovery (AC #4) belt-and-suspenders: a
+            // subscription returning to active/trialing clears any pending
+            // dunning retry date, even if the matching invoice.paid event
+            // wasn't dispatched/matched. Leave it untouched for past_due so
+            // the DunningBanner keeps showing the scheduled retry.
+            if (stripeSub.Status is "active" or "trialing")
+            {
+                row.NextPaymentAttempt = null;
+            }
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
         if (existing is null)
         {
             db.Subscriptions.Add(new SubscriptionEntity
@@ -89,35 +119,28 @@ public sealed class SubscriptionMirrorService(
         }
         else
         {
-            existing.StripeCustomerId = stripeSub.CustomerId;
-            existing.StripeSubscriptionId = stripeSub.Id;
-            // Story 2.2 review-fix P9 — only overwrite StripeItemId when
-            // the incoming webhook carries one. Some Stripe events
-            // (subscription.deleted, certain edge-case payloads) deliver
-            // empty items arrays; unconditional assignment would wipe a
-            // valid si_* id and re-introduce `subscription_not_ready`
-            // 409 for the user until the next item-bearing webhook.
-            if (itemId is not null)
-            {
-                existing.StripeItemId = itemId;
-            }
-            existing.Status = stripeSub.Status;
-            existing.PriceId = priceId;
-            existing.CurrentPeriodEnd = periodEnd;
-            existing.CancelAt = cancelAt;
-            // Story 2.9 — recovery (AC #4) belt-and-suspenders: a
-            // subscription returning to active/trialing clears any pending
-            // dunning retry date, even if the matching invoice.paid event
-            // wasn't dispatched/matched. Leave it untouched for past_due so
-            // the DunningBanner keeps showing the scheduled retry.
-            if (stripeSub.Status is "active" or "trialing")
-            {
-                existing.NextPaymentAttempt = null;
-            }
-            existing.UpdatedAt = DateTimeOffset.UtcNow;
+            ApplyTo(existing);
         }
 
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (existing is null
+            && ex.InnerException is Npgsql.PostgresException { SqlState: "23505" })
+        {
+            // Concurrent delivery of the same subscription event (Stripe is
+            // at-least-once and fans out duplicates): another handler won the
+            // read-then-insert race and the PK rejected our insert. Re-apply
+            // as an update against the winner's row — same terminal state,
+            // and the endpoint answers 200 instead of 500 (which would make
+            // Stripe redeliver forever).
+            db.ChangeTracker.Clear();
+            var winner = await db.Subscriptions
+                .FirstAsync(s => s.UserId == userId.Value, ct);
+            ApplyTo(winner);
+            await db.SaveChangesAsync(ct);
+        }
         return userId;
     }
 

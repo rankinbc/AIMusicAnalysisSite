@@ -9,6 +9,7 @@ import { FeedEmptyState, FeedItemRow, FeedList } from '../FeedView';
 import type { FeedItemDto, FeedSuggestionDto } from '../useFeed';
 
 const item = (over?: Partial<FeedItemDto>): FeedItemDto => ({
+  itemId: '00000000-0000-0000-0000-000000000001',
   kind: 'share',
   handle: 'aurora',
   displayName: 'Aurora',
@@ -55,7 +56,7 @@ describe('FeedList', () => {
   it('renders populated feed reverse-chron as given, with More on hasMore (AC1)', () => {
     const html = renderToStaticMarkup(
       <FeedList
-        items={[item(), item({ kind: 'recap', shareToken: 'tok-456' })]}
+        items={[item(), item({ kind: 'recap', shareToken: 'tok-456', itemId: '00000000-0000-0000-0000-000000000002' })]}
         suggestions={null}
         hasMore
       />,
@@ -66,9 +67,14 @@ describe('FeedList', () => {
     expect(html).not.toContain('data-testid="empty-feed"');
   });
 
-  it('omits More when hasMore is false', () => {
+  it('omits More when hasMore is false, disables it while a page loads', () => {
     const html = renderToStaticMarkup(<FeedList items={[item()]} suggestions={null} />);
     expect(html).not.toContain('More…');
+    const pending = renderToStaticMarkup(
+      <FeedList items={[item()]} suggestions={null} hasMore morePending />,
+    );
+    expect(pending).toContain('disabled');
+    expect(pending).toContain('Loading…');
   });
 
   it('renders the empty state with discovery suggestions (AC2)', () => {

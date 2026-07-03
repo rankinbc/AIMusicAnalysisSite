@@ -14,6 +14,10 @@ public static class FeedEndpoints
 {
     private const int DefaultLimit = 30;
     private const int MaxLimit = 50;
+    // Offset paging pulls skip+take+1 rows per source, so page must be hard-
+    // capped: an uncapped ?page= both overflows int (negative SQL LIMIT) and
+    // materializes millions of rows per request (review finding, story 11.10).
+    private const int MaxPage = 200;
     private const int SuggestionLimit = 5;
 
     public static IEndpointRouteBuilder MapFeedEndpoints(this IEndpointRouteBuilder app)
@@ -23,7 +27,12 @@ public static class FeedEndpoints
         return app;
     }
 
+    // ItemId = song_version id for shares, listening_session id for recaps —
+    // a stable identity per feed item: the deterministic paging tiebreaker on
+    // timestamp ties AND the frontend's React key (two published sessions on
+    // one version share a token, so token+timestamp alone can collide).
     public sealed record FeedItemDto(
+        Guid ItemId,
         string Kind, // "share" | "recap"
         string Handle,
         string? DisplayName,
@@ -50,7 +59,7 @@ public static class FeedEndpoints
     {
         var me = currentUser.UserId();
         var take = Math.Clamp(limit ?? DefaultLimit, 1, MaxLimit);
-        var pageN = Math.Max(0, page ?? 0);
+        var pageN = Math.Clamp(page ?? 0, 0, MaxPage);
         var skip = pageN * take;
         var pull = skip + take + 1; // enough rows per source to page + HasMore probe
 
@@ -66,11 +75,11 @@ public static class FeedEndpoints
             join u in db.Users.AsNoTracking() on s.UserId equals u.Id
             where followees.Contains(s.UserId)
                 && ss.Visibility == "public" && ss.ShareToken != null
-                && ss.EnabledAt != null && u.Handle != null
-            orderby ss.EnabledAt descending
+                && ss.EnabledAt != null && u.Handle != null && u.IsActive
+            orderby ss.EnabledAt descending, ss.SongVersionId descending
             select new FeedItemDto(
-                "share", u.Handle!, u.DisplayName, s.Name, v.VersionNumber,
-                ss.ShareToken!, ss.EnabledAt!.Value)
+                ss.SongVersionId, "share", u.Handle!, u.DisplayName, s.Name,
+                v.VersionNumber, ss.ShareToken!, ss.EnabledAt!.Value)
         ).Take(pull).ToListAsync(ct);
 
         // Source B — published recaps, still gated on the version being public:
@@ -84,15 +93,19 @@ public static class FeedEndpoints
             where followees.Contains(ls.HostId)
                 && ls.RecapPublishedAt != null
                 && ss.Visibility == "public" && ss.ShareToken != null
-                && u.Handle != null
-            orderby ls.RecapPublishedAt descending
+                && u.Handle != null && u.IsActive
+            orderby ls.RecapPublishedAt descending, ls.Id descending
             select new FeedItemDto(
-                "recap", u.Handle!, u.DisplayName, s.Name, v.VersionNumber,
-                ss.ShareToken!, ls.RecapPublishedAt!.Value)
+                ls.Id, "recap", u.Handle!, u.DisplayName, s.Name,
+                v.VersionNumber, ss.ShareToken!, ls.RecapPublishedAt!.Value)
         ).Take(pull).ToListAsync(ct);
 
-        var merged = shares.Concat(recaps)
-            .OrderByDescending(i => i.OccurredAt)
+        // Deterministic 2-way merge that PRESERVES each source's SQL order
+        // (timestamp desc, id desc; ties across sources → shares first).
+        // Re-sorting in memory with .NET Guid comparison would disagree with
+        // Postgres uuid ordering at the pull cut and could drop/duplicate
+        // items across pages on timestamp ties.
+        var merged = MergeDesc(shares, recaps)
             .Skip(skip)
             .Take(take + 1)
             .ToList();
@@ -125,5 +138,15 @@ public static class FeedEndpoints
         }
 
         return Results.Ok(new FeedPageDto(items, pageN, take, hasMore, suggestions));
+    }
+
+    private static IEnumerable<FeedItemDto> MergeDesc(
+        IReadOnlyList<FeedItemDto> a, IReadOnlyList<FeedItemDto> b)
+    {
+        int i = 0, j = 0;
+        while (i < a.Count && j < b.Count)
+            yield return a[i].OccurredAt >= b[j].OccurredAt ? a[i++] : b[j++];
+        while (i < a.Count) yield return a[i++];
+        while (j < b.Count) yield return b[j++];
     }
 }

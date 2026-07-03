@@ -673,6 +673,10 @@ namespace Spectr.Data.Migrations
                     b.HasIndex("Status")
                         .HasDatabaseName("ix_listening_sessions_status");
 
+                    b.HasIndex("HostId", "RecapPublishedAt")
+                        .HasDatabaseName("ix_listening_sessions_host_recap_published")
+                        .HasFilter("recap_published_at IS NOT NULL");
+
                     b.ToTable("listening_sessions", t =>
                         {
                             t.HasCheckConstraint("ck_listening_sessions_status", "\"status\" IN ('live','ended')");

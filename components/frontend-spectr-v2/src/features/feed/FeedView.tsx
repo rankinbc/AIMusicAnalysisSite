@@ -56,11 +56,13 @@ export function FeedList({
   items,
   suggestions,
   hasMore,
+  morePending,
   onMore,
 }: {
   items: FeedItemDto[];
   suggestions: FeedSuggestionDto[] | null;
   hasMore?: boolean;
+  morePending?: boolean;
   onMore?: () => void;
 }) {
   if (items.length === 0) {
@@ -70,12 +72,14 @@ export function FeedList({
     <div>
       <ul className={s.list}>
         {items.map((item) => (
-          <FeedItemRow key={`${item.kind}:${item.shareToken}:${item.occurredAt}`} item={item} />
+          // itemId is server-stable (version id / session id) — token+timestamp
+          // can collide when two published sessions share one version.
+          <FeedItemRow key={`${item.kind}:${item.itemId}`} item={item} />
         ))}
       </ul>
       {hasMore && (
-        <button type="button" className={`btn sm ghost ${s.more}`} onClick={onMore}>
-          More…
+        <button type="button" className={`btn sm ghost ${s.more}`} onClick={onMore} disabled={morePending}>
+          {morePending ? 'Loading…' : 'More…'}
         </button>
       )}
     </div>

@@ -139,21 +139,51 @@ public sealed class FeedEndpointsTests(WebApplicationFactory<Program> factory)
     {
         if (!await TestDb.Reachable(_factory)) { return; }
 
-        var (reader, _, _) = await AuthedWithHandleAsync();
+        var (reader, readerId, readerHandle) = await AuthedWithHandleAsync();
         var (_, sharerId, sharerHandle) = await AuthedWithHandleAsync();
         await SeedShareAsync(sharerId, "public", DateTimeOffset.UtcNow);
+        // The reader ALSO has a public share — proves the self-exclusion branch
+        // for real (a reader with no shares is vacuously absent from suggestions).
+        await SeedShareAsync(readerId, "public", DateTimeOffset.UtcNow);
 
         // Follows no one → empty items + suggestions including the public sharer (AC2).
         var feed = await Feed(reader);
         Assert.Empty(feed.GetProperty("items").EnumerateArray());
         var suggestions = feed.GetProperty("suggestions").EnumerateArray().ToList();
         Assert.Contains(suggestions, s => s.GetProperty("handle").GetString() == sharerHandle);
-        // Never suggests myself
-        Assert.DoesNotContain(suggestions, s => s.GetProperty("handle").GetString() is null);
+        // Never suggests myself — despite my own public share being the newest.
+        Assert.DoesNotContain(suggestions, s => s.GetProperty("handle").GetString() == readerHandle);
 
         // Unauthed → 401 (recipient-scoped, AC4).
         var anon = _factory.CreateClient();
         Assert.Equal(HttpStatusCode.Unauthorized, (await anon.GetAsync("/api/me/feed/")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Deactivated_Followee_Content_Never_Surfaces()
+    {
+        if (!await TestDb.Reachable(_factory)) { return; }
+
+        var (reader, _, _) = await AuthedWithHandleAsync();
+        var (_, ghostId, ghostHandle) = await AuthedWithHandleAsync();
+        var ghostVersion = await SeedShareAsync(ghostId, "public", DateTimeOffset.UtcNow.AddMinutes(-5));
+        await SeedRecapAsync(ghostId, ghostVersion, DateTimeOffset.UtcNow.AddMinutes(-4));
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await reader.PutAsync($"/api/u/{ghostHandle}/follow/", null)).StatusCode);
+
+        // Deactivate the followee — their share AND recap must drop out
+        // (their /u/{handle} deep-link would 404, so surfacing them is a trap).
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var ghost = await db.Users.SingleAsync(u => u.Id == ghostId);
+            ghost.IsActive = false;
+            await db.SaveChangesAsync();
+        }
+
+        var feed = await Feed(reader);
+        Assert.Empty(feed.GetProperty("items").EnumerateArray());
     }
 
     [Fact]

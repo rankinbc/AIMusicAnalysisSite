@@ -119,18 +119,38 @@ claude-fable-5 (Claude Code)
 ### File List
 
 - `components/bff/src/Spectr.Data/Entities/ListeningSession.cs` (RecapPublishedAt)
-- `components/bff/src/Spectr.Data/Migrations/20260703123127_AddRecapPublishedAt.cs` + `.Designer.cs` + snapshot
-- `components/bff/src/Spectr.Bff/Endpoints/RoomEndpoints.cs` (PublishRecap stamps recap_published_at)
+- `components/bff/src/Spectr.Data/Migrations/*_AddRecapPublishedAt.cs` + `.Designer.cs` + snapshot (re-scaffolded in review to include the partial index)
+- `components/bff/src/Spectr.Data/AppDbContext.cs` (ix_listening_sessions_host_recap_published partial index config)
+- `components/bff/src/Spectr.Bff/Endpoints/RoomEndpoints.cs` (PublishRecap stamps recap_published_at, in one tx with the recap comments)
 - `components/bff/src/Spectr.Bff/Endpoints/FeedEndpoints.cs` (new)
 - `components/bff/src/Spectr.Bff/Program.cs` (MapFeedEndpoints)
+- `components/bff/src/Spectr.Bff/Services/SubscriptionMirrorService.cs` (pre-existing webhook upsert race fix — surfaced by review gates, see Change Log)
 - `components/bff/tests/Spectr.Bff.Tests/FeedEndpointsTests.cs` (new)
 - `components/shared/aimusic_shared/models.py` (ListeningSession.recap_published_at mirror)
 - `components/frontend-spectr-v2/src/features/feed/{useFeed.ts,feed-text.ts,FeedView.tsx,feed.module.css}` (new)
 - `components/frontend-spectr-v2/src/features/feed/__tests__/feed-view.test.tsx` (new)
+- `components/frontend-spectr-v2/src/features/profiles/useFollow.ts` (feed invalidation on follow/unfollow)
 - `components/frontend-spectr-v2/src/routes/_app/feed.tsx` (new)
 - `components/frontend-spectr-v2/src/routes/_app.tsx` (Feed nav tab)
 - `components/frontend-spectr-v2/src/routeTree.gen.ts` (regenerated)
+- `.gitignore` (test-generated analysis spectrograms)
+
+### Senior Developer Review (AI)
+
+2026-07-03 — bmad-code-review (Blind Hunter + Edge Case Hunter + Acceptance Auditor). Outcome: **Approve with patches**; all 5 ACs met. 9 patch findings, 3 defers, 7 rejects. All 9 patches applied same day:
+
+- [x] [High] Unclamped `page` → int overflow / memory DoS → `MaxPage = 200` clamp
+- [x] [High] "More…" replaced the page instead of appending → `useInfiniteQuery` + accumulated `pages.flatMap`; also kills the false empty state on empty page > 0
+- [x] [Med] No timestamp tiebreaker → per-source secondary `orderby ... Id descending` + deterministic 2-way `MergeDesc` preserving SQL order (a .NET-side Guid re-sort would disagree with Postgres uuid ordering at the pull cut)
+- [x] [Med] Deactivated followee content surfaced → `u.IsActive` in both source queries + new `Deactivated_Followee_Content_Never_Surfaces` test
+- [x] [Med] Stale feed after follow/unfollow → `useFollow`/`useUnfollow` also invalidate `['me','feed']`
+- [x] [Med] Publish stamp not atomic with recap comments → explicit transaction in `PublishRecap`
+- [x] [Med] Suggestion self-exclusion untested → reader now seeds their own public share; assertion checks reader handle absent
+- [x] [Med] Missing feed index → partial index `(host_id, recap_published_at) WHERE recap_published_at IS NOT NULL` folded into the re-scaffolded migration
+- [x] [Low] React key collision (token+timestamp) → server-stable `ItemId` (version id / session id) added to `FeedItemDto`, used as key
+- Deferred (logged, not blocking): suggestion pre-distinct window starvation by a prolific sharer; `share_settings.enabled_at` index; Postgres-gated silent test skip (project-wide convention).
 
 ### Change Log
 
 - 2026-07-03: implemented on `social/11-10-activity-feed`. Gates: BFF build 0 warn + tests (feed 4/4; full 255/256 w/ known CoachStream flake, passes isolated); frontend vite build + tsc -b + lint + lint:css + vitest 642/642; ruff clean; shared 27; worker 534 + 3 xfail. Status → review.
+- 2026-07-03 (review): 9 code-review patches applied (see Senior Developer Review). ALSO fixed a pre-existing, unrelated race the re-run gates exposed: `SubscriptionMirrorService` read-then-insert on `subscriptions` 500'd one of Stripe's concurrent duplicate deliveries (`Webhook_Concurrent_Deliveries...` began failing consistently, 23505 on PK_subscriptions) — now catches the unique violation and re-applies as an update. Gates after patches: BFF 257/257, frontend vitest 642/642 + build/tsc/lint/lint:css clean.

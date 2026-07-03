@@ -12,7 +12,7 @@ using Spectr.Data;
 namespace Spectr.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260703123127_AddRecapPublishedAt")]
+    [Migration("20260703125926_AddRecapPublishedAt")]
     partial class AddRecapPublishedAt
     {
         /// <inheritdoc />
@@ -675,6 +675,10 @@ namespace Spectr.Data.Migrations
 
                     b.HasIndex("Status")
                         .HasDatabaseName("ix_listening_sessions_status");
+
+                    b.HasIndex("HostId", "RecapPublishedAt")
+                        .HasDatabaseName("ix_listening_sessions_host_recap_published")
+                        .HasFilter("recap_published_at IS NOT NULL");
 
                     b.ToTable("listening_sessions", t =>
                         {
