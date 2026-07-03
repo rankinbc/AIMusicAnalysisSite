@@ -55,6 +55,11 @@ internal sealed class FakeMultipartObjectStore : IMultipartObjectStore
     public Task<bool> ObjectExistsAsync(string key, CancellationToken ct = default)
         => Task.FromResult(ObjectExists);
 
+    public long ObjectSize { get; set; } = 1024;
+
+    public Task<long?> GetObjectSizeAsync(string key, CancellationToken ct = default)
+        => Task.FromResult<long?>(ObjectExists ? ObjectSize : null);
+
     public ConcurrentQueue<string> PresignedPuts { get; } = new();
 
     public string PresignPutUrl(string key, CancellationToken ct = default)
@@ -380,11 +385,25 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
             $"/api/versions/{versionId}/stems/stage-keys",
             new { stems = new[] { new { stemId = "s1", key = $"stems/{Guid.NewGuid()}/s1.wav", fileName = "K.wav" } } })).StatusCode);
 
+        // Traversal-shaped key: valid prefix + extension but `..` segments —
+        // must be rejected before any storage/DB write (review High #2).
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(
+            $"/api/versions/{versionId}/stems/stage-keys",
+            new { stems = new[] { new { stemId = "s1", key = $"stems/{jobId}/../../audio/{Guid.NewGuid()}/{Guid.NewGuid()}/source.wav", fileName = "K.wav" } } })).StatusCode);
+
         // Missing object → 502 upload_not_found.
         store.ObjectExists = false;
         Assert.Equal((HttpStatusCode)502, (await client.PostAsJsonAsync(
             $"/api/versions/{versionId}/stems/stage-keys",
             new { stems = new[] { new { stemId = "s1", key = $"stems/{jobId}/s1.wav", fileName = "K.wav" } } })).StatusCode);
+
+        // Oversize ACTUAL object (client lied at init) → 400 (review High #3).
+        store.ObjectExists = true;
+        store.ObjectSize = 251L * 1024 * 1024;
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(
+            $"/api/versions/{versionId}/stems/stage-keys",
+            new { stems = new[] { new { stemId = "s1", key = $"stems/{jobId}/s1.wav", fileName = "K.wav" } } })).StatusCode);
+        store.ObjectSize = 1024;
 
         // Happy path appends staged entries with the R2 keys.
         store.ObjectExists = true;

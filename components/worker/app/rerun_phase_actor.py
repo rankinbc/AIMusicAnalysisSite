@@ -92,35 +92,49 @@ def rerun_phase(
         stem_mode = (version.stem_analysis_mode or "grouped") if version else "grouped"
 
     # Story 3.2 — resolve source/attachments local-first with S3 fetch fallback
-    # (presigned-uploaded versions have R2 keys, not local paths).
+    # (presigned-uploaded versions have R2 keys, not local paths). A failed
+    # fetch marks the rerun job failed AND cleans any partial fetches — the
+    # Phase B finally below only covers fetches that survive to Phase B.
     fetched: list[Path] = []
-    file_abs = None
-    if file_rel:
-        file_abs, f = object_store.resolve_local(file_rel, LOCAL_ROOT)
-        if f is not None:
-            fetched.append(f)
-    reference_abs = None
-    if reference_rel:
-        reference_abs, f = object_store.resolve_local(reference_rel, LOCAL_ROOT)
-        if f is not None:
-            fetched.append(f)
-    als_abs = None
-    if als_rel:
-        als_abs, f = object_store.resolve_local(als_rel, LOCAL_ROOT)
-        if f is not None:
-            fetched.append(f)
-    if stem_paths:
-        resolved_stems: dict = {}
-        for role, entry in stem_paths.items():
-            keys = entry if isinstance(entry, list) else [entry]
-            out: list[str] = []
-            for k in keys:
-                local, f = object_store.resolve_local(str(k), LOCAL_ROOT)
-                if f is not None:
-                    fetched.append(f)
-                out.append(local)
-            resolved_stems[role] = out if isinstance(entry, list) else out[0]
-        stem_paths = resolved_stems
+    try:
+        file_abs = None
+        if file_rel:
+            file_abs, f = object_store.resolve_local(file_rel, LOCAL_ROOT)
+            if f is not None:
+                fetched.append(f)
+        reference_abs = None
+        if reference_rel:
+            reference_abs, f = object_store.resolve_local(reference_rel, LOCAL_ROOT)
+            if f is not None:
+                fetched.append(f)
+        als_abs = None
+        if als_rel:
+            als_abs, f = object_store.resolve_local(als_rel, LOCAL_ROOT)
+            if f is not None:
+                fetched.append(f)
+        if stem_paths:
+            resolved_stems: dict = {}
+            for role, entry in stem_paths.items():
+                keys = entry if isinstance(entry, list) else [entry]
+                out: list[str] = []
+                for k in keys:
+                    local, f = object_store.resolve_local(str(k), LOCAL_ROOT)
+                    if f is not None:
+                        fetched.append(f)
+                    out.append(local)
+                resolved_stems[role] = out if isinstance(entry, list) else out[0]
+            stem_paths = resolved_stems
+    except Exception as exc:
+        logger.exception("rerun_phase: fetch failed rerun_job=%s", rerun_job_id)
+        with SessionFactory.begin() as s:
+            j = s.get(AnalysisJob, rerun_jid)
+            if j is not None:
+                j.status = JOB_STATUS_FAILED
+                j.error_message = str(exc)[:2000]
+                j.failed_at = _utc_now()
+                j.current_phase = "failed"
+        object_store.cleanup_all(fetched)
+        raise
 
     # Phase 8 (ALS) needs no source audio; phases 2–7 do.
     if file_abs is None and phase != 8:
@@ -132,6 +146,7 @@ def rerun_phase(
                 j.error_message = "Source audio missing for re-run."
                 j.failed_at = _utc_now()
                 j.current_phase = "failed"
+        object_store.cleanup_all(fetched)  # attachments may have been fetched
         return
 
     def _report_progress(p: int, name: str, pct: float) -> None:

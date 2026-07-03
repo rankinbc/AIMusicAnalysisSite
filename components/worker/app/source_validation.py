@@ -59,8 +59,14 @@ def _sniff_magic(head: bytes) -> str | None:
         return "flac"
     if head[:3] == b"ID3":
         return "mp3"
-    # Raw MPEG frame sync: 0xFF Ex/Fx (covers MPEG-1/2 layer 3 without ID3).
-    if head[0] == 0xFF and (head[1] & 0xE0) == 0xE0:
+    # Raw MPEG frame sync (no ID3): 11 sync bits + version/layer bits must not
+    # be their reserved values, or any 0xFF-prefixed junk would pass as mp3.
+    if (
+        head[0] == 0xFF
+        and (head[1] & 0xE0) == 0xE0
+        and (head[1] & 0x18) != 0x08  # version 01 = reserved
+        and (head[1] & 0x06) != 0x00  # layer 00 = reserved
+    ):
         return "mp3"
     if head[:4] == b"FORM" and head[8:12] in (b"AIFF", b"AIFC"):
         return "aiff"
@@ -72,12 +78,32 @@ def _sniff_magic(head: bytes) -> str | None:
     return None
 
 
+def _is_environment_error(exc: Exception) -> bool:
+    """Errors of the WORKER, not the file — must NOT become invalid_file.
+
+    A misconfigured image (missing libsndfile/ffmpeg backend), disk-full temp,
+    or truncated read has nothing to do with the user's bytes; classifying it
+    as invalid_file would permanently fail + refund every upload on that box.
+    These propagate to the generic (retrying) failure arm instead.
+    """
+    if isinstance(exc, (ImportError, MemoryError)):
+        return True
+    # audioread.exceptions.NoBackendError = no mp3 decoder installed (env).
+    if type(exc).__name__ == "NoBackendError":
+        return True
+    # Plain OS I/O errors (disk, permissions) — but libsndfile wraps content
+    # errors in its own exception type, which is NOT a bare OSError.
+    if type(exc) in (OSError, IOError, PermissionError):
+        return True
+    return False
+
+
 def _probe_duration(path: Path, fmt: str) -> float:
     """Header-cheap duration in seconds; raises InvalidFileError(undecodable)."""
     if fmt in ("wav", "flac", "aiff", "ogg"):
-        try:
-            import soundfile as sf
+        import soundfile as sf  # ImportError = env problem, propagates
 
+        try:
             info = sf.info(str(path))
             if info.samplerate <= 0:
                 raise InvalidFileError(REASON_UNDECODABLE, "invalid sample rate in header")
@@ -85,15 +111,19 @@ def _probe_duration(path: Path, fmt: str) -> float:
         except InvalidFileError:
             raise
         except Exception as exc:
+            if _is_environment_error(exc):
+                raise
             raise InvalidFileError(
                 REASON_UNDECODABLE, f"header declares {fmt} but soundfile can't read it: {exc}"
             ) from exc
     # mp3 / m4a — no cheap header probe in soundfile; audioread via librosa.
-    try:
-        import librosa
+    import librosa  # ImportError = env problem, propagates
 
+    try:
         return float(librosa.get_duration(path=str(path)))
     except Exception as exc:
+        if _is_environment_error(exc):
+            raise
         raise InvalidFileError(
             REASON_UNDECODABLE, f"header declares {fmt} but the stream won't decode: {exc}"
         ) from exc

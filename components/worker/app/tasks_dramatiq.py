@@ -427,6 +427,8 @@ def classify_stems(version_id: str) -> None:
     vid = uuid.UUID(version_id)
     logger.info("classify_stems: start version=%s", version_id)
 
+    # Phase A — read the staged entries (short tx; the fetch/classify below
+    # can take minutes and MUST NOT hold a transaction — 3-phase rule).
     with SessionFactory.begin() as s:
         version = s.get(SongVersion, vid)
         if version is None:
@@ -436,9 +438,11 @@ def classify_stems(version_id: str) -> None:
             logger.info("classify_stems: no staged stems for version=%s", version_id)
             return
 
-        # Story 3.2 — presigned-staged stems are R2 keys; resolve local-first
-        # with S3 fetch fallback (legacy local staging unchanged).
-        fetched: list[Path] = []
+    # Phase B — resolve (Story 3.2: presigned-staged stems are R2 keys;
+    # local-first with S3 fetch fallback) + classify, outside any tx. The
+    # finally covers partial fetches when resolve or classify fails mid-batch.
+    fetched: list[Path] = []
+    try:
         abs_paths: list[Path] = []
         for e in entries:
             local, f = object_store.resolve_local(str(e["path"]), LOCAL_ROOT)
@@ -448,20 +452,24 @@ def classify_stems(version_id: str) -> None:
         # On-disk paths are UUIDs; pass the authoritative export name so the classifier
         # can keyword-match (Kick/Snare/Bass/...) before falling back to audio content.
         names = [e.get("original_filename") or Path(e["path"]).name for e in entries]
-        try:
-            proposals = classify_audio(abs_paths, names)
-        finally:
-            object_store.cleanup_all(fetched)
+        proposals = classify_audio(abs_paths, names)
+    finally:
+        object_store.cleanup_all(fetched)
 
-        updated = []
-        for e, prop in zip(entries, proposals):
-            ne = dict(e)
-            ne["detected_role"] = prop.role.value
-            ne["confidence"] = round(float(prop.confidence), 3)
-            ne["evidence"] = prop.evidence
-            updated.append(ne)
-        # Reassign so SQLAlchemy flags the JSONB column dirty (in-place mutation
-        # of a JSON list is not tracked).
+    updated = []
+    for e, prop in zip(entries, proposals):
+        ne = dict(e)
+        ne["detected_role"] = prop.role.value
+        ne["confidence"] = round(float(prop.confidence), 3)
+        ne["evidence"] = prop.evidence
+        updated.append(ne)
+
+    # Phase C — write the proposals back (fresh short tx). Reassign so
+    # SQLAlchemy flags the JSONB column dirty (in-place mutation isn't tracked).
+    with SessionFactory.begin() as s:
+        version = s.get(SongVersion, vid)
+        if version is None:
+            return
         version.stem_paths_raw = updated
 
     logger.info("classify_stems: done version=%s (%d stems)", version_id, len(entries))

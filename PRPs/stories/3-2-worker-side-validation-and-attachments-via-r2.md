@@ -148,6 +148,26 @@ claude-fable-5 (Claude Code)
 - `components/frontend-spectr-v2/src/components/UnifiedUploadDialog.tsx` (presigned-first attachments)
 - `docker/docker-compose.yml` (spectr-worker MinIO user + worker creds)
 
+### Senior Developer Review (AI)
+
+2026-07-03 — bmad-code-review (Blind Hunter + Edge Case Hunter + Acceptance Auditor). Outcome: **Approve with patches**; all 4 ACs met (auditor verified the reversal hook contract, all-tier entitlement semantics — pro is unmetered — and File List accuracy; ran the new worker tests independently). 14 patches applied same day:
+
+- [x] [High] Environmental failures (missing decoder backend, disk I/O) were classified `invalid_file` → false permanent refunds → `_is_environment_error` gate: ImportError/OSError/MemoryError/NoBackendError propagate to the retrying arm; imports moved out of the try; test proves OSError ≠ invalid_file
+- [x] [High] `..` traversal in registered keys (prefix check alone passed `stems/{jobId}/../../audio/{victim}/…`; worker `.resolve()` would escape the root) → `ValidSingleSegmentKey` guard on all three registration endpoints + defense-in-depth ValueError in `resolve_local` + tests both layers
+- [x] [High] Presigned PUT can't bind Content-Length → registration now checks the ACTUAL object size (`GetObjectSizeAsync` on the store interface) against per-kind caps; oversize test added
+- [x] [Med] mp3 frame-sync sniff accepted any `0xFF Ex/Fx` junk → reserved version/layer bits rejected
+- [x] [Med] `classify_stems` held a DB transaction across S3 fetches + classification (3-phase rule violation) → restructured read-tx / fetch+classify / write-tx; partial-fetch cleanup
+- [x] [Med] `rerun_phase` resolution failures left the job stuck `processing` + leaked temps → resolution wrapped (mark failed + cleanup + raise); no-source early return also cleans
+- [x] [Med] Free-meter `invalid_file` exclusion had zero coverage → `Free_InvalidFileJob_DoesNotConsumeMonthlyCap` (also proves the EF `Guid.ToString()` subquery translates on real Postgres)
+- [x] [Med] Reference `complete-key` check-then-insert race → `DbUpdateException` → 409
+- [x] [Low] Stem mint quota at init (100/version) so unregistered presigns can't be minted unbounded per version; stage-keys dedupes by key (idempotent retry) and validates/regenerates client `stemId`
+- [x] [Low] `reference_analyzer` fetched-temp leak on the not-found early return → cleaned
+- [x] [Low] Attachment PUTs had no progress → per-file percent in the dialog status line
+- [x] [Low] `StemExts` (init) vs `StemAudioExts` (registration) same values, two sets — left as-is but both tested; test env-var ordering fixed in `test_resolve_local`
+- Deferred (logged): orphaned unregistered objects → 3.4 retention sweep + R2 lifecycle (3.1 decision 8 precedent); read-path (stem preview/reference playback) for R2 keys → 3.3 signed playback; attachments themselves not content-validated (pipeline per-phase tolerance bounds the blast radius; phase-8 .als isolation is story 5.7); MinIO `readwrite` policy is global not bucket-scoped (dev-only; prod R2 scoped token in 10.1); >30-min mixes rejected by default (env-overridable product default).
+- Rejected: stale AlsProjectJson on re-register (mirrors legacy UploadAls exactly); ftyp accepting video containers (librosa decodes the audio track; duration limits apply); mix-path size binding (3.1 posture, same defer).
+
 ### Change Log
 
 - 2026-07-03: story created + implemented on `storage/3-2-worker-r2-validation`. Gates: worker 547 + 3 xfail (13 new); BFF build 0-warn, 256/257 (sole failure = pre-existing master webhook race, fixed on PR #4 — see Debug Log), upload tests 17/17; frontend vite build + tsc -b + lint + lint:css + vitest 639/639 (4 new); ruff clean; shared 27. Status → review.
+- 2026-07-03 (review): 14 code-review patches applied (see Senior Developer Review). Gates after patches: worker 550 + 3 xfail; BFF 258/258 (webhook race passed this run — it is timing-dependent on master); vitest 639; ruff clean.

@@ -183,6 +183,17 @@ public static class UploadEndpoints
         return null;
     }
 
+    // Story 3.2 review — a registered attachment key must be {prefix} plus ONE
+    // final segment. Prefix-StartsWith alone would accept
+    // "stems/{jobId}/../../audio/{victim}/..." — the worker's local resolve
+    // normalizes `..` and would escape the storage root.
+    internal static bool ValidSingleSegmentKey(string? key, string prefix)
+        => !string.IsNullOrWhiteSpace(key)
+           && key.StartsWith(prefix, StringComparison.Ordinal)
+           && key.Length > prefix.Length
+           && key.AsSpan(prefix.Length).IndexOfAny('/', '\\') < 0
+           && !key.Contains("..", StringComparison.Ordinal);
+
     // ── POST /api/uploads/attachments/init ─────────────────────────────────
     // Mints a single presigned PUT for a stem/.als/reference (AR20 keys:
     // stems/{jobId}/…, als/{jobId}/project.*, reference/{refId}/source.*).
@@ -236,6 +247,15 @@ public static class UploadEndpoints
                         return Results.BadRequest(new { error = "Only .wav / .flac stems are supported." });
                     if (body.FileSize > MaxUploadBytes)
                         return Results.BadRequest(new { error = "File exceeds 250 MB limit." });
+                    // Mint quota: staged entries already at the cap ⇒ no more
+                    // presigns (stage-keys enforces the cap again at register).
+                    var stagedJson = await db.SongVersions.AsNoTracking()
+                        .Where(v => v.Id == vid).Select(v => v.StemPathsRaw).FirstOrDefaultAsync(ct);
+                    var stagedCount = string.IsNullOrEmpty(stagedJson)
+                        ? 0
+                        : System.Text.Json.JsonDocument.Parse(stagedJson).RootElement.GetArrayLength();
+                    if (stagedCount >= 100)
+                        return Results.BadRequest(new { error = "Up to 100 stems per version." });
                     var stemId = Guid.NewGuid().ToString();
                     var stemKey = $"stems/{jobId}/{stemId}{ext}";
                     return Results.Ok(new AttachmentInitResponse(

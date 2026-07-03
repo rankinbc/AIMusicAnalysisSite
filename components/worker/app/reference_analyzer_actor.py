@@ -77,6 +77,7 @@ def run_reference_analyzer(reference_id: str) -> None:
             "reference %s file %s not found locally and S3 fetch unavailable",
             reference_id, local_path,
         )
+        object_store.cleanup_local(fetched)
         return
 
     # ── C: run phase 1 ─────────────────────────────────────────────────────

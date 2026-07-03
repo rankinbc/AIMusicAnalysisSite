@@ -74,6 +74,28 @@ def test_missing_file_is_not_a_user_error(tmp_path):
         sv.validate_source(tmp_path / f"{uuid.uuid4()}.wav")
 
 
+def test_environment_errors_are_not_invalid_file(tmp_path, monkeypatch):
+    """A broken worker (missing decoder, disk I/O) must NOT refund-and-reject
+    the upload as invalid_file — it propagates to the retrying failure arm."""
+    import soundfile
+
+    p = tmp_path / "ok.wav"
+    _write_wav(p, seconds=5.0)
+
+    def _io_boom(_path):
+        raise OSError("disk exploded")
+
+    monkeypatch.setattr(soundfile, "info", _io_boom)
+    with pytest.raises(OSError):
+        sv.validate_source(p)
+
+
+def test_ff_junk_with_reserved_bits_does_not_pass_as_mp3():
+    # 0xFF followed by reserved version/layer bits is NOT a valid MPEG frame.
+    assert sv._sniff_magic(b"\xff\xe1\x00\x00" + b"\x00" * 12) is None  # layer=00 reserved
+    assert sv._sniff_magic(b"\xff\xeb\x00\x00" + b"\x00" * 12) is None  # version=01 reserved
+
+
 def test_magic_table_recognizes_other_formats():
     assert sv._sniff_magic(b"fLaC" + b"\x00" * 12) == "flac"
     assert sv._sniff_magic(b"ID3\x04" + b"\x00" * 12) == "mp3"

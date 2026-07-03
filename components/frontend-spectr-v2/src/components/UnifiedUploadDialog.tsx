@@ -420,7 +420,12 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
       if (als) {
         setStatus('Attaching project…');
         try {
-          const put = await uploadAttachmentPresigned({ file: als, kind: 'als', versionId: vid });
+          const put = await uploadAttachmentPresigned({
+            file: als,
+            kind: 'als',
+            versionId: vid,
+            onProgress: (l, t) => setStatus(`Attaching project… ${Math.round((100 * l) / t)}%`),
+          });
           await fetcher<AlsUploadResponse>({
             url: `/versions/${vid}/als-key`,
             method: 'POST',
@@ -454,7 +459,11 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
         let ref: ReferenceDto;
         try {
           // Story 3.2 — presigned-first; 501 falls back to the proxy upload.
-          const put = await uploadAttachmentPresigned({ file: refFile, kind: 'reference' });
+          const put = await uploadAttachmentPresigned({
+            file: refFile,
+            kind: 'reference',
+            onProgress: (l, t) => setStatus(`Uploading reference… ${Math.round((100 * l) / t)}%`),
+          });
           ref = await fetcher<ReferenceDto>({
             url: '/references/complete-key',
             method: 'POST',
@@ -504,8 +513,14 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
       let staged: StageStemsResponse;
       try {
         const putItems: { stemId: string; key: string; fileName: string }[] = [];
-        for (const r of stemRows) {
-          const put = await uploadAttachmentPresigned({ file: r.file, kind: 'stem', versionId: vid });
+        for (const [i, r] of stemRows.entries()) {
+          const put = await uploadAttachmentPresigned({
+            file: r.file,
+            kind: 'stem',
+            versionId: vid,
+            onProgress: (l, t) =>
+              setStatus(`Uploading stems… ${i + 1}/${stemRows.length} (${Math.round((100 * l) / t)}%)`),
+          });
           putItems.push({ stemId: put.stemId ?? '', key: put.key, fileName: r.file.name });
         }
         staged = await fetcher<StageStemsResponse>({

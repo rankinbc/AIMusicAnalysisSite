@@ -4,9 +4,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from app import object_store
-
 os.environ.setdefault("DATABASE_URL", "postgresql+psycopg2://u:p@localhost/test")
+
+from app import object_store  # noqa: E402
 
 
 def test_local_file_wins_and_nothing_is_fetched(tmp_path, monkeypatch):
@@ -46,6 +46,14 @@ def test_missing_local_with_s3_fetches(tmp_path, monkeypatch):
     finally:
         object_store.cleanup_all([fetched])
     assert not Path(local).exists()
+
+
+def test_traversal_in_stored_path_is_rejected(tmp_path, monkeypatch):
+    import pytest
+
+    monkeypatch.delenv("S3_ENDPOINT", raising=False)
+    with pytest.raises(ValueError):
+        object_store.resolve_local("stems/j/../../audio/victim/source.wav", str(tmp_path))
 
 
 def test_absolute_existing_path_passes_through(tmp_path, monkeypatch):

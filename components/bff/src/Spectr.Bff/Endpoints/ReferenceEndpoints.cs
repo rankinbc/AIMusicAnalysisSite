@@ -139,13 +139,15 @@ public static class ReferenceEndpoints
 
         var userId = currentUser.UserId();
         var expectedPrefix = $"reference/{body.ReferenceId}/";
-        if (string.IsNullOrWhiteSpace(body.Key)
-            || !body.Key.StartsWith(expectedPrefix, StringComparison.Ordinal))
+        if (!UploadEndpoints.ValidSingleSegmentKey(body.Key, expectedPrefix))
             return Results.BadRequest(new { error = "Key does not match this reference upload." });
         if (await db.ReferenceTracks.AsNoTracking().AnyAsync(r => r.Id == body.ReferenceId, ct))
             return Results.Conflict(new { error = "Reference already registered." });
-        if (!await store.ObjectExistsAsync(body.Key, ct))
+        var size = await store.GetObjectSizeAsync(body.Key, ct);
+        if (size is null)
             return ErrorEnvelope.Build(502, "upload_not_found", "Object not found in storage.");
+        if (size > MaxUploadBytes)
+            return Results.BadRequest(new { error = "File exceeds 250 MB limit." });
 
         var titleClean = (body.Title ?? Path.GetFileNameWithoutExtension(body.FileName) ?? "Untitled").Trim();
         if (string.IsNullOrEmpty(titleClean)) titleClean = "Untitled";
@@ -162,7 +164,16 @@ public static class ReferenceEndpoints
             FilePath = body.Key,
         };
         db.ReferenceTracks.Add(row);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // Concurrent double-complete: the PK absorbed the race — answer
+            // the same 409 the AnyAsync pre-check gives, not a 500.
+            return Results.Conflict(new { error = "Reference already registered." });
+        }
         return Results.Created($"/api/references/{row.Id}", ToDto(row));
     }
 

@@ -141,6 +141,48 @@ public sealed class EntitlementServiceTests
         finally { await CleanupAsync(userId); }
     }
 
+    // ── Story 3.2 (AR16) — an invalid_file failure restores the free slot ──
+    // Also proves the EF subquery (j.Id.ToString() == e.Reference) translates.
+    [Fact]
+    public async Task Free_InvalidFileJob_DoesNotConsumeMonthlyCap()
+    {
+        if (!await PostgresReachable()) return;
+        var userId = await SeedUserAsync("ent-inv");
+        Guid jobId = Guid.NewGuid(), songId = Guid.NewGuid(), versionId = Guid.NewGuid();
+        try
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var period = DateTimeOffset.UtcNow.ToString("yyyy-MM");
+            db.Songs.Add(new Song { Id = songId, UserId = userId, Name = "T" });
+            db.SongVersions.Add(new SongVersion
+            { Id = versionId, SongId = songId, VersionNumber = 1, FilePath = "x", IsCurrent = true });
+            // Two dispatched analyses this month; one failed validation.
+            db.AnalysisJobs.Add(new AnalysisJob
+            { Id = jobId, UserId = userId, VersionId = versionId, Status = "failed", ErrorCode = "invalid_file" });
+            db.UsageEvents.Add(new UsageEvent
+            { UserId = userId, EventType = "analysis", BillingPeriod = period, Reference = jobId.ToString() });
+            db.UsageEvents.Add(new UsageEvent
+            { UserId = userId, EventType = "analysis", BillingPeriod = period, Reference = Guid.NewGuid().ToString() });
+            await db.SaveChangesAsync();
+
+            var svc = await NewServiceAsync(scope);
+            var ent = await svc.ForAsync(userId, CancellationToken.None);
+            Assert.Equal("free", ent.Tier);
+            Assert.Equal(1, ent.AnalysesUsed);      // invalid_file job excluded
+            Assert.Equal(2, ent.AnalysesRemaining); // slot restored
+        }
+        finally
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.AnalysisJobs.Where(j => j.Id == jobId).ExecuteDeleteAsync();
+            await db.SongVersions.Where(v => v.Id == versionId).ExecuteDeleteAsync();
+            await db.Songs.Where(s => s.Id == songId).ExecuteDeleteAsync();
+            await CleanupAsync(userId);
+        }
+    }
+
     // ── Case (c) credits balance = 2 → tier = "credits", remaining = 2 ─────
     [Fact]
     public async Task Credits_Balance2_TierCredits_Remaining2()

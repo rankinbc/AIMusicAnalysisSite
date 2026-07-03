@@ -807,18 +807,33 @@ public static class VersionEndpoints
 
         foreach (var item in body.Stems)
         {
-            if (string.IsNullOrWhiteSpace(item.Key)
-                || !item.Key.StartsWith(expectedPrefix, StringComparison.Ordinal))
+            // Single-segment tail — StartsWith alone would let `..` segments
+            // through and the worker's local resolve would escape the root.
+            if (!UploadEndpoints.ValidSingleSegmentKey(item.Key, expectedPrefix))
                 return Results.BadRequest(new { error = $"Key does not match this version's upload." });
             var ext = Path.GetExtension(item.Key).ToLowerInvariant();
             if (!StemAudioExts.Contains(ext))
                 return Results.BadRequest(new { error = $"'{item.FileName}': only .wav / .flac stems are supported." });
-            if (!await store.ObjectExistsAsync(item.Key, ct))
+            // Idempotent re-register (client retry after a lost response).
+            if (entries.Any(e => e.Key == item.Key))
+                continue;
+            var size = await store.GetObjectSizeAsync(item.Key, ct);
+            if (size is null)
                 return ErrorEnvelope.Build(502, "upload_not_found",
                     $"Object for '{item.FileName}' not found in storage.");
+            // Presigned PUT can't bind Content-Length — enforce the cap on the
+            // ACTUAL object, not the client-declared size at init.
+            if (size > MaxUploadBytes)
+                return Results.BadRequest(new { error = $"'{item.FileName}' exceeds the 250 MB limit." });
+            var stemId = item.StemId;
+            if (string.IsNullOrWhiteSpace(stemId) || stemId.Length > 64
+                || !stemId.All(c => char.IsAsciiLetterOrDigit(c) || c is '-'))
+                stemId = Guid.NewGuid().ToString();
+            if (entries.Any(e => e.Id == stemId))
+                stemId = Guid.NewGuid().ToString();
             entries.Add(new StemRawEntry
             {
-                Id = string.IsNullOrWhiteSpace(item.StemId) ? Guid.NewGuid().ToString() : item.StemId,
+                Id = stemId,
                 OriginalFilename = item.FileName,
                 Key = item.Key,
             });
@@ -849,14 +864,16 @@ public static class VersionEndpoints
         if (jobId is null)
             return ErrorEnvelope.Build(501, "presigned_unavailable",
                 "This version predates the presigned key layout; use the legacy upload endpoint.");
-        if (string.IsNullOrWhiteSpace(body.Key)
-            || !body.Key.StartsWith($"als/{jobId}/", StringComparison.Ordinal))
+        if (!UploadEndpoints.ValidSingleSegmentKey(body.Key, $"als/{jobId}/"))
             return Results.BadRequest(new { error = "Key does not match this version's upload." });
         var ext = Path.GetExtension(body.Key).ToLowerInvariant();
         if (ext != ".als" && ext != ".gz")
             return Results.BadRequest(new { error = ".als (or gzip-compressed) file required." });
-        if (!await store.ObjectExistsAsync(body.Key, ct))
+        var alsSize = await store.GetObjectSizeAsync(body.Key, ct);
+        if (alsSize is null)
             return ErrorEnvelope.Build(502, "upload_not_found", "Object not found in storage.");
+        if (alsSize > 50L * 1024 * 1024)
+            return Results.BadRequest(new { error = "File exceeds 50 MB limit." });
 
         // Same size-bounded JSON-object validation as the multipart UploadAls.
         string? normalizedProjectJson = null;

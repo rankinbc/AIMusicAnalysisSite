@@ -80,6 +80,11 @@ def resolve_local(path_or_key: str, local_root: str) -> tuple[str, Path | None]:
 
     Returns ``(local_path, fetched_temp_or_None)``.
     """
+    # Defense-in-depth vs key traversal: a stored path/key must never contain
+    # dot-segments (the BFF rejects them at registration too) — `.resolve()`
+    # below would otherwise normalize `..` right out of the storage root.
+    if ".." in Path(path_or_key).parts:
+        raise ValueError(f"path traversal in stored path: {path_or_key!r}")
     candidate = (Path(local_root) / path_or_key).resolve()
     if candidate.exists():
         return str(candidate), None
