@@ -58,7 +58,11 @@ async function triggerDownload(apiPath: string, filename: string) {
   const token = getAccessToken();
   const headers: Record<string, string> = {};
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`/api${apiPath}`, { headers, credentials: 'include' });
+  // Story 3.3: this URL may 302 to S3/R2. fetch strips Authorization on the
+  // cross-origin hop (spec) — but `credentials:'include'` would turn the S3
+  // request into credentialed CORS, which the bucket CORS does not (and
+  // should not) allow. The BFF hop is same-origin, so no cookies are needed.
+  const res = await fetch(`/api${apiPath}`, { headers });
   if (!res.ok) throw new Error(`Download failed (${res.status})`);
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);

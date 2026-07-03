@@ -98,6 +98,27 @@ claude-fable-5 (Claude Code)
 - `components/frontend-spectr-v2/src/features/listen-rack/ListenRackPage.tsx` (AC4 wire)
 - `components/frontend-spectr-v2/src/routes/_public/{v.$token,r.$token}.tsx` (AC4 wire)
 
+### Senior Developer Review (AI)
+
+2026-07-03 — bmad-code-review (Blind Hunter + Edge Case Hunter + Acceptance Auditor). Outcome: **Approve with patches**; ACs 1-3 PASS, AC4 partial → closed by patches. 13 patches applied same day:
+
+- [x] [High] Immutable-cache race in GetImage (two independent existence checks could stamp an expiring 302 — or 404 — `immutable` for a year) → header decision moved INTO MediaDelivery's single local check (`immutableCacheOnLocal`)
+- [x] [High] `createMediaRetry` was non-terminating (dead resource retried forever every 5 s) + leaked its once-listener across sources (phantom seek/autoplay onto a FUTURE src) → attempts cap (3) reset on success, single pending listener, `dispose()` called from all three effect cleanups, `onResumeBlocked` for autoplay-policy rejection
+- [x] [High/AC4] Listen-rack retry raced token expiry (>15 min idle = presign AND JWT both dead; rebuilt `?t=` carried the stale token) → async `getSrc` forces a silent refresh via `fetcher('/auth/me')` before rebuilding
+- [x] [Med] FilesTab showed "Expired" for every S3-only file (GetFiles probed local storage only — the new download path was unreachable) → availability = local OR `GetObjectSizeAsync`
+- [x] [Med] Durable report went stale on ~every job (deferred structure merge + phase re-runs rewrite final_json without re-uploading) → `put_json` refresh in `structure_actor` + `rerun_phase_actor` (best-effort)
+- [x] [Med] 302 responses carried no cache directive (CDNs cache redirects; Location is a bearer-equivalent grant) → `Cache-Control: no-store` on every redirect branch
+- [x] [Med] Redirected objects served `octet-stream` (attachments were PUT without Content-Type) → `ResponseHeaderOverrides.ContentType` plumbed through PresignGetUrl
+- [x] [Med] FilesTab fetch used `credentials:'include'` → credentialed CORS on the S3 hop the bucket rightly refuses → dropped (Authorization is spec-stripped on the cross-origin redirect; presign needs no auth)
+- [x] [Med] Content-Disposition sanitization was quote-stripping only → printable-ASCII allowlist (quotes/backslash/CR-LF/non-ASCII → `_`)
+- [x] [Med] `put_json` emitted non-strict JSON (NaN/Infinity from audio metrics) → `parse_constant→null` coercion; also compact (no indent) + boto3 `Config(connect_timeout=5, read_timeout=60, retries=2)` so a hanging endpoint can't stall the concurrency-1 worker
+- [x] [Low] TOCTOU between ExistsAsync and OpenReadAsync → catch IO/UnauthorizedAccess and fall through to the S3 branch
+- [x] [Low] `ReadUrlExpiryMinutes ≤ 0` would mint pre-expired URLs → clamped ≥1; `PresignGetUrl` dropped its never-honored CancellationToken
+- [x] [Low] Als redirect test never asserted the download name; audio test now also asserts `no-store` + ContentType override
+- Deferred (logged): stem preview elements have no AC4 retry (StemDeck rebuilds URLs on ~15-min token rotation, roughly matching the presign window); per-Range presign/HEAD amplification (cache candidate, beta-scale fine); prod R2 CORS config (10.1); Postgres-gated silent test skips (project-wide convention).
+- Rejected: durable report "write-only" (AR20 durability is the point; consumers land with 3.5/10.2 restore proof); guard-state reset on token-rotation effect re-runs (attempts cap bounds each instance).
+
 ### Change Log
 
 - 2026-07-03: implemented on `storage/3-3-signed-playback`. Gates: BFF build 0-warn + 274/274 (6 new); worker 554 + 3 xfail (4 new); frontend vite build + tsc -b + lint + lint:css + vitest 669/669 (4 new); ruff clean. Status → review.
+- 2026-07-03 (review): 13 code-review patches applied (see Senior Developer Review). Gates after patches: BFF 274/274, worker 554 + 3 xfail, vitest 673/673 (media-retry suite grew to 8), ruff + lint clean.

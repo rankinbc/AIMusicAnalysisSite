@@ -309,13 +309,12 @@ public static class JobEndpoints
             .FirstOrDefaultAsync(ct);
         if (string.IsNullOrEmpty(key)) return Results.NotFound();
 
-        // Content is immutable for a given analysis — let the browser cache the
-        // BYTES hard on the local-proxy branch. The 302 branch must NOT be
-        // long-cached (its presigned Location expires), so the header is set
-        // only when the local file will actually stream.
-        if (await storage.ExistsAsync(key, ct))
-            response.Headers.CacheControl = "public, max-age=31536000, immutable";
+        // Content is immutable for a given analysis — the LOCAL-proxy branch
+        // may cache hard; MediaDelivery sets the header from the same existence
+        // check that picks the branch (a separate check here could race a
+        // deletion and immutable-cache an expiring 302 for a year).
         return await MediaDelivery.ServeAsync(
-            storage, objectStore, key, "image/webp", ct, rangeProcessing: false);
+            storage, objectStore, key, "image/webp", response, ct,
+            rangeProcessing: false, immutableCacheOnLocal: true);
     }
 }

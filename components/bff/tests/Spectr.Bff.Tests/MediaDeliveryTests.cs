@@ -59,6 +59,10 @@ public sealed class MediaDeliveryTests(WebApplicationFactory<Program> factory)
         Assert.Contains("fake-s3.test", resp.Headers.Location!.ToString());
         Assert.Contains(key, resp.Headers.Location!.ToString());
         Assert.Single(store.PresignedGets);
+        // The Location is a bearer-equivalent grant — intermediaries must not cache it.
+        Assert.Contains("no-store", resp.Headers.CacheControl?.ToString() ?? "");
+        // Content-Type override rides the presign (attachments stored octet-stream).
+        Assert.Equal("audio/wav", store.PresignedGets.First().ContentType);
     }
 
     [Fact]
@@ -100,7 +104,7 @@ public sealed class MediaDeliveryTests(WebApplicationFactory<Program> factory)
     {
         if (!await TestDb.Reachable(_factory)) { return; }
 
-        var (client, _, f) = NewClient();
+        var (client, store, f) = NewClient();
         var (_, versionId) = await SeedVersionAsync(f, client, $"audio/u/{Guid.NewGuid()}/source.wav");
         var alsKey = $"als/{Guid.NewGuid()}/project.als";
         using (var scope = f.Services.CreateScope())
@@ -114,6 +118,8 @@ public sealed class MediaDeliveryTests(WebApplicationFactory<Program> factory)
         var resp = await client.GetAsync($"/api/versions/{versionId}/als");
         Assert.Equal(HttpStatusCode.Redirect, resp.StatusCode);
         Assert.Contains(alsKey, resp.Headers.Location!.ToString());
+        // The reason PresignGetUrl takes a name: Content-Disposition override.
+        Assert.Equal("project.als", store.PresignedGets.Single().DownloadName);
     }
 
     [Fact]

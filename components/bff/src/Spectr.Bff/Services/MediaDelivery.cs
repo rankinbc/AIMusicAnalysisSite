@@ -9,7 +9,9 @@ namespace Spectr.Bff.Services;
 // object exists, answer a 302 to a short-lived presigned GET — the object is
 // never public and the URL expires (ReadUrlExpiryMinutes); an expired URL on
 // resume surfaces as a client media error handled by the AC4 retry. 301 is
-// deliberately never used (cacheable-permanent would defeat NFR5).
+// deliberately never used, and every 302 carries Cache-Control: no-store —
+// the Location header is a bearer-equivalent grant that intermediaries
+// (CDN default rules, misconfigured proxies) must never cache.
 public static class MediaDelivery
 {
     public static async Task<IResult> ServeAsync(
@@ -17,22 +19,42 @@ public static class MediaDelivery
         IMultipartObjectStore s3,
         string key,
         string contentType,
+        HttpResponse response,
         CancellationToken ct,
         bool rangeProcessing = true,
-        string? downloadName = null)
+        string? downloadName = null,
+        bool immutableCacheOnLocal = false)
     {
         if (await storage.ExistsAsync(key, ct))
         {
-            var stream = await storage.OpenReadAsync(key, ct);
-            return downloadName is null
-                ? Results.File(stream, contentType, enableRangeProcessing: rangeProcessing)
-                : Results.File(stream, contentType, fileDownloadName: downloadName,
-                    enableRangeProcessing: rangeProcessing);
+            try
+            {
+                var stream = await storage.OpenReadAsync(key, ct);
+                // Header decided from the SAME existence check that picked the
+                // branch — a second check could race a deletion and stamp an
+                // expiring 302 (or 404) immutable for a year.
+                if (immutableCacheOnLocal)
+                    response.Headers.CacheControl = "public, max-age=31536000, immutable";
+                return downloadName is null
+                    ? Results.File(stream, contentType, enableRangeProcessing: rangeProcessing)
+                    : Results.File(stream, contentType, fileDownloadName: downloadName,
+                        enableRangeProcessing: rangeProcessing);
+            }
+            catch (IOException)
+            {
+                // Deleted between Exists and Open (TOCTOU) — fall through to S3.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Same race shape on Windows — fall through.
+            }
         }
 
         if (s3.IsConfigured && await s3.ObjectExistsAsync(key, ct))
         {
-            return Results.Redirect(s3.PresignGetUrl(key, downloadName, ct), permanent: false);
+            response.Headers.CacheControl = "no-store";
+            return Results.Redirect(
+                s3.PresignGetUrl(key, downloadName, contentType), permanent: false);
         }
 
         return Results.NotFound();

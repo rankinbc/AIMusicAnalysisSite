@@ -68,11 +68,11 @@ internal sealed class FakeMultipartObjectStore : IMultipartObjectStore
         return $"https://fake-s3.test/{key}?put=1";
     }
 
-    public ConcurrentQueue<(string Key, string? DownloadName)> PresignedGets { get; } = new();
+    public ConcurrentQueue<(string Key, string? DownloadName, string? ContentType)> PresignedGets { get; } = new();
 
-    public string PresignGetUrl(string key, string? downloadName = null, CancellationToken ct = default)
+    public string PresignGetUrl(string key, string? downloadName = null, string? contentType = null)
     {
-        PresignedGets.Enqueue((key, downloadName));
+        PresignedGets.Enqueue((key, downloadName, contentType));
         return $"https://fake-s3.test/{key}?get=1&X-Amz-Expires=900";
     }
 }

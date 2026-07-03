@@ -53,8 +53,11 @@ function SharedReviewerPage() {
     const onDur = () => Number.isFinite(a.duration) && setDuration(a.duration);
     // Story 3.3 (AC4): expired presigned URL on resume → re-request the same
     // API URL (the server mints a fresh presign) and restore the position.
-    const retry = createMediaRetry({ getSrc: () => `/api/share/${token}/audio` });
-    const onErr = () => { retry.handleError(a); };
+    const retry = createMediaRetry({
+      getSrc: () => `/api/share/${token}/audio`,
+      onGiveUp: () => toast.error('Could not load audio.'),
+    });
+    const onErr = () => { void retry.handleError(a); };
     a.addEventListener('timeupdate', onTime);
     a.addEventListener('loadedmetadata', onDur);
     a.addEventListener('durationchange', onDur);
@@ -64,6 +67,7 @@ function SharedReviewerPage() {
       a.removeEventListener('loadedmetadata', onDur);
       a.removeEventListener('durationchange', onDur);
       a.removeEventListener('error', onErr);
+      retry.dispose();
     };
   }, [token]);
 

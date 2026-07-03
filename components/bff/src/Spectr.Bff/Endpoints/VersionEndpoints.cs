@@ -257,6 +257,7 @@ public static class VersionEndpoints
         AppDbContext db,
         IFileStorage storage,
         IMultipartObjectStore objectStore,
+        HttpResponse response,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -270,7 +271,8 @@ public static class VersionEndpoints
 
         // Story 3.3: local-first proxy, else 302 to a short-lived presigned GET.
         return await MediaDelivery.ServeAsync(
-            storage, objectStore, row.FilePath, MediaDelivery.AudioContentType(row.FilePath), ct);
+            storage, objectStore, row.FilePath, MediaDelivery.AudioContentType(row.FilePath),
+            response, ct);
     }
 
     // POST /api/versions  (multipart/form-data: file [required], song_id?, genre_hint?, analyze?)
@@ -385,6 +387,7 @@ public static class VersionEndpoints
         ClaimsPrincipal currentUser,
         AppDbContext db,
         IFileStorage storage,
+        IMultipartObjectStore objectStore,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -396,47 +399,49 @@ public static class VersionEndpoints
         ).FirstOrDefaultAsync(ct);
         if (row is null) return Results.NotFound();
 
+        // Story 3.3 — availability = local OR object storage. Without the S3
+        // arm, every S3-only file shows "Expired" in FilesTab and the new
+        // presigned download path is unreachable from the UI.
+        async Task<(long? Size, bool Exists)> ProbeAsync(string key)
+        {
+            if (await storage.ExistsAsync(key, ct))
+                return (await storage.GetFileSizeAsync(key, ct), true);
+            if (objectStore.IsConfigured)
+            {
+                var size = await objectStore.GetObjectSizeAsync(key, ct);
+                if (size is not null) return (size, true);
+            }
+            return (null, false);
+        }
+
         var files = new List<VersionFileEntry>();
 
         // Mix audio
         var mixExt = Path.GetExtension(row.FilePath);
-        files.Add(new VersionFileEntry(
-            "mix",
-            $"mix{mixExt}",
-            await storage.GetFileSizeAsync(row.FilePath, ct),
-            await storage.ExistsAsync(row.FilePath, ct)));
+        var mix = await ProbeAsync(row.FilePath);
+        files.Add(new VersionFileEntry("mix", $"mix{mixExt}", mix.Size, mix.Exists));
 
         // Ableton project
         if (!string.IsNullOrEmpty(row.AlsFilePath))
         {
             var alsExt = Path.GetExtension(row.AlsFilePath);
-            files.Add(new VersionFileEntry(
-                "als",
-                $"project{alsExt}",
-                await storage.GetFileSizeAsync(row.AlsFilePath, ct),
-                await storage.ExistsAsync(row.AlsFilePath, ct)));
+            var als = await ProbeAsync(row.AlsFilePath);
+            files.Add(new VersionFileEntry("als", $"project{alsExt}", als.Size, als.Exists));
         }
 
         // Reference track
         if (!string.IsNullOrEmpty(row.ReferencePath))
         {
             var refExt = Path.GetExtension(row.ReferencePath);
-            files.Add(new VersionFileEntry(
-                "reference",
-                $"reference{refExt}",
-                await storage.GetFileSizeAsync(row.ReferencePath, ct),
-                await storage.ExistsAsync(row.ReferencePath, ct)));
+            var reference = await ProbeAsync(row.ReferencePath);
+            files.Add(new VersionFileEntry("reference", $"reference{refExt}", reference.Size, reference.Exists));
         }
 
         // Staged / confirmed stems (bulk flow)
         foreach (var entry in ReadRaw(row.StemPathsRaw))
         {
-            files.Add(new VersionFileEntry(
-                "stem",
-                entry.OriginalFilename,
-                await storage.GetFileSizeAsync(entry.Key, ct),
-                await storage.ExistsAsync(entry.Key, ct),
-                entry.Id));
+            var stem = await ProbeAsync(entry.Key);
+            files.Add(new VersionFileEntry("stem", entry.OriginalFilename, stem.Size, stem.Exists, entry.Id));
         }
 
         return Results.Ok(new VersionFilesResponse(versionId, files));
@@ -449,6 +454,7 @@ public static class VersionEndpoints
         AppDbContext db,
         IFileStorage storage,
         IMultipartObjectStore objectStore,
+        HttpResponse response,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -461,7 +467,7 @@ public static class VersionEndpoints
         if (row is null || string.IsNullOrEmpty(row.AlsFilePath)) return Results.NotFound();
 
         return await MediaDelivery.ServeAsync(
-            storage, objectStore, row.AlsFilePath, "application/octet-stream", ct,
+            storage, objectStore, row.AlsFilePath, "application/octet-stream", response, ct,
             rangeProcessing: false, downloadName: Path.GetFileName(row.AlsFilePath));
     }
 
@@ -472,6 +478,7 @@ public static class VersionEndpoints
         AppDbContext db,
         IFileStorage storage,
         IMultipartObjectStore objectStore,
+        HttpResponse response,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -485,7 +492,7 @@ public static class VersionEndpoints
 
         return await MediaDelivery.ServeAsync(
             storage, objectStore, row.ReferencePath,
-            MediaDelivery.AudioContentType(row.ReferencePath), ct,
+            MediaDelivery.AudioContentType(row.ReferencePath), response, ct,
             rangeProcessing: false, downloadName: Path.GetFileName(row.ReferencePath));
     }
 
@@ -964,7 +971,8 @@ public static class VersionEndpoints
     // the path contains "/audio", which the JwtBearer OnMessageReceived hook whitelists).
     private static async Task<IResult> StreamStemAudio(
         Guid versionId, string stemId, ClaimsPrincipal currentUser,
-        AppDbContext db, IFileStorage storage, IMultipartObjectStore objectStore, CancellationToken ct)
+        AppDbContext db, IFileStorage storage, IMultipartObjectStore objectStore,
+        HttpResponse response, CancellationToken ct)
     {
         var userId = currentUser.UserId();
         var version = await OwnedVersion(db, versionId, userId, ct);
@@ -973,7 +981,7 @@ public static class VersionEndpoints
         if (entry is null) return Results.NotFound();
         // Story 3.3: local-first proxy, else 302 to a short-lived presigned GET.
         return await MediaDelivery.ServeAsync(
-            storage, objectStore, entry.Key, MediaDelivery.AudioContentType(entry.Key), ct);
+            storage, objectStore, entry.Key, MediaDelivery.AudioContentType(entry.Key), response, ct);
     }
 
     // ── Story 3.1: shared song/version row creation ─────────────────────────

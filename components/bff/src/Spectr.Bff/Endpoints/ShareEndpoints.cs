@@ -189,6 +189,7 @@ public static class ShareEndpoints
         AppDbContext db,
         IFileStorage storage,
         IMultipartObjectStore objectStore,
+        HttpResponse response,
         CancellationToken ct)
     {
         // Resolve token → analysis → version → file. Same Range-friendly
@@ -207,7 +208,7 @@ public static class ShareEndpoints
 
         // Story 3.3: local-first proxy, else 302 to a short-lived presigned GET.
         return await MediaDelivery.ServeAsync(
-            storage, objectStore, key, MediaDelivery.AudioContentType(key), ct);
+            storage, objectStore, key, MediaDelivery.AudioContentType(key), response, ct);
     }
 
     private static async Task<IResult> GetSharePeaks(
@@ -215,6 +216,7 @@ public static class ShareEndpoints
         AppDbContext db,
         IFileStorage storage,
         IMultipartObjectStore objectStore,
+        HttpResponse response,
         CancellationToken ct)
     {
         var peaksKey = await (
@@ -226,7 +228,7 @@ public static class ShareEndpoints
         // until the producer-side waveform-peaks pipeline lands.
         if (string.IsNullOrEmpty(peaksKey)) return Results.NotFound();
         return await MediaDelivery.ServeAsync(
-            storage, objectStore, peaksKey, "application/json", ct, rangeProcessing: false);
+            storage, objectStore, peaksKey, "application/json", response, ct, rangeProcessing: false);
     }
 
     private static async Task<IResult> GetShareComments(

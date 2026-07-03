@@ -129,7 +129,8 @@ public static class VersionViewEndpoints
 
     private static async Task<IResult> StreamVersionAudio(
         string token, ClaimsPrincipal user, ResourceTokenAuth tokenAuth, AccessService access,
-        AppDbContext db, IFileStorage storage, IMultipartObjectStore objectStore, CancellationToken ct)
+        AppDbContext db, IFileStorage storage, IMultipartObjectStore objectStore,
+        HttpResponse response, CancellationToken ct)
     {
         var hit = await ResolveViewableAsync(token, user, tokenAuth, access, ct);
         if (hit is null) return Results.NotFound();
@@ -144,6 +145,6 @@ public static class VersionViewEndpoints
         // Story 3.3: local-first proxy, else 302 to a short-lived presigned GET
         // (the share token authorized this request; the presign carries no auth).
         return await MediaDelivery.ServeAsync(
-            storage, objectStore, filePath, MediaDelivery.AudioContentType(filePath), ct);
+            storage, objectStore, filePath, MediaDelivery.AudioContentType(filePath), response, ct);
     }
 }
