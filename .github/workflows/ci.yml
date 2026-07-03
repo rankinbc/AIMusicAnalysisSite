@@ -232,6 +232,6 @@ jobs:
           ssh-keyscan -H "$VPS_HOST" > ~/.ssh/known_hosts || { echo "!! ssh-keyscan failed" >&2; exit 1; }
           # Ship the infra bundle (self-updating compose/Caddyfile/deploy.sh),
           # then pin + pull + up + health verify (deploy.sh auto-rolls-back).
-          scp -i ~/.ssh/deploy_key infra/compose.prod.yml infra/deploy.sh "$VPS_USER@$VPS_HOST:/opt/spectr/"
+          scp -i ~/.ssh/deploy_key infra/compose.prod.yml infra/deploy.sh infra/backup.sh infra/restore-test.sh "$VPS_USER@$VPS_HOST:/opt/spectr/"
           ssh -i ~/.ssh/deploy_key "$VPS_USER@$VPS_HOST" \
-            "chmod +x /opt/spectr/deploy.sh && /opt/spectr/deploy.sh ${{ github.sha }}"
+            "chmod +x /opt/spectr/deploy.sh /opt/spectr/backup.sh /opt/spectr/restore-test.sh && /opt/spectr/deploy.sh ${{ github.sha }}"

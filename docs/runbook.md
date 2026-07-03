@@ -15,8 +15,8 @@ publishes ports; the BFF has no direct ingress (which is what makes
 ### First-time VPS setup
 
 1. Docker + compose plugin; `mkdir -p /opt/spectr`.
-2. Copy `infra/compose.prod.yml` + `infra/deploy.sh` (CI re-ships these on
-   every deploy); `chmod +x deploy.sh`.
+2. Copy `infra/{compose.prod.yml,deploy.sh,backup.sh,restore-test.sh}` (CI
+   re-ships all four on every deploy); `chmod +x *.sh`.
 3. Create `/opt/spectr/.env` — **chmod 600** (AR31). Required keys are
    listed in the compose header; generate signing keys with
    `openssl rand -base64 48`. `SPECTR_REQUIRE_STRIPE=1` and
@@ -61,6 +61,58 @@ migration means merge == deploy == applied.
       `spectr-purge-residue` after 30 d once the sweep starts tagging
       failed deletes (future).
 - [ ] `backups/` prefix: 30-day expiry (10.2 wires the nightly pg_dump).
+
+## Backups & restore proof (story 10.2 / AR31 / NFR15)
+
+Nightly `pg_dump` → R2 `backups/` (30 d retention, script-side prune +
+bucket lifecycle belt-and-braces). Weekly restore test into a THROWAWAY
+postgres:16 container with schema/data assertions + a staleness gate
+(newest dump older than 30 h = the nightly silently died = failure).
+Failures exit non-zero and push to `NTFY_URL` when configured (10.4
+formalizes alerting).
+
+### Setup (VPS)
+
+1. Create a THIRD R2 token `R2_BACKUP_*` scoped to `backups/` ONLY —
+   dumps contain the entire database; the BFF/worker tokens must never
+   read them. Add to `/opt/spectr/.env` (+ optional `NTFY_URL`).
+2. Cron (as the deploy user):
+   ```
+   15 03 * * *  cd /opt/spectr && ./backup.sh >> backup.log 2>&1
+   30 04 * * 0  cd /opt/spectr && ./restore-test.sh >> restore-test.log 2>&1
+   ```
+3. R2 lifecycle rule: `backups/` prefix, expire after 30 d (the script
+   prunes too — either alone suffices, together they're safe).
+4. Knobs (optional, in `.env`): `RETENTION_DAYS` (default 30),
+   `AGE_HOURS_MAX` (staleness gate, default 30). Add logrotate for
+   `backup.log`/`restore-test.log` or truncate quarterly — cron `>>` grows
+   unbounded.
+
+### Restore drill (the launch gate, NFR15)
+
+Procedure (identical to what `restore-test.sh` automates — run manually
+once pre-launch and log it below):
+
+1. `./restore-test.sh` on the VPS — fetches newest dump, restores into a
+   scratch container, asserts `__EFMigrationsHistory` ≥ 1, tables ≥ 20,
+   `users` queryable.
+2. For a REAL disaster restore (all commands from `/opt/spectr`):
+   ```
+   docker compose -f compose.prod.yml --env-file .env down
+   docker volume rm spectr_postgres_data     # verify name: docker volume ls
+   IMAGE_TAG=$(sed -n 's/^CURRENT_TAG=//p' .deploy-state) \
+     docker compose -f compose.prod.yml --env-file .env up -d postgres
+   gunzip -c dump.sql.gz | docker compose -f compose.prod.yml --env-file .env \
+     exec -T postgres psql -U spectr -d spectr -v ON_ERROR_STOP=1
+   ./restore-test.sh --dump dump.sql.gz      # prove it before serving traffic
+   ./deploy.sh redeploy                      # bring the full stack back
+   ```
+   Dumps are `--clean --if-exists` — idempotent replay.
+3. Log the drill:
+
+| Date | Dump | Result | Notes |
+|------|------|--------|-------|
+| 2026-07-03 | spectr-20260703-222012.sql.gz (dev-stack drill) | PASS — 40 migrations, 42 tables, users queryable | Full cycle: backup.sh → minio → restore-test.sh scratch container. VPS drill pending first deploy (10.8 gate). |
 
 ## Email deliverability (story 4.2 / NFR25)
 
