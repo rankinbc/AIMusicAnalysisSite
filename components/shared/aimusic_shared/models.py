@@ -207,6 +207,10 @@ class AnalysisJob(Base):
     # column already exists in the DB (migration 20260616052555_AddFeatureFlagsAndJobTier).
     tier: Mapped[Optional[str]] = mapped_column("tier", String(16), nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column("error_message", String, nullable=True)
+    # Story 3.2 — typed failure code (mirror of EF AnalysisJob.ErrorCode; the
+    # column pre-exists in the DB). 'invalid_file' is the AR16 reversal trigger:
+    # the BFF's GET /api/jobs/{id} hook refunds the credit spend when it sees it.
+    error_code: Mapped[Optional[str]] = mapped_column("error_code", String(64), nullable=True)
     dispatched_at: Mapped[datetime] = mapped_column(
         "dispatched_at", DateTime(timezone=True), nullable=False, server_default=func.now()
     )

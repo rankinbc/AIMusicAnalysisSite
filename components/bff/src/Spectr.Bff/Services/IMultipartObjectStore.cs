@@ -26,6 +26,16 @@ public interface IMultipartObjectStore
     Task AbortMultipartAsync(string key, string uploadId, CancellationToken ct = default);
 
     Task<bool> ObjectExistsAsync(string key, CancellationToken ct = default);
+
+    // Story 3.2 — single-object presigned PUT for attachments (stems/.als/
+    // reference are ≤250 MB and fit one PUT; multipart/resume was the mix).
+    string PresignPutUrl(string key, CancellationToken ct = default);
+
+    // Story 3.2 review — size of an object, null when missing. A presigned
+    // PUT cannot bind Content-Length, so registration endpoints re-check the
+    // ACTUAL object size against the per-kind caps (the client-declared
+    // fileSize at init is advisory only).
+    Task<long?> GetObjectSizeAsync(string key, CancellationToken ct = default);
 }
 
 public sealed record PresignedPart(int PartNumber, string Url);
@@ -130,20 +140,36 @@ internal sealed class S3ObjectStore : IMultipartObjectStore, IDisposable
         }, ct);
     }
 
+    public string PresignPutUrl(string key, CancellationToken ct = default)
+    {
+        // Same checksum footgun as part presigns: the client must PUT raw
+        // bytes with no checksum headers (config disables SDK injection).
+        return _client.Value.GetPreSignedURL(new GetPreSignedUrlRequest
+        {
+            BucketName = _opts.Bucket,
+            Key = key,
+            Verb = HttpVerb.PUT,
+            Expires = DateTime.UtcNow.AddMinutes(_opts.UrlExpiryMinutes),
+        });
+    }
+
     public async Task<bool> ObjectExistsAsync(string key, CancellationToken ct = default)
+        => await GetObjectSizeAsync(key, ct) is not null;
+
+    public async Task<long?> GetObjectSizeAsync(string key, CancellationToken ct = default)
     {
         try
         {
-            await _client.Value.GetObjectMetadataAsync(new GetObjectMetadataRequest
+            var meta = await _client.Value.GetObjectMetadataAsync(new GetObjectMetadataRequest
             {
                 BucketName = _opts.Bucket,
                 Key = key,
             }, ct);
-            return true;
+            return meta.ContentLength;
         }
         catch (AmazonS3Exception e) when (e.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
-            return false;
+            return null;
         }
     }
 

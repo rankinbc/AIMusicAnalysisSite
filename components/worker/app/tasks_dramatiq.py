@@ -90,6 +90,7 @@ from .trace import trace_runs_enabled  # noqa: E402
 # Story 3.1 — S3/MinIO fetch shim for presigned-uploaded sources (module import
 # so tests can patch app.tasks_dramatiq.object_store.*).
 from . import object_store  # noqa: E402
+from . import source_validation  # noqa: E402
 
 
 def _utc_now() -> datetime:
@@ -143,7 +144,6 @@ def analyze_audio_job(job_id: str) -> None:
         job.phase_pct = 0.0
 
         file_rel = version.file_path
-        file_abs = str((Path(LOCAL_ROOT) / file_rel).resolve())
         user_id = job.user_id
         tier = job.tier  # billing tier stamped by the BFF at dispatch (story 2.4)
         version_id = version.id
@@ -188,21 +188,54 @@ def analyze_audio_job(job_id: str) -> None:
         except Exception:  # progress is best-effort — never fail the job over it
             logger.warning("progress update failed (phase=%s)", phase, exc_info=True)
 
-    # Story 3.1: presigned uploads land in object storage, not the local root.
-    # When S3 is configured and the local path is absent, pull the object down
-    # to a temp file for the pipeline. Legacy local-disk uploads are untouched.
-    fetched_source: Path | None = None
+    # Story 3.1/3.2: presigned uploads land in object storage, not the local
+    # root. resolve_local is local-first (legacy disk deployments untouched)
+    # and fetches from S3 only when the path is absent locally. Story 3.2
+    # extends the fetch to ATTACHMENTS (reference/.als/stems) and validates
+    # the source at this trust boundary before any pipeline work (AR19).
+    fetched: list[Path] = []
     try:
-        if object_store.s3_enabled() and not Path(file_abs).exists():
-            fetched_source = object_store.fetch_to_local(file_rel)
-            file_abs = str(fetched_source)
+        file_abs, f = object_store.resolve_local(file_rel, LOCAL_ROOT)
+        if f is not None:
+            fetched.append(f)
+
+        # AR19 — magic-byte + duration validation BEFORE fetching attachments
+        # or starting the pipeline. InvalidFileError is handled in its own
+        # except arm below (typed fail, no retry, AR16 reversal trigger).
+        source_validation.validate_source(file_abs)
+
+        reference_abs: str | None = None
+        if reference_path:
+            reference_abs, f = object_store.resolve_local(reference_path, LOCAL_ROOT)
+            if f is not None:
+                fetched.append(f)
+        als_abs: str | None = None
+        if als_file_path:
+            als_abs, f = object_store.resolve_local(als_file_path, LOCAL_ROOT)
+            if f is not None:
+                fetched.append(f)
+        # stem_paths is {role: [key,...]} (or legacy {role: "key"}). Resolve
+        # every entry — this also fixes the pre-3.2 inconsistency where stems
+        # were passed RAW (CWD-relative) while classify joined LOCAL_ROOT.
+        resolved_stems: dict | None = None
+        if stem_paths:
+            resolved_stems = {}
+            for role, entry in stem_paths.items():
+                keys = entry if isinstance(entry, list) else [entry]
+                out: list[str] = []
+                for k in keys:
+                    local, f = object_store.resolve_local(str(k), LOCAL_ROOT)
+                    if f is not None:
+                        fetched.append(f)
+                    out.append(local)
+                resolved_stems[role] = out if isinstance(entry, list) else out[0]
 
         logger.info("analyze_audio_job: pipeline begin job=%s file=%s", job_id, file_abs)
         pipeline_result = run_pipeline(
             file_path=file_abs,
-            reference_path=(str(Path(LOCAL_ROOT) / reference_path) if reference_path else None),
-            als_file_path=(str(Path(LOCAL_ROOT) / als_file_path) if als_file_path else None),
-            stem_paths=stem_paths,
+            reference_path=reference_abs,
+            als_file_path=als_abs,
+            stem_paths=resolved_stems,
             stem_mode=stem_mode,
             # Structure detection (~60-90 s allin1) is deferred off the critical
             # path; a background `detect_structure_job` fills Phase 7 in after.
@@ -218,6 +251,21 @@ def analyze_audio_job(job_id: str) -> None:
         # (CPU work). Best-effort: a failure leaves both paths None and the
         # analysis still completes.
         spectrogram_path, waveform_path = _render_and_store_images(job_id, file_abs)
+    except source_validation.InvalidFileError as exc:
+        # AR19/AR16 — a spoofed/broken upload is PERMANENT: fail fast with the
+        # typed code the BFF's reversal hook watches (GET /api/jobs/{id} sees
+        # error_code='invalid_file' and refunds the credit spend). No re-raise:
+        # dramatiq retries would just re-download and re-fail the same bytes.
+        logger.warning("analyze_audio_job: invalid file job=%s (%s)", job_id, exc)
+        with SessionFactory.begin() as s:
+            failed = s.get(AnalysisJob, jid)
+            if failed is not None:
+                failed.status = JOB_STATUS_FAILED
+                failed.error_code = "invalid_file"
+                failed.error_message = str(exc)[:2000]
+                failed.failed_at = _utc_now()
+                failed.current_phase = "failed"
+        return
     except Exception as exc:
         logger.exception("analyze_audio_job: FAILED job=%s", job_id)
         with SessionFactory.begin() as s:
@@ -229,7 +277,7 @@ def analyze_audio_job(job_id: str) -> None:
                 failed.current_phase = "failed"
         raise
     finally:
-        object_store.cleanup_local(fetched_source)
+        object_store.cleanup_all(fetched)
 
     # ── Phase C — persist Analysis row + flip job to COMPLETE ───────────────
     analysis_id = uuid.uuid4()
@@ -379,6 +427,8 @@ def classify_stems(version_id: str) -> None:
     vid = uuid.UUID(version_id)
     logger.info("classify_stems: start version=%s", version_id)
 
+    # Phase A — read the staged entries (short tx; the fetch/classify below
+    # can take minutes and MUST NOT hold a transaction — 3-phase rule).
     with SessionFactory.begin() as s:
         version = s.get(SongVersion, vid)
         if version is None:
@@ -388,21 +438,38 @@ def classify_stems(version_id: str) -> None:
             logger.info("classify_stems: no staged stems for version=%s", version_id)
             return
 
-        abs_paths = [Path((Path(LOCAL_ROOT) / e["path"]).resolve()) for e in entries]
+    # Phase B — resolve (Story 3.2: presigned-staged stems are R2 keys;
+    # local-first with S3 fetch fallback) + classify, outside any tx. The
+    # finally covers partial fetches when resolve or classify fails mid-batch.
+    fetched: list[Path] = []
+    try:
+        abs_paths: list[Path] = []
+        for e in entries:
+            local, f = object_store.resolve_local(str(e["path"]), LOCAL_ROOT)
+            if f is not None:
+                fetched.append(f)
+            abs_paths.append(Path(local))
         # On-disk paths are UUIDs; pass the authoritative export name so the classifier
         # can keyword-match (Kick/Snare/Bass/...) before falling back to audio content.
         names = [e.get("original_filename") or Path(e["path"]).name for e in entries]
         proposals = classify_audio(abs_paths, names)
+    finally:
+        object_store.cleanup_all(fetched)
 
-        updated = []
-        for e, prop in zip(entries, proposals):
-            ne = dict(e)
-            ne["detected_role"] = prop.role.value
-            ne["confidence"] = round(float(prop.confidence), 3)
-            ne["evidence"] = prop.evidence
-            updated.append(ne)
-        # Reassign so SQLAlchemy flags the JSONB column dirty (in-place mutation
-        # of a JSON list is not tracked).
+    updated = []
+    for e, prop in zip(entries, proposals):
+        ne = dict(e)
+        ne["detected_role"] = prop.role.value
+        ne["confidence"] = round(float(prop.confidence), 3)
+        ne["evidence"] = prop.evidence
+        updated.append(ne)
+
+    # Phase C — write the proposals back (fresh short tx). Reassign so
+    # SQLAlchemy flags the JSONB column dirty (in-place mutation isn't tracked).
+    with SessionFactory.begin() as s:
+        version = s.get(SongVersion, vid)
+        if version is None:
+            return
         version.stem_paths_raw = updated
 
     logger.info("classify_stems: done version=%s (%d stems)", version_id, len(entries))

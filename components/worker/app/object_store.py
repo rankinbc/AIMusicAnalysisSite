@@ -65,3 +65,39 @@ def cleanup_local(path: Path | None) -> None:
         path.parent.rmdir()
     except OSError:
         logger.warning("object_store: temp cleanup failed for %s", path, exc_info=True)
+
+
+def resolve_local(path_or_key: str, local_root: str) -> tuple[str, Path | None]:
+    """Story 3.2 — resolve a stored path/key to a local filesystem path.
+
+    Local-first (preserves every pre-S3 deployment's behavior exactly):
+      1. ``local_root / path_or_key`` exists → use it, nothing fetched.
+      2. absolute path that exists → use it.
+      3. S3 enabled → fetch the key to a temp file (caller must
+         ``cleanup_local`` the returned Path).
+      4. otherwise → return the local_root join unchanged (the pipeline's
+         own missing-file error surfaces downstream, same as today).
+
+    Returns ``(local_path, fetched_temp_or_None)``.
+    """
+    # Defense-in-depth vs key traversal: a stored path/key must never contain
+    # dot-segments (the BFF rejects them at registration too) — `.resolve()`
+    # below would otherwise normalize `..` right out of the storage root.
+    if ".." in Path(path_or_key).parts:
+        raise ValueError(f"path traversal in stored path: {path_or_key!r}")
+    candidate = (Path(local_root) / path_or_key).resolve()
+    if candidate.exists():
+        return str(candidate), None
+    p = Path(path_or_key)
+    if p.is_absolute() and p.exists():
+        return str(p), None
+    if s3_enabled():
+        fetched = fetch_to_local(path_or_key)
+        return str(fetched), fetched
+    return str(candidate), None
+
+
+def cleanup_all(fetched: list[Path]) -> None:
+    """cleanup_local over a batch of resolve_local fetches."""
+    for f in fetched:
+        cleanup_local(f)

@@ -25,6 +25,7 @@ import type {
   StemRole,
 } from '../api/types';
 import { useMixUpload } from '../hooks/useMixUpload';
+import { uploadAttachmentPresigned } from '../features/upload/attachment-upload-helpers';
 import { AlsPreviewPanel } from '../features/upload/AlsPreviewPanel';
 import {
   AlsParseError,
@@ -414,17 +415,38 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
       // 2. .als — attach only. Ship the client-parsed project map so the app
       //    has saved "project awareness" (track/device map) alongside the
       //    analysis. The worker's phase8 re-parse stays authoritative.
+      //    Story 3.2: presigned-first (direct PUT to R2/MinIO + als-key
+      //    registration); 501 falls back to the legacy proxy FormData.
       if (als) {
         setStatus('Attaching project…');
-        const alsForm = new FormData();
-        alsForm.append('file', als, als.name);
-        alsForm.append('analyze', 'false');
-        if (alsProject) alsForm.append('project_json', JSON.stringify(alsProject));
-        await fetcher<AlsUploadResponse>({
-          url: `/versions/${vid}/als`,
-          method: 'POST',
-          body: alsForm,
-        });
+        try {
+          const put = await uploadAttachmentPresigned({
+            file: als,
+            kind: 'als',
+            versionId: vid,
+            onProgress: (l, t) => setStatus(`Attaching project… ${Math.round((100 * l) / t)}%`),
+          });
+          await fetcher<AlsUploadResponse>({
+            url: `/versions/${vid}/als-key`,
+            method: 'POST',
+            data: {
+              key: put.key,
+              analyze: false,
+              ...(alsProject ? { projectJson: JSON.stringify(alsProject) } : {}),
+            },
+          });
+        } catch (e) {
+          if (!(e instanceof ApiError && e.status === 501)) throw e;
+          const alsForm = new FormData();
+          alsForm.append('file', als, als.name);
+          alsForm.append('analyze', 'false');
+          if (alsProject) alsForm.append('project_json', JSON.stringify(alsProject));
+          await fetcher<AlsUploadResponse>({
+            url: `/versions/${vid}/als`,
+            method: 'POST',
+            body: alsForm,
+          });
+        }
       }
 
       // 3. Reference — either a saved library track or a new upload. Either way
@@ -434,12 +456,35 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
         referenceId = pickedReferenceId;
       } else if (refFile) {
         setStatus('Uploading reference…');
-        const rForm = new FormData();
-        rForm.append('file', refFile);
-        if (refTitle.trim()) rForm.append('title', refTitle.trim());
-        if (refArtist.trim()) rForm.append('artist', refArtist.trim());
-        if (refGenre.trim()) rForm.append('genre', refGenre.trim());
-        const ref = await fetcher<ReferenceDto>({ url: '/references/', method: 'POST', body: rForm });
+        let ref: ReferenceDto;
+        try {
+          // Story 3.2 — presigned-first; 501 falls back to the proxy upload.
+          const put = await uploadAttachmentPresigned({
+            file: refFile,
+            kind: 'reference',
+            onProgress: (l, t) => setStatus(`Uploading reference… ${Math.round((100 * l) / t)}%`),
+          });
+          ref = await fetcher<ReferenceDto>({
+            url: '/references/complete-key',
+            method: 'POST',
+            data: {
+              referenceId: put.referenceId,
+              key: put.key,
+              fileName: refFile.name,
+              ...(refTitle.trim() ? { title: refTitle.trim() } : {}),
+              ...(refArtist.trim() ? { artist: refArtist.trim() } : {}),
+              ...(refGenre.trim() ? { genre: refGenre.trim() } : {}),
+            },
+          });
+        } catch (e) {
+          if (!(e instanceof ApiError && e.status === 501)) throw e;
+          const rForm = new FormData();
+          rForm.append('file', refFile);
+          if (refTitle.trim()) rForm.append('title', refTitle.trim());
+          if (refArtist.trim()) rForm.append('artist', refArtist.trim());
+          if (refGenre.trim()) rForm.append('genre', refGenre.trim());
+          ref = await fetcher<ReferenceDto>({ url: '/references/', method: 'POST', body: rForm });
+        }
         void fetcher<unknown>({ url: `/references/${ref.id}/analyze`, method: 'POST' }).catch(() => {});
         qc.invalidateQueries({ queryKey: ['references'] });
         referenceId = ref.id;
@@ -461,14 +506,38 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
       }
 
       // Stems path: stage → classify → (review | auto-confirm).
+      // Story 3.2: presigned-first per file + one stage-keys registration;
+      // any 501 (unconfigured S3, pre-AR20 version) falls back to the legacy
+      // multi-file proxy stage for the WHOLE batch.
       setStatus('Uploading stems…');
-      const stemForm = new FormData();
-      for (const r of stemRows) stemForm.append('files', r.file, r.file.name);
-      const staged = await fetcher<StageStemsResponse>({
-        url: `/versions/${vid}/stems/stage`,
-        method: 'POST',
-        body: stemForm,
-      });
+      let staged: StageStemsResponse;
+      try {
+        const putItems: { stemId: string; key: string; fileName: string }[] = [];
+        for (const [i, r] of stemRows.entries()) {
+          const put = await uploadAttachmentPresigned({
+            file: r.file,
+            kind: 'stem',
+            versionId: vid,
+            onProgress: (l, t) =>
+              setStatus(`Uploading stems… ${i + 1}/${stemRows.length} (${Math.round((100 * l) / t)}%)`),
+          });
+          putItems.push({ stemId: put.stemId ?? '', key: put.key, fileName: r.file.name });
+        }
+        staged = await fetcher<StageStemsResponse>({
+          url: `/versions/${vid}/stems/stage-keys`,
+          method: 'POST',
+          data: { stems: putItems },
+        });
+      } catch (e) {
+        if (!(e instanceof ApiError && e.status === 501)) throw e;
+        const stemForm = new FormData();
+        for (const r of stemRows) stemForm.append('files', r.file, r.file.name);
+        staged = await fetcher<StageStemsResponse>({
+          url: `/versions/${vid}/stems/stage`,
+          method: 'POST',
+          body: stemForm,
+        });
+      }
       const stagedStems = staged.stems.slice(-stemRows.length);
       setStemRows((prev) => prev.map((r, i) => ({ ...r, serverId: stagedStems[i]?.id })));
       await fetcher<unknown>({ url: `/versions/${vid}/stems/classify`, method: 'POST' });
