@@ -1,0 +1,35 @@
+<!doctype html>
+<!-- Story 10.4 (NFR16) — SPECTR status page TEMPLATE. Publish OUTSIDE the
+     VPS (GitHub Pages — runbook procedure): a status page hosted on the
+     thing that's down is not a status page. Update = edit + push, from
+     anywhere including a phone. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SPECTR status</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0d0f14; color: #e6e8ef;
+           max-width: 640px; margin: 4rem auto; padding: 0 1rem; }
+    .ok { color: #4ade80; } .warn { color: #facc15; } .down { color: #f87171; }
+    .card { background: #161a22; border-radius: 10px; padding: 1rem 1.25rem; margin: 1rem 0; }
+    h1 { font-size: 1.4rem; } .ts { color: #8b90a0; font-size: .85rem; }
+  </style>
+</head>
+<body>
+  <h1>SPECTR status</h1>
+  <!-- EDIT BELOW during an incident. States: ok / warn / down -->
+  <div class="card">
+    <strong class="ok">● All systems operational</strong>
+    <p class="ts">Last updated: 2026-07-03 (UTC) — edit this line with every update.</p>
+  </div>
+  <div class="card">
+    <strong>Incident log</strong>
+    <ul>
+      <li class="ts">No incidents recorded.</li>
+      <!-- <li><strong class="down">2026-07-10 14:20</strong> — analysis queue stalled; investigating.</li> -->
+    </ul>
+  </div>
+  <p class="ts">Uptime probe: healthchecks.io monitors <code>/healthz</code> independently of this page.</p>
+</body>
+</html>

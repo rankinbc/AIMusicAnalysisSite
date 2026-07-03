@@ -172,12 +172,29 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GRAFANA_PG_PASSWORD: "${GRAFANA_PG_PASSWORD:-}"  # read-only role (runbook SQL)
+      # Story 10.4 — the alerting contact point interpolates this. The
+      # default is deliberately UNROUTABLE (review: a guessable public
+      # ntfy topic would receive business telemetry AND make delivery
+      # look like it works) — misconfiguration fails loudly in Grafana's
+      # notification log instead of succeeding silently into public space.
+      NTFY_URL: "${NTFY_URL:-http://127.0.0.1:9/ntfy-unconfigured}"
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     depends_on:
       prometheus: { condition: service_started }
+
+  # Story 10.4 — host metrics for the disk>80% alert (no other way to see
+  # the host from inside the stack). Unpublished; prometheus scrapes :9100.
+  node-exporter:
+    image: prom/node-exporter:v1.8.1
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["--path.rootfs=/host"]
+    volumes:
+      - /:/host:ro,rslave
+    pid: host
 
   postgres:
     image: postgres:16-alpine

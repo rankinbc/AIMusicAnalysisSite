@@ -1,0 +1,171 @@
+# Story 10.4 (FR49) — the five in-stack alert conditions. The sixth
+# ("backup missed") is deliberately NOT here: the VPS can't reliably report
+# its own cron death — backup.sh pings a healthchecks.io dead-man check
+# instead (see runbook).
+#
+# noDataState is OK everywhere except disk: node_exporter down IS an
+# incident. Budget rule: a NULL/absent feature_flags ceiling keeps the rule
+# OK (env-fallback ceilings aren't DB-visible — documented limitation).
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: spectr-alerts
+    folder: SPECTR
+    interval: 1m
+    rules:
+      - uid: spectr-failure-spike
+        title: "Analysis job failure spike"
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: "More than 3 failed analysis jobs in 15m — check worker logs + Sentry."
+        data:
+          - refId: A
+            relativeTimeRange: { from: 900, to: 0 }
+            datasourceUid: spectr-prom
+            model:
+              refId: A
+              instant: true
+              expr: sum(increase(spectr_job_duration_seconds_count{status="failed"}[15m]))
+          - refId: C
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [3] }
+
+      - uid: spectr-llm-budget-80
+        title: "LLM spend at 80% of the global monthly budget"
+        condition: C
+        for: 15m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: "Month-to-date LLM spend >= 80% of feature_flags llm_budget_global_usd. Hard stop at 100% applies in API-transport mode only (FR16)."
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: spectr-pg
+            model:
+              refId: A
+              format: table
+              rawQuery: true
+              editorMode: code
+              rawSql: >-
+                SELECT coalesce(
+                  (SELECT sum(cost_usd)::float FROM llm_calls
+                    WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'utc') AT TIME ZONE 'utc'
+                      AND outcome = 'ok')
+                  / nullif((SELECT nullif(value,'')::float FROM feature_flags
+                            WHERE name = 'llm_budget_global_usd'), 0),
+                  0) AS value
+          - refId: C
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0.8] }
+
+      - uid: spectr-webhook-failures
+        title: "Billing/email webhook processing failures"
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: "webhook_events stuck unprocessed >15m or errored in the last 30m — check Stripe/Resend dashboards + BFF logs."
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: spectr-pg
+            model:
+              refId: A
+              format: table
+              rawQuery: true
+              editorMode: code
+              rawSql: >-
+                SELECT count(*)::float AS value FROM webhook_events
+                WHERE (processed_at IS NULL AND received_at < now() - interval '15 minutes')
+                   OR (processing_error IS NOT NULL
+                       AND received_at > now() - interval '30 minutes')
+          - refId: C
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+      - uid: spectr-wrong-rate
+        title: "Verdict wrong-rate above 10%"
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: "7-day wrong-feedback rate exceeded 10% (n>=10) — quality regression, check recent prompt versions."
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: spectr-pg
+            model:
+              refId: A
+              format: table
+              rawQuery: true
+              editorMode: code
+              rawSql: >-
+                SELECT CASE
+                  WHEN count(*) FILTER (WHERE feedback IS NOT NULL) >= 10
+                  THEN (count(*) FILTER (WHERE feedback = 'wrong'))::float
+                       / (count(*) FILTER (WHERE feedback IS NOT NULL))
+                  ELSE 0 END AS value
+                FROM verdict_user_state
+                WHERE updated_at > now() - interval '7 days'
+          - refId: C
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0.1] }
+
+      - uid: spectr-disk-80
+        title: "Host disk above 80%"
+        condition: C
+        for: 10m
+        noDataState: Alerting   # node_exporter down IS an incident
+        execErrState: Error
+        annotations:
+          summary: "Root filesystem >80% — prune docker images/logs before postgres dies with the disk."
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: spectr-prom
+            model:
+              refId: A
+              instant: true
+              expr: >-
+                max(1 - node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}
+                      / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"})
+          - refId: C
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0.8] }
