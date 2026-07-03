@@ -208,6 +208,26 @@ def test_billing_failure_fails_closed(db, monkeypatch):
     assert _purged_at(factory, vid) is None
 
 
+def test_orphaned_account_content_requeues_purge(db, monkeypatch):
+    """Story 4.6 self-heal: songs whose user row is gone (failed purge
+    enqueue) re-enqueue delete_account_data from the nightly sweep."""
+    from app import account_deletion_actor as ada
+
+    factory, _ = db
+    ghost = uuid.uuid4()
+    with factory.begin() as s:
+        s.add(Song(id=uuid.uuid4(), user_id=ghost, name="Orphan"))  # no users row
+
+    sent: list[str] = []
+    monkeypatch.setattr(ada.delete_account_data, "send", lambda uid: sent.append(uid))
+
+    stats = ra.run_sweep(now=NOW)
+    assert stats["orphaned_accounts_requeued"] == 1
+    # sqlite yields undashed hex, PG dashed — the actor's uuid.UUID() parse
+    # accepts both; compare canonically.
+    assert [uuid.UUID(x) for x in sent] == [ghost]
+
+
 def test_anon_guard_noops_without_devices_table(db):
     factory, _ = db
     stats = ra.run_sweep(now=NOW)

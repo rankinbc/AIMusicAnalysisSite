@@ -107,6 +107,33 @@ public static class AccountEndpoints
             .Select(m => new { m.Id, m.ConversationId, m.Role, m.Content, m.CreatedAt })
             .ToListAsync(ct);
 
+        // Right-to-access PARITY (review-hardened): everything deletion
+        // destroys — and the retained billing rows — is exportable.
+        var referenceTracks = await db.ReferenceTracks.AsNoTracking()
+            .Where(r => r.UserId == userId).ToListAsync(ct);
+        var ratings = await db.VersionUserRatings.AsNoTracking()
+            .Where(r => r.UserId == userId).ToListAsync(ct);
+        var compareNotes = await db.VersionCompareNotes.AsNoTracking()
+            .Where(n => n.UserId == userId).ToListAsync(ct);
+        var sessionNotes = await db.SessionNotes.AsNoTracking()
+            .Where(n => n.UserId == userId).ToListAsync(ct);
+        var comments = await db.TrackComments.AsNoTracking()
+            .Where(c => c.AuthorUserId == userId).ToListAsync(ct);
+        var bookmarks = await db.TrackBookmarks.AsNoTracking()
+            .Where(b => b.UserId == userId).ToListAsync(ct);
+        var billing = new
+        {
+            subscriptions = await db.Subscriptions.AsNoTracking()
+                .Where(s => s.UserId == userId)
+                .Select(s => new { s.Status, s.CurrentPeriodEnd, s.CreatedAt })
+                .ToListAsync(ct),
+            creditLedger = await db.CreditLedger.AsNoTracking()
+                .Where(e => e.UserId == userId)
+                .Select(e => new { e.Amount, e.Reason, e.CreatedAt })
+                .ToListAsync(ct),
+            usageEventCount = await db.UsageEvents.CountAsync(e => e.UserId == userId, ct),
+        };
+
         // Media manifest: every storage key the user owns + a signed link
         // when object storage is configured (15-min expiry — the export is a
         // point-in-time snapshot, links are re-obtainable by re-exporting).
@@ -118,6 +145,8 @@ public static class AccountEndpoints
                 if (!string.IsNullOrEmpty(v.FilePath)) mediaKeys.Add(v.FilePath);
                 if (!string.IsNullOrEmpty(v.ReferencePath)) mediaKeys.Add(v.ReferencePath!);
                 if (!string.IsNullOrEmpty(v.AlsFilePath)) mediaKeys.Add(v.AlsFilePath!);
+                if (v.StemPaths is not null)
+                    mediaKeys.AddRange(ExtractStemKeys(v.StemPaths));
             }
         }
         foreach (var a in analyses)
@@ -125,6 +154,9 @@ public static class AccountEndpoints
             if (!string.IsNullOrEmpty(a.SpectrogramImagePath)) mediaKeys.Add(a.SpectrogramImagePath!);
             if (!string.IsNullOrEmpty(a.WaveformImagePath)) mediaKeys.Add(a.WaveformImagePath!);
         }
+        mediaKeys.AddRange(referenceTracks
+            .Where(r => !string.IsNullOrEmpty(r.FilePath))
+            .Select(r => r.FilePath!));
         var manifest = mediaKeys.Distinct().Select(key => new
         {
             key,
@@ -138,17 +170,58 @@ public static class AccountEndpoints
             account,
             songs,
             versions,
-            reports = analyses,
+            // Machine-readable form: final_json embedded as real JSON, not an
+            // escaped string.
+            reports = analyses.Select(a => new
+            {
+                a.Id, a.JobId, a.SongId, a.SongName, a.VersionId,
+                finalJson = TryParse(a.FinalJson),
+                a.ShareToken, a.CreatedAt,
+            }),
             verdicts,
             conversations = conversations.Select(c => new
             {
                 c.Id, c.AnalysisId, c.CreatedAt,
                 messages = messages.Where(m => m.ConversationId == c.Id).OrderBy(m => m.CreatedAt),
             }),
+            referenceTracks,
+            ratings,
+            compareNotes,
+            sessionNotes,
+            comments,
+            bookmarks,
+            billing,
             mediaManifest = manifest,
         };
 
         return Results.Json(export, contentType: "application/json");
+
+        static object? TryParse(string? json)
+        {
+            if (string.IsNullOrEmpty(json)) return null;
+            try { return System.Text.Json.JsonDocument.Parse(json).RootElement.Clone(); }
+            catch (System.Text.Json.JsonException) { return json; }
+        }
+
+        static IEnumerable<string> ExtractStemKeys(string stemPathsJson)
+        {
+            List<string> keys = [];
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(stemPathsJson);
+                foreach (var prop in doc.RootElement.EnumerateObject())
+                {
+                    if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.Array)
+                        keys.AddRange(prop.Value.EnumerateArray()
+                            .Where(e => e.ValueKind == System.Text.Json.JsonValueKind.String)
+                            .Select(e => e.GetString()!));
+                    else if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.String)
+                        keys.Add(prop.Value.GetString()!);
+                }
+            }
+            catch (System.Text.Json.JsonException) { /* legacy shape — skip */ }
+            return keys;
+        }
     }
 
     // ── POST /api/me/delete — AC2/AC3/AC4 ────────────────────────────────────
@@ -160,6 +233,7 @@ public static class AccountEndpoints
         RefreshTokenService refresh,
         IJobQueue queue,
         IStripeSubscriptionClient stripe,
+        IRateLimiter limiter,
         HttpContext httpCtx,
         HttpResponse resp,
         CancellationToken ct)
@@ -168,39 +242,63 @@ public static class AccountEndpoints
         var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
         if (user is null) return Results.Unauthorized();
 
+        // Password-guessing throttle: an attacker holding only an access
+        // token must not get an unthrottled oracle at the deadliest endpoint.
+        var cfgDel = httpCtx.RequestServices.GetRequiredService<IConfiguration>();
+        if (!string.Equals(cfgDel["RateLimits:Enabled"], "false", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var verdict = await limiter.CheckAsync(
+                    $"user:{userId}", httpCtx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    "account_delete", 5, TimeSpan.FromMinutes(15), ct);
+                if (!verdict.Allowed)
+                    return ErrorEnvelope.Build(429, "rate_limited", "Too many attempts — slow down.");
+            }
+            catch (Exception) { /* fail-open */ }
+        }
+
         // Re-auth: deletion is the most destructive action in the product.
+        // 403, NOT 401 — the fetcher's transport contract treats 401 as
+        // "token expired" and would silently refresh + auto-RETRY this
+        // destructive POST.
         if (string.IsNullOrEmpty(req.Password) || !hasher.Verify(req.Password, user.HashedPassword))
-            return ErrorEnvelope.Build(401, "invalid_password", "Password check failed.");
+            return ErrorEnvelope.Build(403, "invalid_password", "Password check failed.");
 
         // AC3 — active subscription: explain cancellation-first; proceed only
         // with explicit confirmation, which cancels IMMEDIATELY (an account
         // about to not exist has no period-end to wait for; no refunds —
         // stated in the confirm copy).
-        var activeSub = await db.Subscriptions.AsNoTracking()
-            .Where(s => s.UserId == userId
-                && (s.Status == "active" || s.Status == "trialing" || s.Status == "past_due"))
-            .FirstOrDefaultAsync(ct);
-        if (activeSub is not null)
+        var anyLive = await db.Subscriptions.AsNoTracking()
+            .AnyAsync(s => s.UserId == userId
+                && (s.Status == "active" || s.Status == "trialing" || s.Status == "past_due"), ct);
+        if (anyLive && !req.ConfirmCancel)
+            return ErrorEnvelope.Build(409, "subscription_active",
+                "Your subscription is still active. Deleting your account cancels it "
+                + "immediately with no refund for the remaining period. Re-submit with "
+                + "confirmCancel to proceed.");
+        // Cancel EVERY sub row with a Stripe id, regardless of local status —
+        // the mirror can be stale (unpaid/incomplete/missed webhook) and a
+        // live Stripe sub must never keep invoicing a deleted account.
+        // CancelImmediatelyAsync is idempotent on already-canceled.
+        var stripeSubIds = await db.Subscriptions.AsNoTracking()
+            .Where(s => s.UserId == userId && s.StripeSubscriptionId != "")
+            .Select(s => s.StripeSubscriptionId)
+            .ToListAsync(ct);
+        foreach (var subId in stripeSubIds)
         {
-            if (!req.ConfirmCancel)
-                return ErrorEnvelope.Build(409, "subscription_active",
-                    "Your subscription is still active. Deleting your account cancels it "
-                    + "immediately with no refund for the remaining period. Re-submit with "
-                    + "confirmCancel to proceed.");
-            if (!string.IsNullOrEmpty(activeSub.StripeSubscriptionId))
+            try
             {
-                try
-                {
-                    await stripe.CancelImmediatelyAsync(activeSub.StripeSubscriptionId, userId, ct);
-                }
-                catch (Exception ex)
-                {
-                    httpCtx.RequestServices.GetRequiredService<ILoggerFactory>()
-                        .CreateLogger("Account").LogError(ex,
-                            "Immediate Stripe cancel failed for {UserId} — deletion aborted.", userId);
-                    return ErrorEnvelope.Build(502, "stripe_cancel_failed",
-                        "Could not cancel the subscription — account not deleted. Try again.");
-                }
+                await stripe.CancelImmediatelyAsync(subId, userId, ct);
+            }
+            catch (Exception ex)
+            {
+                httpCtx.RequestServices.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("Account").LogError(ex,
+                        "Immediate Stripe cancel failed for {UserId} sub {SubId} — deletion aborted.",
+                        userId, subId);
+                return ErrorEnvelope.Build(502, "stripe_cancel_failed",
+                    "Could not cancel the subscription — account not deleted. Try again.");
             }
         }
 
@@ -221,10 +319,21 @@ public static class AccountEndpoints
             await refresh.RevokeAllForUserAsync(userId, ct);
             await db.AuthTokens.Where(t => t.UserId == userId).ExecuteDeleteAsync(ct);
             await db.RefreshTokens.Where(t => t.UserId == userId).ExecuteDeleteAsync(ct);
-            // Devices this user claimed: sever attribution (rows already
-            // re-parented at claim time; the device row itself is not PII).
+            // Devices this user claimed: sever attribution AND scrub the
+            // peppered ip/ua hashes (hashed network identifiers are still
+            // personal data once the account is gone).
             await db.Devices.Where(d => d.ClaimedByUserId == userId)
-                .ExecuteUpdateAsync(s => s.SetProperty(d => d.ClaimedByUserId, (Guid?)null), ct);
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(d => d.ClaimedByUserId, (Guid?)null)
+                    .SetProperty(d => d.IpHash, "")
+                    .SetProperty(d => d.UaHash, ""), ct);
+            // PII scrubs the FK graph can't do: the user's email inside
+            // OTHERS' invite rows, and their display name inside grants they
+            // received (both survive the SetNull cascades otherwise).
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE invites SET invited_email = NULL WHERE invited_email = {user.Email}", ct);
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE control_grants SET grantee_display_name = NULL WHERE grantee_user_id = {userId}", ct);
 
             // The user row: FK-cascades take viz_presets, listening_sessions,
             // control_grants, notifications, follow_relations, invites.
@@ -233,14 +342,29 @@ public static class AccountEndpoints
             await tx.CommitAsync(ct);
         }
 
-        // Content subtree + storage objects purge asynchronously (idempotent).
-        await queue.EnqueueAsync(
-            DramatiqTasks.DeleteAccountData, [userId.ToString()], DramatiqQueues.Maintenance, ct);
-
-        // Instant local access-token death (row is gone → cache must not
-        // serve the stale version for 60 s).
+        // Local session teardown FIRST — must happen even if the enqueue
+        // below fails (the deleted user's cached tver must not validate for
+        // another 60 s).
         httpCtx.RequestServices.GetRequiredService<IMemoryCache>().Remove($"tver:{userId:N}");
         resp.Cookies.Delete(RefreshTokenService.CookieName);
+
+        // Content subtree + storage objects purge asynchronously (idempotent).
+        // A failed enqueue must NOT 500: the identity deletion already
+        // committed and the user cannot retry (login is dead). LogCritical +
+        // the nightly sweep's orphaned-account detector re-enqueues.
+        try
+        {
+            await queue.EnqueueAsync(
+                DramatiqTasks.DeleteAccountData, [userId.ToString()], DramatiqQueues.Maintenance, ct);
+        }
+        catch (Exception ex)
+        {
+            httpCtx.RequestServices.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("Account").LogCritical(ex,
+                    "Account-purge enqueue FAILED for {UserId} — sweep_retention's "
+                    + "orphaned-account detector will re-enqueue on the next nightly run.",
+                    userId);
+        }
 
         return Results.NoContent();
     }

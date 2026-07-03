@@ -33,6 +33,10 @@ namespace Spectr.Data.Migrations
                 {
                     table.PrimaryKey("PK_audit_log", x => x.id);
                 });
+
+            // The support/ops query shapes (who did what / what happened when).
+            migrationBuilder.Sql(
+                "CREATE INDEX ix_audit_log_actor_created ON audit_log (actor_user_id, created_at);");
         }
 
         /// <inheritdoc />

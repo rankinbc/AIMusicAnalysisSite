@@ -79,6 +79,24 @@ claude-fable-5 (Claude Code)
 - Frontend: `features/account/DangerZone.tsx` (new), `routes/_app/profile.tsx`
 - Docs: `docs/runbook.md` (GDPR section)
 
+### Senior Developer Review (AI)
+
+2026-07-03 — bmad-code-review (Blind Hunter GDPR/data-integrity + Edge Case Hunter/Acceptance Auditor; auditor traced JwtBearer exception semantics, verified all 4 jwt.Issue sites carry tver, confirmed llm_calls stores metering only — no PII hole, and ran all suites live). Outcome: **Approve after patches** — 13 patches applied:
+
+- [x] [High] **Object purge was unrecoverable**: rows (the only key manifest) deleted BEFORE objects — a storage blip left audio orphaned forever and "safe to replay" was false → objects delete FIRST; any failure raises (dramatiq max_retries becomes real) with rows intact; replay idempotent
+- [x] [High] **Enqueue-after-delete dead end**: a Redis blip 500'd a user whose account was already gone, with no retry handle → try/catch + LogCritical + still 204; PLUS a self-heal: `sweep_retention` detects songs whose user row is gone and re-enqueues `delete_account_data` nightly (also covers crash windows); session teardown (cache evict + cookie) moved BEFORE the enqueue
+- [x] [High] **Threaded-comment FK dead-letter**: another user's reply (parent_id NO ACTION) aborted the entire single-tx purge → replies detached (parent_id NULL) before the authored-comment delete
+- [x] [High] **Right-to-access parity**: export gained referenceTracks, ratings, compareNotes, sessionNotes, comments, bookmarks, and a billing section (retained rows are still the user's data under Art. 15); manifest gained stem + reference keys; final_json embedded as REAL JSON (was double-encoded string)
+- [x] [Med-High] **OnTokenValidated DB blip = full-site 500s** (exception escapes the bearer event; even anonymous endpoints carrying a token) → fail-OPEN try/catch (argued: degrades to the pre-4.6 15-min TTL status quo; fail-closed would mass-logout via refresh calls that also need the down DB; matches the 4.3 limiter direction)
+- [x] [Med] Wrong-password 401 collided with the fetcher's refresh-and-RETRY contract (auto-replaying the deadliest POST) → 403 `invalid_password`; dialog branches on `ApiError.status` (the 502 stripe-failure copy contained "subscription" and the substring sniff would have coached users into hammering a failing destructive endpoint)
+- [x] [Med] Stripe cancel now loops EVERY sub row with a Stripe id regardless of local status (stale mirror must never leave a live sub invoicing a deleted account; idempotent on canceled)
+- [x] [Med] PII scrubs the FK graph can't do: `invites.invited_email` (the user's email in others' rows), `control_grants.grantee_display_name`, and claimed devices' ip/ua hashes — all cleared in the delete tx; email_suppressions retention declared in the runbook
+- [x] [Med] `/me/delete` rate-limited 5/15 min (password oracle for an access-token thief)
+- [x] [Low] Deleted-user access token 401 asserted in the delete test; overlay click disabled while pending; `ix_audit_log_actor_created`; export/manifest gaps closed above
+- Deferred: async export for heavy users (sync fits beta; size noted); `SkippableFact` semantics (project-wide convention); missing-tver bypass sunset (tracked for 10.x — flip to fail-closed once pre-4.6 tokens age out); audit_log DB-level append-only enforcement (10.5's story).
+- Verified-clean: tver on all 4 issue paths (refresh mints fresh versions); deletion's row-gone ≡ version-bump (equivalent semantics, noted); devices/claim interaction gap-free; llm_calls PII-free (metering only); enqueue-AFTER-commit direction correct (before-commit could purge a live account on rollback).
+
 ### Change Log
 
 - 2026-07-03: implemented on `account/4-6-gdpr`. Gates: BFF 325/325, worker 578 + 3 xfail, vitest 677, shared 27, all linters clean. Status → review.
+- 2026-07-03 (review): 13 patches applied. Gates after: BFF 325/325, worker 579 + 3 xfail, vitest 677, all linters clean.

@@ -109,9 +109,10 @@ public sealed class AccountGdprTests(WebApplicationFactory<Program> factory)
 
         try
         {
-            // Wrong password → 401, nothing happens.
+            // Wrong password → 403 (NOT 401: the fetcher auto-refresh-retries
+            // 401s — a destructive POST must never be silently replayed).
             var wrong = await client.PostAsJsonAsync("/api/me/delete", new { password = "nope-wrong" });
-            Assert.Equal(HttpStatusCode.Unauthorized, wrong.StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, wrong.StatusCode);
 
             // Active subscription without confirmCancel → 409 explanation.
             using (var scope = f.Services.CreateScope())
@@ -151,6 +152,13 @@ public sealed class AccountGdprTests(WebApplicationFactory<Program> factory)
                 && c.Queue == DramatiqQueues.Maintenance
                 && (string)c.Args[0] == userId.ToString());
             Assert.Equal($"sub_{userId:N}", stripe.LastCanceled); // immediate cancel fired
+
+            // The DELETED user's access token is dead immediately (tver row
+            // gone + same-process cache evict) — the 4.6 token-versioning
+            // covers deletion, not just password reset.
+            var ghost = new HttpRequestMessage(HttpMethod.Get, "/api/auth/me");
+            ghost.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            Assert.Equal(HttpStatusCode.Unauthorized, (await f.CreateClient().SendAsync(ghost)).StatusCode);
         }
         finally
         {

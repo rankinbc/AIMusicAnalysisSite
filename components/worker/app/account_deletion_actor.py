@@ -83,6 +83,11 @@ def _collect_storage_keys(s, uid) -> list[str]:
 # fire from the song_versions/songs deletes at the end. Tables absent from
 # this list are either FK-cascaded off users (already gone) or retained.
 _DELETE_STATEMENTS: tuple[str, ...] = (
+    # Review-hardening: track_comments.parent_id is FK NO ACTION — another
+    # user's REPLY to this user's comment would abort the authored-comment
+    # delete (and with it the whole tx). Detach replies first.
+    "UPDATE track_comments SET parent_id = NULL WHERE parent_id IN "
+    "(SELECT id FROM track_comments WHERE author_user_id = :uid)",
     # coach chats
     "DELETE FROM coach_messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = :uid)",
     "DELETE FROM conversations WHERE user_id = :uid",
@@ -111,18 +116,20 @@ _DELETE_STATEMENTS: tuple[str, ...] = (
 
 
 def purge_account_data(user_id: str) -> dict:
-    """Delete everything content-shaped a user id owned. Returns stats."""
+    """Delete everything content-shaped a user id owned. Returns stats.
+
+    ORDER MATTERS (review-hardened): objects delete BEFORE rows — the rows
+    are the only key manifest, so deleting them first would make a failed
+    object pass unrecoverable (replay would collect zero keys). With
+    objects-first, a crash or storage blip leaves the rows intact; the raise
+    below turns dramatiq's max_retries into REAL retries, and replays are
+    idempotent (delete_object is missing-ok).
+    """
     uid = uuid_mod.UUID(user_id)
     stats = {"rows_deleted": 0, "objects_deleted": 0, "objects_failed": 0}
 
     with SessionFactory() as s:
         keys = _collect_storage_keys(s, _uid_param(s, uid))
-
-    with SessionFactory.begin() as s:
-        p = _uid_param(s, uid)
-        for stmt in _DELETE_STATEMENTS:
-            result = s.execute(text(stmt), {"uid": p})
-            stats["rows_deleted"] += result.rowcount or 0
 
     for key in keys:
         try:
@@ -131,10 +138,20 @@ def purge_account_data(user_id: str) -> dict:
         except Exception:
             stats["objects_failed"] += 1
             logger.warning("delete_account_data: object delete failed key=%s", key, exc_info=True)
+    if stats["objects_failed"]:
+        # Rows are still intact — raising makes dramatiq retry the whole run.
+        raise RuntimeError(
+            f"delete_account_data: {stats['objects_failed']} object delete(s) failed for {user_id} — retrying")
+
+    with SessionFactory.begin() as s:
+        p = _uid_param(s, uid)
+        for stmt in _DELETE_STATEMENTS:
+            result = s.execute(text(stmt), {"uid": p})
+            stats["rows_deleted"] += result.rowcount or 0
 
     logger.info(
-        "delete_account_data: user=%s rows=%d objects=%d failed=%d",
-        user_id, stats["rows_deleted"], stats["objects_deleted"], stats["objects_failed"],
+        "delete_account_data: user=%s rows=%d objects=%d",
+        user_id, stats["rows_deleted"], stats["objects_deleted"],
     )
     return stats
 

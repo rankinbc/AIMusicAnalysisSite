@@ -283,6 +283,34 @@ def _purge_stale_auth_tokens(now: datetime) -> int:
         return 0
 
 
+def _requeue_orphaned_account_purges() -> int:
+    """Story 4.6 review self-heal: if the BFF's purge enqueue failed (Redis
+    blip after the user row was already deleted), content rows sit orphaned
+    with no retry handle — the user can't even log in to retry. Detect
+    user_ids that own songs/analyses but have no users row and re-enqueue
+    delete_account_data. Idempotent (the actor tolerates replays)."""
+    try:
+        with SessionFactory() as s:
+            orphans = [str(r.user_id) for r in s.execute(text(
+                "SELECT DISTINCT user_id FROM songs sg "
+                "WHERE user_id IS NOT NULL "
+                "AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = sg.user_id) "
+                "LIMIT 20"
+            )).all()]
+        if not orphans:
+            return 0
+        from .account_deletion_actor import delete_account_data
+
+        for uid in orphans:
+            delete_account_data.send(uid)
+        logger.warning(
+            "sweep_retention: re-enqueued account purge for %d orphaned user id(s)", len(orphans))
+        return len(orphans)
+    except Exception:
+        logger.warning("sweep_retention: orphaned-account check failed", exc_info=True)
+        return 0
+
+
 def run_sweep(now: datetime | None = None, lapsed_days: int | None = None) -> dict:
     """One idempotent sweep pass. Returns stats for logging/tests."""
     now = now or datetime.now(timezone.utc)
@@ -363,6 +391,7 @@ def run_sweep(now: datetime | None = None, lapsed_days: int | None = None) -> di
 
     stats["anon_purged"] = _purge_unclaimed_anonymous(now)
     stats["auth_tokens_purged"] = _purge_stale_auth_tokens(now)
+    stats["orphaned_accounts_requeued"] = _requeue_orphaned_account_purges()
 
     logger.info(
         "sweep_retention: purged=%d deleted=%d missing=%d failed=%d anon=%d skipped=%s",

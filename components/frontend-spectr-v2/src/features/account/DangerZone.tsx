@@ -5,7 +5,7 @@
 import { useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 
-import { fetcher } from '../../api/fetcher';
+import { ApiError, fetcher } from '../../api/fetcher';
 import f from '../../styles/forms.module.css';
 import s from '../../routes/_app/profile.module.css';
 
@@ -78,8 +78,11 @@ export function DeleteAccountDialog({
       });
       onDeleted(); // signs out + clears local auth
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      if (msg.includes('409') || msg.toLowerCase().includes('subscription')) {
+      // Structured status branching — never substring-sniff error copy (a
+      // 502 "could not cancel the subscription" must not read as the 409
+      // confirm flow).
+      const status = err instanceof ApiError ? err.status : 0;
+      if (status === 409) {
         // AC3: the server explained cancellation-first — surface the
         // consequence and require one more explicit go.
         setNeedsCancelConfirm(true);
@@ -87,8 +90,10 @@ export function DeleteAccountDialog({
           'Your subscription is still active. Continuing cancels it immediately '
             + 'with no refund for the remaining period. Submit again to confirm.',
         );
-      } else if (msg.includes('401')) {
+      } else if (status === 403) {
         setError('Password check failed.');
+      } else if (status === 429) {
+        setError('Too many attempts — wait a few minutes.');
       } else {
         setError('Deletion failed — try again.');
       }
@@ -98,7 +103,9 @@ export function DeleteAccountDialog({
   };
 
   return (
-    <div className={f.dialogOverlay} onClick={onClose}>
+    // Overlay click is disabled while the request is in flight — the dialog
+    // must not vanish mid-delete.
+    <div className={f.dialogOverlay} onClick={pending ? undefined : onClose}>
       <div
         className={f.dialogContent}
         onClick={(e) => e.stopPropagation()}

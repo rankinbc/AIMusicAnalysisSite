@@ -134,17 +134,35 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 if (tverClaim is null || sub is null || !Guid.TryParse(sub, out var uid))
                     return; // pre-4.6 token without tver: honored until natural expiry (≤15 min, one-time rollout window)
 
-                var cache = ctx.HttpContext.RequestServices
-                    .GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
-                var current = await cache.GetOrCreateAsync($"tver:{uid:N}", async e =>
+                int? current;
+                try
                 {
-                    e.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(60);
-                    var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
-                    return await db.Users.AsNoTracking()
-                        .Where(u => u.Id == uid)
-                        .Select(u => (int?)u.TokenVersion)
-                        .FirstOrDefaultAsync();
-                });
+                    var cache = ctx.HttpContext.RequestServices
+                        .GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
+                    current = await cache.GetOrCreateAsync($"tver:{uid:N}", async e =>
+                    {
+                        e.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(60);
+                        var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                        return await db.Users.AsNoTracking()
+                            .Where(u => u.Id == uid)
+                            .Select(u => (int?)u.TokenVersion)
+                            .FirstOrDefaultAsync();
+                    });
+                }
+                catch (Exception ex)
+                {
+                    // FAIL-OPEN (review decision): an unhandled exception here
+                    // 500s EVERY bearer-carrying request during a DB blip.
+                    // Failing open degrades exactly to the pre-4.6 status quo
+                    // (revocation bounded by the 15-min token TTL) — and a
+                    // fail-closed 401 would trigger mass refresh attempts that
+                    // ALSO need the down DB. Same direction as the rate
+                    // limiter's fail-open (4.3).
+                    ctx.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("Auth").LogWarning(ex,
+                            "Token-version check unavailable — failing OPEN.");
+                    return;
+                }
                 if (current is null || tverClaim != current.Value.ToString())
                     ctx.Fail("stale token version");
             },
