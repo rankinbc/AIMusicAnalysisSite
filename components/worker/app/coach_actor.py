@@ -49,6 +49,7 @@ from typing import Any
 
 import dramatiq
 
+from . import obs
 from .coach_lib.cancel import cancel_check_for
 from .coach_lib.context import build_context_bundle, resolve_evidence
 from .coach_lib.payload import (
@@ -289,6 +290,10 @@ def coach_reply(
     cid = uuid.UUID(conversation_id)
     uid_msg = uuid.UUID(user_message_id)
     mid = uuid.UUID(assistant_message_id)
+    # 10.3: conversation id is the coach lane's correlation; the analysis id
+    # tag is added in Phase A once the conversation row is loaded (closing
+    # the upload→report→coach chain seam).
+    obs.set_correlation(conversation_id)
     logger.info(
         "coach_reply start conversation=%s user_msg=%s assistant_msg=%s",
         conversation_id, user_message_id, assistant_message_id,
@@ -367,6 +372,13 @@ def coach_reply(
             degradation_notice = analysis.degradation_notice
             user_id = conversation.user_id
             analysis_id = analysis.id
+            # 10.3: stitch the coach lane onto the analysis correlation chain.
+            try:
+                import sentry_sdk  # noqa: PLC0415
+
+                sentry_sdk.set_tag("analysis_id", str(analysis_id))
+            except Exception:
+                pass
 
             # Conversation tail = all non-pending messages EXCLUDING both
             # the pending assistant row AND the user row we're answering

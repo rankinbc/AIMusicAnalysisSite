@@ -31,6 +31,7 @@ from aimusic_shared.verdicts.models import Verdict as VerdictModel
 from aimusic_shared.verdicts.scoring import compute_priority_score
 from aimusic_shared.verdicts.ulid_helpers import new_fix_id, new_verdict_id
 
+from . import obs
 from .db_sync import SessionFactory
 from .llm import gateway
 from .llm.gateway import LlmBudgetExceeded, LlmError
@@ -171,6 +172,7 @@ def _persist_verdict(analysis_id: uuid.UUID, v: VerdictModel) -> None:
 def run_specialist(analysis_id: str, slug: str, user_id: str) -> None:
     """See module docstring."""
     aid = uuid.UUID(analysis_id)
+    obs.set_correlation(analysis_id)
     logger.info("run_specialist start analysis=%s slug=%s", analysis_id, slug)
 
     # ── Phase A: load analysis ─────────────────────────────────────────────
@@ -284,6 +286,7 @@ def run_specialist(analysis_id: str, slug: str, user_id: str) -> None:
         else:
             reason = result.failure.reason if result.failure else "unknown"
             logger.info("verdict rejected by validator (slug=%s): %s", slug, reason)
+            obs.VALIDATION_REJECTS.labels(slug=slug).inc()  # 10.3: finally queryable
 
     if not final_verdicts:
         _persist_fail_marker(aid, slug, "No verdicts survived validation")

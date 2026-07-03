@@ -33,5 +33,8 @@
     <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.0" />
     <PackageReference Include="Stripe.net" Version="52.0.0" />
     <PackageReference Include="AWSSDK.S3" Version="4.0.25.2" />
+    <!-- Story 10.3 — observability: /metrics + DSN-gated error reporting -->
+    <PackageReference Include="prometheus-net.AspNetCore" Version="8.2.1" />
+    <PackageReference Include="Sentry.AspNetCore" Version="5.0.1" />
   </ItemGroup>
 </Project>

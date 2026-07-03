@@ -1,0 +1,26 @@
+# Story 10.3 — two datasources: Prometheus (queues/durations/http) and
+# Postgres READ-ONLY (money + quality SQL panels — llm_calls,
+# verdict_user_state, subscriptions, analysis_jobs). The grafana DB role is
+# SELECT-only (runbook has the CREATE ROLE SQL) — Grafana never holds the
+# app credentials.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: spectr-prom
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+  - name: SpectrDB
+    uid: spectr-pg
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: spectr
+    user: grafana
+    secureJsonData:
+      password: ${GRAFANA_PG_PASSWORD}
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1600

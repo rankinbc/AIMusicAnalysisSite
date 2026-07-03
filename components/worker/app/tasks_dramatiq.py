@@ -18,9 +18,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+
+from . import obs
 
 import dramatiq
 
@@ -124,6 +127,8 @@ def analyze_audio_job(job_id: str) -> None:
         raise RuntimeError("audio_analysis package not installed in worker environment")
 
     jid = uuid.UUID(job_id)
+    obs.set_correlation(job_id)  # NFR30: the job id IS the correlation id
+    _job_started_at = time.monotonic()
     logger.info("analyze_audio_job: start job=%s", job_id)
 
     # ── Phase A — mark processing + capture paths ────────────────────────────
@@ -287,6 +292,8 @@ def analyze_audio_job(job_id: str) -> None:
                 failed.error_message = str(exc)[:2000]
                 failed.failed_at = _utc_now()
                 failed.current_phase = "failed"
+        obs.JOB_DURATION.labels(tier=tier or "free", status="failed").observe(
+            time.monotonic() - _job_started_at)
         return
     except Exception as exc:
         logger.exception("analyze_audio_job: FAILED job=%s", job_id)
@@ -297,6 +304,8 @@ def analyze_audio_job(job_id: str) -> None:
                 failed.error_message = str(exc)[:2000]
                 failed.failed_at = _utc_now()
                 failed.current_phase = "failed"
+        obs.JOB_DURATION.labels(tier=tier or "free", status="failed").observe(
+            time.monotonic() - _job_started_at)
         raise
     finally:
         object_store.cleanup_all(fetched)
@@ -347,6 +356,8 @@ def analyze_audio_job(job_id: str) -> None:
             if bref is not None:
                 bref.used_count = (bref.used_count or 0) + 1
 
+    obs.JOB_DURATION.labels(tier=tier or "free", status="complete").observe(
+        time.monotonic() - _job_started_at)
     _try_write_artifact(job_id, result_dict)
     _try_upload_durables(job_id, result_dict, spectrogram_path, waveform_path)
 

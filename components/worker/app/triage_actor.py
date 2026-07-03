@@ -34,6 +34,7 @@ import dramatiq
 from aimusic_shared.models import Analysis
 from aimusic_shared.verdicts.models import SpecialistRoutingPlan
 
+from . import obs
 from .db_sync import SessionFactory
 from .llm import gateway
 from .llm.gateway import LlmBudgetExceeded, LlmError
@@ -58,6 +59,7 @@ logger = logging.getLogger(__name__)
 def run_triage(analysis_id: str) -> None:
     """See module docstring."""
     aid = uuid.UUID(analysis_id)
+    obs.set_correlation(analysis_id)
     logger.info("run_triage start analysis=%s", analysis_id)
 
     # ── A: load + idempotency check ────────────────────────────────────────

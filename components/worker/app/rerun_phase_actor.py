@@ -31,6 +31,7 @@ from aimusic_shared.models import (
 )
 
 from . import object_store
+from . import obs
 from .db_sync import SessionFactory
 from .tasks_dramatiq import LOCAL_ROOT, _utc_now
 
@@ -63,6 +64,7 @@ def rerun_phase(
 
     rerun_jid = uuid.UUID(rerun_job_id)
     aid = uuid.UUID(analysis_id)
+    obs.set_correlation(analysis_id)
     phase = int(phase)
     logger.info(
         "rerun_phase: start rerun_job=%s analysis=%s phase=%s",

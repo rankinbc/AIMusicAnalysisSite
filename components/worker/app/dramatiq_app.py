@@ -31,11 +31,24 @@ except ImportError:
 import dramatiq
 from dramatiq.brokers.redis import RedisBroker
 
-logging.basicConfig(level=logging.INFO)
+# Story 10.3 — correlation-stamped logging + DSN-gated Sentry replace the
+# bare basicConfig; the Prometheus middleware exposes the dramatiq metrics
+# exporter (+ our custom counters from obs.py) when enabled.
+from .obs import configure_logging, init_sentry  # noqa: E402
+
+configure_logging()
+if init_sentry():
+    logging.getLogger(__name__).info("sentry: enabled (worker)")
 
 _REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
 broker = RedisBroker(url=_REDIS_URL)
+if os.environ.get("WORKER_METRICS", "").strip() == "1":
+    from dramatiq.middleware.prometheus import Prometheus
+
+    # Exporter binds dramatiq_prom_host/dramatiq_prom_port (default
+    # 127.0.0.1:9191; prod compose sets host 0.0.0.0 for the scraper).
+    broker.add_middleware(Prometheus())
 dramatiq.set_broker(broker)
 
 # Side effect: registers actors with the broker.

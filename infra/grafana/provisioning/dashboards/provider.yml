@@ -1,0 +1,10 @@
+# Story 10.3 — file-provisioned dashboards.
+apiVersion: 1
+
+providers:
+  - name: spectr
+    folder: SPECTR
+    type: file
+    disableDeletion: false
+    options:
+      path: /var/lib/grafana/dashboards

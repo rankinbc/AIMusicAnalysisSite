@@ -180,6 +180,9 @@ jobs:
           context: .
           file: infra/Dockerfile.web
           load: true
+          build-args: |
+            VITE_SENTRY_DSN=${{ secrets.VITE_SENTRY_DSN }}
+            VITE_POSTHOG_KEY=${{ secrets.VITE_POSTHOG_KEY }}
           tags: ghcr.io/${{ github.repository_owner }}/spectr-web:${{ github.sha }}
 
       # Built-image scanning (story 4.1 deferral lands here): CRITICAL
@@ -233,5 +236,6 @@ jobs:
           # Ship the infra bundle (self-updating compose/Caddyfile/deploy.sh),
           # then pin + pull + up + health verify (deploy.sh auto-rolls-back).
           scp -i ~/.ssh/deploy_key infra/compose.prod.yml infra/deploy.sh infra/backup.sh infra/restore-test.sh "$VPS_USER@$VPS_HOST:/opt/spectr/"
+          scp -r -i ~/.ssh/deploy_key infra/prometheus infra/grafana "$VPS_USER@$VPS_HOST:/opt/spectr/"
           ssh -i ~/.ssh/deploy_key "$VPS_USER@$VPS_HOST" \
             "chmod +x /opt/spectr/deploy.sh /opt/spectr/backup.sh /opt/spectr/restore-test.sh && /opt/spectr/deploy.sh ${{ github.sha }}"

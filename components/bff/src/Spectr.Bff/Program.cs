@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using Prometheus;
 using Serilog;
 using Spectr.Bff.Auth;
 using Spectr.Bff.Endpoints;
@@ -19,6 +20,17 @@ builder.Host.UseSerilog((ctx, services, lc) => lc
     .ReadFrom.Configuration(ctx.Configuration)
     .Enrich.FromLogContext()
     .WriteTo.Console());
+
+// Story 10.3 — Sentry, DSN-gated (empty/missing = fully disabled; dev default).
+if (!string.IsNullOrWhiteSpace(builder.Configuration["Sentry:Dsn"]))
+{
+    builder.WebHost.UseSentry(o =>
+    {
+        o.Dsn = builder.Configuration["Sentry:Dsn"]!;
+        o.Environment = builder.Environment.EnvironmentName;
+        o.TracesSampleRate = 0.0; // errors only — tracing out of 10.3 scope
+    });
+}
 
 // ── Configuration ──────────────────────────────────────────────────────────────
 var conn = builder.Configuration.GetConnectionString("Postgres")
@@ -410,6 +422,34 @@ if (string.Equals(app.Configuration["ForwardedHeaders:Enabled"], "true", StringC
 app.MapOpenApi();
 
 app.UseSerilogRequestLogging();
+
+// Story 10.3 — correlation enrichment (NFR30): any request that names a job
+// or analysis id carries that id on every log line + Sentry event, so one id
+// traces upload → job → actors → LLM calls → report render.
+app.Use(async (ctx, next) =>
+{
+    var routeVals = ctx.Request.RouteValues;
+    var cid = (routeVals.TryGetValue("jobId", out var j) ? j?.ToString() : null)
+        ?? (routeVals.TryGetValue("analysisId", out var a) ? a?.ToString() : null)
+        ?? (routeVals.TryGetValue("id", out var i) && ctx.Request.Path.StartsWithSegments("/api/jobs") ? i?.ToString() : null);
+    if (cid is not null)
+    {
+        SentrySdk.ConfigureScope(s => s.SetTag("correlation_id", cid));
+        using (Serilog.Context.LogContext.PushProperty("CorrelationId", cid))
+        {
+            await next();
+        }
+    }
+    else
+    {
+        await next();
+    }
+});
+
+// Story 10.3 — prometheus HTTP metrics + /metrics (internal scrape only —
+// caddy never routes /metrics; prometheus reaches bff:5000 on the compose net).
+app.UseHttpMetrics();
+
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -484,6 +524,30 @@ app.MapGet("/healthz", async (AppDbContext db, IConnectionMultiplexer redis) =>
         ? Results.Json(new { status = "ok" })
         : Results.Json(new { status = "degraded", failing }, statusCode: 503);
 }).AllowAnonymous();
+
+// Story 10.3 (AC2) — /metrics + the queue-depth gauge. The worker's dramatiq
+// middleware can't see Redis LIST depth; the BFF already owns a Redis
+// connection, so depth is collected here at scrape time for all four lanes.
+var queueDepthGauge = Metrics.CreateGauge(
+    "spectr_queue_depth", "Dramatiq queue depth (pending messages).", "queue");
+Metrics.DefaultRegistry.AddBeforeCollectCallback(async ct =>
+{
+    try
+    {
+        var redisConn = app.Services.GetRequiredService<IConnectionMultiplexer>();
+        var rdb = redisConn.GetDatabase();
+        foreach (var q in new[] { "coach", "analysis-paid", "analysis-free", "maintenance" })
+        {
+            var len = await rdb.ListLengthAsync($"dramatiq:{q}");
+            queueDepthGauge.WithLabels(q).Set(len);
+        }
+    }
+    catch
+    {
+        // Scrapes must not fail because Redis blipped — gauges just go stale.
+    }
+});
+app.MapMetrics().AllowAnonymous();
 
 // Story 10.1 (AC2) — migrations at boot under advisory lock (prod compose
 // sets Migrations:ApplyAtBoot; dev keeps the CLI/launcher flow). A failure

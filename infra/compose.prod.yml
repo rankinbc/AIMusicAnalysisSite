@@ -59,6 +59,8 @@ services:
       # header trust (caddy is the only ingress) + hard origin requirement.
       Migrations__ApplyAtBoot: "true"
       ForwardedHeaders__Enabled: "true"
+      # Story 10.3 — optional; empty disables Sentry entirely.
+      Sentry__Dsn: "${SENTRY_DSN_BFF:-}"
       App__FrontendOrigin: "https://${SPECTR_DOMAIN:?}"
       # Object storage = Cloudflare R2 (S3 API). Local root backs the
       # residual IFileStorage writes (volume above).
@@ -106,6 +108,11 @@ services:
       S3_REGION: "auto"
       RESEND_API_KEY: "${RESEND_API_KEY:?}"
       SPECTR_REQUIRE_EMAIL: "1"
+      # Story 10.3 — metrics exporter (:9191, scraped internally) + Sentry.
+      WORKER_METRICS: "1"
+      dramatiq_prom_host: "0.0.0.0"
+      dramatiq_prom_port: "9191"
+      SENTRY_DSN: "${SENTRY_DSN_WORKER:-}"
       WORKER_QUEUES: "coach analysis-paid"
     volumes:
       - worker_models:/data/models
@@ -126,6 +133,37 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+
+  # ── Story 10.3 — observability pair. Prometheus publishes NOTHING;
+  # grafana binds 127.0.0.1 only (operator reaches it via SSH tunnel:
+  # `ssh -L 3000:localhost:3000 <vps>` — no public surface pre-10.5).
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=30d"]
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: "admin"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:?}"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GRAFANA_PG_PASSWORD: "${GRAFANA_PG_PASSWORD:?}"  # read-only role (runbook SQL)
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      prometheus: { condition: service_started }
 
   postgres:
     image: postgres:16-alpine
@@ -164,3 +202,5 @@ volumes:
   redis_data:
   worker_models:
   bff_data:
+  prometheus_data:
+  grafana_data:

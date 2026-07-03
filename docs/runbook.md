@@ -62,6 +62,51 @@ migration means merge == deploy == applied.
       failed deletes (future).
 - [ ] `backups/` prefix: 30-day expiry (10.2 wires the nightly pg_dump).
 
+## Observability (story 10.3 / AR32 / NFR30)
+
+- **Sentry** (all optional, DSN-gated): create 3 projects → set
+  `SENTRY_DSN_BFF`, `SENTRY_DSN_WORKER` in `.env`; `VITE_SENTRY_DSN` as a
+  CI repo secret (baked into the web bundle at build). Every event carries
+  `correlation_id` = the analysis job id (coach events also carry
+  `analysis_id`); search that tag to trace upload → job → actors → LLM
+  calls → report render.
+- **Prometheus** (internal-only): scrapes BFF `:5000/metrics`
+  (prometheus-net HTTP metrics + `spectr_queue_depth{queue}` for all four
+  dramatiq lanes) and both workers `:9191` (dramatiq middleware +
+  `spectr_job_duration_seconds`, `spectr_llm_cost_usd_total`,
+  `spectr_verdict_validation_rejects_total`). 30 d retention.
+- **Grafana**: `127.0.0.1:3000` only — reach it with
+  `ssh -L 3000:localhost:3000 <vps>`. Login admin / `GRAFANA_ADMIN_PASSWORD`.
+  The `SPECTR / SPECTR Ops` dashboard is file-provisioned (10 panels:
+  queue depth, job p90, success rate, hourly outcomes, LLM spend vs budget,
+  spend rate, helpful/wrong, validation rejects, MRR proxy, HTTP p95).
+- **Grafana read-only DB role** (run once on the VPS):
+  ```sql
+  CREATE ROLE grafana LOGIN PASSWORD '<GRAFANA_PG_PASSWORD>';
+  GRANT CONNECT ON DATABASE spectr TO grafana;
+  GRANT USAGE ON SCHEMA public TO grafana;
+  GRANT SELECT ON ALL TABLES IN SCHEMA public TO grafana;
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO grafana;
+  ```
+- **PostHog** (EU): project key = CI secret `VITE_POSTHOG_KEY`. Product
+  events: `upload_completed` (attachment flags), `report_viewed`,
+  `coach_message_sent`, `verdict_feedback`. Epic 6 adds the landing/funnel
+  events.
+- **KPI table → source mapping** (PRD Measurable Outcomes):
+
+| KPI row | Source |
+|---|---|
+| Time-to-first-insight | `analysis_jobs` timestamps (+ `report_viewed`) |
+| Free→paid conversion | Stripe + PostHog signup cohorts (Epic 6 funnel) |
+| Same-track re-analysis | SQL: `song_versions` per user |
+| Paid churn | Stripe dashboard |
+| Verdict helpful/wrong | `verdict_user_state.feedback` (Grafana panel 7) |
+| Coach follow-up rate | `coach_message_sent` + `coach_messages` rows |
+| .als attach rate | `upload_completed.als_attached` |
+| LLM cost / analysis | `llm_calls` (Grafana panel 5) |
+| Share-link k-factor | Epic 6 share instrumentation (not yet) |
+| Failed-payment recovery | `subscriptions.next_payment_attempt` + Stripe |
+
 ## Backups & restore proof (story 10.2 / AR31 / NFR15)
 
 Nightly `pg_dump` → R2 `backups/` (30 d retention, script-side prune +

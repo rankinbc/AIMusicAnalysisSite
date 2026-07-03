@@ -185,6 +185,15 @@ def record_llm_call(
     on both the row and the ``GatewayResult``); otherwise one is generated.
     """
     rid = row_id or new_llm_call_id()
+    # Story 10.3 — the prometheus spend counter mirrors the metered row (the
+    # DB stays the money source of truth; the counter feeds live dashboards).
+    try:
+        if cost_usd and cost_usd > 0:
+            from app.obs import LLM_COST  # noqa: PLC0415
+
+            LLM_COST.labels(tier=tier or "unknown", purpose=purpose).inc(float(cost_usd))
+    except Exception:  # pragma: no cover — metrics must never mask the call
+        pass
     try:
         from app.db_sync import SessionFactory  # noqa: PLC0415 — deliberate lazy import
         from aimusic_shared.models import LlmCall
