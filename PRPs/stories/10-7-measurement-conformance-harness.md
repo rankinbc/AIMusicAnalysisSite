@@ -1,6 +1,6 @@
 # Story 10.7: Measurement Conformance Harness
 
-Status: review
+Status: done
 
 ## Story
 
