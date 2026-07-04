@@ -177,6 +177,33 @@ A "https://<domain>/api/admin/audit?target=<uuid>" | jq
   `handle @adminOutside { respond 403 }` — deliberately NOT shipped by
   default (a moving operator IP would lock you out mid-incident).
 
+## Abuse response (story 10.6 / FR47 / J6)
+
+The layers (all fail-open — abuse controls must never take down signup):
+
+| Layer | Mechanism | Knob (feature flag) |
+|---|---|---|
+| Registration burst | 5/min/IP register arm (4.3) | fixed |
+| Disposable-domain registration | second, tighter per-IP arm | `disposable_register_per_hour_ip` (2) |
+| Disposable free account | reduced analysis cap at dispatch | `disposable_free_analyses` (1) |
+| Cross-account scripting | per-IP dispatch ceiling, free tier only | `dispatch_per_ip_hourly` (10) |
+| Per-account cap | `free_analyses_per_month` (3) | existing |
+| Second-analysis verify gate | 403 until email verified (4.3) | fixed |
+| Operator ban | 10.5 admin surface (sessions die ≤60 s) | — |
+
+**Mid-incident play** (all via the 10.5 admin flags API, audited, no deploy):
+1. New disposable domain? Append it:
+   `PUT /api/admin/flags/disposable_extra_domains {"value":"newdomain.tld,other.tld","reason":"J6 incident"}`
+   (comma-separated; effective ≤60 s).
+2. Tighten the ceilings: `dispatch_per_ip_hourly` → 3, `disposable_free_analyses` → 0-equivalent
+   (set `disposable_register_per_hour_ip` to 1 — 0 is treated as unset by the numeric reader).
+3. Ban the accounts (see Admin surface above) — sessions die ≤60 s.
+4. Watch containment on the Grafana queue-depth + failure panels.
+
+Paid tiers are exempt from the per-IP dispatch ceiling (they pay per unit;
+a paying "abuser" is a customer). VPN/NAT users share the 10/h dispatch
+budget — raise the flag if support tickets say a studio LAN is hitting it.
+
 ## Alerting & status (story 10.4 / FR49 / NFR16)
 
 **Phone pushes**: install the ntfy app, subscribe to a PRIVATE topic

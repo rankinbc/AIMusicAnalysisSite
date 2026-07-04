@@ -86,6 +86,24 @@ public static class AuthEndpoints
     }
 
     // POST /api/auth/register
+    // Story 10.6 — numeric abuse knobs read through the 60 s flag cache;
+    // fail-safe to the fallback (a flag outage must not block registration).
+    private static async Task<int> ReadNumericFlagAsync(
+        HttpContext ctx, string name, int fallback, CancellationToken ct)
+    {
+        try
+        {
+            var flags = await ctx.RequestServices.GetRequiredService<EntitlementService>()
+                .GetFlagsAsync(ct);
+            return flags.TryGetValue(name, out var v) && int.TryParse(v, out var n) && n > 0
+                ? n : fallback;
+        }
+        catch
+        {
+            return fallback;
+        }
+    }
+
     private static async Task<IResult> Register(
         RegisterRequest req,
         AppDbContext db,
@@ -109,6 +127,18 @@ public static class AuthEndpoints
         if (string.IsNullOrWhiteSpace(req.Email) || !req.Email.Contains('@'))
             return Results.ValidationProblem(new Dictionary<string, string[]>
                 { ["email"] = ["Valid email required."] });
+
+        // Story 10.6 (FR47) — disposable domains get a SECOND, much tighter
+        // per-IP arm. Throttled, never blocked: a false positive still
+        // registers, just not fifty times an hour.
+        var disposables = httpCtx.RequestServices.GetRequiredService<DisposableEmailService>();
+        if (await disposables.IsDisposableAsync(req.Email, ct))
+        {
+            var perHour = await ReadNumericFlagAsync(httpCtx, "disposable_register_per_hour_ip", 2, ct);
+            if (await RateLimitAsync(limiter, httpCtx, "auth_register_disposable",
+                    $"ip:{ClientIp(httpCtx)}", perHour, TimeSpan.FromHours(1), ct) is { } deniedDisposable)
+                return deniedDisposable;
+        }
         if (string.IsNullOrEmpty(req.Password) || req.Password.Length < 8)
             return Results.ValidationProblem(new Dictionary<string, string[]>
                 { ["password"] = ["At least 8 characters required."] });

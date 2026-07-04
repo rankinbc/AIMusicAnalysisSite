@@ -112,6 +112,7 @@ public static class VersionEndpoints
         IJobQueue queue,
         EntitlementService ents,
         CreditLedgerService credits,
+        HttpContext httpCtx,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -123,7 +124,7 @@ public static class VersionEndpoints
         ).FirstOrDefaultAsync(ct);
         if (version is null) return Results.NotFound();
 
-        var (jobId, err) = await DispatchAnalysisAsync(userId, versionId, referenceId, db, ents, credits, queue, ct);
+        var (jobId, err) = await DispatchAnalysisAsync(userId, versionId, referenceId, db, ents, credits, queue, httpCtx, ct);
         if (err is not null) return err;
         return Results.Accepted(value: new ReanalyzeResponse(jobId));
     }
@@ -293,6 +294,7 @@ public static class VersionEndpoints
         IJobQueue queue,
         EntitlementService ents,
         CreditLedgerService credits,
+        HttpContext httpCtx,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -326,7 +328,7 @@ public static class VersionEndpoints
 
         if (shouldAnalyze)
         {
-            var (_, err) = await DispatchAnalysisAsync(userId, versionId, null, db, ents, credits, queue, ct, preallocatedJobId: jobId);
+            var (_, err) = await DispatchAnalysisAsync(userId, versionId, null, db, ents, credits, queue, httpCtx, ct, preallocatedJobId: jobId);
             if (err is not null) return err;
             return Results.Ok(new UploadResponse(songGuid, versionId, jobId));
         }
@@ -519,6 +521,7 @@ public static class VersionEndpoints
         IJobQueue queue,
         EntitlementService ents,
         CreditLedgerService credits,
+        HttpContext httpCtx,
         CancellationToken ct)
     {
         if (!request.HasFormContentType)
@@ -571,7 +574,7 @@ public static class VersionEndpoints
         version.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
 
-        var (jobId, err) = await DispatchAnalysisAsync(userId, versionId, null, db, ents, credits, queue, ct);
+        var (jobId, err) = await DispatchAnalysisAsync(userId, versionId, null, db, ents, credits, queue, httpCtx, ct);
         if (err is not null) return err;
         return Results.Ok(new StemUploadResponse(versionId, stemPaths, jobId));
     }
@@ -595,6 +598,7 @@ public static class VersionEndpoints
         IJobQueue queue,
         EntitlementService ents,
         CreditLedgerService credits,
+        HttpContext httpCtx,
         CancellationToken ct)
     {
         if (file is null || file.Length == 0)
@@ -653,7 +657,7 @@ public static class VersionEndpoints
 
         if (shouldAnalyze)
         {
-            var (jobId, err) = await DispatchAnalysisAsync(userId, versionId, null, db, ents, credits, queue, ct);
+            var (jobId, err) = await DispatchAnalysisAsync(userId, versionId, null, db, ents, credits, queue, httpCtx, ct);
             if (err is not null) return err;
             return Results.Ok(new AlsUploadResponse(versionId, key, jobId));
         }
@@ -835,7 +839,7 @@ public static class VersionEndpoints
     private static async Task<IResult> RegisterAlsKey(
         Guid versionId, RegisterAlsKeyRequest body, ClaimsPrincipal currentUser,
         AppDbContext db, IMultipartObjectStore store, IJobQueue queue,
-        EntitlementService ents, CreditLedgerService credits, CancellationToken ct)
+        EntitlementService ents, CreditLedgerService credits, HttpContext httpCtx, CancellationToken ct)
     {
         if (!store.IsConfigured)
             return ErrorEnvelope.Build(501, "presigned_unavailable",
@@ -887,7 +891,7 @@ public static class VersionEndpoints
 
         if (shouldAnalyze)
         {
-            var (dispatchedJobId, err) = await DispatchAnalysisAsync(userId, versionId, null, db, ents, credits, queue, ct);
+            var (dispatchedJobId, err) = await DispatchAnalysisAsync(userId, versionId, null, db, ents, credits, queue, httpCtx, ct);
             if (err is not null) return err;
             return Results.Ok(new AlsUploadResponse(versionId, body.Key, dispatchedJobId));
         }
@@ -922,7 +926,8 @@ public static class VersionEndpoints
     // POST /api/versions/{id}/stems/confirm — persist confirmed roles + groups, dispatch re-analysis.
     private static async Task<IResult> ConfirmStems(
         Guid versionId, ConfirmStemsRequest body, ClaimsPrincipal currentUser,
-        AppDbContext db, IJobQueue queue, EntitlementService ents, CreditLedgerService credits, CancellationToken ct)
+        AppDbContext db, IJobQueue queue, EntitlementService ents, CreditLedgerService credits,
+        HttpContext httpCtx, CancellationToken ct)
     {
         if (body?.Stems is null || body.Stems.Count == 0)
             return Results.BadRequest(new { error = "At least one stem confirmation required." });
@@ -962,7 +967,7 @@ public static class VersionEndpoints
         version.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
 
-        var (jobId, err) = await DispatchAnalysisAsync(userId, versionId, body.ReferenceId, db, ents, credits, queue, ct);
+        var (jobId, err) = await DispatchAnalysisAsync(userId, versionId, body.ReferenceId, db, ents, credits, queue, httpCtx, ct);
         if (err is not null) return err;
         return Results.Ok(new ConfirmStemsResponse(versionId, jobId));
     }
@@ -1057,6 +1062,7 @@ public static class VersionEndpoints
         EntitlementService ents,
         CreditLedgerService credits,
         IJobQueue queue,
+        HttpContext httpCtx,
         CancellationToken ct,
         Guid? preallocatedJobId = null)
     {
@@ -1086,6 +1092,59 @@ public static class VersionEndpoints
         if (ent.AnalysesRemaining == 0)
             return (Guid.Empty, ErrorEnvelope.Build(409, "entitlement_exhausted",
                 "You have used all your analyses for this billing period."));
+
+        // Story 10.6 (FR47) — the CROSS-ACCOUNT layers. Per-account caps are
+        // useless against N disposable accounts; these arms see through them.
+        // Paid tiers exempt (they pay per unit). Both checks fail-open.
+        if (ent.Tier is not ("pro" or "credits"))
+        {
+            var cfg106 = httpCtx.RequestServices.GetRequiredService<IConfiguration>();
+            var limitsOn = !string.Equals(cfg106["RateLimits:Enabled"], "false", StringComparison.OrdinalIgnoreCase);
+
+            // (a) Disposable-domain accounts get a REDUCED cap (default 1) —
+            // the throttle answer to "50 analyses through disposable emails".
+            try
+            {
+                var disposables = httpCtx.RequestServices.GetRequiredService<DisposableEmailService>();
+                var emailAddr = await db.Users.AsNoTracking()
+                    .Where(u => u.Id == userId).Select(u => u.Email).FirstOrDefaultAsync(ct);
+                if (emailAddr is not null && await disposables.IsDisposableAsync(emailAddr, ct))
+                {
+                    var flags = await ents.GetFlagsAsync(ct);
+                    var dispCap = flags.TryGetValue("disposable_free_analyses", out var dv)
+                        && int.TryParse(dv, out var dn) && dn > 0 ? dn : 1;
+                    var period = DateTimeOffset.UtcNow.ToString("yyyy-MM");
+                    var used = await db.UsageEvents.AsNoTracking()
+                        .CountAsync(e => e.UserId == userId
+                            && e.EventType == "analysis" && e.BillingPeriod == period, ct);
+                    if (used >= dispCap)
+                        return (Guid.Empty, ErrorEnvelope.Build(409, "entitlement_exhausted",
+                            "You have used all your analyses for this billing period."));
+                }
+            }
+            catch (Exception) { /* fail-open — throttling layer only */ }
+
+            // (b) Per-IP dispatch ceiling: N accounts on one machine share one
+            // budget (default 10/h — generous for humans/NAT, fatal for scripts).
+            if (limitsOn)
+            {
+                try
+                {
+                    var limiter = httpCtx.RequestServices.GetRequiredService<IRateLimiter>();
+                    var flags = await ents.GetFlagsAsync(ct);
+                    var perIp = flags.TryGetValue("dispatch_per_ip_hourly", out var pv)
+                        && int.TryParse(pv, out var pn) && pn > 0 ? pn : 10;
+                    var ip = httpCtx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+                    var verdict = await limiter.CheckAsync(
+                        $"user:{userId}", ip, "analysis_dispatch", perIp, TimeSpan.FromHours(1), ct);
+                    if (!verdict.Allowed)
+                        return (Guid.Empty, ErrorEnvelope.Build(429, "rate_limited",
+                            "Too many analyses from this network — slow down or upgrade."));
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception) { /* fail-open (Redis blip) */ }
+            }
+        }
 
         // Story 4.5 (AC5/AR26) — the SECOND-analysis verify gate: a free-tier
         // user with an unverified email gets exactly one analysis; the next
