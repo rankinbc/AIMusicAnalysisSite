@@ -247,6 +247,7 @@ builder.Services.AddSingleton<CoachChatService>();
 builder.Services.AddSingleton<IStripeCheckoutClient, StripeCheckoutClient>();
 builder.Services.AddSingleton<IStripeSubscriptionClient, StripeSubscriptionClient>();
 builder.Services.AddSingleton<IStripeRefundClient, StripeRefundClient>(); // 10.5 admin refunds
+builder.Services.AddSingleton<DisposableEmailService>(); // 10.6 abuse containment
 builder.Services.AddScoped<SubscriptionMirrorService>();
 
 // Story 2.3 — append-only credit ledger. The ONLY writer to credit_ledger

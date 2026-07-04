@@ -141,6 +141,7 @@ public static class UploadEndpoints
         IJobQueue queue,
         EntitlementService ents,
         CreditLedgerService credits,
+        HttpContext httpCtx,
         CancellationToken ct)
     {
         if (!store.IsConfigured)
@@ -178,7 +179,7 @@ public static class UploadEndpoints
         if (shouldAnalyze)
         {
             var (jobId, err) = await VersionEndpoints.DispatchAnalysisAsync(
-                userId, versionId, null, db, ents, credits, queue, ct, preallocatedJobId: body.JobId);
+                userId, versionId, null, db, ents, credits, queue, httpCtx, ct, preallocatedJobId: body.JobId);
             if (err is not null) return err;
             return Results.Ok(new CompleteResponse(songGuid, versionId, jobId));
         }
