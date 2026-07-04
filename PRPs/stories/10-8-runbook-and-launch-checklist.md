@@ -1,6 +1,6 @@
 # Story 10.8: Runbook & Launch Checklist
 
-Status: review
+Status: done
 
 ## Story
 
