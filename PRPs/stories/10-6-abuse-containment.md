@@ -1,6 +1,6 @@
 # Story 10.6: Abuse Containment
 
-Status: review
+Status: done
 
 ## Story
 
