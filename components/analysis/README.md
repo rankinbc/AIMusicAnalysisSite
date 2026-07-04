@@ -99,3 +99,32 @@ Idempotent — already-cached tracks (cache file newer than source) are
 skipped. Without the cache, phase 5 still works but falls back to
 full-mix comparison when the user provides stems against a curated
 reference. User-uploaded reference stems bypass the cache entirely.
+
+## Measurement conformance (story 10.7 — BS.1770-4 / EBU Tech 3341)
+
+The two authoritative meters live in `phases/phase1_universal.py`
+(`integrated_lufs`, `true_peak_dbtp`) and are asserted against
+synthesized EBU Tech 3341 vectors in `tests/conformance/` on every CI
+run — a measurement regression fails the build and blocks deploy.
+
+Conformant (asserted):
+
+- Integrated LUFS: 1 kHz tone cases (-23 / -33 dBFS) within +/-0.1 LU;
+  the relative-gate case (-36/-23/-36 dBFS segments) within +/-0.1 LU;
+  digital silence returns the -70.0 floor sentinel.
+- True peak (dBTP, 4x polyphase oversampling, max across channels per
+  BS.1770-4): fs/4 inter-sample-peak case and full-scale 997 Hz case
+  within the EBU acceptance window (-0.4 / +0.2 dB). The per-channel max
+  is load-bearing: dBTP was measured on the mono downmix before 10.7,
+  which under-reads stereo content (out-of-phase material nulls).
+
+Documented limits (not asserted as conformance):
+
+- Above ~0.4*fs the 4x resampler's transition-band ripple OVER-reads
+  (measured: 0.45*fs @ -6 dBFS reads about -4.5 dBTP, +1.5 dB high).
+  Over-reading is the conservative direction for streaming-readiness
+  warnings, and real programme material has negligible energy there.
+  A pinned test keeps this behavior from silently degrading.
+- Momentary / short-term / LRA are structurally tested (window sizes,
+  series shapes) but not conformance-asserted. If marketing ever quotes
+  LRA as authoritative, add Tech 3342 vectors first.
