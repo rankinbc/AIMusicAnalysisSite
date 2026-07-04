@@ -1054,6 +1054,19 @@ public static class VersionEndpoints
     //
     // preallocatedJobId: pass when the caller already used the jobId in a
     // storage key (e.g. UploadVersion: "audio/upload/{jobId}/...").
+    // 10.6 review: IPv6 → /64 prefix (one rotation per request would
+    // otherwise walk past any per-IP arm); IPv4 verbatim; null → null.
+    internal static string? NormalizeIpForLimiting(System.Net.IPAddress? addr)
+    {
+        if (addr is null) return null;
+        if (addr.AddressFamily != System.Net.Sockets.AddressFamily.InterNetworkV6)
+            return addr.ToString();
+        if (addr.IsIPv4MappedToIPv6) return addr.MapToIPv4().ToString();
+        var bytes = addr.GetAddressBytes();
+        for (var i = 8; i < 16; i++) bytes[i] = 0;
+        return new System.Net.IPAddress(bytes) + "/64";
+    }
+
     internal static async Task<(Guid JobId, IResult? Error)> DispatchAnalysisAsync(
         Guid userId,
         Guid versionId,
@@ -1114,14 +1127,21 @@ public static class VersionEndpoints
                     var dispCap = flags.TryGetValue("disposable_free_analyses", out var dv)
                         && int.TryParse(dv, out var dn) && dn > 0 ? dn : 1;
                     var period = DateTimeOffset.UtcNow.ToString("yyyy-MM");
+                    // SAME exclusion as EntitlementService (AR16): an
+                    // invalid_file failure must not consume the disposable
+                    // cap either — a false positive still gets their one
+                    // analysis even after a broken upload.
                     var used = await db.UsageEvents.AsNoTracking()
                         .CountAsync(e => e.UserId == userId
-                            && e.EventType == "analysis" && e.BillingPeriod == period, ct);
+                            && e.EventType == "analysis" && e.BillingPeriod == period
+                            && !db.AnalysisJobs.Any(j =>
+                                j.ErrorCode == "invalid_file" && j.Id.ToString() == e.Reference), ct);
                     if (used >= dispCap)
                         return (Guid.Empty, ErrorEnvelope.Build(409, "entitlement_exhausted",
                             "You have used all your analyses for this billing period."));
                 }
             }
+            catch (OperationCanceledException) { throw; }
             catch (Exception) { /* fail-open — throttling layer only */ }
 
             // (b) Per-IP dispatch ceiling: N accounts on one machine share one
@@ -1130,16 +1150,23 @@ public static class VersionEndpoints
             {
                 try
                 {
-                    var limiter = httpCtx.RequestServices.GetRequiredService<IRateLimiter>();
-                    var flags = await ents.GetFlagsAsync(ct);
-                    var perIp = flags.TryGetValue("dispatch_per_ip_hourly", out var pv)
-                        && int.TryParse(pv, out var pn) && pn > 0 ? pn : 10;
-                    var ip = httpCtx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-                    var verdict = await limiter.CheckAsync(
-                        $"user:{userId}", ip, "analysis_dispatch", perIp, TimeSpan.FromHours(1), ct);
-                    if (!verdict.Allowed)
-                        return (Guid.Empty, ErrorEnvelope.Build(429, "rate_limited",
-                            "Too many analyses from this network — slow down or upgrade."));
+                    // IPv6 buckets to /64 (a residential /64 is one "machine"
+                    // for abuse purposes — per-address keying would hand the
+                    // abuser 2^64 fresh identities). Null IP = fail-open,
+                    // never a shared "unknown" bucket (fail-closed trap).
+                    var ip = NormalizeIpForLimiting(httpCtx.Connection.RemoteIpAddress);
+                    if (ip is not null)
+                    {
+                        var limiter = httpCtx.RequestServices.GetRequiredService<IRateLimiter>();
+                        var flags = await ents.GetFlagsAsync(ct);
+                        var perIp = flags.TryGetValue("dispatch_per_ip_hourly", out var pv)
+                            && int.TryParse(pv, out var pn) && pn > 0 ? pn : 10;
+                        var verdict = await limiter.CheckAsync(
+                            $"user:{userId}", ip, "analysis_dispatch", perIp, TimeSpan.FromHours(1), ct);
+                        if (!verdict.Allowed)
+                            return (Guid.Empty, ErrorEnvelope.Build(429, "rate_limited",
+                                "Too many analyses from this network — slow down or upgrade."));
+                    }
                 }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception) { /* fail-open (Redis blip) */ }

@@ -21,7 +21,7 @@ So that a scripted free-tier abuser is contained before I wake up (Journey 6).
    (b) **Cross-account per-IP dispatch throttle**: free-tier dispatches gain a per-IP limiter arm (`analysis_dispatch`, flag `dispatch_per_ip_hourly` default 10/h — generous for humans/NAT, fatal for 50-analysis scripts). Paid tiers exempt (they pay per unit). Fail-open like every limiter.
 2. **`DispatchAnalysisAsync` grows an `HttpContext` parameter** (7 call sites) — the chokepoint stays single; abuse checks CANNOT be bypassed via an unwired dispatch path. Services (limiter, disposable list, flags) resolve from RequestServices.
 3. **AC2 is already satisfied by 10.5** (ban revokes sessions ≤60 s, blocks login/refresh 403, audits) — this story only VERIFIES it inside the J6 test.
-4. **AC3 test = `AbuseContainmentTests`** (RateLimits enabled per-factory, the AuthFlowTests precedent): scripted registration burst → 429 at 6; disposable-domain registration hits the tighter arm; N accounts same-IP free dispatches contained at the per-IP ceiling; banned account's token dead + login 403 (the 10.5 verify). Epic 4's anon device limits (1-active-per-device) remain 6.3's dispatch vertical — the J6 test covers the ACCOUNT layers + documents that boundary honestly.
+4. **AC3 test = `AbuseContainmentTests`** (RateLimits enabled per-factory, the AuthFlowTests precedent): scripted registration burst → 429; disposable-domain registration hits the tighter arm; N accounts same-IP free dispatches contained at the per-IP ceiling. AC2 (ban) is verified by 10.5's `Ban_Blocks_Login_Kills_Tokens_And_Audits_Unban_Restores` — not re-duplicated here (review-corrected: the original text promised an in-J6 ban step; the coverage lives where the machinery does). Epic 4's anon device limits (1-active-per-device) remain 6.3's dispatch vertical — the J6 test covers the ACCOUNT layers + documents that boundary honestly.
 5. **All knobs are feature flags** (numeric-suffix families → the 10.5 typed-flag guard validates them): `disposable_register_per_hour_ip`, `disposable_free_analyses`, `dispatch_per_ip_hourly`. Operator tunes mid-incident with an audit trail, no deploy.
 6. **Out of scope**: MX/SMTP verification (cost/latency, verify-gate already exists), CAPTCHA (UX cliff pre-launch), device-fingerprint correlation (6.3's vertical), `charge.refunded` mirroring (still noted).
 
@@ -70,6 +70,20 @@ claude-fable-5 (Claude Code)
 - Tests: `AbuseContainmentTests.cs` (new, 5)
 - Docs: `docs/runbook.md` (Abuse response)
 
+### Senior Developer Review (AI)
+
+2026-07-03 — bmad-code-review (combined adversarial pass; the reviewer ran the full 339-test suite against live infra and hunted bypasses: email-change escape, case games, proxy integrity, limiter mechanics all came back clean). Outcome: **Approve with changes → applied** (8 patches):
+
+- [x] [Med] **The story's typed-flag-guard claim was FALSE**: none of the 3 new numeric knobs matched the 10.5 guard families — a mid-incident `"three"` would be accepted and silently fall back while the operator believed they'd tightened → `*_per_hour_ip`/`*_hourly`/`*_free_analyses` families added to the guard
+- [x] [Med] **Disposable cap counted refunded failures**: the "same usage query" claim was false — a disposable user whose one analysis died on invalid_file was month-locked while the normal cap refunded them → AR16 exclusion now applied identically
+- [x] [Med] **IPv6 rotation defeated the per-IP arms** (a residential /64 = 2^64 fresh identities) → `NormalizeIpForLimiting` buckets v6 to /64 (v4-mapped unwrapped); null IP now FAIL-OPENS instead of pooling into a shared fail-closed "unknown" bucket
+- [x] [Med] Story-text honesty: the promised in-J6 ban step was silently dropped → decision 4 corrected (AC2 coverage lives in 10.5's lifecycle test, where the machinery is)
+- [x] [Low] `rerun_phase`/reference-analyzer bypass documented as a KNOWN GAP in the runbook layer table (free user can loop re-runs onto the paid queue — 10.7/10.8 follow-up); exact-match subdomain evasion warned in the incident play; the garbled "0-equivalent" step rewritten (the zero mechanism is the ban); OperationCanceledException rethrow in arm (a)
+- Test infra: TestServer's null RemoteIpAddress (correctly fail-opened by the patched arm) required a FakeIpStartupFilter stamping a client IP — the per-IP layer now genuinely engages in the J6 test.
+- Accepted/noted: attempt-metering on the disposable register arm (attempts ARE the abuse signal), TOCTOU on the cap count (mirrors the pre-existing normal-cap pattern; the atomic limiter arm compensates), duplicated flag-parse idiom.
+- Verified-clean: no email-change escape path exists; detection case-consistent at register and dispatch; ForwardedHeaders ordering makes the prod IP real; all 7 dispatch sites threaded with no eighth enqueue path.
+
 ### Change Log
 
 - 2026-07-03: implemented on `ops/10-6-abuse`. Gates: BFF 339/339. Status → review.
+- 2026-07-03 (review): 8 patches (guard families, AR16 parity, IPv6 /64, honesty corrections). BFF 339/339 re-verified.

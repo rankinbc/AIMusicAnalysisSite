@@ -243,7 +243,8 @@ public static partial class AdminEndpoints
         // the 10.4 budget alert rule (::float cast) and silently drop the
         // worker to its env fallback (review).
         if ((name.StartsWith("llm_budget_") || name.EndsWith("_per_month") || name.EndsWith("_depth_free")
-                || name.EndsWith("_followups") || name.EndsWith("_monthly"))
+                || name.EndsWith("_followups") || name.EndsWith("_monthly")
+                || name.EndsWith("_per_hour_ip") || name.EndsWith("_hourly") || name.EndsWith("_free_analyses"))
             && !decimal.TryParse(req.Value, System.Globalization.CultureInfo.InvariantCulture, out _))
             return ErrorEnvelope.Build(400, "invalid_flag_value",
                 $"'{name}' is a numeric flag — '{req.Value}' doesn't parse.");

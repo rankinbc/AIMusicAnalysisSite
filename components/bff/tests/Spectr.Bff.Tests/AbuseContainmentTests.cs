@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,6 +18,20 @@ public sealed class AbuseContainmentTests(WebApplicationFactory<Program> factory
     : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
+
+    private sealed class FakeIpStartupFilter : Microsoft.AspNetCore.Hosting.IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) =>
+            app =>
+            {
+                app.Use(async (ctx, nxt) =>
+                {
+                    ctx.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("203.0.113.7");
+                    await nxt();
+                });
+                next(app);
+            };
+    }
 
     private static bool RedisUp(WebApplicationFactory<Program> f)
     {
@@ -155,8 +170,15 @@ public sealed class AbuseContainmentTests(WebApplicationFactory<Program> factory
         if (!RedisUp(_factory)) { return; }
 
         // Ceiling of 2/h for the test; RateLimits ON only for this factory.
+        // TestServer has a NULL RemoteIpAddress (which the dispatch arm
+        // correctly fail-opens on) — stamp a fake client IP so the per-IP
+        // layer actually engages.
         using var f = _factory.WithWebHostBuilder(b =>
-            b.UseSetting("RateLimits:Enabled", "true"));
+        {
+            b.UseSetting("RateLimits:Enabled", "true");
+            b.ConfigureServices(s =>
+                s.AddSingleton<Microsoft.AspNetCore.Hosting.IStartupFilter>(new FakeIpStartupFilter()));
+        });
 
         // The dispatch arm's window is ONE HOUR — leftover entries from a
         // prior test run (same IP, same action) would 429 dispatch #1.
