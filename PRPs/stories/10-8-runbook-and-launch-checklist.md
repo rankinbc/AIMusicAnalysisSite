@@ -62,6 +62,19 @@ claude-fable-5 (Claude Code)
 - BFF: `Program.cs` (UseExceptionHandler + dev detonator), `tests/ErrorEnvelopeLeakTests.cs` (new, 1)
 - Docs: `docs/runbook.md` (4 sections), `docs/launch-checklist.md` (new)
 
+### Senior Developer Review (AI)
+
+2026-07-03 — bmad-code-review (combined adversarial pass; the reviewer investigated BOTH feared criticals to ground truth: read sentry-dotnet 5.0.1 source proving `UseExceptionHandler`-swallowed exceptions STILL reach Sentry via `IExceptionHandlerFeature` — 10.3's reporting did not go dark; and RAN the CI-pinned gitleaks 8.24.3 over all 533 commits proving the detonator's fake `hunter2` doesn't trip). Outcome: **Approve with fixes → applied** (8 patches):
+
+- [x] [High] **Runbook told the operator credits refund on `worker_unavailable` — they deliberately DON'T** (StaleJobReaper chose that code precisely to avoid the reversal path) → corrected + manual admin-refund pointer added (a 3 a.m. doc that lies is worse than none)
+- [x] [Med] Reconciliation sweep documented as "trues + force-able" — it's DETECT-ONLY with no trigger → corrected (resend/manual-align are the real recoveries)
+- [x] [Med] The `:9191` checklist command couldn't run from the VPS shell (compose-internal DNS, unpublished port) → exec-into-container command
+- [x] [Med] **The CI copy of the NFR9 proof was vacuous**: the leak test gated on `TestDb.Reachable` but CI's bff job has no DB service — silently passing without hitting the detonator → gate removed (the test needs nothing); CI-green is now a real signal
+- [x] [Low] Handler now emits the EXACT `ErrorEnvelope.Build` shape (`{error:{code,message,details}}`, traceId in details — the story claimed "shared envelope" while hand-rolling a third shape); `StatusCodeSelector` keeps `BadHttpRequestException` client-error semantics (aborted/oversized uploads were becoming 500s); checklist 404/400 item reworded (framework shapes aren't enveloped — the executor would have failed a healthy system); XQ 7-day TTL annotated as dramatiq's DEFAULT
+- Verified-clean: Sentry capture path (source-verified), gitleaks (executed), correlation LogContext disposal, `/openapi`+`/metrics` unreachable via the edge (caddy catch-all serves the SPA), dunning test card + test-clock approach, discordbot in the bot regex, webhook dedupe conditional, redis AOF, prompt-pin regex/TTL byte-identical.
+- Noted: Sentry-DSNs-blocking-vs-non-blocking judgment call left as non-blocking (envelope hides detail from users; logs still carry full traces via the ExceptionHandlerMiddleware error log).
+
 ### Change Log
 
 - 2026-07-03: implemented on `ops/10-8-launch`. Gates: BFF 340/340. Status → review.
+- 2026-07-03 (review): 8 patches (doc truthfulness + envelope contract + un-vacuous CI proof). BFF 340/340 re-verified.

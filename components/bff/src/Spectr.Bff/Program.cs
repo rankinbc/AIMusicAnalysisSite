@@ -438,20 +438,28 @@ if (string.Equals(app.Configuration["ForwardedHeaders:Enabled"], "true", StringC
 // EVERY environment (registered unconditionally so the test exercises the
 // exact prod path): 500 internal_error, generic message, trace id for
 // support correlation — never a stack frame, never an exception message.
-app.UseExceptionHandler(errApp => errApp.Run(async ctx =>
+app.UseExceptionHandler(new ExceptionHandlerOptions
 {
-    ctx.Response.StatusCode = 500;
-    ctx.Response.ContentType = "application/json";
-    await ctx.Response.WriteAsJsonAsync(new
+    // BadHttpRequestException (aborted/oversized body reads) keeps its
+    // client-error semantics instead of masquerading as our 500 (review L2).
+    StatusCodeSelector = ex => ex is Microsoft.AspNetCore.Http.BadHttpRequestException bad
+        ? bad.StatusCode : 500,
+    ExceptionHandler = async ctx =>
     {
-        error = new
+        ctx.Response.ContentType = "application/json";
+        // The shared envelope shape ({error:{code,message,details}}) — the
+        // exact ErrorEnvelope.Build contract; traceId rides in details.
+        await ctx.Response.WriteAsJsonAsync(new
         {
-            code = "internal_error",
-            message = "Something went wrong on our side. If this persists, contact support with the trace id.",
-            traceId = ctx.TraceIdentifier,
-        },
-    });
-}));
+            error = new
+            {
+                code = "internal_error",
+                message = "Something went wrong on our side. If this persists, contact support with the trace id.",
+                details = new { traceId = ctx.TraceIdentifier },
+            },
+        });
+    },
+});
 
 // OpenAPI doc is mapped unconditionally — orval codegen needs to fetch it from
 // whatever environment is running (dev + CI). Lock down before public exposure.

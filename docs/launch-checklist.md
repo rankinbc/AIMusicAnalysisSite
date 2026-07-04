@@ -15,9 +15,12 @@ unchecked box in "Blocking".
 - [ ] `https://<domain>/healthz` returns `{"status":"ok"}` (TLS + caddy + BFF)
 - [ ] Share crawler split: `curl -A discordbot https://<domain>/r/<token>`
       returns the OG shell; a browser gets the SPA
-- [ ] Worker metrics: `curl worker-paid:9191` (from the VPS) serves dramatiq
-      families AND `spectr_job_duration_seconds` (the 10.3 multiproc fix
-      verified live)
+- [ ] Worker metrics (`worker-paid:9191` is compose-network-internal —
+      exec into the container):
+      `docker compose -f compose.prod.yml exec worker-paid python -c
+      "import urllib.request as u; print(u.urlopen('http://localhost:9191').read().decode()[:2000])"`
+      serves dramatiq families AND `spectr_job_duration_seconds`
+      (the 10.3 multiproc fix verified live)
 - [ ] Grafana (SSH tunnel): SPECTR Ops dashboard renders — all 10 panels
       non-erroring after the grafana RO role SQL
 - [ ] Disk rule samples: `node_filesystem_avail_bytes{mountpoint="/"}`
@@ -79,8 +82,11 @@ Run in TEST mode with test clocks before flipping live keys:
 
 - [ ] `ADMIN_API_KEY` set (≥32 chars, generated, in the password manager);
       `/api/admin/audit` reachable with the key, 401 without
-- [ ] NFR9 leak test green in CI (`ErrorEnvelopeLeakTests`) and a manual
-      prod check: force a 404/400 — envelope only, no stack, no schema
+- [ ] NFR9 leak test green in CI (`ErrorEnvelopeLeakTests` — runs
+      DB-free, so CI-green is a real signal) and a manual prod check:
+      force a 404/400 — no stack traces, no schema internals (framework
+      404s/400s are empty/ProblemDetails-shaped by design; only
+      endpoint-authored errors + unhandled 500s carry the envelope)
 - [ ] gitleaks CI green on the launch commit
 - [ ] R2: two scoped app tokens + the backups-only token; bucket CORS per
       runbook checklist; NO blanket lifecycle rule

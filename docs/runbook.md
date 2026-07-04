@@ -16,10 +16,15 @@ alert.
    worker-paid worker-free` → `./deploy.sh redeploy` restarts the stack.
    Queued jobs SURVIVE (redis AOF; NFR16) and resume on restart.
 3. Single stuck job: the reaper (3.5) auto-fails jobs whose worker
-   heartbeat went stale (`error_code=worker_unavailable`, credits
-   refunded) — give it its interval before intervening.
+   heartbeat went stale (`error_code=worker_unavailable`). Credits are
+   NOT auto-refunded on this code (deliberate — only `invalid_file`
+   reverses); if a credits-tier user lost a spend to an outage, refund
+   manually: `POST /api/admin/refunds {"userId":…,"credits":1,"reason":…}`.
+   Give the reaper its interval before intervening.
 4. Dead letters: `docker compose exec redis redis-cli KEYS 'dramatiq:*.XQ'`
-   then `LRANGE <key> 0 5` — messages land here after max_retries.
+   then `LRANGE <key> 0 5` — messages land here after max_retries
+   (7-day TTL is dramatiq's DEFAULT, not configured — re-verify on
+   dramatiq upgrades).
    Re-run via the product (re-analyze) rather than raw requeue: dispatch
    re-checks entitlements/abuse arms.
 5. Still wedged: per-phase re-run buttons (AnalysisTab) re-run a single
@@ -43,9 +48,11 @@ errored in 30 m.
    automatically on 5xx — a 503 from an unconfigured secret self-heals
    once the secret lands.
 4. Backlog cleared but state drifted (missed period)? The billing
-   reconciliation sweep trues `subscriptions` against Stripe; force one
-   via its schedule or verify `subscriptions.status` manually against the
-   dashboard.
+   reconciliation sweep is DETECT-ONLY (logs `ReconciliationDrift`
+   warnings; it never writes, and it re-runs on BFF restart — there is
+   no force trigger). Correction = resend the missed webhook from the
+   Stripe dashboard, or align `subscriptions` manually against the
+   dashboard as a last resort.
 
 ## LLM budget breach (story 10.8 / FR16)
 
