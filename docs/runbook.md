@@ -2,6 +2,77 @@
 
 Operational checklists the architecture references (architecture.md "Repo
 additions"). Sections land with the story that creates the concern.
+Launch gates live in `docs/launch-checklist.md` (story 10.8).
+
+## Stuck job (story 10.8 / NFR31)
+
+Symptoms: job pinned at `processing`, user report, or the failure-spike
+alert.
+
+1. Triage: `GET /api/health/worker` — heartbeat age + queue depth.
+   Heartbeat stale = the worker POOL is down; depth climbing with a fresh
+   heartbeat = jobs are slow, not stuck.
+2. Worker down? `docker compose -f compose.prod.yml logs --tail 100
+   worker-paid worker-free` → `./deploy.sh redeploy` restarts the stack.
+   Queued jobs SURVIVE (redis AOF; NFR16) and resume on restart.
+3. Single stuck job: the reaper (3.5) auto-fails jobs whose worker
+   heartbeat went stale (`error_code=worker_unavailable`, credits
+   refunded) — give it its interval before intervening.
+4. Dead letters: `docker compose exec redis redis-cli KEYS 'dramatiq:*.XQ'`
+   then `LRANGE <key> 0 5` — messages land here after max_retries.
+   Re-run via the product (re-analyze) rather than raw requeue: dispatch
+   re-checks entitlements/abuse arms.
+5. Still wedged: per-phase re-run buttons (AnalysisTab) re-run a single
+   phase in place; `POST /api/versions/{id}/analyze` re-runs the pipeline.
+
+## Webhook backlog (story 10.8)
+
+The `spectr-webhook-failures` alert (10.4) fires on rows stuck >15 m or
+errored in 30 m.
+
+1. Inspect: `SELECT id, event_type, received_at, processing_error FROM
+   webhook_events WHERE processed_at IS NULL OR processing_error IS NOT
+   NULL ORDER BY received_at DESC LIMIT 20;`
+2. `processing_error` set → the handler threw: check BFF logs for the
+   event id, fix the cause. The dedupe skip is conditional on
+   `processed_at IS NOT NULL`, so a **Stripe dashboard → resend** of the
+   same event RE-PROCESSES it (this is the designed recovery path).
+3. `processed_at IS NULL` with no error → the event never finished
+   dispatch (crash mid-handler): resend from the Stripe dashboard
+   (Developers → Events → Resend). Resend/svix (email webhooks) retry
+   automatically on 5xx — a 503 from an unconfigured secret self-heals
+   once the secret lands.
+4. Backlog cleared but state drifted (missed period)? The billing
+   reconciliation sweep trues `subscriptions` against Stripe; force one
+   via its schedule or verify `subscriptions.status` manually against the
+   dashboard.
+
+## LLM budget breach (story 10.8 / FR16)
+
+The `spectr-llm-budget-80` alert fires at 80% of
+`feature_flags.llm_budget_global_usd`.
+
+1. Where is it going? `SELECT tier, purpose, count(*),
+   round(sum(cost_usd), 2) AS usd FROM llm_calls WHERE created_at >=
+   date_trunc('month', now() AT TIME ZONE 'utc') GROUP BY 1, 2 ORDER BY
+   4 DESC;`
+2. Legitimate growth → raise the ceiling (audited, no deploy):
+   `PUT /api/admin/flags/llm_budget_global_usd {"value":"400","reason":"…"}`.
+3. Abuse-shaped (one tier, coach-heavy) → the 10.6 play: tighten
+   `dispatch_per_ip_hourly`, check the billing trail, ban.
+4. At 100% (API transport) the gateway HARD-STOPS: analyses complete with
+   rule-engine verdicts + a degradation banner instead of LLM specialists
+   — the product degrades, it doesn't break. Coach returns its offline
+   copy. Nothing to restart; service resumes when the month rolls or the
+   ceiling rises.
+
+## Prompt rollback (story 1.1 mechanism / 10.5 writer)
+
+No deploy, effective ≤60 s (worker pin TTL):
+`PUT /api/admin/prompts/{slug} {"pinnedVersion":"1.2.0","reason":"…"}` —
+serves `prompts/experts/versions/{Name}@{version}.md`. `null` unpins back
+to the live file. Slugs = the specialist catalog; versions must match
+`^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$`. Audited (`prompt_pin`).
 
 ## Production deploy & rollback (story 10.1)
 

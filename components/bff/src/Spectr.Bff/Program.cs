@@ -434,6 +434,25 @@ if (string.Equals(app.Configuration["ForwardedHeaders:Enabled"], "true", StringC
     app.UseForwardedHeaders(fwd);
 }
 
+// Story 10.8 (NFR9) — unhandled exceptions become the shared envelope in
+// EVERY environment (registered unconditionally so the test exercises the
+// exact prod path): 500 internal_error, generic message, trace id for
+// support correlation — never a stack frame, never an exception message.
+app.UseExceptionHandler(errApp => errApp.Run(async ctx =>
+{
+    ctx.Response.StatusCode = 500;
+    ctx.Response.ContentType = "application/json";
+    await ctx.Response.WriteAsJsonAsync(new
+    {
+        error = new
+        {
+            code = "internal_error",
+            message = "Something went wrong on our side. If this persists, contact support with the trace id.",
+            traceId = ctx.TraceIdentifier,
+        },
+    });
+}));
+
 // OpenAPI doc is mapped unconditionally — orval codegen needs to fetch it from
 // whatever environment is running (dev + CI). Lock down before public exposure.
 app.MapOpenApi();
@@ -520,6 +539,17 @@ app.MapEmailWebhookEndpoints();  // story 4.2 — POST /api/email/webhook (svix-
 
 app.MapGet("/", () => Results.Json(new { status = "ok", version = "2.0.0" }))
    .AllowAnonymous();
+
+// Story 10.8 (NFR9) — Development-only detonator (dev-login precedent):
+// exercises the UNCONDITIONAL exception handler above, which is byte-for-
+// byte the prod path. 404s outside Development.
+if (app.Environment.IsDevelopment())
+{
+    app.MapGet("/api/dev/throw", string () =>
+        throw new InvalidOperationException(
+            "SECRET-INTERNAL-DETAIL: connection string = Host=postgres;Password=hunter2"))
+       .AllowAnonymous();
+}
 
 // Story 10.1 (AC3) — the deploy smoke + external-probe endpoint: verifies
 // the two hard dependencies. 200 {"status":"ok"} or 503 naming the failure.
