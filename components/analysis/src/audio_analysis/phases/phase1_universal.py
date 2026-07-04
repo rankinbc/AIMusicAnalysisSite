@@ -259,6 +259,51 @@ def _detect_structure(wav_path: Path) -> dict:
     return structure_dict_from_result(result)
 
 
+# ── Story 10.7 — the two authoritative meters, extracted so the BS.1770-4
+# conformance harness (tests/conformance/) asserts EBU Tech 3341 vectors
+# against exactly the code that ships.
+
+def integrated_lufs(y: np.ndarray, sr: int) -> float:
+    """Integrated loudness (LUFS, BS.1770-4 gated) for ``(channels, samples)``
+    float audio. pyloudnorm expects (samples, channels) float64 — the
+    transpose here is load-bearing (CLAUDE.md axis-order gotcha).
+    Returns the -70.0 sentinel when the clip is too short/silent to gate."""
+    if y.ndim == 1:
+        y = y[np.newaxis, :]
+    try:
+        meter = pyloudnorm.Meter(sr)
+        lufs = float(meter.integrated_loudness(y.T.astype(float)))
+        if not np.isfinite(lufs):
+            return -70.0  # digital silence → -inf from pyloudnorm
+        return lufs
+    except Exception:
+        logger.warning("pyloudnorm LUFS failed (clip too short?); defaulting to -70.0")
+        return -70.0
+
+
+def true_peak_dbtp(y: np.ndarray, sr: int) -> float:  # noqa: ARG001 — sr kept for future >4x policies
+    """True peak (dBTP): 4× polyphase oversampling, max across CHANNELS
+    (BS.1770-4 — a mono downmix under-reads stereo inter-sample peaks).
+    Known limit (documented in the analysis README, MEASURED): above
+    ~0.4·fs the resampler's transition-band ripple OVER-reads (+1.5 dB at
+    0.45·fs) — the conservative direction for streaming warnings; real
+    programme material has negligible energy there."""
+    if y.ndim == 1:
+        y = y[np.newaxis, :]
+    try:
+        from scipy import signal as scipy_signal
+
+        true_peak_linear = max(
+            float(np.max(np.abs(scipy_signal.resample_poly(ch, 4, 1))))
+            for ch in y
+        )
+    except Exception:
+        logger.warning("true-peak oversampling failed; falling back to sample peak "
+                       "(may under-read inter-sample peaks by up to ~3 dB)")
+        true_peak_linear = float(np.max(np.abs(y)))
+    return float(20.0 * np.log10(true_peak_linear + 1e-9))
+
+
 def analyze(
     wav_path: Path,
     progress_cb: Callable | None = None,
@@ -289,15 +334,10 @@ def analyze(
         y = y[np.newaxis, :]  # (1, N)
 
     # ------------------------------------------------------------------
-    # LUFS — pyloudnorm expects (samples, channels) float64
-    # CRITICAL: do NOT pass (channels, samples) — values would be silently wrong
+    # LUFS — extracted to integrated_lufs() (story 10.7: the conformance
+    # harness asserts EBU Tech 3341 vectors against the PRODUCTION path).
     # ------------------------------------------------------------------
-    try:
-        meter = pyloudnorm.Meter(sr)
-        lufs = float(meter.integrated_loudness(y.T.astype(float)))
-    except Exception:
-        logger.warning("pyloudnorm LUFS failed (clip too short?); defaulting to -70.0")
-        lufs = -70.0
+    lufs = integrated_lufs(y, sr)
 
     # ------------------------------------------------------------------
     # RMS + duration
@@ -334,16 +374,13 @@ def analyze(
     channel_balance = _channel_balance(y)
 
     # ------------------------------------------------------------------
-    # True peak — 4x oversampling to detect inter-sample peaks (dBTP)
-    # Falls back to simple peak if scipy is unavailable.
+    # True peak — extracted to true_peak_dbtp() (story 10.7). NOTE: this
+    # also FIXED a conformance bug — dBTP was previously measured on the
+    # mono DOWNMIX; BS.1770-4 defines it as the max across channels of the
+    # oversampled signal (a downmix under-reads stereo content; out-of-
+    # phase material can null entirely).
     # ------------------------------------------------------------------
-    try:
-        from scipy import signal as scipy_signal
-        oversampled = scipy_signal.resample_poly(mono, 4, 1)
-        true_peak_linear = float(np.max(np.abs(oversampled)))
-    except Exception:
-        true_peak_linear = float(np.max(np.abs(mono)))
-    true_peak_db = float(20.0 * np.log10(true_peak_linear + 1e-9))
+    true_peak_db = true_peak_dbtp(y, sr)
 
     # ------------------------------------------------------------------
     # Peak dBFS + clipping detection

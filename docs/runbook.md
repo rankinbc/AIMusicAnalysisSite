@@ -177,6 +177,15 @@ A "https://<domain>/api/admin/audit?target=<uuid>" | jq
   `handle @adminOutside { respond 403 }` — deliberately NOT shipped by
   default (a moving operator IP would lock you out mid-incident).
 
+## Measurement conformance (story 10.7)
+
+LUFS/dBTP are proven against synthesized EBU Tech 3341 vectors on every
+CI run (`components/analysis/tests/conformance/`) — a regression fails
+the build and blocks deploy. Conformance statement + documented limits:
+`components/analysis/README.md` § Measurement conformance. Never market
+a number (LRA, momentary) as authoritative without adding its vectors
+there first.
+
 ## Abuse response (story 10.6 / FR47 / J6)
 
 The layers (all fail-open — abuse controls must never take down signup):
