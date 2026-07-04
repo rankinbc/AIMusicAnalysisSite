@@ -67,6 +67,20 @@ claude-fable-5 (Claude Code)
 - `components/analysis/tests/conformance/{__init__.py,test_bs1770_conformance.py}` (new, 8)
 - `components/analysis/README.md` (§ Measurement conformance), `docs/runbook.md` (pointer)
 
+### Senior Developer Review (AI)
+
+2026-07-03 — bmad-code-review (combined adversarial DSP pass; every number re-measured empirically in the lock venv — margins, gate arithmetic, fallback values, old-vs-new dual-mono bit-identity). Outcome: **Approve with required changes → applied** (patches):
+
+- [x] [High] **Case-3 gating margin was 0.003 LU — 3% of tolerance on a DEPLOY-BLOCKING test** (boundary-block dilution scales with middle-segment length) → 10/40/10 segments (~10× margin, CI ~3 s)
+- [x] [High] **The near-Nyquist test's "dropping the oversampler still fails here" claim was FALSE** (the sample-peak fallback reads −6.05 for that vector — inside the old window) → lower bound tightened to −5.5; the fallback now genuinely falls out
+- [x] [High] **The silence sentinel was a SECOND undisclosed behavior fix**: pyloudnorm returns −inf WITHOUT raising — the old except-only wrapper let `-Infinity` (invalid JSON) head into final_json/jsonb → reframed honestly in the test comment + README; and the SAME live bug in `stems/analyzer.py` (silent stem → −inf → jsonb) fixed in-story with the identical finite-guard
+- [x] [Med] Blast radius documented (README): pre-10.7 analyses carry downmix-measured true peaks — cross-boundary version comparisons show phantom regressions; wide mixes may now legitimately trip −1.0 dBTP rules (consumers: rule engine true_peak_overshoot/loudness_war, StreamingReadiness, CompareDialog)
+- [x] [Med] `true_peak_dbtp` docstring had the WRONG SIGN (kept the draft's "under-reads" guess; measured behavior is OVER-read +1.5 dB at 0.45·fs) → corrected; −70 floor semantics documented (any content below the absolute gate, not just silence — a −80 dBFS tone reads −70.0)
+- [x] [Low] Silent sample-peak fallback now logs a warning (a runtime-only scipy failure was an invisible up-to-3 dB under-read); story's −9.03 nit → measured −9.01
+- Noted for follow-up: `reference_analyzer_actor` falsy `true_peak_db or peak_dbfs` treats exact-0.0 dBTP as missing (adjacent nit, separate lane).
+- Verified by the reviewer: 167/167 + 8/8 re-run; dual-mono old==new to 9 decimals; hard-panned −6 dBFS old −12.0 → new −6.0; gate arithmetic (−36 flank clears the relative gate by 0.24 LU at 50/50 — hence the F1 fix); fs/4 margin +0.115 of +0.2; 997 Hz reads +0.0055 dBTP (positive dBTP now legitimately possible).
+
 ### Change Log
 
 - 2026-07-03: implemented on `ops/10-7-conformance`. Gates: analysis 167/167, worker 583+3xf, ruff clean. Status → review.
+- 2026-07-03 (review): patches applied (gating margin, honest guards, stems −inf fix, blast-radius docs). Analysis 167/167 re-verified.

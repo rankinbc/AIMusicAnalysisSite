@@ -284,10 +284,10 @@ def integrated_lufs(y: np.ndarray, sr: int) -> float:
 def true_peak_dbtp(y: np.ndarray, sr: int) -> float:  # noqa: ARG001 — sr kept for future >4x policies
     """True peak (dBTP): 4× polyphase oversampling, max across CHANNELS
     (BS.1770-4 — a mono downmix under-reads stereo inter-sample peaks).
-    Known limit (documented in the analysis README): 4× at 44.1 kHz
-    under-reads worst-case near-Nyquist inter-sample peaks by up to a few
-    tenths of a dB — within the EBU acceptance window for programme
-    material, not for pathological >0.45·fs tones."""
+    Known limit (documented in the analysis README, MEASURED): above
+    ~0.4·fs the resampler's transition-band ripple OVER-reads (+1.5 dB at
+    0.45·fs) — the conservative direction for streaming warnings; real
+    programme material has negligible energy there."""
     if y.ndim == 1:
         y = y[np.newaxis, :]
     try:
@@ -298,6 +298,8 @@ def true_peak_dbtp(y: np.ndarray, sr: int) -> float:  # noqa: ARG001 — sr kept
             for ch in y
         )
     except Exception:
+        logger.warning("true-peak oversampling failed; falling back to sample peak "
+                       "(may under-read inter-sample peaks by up to ~3 dB)")
         true_peak_linear = float(np.max(np.abs(y)))
     return float(20.0 * np.log10(true_peak_linear + 1e-9))
 

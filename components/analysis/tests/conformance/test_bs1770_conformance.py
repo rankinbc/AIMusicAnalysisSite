@@ -45,19 +45,24 @@ def test_tech3341_case2_minus33_dbfs_tone_reads_minus33_lufs():
 
 
 def test_tech3341_case3_style_gating_discards_quiet_segments():
-    # -36 dBFS (10 s) | -23 dBFS (20 s) | -36 dBFS (10 s): the relative gate
+    # -36 dBFS (10 s) | -23 dBFS (40 s) | -36 dBFS (10 s): the relative gate
     # (-10 LU) must discard the quiet flanks -> integrated = -23.0 LUFS.
-    # (EBU's middle segment is 60 s; the gate math is identical at 20 s and
-    # CI stays fast.)
+    # Middle segment is 40 s (EBU uses 60 s): at 20 s the boundary-block
+    # dilution left only 0.003 LU of margin against the +-0.1 tolerance —
+    # a deploy-blocking time bomb (review F1). 40 s gives ~10x margin and
+    # CI stays fast (~3 s).
     quiet = _sine(1000.0, -36.0, 10.0)
-    loud = _sine(1000.0, -23.0, 20.0)
+    loud = _sine(1000.0, -23.0, 40.0)
     y = _stereo(np.concatenate([quiet, loud, quiet]))
     assert abs(integrated_lufs(y, SR) - (-23.0)) <= LU_TOL
 
 
 def test_silence_returns_the_shipped_sentinel():
-    # Production behavior: digital silence -> the -70.0 floor sentinel
-    # (pyloudnorm's -inf never escapes into reports).
+    # Story 10.7 BEHAVIOR FIX (review F3): pyloudnorm returns -inf for
+    # silence WITHOUT raising — the old except-only wrapper let -inf into
+    # final_json, where json.dumps emits the invalid '-Infinity' literal
+    # (jsonb rejects it). The finite-guard maps anything below the -70
+    # absolute gate to the -70.0 floor sentinel.
     y = np.zeros((2, SR * 5), dtype=np.float64)
     assert integrated_lufs(y, SR) == -70.0
 
@@ -97,8 +102,10 @@ def test_dbtp_near_nyquist_documented_limit(freq_frac: float):
     # transition-band ripple OVER-reads (0.45*fs @ -6 dBFS measures about
     # -4.5 dBTP, i.e. +1.5 dB high). Over-reading is the CONSERVATIVE
     # direction for streaming-readiness warnings (never under-warns), and
-    # real programme material has negligible energy at 0.45*fs. Pinned
-    # loosely so dropping the oversampler entirely still fails here.
+    # real programme material has negligible energy at 0.45*fs.
+    # Lower bound -5.5 is the regression guard (review F2): the raw
+    # sample-peak fallback reads -6.05 here — dropping the oversampler
+    # falls OUT of this window and fails.
     mono = _sine(SR * freq_frac, -6.0, 5.0, phase=np.pi / 3.0)
     measured = true_peak_dbtp(_stereo(mono), SR)
-    assert -6.0 - 0.4 <= measured <= -6.0 + 2.0
+    assert -5.5 <= measured <= -4.0

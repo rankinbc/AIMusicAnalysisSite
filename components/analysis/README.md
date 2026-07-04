@@ -128,3 +128,14 @@ Documented limits (not asserted as conformance):
 - Momentary / short-term / LRA are structurally tested (window sizes,
   series shapes) but not conformance-asserted. If marketing ever quotes
   LRA as authoritative, add Tech 3342 vectors first.
+- The -70.0 LUFS floor applies to ANY content wholly below the BS.1770
+  absolute gate (not just digital silence): a -80 dBFS tone reads -70.0.
+  This also FIXED a latent serialization bug — pyloudnorm returns -inf
+  without raising, and the old wrapper let '-Infinity' (invalid JSON)
+  head toward jsonb. The same guard now covers per-stem loudness.
+- Historical comparison caveat: analyses stored BEFORE 10.7 carry
+  downmix-measured true peaks — wide/panned mixes under-read by up to
+  several dB. Cross-boundary version comparisons can show phantom
+  true-peak "regressions" (the old version looks spuriously better);
+  re-analyze the old version for a fair delta. Wide mixes that formerly
+  "passed" -1.0 dBTP may now legitimately trip true-peak rules.

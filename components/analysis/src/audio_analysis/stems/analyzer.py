@@ -102,8 +102,13 @@ def _measure_from_audio(role: StemRole, audio: np.ndarray, sr: int) -> StemMetri
     meter = pyln.Meter(sr)
     try:
         lufs = float(meter.integrated_loudness(mono))
+        # 10.7 review F4: pyloudnorm returns -inf for silent stems WITHOUT
+        # raising — json.dumps('-Infinity') is invalid JSON and jsonb
+        # rejects it. Same finite-guard as phase1's integrated_lufs.
+        if not np.isfinite(lufs):
+            lufs = -70.0
     except Exception:
-        lufs = float("-inf")
+        lufs = -70.0
     rms = 20 * float(np.log10(np.sqrt((mono ** 2).mean()) + 1e-12))
     peak = 20 * float(np.log10(np.max(np.abs(mono)) + 1e-12))
     width, is_mono = _stereo_width(audio)
