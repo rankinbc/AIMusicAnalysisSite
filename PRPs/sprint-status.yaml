@@ -1,5 +1,6 @@
 # generated: 2026-06-12
-# last_updated: 2026-06-16
+# last_updated: 2026-07-10
+# epic-12 added 2026-07-10: post-audit reliability & product truthfulness — 8 stories from the full-app audit (output/audit/2026-07-10_full-app-audit/findings.md) + team improvement review. Suggested order: 12-1/12-2/12-3 (dev-loop unblock) -> 12-4 + 12-5 parallel -> 12-6 (needs product decision) -> 12-7/12-8 anytime. Merge story 5-6 (in review) before 12-5 touches results tabs.
 # story 2-5 transitioned: backlog → ready-for-dev (create-story workflow, 2026-06-16; tier-routed analyze_audio_job + W1/W2 queue split; re-homes 5 default-queue actors to avoid prod orphaning)
 # project: Spectr
 # story 1-5 transitioned: backlog → ready-for-dev → in-progress → review → done (code-review workflow, 2026-06-15)
@@ -177,3 +178,13 @@ development_status:
   11-10-activity-feed: done  # merged to master via PR #4 (2026-07-03); recap_published_at column (+python mirror) closes the published-recap gap; GET /api/me/feed (followees' public shares + published recaps, visibility-gated, paged, empty-state suggestions) + /feed page + nav tab; 9 review patches applied (page cap, infinite-query accumulate, merge tiebreak, IsActive, feed invalidation, publish tx, ItemId key, partial index, test coverage) + pre-existing SubscriptionMirrorService webhook upsert race fixed; PR #4; gates green (BFF 257, vitest 642)
   11-11-discovery-entry-points: done  # merged to master via PR #4 (2026-07-03); GET /api/u/?q= handle search (mention-grammar-validated, IsActive, rate-limited) + features/mentions autocomplete in both composers + comment/roster avatar → /u/{handle} links + /v/{token} owner identity + RegisterCta(via+next)/FollowProducerCta post-claim loop; 12 review patches applied (token encoding, full-token replace, caret restore, IME guard, reactive auth + isSelf, keepPreviousData, key collision, test hardening); gates green (BFF 262, vitest 661); PR #4
   epic-11-retrospective: optional
+  epic-12: backlog  # added 2026-07-10 from full-app audit + team review; see PRPs/epics.md Epic 12
+  12-1-analysis-dispatch-unblocked-in-dev-and-verify-gate-ux: backlog  # AUDIT P0: verify gate 403s every analysis after first in dev; opaque "HTTP 403" toast; disposable cap not gated
+  12-2-failure-visibility-worker-health-and-progress-storyline: backlog  # AUDIT P0: dead worker = 4h "in progress" spinner; fail-loud launcher, dev reaper 5min, per-phase narration, healthz aggregation, boot config summary
+  12-3-upload-robustness-and-dev-bootstrap: backlog  # presigned 500-no-fallback when S3 env set w/o MinIO; docs/dev-setup.md; storage-root logging; start-script preflight
+  12-4-fix-rack-to-listen-carry-over: backlog  # AUDIT P0: "Open in Listen rack" carries nothing (FixRackPanel.tsx:48); URL-param carrier + one-shot apply + applied chip + composeRack overlay + unmapped-fix rows + integration test
+  12-5-dead-ui-sweep-and-honest-empty-states: backlog  # global search/⌘K unwired, disabled Listen tab, stale unlock chips, ProjectUnlock no CTA, fabricated percentile, Debug tab exposed, dead note input, orphan components
+  12-6-coach-mix-truthfulness-and-coach-chat-polish: backlog  # arbiter unbuilt (1/15 tasks) — NEEDS PRODUCT DECISION finish-vs-relabel; remove "soon" placeholder or wire change_log; delete orphaned coach_mix pkg; fix flaky test double; refused/Stop turns vs cap
+  12-7-test-integrity-smoke-e2e-and-fail-loud-suites: backlog  # BFF suites silently no-op w/o Postgres (false-green CI); one Playwright smoke; error-code contract test
+  12-8-first-run-experience-and-feedback-loop: backlog  # seeded demo track, report-a-problem w/ correlation id, "how analysis works" link, CLAUDE.md truth pass + deferred-work ledger consolidation
+  epic-12-retrospective: optional
