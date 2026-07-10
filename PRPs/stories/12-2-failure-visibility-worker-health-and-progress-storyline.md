@@ -1,6 +1,6 @@
 # Story 12.2: Failure Visibility — Worker Health & Progress Storyline
 
-Status: review
+Status: done
 
 ## Story
 
