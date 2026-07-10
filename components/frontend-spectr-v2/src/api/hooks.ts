@@ -19,6 +19,7 @@ import type {
   CreateTagRequest,
   EntitlementsDto,
   FeedbackKind,
+  FullHealthResponse,
   HonestMathDto,
   JobResultsDto,
   JobStatusDto,
@@ -451,6 +452,20 @@ export function useWorkerHealth() {
       fetcher<WorkerHealthResponse>({ url: '/health/worker', method: 'GET' }),
     refetchInterval: (query) =>
       query.state.data?.healthy === false ? 10_000 : 30_000,
+    refetchIntervalInBackground: false,
+    staleTime: 5_000,
+    retry: false,
+  });
+}
+
+/** Story 12.2 — aggregated health for the dev-only shell dot. Poll ~30s;
+ *  callers gate mounting on import.meta.env.DEV so prod builds never query. */
+export function useFullHealth() {
+  return useQuery<FullHealthResponse>({
+    queryKey: ['health', 'full'],
+    queryFn: () =>
+      fetcher<FullHealthResponse>({ url: '/health/full', method: 'GET' }),
+    refetchInterval: 30_000,
     refetchIntervalInBackground: false,
     staleTime: 5_000,
     retry: false,

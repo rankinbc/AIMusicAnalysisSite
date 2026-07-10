@@ -311,6 +311,8 @@ builder.Services.AddHostedService<BillingReconciliationService>();
 // the UI shows a re-runnable error instead of an infinite spinner. Runtime
 // backstop to scripts/recover-jobs.ps1 (which handles dev restarts at launch).
 builder.Services.AddHostedService<StaleJobReaper>();
+// Story 12.2 — shared dramatiq heartbeat read (health endpoint + reaper).
+builder.Services.AddSingleton<IWorkerHeartbeat, WorkerHeartbeat>();
 builder.Services.AddOptions<WorkerOptions>()
     .Bind(builder.Configuration.GetSection(WorkerOptions.SectionName))
     .ValidateOnStart();
@@ -413,6 +415,36 @@ builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
 });
 
 var app = builder.Build();
+
+// Story 12.2 (AC5) — one Information-level summary of the silent-degradation
+// knobs: which integrations are configured and what the worker-supervision
+// thresholds resolved to. Booleans and paths ONLY — key material is guarded
+// by the RequireSigningKey boot checks above, never logged.
+{
+    var s3Opts = app.Services.GetRequiredService<IOptions<S3StorageOptions>>().Value;
+    var resendOpts = app.Services.GetRequiredService<IOptions<ResendOptions>>().Value;
+    var stripeOpts = app.Services.GetRequiredService<IOptions<StripeOptions>>().Value;
+    var workerKnobs = app.Services.GetRequiredService<IOptions<WorkerOptions>>().Value;
+    var rateLimitsEnabled = !string.Equals(
+        app.Configuration["RateLimits:Enabled"], "false", StringComparison.OrdinalIgnoreCase);
+    var devAutoVerify = string.Equals(
+        app.Configuration["Auth:DevAutoVerify"], "true", StringComparison.OrdinalIgnoreCase);
+    var localRoot = app.Configuration["Storage:LocalRoot"];
+    var resolvedLocalRoot = string.IsNullOrWhiteSpace(localRoot)
+        ? "(unset)"
+        : Path.GetFullPath(localRoot);
+    app.Logger.LogInformation(
+        "Boot config: env={Environment} | S3 configured: {S3Configured} | Resend configured: {ResendConfigured} | "
+        + "Stripe configured: {StripeConfigured} | RateLimits enabled: {RateLimitsEnabled} | "
+        + "Auth:DevAutoVerify: {DevAutoVerify} | Worker: stale={StaleJobMinutes}m pendingGrace={PendingGraceMinutes}m "
+        + "pendingNoWorker={PendingNoWorkerGraceMinutes}m heartbeatStale={HeartbeatStaleSeconds}s | "
+        + "Storage:LocalRoot resolved: {StorageLocalRoot}",
+        app.Environment.EnvironmentName, s3Opts.IsConfigured, resendOpts.IsConfigured,
+        stripeOpts.IsConfigured, rateLimitsEnabled, devAutoVerify,
+        workerKnobs.StaleJobMinutes, workerKnobs.PendingGraceMinutes,
+        workerKnobs.PendingNoWorkerGraceMinutes, workerKnobs.HeartbeatStaleSeconds,
+        resolvedLocalRoot);
+}
 
 // ── Pipeline ───────────────────────────────────────────────────────────────────
 // Story 10.1 — proxy header trust, config-gated (prod compose only). FIRST

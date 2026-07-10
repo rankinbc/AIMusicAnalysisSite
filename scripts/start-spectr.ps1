@@ -307,14 +307,24 @@ function Start-Apps {
 
     # --- Worker ---
     if (Get-Command python -ErrorAction SilentlyContinue) {
-        # Best-effort sanity check: is dramatiq importable in this `python`?
-        python -c "import dramatiq" 2>$null
+        # Story 12.2 (AC1): fail LOUD if the worker deps are missing. A worker
+        # window opened with a doomed command instantly errors while the
+        # launcher exits green — a dead worker from minute zero. Check the SAME
+        # `python` the window would use (bare `python` from PATH).
+        python -c "import dramatiq, audio_analysis" 2>$null
         if ($LASTEXITCODE -ne 0) {
-            Warn "Worker: `python` cannot import dramatiq - the worker window will show the error. Install deps: pip install -r components/worker/requirements.txt"
+            # Re-run without suppression to capture the actual import error.
+            $importError = (python -c "import dramatiq, audio_analysis" 2>&1 |
+                            Where-Object { $_ -match 'Error' } | Select-Object -Last 1)
+            if (-not $importError) { $importError = 'import failed (no error text captured)' }
+            Fail ("Worker NOT started: ``python`` cannot import worker deps - $importError. " +
+                  'Install: pip install -r components/worker/requirements.txt ' +
+                  'and pip install -e components/shared components/analysis')
+        } else {
+            Start-InWindow -Title 'SPECTR Worker' -WorkDir $WorkerDir -Command $WorkerCmd
         }
-        Start-InWindow -Title 'SPECTR Worker' -WorkDir $WorkerDir -Command $WorkerCmd
     } else {
-        Fail 'Worker: `python` not found on PATH'
+        Fail 'Worker NOT started: `python` not found on PATH'
     }
 
     # --- Frontend ---

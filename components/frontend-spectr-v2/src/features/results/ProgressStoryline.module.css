@@ -1,0 +1,113 @@
+/* Story 12.2 — per-phase progress storyline (results page, in-progress branch). */
+
+.panel {
+  margin-top: var(--space-4);
+  padding: var(--space-5);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--panel-radius);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.headerRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.statusLine {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.elapsed {
+  font-size: 12px;
+  color: var(--text-2);
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.phases {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.phase {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.phaseMark {
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.phaseDone {
+  color: var(--text-2);
+}
+
+.phaseDone .phaseMark {
+  color: var(--green);
+}
+
+.phaseCurrent {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.phaseCurrent .phaseMark {
+  color: var(--cyan);
+}
+
+.progress {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--dim);
+}
+
+.progress::-webkit-progress-bar {
+  background: var(--dim);
+  border-radius: var(--radius-sm);
+}
+
+.progress::-webkit-progress-value {
+  background: var(--cyan);
+  border-radius: var(--radius-sm);
+  transition: width 240ms ease;
+}
+
+.progress::-moz-progress-bar {
+  background: var(--cyan);
+  border-radius: var(--radius-sm);
+}
+
+.hintOffline {
+  margin: 0;
+  font-size: 13px;
+  color: var(--red);
+}
+
+.hintSlow {
+  margin: 0;
+  font-size: 13px;
+  color: var(--orange);
+}

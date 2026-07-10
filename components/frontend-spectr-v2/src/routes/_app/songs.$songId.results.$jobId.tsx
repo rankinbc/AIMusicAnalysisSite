@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { useJob, useJobResults } from '../../api/hooks';
 import { capture } from '../../lib/analytics';
 import { setCorrelation } from '../../lib/sentry';
+import { ProgressStoryline } from '../../features/results/ProgressStoryline';
 import { ReportView } from '../../features/results/ReportView';
 import {
   DEFAULT_RESULTS_TAB,
@@ -89,13 +90,7 @@ function ResultsPage() {
   return (
     <FrameWithBack songId={songId}>
       <h1 className={s.heading}>Analysis in progress</h1>
-      {job.data && (
-        <PhaseProgress
-          status={job.data.status}
-          phase={job.data.currentPhase}
-          pct={job.data.phasePct}
-        />
-      )}
+      {job.data && <ProgressStoryline job={job.data} />}
     </FrameWithBack>
   );
 }
@@ -107,30 +102,6 @@ function FrameWithBack({ songId, children }: { songId: string; children: React.R
         ← all versions
       </Link>
       {children}
-    </div>
-  );
-}
-
-function PhaseProgress({
-  status,
-  phase,
-  pct,
-}: {
-  status: string;
-  phase: string;
-  pct: number;
-}) {
-  return (
-    <div className={s.panel}>
-      <p className={`mono ${s.statusLine}`}>
-        Status: {status}
-        {phase ? ` · ${phase}` : ''}
-      </p>
-      <progress
-        className={s.progress}
-        value={Math.max(0, Math.min(1, pct))}
-        max={1}
-      />
     </div>
   );
 }
