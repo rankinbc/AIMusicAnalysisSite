@@ -315,6 +315,10 @@ builder.Services.AddHostedService<StaleJobReaper>();
 builder.Services.AddSingleton<IWorkerHeartbeat, WorkerHeartbeat>();
 builder.Services.AddOptions<WorkerOptions>()
     .Bind(builder.Configuration.GetSection(WorkerOptions.SectionName))
+    // 12.2 review fix: the fast tier is unclamped by design, so a zero/negative
+    // grace would insta-fail every pending job whenever the heartbeat lapses.
+    .Validate(o => o.PendingNoWorkerGraceMinutes > 0,
+        "Worker:PendingNoWorkerGraceMinutes must be > 0")
     .ValidateOnStart();
 
 // Story 3.4 seam → story 4.2 implementation: the ONE email pathway.
@@ -430,9 +434,19 @@ var app = builder.Build();
     var devAutoVerify = string.Equals(
         app.Configuration["Auth:DevAutoVerify"], "true", StringComparison.OrdinalIgnoreCase);
     var localRoot = app.Configuration["Storage:LocalRoot"];
-    var resolvedLocalRoot = string.IsNullOrWhiteSpace(localRoot)
-        ? "(unset)"
-        : Path.GetFullPath(localRoot);
+    string resolvedLocalRoot;
+    try
+    {
+        resolvedLocalRoot = string.IsNullOrWhiteSpace(localRoot)
+            ? "(unset)"
+            : Path.GetFullPath(localRoot);
+    }
+    catch (Exception ex)
+    {
+        // A malformed path must not turn a log line into a boot failure —
+        // LocalDiskFileStorage surfaces the real error on first use.
+        resolvedLocalRoot = $"(unresolvable: {ex.GetType().Name})";
+    }
     app.Logger.LogInformation(
         "Boot config: env={Environment} | S3 configured: {S3Configured} | Resend configured: {ResendConfigured} | "
         + "Stripe configured: {StripeConfigured} | RateLimits enabled: {RateLimitsEnabled} | "

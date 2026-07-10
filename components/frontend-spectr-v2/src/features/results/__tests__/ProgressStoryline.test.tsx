@@ -97,4 +97,41 @@ describe('ProgressStorylineView', () => {
     // High overall pct checks off the base phases.
     expect(html).toContain('✓');
   });
+
+  it('ALS phase 8 (pct 7/8) marks all 7 base phases done under the appended row', () => {
+    const html = renderToStaticMarkup(
+      <ProgressStorylineView
+        {...base}
+        currentPhase="Ableton Project Analysis"
+        phasePct={7 / 8}
+      />,
+    );
+    // 7 done base rows + 1 appended current row — no ○ left.
+    expect(html.match(/✓/g)).toHaveLength(7);
+    expect(html).not.toContain('○');
+  });
+
+  it('structure_actor "Arrangement" aliases to the base row, no duplicate', () => {
+    const html = renderToStaticMarkup(
+      <ProgressStorylineView {...base} currentPhase="Arrangement" phasePct={0.9} />,
+    );
+    expect(html.match(/Arrangement Advice/g)).toHaveLength(1);
+    expect(html).not.toContain('>Arrangement<');
+    expect(html.match(/aria-current="step"/g)).toHaveLength(1);
+  });
+
+  it('completed job never shows hints, even with huge elapsed time', () => {
+    const html = renderToStaticMarkup(
+      <ProgressStorylineView
+        {...base}
+        status="complete"
+        currentPhase="complete"
+        phasePct={1}
+        elapsedMs={3 * 24 * 60 * 60_000}
+        workerOffline
+      />,
+    );
+    expect(html).not.toContain('Taking longer than usual');
+    expect(html).not.toContain('appears to be down');
+  });
 });

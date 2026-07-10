@@ -183,6 +183,24 @@ claude-fable-5 (Claude Code)
 - PRPs/sprint-status.yaml (modified — story status)
 - PRPs/stories/12-2-failure-visibility-worker-health-and-progress-storyline.md (this file)
 
+## Senior Review Record (bmad-code-review, 2026-07-10)
+
+Three-layer adversarial review (Blind Hunter / Edge Case Hunter / Acceptance Auditor) of the merged diff `d47d0fc..7756141`. Auditor verdict: all 5 ACs met, all negative constraints honored. 14 findings triaged (1 intent gap, 1 spec amendment, 8 patches, 4 deferred, 7 rejected as noise). Patches applied on `fix/12-2-review-findings`:
+
+- **Redis outage no longer suppresses the offline hint**: `GetWorkerHealth` degrades to `healthy=false` (3s timeout, catch-all) instead of a 500, and the storyline container also treats a health-probe error (`isError`) as offline — previously a dead Redis produced HTTP 500, `useWorkerHealth().data` stayed undefined, and the P0 "dead worker masquerades as progress" case survived.
+- **`/api/health/full` is now mapped in Development only** (spec amendment: the spec asked for an anonymous sibling of `/health/worker`, but its only consumer is the dev-only dot, and the aggregated payload + per-hit probe cost is not a surface prod needs). Integration tests run env=Development, so coverage is unchanged.
+- **DevHealthDot turns red on probe error** (`unreachable` prop from `useFullHealth().isError`) instead of holding a stale green from the last successful payload.
+- **Fast pending tier floored**: `ValidateOnStart` rule (`PendingNoWorkerGraceMinutes > 0`) plus a `Math.Max(1, …)` belt in the reaper — a zero/negative grace would have insta-failed every pending job on any 60s heartbeat gap.
+- **Queue-depth read single-sourced**: moved into `IWorkerHeartbeat.AnalysisQueueDepthAsync` (was copy-pasted in both health handlers); heartbeat/depth awaits are now cancellable via `WaitAsync(ct)` so probe timeouts actually cut them off.
+- **ProgressStoryline**: `Arrangement` (structure_actor) aliases to the "Arrangement Advice" base row instead of rendering a duplicate; unknown-phase check-off denominator is `BASE+1` (ALS pct 7/8 now marks all base rows done); hints and the slow threshold only render while status is pending/processing.
+- **Results route**: a complete job whose report payload is loading (or whose `/results` fetch errored — previously swallowed) renders a loading/error frame instead of falling into the in-progress storyline with a multi-day elapsed clock.
+- **Boot-crash-for-a-log-line guards**: BFF boot summary wraps `Path.GetFullPath(LocalRoot)`; worker boot one-liner wraps `get_llm_settings()` (malformed `LLM_*` env logs `LLM_FAKE=?` instead of killing the worker).
+
+Accepted without change (documented): dev-only slow-boot window (worker boot > 60s can fast-fail >5-min-old dev pending jobs during a restart; retry path exists). Deferred: launcher check-vs-window python profile divergence; silent-skip integration-test pattern + storage-probe test weakness (story 12-7); `TestEnv` pin excluding dev fast-tier config from factory hosts; client clock-skew polish in elapsed display.
+
+Gates after fixes: BFF 355/355, frontend build + tsc + eslint + lint:css clean, vitest 713/713 (+4 review tests), worker ruff clean + pytest 583 passed / 3 xfailed.
+
 ### Change Log
 
 - 2026-07-10: Story 12.2 implemented — fail-loud launcher, heartbeat-aware two-tier pending reap (`PendingNoWorkerGraceMinutes`, dev 5 min), ProgressStoryline with elapsed time + escalating hints, `/api/health/full` + DevHealthDot (dev builds only), BFF + worker boot config summaries. All gates green; status → review.
+- 2026-07-10: Senior review pass — 8 patches applied (see Senior Review Record), `/api/health/full` dev-gated, all gates re-run green.

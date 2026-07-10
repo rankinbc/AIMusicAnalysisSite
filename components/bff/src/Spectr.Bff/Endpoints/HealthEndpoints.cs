@@ -21,7 +21,15 @@ public static class HealthEndpoints
     {
         var g = app.MapGroup("/health").WithTags("health").AllowAnonymous();
         g.MapGet("/worker", GetWorkerHealth);
-        g.MapGet("/full", GetFullHealth);
+        // 12.2 review fix: /full is Development-only. Its sole consumer is the
+        // dev shell dot, and an anonymous prod endpoint that runs postgres +
+        // redis + S3 probes per hit while disclosing queue depth / heartbeat
+        // age / degradation state is an unmetered probe surface we don't need.
+        var env = app.ServiceProvider.GetRequiredService<IHostEnvironment>();
+        if (env.IsDevelopment())
+        {
+            g.MapGet("/full", GetFullHealth);
+        }
         return app;
     }
 
@@ -32,7 +40,8 @@ public static class HealthEndpoints
     /// (the story-10.1 deploy smoke, whose 200/503 semantics are a contract),
     /// this endpoint ALWAYS returns 200 with the JSON body so the frontend can
     /// render partial state; <c>status</c> is "degraded" only when postgres or
-    /// redis fail — worker/storage state is informational.
+    /// redis fail — worker/storage state is informational. Mapped in
+    /// Development only (see <see cref="MapHealthEndpoints"/>).
     /// </summary>
     private static async Task<IResult> GetFullHealth(
         AppDbContext db,
@@ -66,13 +75,11 @@ public static class HealthEndpoints
         long queueDepth = 0;
         try
         {
-            heartbeatAge = await heartbeat.AgeSecondsAsync().WaitAsync(timeout);
+            using var cts = new CancellationTokenSource(timeout);
+            heartbeatAge = await heartbeat.AgeSecondsAsync(cts.Token);
             workerHealthy = heartbeatAge is long age
                 && age < opts.Value.HeartbeatStaleSeconds;
-            var rdb = redis.GetDatabase();
-            queueDepth =
-                await rdb.ListLengthAsync($"dramatiq:{DramatiqQueues.AnalysisPaid}")
-                + await rdb.ListLengthAsync($"dramatiq:{DramatiqQueues.AnalysisFree}");
+            queueDepth = await heartbeat.AnalysisQueueDepthAsync(cts.Token);
         }
         catch { }
 
@@ -109,23 +116,27 @@ public static class HealthEndpoints
     }
 
     private static async Task<IResult> GetWorkerHealth(
-        IConnectionMultiplexer redis,
         IWorkerHeartbeat heartbeat,
         IOptions<WorkerOptions> opts)
     {
-        // Story 12.2: heartbeat read lives in IWorkerHeartbeat (shared with
-        // the StaleJobReaper) so the ZSET key + max-score rule never drift.
-        long? ageSeconds = await heartbeat.AgeSecondsAsync();
-
-        bool healthy = ageSeconds is long age
-            && age < opts.Value.HeartbeatStaleSeconds;
-
-        // Backlog across both analysis lanes — context for the banner / ops.
-        // The dramatiq queue LIST key is `dramatiq:<queue-name>`.
-        var db = redis.GetDatabase();
-        long queueDepth =
-            await db.ListLengthAsync($"dramatiq:{DramatiqQueues.AnalysisPaid}")
-            + await db.ListLengthAsync($"dramatiq:{DramatiqQueues.AnalysisFree}");
+        // Story 12.2: heartbeat + queue-depth reads live in IWorkerHeartbeat
+        // (shared with the StaleJobReaper) so the key rules never drift.
+        // Review fix: a Redis outage degrades to healthy=false instead of a
+        // 500 — the storyline's "worker appears to be down" hint keys on this
+        // payload, and an erroring endpoint would suppress the hint exactly
+        // when nothing can drain the queue (the P0 this story exists to fix).
+        bool healthy = false;
+        long? ageSeconds = null;
+        long queueDepth = 0;
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            ageSeconds = await heartbeat.AgeSecondsAsync(cts.Token);
+            healthy = ageSeconds is long age
+                && age < opts.Value.HeartbeatStaleSeconds;
+            queueDepth = await heartbeat.AnalysisQueueDepthAsync(cts.Token);
+        }
+        catch { /* Redis unreachable ⇒ worker effectively unavailable. */ }
 
         return Results.Ok(new WorkerHealthDto(healthy, ageSeconds, queueDepth));
     }

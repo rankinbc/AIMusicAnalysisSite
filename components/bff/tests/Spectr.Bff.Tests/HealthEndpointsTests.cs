@@ -9,7 +9,9 @@ namespace Spectr.Bff.Tests;
 // Story 12.2 (AC4) — GET /api/health/full: the aggregated always-200 health
 // JSON behind the dev shell indicator. Unlike /healthz (deploy contract,
 // 200/503), this endpoint returns 200 with per-check state so the frontend
-// can render partial degradation.
+// can render partial degradation. NOTE: mapped in Development only (12.2
+// review fix); WebApplicationFactory hosts run env=Development, so these
+// tests exercise the mapped path.
 public sealed class HealthEndpointsTests(WebApplicationFactory<Program> factory)
     : IClassFixture<WebApplicationFactory<Program>>
 {

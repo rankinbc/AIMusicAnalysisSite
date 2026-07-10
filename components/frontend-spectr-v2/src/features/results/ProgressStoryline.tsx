@@ -28,6 +28,13 @@ const BASE_PHASES = [
 // job states, not phases, so they never render as an appended phase row.
 const SENTINELS = new Set(['', 'queued', 'starting', 'complete', 'failed']);
 
+// Worker phase names that are the same step as a base row under another name —
+// structure_actor writes "Arrangement" while running arrangement advice.
+// Without the alias it would render as a duplicate row under the base one.
+const PHASE_ALIASES: Record<string, string> = {
+  Arrangement: 'Arrangement Advice',
+};
+
 // Soft "taking longer than usual" thresholds — deliberately constants, not
 // config: they only tune a hint, and a wrong value is a copy nit, not a bug.
 const SLOW_ELAPSED_MS = 10 * 60 * 1000; // any status, 10 min total
@@ -38,7 +45,9 @@ export interface ProgressStorylineViewProps {
   currentPhase: string;
   phasePct: number;
   elapsedMs: number;
-  /** True only on a definitive offline reading (useWorkerHealth healthy === false). */
+  /** True on a definitive offline reading (healthy === false) OR when the
+   *  health probe itself errors — an unreachable BFF/Redis must not read as
+   *  "everything fine" on the page whose whole job is failure visibility. */
   workerOffline: boolean;
   /** Jobs waiting on the dead worker; shown with the offline hint. */
   queueDepth?: number | undefined;
@@ -64,9 +73,14 @@ export function ProgressStorylineView({
   queueDepth = 0,
 }: ProgressStorylineViewProps) {
   const pct = Math.max(0, Math.min(1, phasePct));
-  const knownIdx = (BASE_PHASES as readonly string[]).indexOf(currentPhase);
-  const isSentinel = SENTINELS.has(currentPhase);
+  const phase = PHASE_ALIASES[currentPhase] ?? currentPhase;
+  const knownIdx = (BASE_PHASES as readonly string[]).indexOf(phase);
+  const isSentinel = SENTINELS.has(phase);
   const isUnknownPhase = knownIdx === -1 && !isSentinel;
+  // Hints and the ticking clock only make sense while the job is actually
+  // running — a completed job briefly passes through here while the report
+  // payload loads, and must not show "taking longer than usual".
+  const active = status === 'pending' || status === 'processing';
 
   const rows: { name: string; state: 'done' | 'current' | 'todo' }[] =
     BASE_PHASES.map((name, idx) => {
@@ -76,20 +90,27 @@ export function ProgressStorylineView({
         if (idx === knownIdx) return { name, state: 'current' };
         return { name, state: 'todo' };
       }
-      // Unknown/extra phase in flight (ALS, Mix Translation, …): base phases
-      // are checked off by overall progress — the only signal we still have.
+      // Unknown/extra phase in flight (ALS phase 8, Mix Translation, …):
+      // base phases are checked off by overall progress — the only signal we
+      // still have. Denominator assumes one extra phase, since the known
+      // extras run AFTER the 7 base phases (worker pct is (phase-1+frac)/8
+      // for an ALS job, so /8 marks all base rows done exactly then).
       if (isUnknownPhase) {
-        return { name, state: pct >= (idx + 1) / BASE_PHASES.length ? 'done' : 'todo' };
+        return {
+          name,
+          state: pct >= (idx + 1) / (BASE_PHASES.length + 1) ? 'done' : 'todo',
+        };
       }
       return { name, state: 'todo' };
     });
   if (isUnknownPhase) {
-    rows.push({ name: currentPhase, state: 'current' });
+    rows.push({ name: phase, state: 'current' });
   }
 
   const slow =
-    elapsedMs > SLOW_ELAPSED_MS ||
-    (status === 'pending' && elapsedMs > SLOW_PENDING_MS);
+    active &&
+    (elapsedMs > SLOW_ELAPSED_MS ||
+      (status === 'pending' && elapsedMs > SLOW_PENDING_MS));
 
   const waiting =
     queueDepth > 0 ? ` ${queueDepth} job${queueDepth === 1 ? '' : 's'} queued.` : '';
@@ -129,7 +150,7 @@ export function ProgressStorylineView({
 
       <progress className={s.progress} value={pct} max={1} />
 
-      {workerOffline && (
+      {active && workerOffline && (
         <p className={s.hintOffline} role="status">
           The analysis worker appears to be down — this job will resume or fail
           shortly.{waiting}
@@ -164,7 +185,7 @@ export function ProgressStoryline({ job }: { job: JobStatusDto }) {
       currentPhase={job.currentPhase}
       phasePct={job.phasePct}
       elapsedMs={now - Date.parse(startIso)}
-      workerOffline={health.data?.healthy === false}
+      workerOffline={health.data?.healthy === false || health.isError}
       queueDepth={health.data?.queueDepth}
     />
   );
