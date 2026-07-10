@@ -397,6 +397,10 @@ Educators register for coded links, see clicks/signups/conversions on a one-page
 The operator runs the business from dashboards (queue, success rate, LLM spend vs budget, quality rates, revenue), gets phone-grade alerts, issues refunds with audit trails, contains abuse, and deploys/restores the whole system reproducibly — production topology, backups, observability, and runbook complete.
 **FRs covered:** FR45, FR46, FR47, FR49
 
+### Epic 12: Post-Audit Reliability & Product Truthfulness
+
+Close every finding from the 2026-07-10 full-app audit (`output/audit/2026-07-10_full-app-audit/findings.md`): unblock the local analysis loop (email-verify gate, dead-worker spinner), make the fix-rack → Listen handoff actually carry fixes, sweep dead/fake UI so no control lies to the user, make Coach Mix honest about what it is, and restore test-signal integrity. Net-new epic alongside 1–11 (no renumbering; 12 chosen because 11 exists).
+
 ### Epic Dependency Notes
 
 - Epic 1 runs on current local storage — no dependency on Epic 3.
@@ -1427,3 +1431,121 @@ So that comments, rooms, profiles, and follows reinforce each other.
 2. **Given** a comment or room-participant avatar, **When** clicked, **Then** it links to `/u/{handle}`.
 3. **Given** an anon viewer on `/v/{token}` who registers, **Then** a "follow this producer" CTA is offered post-claim.
 4. **Given** these entry-points, **Then** static-render tests cover the mention autocomplete and avatar links.
+
+## Epic 12: Post-Audit Reliability & Product Truthfulness
+
+Close every finding from the 2026-07-10 full-app audit (`output/audit/2026-07-10_full-app-audit/findings.md`), plus the team-review improvement list. Theme: nothing in the product may lie — no dead buttons, no fabricated numbers, no silent failures, no features labeled smarter than they are. Fix batches A–E map to stories 12.1–12.6; the party-mode improvement round adds 12.7–12.8.
+
+**Sequencing.** 12.1 + 12.2 + 12.3 first (unblock the local dev loop — these explain the reported upload failures). 12.4 and 12.5 parallel after. 12.6 needs one product decision (finish arbiter vs relabel) before dev. 12.7/12.8 anytime. Story 5.6 (in review) should merge before 12.5 touches the results tabs.
+
+### Story 12.1: Analysis Dispatch Unblocked in Dev & Verify-Gate UX
+
+As a developer (and any unverified user),
+I want the email-verify gate to be satisfiable and visible,
+So that analyses after the first do not fail with an opaque HTTP 403.
+
+**Acceptance Criteria:**
+
+1. **Given** `ASPNETCORE_ENVIRONMENT=Development`, **When** a user registers, **Then** the account is auto-verified OR the verification link is logged to the BFF console — the gate at `VersionEndpoints.cs` (second-analysis check) is satisfiable locally without Resend.
+2. **Given** a dispatch rejected with `email_verification_required`, **Then** the frontend shows a clear message ("Verify your email to run more analyses") with a resend-verification action — never a raw "HTTP 403" toast (`fetcher.ts` ApiError code mapping).
+3. **Given** an unverified logged-in user, **Then** a persistent dismissible banner offers verify/resend (visible quest, not invisible wall).
+4. **Given** Development environment, **Then** the disposable-email dispatch cap is gated behind the same `RateLimits:Enabled` knob as the per-IP arm (no more cap=1 surprises with test domains).
+5. **Given** any dispatch-path 4xx, **Then** the response carries a machine-readable `code` the frontend maps to human copy (error-envelope contract).
+
+### Story 12.2: Failure Visibility — Worker Health & Progress Storyline
+
+As a user waiting on an analysis,
+I want stuck jobs to look different from healthy ones,
+So that a dead worker never masquerades as 4 hours of progress.
+
+**Acceptance Criteria:**
+
+1. **Given** the worker launcher (`start-spectr.ps1`), **When** `import dramatiq` or `audio_analysis` fails, **Then** the launcher fails loudly (red banner + non-zero exit), not a warn-and-continue.
+2. **Given** Development, **Then** `PendingGraceMinutes` is ~5 (not 240) so orphaned pending jobs surface fast.
+3. **Given** a job in progress, **Then** the results page narrates per-phase progress with elapsed time; after a threshold it shows a "taking longer than usual — worker may be down" hint.
+4. **Given** the BFF `/healthz` (or a dev-only sibling), **Then** it aggregates DB / Redis / worker-heartbeat / storage checks in one JSON, and the app shell shows a small status indicator in dev.
+5. **Given** BFF boot, **Then** a startup config summary logs: S3 configured?, Resend configured?, LLM fake?, RateLimits on? (extends the RequireSigningKey validation pattern).
+
+### Story 12.3: Upload Robustness & Dev Bootstrap
+
+As a developer setting up the stack,
+I want uploads to degrade gracefully and setup to be one documented path,
+So that a missing MinIO or missing .env never hard-fails the flow.
+
+**Acceptance Criteria:**
+
+1. **Given** `Storage:S3` is configured but unreachable, **When** `POST /uploads/init` fails on connection, **Then** the client falls back to the legacy proxy upload (fallback broadened beyond strict 501), OR the BFF reports 501 after a reachability probe.
+2. **Given** a fresh clone, **Then** `docs/dev-setup.md` documents boot order, required env, the "no .env exists by default" reality, the verify-gate dev behavior, and `LLM_FAKE`.
+3. **Given** `components/worker/.env`, **Then** it never carries the compose-only `STORAGE_LOCAL_ROOT=/data` on native runs, and the worker logs its resolved storage root at startup.
+4. **Given** the start script, **Then** a preflight check verifies Docker/Postgres/Redis reachable before launching dependents.
+
+### Story 12.4: Fix Rack → Listen Carry-Over (Reliable Handoff)
+
+As a producer,
+I want "Open in Listen rack" to actually carry my generated fixes,
+So that what I previewed on the report is what I hear on Listen.
+
+**Acceptance Criteria:**
+
+1. **Given** a generated fix rack, **When** I click "Open in Listen rack" (`FixRackPanel.tsx`), **Then** the chain arrives on `/listen-rack/$versionId` via a validated URL search param (preset id or fix-rack fetch) — survives refresh and back.
+2. **Given** the Listen page loads with a carried chain, **Then** it applies once after the audio graph is ready (pending-params ref; carry-over wins over draft autosave restore).
+3. **Given** carried fixes are active, **Then** a visible chip ("Fixes applied: N — reset") renders in every mode, not only the work-mode PLAN tab.
+4. **Given** `composeRack`, **Then** it overlays onto the live rack state (manual knob moves preserved, pitch mode never reset) instead of rebuilding from defaults.
+5. **Given** a fix with unmapped ops (`multiband_compressor`, `sidechain`), **Then** it renders as a disabled "not applicable in the rack" row — never silently dropped.
+6. **Given** the flow, **Then** an integration test drives Results → navigate → Listen and asserts the carried fix reaches the rack state through the real graph handle.
+
+### Story 12.5: Dead-UI Sweep & Honest Empty States
+
+As a user,
+I want every visible control to do something real,
+So that the app never teaches me to stop clicking.
+
+**Acceptance Criteria:**
+
+1. **Given** the global search box + ⌘K badge (`_app.tsx`), **Then** it either performs real library search or is removed (decision informed by PostHog usage if available).
+2. **Given** the disabled "Listen" nav tab, **Then** it routes to a library picker or is removed from the nav.
+3. **Given** coach unlock chips (`coach-chat-helpers.ts`), **Then** `upgrade` routes to `/pricing`, `add_stems`/`add_reference` open the real upload dialogs — no stale "coming with Epic 2" toasts.
+4. **Given** ProjectUnlock, **Then** it renders a real .als upload affordance instead of instruction-with-no-button.
+5. **Given** ReferenceTab with no real percentile, **Then** it shows an honest "upload a reference to unlock" empty state — never a fabricated percentile from `score * 0.95`.
+6. **Given** the Debug tab, **Then** it is gated behind a dev flag/query param and hidden from end users.
+7. **Given** dead elements — the Listen rail "Note this moment" input, the disabled profile Email Edit row, the unlinked mock `/listen-rack` demo route — **Then** each is wired or removed.
+8. **Given** orphaned components (`AnalysisTab`/`SpectrumTab`/`ArrangementTab`, `VerdictCard`/`VerdictsPanel`, `NotImplemented.cs`), **Then** they are deleted or re-wired (explicit decision per component), and CLAUDE.md's stale frontend description is corrected.
+
+### Story 12.6: Coach Mix Truthfulness & Coach Chat Polish
+
+As a user,
+I want Coach Mix and the coach chat to be honest about their capabilities,
+So that labels match what the system actually does.
+
+**Acceptance Criteria:**
+
+1. **Given** the arbiter is unbuilt (1/15 tasks), **Then** a product decision is recorded: finish the arbiter plan (`docs/superpowers/plans/2026-06-28-coach-mix-arbiter.md`) OR relabel the feature honestly — and the UI label, persisted preset name, and marketing copy agree with the decision.
+2. **Given** the FixRackPanel "Why these settings — soon" placeholder, **Then** it is removed OR wired to the solver-computed `change_log`/`leftover_advice` (which already exists server-side).
+3. **Given** the orphaned `app/coach_mix/` package (types + interactions, zero importers), **Then** it is deleted or adopted per the AC1 decision.
+4. **Given** `RecordingJobQueue` in `CoachConversationEndpointsTests.cs`, **Then** `Calls` is a `ConcurrentQueue` and the `Concurrent_Posts_Converge` flake is gone.
+5. **Given** a coach turn that ends refused or user-stopped, **Then** it does not count against the user's cap (or the recorded product decision says why it does).
+
+### Story 12.7: Test Integrity — Smoke E2E & Fail-Loud Suites
+
+As the operator,
+I want green CI to mean something,
+So that suites can never silently no-op.
+
+**Acceptance Criteria:**
+
+1. **Given** BFF integration tests without Postgres, **Then** they report as SKIPPED (visible count in CI output) instead of silently returning green.
+2. **Given** the compose stack, **Then** one Playwright smoke test runs: register → upload fixture WAV → wait for report → open Listen — catching verify-gate, dead-handoff, and dead-UI regressions in one pass.
+3. **Given** dispatch endpoints, **Then** a contract test asserts every 4xx carries a machine-readable `code` (pairs with 12.1 AC5).
+
+### Story 12.8: First-Run Experience & Feedback Loop
+
+As a new user,
+I want value before my first upload finishes and a way to report problems,
+So that the first session builds trust instead of testing patience.
+
+**Acceptance Criteria:**
+
+1. **Given** a new account, **Then** a pre-analyzed demo track is available in the library (seeded report, clearly labeled), so a full report is visible in seconds.
+2. **Given** the app shell, **Then** a "Report a problem" affordance opens a prefilled report (mailto or GitHub issue) carrying the current job/correlation ID.
+3. **Given** the analysis progress view, **Then** a small "How analysis works" link/diagram explains the 7 phases (pairs with 12.2 AC3).
+4. **Given** the docs, **Then** CLAUDE.md's stale claims are corrected (DeltaCard, tab list, retired Listen page) and `PRPs/deferred-work.md` absorbs the Epics 3–10 inline deferrals into one ledger.
