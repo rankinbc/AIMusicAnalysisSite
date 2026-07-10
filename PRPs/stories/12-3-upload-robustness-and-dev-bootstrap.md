@@ -1,6 +1,14 @@
 # Story 12.3: Upload Robustness & Dev Bootstrap
 
-Status: review
+Status: done
+
+## Senior Review Record (2026-07-10)
+
+Review verdict: 2 findings (P1, P2) + 2 defers; both findings fixed in-review, gates re-run green (affected 21/21, full vitest 735/735 incl. +3 new, build/tsc/lint clean). BFF/worker/launcher untouched — both findings were client-side.
+
+- **P1 (fixed):** a down MinIO surfaces at the attachment XHR PUT (not the CPU-only init), and that failure was a plain `Error` the fallback predicate ignored — attachments hard-failed instead of falling back to proxy. Fix: `PresignedPutError` in `presigned-fallback.ts` (predicate-eligible; single PUT = zero bytes committed), thrown by `putToPresignedUrl` on network error / non-2xx. Abort stays a plain Error (user cancel never falls back). Mix part-PUT semantics untouched.
+- **P2 (fixed):** attachment sites wrapped init+PUT+registration in one fallback try — a failed registration (als-key / complete-key / stems/stage-keys) after a committed PUT could trigger a proxy re-upload → double-create hazard. Fix: all three `UnifiedUploadDialog` attachment sites split so only init+PUT is fallback-eligible; registration failures propagate.
+- **Deferred (non-blocking):** orphaned multipart parts on init partial-fail; `/data` missing-root warning only fires when `C:\data` absent. Dialog-level integration test for the restructured attachment flow flagged as optional follow-up (helper + predicate contract tests cover the decision logic).
 
 ## Story
 

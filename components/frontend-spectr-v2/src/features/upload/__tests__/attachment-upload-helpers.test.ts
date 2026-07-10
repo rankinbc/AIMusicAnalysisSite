@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { putToPresignedUrl, uploadAttachmentPresigned } from '../attachment-upload-helpers';
-import { shouldFallBackToProxy } from '../presigned-fallback';
+import { PresignedPutError, shouldFallBackToProxy } from '../presigned-fallback';
 
 // Keep ApiError real (12.3: shouldFallBackToProxy relies on instanceof).
 vi.mock('../../../api/fetcher', async (importOriginal) => {
@@ -15,6 +15,8 @@ import { ApiError, fetcher } from '../../../api/fetcher';
 class FakeXhr {
   static last: FakeXhr | null = null;
   static status = 200;
+  // Which XHR event send() fires — 'load' (default), 'error' (network), 'abort'.
+  static fireEvent: 'load' | 'error' | 'abort' = 'load';
   method = '';
   url = '';
   sent: unknown = null;
@@ -45,7 +47,7 @@ class FakeXhr {
 
   send(body: unknown) {
     this.sent = body;
-    queueMicrotask(() => this.listeners['load']?.());
+    queueMicrotask(() => this.listeners[FakeXhr.fireEvent]?.());
   }
 }
 
@@ -57,6 +59,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
   FakeXhr.status = 200;
+  FakeXhr.fireEvent = 'load';
   FakeXhr.last = null;
 });
 
@@ -71,12 +74,39 @@ describe('putToPresignedUrl', () => {
     expect(Object.keys(FakeXhr.last!.headers)).toHaveLength(0);
   });
 
-  it('rejects on a non-2xx response', async () => {
+  it('rejects a non-2xx with a fallback-eligible PresignedPutError', async () => {
     withFakeXhr();
     FakeXhr.status = 403;
-    await expect(
-      putToPresignedUrl('https://s3.test/k', new File([new Uint8Array(1)], 'x.wav')),
-    ).rejects.toThrow('403');
+    const err = await putToPresignedUrl(
+      'https://s3.test/k',
+      new File([new Uint8Array(1)], 'x.wav'),
+    ).catch((e) => e);
+    expect(err).toBeInstanceOf(PresignedPutError);
+    expect(String(err)).toContain('403');
+    expect(shouldFallBackToProxy(err)).toBe(true);
+  });
+
+  it('rejects a network error with a fallback-eligible PresignedPutError (12.3: down MinIO surfaces at the PUT, not init)', async () => {
+    withFakeXhr();
+    FakeXhr.fireEvent = 'error';
+    const err = await putToPresignedUrl(
+      'https://s3.test/k',
+      new File([new Uint8Array(1)], 'x.wav'),
+    ).catch((e) => e);
+    expect(err).toBeInstanceOf(PresignedPutError);
+    expect(shouldFallBackToProxy(err)).toBe(true);
+  });
+
+  it('rejects an abort with a plain Error that does NOT fall back (user cancel, not a storage outage)', async () => {
+    withFakeXhr();
+    FakeXhr.fireEvent = 'abort';
+    const err = await putToPresignedUrl(
+      'https://s3.test/k',
+      new File([new Uint8Array(1)], 'x.wav'),
+    ).catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(PresignedPutError);
+    expect(shouldFallBackToProxy(err)).toBe(false);
   });
 });
 

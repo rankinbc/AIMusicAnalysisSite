@@ -27,7 +27,10 @@ import type {
   StemRole,
 } from '../api/types';
 import { useMixUpload } from '../hooks/useMixUpload';
-import { uploadAttachmentPresigned } from '../features/upload/attachment-upload-helpers';
+import {
+  uploadAttachmentPresigned,
+  type AttachmentInitResponse,
+} from '../features/upload/attachment-upload-helpers';
 import { shouldFallBackToProxy } from '../features/upload/presigned-fallback';
 import { AlsPreviewPanel } from '../features/upload/AlsPreviewPanel';
 import {
@@ -429,21 +432,16 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
       //    registration); 501 falls back to the legacy proxy FormData.
       if (als) {
         setStatus('Attaching project…');
+        // Init + PUT is fallback-eligible (zero bytes committed on failure).
+        // The als-key registration is NOT — a failure there surfaces rather than
+        // re-uploading via the proxy and risking a double-create (story 12.3).
+        let alsPut: AttachmentInitResponse | null = null;
         try {
-          const put = await uploadAttachmentPresigned({
+          alsPut = await uploadAttachmentPresigned({
             file: als,
             kind: 'als',
             versionId: vid,
             onProgress: (l, t) => setStatus(`Attaching project… ${Math.round((100 * l) / t)}%`),
-          });
-          await fetcher<AlsUploadResponse>({
-            url: `/versions/${vid}/als-key`,
-            method: 'POST',
-            data: {
-              key: put.key,
-              analyze: false,
-              ...(alsProject ? { projectJson: JSON.stringify(alsProject) } : {}),
-            },
           });
         } catch (e) {
           if (!shouldFallBackToProxy(e)) throw e;
@@ -457,6 +455,17 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
             body: alsForm,
           });
         }
+        if (alsPut) {
+          await fetcher<AlsUploadResponse>({
+            url: `/versions/${vid}/als-key`,
+            method: 'POST',
+            data: {
+              key: alsPut.key,
+              analyze: false,
+              ...(alsProject ? { projectJson: JSON.stringify(alsProject) } : {}),
+            },
+          });
+        }
       }
 
       // 3. Reference — either a saved library track or a new upload. Either way
@@ -466,25 +475,16 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
         referenceId = pickedReferenceId;
       } else if (refFile) {
         setStatus('Uploading reference…');
+        // Story 3.2 — presigned-first; init/PUT failure falls back to the proxy
+        // upload (501 unconfigured or PresignedPutError from a down store, story
+        // 12.3). The complete-key registration below is NOT fallback-eligible.
         let ref: ReferenceDto;
+        let refPut: AttachmentInitResponse | null = null;
         try {
-          // Story 3.2 — presigned-first; 501 falls back to the proxy upload.
-          const put = await uploadAttachmentPresigned({
+          refPut = await uploadAttachmentPresigned({
             file: refFile,
             kind: 'reference',
             onProgress: (l, t) => setStatus(`Uploading reference… ${Math.round((100 * l) / t)}%`),
-          });
-          ref = await fetcher<ReferenceDto>({
-            url: '/references/complete-key',
-            method: 'POST',
-            data: {
-              referenceId: put.referenceId,
-              key: put.key,
-              fileName: refFile.name,
-              ...(refTitle.trim() ? { title: refTitle.trim() } : {}),
-              ...(refArtist.trim() ? { artist: refArtist.trim() } : {}),
-              ...(refGenre.trim() ? { genre: refGenre.trim() } : {}),
-            },
           });
         } catch (e) {
           if (!shouldFallBackToProxy(e)) throw e;
@@ -495,9 +495,23 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
           if (refGenre.trim()) rForm.append('genre', refGenre.trim());
           ref = await fetcher<ReferenceDto>({ url: '/references/', method: 'POST', body: rForm });
         }
-        void fetcher<unknown>({ url: `/references/${ref.id}/analyze`, method: 'POST' }).catch(() => {});
+        if (refPut) {
+          ref = await fetcher<ReferenceDto>({
+            url: '/references/complete-key',
+            method: 'POST',
+            data: {
+              referenceId: refPut.referenceId,
+              key: refPut.key,
+              fileName: refFile.name,
+              ...(refTitle.trim() ? { title: refTitle.trim() } : {}),
+              ...(refArtist.trim() ? { artist: refArtist.trim() } : {}),
+              ...(refGenre.trim() ? { genre: refGenre.trim() } : {}),
+            },
+          });
+        }
+        void fetcher<unknown>({ url: `/references/${ref!.id}/analyze`, method: 'POST' }).catch(() => {});
         qc.invalidateQueries({ queryKey: ['references'] });
-        referenceId = ref.id;
+        referenceId = ref!.id;
       }
       resolvedRefIdRef.current = referenceId; // carried into the review-confirm step
 
@@ -517,10 +531,13 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
 
       // Stems path: stage → classify → (review | auto-confirm).
       // Story 3.2: presigned-first per file + one stage-keys registration;
-      // any 501 (unconfigured S3, pre-AR20 version) falls back to the legacy
-      // multi-file proxy stage for the WHOLE batch.
+      // any 501 (unconfigured S3, pre-AR20 version) or a PresignedPutError from a
+      // down store (story 12.3) falls back to the legacy multi-file proxy stage
+      // for the WHOLE batch — safe because no stem is registered until every PUT
+      // has landed. The stage-keys registration itself is NOT fallback-eligible.
       setStatus('Uploading stems…');
-      let staged: StageStemsResponse;
+      let staged: StageStemsResponse | null = null;
+      let stemPutItems: { stemId: string; key: string; fileName: string }[] | null = null;
       try {
         const putItems: { stemId: string; key: string; fileName: string }[] = [];
         for (const [i, r] of stemRows.entries()) {
@@ -533,11 +550,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
           });
           putItems.push({ stemId: put.stemId ?? '', key: put.key, fileName: r.file.name });
         }
-        staged = await fetcher<StageStemsResponse>({
-          url: `/versions/${vid}/stems/stage-keys`,
-          method: 'POST',
-          data: { stems: putItems },
-        });
+        stemPutItems = putItems;
       } catch (e) {
         if (!shouldFallBackToProxy(e)) throw e;
         const stemForm = new FormData();
@@ -548,7 +561,14 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
           body: stemForm,
         });
       }
-      const stagedStems = staged.stems.slice(-stemRows.length);
+      if (stemPutItems) {
+        staged = await fetcher<StageStemsResponse>({
+          url: `/versions/${vid}/stems/stage-keys`,
+          method: 'POST',
+          data: { stems: stemPutItems },
+        });
+      }
+      const stagedStems = staged!.stems.slice(-stemRows.length);
       setStemRows((prev) => prev.map((r, i) => ({ ...r, serverId: stagedStems[i]?.id })));
       await fetcher<unknown>({ url: `/versions/${vid}/stems/classify`, method: 'POST' });
 
