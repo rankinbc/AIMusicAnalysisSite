@@ -40,6 +40,7 @@ import f from '../styles/forms.module.css';
 import { BlurLock } from './BlurLock';
 import { buildConfirmPayload } from './stems-upload-helpers';
 import { UpgradeSheet } from './UpgradeSheet';
+import { isVerifyGateError, showVerifyGateToast } from './verify-email';
 import {
   buildAutoConfirmPayload,
   decideDispatchPath,
@@ -581,6 +582,15 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
         setBusy(false);
         setUpgradeReason('cap');
         setEntExhausted(true);
+        return;
+      }
+      // Story 12.1 (AC2) — the story-4.5 verify gate gets an actionable
+      // toast (verify copy + resend action), never a raw "HTTP 403".
+      if (isVerifyGateError(err)) {
+        setPhase('form');
+        setStatus('');
+        setBusy(false);
+        showVerifyGateToast();
         return;
       }
       // The version may already exist un-analyzed — let the user retry from the song page.

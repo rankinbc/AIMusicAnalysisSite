@@ -616,6 +616,8 @@ export interface MeProfileDto {
   publicLink: string | null;
   /** Story 4.4 — analysis-complete email opt-out (true = emails on). */
   notifyAnalysisComplete: boolean;
+  /** Story 12.1 — ISO timestamp, null while the email is unverified. */
+  emailVerifiedAt: string | null;
 }
 
 export interface PatchMeProfileRequest {

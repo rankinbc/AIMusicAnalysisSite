@@ -48,7 +48,7 @@
 # Build order: E1 -> E2 -> E3 -> E4 -> E5 -> E6 -> E7 -> E8 -> E9 -> E10.
 
 generated: 2026-06-12
-last_updated: 2026-07-03
+last_updated: 2026-07-10
 # story 2-10 transitioned: backlog → ready-for-dev → in-progress → review → done (2026-06-23; nightly BillingReconciliationService + webhook replay idempotency tests + currency/price drift detection; code-review: 4 patches [sentinel false-positive, PeriodicTimer startup run, subscription-drift tests, per-row error isolation], 154/154 BFF tests). Epic-2 COMPLETE — all 10 stories done.
 # story 2-8 transitioned: backlog → ready-for-dev (create-story workflow, 2026-06-23; usage page summary + HonestMathBanner + UsageMeter nav + BFF coach-pool/honest-math surfacing)
 # story 2-9 transitioned: backlog → ready-for-dev (create-story workflow, 2026-06-23; dunning DunningBanner + next_payment_attempt persistence + graceful degradation via existing 2.7 BlurLock + AR15 results-forever)
@@ -179,7 +179,7 @@ development_status:
   11-11-discovery-entry-points: done  # merged to master via PR #4 (2026-07-03); GET /api/u/?q= handle search (mention-grammar-validated, IsActive, rate-limited) + features/mentions autocomplete in both composers + comment/roster avatar → /u/{handle} links + /v/{token} owner identity + RegisterCta(via+next)/FollowProducerCta post-claim loop; 12 review patches applied (token encoding, full-token replace, caret restore, IME guard, reactive auth + isSelf, keepPreviousData, key collision, test hardening); gates green (BFF 262, vitest 661); PR #4
   epic-11-retrospective: optional
   epic-12: in-progress  # added 2026-07-10 from full-app audit + team review; see PRPs/epics.md Epic 12
-  12-1-analysis-dispatch-unblocked-in-dev-and-verify-gate-ux: ready-for-dev  # story file created 2026-07-10 (create-story, code anchors verified); AUDIT P0: verify gate 403s every analysis after first in dev; opaque "HTTP 403" toast; disposable cap not gated
+  12-1-analysis-dispatch-unblocked-in-dev-and-verify-gate-ux: done  # code-reviewed 2026-07-10 (3 adversarial layers, all 5 ACs Met, 6 patches applied incl. loopback-gated token log + logout cooldown reset + banner entitlement wait); full gates post-patch: BFF 350/350 (live PG+Redis), vite build + tsc 0 + lints clean + vitest 699/699. Impl: DevAutoVerify (Development-only, double guard) + console verify link + dev-login stamp; AR38-message-first ApiError + verify-gate toast w/ resend; VerifyEmailBanner in shell; disposable arm behind limitsOn; 5-code dispatch error contract tests
   12-2-failure-visibility-worker-health-and-progress-storyline: backlog  # AUDIT P0: dead worker = 4h "in progress" spinner; fail-loud launcher, dev reaper 5min, per-phase narration, healthz aggregation, boot config summary
   12-3-upload-robustness-and-dev-bootstrap: backlog  # presigned 500-no-fallback when S3 env set w/o MinIO; docs/dev-setup.md; storage-root logging; start-script preflight
   12-4-fix-rack-to-listen-carry-over: backlog  # AUDIT P0: "Open in Listen rack" carries nothing (FixRackPanel.tsx:48); URL-param carrier + one-shot apply + applied chip + composeRack overlay + unmapped-fix rows + integration test

@@ -54,6 +54,18 @@ public sealed class AuthFlowTests(WebApplicationFactory<Program> factory)
         return null;
     }
 
+    // Dev auto-verify stamps EmailVerifiedAt at register under the base
+    // (Development) factory. Tests that mean to exercise the token->stamp path
+    // must strip that stamp first, or their assertions pass on the dev
+    // convenience rather than the code under test.
+    private static async Task UnverifyAsync(WebApplicationFactory<Program> f, string address)
+    {
+        using var scope = f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await db.Users.Where(u => u.Email == address).ExecuteUpdateAsync(
+            s => s.SetProperty(u => u.EmailVerifiedAt, (DateTimeOffset?)null));
+    }
+
     [Fact]
     public async Task Register_Sends_Verification_And_Token_Verifies_Once()
     {
@@ -71,6 +83,10 @@ public sealed class AuthFlowTests(WebApplicationFactory<Program> factory)
         Assert.Equal(address, sent.To);
         var token = TokenFromUrl(sent.Data["verifyUrl"]);
         Assert.True(token.Length >= 32);
+
+        // Strip the dev auto-verify stamp so the assertion below proves the
+        // TOKEN drove the stamp, not the register-time convenience.
+        await UnverifyAsync(f, address);
 
         // Verify — 204, user stamped.
         var verify = await client.PostAsJsonAsync("/api/auth/verify-email", new { token });
@@ -110,6 +126,10 @@ public sealed class AuthFlowTests(WebApplicationFactory<Program> factory)
         var cross = await client.PostAsJsonAsync("/api/auth/reset-password",
             new { token = verifyToken, newPassword = "NewPassword9!" });
         Assert.Equal(HttpStatusCode.BadRequest, cross.StatusCode);
+
+        // Strip the dev auto-verify stamp so the 204 below reflects the token
+        // actually verifying, not an already-verified no-op.
+        await UnverifyAsync(f, address);
 
         // And it still works for its OWN purpose (the cross attempt did not consume it).
         var verify = await client.PostAsJsonAsync("/api/auth/verify-email", new { token = verifyToken });
@@ -216,6 +236,150 @@ public sealed class AuthFlowTests(WebApplicationFactory<Program> factory)
         Assert.Equal(HttpStatusCode.NoContent, resp.StatusCode);
         // No SECOND verification email — no-op when verified.
         Assert.Single(email.Sent, s => s.Template == EmailTemplates.Verification);
+    }
+
+    // ── Story 12.1 — dev verify-gate satisfiability ─────────────────────────
+
+    [Fact]
+    public async Task Register_AutoVerifies_In_Development_When_Flag_On()
+    {
+        if (!await TestDb.Reachable(_factory)) { return; }
+
+        // Base factory runs env=Development + appsettings.Development.json
+        // (Auth:DevAutoVerify=true) — registration must come out verified so
+        // the second-analysis gate is satisfiable without email delivery.
+        var (f, email) = Build();
+        var client = f.CreateClient();
+        var address = $"dav+{Guid.NewGuid():N}@spectr.test";
+        var reg = await client.PostAsJsonAsync("/api/auth/register",
+            new { email = address, password = "CorrectHorse9!" });
+        reg.EnsureSuccessStatusCode();
+
+        using var scope = f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var verifiedAt = await db.Users.AsNoTracking()
+            .Where(u => u.Email == address).Select(u => u.EmailVerifiedAt).SingleAsync();
+        Assert.NotNull(verifiedAt);
+        // The verification email still goes out (log-link + resend flows stay
+        // exercised in dev).
+        Assert.Single(email.Sent, s => s.Template == EmailTemplates.Verification);
+    }
+
+    [Fact]
+    public async Task Register_Does_Not_AutoVerify_When_Flag_Off()
+    {
+        if (!await TestDb.Reachable(_factory)) { return; }
+
+        var email = new RecordingEmailSender();
+        using var f = _factory.WithWebHostBuilder(b =>
+        {
+            b.UseSetting("Auth:DevAutoVerify", "false");
+            b.ConfigureServices(s => s.AddSingleton<IEmailSender>(email));
+        });
+        var client = f.CreateClient();
+        var address = $"davoff+{Guid.NewGuid():N}@spectr.test";
+        var reg = await client.PostAsJsonAsync("/api/auth/register",
+            new { email = address, password = "CorrectHorse9!" });
+        reg.EnsureSuccessStatusCode();
+
+        using var scope = f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var verifiedAt = await db.Users.AsNoTracking()
+            .Where(u => u.Email == address).Select(u => u.EmailVerifiedAt).SingleAsync();
+        Assert.Null(verifiedAt);
+    }
+
+    [Fact]
+    public async Task Register_Does_Not_AutoVerify_When_Flag_Absent()
+    {
+        if (!await TestDb.Reachable(_factory)) { return; }
+
+        // Guards against a future default-ON regression (e.g. switching the
+        // comparison to `!= "false"`): a blank/absent flag must read as OFF.
+        // Empty string stands in for the key being absent — both are non-"true"
+        // — and would auto-verify only under a default-on bug, failing here.
+        var email = new RecordingEmailSender();
+        using var f = _factory.WithWebHostBuilder(b =>
+        {
+            b.UseSetting("Auth:DevAutoVerify", "");
+            b.ConfigureServices(s => s.AddSingleton<IEmailSender>(email));
+        });
+        var client = f.CreateClient();
+        var address = $"davabs+{Guid.NewGuid():N}@spectr.test";
+        var reg = await client.PostAsJsonAsync("/api/auth/register",
+            new { email = address, password = "CorrectHorse9!" });
+        reg.EnsureSuccessStatusCode();
+
+        using var scope = f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var verifiedAt = await db.Users.AsNoTracking()
+            .Where(u => u.Email == address).Select(u => u.EmailVerifiedAt).SingleAsync();
+        Assert.Null(verifiedAt);
+    }
+
+    [Fact]
+    public async Task DevAutoVerify_Is_Inert_Outside_Development()
+    {
+        if (!await TestDb.Reachable(_factory)) { return; }
+
+        // Guard test: even with the flag EXPLICITLY true, a non-Development
+        // boot must not honor it (defense in depth, dev-login precedent).
+        // Staging boot needs real-looking signing keys + FrontendOrigin
+        // (appsettings.Development.json no longer loads).
+        var email = new RecordingEmailSender();
+        using var f = _factory.WithWebHostBuilder(b =>
+        {
+            b.UseEnvironment("Staging");
+            b.UseSetting("Jwt:Key", "staging-guard-test-jwt-signing-key-0123456789abcdef");
+            b.UseSetting("Anon:SigningKey", "staging-guard-test-anon-signing-key-9876543210fedcba");
+            b.UseSetting("App:FrontendOrigin", "https://staging.spectr.test");
+            b.UseSetting("RateLimits:Enabled", "false");
+            b.UseSetting("Auth:DevAutoVerify", "true");
+            b.ConfigureServices(s => s.AddSingleton<IEmailSender>(email));
+        });
+        var client = f.CreateClient();
+        var address = $"davstg+{Guid.NewGuid():N}@spectr.test";
+        var reg = await client.PostAsJsonAsync("/api/auth/register",
+            new { email = address, password = "CorrectHorse9!" });
+        reg.EnsureSuccessStatusCode();
+
+        using var scope = f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var verifiedAt = await db.Users.AsNoTracking()
+            .Where(u => u.Email == address).Select(u => u.EmailVerifiedAt).SingleAsync();
+        Assert.Null(verifiedAt);
+    }
+
+    [Fact]
+    public async Task DevLogin_Stamps_Verified_On_Target_Account()
+    {
+        if (!await TestDb.Reachable(_factory)) { return; }
+
+        var (f, email) = Build();
+        var client = f.CreateClient();
+        var address = $"dvl+{Guid.NewGuid():N}@spectr.test";
+        var reg = await client.PostAsJsonAsync("/api/auth/register",
+            new { email = address, password = "CorrectHorse9!" });
+        reg.EnsureSuccessStatusCode();
+
+        // Force the unverified state, then dev-login — it must stamp.
+        using (var scope = f.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.Users.Where(u => u.Email == address).ExecuteUpdateAsync(
+                s => s.SetProperty(u => u.EmailVerifiedAt, (DateTimeOffset?)null));
+        }
+
+        var devLogin = await client.PostAsJsonAsync("/api/auth/dev-login", new { email = address });
+        Assert.Equal(HttpStatusCode.OK, devLogin.StatusCode);
+
+        using (var scope = f.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var verifiedAt = await db.Users.AsNoTracking()
+                .Where(u => u.Email == address).Select(u => u.EmailVerifiedAt).SingleAsync();
+            Assert.NotNull(verifiedAt);
+        }
     }
 
     [Fact]

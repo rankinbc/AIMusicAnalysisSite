@@ -15,6 +15,7 @@ import { AppWorkerHealthNotice } from '../features/health/AppWorkerHealthNotice'
 import { NotificationBell } from '../features/notifications/NotificationCenter';
 import { BrandMark } from '../ui/BrandMark';
 import { UsageMeter } from '../components/UsageMeter';
+import { VerifyEmailBanner } from '../components/VerifyEmailBanner';
 import s from './_app/_appLayout.module.css';
 
 // Authenticated layout. beforeLoad guards on auth — anonymous users get
@@ -199,6 +200,9 @@ function AppLayout() {
       )}
       {/* Global analysis-worker outage notice — renders nothing while healthy. */}
       <AppWorkerHealthNotice className={s.workerHealthSlot} />
+      {/* Story 12.1 — unverified-email notice (free tier only); renders
+          nothing when verified, dismissed, or on paid tiers. */}
+      <VerifyEmailBanner className={s.verifyEmailSlot} />
       <main className={s.main}>
         <Outlet />
       </main>

@@ -4,6 +4,8 @@
 // Refresh is serialized via a module-level Promise so N concurrent 401s
 // trigger exactly one /api/auth/refresh call.
 
+import { extractApiError } from './error-utils';
+
 export class ApiError extends Error {
   constructor(public status: number, public body: unknown, message?: string) {
     super(message ?? `HTTP ${status}`);
@@ -115,7 +117,9 @@ export async function fetcher<T>(config: FetcherConfig): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => undefined);
-    throw new ApiError(res.status, body);
+    // Story 12.1 (AC2) — prefer the AR38 envelope's human message so callers
+    // that toast `err.message` show the server's wording, not "HTTP 403".
+    throw new ApiError(res.status, body, extractApiError(body).message);
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;

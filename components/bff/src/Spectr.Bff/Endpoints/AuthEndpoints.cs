@@ -37,6 +37,15 @@ public static class AuthEndpoints
     private static string ClientIp(HttpContext ctx)
         => ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 
+    // Loopback-only, mirroring the dev-login guard (a null remote — in-memory
+    // TestServer — counts as local). Used to keep the dev verify-link log off
+    // any non-loopback request even on a box misconfigured to Development.
+    private static bool IsLoopbackRequest(HttpContext ctx)
+    {
+        var remote = ctx.Connection.RemoteIpAddress;
+        return remote is null || System.Net.IPAddress.IsLoopback(remote);
+    }
+
     // NFR8: both arms (per-IP + per-actor) must pass; 429 envelope on deny.
     // RateLimits:Enabled=false (appsettings.Development.json) turns the auth
     // limits off for dev + the test suite — hundreds of same-IP registrations
@@ -74,13 +83,24 @@ public static class AuthEndpoints
 
     private static async Task SendVerificationEmailAsync(
         IEmailSender email, AuthTokenService tokens, IConfiguration cfg,
-        ILoggerFactory lf, Guid userId, string toEmail, CancellationToken ct)
+        IWebHostEnvironment env, ILoggerFactory lf, Guid userId, string toEmail,
+        bool localRequest, CancellationToken ct)
     {
         var raw = await tokens.IssueAsync(
             userId, AuthTokenService.PurposeVerifyEmail, AuthTokenService.VerifyEmailTtl, ct);
+        var verifyUrl = $"{FrontendOrigin(cfg, lf)}/verify-email?token={raw}";
+        // Story 12.1 — local dev has no email delivery (RESEND_API_KEY empty),
+        // so surface the link in the BFF console. Logged BEFORE the enqueue so
+        // it appears even when the email queue is down. Defense in depth: the
+        // raw token (a working verify credential) is logged ONLY in Development
+        // AND ONLY for a loopback request — a box misconfigured to Development
+        // that serves real users over the network never logs their tokens.
+        if (env.IsDevelopment() && localRequest)
+            lf.CreateLogger("Auth").LogInformation(
+                "DEV verification link for {Email}: {VerifyUrl}", toEmail, verifyUrl);
         await email.SendAsync(toEmail, EmailTemplates.Verification, new Dictionary<string, string>
         {
-            ["verifyUrl"] = $"{FrontendOrigin(cfg, lf)}/verify-email?token={raw}",
+            ["verifyUrl"] = verifyUrl,
             ["expiresHours"] = ((int)AuthTokenService.VerifyEmailTtl.TotalHours).ToString(),
         }, ct);
     }
@@ -114,6 +134,7 @@ public static class AuthEndpoints
         AuthTokenService authTokens,
         IEmailSender email,
         IConfiguration cfg,
+        IWebHostEnvironment env,
         IRateLimiter limiter,
         ILoggerFactory loggerFactory,
         HttpContext httpCtx,
@@ -159,6 +180,14 @@ public static class AuthEndpoints
             Handle = handle,
             DisplayName = handle,
         };
+        // Story 12.1 — dev auto-verify: local dev delivers no email, so the
+        // story-4.5 second-analysis verify gate would otherwise be
+        // unsatisfiable. Defense in depth (mirrors the dev-login guard): the
+        // flag is honored ONLY in Development AND only when explicitly true —
+        // appsettings.Development.json sets it; no other config may.
+        if (env.IsDevelopment()
+            && string.Equals(cfg["Auth:DevAutoVerify"], "true", StringComparison.OrdinalIgnoreCase))
+            user.EmailVerifiedAt = DateTimeOffset.UtcNow;
         db.Users.Add(user);
 
         await db.SaveChangesAsync(ct);
@@ -235,7 +264,7 @@ public static class AuthEndpoints
         // /resend-verification is the recovery.
         try
         {
-            await SendVerificationEmailAsync(email, authTokens, cfg, loggerFactory, user.Id, user.Email, ct);
+            await SendVerificationEmailAsync(email, authTokens, cfg, env, loggerFactory, user.Id, user.Email, IsLoopbackRequest(httpCtx), ct);
         }
         catch (Exception ex)
         {
@@ -320,6 +349,19 @@ public static class AuthEndpoints
         if (user is null)
             return Results.NotFound(new { error = $"Dev user '{email}' not found — register it first." });
         if (!user.IsActive) return Results.Unauthorized();
+
+        // Story 12.1 — the dev account satisfies the story-4.5 verify gate (no
+        // email delivery locally). Gated on the SAME Auth:DevAutoVerify flag as
+        // register so the switch is consistent: with the flag off, a developer
+        // can dev-login and still reproduce the unverified gate. Idempotent;
+        // endpoint is already Development-only + loopback-only.
+        var devCfg = ctx.RequestServices.GetRequiredService<IConfiguration>();
+        if (user.EmailVerifiedAt is null
+            && string.Equals(devCfg["Auth:DevAutoVerify"], "true", StringComparison.OrdinalIgnoreCase))
+        {
+            user.EmailVerifiedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+        }
 
         var (rawRefresh, _) = await refresh.IssueAsync(user.Id, ct);
         resp.Cookies.Append(RefreshTokenService.CookieName, rawRefresh, refresh.CookieOptions());
@@ -478,6 +520,7 @@ public static class AuthEndpoints
         AuthTokenService tokens,
         IEmailSender email,
         IConfiguration cfg,
+        IWebHostEnvironment env,
         IRateLimiter limiter,
         HttpContext httpCtx,
         CancellationToken ct)
@@ -493,7 +536,7 @@ public static class AuthEndpoints
         if (user.EmailVerifiedAt is not null) return Results.NoContent(); // already done
 
         var lf = httpCtx.RequestServices.GetRequiredService<ILoggerFactory>();
-        await SendVerificationEmailAsync(email, tokens, cfg, lf, user.Id, user.Email, ct);
+        await SendVerificationEmailAsync(email, tokens, cfg, env, lf, user.Id, user.Email, IsLoopbackRequest(httpCtx), ct);
         return Results.NoContent();
     }
 

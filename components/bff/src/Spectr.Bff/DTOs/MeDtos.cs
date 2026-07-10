@@ -36,7 +36,8 @@ public sealed record MeProfileDto(
     string? Accent,
     string? PublicLink,
     string Tier,
-    bool NotifyAnalysisComplete);  // story 4.4 — completion-email opt-out
+    bool NotifyAnalysisComplete,   // story 4.4 — completion-email opt-out
+    DateTimeOffset? EmailVerifiedAt);  // story 12.1 — null = unverified (drives the verify banner)
 
 public sealed record PatchMeProfileRequest(
     string? DisplayName,

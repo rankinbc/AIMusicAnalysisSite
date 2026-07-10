@@ -10,6 +10,7 @@ import {
 } from 'react';
 
 import { fetcher, onAuthCleared, onTokenRefreshed, setAccessToken } from '../api/fetcher';
+import { resetVerifyResendState } from '../components/verify-email';
 import { identifyUser } from '../lib/analytics';
 import type { AuthResponse, AuthedUser } from '../api/types';
 
@@ -45,6 +46,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setState({ user: auth.user, accessToken: auth.accessToken, isLoading: false });
     } else {
       setAccessToken(null);
+      // Session ended (logout / refresh-clear): drop the verify-email resend
+      // debounce so the next user on this tab isn't blocked by the prior
+      // account's cooldown/in-flight state.
+      resetVerifyResendState();
       setState({ user: null, accessToken: null, isLoading: false });
     }
   }, []);

@@ -1116,33 +1116,40 @@ public static class VersionEndpoints
 
             // (a) Disposable-domain accounts get a REDUCED cap (default 1) —
             // the throttle answer to "50 analyses through disposable emails".
-            try
+            // Story 12.1 (AC4): this arm is throttling ("throttling layer
+            // only"), so it sits behind the same RateLimits:Enabled knob as
+            // the per-IP arm — dev/test registrations with throwaway domains
+            // must not get a mislabeled entitlement_exhausted.
+            if (limitsOn)
             {
-                var disposables = httpCtx.RequestServices.GetRequiredService<DisposableEmailService>();
-                var emailAddr = await db.Users.AsNoTracking()
-                    .Where(u => u.Id == userId).Select(u => u.Email).FirstOrDefaultAsync(ct);
-                if (emailAddr is not null && await disposables.IsDisposableAsync(emailAddr, ct))
+                try
                 {
-                    var flags = await ents.GetFlagsAsync(ct);
-                    var dispCap = flags.TryGetValue("disposable_free_analyses", out var dv)
-                        && int.TryParse(dv, out var dn) && dn > 0 ? dn : 1;
-                    var period = DateTimeOffset.UtcNow.ToString("yyyy-MM");
-                    // SAME exclusion as EntitlementService (AR16): an
-                    // invalid_file failure must not consume the disposable
-                    // cap either — a false positive still gets their one
-                    // analysis even after a broken upload.
-                    var used = await db.UsageEvents.AsNoTracking()
-                        .CountAsync(e => e.UserId == userId
-                            && e.EventType == "analysis" && e.BillingPeriod == period
-                            && !db.AnalysisJobs.Any(j =>
-                                j.ErrorCode == "invalid_file" && j.Id.ToString() == e.Reference), ct);
-                    if (used >= dispCap)
-                        return (Guid.Empty, ErrorEnvelope.Build(409, "entitlement_exhausted",
-                            "You have used all your analyses for this billing period."));
+                    var disposables = httpCtx.RequestServices.GetRequiredService<DisposableEmailService>();
+                    var emailAddr = await db.Users.AsNoTracking()
+                        .Where(u => u.Id == userId).Select(u => u.Email).FirstOrDefaultAsync(ct);
+                    if (emailAddr is not null && await disposables.IsDisposableAsync(emailAddr, ct))
+                    {
+                        var flags = await ents.GetFlagsAsync(ct);
+                        var dispCap = flags.TryGetValue("disposable_free_analyses", out var dv)
+                            && int.TryParse(dv, out var dn) && dn > 0 ? dn : 1;
+                        var period = DateTimeOffset.UtcNow.ToString("yyyy-MM");
+                        // SAME exclusion as EntitlementService (AR16): an
+                        // invalid_file failure must not consume the disposable
+                        // cap either — a false positive still gets their one
+                        // analysis even after a broken upload.
+                        var used = await db.UsageEvents.AsNoTracking()
+                            .CountAsync(e => e.UserId == userId
+                                && e.EventType == "analysis" && e.BillingPeriod == period
+                                && !db.AnalysisJobs.Any(j =>
+                                    j.ErrorCode == "invalid_file" && j.Id.ToString() == e.Reference), ct);
+                        if (used >= dispCap)
+                            return (Guid.Empty, ErrorEnvelope.Build(409, "entitlement_exhausted",
+                                "You have used all your analyses for this billing period."));
+                    }
                 }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception) { /* fail-open — throttling layer only */ }
             }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception) { /* fail-open — throttling layer only */ }
 
             // (b) Per-IP dispatch ceiling: N accounts on one machine share one
             // budget (default 10/h — generous for humans/NAT, fatal for scripts).

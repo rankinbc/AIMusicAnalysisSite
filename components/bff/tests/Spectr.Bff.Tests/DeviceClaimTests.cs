@@ -239,13 +239,17 @@ public sealed class DeviceClaimTests(WebApplicationFactory<Program> factory)
 
         try
         {
-            // Simulate one prior analysis job (the free first one).
+            // Simulate one prior analysis job (the free first one). Also
+            // strip the story-12.1 dev auto-verify stamp — this test is about
+            // the UNVERIFIED path.
             using (var scope = _factory.Services.CreateScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                 db.AnalysisJobs.Add(new AnalysisJob
                 { Id = Guid.NewGuid(), UserId = userId, VersionId = versionId, Status = "complete" });
                 await db.SaveChangesAsync();
+                await db.Users.Where(u => u.Id == userId).ExecuteUpdateAsync(
+                    s => s.SetProperty(u => u.EmailVerifiedAt, (DateTimeOffset?)null));
             }
 
             // Unverified + prior job → 403 with the envelope.
