@@ -17,9 +17,13 @@
         1. Stop existing instances of each app component (by listening port +
            by matching command line) so a clean process is started.
         2. Ensure the Docker infra (postgres + redis ONLY) is up and healthy.
-        3. Launch BFF, worker and frontend, each in its own PowerShell window
+        3. Preflight: verify Docker is reachable and postgres (5432) + redis
+           (6379) accept TCP from the host. On failure the app components are
+           NOT launched (story 12.3). Runs on -SkipInfra too — it validates
+           the "already running" assumption instead of trusting it.
+        4. Launch BFF, worker and frontend, each in its own PowerShell window
            with live logs.
-        4. Print a summary of what started, what failed, and the URLs.
+        5. Print a summary of what started, what failed, and the URLs.
 
 .PARAMETER StopOnly
     Stop the app components (and optionally the infra) without relaunching.
@@ -222,6 +226,56 @@ function Start-Infra {
     }
 }
 
+# ── Preflight (story 12.3 / AC4) ────────────────────────────────────────────
+# Host-side truth check before launching the app components. Start-Infra's
+# healthcheck wait proves the CONTAINER thinks it's healthy; these TCP probes
+# prove the ports are actually reachable from the host — and they are the ONLY
+# check on the -SkipInfra path, which otherwise trusts the "already running"
+# assumption. BFF/worker/frontend are all DB/Redis-dependent at boot, so
+# launching them into dead infra just multiplies red windows; failing here also
+# spares the confusing EF stack trace Update-Database would print first.
+function Test-TcpPort {
+    param([int]$Port, [int]$TimeoutMs = 2000)
+    $client = [System.Net.Sockets.TcpClient]::new()
+    try {
+        # Wait() throws on connection-refused (faulted task) -> catch -> false.
+        return ($client.ConnectAsync('localhost', $Port).Wait($TimeoutMs) -and $client.Connected)
+    } catch {
+        return $false
+    } finally {
+        $client.Dispose()
+    }
+}
+
+function Test-Preflight {
+    Step 'Preflight: infra reachable from the host'
+    $ok = $true
+
+    if ($SkipInfra) {
+        # Docker isn't required under -SkipInfra (postgres/redis may be hosted
+        # elsewhere) — report, don't fail.
+        if (Test-Docker) { Info 'Docker: reachable' }
+        else { Info 'Docker: not reachable (fine under -SkipInfra if postgres/redis run elsewhere)' }
+    } elseif (-not (Test-Docker)) {
+        Fail 'Preflight: Docker daemon not reachable - Docker Desktop not running?'
+        $ok = $false
+    }
+
+    if (Test-TcpPort -Port 5432) { Good 'postgres: TCP 5432 accepting connections' }
+    else {
+        Fail 'Preflight: nothing accepting TCP on localhost:5432 - postgres not running/healthy? Try -RecreateInfra.'
+        $ok = $false
+    }
+
+    if (Test-TcpPort -Port 6379) { Good 'redis: TCP 6379 accepting connections' }
+    else {
+        Fail 'Preflight: nothing accepting TCP on localhost:6379 - redis not running/healthy? Try -RecreateInfra.'
+        $ok = $false
+    }
+
+    return $ok
+}
+
 # ── DB migrations ───────────────────────────────────────────────────────────
 # The BFF owns the canonical schema via EF Core. If pending migrations aren't
 # applied, EF's model references columns the DB lacks and every query 500s
@@ -374,9 +428,14 @@ if ($StopOnly) {
 }
 
 Start-Infra
-Update-Database
-Invoke-Recovery
-Start-Apps
+if (Test-Preflight) {
+    Update-Database
+    Invoke-Recovery
+    Start-Apps
+} else {
+    # Preflight already Fail'ed the specifics; make the outcome unmissable.
+    Warn 'Preflight failed - app components NOT launched.'
+}
 Show-Summary
 
 if ($script:Errors.Count -gt 0) { exit 1 } else { exit 0 }

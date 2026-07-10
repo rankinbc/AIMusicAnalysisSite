@@ -66,6 +66,8 @@ After the pipeline runs, the user can click any of 26 specialist tiles on the Re
 
 ## How to run (v2 stack)
 
+Full setup guide (prerequisites, one-command boot, env-file map, troubleshooting): [docs/dev-setup.md](docs/dev-setup.md)
+
 ```bash
 # 1. Start local services
 docker compose -f docker/docker-compose.yml up -d  # PostgreSQL + Redis

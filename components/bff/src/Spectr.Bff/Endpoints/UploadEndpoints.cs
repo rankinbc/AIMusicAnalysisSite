@@ -124,8 +124,25 @@ public static class UploadEndpoints
         if (partCount > MaxParts)
             return Results.BadRequest(new { error = "File requires too many parts." });
 
-        var uploadId = await store.InitiateMultipartAsync(key, contentType!, ct);
-        var parts = await store.PresignPartUrlsAsync(key, uploadId, partCount, ct);
+        // Story 12.3 (AC1) — S3 configured but unreachable (MinIO down) must be
+        // a typed 503, never an unhandled 500: the client's proxy fallback keys
+        // off init-stage 5xx. Catch broadly — connection failures, SDK errors,
+        // and lazy AmazonS3Client construction on malformed config all mean the
+        // same thing here.
+        string uploadId;
+        IReadOnlyList<PresignedPart> parts;
+        try
+        {
+            uploadId = await store.InitiateMultipartAsync(key, contentType!, ct);
+            parts = await store.PresignPartUrlsAsync(key, uploadId, partCount, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            httpCtx.RequestServices.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("Uploads").LogError(ex, "Storage unreachable during /uploads/init.");
+            return ErrorEnvelope.Build(503, "storage_unreachable",
+                "Upload storage is unreachable; falling back to standard upload.");
+        }
 
         return Results.Ok(new InitResponse(
             jobId, key, uploadId, partSize,
@@ -159,14 +176,29 @@ public static class UploadEndpoints
         if (body.Parts is null || body.Parts.Count == 0)
             return Results.BadRequest(new { error = "At least one part required." });
 
-        await store.CompleteMultipartAsync(
-            body.Key, body.UploadId,
-            body.Parts.Select(p => new CompletedPart(p.PartNumber, p.ETag)).ToList(), ct);
+        // Story 12.3 (AC1) — same typed 503 as /init, but NO fallback semantics:
+        // parts are already in the bucket (or lost), so the client must surface
+        // the error, never silently re-upload the file through the proxy. If the
+        // multipart actually completed before the failure, a retry mints a new
+        // jobId/key at /init and the abandoned object is retention-swept (3.4).
+        try
+        {
+            await store.CompleteMultipartAsync(
+                body.Key, body.UploadId,
+                body.Parts.Select(p => new CompletedPart(p.PartNumber, p.ETag)).ToList(), ct);
 
-        // Belt-and-braces: the object must exist before we create DB rows.
-        if (!await store.ObjectExistsAsync(body.Key, ct))
-            return ErrorEnvelope.Build(502, "upload_not_found",
-                "Finalized object not found in storage.");
+            // Belt-and-braces: the object must exist before we create DB rows.
+            if (!await store.ObjectExistsAsync(body.Key, ct))
+                return ErrorEnvelope.Build(502, "upload_not_found",
+                    "Finalized object not found in storage.");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            httpCtx.RequestServices.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("Uploads").LogError(ex, "Storage unreachable during /uploads/complete.");
+            return ErrorEnvelope.Build(503, "storage_unreachable",
+                "Upload storage is unreachable; the upload could not be finalized. Please retry.");
+        }
 
         var (songGuid, songErr) = await VersionEndpoints.ResolveOrCreateSongAsync(
             db, userId, body.SongId, body.GenreHint, Path.GetFileName(body.Key), ct);
@@ -228,13 +260,37 @@ public static class UploadEndpoints
     // kind-specific endpoints AFTER the PUT (stage-keys / als-key /
     // references/complete-key), each of which re-verifies key prefix +
     // object existence.
+    // Story 12.3 (AC1) — presigning is CPU-only signing, but the lazy
+    // AmazonS3Client construction underneath can throw on malformed config;
+    // answer the same typed 503 the multipart init does.
+    private static IResult PresignPutOr503(
+        IMultipartObjectStore store, string key, ILogger logger, CancellationToken ct,
+        Func<string, IResult> ok)
+    {
+        string url;
+        try
+        {
+            url = store.PresignPutUrl(key, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Storage unreachable during /uploads/attachments/init.");
+            return ErrorEnvelope.Build(503, "storage_unreachable",
+                "Upload storage is unreachable; falling back to standard upload.");
+        }
+        return ok(url);
+    }
+
     private static async Task<IResult> AttachmentInit(
         AttachmentInitRequest body,
         ClaimsPrincipal currentUser,
         AppDbContext db,
         IMultipartObjectStore store,
+        ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
+        var log = loggerFactory.CreateLogger("Uploads");
+
         if (!store.IsConfigured)
             return ErrorEnvelope.Build(501, "presigned_unavailable",
                 "Presigned upload storage is not configured; use the legacy upload endpoint.");
@@ -284,8 +340,8 @@ public static class UploadEndpoints
                         return Results.BadRequest(new { error = "Up to 100 stems per version." });
                     var stemId = Guid.NewGuid().ToString();
                     var stemKey = $"stems/{jobId}/{stemId}{ext}";
-                    return Results.Ok(new AttachmentInitResponse(
-                        stemKey, store.PresignPutUrl(stemKey, ct), stemId, null));
+                    return PresignPutOr503(store, stemKey, log, ct, url =>
+                        Results.Ok(new AttachmentInitResponse(stemKey, url, stemId, null)));
                 }
 
                 if (!AlsExts.Contains(ext))
@@ -293,8 +349,8 @@ public static class UploadEndpoints
                 if (body.FileSize > MaxAlsBytes)
                     return Results.BadRequest(new { error = "File exceeds 50 MB limit." });
                 var alsKey = $"als/{jobId}/project{ext}";
-                return Results.Ok(new AttachmentInitResponse(
-                    alsKey, store.PresignPutUrl(alsKey, ct), null, null));
+                return PresignPutOr503(store, alsKey, log, ct, url =>
+                    Results.Ok(new AttachmentInitResponse(alsKey, url, null, null)));
             }
             case "reference":
             {
@@ -304,8 +360,8 @@ public static class UploadEndpoints
                     return Results.BadRequest(new { error = "File exceeds 250 MB limit." });
                 var refId = Guid.NewGuid();
                 var refKey = $"reference/{refId}/source{ext}";
-                return Results.Ok(new AttachmentInitResponse(
-                    refKey, store.PresignPutUrl(refKey, ct), null, refId));
+                return PresignPutOr503(store, refKey, log, ct, url =>
+                    Results.Ok(new AttachmentInitResponse(refKey, url, null, refId)));
             }
             default:
                 return Results.BadRequest(new { error = "kind must be stem, als, or reference." });
