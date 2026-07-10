@@ -60,4 +60,13 @@ describe('DevHealthDotView', () => {
     expect(html).toContain('data-tone="warn"');
     expect(html).toContain('waiting for first probe');
   });
+
+  it('probe error outranks stale last-good data → red, never a false green', () => {
+    const html = renderToStaticMarkup(
+      <DevHealthDotView health={health()} unreachable />,
+    );
+    expect(html).toContain('class="dot red"');
+    expect(html).toContain('data-tone="down"');
+    expect(html).toContain('probe unreachable');
+  });
 });

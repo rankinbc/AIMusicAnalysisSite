@@ -93,9 +93,16 @@ from urllib.parse import urlparse as _urlparse  # noqa: E402
 from .llm.settings import get_llm_settings as _get_llm_settings  # noqa: E402
 
 _redis_loc = _urlparse(_REDIS_URL)
+# get_llm_settings() validates every LLM_* env var; a malformed value must not
+# turn this log line into a boot crash — the LLM gateway will surface the real
+# error on first use, exactly as it did before this summary existed.
+try:
+    _llm_fake = "1" if _get_llm_settings().llm_fake else "0"
+except Exception:  # noqa: BLE001
+    _llm_fake = "?"
 logging.getLogger(__name__).info(
     "Boot config: LLM_FAKE=%s WORKER_METRICS=%s redis=%s:%s queues=%s",
-    "1" if _get_llm_settings().llm_fake else "0",
+    _llm_fake,
     "1" if os.environ.get("WORKER_METRICS", "").strip() == "1" else "0",
     _redis_loc.hostname or "localhost",
     _redis_loc.port or 6379,

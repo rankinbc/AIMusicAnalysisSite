@@ -89,9 +89,11 @@ internal sealed class StaleJobReaper(
         }
         // Deliberately NOT clamped by StaleJobMinutes: a dead worker cannot be
         // "still working on it", so the NFR16 inversion the clamp guards
-        // against does not apply here.
+        // against does not apply here. Floored at 1 min (belt to the
+        // ValidateOnStart braces): a zero/negative grace plus any 60 s
+        // heartbeat gap would fail every pending job on the next sweep.
         var pendingNoWorkerCutoff = now - TimeSpan.FromMinutes(
-            _workerOpts.Value.PendingNoWorkerGraceMinutes);
+            Math.Max(1, _workerOpts.Value.PendingNoWorkerGraceMinutes));
 
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();

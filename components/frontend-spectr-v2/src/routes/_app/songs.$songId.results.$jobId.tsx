@@ -67,8 +67,24 @@ function ResultsPage() {
     );
   }
 
-  if (isComplete && results.data) {
-    return <ReportView results={results.data} songId={songId} tab={activeTab} onTabChange={setTab} />;
+  if (isComplete) {
+    if (results.data) {
+      return <ReportView results={results.data} songId={songId} tab={activeTab} onTabChange={setTab} />;
+    }
+    // Job is done — never fall through to the in-progress storyline (its
+    // elapsed clock and "taking longer" hint would misread a finished job).
+    return (
+      <FrameWithBack songId={songId}>
+        {results.error ? (
+          <p className={s.loadError}>
+            Analysis finished, but the report failed to load:{' '}
+            {results.error instanceof Error ? results.error.message : String(results.error)}
+          </p>
+        ) : (
+          <p className="mono">Loading report…</p>
+        )}
+      </FrameWithBack>
+    );
   }
 
   if (isFailed && job.data) {

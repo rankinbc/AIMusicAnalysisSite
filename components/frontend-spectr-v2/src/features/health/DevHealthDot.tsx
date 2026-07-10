@@ -9,10 +9,16 @@ import type { FullHealthResponse } from '../../api/types';
 
 type Tone = 'ok' | 'warn' | 'down';
 
-function classify(health: FullHealthResponse | undefined): {
+function classify(
+  health: FullHealthResponse | undefined,
+  unreachable: boolean,
+): {
   tone: Tone;
   title: string;
 } {
+  // Probe error outranks any (stale) last-good payload — a dot that stays
+  // green while the whole BFF is down defeats its purpose.
+  if (unreachable) return { tone: 'down', title: 'Health: probe unreachable — BFF down?' };
   if (!health) return { tone: 'warn', title: 'Health: waiting for first probe…' };
 
   const failing: string[] = [];
@@ -31,8 +37,14 @@ function classify(health: FullHealthResponse | undefined): {
 }
 
 // Presentational core — static-render testable.
-export function DevHealthDotView({ health }: { health: FullHealthResponse | undefined }) {
-  const { tone, title } = classify(health);
+export function DevHealthDotView({
+  health,
+  unreachable = false,
+}: {
+  health: FullHealthResponse | undefined;
+  unreachable?: boolean;
+}) {
+  const { tone, title } = classify(health, unreachable);
   const toneClass = tone === 'down' ? 'dot red' : tone === 'warn' ? 'dot orange' : 'dot';
   return (
     <span
@@ -46,6 +58,6 @@ export function DevHealthDotView({ health }: { health: FullHealthResponse | unde
 }
 
 export function DevHealthDot() {
-  const { data } = useFullHealth();
-  return <DevHealthDotView health={data} />;
+  const { data, isError } = useFullHealth();
+  return <DevHealthDotView health={data} unreachable={isError} />;
 }
