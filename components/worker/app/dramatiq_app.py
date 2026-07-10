@@ -84,3 +84,20 @@ if _os.environ.get("SPECTR_REQUIRE_EMAIL") == "1" and not _os.environ.get("RESEN
         "SPECTR_REQUIRE_EMAIL=1 but RESEND_API_KEY is not set — the send_email "
         "actor would stub every email. Set RESEND_API_KEY on the worker."
     )
+
+# Story 12.2 (AC5) — one boot summary of the worker-owned knobs. Values only,
+# never secrets: REDIS_URL may embed a password, so log host:port only; the
+# resolved storage root is story 12-3's line; DATABASE_URL is never logged.
+from urllib.parse import urlparse as _urlparse  # noqa: E402
+
+from .llm.settings import get_llm_settings as _get_llm_settings  # noqa: E402
+
+_redis_loc = _urlparse(_REDIS_URL)
+logging.getLogger(__name__).info(
+    "Boot config: LLM_FAKE=%s WORKER_METRICS=%s redis=%s:%s queues=%s",
+    "1" if _get_llm_settings().llm_fake else "0",
+    "1" if os.environ.get("WORKER_METRICS", "").strip() == "1" else "0",
+    _redis_loc.hostname or "localhost",
+    _redis_loc.port or 6379,
+    ",".join(sorted(broker.get_declared_queues())),
+)

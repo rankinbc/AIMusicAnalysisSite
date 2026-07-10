@@ -1586,3 +1586,20 @@ export interface WorkerHealthResponse {
   /** Pending analysis messages across the paid + free lanes. */
   queueDepth: number;
 }
+
+/** GET /api/health/full — story 12.2 aggregated health for the dev shell dot.
+ *  Always HTTP 200; degradation lives in the body. Mirrors FullHealthDto. */
+export interface FullHealthResponse {
+  /** "ok" when postgres AND redis pass; "degraded" otherwise. Worker/storage never change it. */
+  status: 'ok' | 'degraded';
+  checks: {
+    postgres: boolean;
+    redis: boolean;
+    worker: WorkerHealthResponse;
+    storage: {
+      /** "local" (LocalRoot directory probe) or "s3" (HEAD reachability probe). */
+      mode: 'local' | 's3';
+      ok: boolean;
+    };
+  };
+}

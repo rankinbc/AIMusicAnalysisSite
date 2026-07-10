@@ -12,6 +12,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useEntitlements } from '../api/hooks';
 import { AppDunningNotice } from '../features/billing/AppDunningNotice';
 import { AppWorkerHealthNotice } from '../features/health/AppWorkerHealthNotice';
+import { DevHealthDot } from '../features/health/DevHealthDot';
 import { NotificationBell } from '../features/notifications/NotificationCenter';
 import { BrandMark } from '../ui/BrandMark';
 import { UsageMeter } from '../components/UsageMeter';
@@ -118,6 +119,9 @@ function AppLayout() {
             <input placeholder="Search your tracks, notes, fixes…" />
             <span className={s.navSearchKbd}>⌘K</span>
           </div>
+          {/* Story 12.2 — dev-only aggregated-health dot. The conditional
+              render keeps the /health/full query unmounted in prod builds. */}
+          {import.meta.env.DEV && <DevHealthDot />}
           {/* Story 11.7 — live bell (was a decorative placeholder). */}
           <NotificationBell className={s.navIconBtn} />
           <Link to="/library" className="btn primary sm">

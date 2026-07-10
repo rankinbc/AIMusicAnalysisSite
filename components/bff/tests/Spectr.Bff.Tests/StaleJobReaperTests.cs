@@ -21,10 +21,23 @@ public sealed class StaleJobReaperTests(WebApplicationFactory<Program> factory)
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-    private StaleJobReaper NewReaper() => new(
+    // Story 12.2: the reaper reads the worker heartbeat to decide whether the
+    // FAST pending tier applies. Tests inject a deterministic stub — the
+    // Func<long?> may throw to exercise the probe-failure fallback.
+    private sealed class StubHeartbeat(Func<long?> ageSeconds) : IWorkerHeartbeat
+    {
+        public Task<long?> AgeSecondsAsync(CancellationToken ct = default)
+            => Task.FromResult(ageSeconds());
+    }
+
+    private StaleJobReaper NewReaper(
+        IWorkerHeartbeat? heartbeat = null, WorkerOptions? options = null) => new(
         _factory.Services.GetRequiredService<IServiceScopeFactory>(),
         Microsoft.Extensions.Options.Options.Create(
-            new WorkerOptions { StaleJobMinutes = 30, PendingGraceMinutes = 240 }),
+            options ?? new WorkerOptions { StaleJobMinutes = 30, PendingGraceMinutes = 240 }),
+        // Default = fresh heartbeat (busy-but-live worker): the long-grace
+        // tests keep their original semantics — the fast tier never fires.
+        heartbeat ?? new StubHeartbeat(() => 0),
         NullLogger<StaleJobReaper>.Instance);
 
     private async Task<Guid> SeedJobAsync(
@@ -103,6 +116,133 @@ public sealed class StaleJobReaperTests(WebApplicationFactory<Program> factory)
         finally
         {
             await CleanupAsync(queuedSurvivor, queuedOrphan, abandoned, live);
+        }
+    }
+
+    // Story 12.2 (AC2) — the heartbeat-aware fast pending tier: a DEAD worker
+    // (stale/absent heartbeat) fails queued jobs after the short grace; a
+    // BUSY worker (fresh heartbeat) keeps the long grace so its queue is
+    // never false-failed.
+    [Fact]
+    public async Task Pending_Fast_Tier_Fires_Only_When_The_Heartbeat_Is_Stale()
+    {
+        if (!await TestDb.Reachable(_factory)) { return; }
+
+        var client = _factory.CreateClient();
+        var (userId, token) = await TestAuth.RegisterAsync(client);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var (_, versionId) = await TestSeed.SongWithVersionAsync(_factory, userId);
+        var now = DateTimeOffset.UtcNow;
+
+        var opts = new WorkerOptions
+        {
+            StaleJobMinutes = 30,
+            PendingGraceMinutes = 240,
+            PendingNoWorkerGraceMinutes = 5,
+            HeartbeatStaleSeconds = 60,
+        };
+
+        // Queued 2 min ago — younger than even the short grace: survives.
+        var young = await SeedJobAsync(userId, versionId, "pending",
+            dispatchedAt: now.AddMinutes(-2), startedAt: null);
+        // Queued 10 min ago — past the short grace: fails when worker is dead.
+        var orphaned = await SeedJobAsync(userId, versionId, "pending",
+            dispatchedAt: now.AddMinutes(-10), startedAt: null);
+        // Started 5 min ago — processing behavior must be unchanged by the tier.
+        var live = await SeedJobAsync(userId, versionId, "processing",
+            dispatchedAt: now.AddMinutes(-6), startedAt: now.AddMinutes(-5));
+
+        try
+        {
+            // FRESH heartbeat (busy worker) → fast tier must NOT fire.
+            await NewReaper(new StubHeartbeat(() => 0), opts).ReapAsync(CancellationToken.None);
+            Assert.Equal("pending", await StatusOfAsync(orphaned));
+
+            // STALE heartbeat (dead worker) → past-short-grace pending fails;
+            // young pending and live processing survive.
+            await NewReaper(new StubHeartbeat(() => 999), opts).ReapAsync(CancellationToken.None);
+            Assert.Equal("pending", await StatusOfAsync(young));
+            Assert.Equal("failed", await StatusOfAsync(orphaned));
+            Assert.Equal("processing", await StatusOfAsync(live));
+
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var reaped = await db.AnalysisJobs.AsNoTracking().SingleAsync(j => j.Id == orphaned);
+            Assert.Equal("worker_unavailable", reaped.ErrorCode); // reuses the wired UI path
+        }
+        finally
+        {
+            await CleanupAsync(young, orphaned, live);
+        }
+    }
+
+    // Story 12.2 (AC2) — an ABSENT heartbeat (no worker ever registered) is a
+    // dead worker too: null age must arm the fast tier.
+    [Fact]
+    public async Task Pending_Fast_Tier_Fires_When_No_Heartbeat_Exists()
+    {
+        if (!await TestDb.Reachable(_factory)) { return; }
+
+        var client = _factory.CreateClient();
+        var (userId, token) = await TestAuth.RegisterAsync(client);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var (_, versionId) = await TestSeed.SongWithVersionAsync(_factory, userId);
+
+        var opts = new WorkerOptions { PendingNoWorkerGraceMinutes = 5 };
+        var orphaned = await SeedJobAsync(userId, versionId, "pending",
+            dispatchedAt: DateTimeOffset.UtcNow.AddMinutes(-10), startedAt: null);
+
+        try
+        {
+            await NewReaper(new StubHeartbeat(() => null), opts).ReapAsync(CancellationToken.None);
+            Assert.Equal("failed", await StatusOfAsync(orphaned));
+        }
+        finally
+        {
+            await CleanupAsync(orphaned);
+        }
+    }
+
+    // Story 12.2 (AC2) — a Redis probe error is liveness UNKNOWN, not "dead":
+    // the fast tier must not fire, and the EF-only reap must keep working.
+    [Fact]
+    public async Task Heartbeat_Probe_Failure_Falls_Back_To_The_Long_Grace_Only()
+    {
+        if (!await TestDb.Reachable(_factory)) { return; }
+
+        var client = _factory.CreateClient();
+        var (userId, token) = await TestAuth.RegisterAsync(client);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var (_, versionId) = await TestSeed.SongWithVersionAsync(_factory, userId);
+        var now = DateTimeOffset.UtcNow;
+
+        var opts = new WorkerOptions
+        {
+            StaleJobMinutes = 30,
+            PendingGraceMinutes = 240,
+            PendingNoWorkerGraceMinutes = 5,
+        };
+
+        // Pending 10 min — fast tier would fail it, but the probe error means
+        // liveness is unknown → long grace only → survives.
+        var pending = await SeedJobAsync(userId, versionId, "pending",
+            dispatchedAt: now.AddMinutes(-10), startedAt: null);
+        // Abandoned processing — the classic reap must survive a Redis outage.
+        var abandoned = await SeedJobAsync(userId, versionId, "processing",
+            dispatchedAt: now.AddHours(-1), startedAt: now.AddMinutes(-40));
+
+        try
+        {
+            var throwing = new StubHeartbeat(() =>
+                throw new InvalidOperationException("redis unreachable"));
+            await NewReaper(throwing, opts).ReapAsync(CancellationToken.None);
+
+            Assert.Equal("pending", await StatusOfAsync(pending));
+            Assert.Equal("failed", await StatusOfAsync(abandoned));
+        }
+        finally
+        {
+            await CleanupAsync(pending, abandoned);
         }
     }
 

@@ -29,6 +29,19 @@ public sealed class WorkerOptions
     public int PendingGraceMinutes { get; init; } = 240;
 
     /// <summary>
+    /// Story 12.2 (AC2): the FAST pending tier — when NO live worker heartbeat
+    /// exists (stale or absent), a pending job's message has nothing draining
+    /// the queue, so it is failed after this much shorter grace instead of
+    /// <see cref="PendingGraceMinutes"/>. A merely-busy worker keeps its
+    /// heartbeat fresh, so its queued jobs are never false-failed by this
+    /// tier. Deliberately NOT clamped by <see cref="StaleJobMinutes"/> (a dead
+    /// worker cannot be "still working on it"). Default equals
+    /// <see cref="PendingGraceMinutes"/> = zero behavior change unless
+    /// overridden (Development sets 5).
+    /// </summary>
+    public int PendingNoWorkerGraceMinutes { get; init; } = 240;
+
+    /// <summary>
     /// The worker is considered offline if the most recent dramatiq heartbeat
     /// (max score in the <c>dramatiq:__heartbeats__</c> ZSET) is older than this.
     /// A live worker refreshes its heartbeat every few seconds, so 60 s gives a
