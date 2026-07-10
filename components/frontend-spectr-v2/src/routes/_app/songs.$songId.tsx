@@ -9,6 +9,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { SharePublishDialog } from '../../components/SharePublishDialog';
 import { SongEditDialog } from '../../components/SongEditDialog';
 import { UnifiedUploadDialog } from '../../components/UnifiedUploadDialog';
+import { showAnalysisDispatchError } from '../../components/verify-email';
 import { ReanalyzeWithReferenceDialog } from '../../features/references/ReanalyzeWithReferenceDialog';
 import { CoverArt } from '../../ui/CoverArt';
 import { hueFromId } from '../../ui/hueFromId';
@@ -426,8 +427,9 @@ function ReanalyzeButton({ versionId, songId }: { versionId: string; songId: str
               params: { songId, jobId: res.jobId },
             });
           },
+          // Story 12.1 (AC2) — verify-gate 403 gets the resend-action toast.
           onError: (err) =>
-            toast.error(err instanceof Error ? err.message : 'Could not start re-analysis'),
+            showAnalysisDispatchError(err, 'Could not start re-analysis'),
         });
       }}
     >

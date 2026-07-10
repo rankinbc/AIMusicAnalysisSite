@@ -235,6 +235,11 @@
   padding: var(--space-4) var(--space-5) 0;
 }
 
+/* Story 12.1 — verify-email banner slot; mirrors .dunningSlot. */
+.verifyEmailSlot {
+  padding: var(--space-4) var(--space-5) 0;
+}
+
 .loading {
   padding: var(--space-6);
   color: var(--muted);

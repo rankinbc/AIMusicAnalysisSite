@@ -111,17 +111,24 @@ public sealed class AbuseContainmentTests(WebApplicationFactory<Program> factory
     {
         if (!await TestDb.Reachable(_factory)) { return; }
 
-        // RateLimits stay OFF (dev default) — this test isolates the
-        // disposable CAP layer from the limiter layers.
-        var client = _factory.CreateClient();
+        // Story 12.1 (AC4): the disposable CAP arm now sits behind the
+        // RateLimits:Enabled knob like the per-IP arm — this test must opt
+        // IN explicitly. Register on the BASE factory (limits off) so the
+        // disposable register-arm never interferes; dispatch through the
+        // limits-on factory (the layer under test). The per-IP dispatch arm
+        // stays inert here: TestServer's null RemoteIpAddress fail-opens it.
+        using var f = _factory.WithWebHostBuilder(b =>
+            b.UseSetting("RateLimits:Enabled", "true"));
+        var regClient = _factory.CreateClient();
         var salt = Guid.NewGuid().ToString("N")[..8];
         var email = $"cap-{salt}@mailinator.com";
-        var reg = await client.PostAsJsonAsync("/api/auth/register",
+        var reg = await regClient.PostAsJsonAsync("/api/auth/register",
             new { email, password = "Password123!" });
         reg.EnsureSuccessStatusCode();
         var auth = await reg.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
         var token = auth.GetProperty("accessToken").GetString();
         var userId = auth.GetProperty("user").GetProperty("id").GetGuid();
+        var client = f.CreateClient();
         client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
@@ -155,6 +162,65 @@ public sealed class AbuseContainmentTests(WebApplicationFactory<Program> factory
         {
             using var scope = _factory.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.UsageEvents.Where(e => e.UserId == userId).ExecuteDeleteAsync();
+            await db.SongVersions.Where(v => v.SongId == songId).ExecuteDeleteAsync();
+            await db.Songs.Where(s => s.Id == songId).ExecuteDeleteAsync();
+            await db.RefreshTokens.Where(t => t.UserId == userId).ExecuteDeleteAsync();
+            await db.Users.Where(u => u.Id == userId).ExecuteDeleteAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Disposable_Cap_Arm_Is_Off_When_Limits_Disabled()
+    {
+        if (!await TestDb.Reachable(_factory)) { return; }
+        if (!RedisUp(_factory)) { return; } // the ALLOWED dispatch enqueues to Redis
+
+        // Story 12.1 (AC4): with RateLimits:Enabled=false (dev default, the
+        // base factory), a disposable-domain account past the reduced cap
+        // must still dispatch — the arm is throttling, not entitlement, and
+        // dev must never see its mislabeled entitlement_exhausted.
+        var client = _factory.CreateClient();
+        var salt = Guid.NewGuid().ToString("N")[..8];
+        var email = $"capoff-{salt}@mailinator.com";
+        var reg = await client.PostAsJsonAsync("/api/auth/register",
+            new { email, password = "Password123!" });
+        reg.EnsureSuccessStatusCode();
+        var auth = await reg.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        var token = auth.GetProperty("accessToken").GetString();
+        var userId = auth.GetProperty("user").GetProperty("id").GetGuid();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        var (songId, versionId) = await TestSeed.SongWithVersionAsync(_factory, userId);
+        try
+        {
+            // Verified + one burned analysis: past the disposable cap (1),
+            // inside the normal free cap (3).
+            using (var scope = _factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                await db.Users.Where(u => u.Id == userId).ExecuteUpdateAsync(
+                    s => s.SetProperty(u => u.EmailVerifiedAt, DateTimeOffset.UtcNow));
+                db.UsageEvents.Add(new Spectr.Data.Entities.UsageEvent
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = userId,
+                    EventType = "analysis",
+                    BillingPeriod = DateTimeOffset.UtcNow.ToString("yyyy-MM"),
+                    OccurredAt = DateTimeOffset.UtcNow,
+                });
+                await db.SaveChangesAsync();
+            }
+
+            var resp = await client.PostAsync($"/api/versions/{versionId}/analyze", null);
+            Assert.Equal(HttpStatusCode.Accepted, resp.StatusCode);
+        }
+        finally
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.AnalysisJobs.Where(j => j.UserId == userId).ExecuteDeleteAsync();
             await db.UsageEvents.Where(e => e.UserId == userId).ExecuteDeleteAsync();
             await db.SongVersions.Where(v => v.SongId == songId).ExecuteDeleteAsync();
             await db.Songs.Where(s => s.Id == songId).ExecuteDeleteAsync();
@@ -242,7 +308,12 @@ public sealed class AbuseContainmentTests(WebApplicationFactory<Program> factory
                 else if (resp.StatusCode == HttpStatusCode.TooManyRequests)
                 {
                     refused = true;
-                    Assert.Contains("rate_limited", await resp.Content.ReadAsStringAsync());
+                    // Story 12.1 (AC5): machine-readable code in the AR38
+                    // envelope, not just a substring anywhere in the body.
+                    using var doc = System.Text.Json.JsonDocument.Parse(
+                        await resp.Content.ReadAsStringAsync());
+                    Assert.Equal("rate_limited",
+                        doc.RootElement.GetProperty("error").GetProperty("code").GetString());
                 }
             }
             Assert.True(refused, "third same-IP dispatch should hit the cross-account ceiling");
