@@ -117,7 +117,7 @@ development_status:
   5-3-featuredverdictcard-and-coach-handoff: done  # VerdictCard: persona/impact/confidence/FixRecipe/feedback
   5-4-analysis-summary-tab-filters-and-specialist-roster: done  # shipped; AC1/AC2/AC3 met — final gap (sticky side rail, AnalysisTab.module.css .right) closed 2026-06-27
   5-5-frequency-stem-clash-reference-and-arrangement-panels: done  # Spectrum/Reference/Arrangement tabs
-  5-6-als-project-panel-and-track-name-attribution: review  # implemented 2026-06-27: AC2 structured where.track_names + TrackChip in live FindingsTab (VerdictCard was dead), AC3 ProjectUnlock; gates green (worker isolated; frontend tsc/lint/build/vitest 561)
+  5-6-als-project-panel-and-track-name-attribution: done  # closed 2026-07-10: code was already on master since 2026-06-27 (commit 3ff5181), tracker never flipped from review; gates were green at implementation (worker isolated; frontend tsc/lint/build/vitest 561). 2026-07-10 audit re-examined the surface: only 2 rules emit where.track_names (widening = follow-up), chip-click switches tab w/o scroll-to-row; both folded into epic-12 scope notes
   5-7-partial-failure-reporting-and-free-retry: backlog  # PARTIAL — DegradationBanner + rerun hooks; GAP: free-retry entitlement-free dispatch (AR16) + .als subprocess isolation (AR33)
   5-8-song-detail-and-version-compare: done  # song detail route + ProgressTimeline + CompareDialog
   5-9-upload-dialog-polish-club-check-and-playback-verify: done  # UnifiedUploadDialog + StereoCard/ClubCheck + ResultsPlayer
