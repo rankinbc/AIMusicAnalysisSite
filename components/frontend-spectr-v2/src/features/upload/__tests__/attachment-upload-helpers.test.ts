@@ -2,12 +2,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { putToPresignedUrl, uploadAttachmentPresigned } from '../attachment-upload-helpers';
+import { shouldFallBackToProxy } from '../presigned-fallback';
 
-vi.mock('../../../api/fetcher', () => ({
-  fetcher: vi.fn(),
-}));
+// Keep ApiError real (12.3: shouldFallBackToProxy relies on instanceof).
+vi.mock('../../../api/fetcher', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../api/fetcher')>();
+  return { ...actual, fetcher: vi.fn() };
+});
 
-import { fetcher } from '../../../api/fetcher';
+import { ApiError, fetcher } from '../../../api/fetcher';
 
 class FakeXhr {
   static last: FakeXhr | null = null;
@@ -106,5 +109,19 @@ describe('uploadAttachmentPresigned', () => {
       uploadAttachmentPresigned({ file: new File([], 'p.als'), kind: 'als', versionId: 'v-1' }),
     ).rejects.toBe(err);
     expect(FakeXhr.last).toBeNull(); // no PUT attempted
+  });
+
+  it('propagates 12.3 fallback-eligible init errors and the shared predicate agrees', async () => {
+    withFakeXhr();
+    const err = new ApiError(503, { error: { code: 'storage_unreachable' } });
+    vi.mocked(fetcher).mockRejectedValueOnce(err);
+    await expect(
+      uploadAttachmentPresigned({ file: new File([], 'p.als'), kind: 'als', versionId: 'v-1' }),
+    ).rejects.toBe(err);
+    expect(FakeXhr.last).toBeNull(); // zero bytes moved — safe to fall back
+    expect(shouldFallBackToProxy(err)).toBe(true);
+    // The gates the callers must NOT proxy-bypass:
+    expect(shouldFallBackToProxy(new ApiError(409, null))).toBe(false);
+    expect(shouldFallBackToProxy(new ApiError(403, null))).toBe(false);
   });
 });

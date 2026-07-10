@@ -72,6 +72,30 @@ RESULTS_DIR = Path(
     os.environ.get("RESULTS_DIR") or str(Path(LOCAL_ROOT) / "output" / "analysis_results")
 )
 
+
+def storage_boot_summary(local_root: str, results_dir: str) -> tuple[str, str | None]:
+    """Boot-line fragment + optional warning for the resolved storage root.
+
+    Story 12.3 (AC3): the resolved root was previously invisible, which made a
+    compose-only ``STORAGE_LOCAL_ROOT=/data`` leaking into a native run
+    undiagnosable. Returns ``(info_fragment, warning_or_None)`` — the warning
+    fires when the root directory does not exist. Kept a pure function so
+    dramatiq_app's log content is testable without importing the broker, and
+    it must never raise (12-2 rule: never crash for a log line).
+    """
+    fragment = f"storage_root={local_root} results_dir={results_dir}"
+    try:
+        root_exists = Path(local_root).is_dir()
+    except (OSError, ValueError):
+        root_exists = False
+    warning = None
+    if not root_exists:
+        warning = (
+            f"storage root {local_root} does not exist — uploads will fail file "
+            "resolution (compose-only STORAGE_LOCAL_ROOT on a native run?)"
+        )
+    return fragment, warning
+
 try:
     from audio_analysis import run_pipeline
 except ImportError:

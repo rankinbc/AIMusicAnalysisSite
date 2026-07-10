@@ -77,6 +77,42 @@ internal sealed class FakeMultipartObjectStore : IMultipartObjectStore
     }
 }
 
+// Story 12.3 — configured-but-unreachable S3 (MinIO down with ServiceUrl set).
+// Every network-touching call throws like a dead endpoint; presigning throws
+// too because the lazy AmazonS3Client construction can fail on bad config.
+internal sealed class ThrowingMultipartObjectStore : IMultipartObjectStore
+{
+    private static Exception Dead() => new HttpRequestException("connection refused (fake)");
+
+    public bool IsConfigured => true;
+
+    public Task<string> InitiateMultipartAsync(string key, string contentType, CancellationToken ct = default)
+        => throw Dead();
+
+    public Task<IReadOnlyList<PresignedPart>> PresignPartUrlsAsync(
+        string key, string uploadId, int partCount, CancellationToken ct = default)
+        => throw Dead();
+
+    public Task CompleteMultipartAsync(
+        string key, string uploadId, IReadOnlyList<CompletedPart> parts, CancellationToken ct = default)
+        => throw Dead();
+
+    public Task AbortMultipartAsync(string key, string uploadId, CancellationToken ct = default)
+        => throw Dead();
+
+    public Task<bool> ObjectExistsAsync(string key, CancellationToken ct = default)
+        => throw Dead();
+
+    public Task<long?> GetObjectSizeAsync(string key, CancellationToken ct = default)
+        => throw Dead();
+
+    public string PresignPutUrl(string key, CancellationToken ct = default)
+        => throw Dead();
+
+    public string PresignGetUrl(string key, string? downloadName = null, string? contentType = null)
+        => throw Dead();
+}
+
 public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
     : IClassFixture<WebApplicationFactory<Program>>
 {
@@ -128,6 +164,83 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
         var resp = await client.PostAsJsonAsync("/api/uploads/init",
             new { fileName = "track.wav", fileSize = 1024L });
         Assert.Equal((HttpStatusCode)501, resp.StatusCode);
+    }
+
+    // ── Story 12.3 — configured-but-unreachable S3 → 503 storage_unreachable ─
+
+    private (HttpClient Client, RecordingJobQueue Queue) NewThrowingStoreClient()
+    {
+        var queue = new RecordingJobQueue();
+        var f = _factory.WithWebHostBuilder(b =>
+        {
+            b.ConfigureServices(s =>
+            {
+                s.RemoveAll<IMultipartObjectStore>();
+                s.AddSingleton<IMultipartObjectStore>(new ThrowingMultipartObjectStore());
+                s.RemoveAll<IJobQueue>();
+                s.AddSingleton<IJobQueue>(queue);
+            });
+        });
+        return (f.CreateClient(), queue);
+    }
+
+    private static async Task<string?> ErrorCode(HttpResponseMessage resp)
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+        return doc.RootElement.GetProperty("error").GetProperty("code").GetString();
+    }
+
+    [Fact]
+    public async Task Init_StorageUnreachable_Returns503_NotUnhandled500()
+    {
+        if (!await TestDb.Reachable(_factory)) { return; }
+
+        var (client, _) = NewThrowingStoreClient();
+        var (_, token) = await TestAuth.RegisterAsync(client);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var resp = await client.PostAsJsonAsync("/api/uploads/init",
+            new { fileName = "track.wav", fileSize = 1024L });
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
+        Assert.Equal("storage_unreachable", await ErrorCode(resp));
+    }
+
+    [Fact]
+    public async Task AttachmentInit_StorageUnreachable_Returns503()
+    {
+        if (!await TestDb.Reachable(_factory)) { return; }
+
+        var (client, _) = NewThrowingStoreClient();
+        var (_, token) = await TestAuth.RegisterAsync(client);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // kind=reference needs no version row — presign is the first store call.
+        var resp = await client.PostAsJsonAsync("/api/uploads/attachments/init",
+            new { kind = "reference", fileName = "ref.mp3", fileSize = 1024L });
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
+        Assert.Equal("storage_unreachable", await ErrorCode(resp));
+    }
+
+    [Fact]
+    public async Task Complete_StorageUnreachable_Returns503_NoRowsNoDispatch()
+    {
+        if (!await TestDb.Reachable(_factory)) { return; }
+
+        var (client, queue) = NewThrowingStoreClient();
+        var (userId, token) = await TestAuth.RegisterAsync(client);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var jobId = Guid.NewGuid();
+        var resp = await client.PostAsJsonAsync("/api/uploads/complete", new
+        {
+            jobId,
+            key = $"audio/{userId}/{jobId}/source.wav",
+            uploadId = "upload-abc",
+            parts = new[] { new { partNumber = 1, eTag = "\"etag1\"" } },
+        });
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
+        Assert.Equal("storage_unreachable", await ErrorCode(resp));
+        Assert.Empty(queue.Calls);
     }
 
     // ── init happy path ──────────────────────────────────────────────────────

@@ -86,8 +86,11 @@ if _os.environ.get("SPECTR_REQUIRE_EMAIL") == "1" and not _os.environ.get("RESEN
     )
 
 # Story 12.2 (AC5) — one boot summary of the worker-owned knobs. Values only,
-# never secrets: REDIS_URL may embed a password, so log host:port only; the
-# resolved storage root is story 12-3's line; DATABASE_URL is never logged.
+# never secrets: REDIS_URL may embed a password, so log host:port only;
+# DATABASE_URL is never logged. Story 12.3 (AC3) appends the resolved storage
+# root + results dir (the line 12-2 deliberately deferred) and warns when the
+# root is missing — the classic symptom of a compose-only
+# STORAGE_LOCAL_ROOT=/data leaking into a native run.
 from urllib.parse import urlparse as _urlparse  # noqa: E402
 
 from .llm.settings import get_llm_settings as _get_llm_settings  # noqa: E402
@@ -100,11 +103,17 @@ try:
     _llm_fake = "1" if _get_llm_settings().llm_fake else "0"
 except Exception:  # noqa: BLE001
     _llm_fake = "?"
+_storage_fragment, _storage_warning = tasks_dramatiq.storage_boot_summary(
+    tasks_dramatiq.LOCAL_ROOT, str(tasks_dramatiq.RESULTS_DIR)
+)
 logging.getLogger(__name__).info(
-    "Boot config: LLM_FAKE=%s WORKER_METRICS=%s redis=%s:%s queues=%s",
+    "Boot config: LLM_FAKE=%s WORKER_METRICS=%s redis=%s:%s queues=%s %s",
     _llm_fake,
     "1" if os.environ.get("WORKER_METRICS", "").strip() == "1" else "0",
     _redis_loc.hostname or "localhost",
     _redis_loc.port or 6379,
     ",".join(sorted(broker.get_declared_queues())),
+    _storage_fragment,
 )
+if _storage_warning:
+    logging.getLogger(__name__).warning("%s", _storage_warning)

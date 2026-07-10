@@ -1,19 +1,21 @@
 // Story 3.1 — presigned-first mix upload (AR17/AR18).
 //
 // Tries the browser-direct multipart path (init -> PUT parts straight to
-// R2/MinIO -> complete); when the server answers 501 `presigned_unavailable`
-// (Storage:S3 unconfigured) it falls back transparently to the legacy
-// proxy upload — same return shape, same 0..1 progress (FR1), so callers
-// are agnostic to which path ran.
+// R2/MinIO -> complete); when /uploads/init fails because the presigned path
+// is unavailable (501 unconfigured, 503/5xx unreachable, or a network error —
+// see shouldFallBackToProxy, story 12.3) it falls back transparently to the
+// legacy proxy upload — same return shape, same 0..1 progress (FR1), so
+// callers are agnostic to which path ran. Failures past init never fall back.
 import { useCallback, useRef, useState } from 'react';
 
-import { ApiError, fetcher } from '../api/fetcher';
+import { fetcher } from '../api/fetcher';
 import type { UploadResponse } from '../api/types';
 import {
   planParts,
   uploadPartsSequential,
   type PartPlan,
 } from '../features/upload/multipart-upload-helpers';
+import { shouldFallBackToProxy } from '../features/upload/presigned-fallback';
 import { useFileUpload } from './useFileUpload';
 
 interface InitResponse {
@@ -81,22 +83,12 @@ export function useMixUpload() {
     [],
   );
 
-  const uploadPresigned = useCallback(
-    async (file: File, fields: MixUploadFields): Promise<UploadResponse> => {
-      cancelled.current = false;
-      setState({ isUploading: true, progress: 0, error: null });
-
-      const init = await fetcher<InitResponse>({
-        url: '/uploads/init',
-        method: 'POST',
-        data: {
-          fileName: file.name,
-          fileSize: file.size,
-          contentType: file.type || 'application/octet-stream',
-          songId: fields.song_id ?? null,
-        },
-      });
-
+  // Parts + complete only — the caller has already run /uploads/init. Past
+  // this point bytes are moving, so failures must SURFACE (abort best-effort,
+  // set error, rethrow), never fall back to the proxy: a silent re-upload
+  // could push 250 MB twice and double-create versions (story 12.3).
+  const uploadPresignedParts = useCallback(
+    async (file: File, fields: MixUploadFields, init: InitResponse): Promise<UploadResponse> => {
       try {
         const plans = planParts(file.size, init.partSizeBytes);
         const urlByPart = new Map(init.parts.map((p) => [p.partNumber, p.url]));
@@ -141,20 +133,43 @@ export function useMixUpload() {
   const upload = useCallback(
     async (file: File, fields: MixUploadFields = {}): Promise<UploadResponse> => {
       if (presignedAvailable.current === false) return legacy.upload(file, fields);
+
+      cancelled.current = false;
+      setState({ isUploading: true, progress: 0, error: null });
+
+      // Init-stage failure = zero bytes moved, so falling back to the proxy
+      // is always safe. Story 12.3 broadens the trigger from 501-only to any
+      // init 5xx/network failure (MinIO down now answers a typed 503); 4xx
+      // gates (403 verify, 409 entitlement, 429) still propagate untouched.
+      let init: InitResponse;
       try {
-        const res = await uploadPresigned(file, fields);
-        presignedAvailable.current = true;
-        return res;
+        init = await fetcher<InitResponse>({
+          url: '/uploads/init',
+          method: 'POST',
+          data: {
+            fileName: file.name,
+            fileSize: file.size,
+            contentType: file.type || 'application/octet-stream',
+            songId: fields.song_id ?? null,
+          },
+        });
       } catch (e) {
-        if (e instanceof ApiError && e.status === 501) {
+        if (shouldFallBackToProxy(e)) {
+          // Cache for the session: one failed probe, then fast proxy uploads.
           presignedAvailable.current = false;
-          setState((s) => ({ ...s, error: null }));
+          setState({ isUploading: false, progress: 0, error: null });
           return legacy.upload(file, fields);
         }
+        const msg = e instanceof Error ? e.message : 'Upload failed';
+        setState((s) => ({ ...s, isUploading: false, error: msg }));
         throw e;
       }
+
+      const res = await uploadPresignedParts(file, fields, init);
+      presignedAvailable.current = true;
+      return res;
     },
-    [legacy, uploadPresigned],
+    [legacy, uploadPresignedParts],
   );
 
   const cancel = useCallback(() => {

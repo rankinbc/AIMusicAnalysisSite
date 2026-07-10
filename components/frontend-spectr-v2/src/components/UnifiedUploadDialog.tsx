@@ -28,6 +28,7 @@ import type {
 } from '../api/types';
 import { useMixUpload } from '../hooks/useMixUpload';
 import { uploadAttachmentPresigned } from '../features/upload/attachment-upload-helpers';
+import { shouldFallBackToProxy } from '../features/upload/presigned-fallback';
 import { AlsPreviewPanel } from '../features/upload/AlsPreviewPanel';
 import {
   AlsParseError,
@@ -445,7 +446,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
             },
           });
         } catch (e) {
-          if (!(e instanceof ApiError && e.status === 501)) throw e;
+          if (!shouldFallBackToProxy(e)) throw e;
           const alsForm = new FormData();
           alsForm.append('file', als, als.name);
           alsForm.append('analyze', 'false');
@@ -486,7 +487,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
             },
           });
         } catch (e) {
-          if (!(e instanceof ApiError && e.status === 501)) throw e;
+          if (!shouldFallBackToProxy(e)) throw e;
           const rForm = new FormData();
           rForm.append('file', refFile);
           if (refTitle.trim()) rForm.append('title', refTitle.trim());
@@ -538,7 +539,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
           data: { stems: putItems },
         });
       } catch (e) {
-        if (!(e instanceof ApiError && e.status === 501)) throw e;
+        if (!shouldFallBackToProxy(e)) throw e;
         const stemForm = new FormData();
         for (const r of stemRows) stemForm.append('files', r.file, r.file.name);
         staged = await fetcher<StageStemsResponse>({
