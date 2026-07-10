@@ -1,6 +1,6 @@
 # Story 12.1: Analysis Dispatch Unblocked in Dev & Verify-Gate UX
 
-Status: review
+Status: done
 
 ## Story
 
