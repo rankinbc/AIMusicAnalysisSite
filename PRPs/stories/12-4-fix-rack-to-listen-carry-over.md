@@ -1,6 +1,6 @@
 # Story 12.4: Fix Rack → Listen Carry-Over (Reliable Handoff)
 
-Status: review
+Status: done
 
 ## Story
 
