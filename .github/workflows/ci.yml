@@ -236,21 +236,21 @@ jobs:
       # Built-image scanning (story 4.1 deferral lands here): CRITICAL
       # vulns fail the deploy; unfixed-upstream noise ignored.
       - name: Trivy scan spectr-bff
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0 — SHA-pinned; the old 0.28.0 tag was removed upstream
         with:
           image-ref: ghcr.io/${{ github.repository_owner }}/spectr-bff:${{ github.sha }}
           severity: CRITICAL
           ignore-unfixed: true
           exit-code: "1"
       - name: Trivy scan spectr-worker
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0 — SHA-pinned; the old 0.28.0 tag was removed upstream
         with:
           image-ref: ghcr.io/${{ github.repository_owner }}/spectr-worker:${{ github.sha }}
           severity: CRITICAL
           ignore-unfixed: true
           exit-code: "1"
       - name: Trivy scan spectr-web
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0 — SHA-pinned; the old 0.28.0 tag was removed upstream
         with:
           image-ref: ghcr.io/${{ github.repository_owner }}/spectr-web:${{ github.sha }}
           severity: CRITICAL
