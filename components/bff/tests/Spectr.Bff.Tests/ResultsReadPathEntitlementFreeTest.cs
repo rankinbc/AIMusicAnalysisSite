@@ -23,17 +23,6 @@ public sealed class ResultsReadPathEntitlementFreeTest(WebApplicationFactory<Pro
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
-
     // Counting subclass — ForAsync increments the shared tracker on every call.
     private sealed class CountingEntitlementService(
         AppDbContext db,
@@ -57,10 +46,10 @@ public sealed class ResultsReadPathEntitlementFreeTest(WebApplicationFactory<Pro
         public void Reset() => System.Threading.Volatile.Write(ref _count, 0);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetJobStatus_And_GetJobResults_NeverCallEntitlementService()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
 
         var tracker = new CallTracker();
 

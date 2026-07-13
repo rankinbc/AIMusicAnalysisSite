@@ -12,10 +12,10 @@ public sealed class PersonalScoreTests(WebApplicationFactory<Program> factory)
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-    [Fact]
+    [SkippableFact]
     public async Task Rating_upsert_then_clear_roundtrips_on_song_payload()
     {
-        if (!await TestDb.Reachable(_factory)) return;
+        await TestDb.RequireAsync(_factory);
         var client = _factory.CreateClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -39,10 +39,10 @@ public sealed class PersonalScoreTests(WebApplicationFactory<Program> factory)
         Assert.Null(song!.Versions[0].PersonalScore);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Rating_rejects_out_of_range()
     {
-        if (!await TestDb.Reachable(_factory)) return;
+        await TestDb.RequireAsync(_factory);
         var client = _factory.CreateClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);

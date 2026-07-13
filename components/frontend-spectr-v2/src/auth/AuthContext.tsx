@@ -9,7 +9,13 @@ import {
   type ReactNode,
 } from 'react';
 
-import { fetcher, onAuthCleared, onTokenRefreshed, setAccessToken } from '../api/fetcher';
+import {
+  fetcher,
+  onAuthCleared,
+  onTokenRefreshed,
+  refreshSession,
+  setAccessToken,
+} from '../api/fetcher';
 import { resetVerifyResendState } from '../components/verify-email';
 import { identifyUser } from '../lib/analytics';
 import type { AuthResponse, AuthedUser } from '../api/types';
@@ -31,6 +37,15 @@ interface AuthContextValue extends AuthState {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+// Story 12.7 (found by the first-run smoke): refresh is single-flight and
+// lives in fetcher.refreshSession — shared with the 401 handler so the two
+// mechanisms can never race token rotation against each other.
+//
+// Session epoch: logout bumps this so a refresh that was already in flight
+// when the user logged out can never re-apply its (stale) session onto the
+// logged-out UI.
+let sessionEpoch = 0;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
@@ -55,20 +70,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refresh = useCallback(async (): Promise<boolean> => {
+    const epoch = sessionEpoch;
     try {
-      const res = await fetch('/api/auth/refresh', {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (!res.ok) {
-        applyAuth(null);
-        return false;
-      }
-      const data = (await res.json()) as AuthResponse;
+      const data = await refreshSession();
+      // Logout happened while this refresh was in flight — do not resurrect
+      // the stale session.
+      if (epoch !== sessionEpoch) return false;
       applyAuth(data);
-      return true;
+      return data !== null;
     } catch {
-      applyAuth(null);
+      if (epoch === sessionEpoch) applyAuth(null);
       return false;
     }
   }, [applyAuth]);
@@ -141,6 +152,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
+    // Invalidate any in-flight refresh FIRST so its result can't re-apply
+    // a session after the user chose to leave.
+    sessionEpoch++;
     try {
       await fetcher<void>({ url: '/auth/logout', method: 'POST' });
     } finally {

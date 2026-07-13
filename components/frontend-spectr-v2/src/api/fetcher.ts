@@ -5,6 +5,7 @@
 // trigger exactly one /api/auth/refresh call.
 
 import { extractApiError } from './error-utils';
+import type { AuthResponse } from './types';
 
 export class ApiError extends Error {
   constructor(public status: number, public body: unknown, message?: string) {
@@ -13,7 +14,7 @@ export class ApiError extends Error {
 }
 
 let accessToken: string | null = null;
-let refreshInFlight: Promise<string | null> | null = null;
+let refreshInFlight: Promise<AuthResponse | null> | null = null;
 let onAuthClearedCallback: (() => void) | null = null;
 let onTokenRefreshedCallback: ((token: string) => void) | null = null;
 
@@ -46,19 +47,27 @@ interface FetcherConfig {
   params?: Record<string, string | number | boolean | null | undefined> | undefined;
 }
 
-async function refreshToken(): Promise<string | null> {
-  if (refreshInFlight) return refreshInFlight;
-  refreshInFlight = (async () => {
+/**
+ * Story 12.7: THE single-flight /api/auth/refresh for the whole tab.
+ * Both refresh mechanisms — the AuthContext boot silent-refresh and this
+ * wrapper's 401 handler — MUST share one in-flight request: refresh tokens
+ * ROTATE, so two concurrent calls guarantee the loser 401s and clears a
+ * perfectly good session (React StrictMode's double mount effect made this
+ * deterministic in dev). Returns the full AuthResponse so AuthContext can
+ * hydrate the user without a second round-trip.
+ */
+export async function refreshSession(): Promise<AuthResponse | null> {
+  refreshInFlight ??= (async () => {
     try {
       const r = await fetch('/api/auth/refresh', {
         method: 'POST',
         credentials: 'include',
       });
       if (!r.ok) return null;
-      const data = (await r.json()) as { accessToken: string };
+      const data = (await r.json()) as AuthResponse;
       accessToken = data.accessToken;
       onTokenRefreshedCallback?.(data.accessToken);
-      return data.accessToken;
+      return data;
     } catch {
       return null;
     } finally {
@@ -66,6 +75,10 @@ async function refreshToken(): Promise<string | null> {
     }
   })();
   return refreshInFlight;
+}
+
+async function refreshToken(): Promise<string | null> {
+  return (await refreshSession())?.accessToken ?? null;
 }
 
 async function doFetch(config: FetcherConfig, token: string | null): Promise<Response> {

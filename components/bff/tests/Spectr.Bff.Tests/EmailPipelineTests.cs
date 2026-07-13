@@ -24,7 +24,7 @@ public sealed class EmailPipelineTests(WebApplicationFactory<Program> factory)
 
     // ── Template registry (AC2) ──────────────────────────────────────────────
 
-    [Theory]
+    [SkippableTheory]
     [InlineData(EmailTemplates.Verification)]
     [InlineData(EmailTemplates.Reset)]
     [InlineData(EmailTemplates.AnalysisComplete)]
@@ -55,7 +55,7 @@ public sealed class EmailPipelineTests(WebApplicationFactory<Program> factory)
         Assert.Contains("-apple-system", html);
     }
 
-    [Fact]
+    [SkippableFact]
     public void Template_Data_Is_Html_Encoded()
     {
         var (_, html) = EmailTemplates.Render(EmailTemplates.RetentionWarning,
@@ -69,14 +69,14 @@ public sealed class EmailPipelineTests(WebApplicationFactory<Program> factory)
         Assert.Contains("&lt;script&gt;", html);
     }
 
-    [Fact]
+    [SkippableFact]
     public void Unknown_Template_Throws()
     {
         Assert.Throws<InvalidOperationException>(
             () => EmailTemplates.Render("no-such-template", new Dictionary<string, string>()));
     }
 
-    [Fact]
+    [SkippableFact]
     public void Subject_Strips_Control_Characters_And_Falls_Back_When_Missing()
     {
         var (subject, _) = EmailTemplates.Render(EmailTemplates.AnalysisComplete,
@@ -93,7 +93,7 @@ public sealed class EmailPipelineTests(WebApplicationFactory<Program> factory)
         Assert.Equal("Your analysis is ready", fallback); // no dangling em-dash
     }
 
-    [Fact]
+    [SkippableFact]
     public void Url_Slots_Reject_Non_Http_Schemes()
     {
         var (_, html) = EmailTemplates.Render(EmailTemplates.Verification,
@@ -133,10 +133,10 @@ public sealed class EmailPipelineTests(WebApplicationFactory<Program> factory)
         return (sender, queue, scope);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Send_Enqueues_Rendered_Email_On_Maintenance()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (sender, queue, scope) = NewSender();
         using (scope)
@@ -159,10 +159,10 @@ public sealed class EmailPipelineTests(WebApplicationFactory<Program> factory)
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Suppressed_Address_Is_Skipped()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var email = $"bounce+{Guid.NewGuid():N}@spectr.test";
         using (var seedScope = _factory.Services.CreateScope())
@@ -220,19 +220,19 @@ public sealed class EmailPipelineTests(WebApplicationFactory<Program> factory)
         return req;
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Webhook_Without_Secret_Configured_Returns_503()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
         var resp = await _factory.CreateClient().PostAsync("/api/email/webhook",
             new StringContent("{}", Encoding.UTF8, "application/json"));
         Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Webhook_With_Bad_Signature_Is_Rejected()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         using var f = WebhookFactory();
         var req = SignedWebhook($"msg_{Guid.NewGuid():N}", """{"type":"email.bounced","data":{"to":["x@y.test"]}}""");
@@ -242,10 +242,10 @@ public sealed class EmailPipelineTests(WebApplicationFactory<Program> factory)
         Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Webhook_Bounce_Appends_Suppression_And_Dedupes()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var email = $"hook+{Guid.NewGuid():N}@spectr.test";
         var eventId = $"msg_{Guid.NewGuid():N}";
@@ -282,10 +282,10 @@ public sealed class EmailPipelineTests(WebApplicationFactory<Program> factory)
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Webhook_Missing_Headers_Or_Stale_Timestamp_Is_Unauthorized()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         using var f = WebhookFactory();
         var client = f.CreateClient();
@@ -317,7 +317,7 @@ public sealed class EmailPipelineTests(WebApplicationFactory<Program> factory)
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.SendAsync(absurd)).StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public void Svix_Verifier_Rejects_Tampered_Body()
     {
         var id = "msg_x"; var ts = "1700000000"; var body = """{"a":1}""";

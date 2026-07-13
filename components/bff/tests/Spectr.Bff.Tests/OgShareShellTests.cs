@@ -16,10 +16,10 @@ public sealed class OgShareShellTests(WebApplicationFactory<Program> factory)
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-    [Fact]
+    [SkippableFact]
     public async Task Shell_Carries_Og_Meta_Noindex_And_Projection_Only()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var client = _factory.CreateClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);
@@ -77,10 +77,10 @@ public sealed class OgShareShellTests(WebApplicationFactory<Program> factory)
         Assert.Contains("class=\"grade\"", html);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Unknown_Token_Serves_Friendly_Gone_Shell_404()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var anon = _factory.CreateClient();
         var resp = await anon.GetAsync("/r/definitely-not-a-token");

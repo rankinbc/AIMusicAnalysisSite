@@ -23,17 +23,6 @@ public sealed class AnalysisImageEndpointsTests(WebApplicationFactory<Program> f
     private static readonly byte[] FakeWebp =
         Encoding.ASCII.GetBytes("RIFF\0\0\0\0WEBPfakebytes");
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
-
     private async Task<(HttpClient client, Guid userId)> RegisterAsync(HttpClient client)
     {
         var email = $"img+{Guid.NewGuid():N}@spectr.test";
@@ -77,10 +66,10 @@ public sealed class AnalysisImageEndpointsTests(WebApplicationFactory<Program> f
         return jobId;
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Owner_GetsSpectrogram_AsWebp()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (client, userId) = await RegisterAsync(_factory.CreateClient());
         var jobId = await SeedAsync(userId, withImages: true);
 
@@ -92,10 +81,10 @@ public sealed class AnalysisImageEndpointsTests(WebApplicationFactory<Program> f
         Assert.Equal(FakeWebp, bytes);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetResults_SurfacesImageUrl_WhenPresent_NullWhenAbsent()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (client, userId) = await RegisterAsync(_factory.CreateClient());
 
         var withImg = await SeedAsync(userId, withImages: true);
@@ -109,10 +98,10 @@ public sealed class AnalysisImageEndpointsTests(WebApplicationFactory<Program> f
         Assert.Null(noImg.WaveformImageUrl);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task MissingPath_Returns404()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (client, userId) = await RegisterAsync(_factory.CreateClient());
         var jobId = await SeedAsync(userId, withImages: false);
 
@@ -120,10 +109,10 @@ public sealed class AnalysisImageEndpointsTests(WebApplicationFactory<Program> f
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task BadKind_Returns400()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (client, userId) = await RegisterAsync(_factory.CreateClient());
         var jobId = await SeedAsync(userId, withImages: true);
 
@@ -131,10 +120,10 @@ public sealed class AnalysisImageEndpointsTests(WebApplicationFactory<Program> f
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task NonOwner_Gets404_Idor()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (_, ownerId) = await RegisterAsync(_factory.CreateClient());
         var jobId = await SeedAsync(ownerId, withImages: true);
 

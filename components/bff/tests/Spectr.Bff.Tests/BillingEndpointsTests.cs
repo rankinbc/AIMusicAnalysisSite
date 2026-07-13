@@ -94,17 +94,6 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
         return (f, fake);
     }
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
-
     private static async Task<(HttpClient Client, Guid UserId)> SeedAuthed(
         WebApplicationFactory<Program> factory, string prefix)
     {
@@ -130,9 +119,10 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
 
     // ── GET /plans ─────────────────────────────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task Get_Plans_Returns_Display_Cents_For_Public()
     {
+        TestDb.Require(TestDb.RedisUp(_factory), "Redis"); // request pipeline touches Redis (story 12.7)
         var (factory, _) = BuildWithFakeStripe();
         var client = factory.CreateClient();
 
@@ -147,10 +137,10 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
 
     // ── POST /checkout/subscription ─────────────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task Post_Checkout_Monthly_Returns_Url_And_Creates_Stripe_Customer()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (factory, fake) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthed(factory, "billing-monthly");
@@ -200,14 +190,14 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Post_Checkout_Idempotency_Key_Is_Stable_Across_Cadence()
     {
         // review-fix P1 — two checkouts with the same cadence must use the
         // same session idempotency key (so a retry is a no-op); switching
         // cadence must use a DIFFERENT key (so a user who starts monthly
         // then starts annual gets the second session, not a cached one).
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (factory, fake) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthed(factory, "billing-idemp");
@@ -232,10 +222,10 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
         finally { await CleanupUser(factory, userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Post_Checkout_Annual_Uses_Annual_Price()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (factory, fake) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthed(factory, "billing-annual");
@@ -255,10 +245,10 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Post_Checkout_Reuses_Existing_StripeCustomerId()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (factory, fake) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthed(factory, "billing-reuse");
@@ -286,10 +276,10 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Post_Checkout_Invalid_Cadence_Returns_400_With_AR38_Envelope()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (factory, _) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthed(factory, "billing-bad-cadence");
@@ -311,10 +301,10 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Post_Checkout_Without_StripeConfig_Returns_503()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (factory, _) = BuildWithFakeStripe(configured: false);
         var (client, userId) = await SeedAuthed(factory, "billing-noconfig");
@@ -336,10 +326,10 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Get_Me_Tier_Is_Free_Without_Subscription()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (factory, _) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthed(factory, "billing-tier-free");
@@ -358,10 +348,10 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Get_Me_Tier_Is_Pro_With_Active_Subscription()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (factory, _) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthed(factory, "billing-tier-pro");
@@ -395,10 +385,10 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Get_Me_Tier_Is_Free_With_Canceled_Subscription()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (factory, _) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthed(factory, "billing-tier-canceled");

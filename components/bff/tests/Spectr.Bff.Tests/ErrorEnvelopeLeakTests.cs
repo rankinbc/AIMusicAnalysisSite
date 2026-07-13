@@ -12,12 +12,15 @@ public sealed class ErrorEnvelopeLeakTests(WebApplicationFactory<Program> factor
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-    [Fact]
+    [SkippableFact]
     public async Task Unhandled_Exception_Returns_Envelope_With_No_Internals()
     {
-        // Deliberately NO TestDb gate (review M3): the detonator touches
-        // nothing — gating on Postgres made the CI copy of this proof
-        // vacuous (the CI bff job has no DB service).
+        // No Postgres gate (review M3): the detonator touches no DB. The
+        // request PIPELINE does touch Redis, so story 12.7 gates on Redis —
+        // skip-visible locally, and in CI (SPECTR_REQUIRE_DB=1, Redis service
+        // provisioned) an unreachable Redis hard-fails, so this proof can
+        // never go vacuous again.
+        TestDb.Require(TestDb.RedisUp(_factory), "Redis");
         var resp = await _factory.CreateClient().GetAsync("/api/dev/throw");
         Assert.Equal(HttpStatusCode.InternalServerError, resp.StatusCode);
         Assert.Equal("application/json", resp.Content.Headers.ContentType?.MediaType);

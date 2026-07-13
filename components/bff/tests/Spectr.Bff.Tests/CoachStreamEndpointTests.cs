@@ -19,7 +19,7 @@ namespace Spectr.Bff.Tests;
 // run without Redis. The live-subscribe round-trip case is marked
 // [Trait("Category","Slow")] so CI can filter it out in fast mode; it
 // uses the real local Redis from the RedisReachable() gate, mirroring
-// the PostgresReachable() pattern from VerdictsEndpointDegradationTests.
+// the TestDb.RequireAsync Postgres gate (skip-visible, story 12.7).
 //
 // AC4 (idle fallback after 30 s of pub/sub silence) + the 15 s
 // heartbeat are covered by the local smoke test in story task 9.2 —
@@ -32,17 +32,6 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
     : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
-
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
 
     private bool RedisReachable()
     {
@@ -168,10 +157,10 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
 
     // ── terminal short-circuit (AC5) ───────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task Stream_For_Complete_Row_Emits_Token_Then_Done()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var evidence = "[{\"label\":\"LUFS -11.2\",\"path\":\"phase1.lufs_integrated\"}]";
         var seed = await SeedTerminalAssistant(
@@ -215,10 +204,10 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Stream_For_Refused_Row_Emits_Refusal_Frame()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var seed = await SeedTerminalAssistant(
             "stream-refused",
@@ -247,10 +236,10 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Stream_For_Error_Row_Emits_Error_Frame()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var seed = await SeedTerminalAssistant(
             "stream-error",
@@ -279,10 +268,10 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
 
     // ── ownership gate (AC6) ───────────────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task Stream_For_Other_Users_Message_Returns_404()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         // User A seeds a complete assistant row.
         var seedA = await SeedTerminalAssistant(
@@ -333,12 +322,12 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
 
     // ── live subscribe round-trip ──────────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     [Trait("Category", "Slow")]
     public async Task Stream_Live_Subscribe_Forwards_Published_Frames()
     {
-        if (!await PostgresReachable()) { return; }
-        if (!RedisReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
+        TestDb.Require(RedisReachable(), "Redis");
 
         // Seed a pending assistant row directly (no enqueue) so we can
         // drive the publish ourselves.
@@ -401,12 +390,12 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
 
     // ── client-disconnect → coach:cancel:{messageId} SET (Task 6.5) ─────
 
-    [Fact]
+    [SkippableFact]
     [Trait("Category", "Slow")]
     public async Task Client_Disconnect_Sets_Cancel_Key_In_Redis()
     {
-        if (!await PostgresReachable()) { return; }
-        if (!RedisReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
+        TestDb.Require(RedisReachable(), "Redis");
 
         // Seed a pending assistant row — no actor enqueue, just need the
         // SSE endpoint to open the subscribe + relay loop.

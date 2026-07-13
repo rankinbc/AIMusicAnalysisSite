@@ -31,17 +31,6 @@ public sealed class SubscriptionMirrorServiceTests
         _factory = factory;
     }
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
-
     private static Subscription StripeSub(
         Guid userId,
         string customerId,
@@ -96,10 +85,10 @@ public sealed class SubscriptionMirrorServiceTests
         await db.Users.Where(u => u.Id == userId).ExecuteDeleteAsync();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task First_Apply_For_A_User_Inserts_A_Row()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync(
             $"mirror+first+{Guid.NewGuid():N}@spectr.test");
         try
@@ -122,10 +111,10 @@ public sealed class SubscriptionMirrorServiceTests
         finally { await CleanupAsync(userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Second_Apply_With_Changed_Status_Mutates_Existing_Row()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync(
             $"mirror+mut+{Guid.NewGuid():N}@spectr.test");
         try
@@ -151,10 +140,10 @@ public sealed class SubscriptionMirrorServiceTests
         finally { await CleanupAsync(userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Apply_With_Unknown_Customer_And_Missing_Metadata_Is_NoOp()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         // No seeded user with this customer id, and the subscription
         // payload omits the spectr_user_id metadata — the service should
@@ -175,7 +164,7 @@ public sealed class SubscriptionMirrorServiceTests
         Assert.Equal(0, orphanCount);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Apply_Populates_StripeItemId_From_First_Item()
     {
         // Story 2.2 review-fix P17 / Task 10.2 — assert that
@@ -184,7 +173,7 @@ public sealed class SubscriptionMirrorServiceTests
         // change-cadence endpoint requires this column to be populated
         // before it can swap a price; backfilling here lets the next
         // webhook unblock an existing user for cadence changes.
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync(
             $"mirror+itemid+{Guid.NewGuid():N}@spectr.test");
         try
@@ -207,7 +196,7 @@ public sealed class SubscriptionMirrorServiceTests
         finally { await CleanupAsync(userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Apply_Preserves_Existing_StripeItemId_When_Items_Empty()
     {
         // Story 2.2 review-fix P9 — webhook payloads with empty items
@@ -215,7 +204,7 @@ public sealed class SubscriptionMirrorServiceTests
         // must NOT wipe the previously-populated StripeItemId; doing
         // so re-introduces `subscription_not_ready` 409 for an active
         // user until the next item-bearing webhook.
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync(
             $"mirror+preserve+{Guid.NewGuid():N}@spectr.test");
         try
@@ -250,10 +239,10 @@ public sealed class SubscriptionMirrorServiceTests
         finally { await CleanupAsync(userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Apply_Resolves_User_Via_Existing_StripeCustomerId_On_User_Row()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var customerId = $"cus_via_user_{Guid.NewGuid():N}";
         var userId = await SeedUserAsync(

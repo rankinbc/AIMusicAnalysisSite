@@ -17,19 +17,19 @@ public sealed class ProfileEndpointsTests(WebApplicationFactory<Program> factory
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-    [Fact]
+    [SkippableFact]
     public async Task Unknown_Handle_404s()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
         var anon = _factory.CreateClient();
         var resp = await anon.GetAsync("/api/u/no-such-handle-ever");
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Profile_Exposes_Only_Public_Versions()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var client = _factory.CreateClient();
         var (userId, _) = await TestAuth.RegisterAsync(client);
@@ -107,10 +107,10 @@ public sealed class ProfileEndpointsTests(WebApplicationFactory<Program> factory
             .Select(i => i.GetProperty("handle").GetString()!).ToList();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Handle_Search_Prefix_Matches_Case_Insensitive_Active_Only()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         // Distinct prefix per run so parallel test data can't collide.
         var p = $"zq{Guid.NewGuid():N}"[..8];
@@ -128,10 +128,10 @@ public sealed class ProfileEndpointsTests(WebApplicationFactory<Program> factory
         Assert.DoesNotContain(hit, await Search(anon, tail));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Handle_Search_Caps_At_Eight_Results()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var p = $"zc{Guid.NewGuid():N}"[..8];
         for (var i = 0; i < 9; i++) await SeedHandleAsync(p);
@@ -140,10 +140,10 @@ public sealed class ProfileEndpointsTests(WebApplicationFactory<Program> factory
         Assert.Equal(8, (await Search(anon, p)).Count);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Handle_Search_Underscore_Matches_Literally_Not_As_Wildcard()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         // 'ab_...' must be matched by q='ab_' ; 'abX...' must NOT (an
         // unescaped '_' would be a single-char ILIKE wildcard and match both).
@@ -157,10 +157,10 @@ public sealed class ProfileEndpointsTests(WebApplicationFactory<Program> factory
         Assert.DoesNotContain(decoy, results);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Handle_Search_Rejects_Junk_As_Empty_Not_Error()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
         var anon = _factory.CreateClient();
 
         Assert.Empty(await Search(anon, ""));                    // empty

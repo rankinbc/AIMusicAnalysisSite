@@ -14,10 +14,10 @@ public sealed class SongVersionMetricsTests(WebApplicationFactory<Program> facto
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-    [Fact]
+    [SkippableFact]
     public async Task Song_versions_carry_latest_metrics()
     {
-        if (!await TestDb.Reachable(_factory)) return;
+        await TestDb.RequireAsync(_factory);
         var client = _factory.CreateClient();
 
         var (userId, token) = await TestAuth.RegisterAsync(client);

@@ -22,7 +22,7 @@ public sealed class NotificationEndpointsTests(WebApplicationFactory<Program> fa
 
     // ── MentionParser (pure) ─────────────────────────────────────────────────
 
-    [Theory]
+    [SkippableTheory]
     [InlineData("nice one @vela", new[] { "vela" })]
     [InlineData("@vela @forge check this", new[] { "vela", "forge" })]
     [InlineData("@Vela and @vela dedupe", new[] { "Vela" })] // case-insensitive distinct
@@ -49,10 +49,10 @@ public sealed class NotificationEndpointsTests(WebApplicationFactory<Program> fa
         new(scope.ServiceProvider.GetRequiredService<AppDbContext>(),
             NullLogger<TableNotificationSink>.Instance);
 
-    [Fact]
+    [SkippableFact]
     public async Task Sink_EventRow_Written_For_User_And_NoOp_For_Anon()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
         var (client, userId) = await AuthedClientAsync();
 
         using var scope = _factory.Services.CreateScope();
@@ -77,10 +77,10 @@ public sealed class NotificationEndpointsTests(WebApplicationFactory<Program> fa
         Assert.Equal(1, unread!.Unread);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Digest_Upsert_Is_Idempotent_Per_Day_And_ReUnreads()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
         var (client, userId) = await AuthedClientAsync();
         var versionId = Guid.NewGuid();
 
@@ -106,10 +106,10 @@ public sealed class NotificationEndpointsTests(WebApplicationFactory<Program> fa
         Assert.Null(after.ReadAt);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Inbox_Is_Recipient_Scoped()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
         var (clientA, userA) = await AuthedClientAsync();
         var (clientB, userB) = await AuthedClientAsync();
 
@@ -135,10 +135,10 @@ public sealed class NotificationEndpointsTests(WebApplicationFactory<Program> fa
         Assert.Equal(0, unreadAfter!.Unread);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Comment_On_Owned_Version_Notifies_Owner_And_Mentions()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         // Owner + commenter; owner's version must be commentable by the commenter.
         var (ownerClient, ownerId) = await AuthedClientAsync();

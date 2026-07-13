@@ -41,7 +41,7 @@ public sealed class SecretsHardeningTests(WebApplicationFactory<Program> factory
         Assert.Contains(messageFragment, Flatten(ex));
     }
 
-    [Fact]
+    [SkippableFact]
     public void Production_Boot_Without_Jwt_Key_Refuses_To_Start()
     {
         // Production does not load appsettings.Development.json, so no signing
@@ -50,7 +50,7 @@ public sealed class SecretsHardeningTests(WebApplicationFactory<Program> factory
         AssertBootRefusal(f, "Jwt:Key");
     }
 
-    [Theory]
+    [SkippableTheory]
     [InlineData("Production")]
     [InlineData("Development")]
     public void Short_Signing_Key_Refuses_To_Start_In_Any_Environment(string environment)
@@ -59,14 +59,14 @@ public sealed class SecretsHardeningTests(WebApplicationFactory<Program> factory
         AssertBootRefusal(f, "32 bytes");
     }
 
-    [Fact]
+    [SkippableFact]
     public void Production_Boot_With_Valid_Keys_Also_Validates_Anon_Key()
     {
         using var f = BootFactory("Production", ("Jwt:Key", new string('k', 48)));
         AssertBootRefusal(f, "Anon:SigningKey");
     }
 
-    [Fact]
+    [SkippableFact]
     public void Committed_Dev_Keys_Are_Rejected_Outside_Development()
     {
         // env=Development-on-a-prod-host bypass: the publicly-committed dev
@@ -76,7 +76,7 @@ public sealed class SecretsHardeningTests(WebApplicationFactory<Program> factory
         AssertBootRefusal(f, "PUBLICLY-COMMITTED");
     }
 
-    [Fact]
+    [SkippableFact]
     public void Identical_Jwt_And_Anon_Keys_Are_Rejected()
     {
         var key = new string('k', 48);
@@ -89,10 +89,10 @@ public sealed class SecretsHardeningTests(WebApplicationFactory<Program> factory
     private HttpClient CookielessClient() => _factory.CreateClient(
         new WebApplicationFactoryClientOptions { HandleCookies = false });
 
-    [Fact]
+    [SkippableFact]
     public async Task Refresh_Rotates_And_Old_Cookie_Is_Rejected()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var client = CookielessClient();
         var email = $"sec+{Guid.NewGuid():N}@spectr.test";
@@ -120,10 +120,10 @@ public sealed class SecretsHardeningTests(WebApplicationFactory<Program> factory
         Assert.Equal(HttpStatusCode.OK, refresh2.StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Logout_Revokes_The_Refresh_Token()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var client = CookielessClient();
         var email = $"sec+{Guid.NewGuid():N}@spectr.test";

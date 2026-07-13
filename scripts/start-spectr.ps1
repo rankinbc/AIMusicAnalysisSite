@@ -68,8 +68,18 @@ $DataProj    = Join-Path $RepoRoot 'components/bff/src/Spectr.Data'
 $WorkerDir   = Join-Path $RepoRoot 'components/worker'
 $FrontendDir = Join-Path $RepoRoot 'components/frontend-spectr-v2'
 
-# Canonical worker entrypoint (mirrors components/worker/Procfile).
-$WorkerCmd = 'python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues coach analysis-paid analysis-free maintenance'
+# Story 12.7 (AC5): resolve ONE absolute python and use it for BOTH the
+# import pre-flight and the worker window. The spawned window runs a fresh
+# PowerShell whose profile can reorder PATH — a bare `python` there may be a
+# DIFFERENT interpreter than the one the launcher just verified (the
+# check-vs-window profile divergence). $env:SPECTR_PYTHON overrides (e.g. a
+# prepared venv's python.exe).
+$PythonExe = if ($env:SPECTR_PYTHON) { $env:SPECTR_PYTHON }
+             else { (Get-Command python -ErrorAction SilentlyContinue)?.Source }
+
+# Canonical worker entrypoint (mirrors components/worker/Procfile), pinned to
+# the resolved interpreter above.
+$WorkerCmd = "& `"$PythonExe`" -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues coach analysis-paid analysis-free maintenance"
 
 # ── Pretty output helpers ───────────────────────────────────────────────────
 $script:Errors = @()
@@ -360,25 +370,32 @@ function Start-Apps {
     }
 
     # --- Worker ---
-    if (Get-Command python -ErrorAction SilentlyContinue) {
+    if ($env:SPECTR_PYTHON -and -not (Test-Path $env:SPECTR_PYTHON -PathType Leaf)) {
+        # A set-but-wrong override deserves its own diagnosis (a directory or
+        # typo here would otherwise abort mid-launch on the & invoke).
+        Fail "Worker NOT started: `$env:SPECTR_PYTHON is set but not a file: $env:SPECTR_PYTHON"
+    }
+    elseif ($PythonExe -and (Test-Path $PythonExe -PathType Leaf)) {
         # Story 12.2 (AC1): fail LOUD if the worker deps are missing. A worker
         # window opened with a doomed command instantly errors while the
-        # launcher exits green — a dead worker from minute zero. Check the SAME
-        # `python` the window would use (bare `python` from PATH).
-        python -c "import dramatiq, audio_analysis" 2>$null
+        # launcher exits green — a dead worker from minute zero. Story 12.7
+        # (AC5): the check and the window use the SAME resolved interpreter.
+        Info "Worker python: $PythonExe"
+        & $PythonExe -c "import dramatiq, audio_analysis" 2>$null
         if ($LASTEXITCODE -ne 0) {
             # Re-run without suppression to capture the actual import error.
-            $importError = (python -c "import dramatiq, audio_analysis" 2>&1 |
+            $importError = (& $PythonExe -c "import dramatiq, audio_analysis" 2>&1 |
                             Where-Object { $_ -match 'Error' } | Select-Object -Last 1)
             if (-not $importError) { $importError = 'import failed (no error text captured)' }
-            Fail ("Worker NOT started: ``python`` cannot import worker deps - $importError. " +
+            Fail ("Worker NOT started: ``$PythonExe`` cannot import worker deps - $importError. " +
                   'Install: pip install -r components/worker/requirements.txt ' +
-                  'and pip install -e components/shared components/analysis')
+                  'and pip install -e components/shared components/analysis ' +
+                  '(or point $env:SPECTR_PYTHON at the prepared venv python.exe)')
         } else {
             Start-InWindow -Title 'SPECTR Worker' -WorkDir $WorkerDir -Command $WorkerCmd
         }
     } else {
-        Fail 'Worker NOT started: `python` not found on PATH'
+        Fail 'Worker NOT started: no python found (PATH or $env:SPECTR_PYTHON)'
     }
 
     # --- Frontend ---

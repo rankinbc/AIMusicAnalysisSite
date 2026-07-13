@@ -39,17 +39,6 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
             if (services is not null) builder.ConfigureServices(services);
         });
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
-
     private static async Task<HttpResponseMessage> PostWebhookAsync(
         HttpClient client, string rawBody, string? signature)
     {
@@ -106,9 +95,10 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
 
     // ── Signature verification (AC4) ───────────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task Webhook_Missing_Signature_Header_Returns_400()
     {
+        TestDb.Require(TestDb.RedisUp(_factory), "Redis"); // request pipeline touches Redis (story 12.7)
         var factory = BuildConfigured();
         var client = factory.CreateClient();
 
@@ -117,10 +107,10 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Webhook_Invalid_Signature_Returns_400_And_No_Event_Row()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var factory = BuildConfigured();
         var client = factory.CreateClient();
@@ -139,10 +129,10 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
 
     // ── Idempotency (AC2) + dispatch (AC3) ─────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task Webhook_Valid_Subscription_Created_Writes_Mirror_And_WebhookEvent()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var factory = BuildConfigured();
         var client = factory.CreateClient();
@@ -179,10 +169,10 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Webhook_Replay_Of_Same_Event_Is_Idempotent()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var factory = BuildConfigured();
         var client = factory.CreateClient();
@@ -224,10 +214,10 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Webhook_Subscription_Updated_Mutates_Existing_Mirror_Row()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var factory = BuildConfigured();
         var client = factory.CreateClient();
@@ -268,7 +258,7 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Webhook_Concurrent_Deliveries_Of_Same_Event_Produce_Exactly_One_Row()
     {
         // review-fix P5 / Task 4.7(e) — explicit concurrency test. Stripe
@@ -276,7 +266,7 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
         // in pathological retry scenarios. The ON CONFLICT DO NOTHING
         // primitive must collapse them to a single webhook_events row +
         // a single subscriptions row.
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var factory = BuildConfigured();
         var userId = await SeedUserWithCustomerIdAsync(factory, "cus_test_001");
@@ -319,10 +309,10 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
 
     // ── Story 2.9 — dunning retry-date persistence ─────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task Webhook_Invoice_Payment_Failed_Stamps_NextPaymentAttempt()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var factory = BuildConfigured();
         var client = factory.CreateClient();
@@ -374,10 +364,10 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Webhook_Invoice_Payment_Failed_Sends_Dunning_Email_Once_Per_Invoice()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var email = new RecordingEmailSender();
         var factory = BuildConfigured(s =>
@@ -431,10 +421,10 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Webhook_Invoice_Paid_Clears_NextPaymentAttempt()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var factory = BuildConfigured();
         var client = factory.CreateClient();
@@ -479,10 +469,10 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
     // also covers this path but includes response-body assertions; this test
     // documents the DB-level guarantee explicitly for the billing-integrity story.
 
-    [Fact]
+    [SkippableFact]
     public async Task Webhook_DuplicateEventId_IsNoOp()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         const string eventId = "evt_test_sub_created_001";
         var factory = BuildConfigured();
@@ -521,10 +511,10 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
 
     // ── Story 2.10 AC3 — entitlement reconstruction via event replay ───────
 
-    [Fact]
+    [SkippableFact]
     public async Task Webhook_Replay_ReconstructsSubscriptionMirror()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var factory = BuildConfigured();
         var client = factory.CreateClient();
@@ -590,10 +580,10 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Webhook_Unsupported_Event_Type_Is_Recorded_But_Not_Processed()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var factory = BuildConfigured();
         var client = factory.CreateClient();

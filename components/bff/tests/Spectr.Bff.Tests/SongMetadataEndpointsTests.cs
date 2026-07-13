@@ -15,10 +15,10 @@ public sealed class SongMetadataEndpointsTests(WebApplicationFactory<Program> fa
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-    [Fact]
+    [SkippableFact]
     public async Task Create_And_Get_RoundTripsMetadata_AndDefaultsVisibilityPrivate()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (client, _) = await NewAuthedClient();
 
         var created = await CreateSong(client, new
@@ -52,10 +52,10 @@ public sealed class SongMetadataEndpointsTests(WebApplicationFactory<Program> fa
         Assert.Equal("trance", fetched.ReferenceProfileId);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Patch_UpdatesVisibility_AndPersists()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (client, _) = await NewAuthedClient();
         var song = await CreateSong(client, new { name = $"Vis {Guid.NewGuid():N}" });
         Assert.Equal("private", song!.Visibility);
@@ -75,10 +75,10 @@ public sealed class SongMetadataEndpointsTests(WebApplicationFactory<Program> fa
         Assert.Equal("public", again!.Visibility);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Patch_RejectsInvalidVisibility_WithBadRequest()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (client, _) = await NewAuthedClient();
         var song = await CreateSong(client, new { name = $"Bad {Guid.NewGuid():N}" });
 
@@ -91,10 +91,10 @@ public sealed class SongMetadataEndpointsTests(WebApplicationFactory<Program> fa
         Assert.Equal("private", fetched!.Visibility);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task HardDelete_RemovesSongVersionsAndTags_AndIsOwnerScoped()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (owner, _) = await NewAuthedClient();
         var song = await CreateSong(owner, new { name = $"Doomed {Guid.NewGuid():N}" });
         var versionId = await CreateVersionForSong(owner, song!.Id);
@@ -120,10 +120,10 @@ public sealed class SongMetadataEndpointsTests(WebApplicationFactory<Program> fa
         Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync($"/api/versions/{versionId}/files")).StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Archive_StillOnlySetsArchivedAt_NotHardDelete()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (owner, _) = await NewAuthedClient();
         var song = await CreateSong(owner, new { name = $"Arch {Guid.NewGuid():N}" });
 
@@ -170,15 +170,4 @@ public sealed class SongMetadataEndpointsTests(WebApplicationFactory<Program> fa
         return (await resp.Content.ReadFromJsonAsync<UploadResponse>())!.VersionId;
     }
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider
-                .GetRequiredService<Spectr.Data.AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
 }

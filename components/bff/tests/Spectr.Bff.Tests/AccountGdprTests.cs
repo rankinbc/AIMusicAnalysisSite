@@ -33,10 +33,10 @@ public sealed class AccountGdprTests(WebApplicationFactory<Program> factory)
         { Calls.Enqueue((taskName, args, queueName)); return Task.CompletedTask; }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Export_Contains_All_Six_Categories_And_Manifest()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var client = _factory.CreateClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);
@@ -90,10 +90,10 @@ public sealed class AccountGdprTests(WebApplicationFactory<Program> factory)
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Delete_Requires_Password_And_Subscription_Confirmation()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var queue = new RecordingQueue();
         var stripe = new FakeStripe();
@@ -171,10 +171,10 @@ public sealed class AccountGdprTests(WebApplicationFactory<Program> factory)
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Password_Reset_Kills_Outstanding_Access_Tokens()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         // 4.3's recorded gap, closed by 4.6 token-versioning: the OLD access
         // token dies as soon as the version bumps (instant same-process).

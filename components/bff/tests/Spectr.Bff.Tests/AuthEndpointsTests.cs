@@ -33,10 +33,10 @@ public sealed class AuthEndpointsTests(WebApplicationFactory<Program> factory)
         }).CreateClient();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Register_Login_Roundtrip_Issues_Access_Token()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var client = NewClient();
         var email = $"slice1+{Guid.NewGuid():N}@spectr.test";
@@ -57,39 +57,24 @@ public sealed class AuthEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Me_Requires_Bearer()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var client = NewClient();
         var resp = await client.GetAsync("/api/auth/me");
         Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Songs_List_Requires_Auth()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var client = NewClient();
         var resp = await client.GetAsync("/api/songs/");
         Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
     }
 
-    // Test gate: skip if the docker-compose Postgres isn't running. CI matrix
-    // would set this up via service container; local dev needs `docker compose up`.
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch
-        {
-            return false;
-        }
-    }
 }

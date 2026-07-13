@@ -239,7 +239,7 @@ export function ReportView({ results, songId, tab, onTabChange }: ReportViewProp
   }, []);
 
   return (
-    <div className={`${s.report} rdx`}>
+    <div className={`${s.report} rdx`} data-testid="report-view">
       <header className={s.header}>
         <Link to="/songs/$songId" params={{ songId }} className={s.backLink}>
           ← all versions

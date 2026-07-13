@@ -103,10 +103,10 @@ public sealed class RetentionSweepSchedulerTests(WebApplicationFactory<Program> 
         await db.Users.Where(u => u.Id == userId).ExecuteDeleteAsync();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Warns_Due_Tiers_Once_And_Enqueues_Sweep()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (scheduler, email, queue, f) = Build();
         var warnUser = await SeedLapsedUserAsync(f, daysUntilPurge: 7, lapsedDays: 90);
@@ -151,10 +151,10 @@ public sealed class RetentionSweepSchedulerTests(WebApplicationFactory<Program> 
         await db.Notifications.Where(n => userIds.Contains(n.RecipientUserId)).ExecuteDeleteAsync();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Disabled_Flag_Short_Circuits()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (scheduler, email, queue, _) = Build(new RetentionOptions { Enabled = false });
         await scheduler.RunOnceAsync(CancellationToken.None);
@@ -162,10 +162,10 @@ public sealed class RetentionSweepSchedulerTests(WebApplicationFactory<Program> 
         Assert.Empty(queue.Calls);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Resubscribed_User_Gets_No_Warning()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (scheduler, email, _, f) = Build();
         var userId = await SeedLapsedUserAsync(f, daysUntilPurge: 7, lapsedDays: 90);

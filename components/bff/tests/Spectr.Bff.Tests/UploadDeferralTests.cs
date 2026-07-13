@@ -70,10 +70,10 @@ public sealed class UploadDeferralTests(WebApplicationFactory<Program> factory)
         return (client, queue);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task UploadVersion_AnalyzeFalse_CreatesVersion_NoJob_NoDispatch()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, queue) = NewClient();
         await Authenticate(client);
@@ -89,10 +89,10 @@ public sealed class UploadDeferralTests(WebApplicationFactory<Program> factory)
         Assert.Equal(0, await JobCount(body.VersionId)); // no AnalysisJob row
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task UploadVersion_Default_DispatchesExactlyOneJob()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, queue) = NewClient();
         await Authenticate(client);
@@ -109,10 +109,10 @@ public sealed class UploadDeferralTests(WebApplicationFactory<Program> factory)
         Assert.Equal(1, await JobCount(body.VersionId));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task UploadAls_AnalyzeFalse_AttachesProject_NoJob_NoDispatch()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, queue) = NewClient();
         await Authenticate(client);
@@ -134,10 +134,10 @@ public sealed class UploadDeferralTests(WebApplicationFactory<Program> factory)
         Assert.Equal(0, await JobCount(version.VersionId));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task UploadAls_WithProjectJson_PersistsAlsProjectColumn()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, _) = NewClient();
         await Authenticate(client);
@@ -161,10 +161,10 @@ public sealed class UploadDeferralTests(WebApplicationFactory<Program> factory)
         Assert.Equal("Kick", doc.RootElement.GetProperty("tracks")[0].GetProperty("name").GetString());
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task UploadAls_InvalidProjectJson_Returns400()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, _) = NewClient();
         await Authenticate(client);
@@ -234,17 +234,4 @@ public sealed class UploadDeferralTests(WebApplicationFactory<Program> factory)
             .FirstOrDefaultAsync();
     }
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch
-        {
-            return false;
-        }
-    }
 }

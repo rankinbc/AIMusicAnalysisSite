@@ -26,10 +26,10 @@ public sealed class RackPresetEndpointsTests(WebApplicationFactory<Program> fact
         masterBypass = bypass,
     };
 
-    [Fact]
+    [SkippableFact]
     public async Task SavePreset_OnOwnedVersion_PersistsAndLists()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var client = NewClient();
         await Authenticate(client);
         var versionId = await CreateVersion(client);
@@ -49,10 +49,10 @@ public sealed class RackPresetEndpointsTests(WebApplicationFactory<Program> fact
         Assert.Equal(dto.Id, list![0].Id);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task SavePreset_OnAnotherUsersVersion_Returns404()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
 
         var owner = NewClient();
         await Authenticate(owner);
@@ -73,10 +73,10 @@ public sealed class RackPresetEndpointsTests(WebApplicationFactory<Program> fact
         Assert.Equal(0, await PresetCount(versionId));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task SavePreset_NonObjectChain_Returns400()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var client = NewClient();
         await Authenticate(client);
         var versionId = await CreateVersion(client);
@@ -88,10 +88,10 @@ public sealed class RackPresetEndpointsTests(WebApplicationFactory<Program> fact
         Assert.Equal(0, await PresetCount(versionId));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task DeletePreset_RemovesRow_ThenNotFound()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var client = NewClient();
         await Authenticate(client);
         var versionId = await CreateVersion(client);
@@ -107,10 +107,10 @@ public sealed class RackPresetEndpointsTests(WebApplicationFactory<Program> fact
         Assert.Equal(0, await PresetCount(versionId));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Draft_SecondPut_UpdatesSameRow_NotASecond()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var client = NewClient();
         await Authenticate(client);
         var versionId = await CreateVersion(client);
@@ -135,10 +135,10 @@ public sealed class RackPresetEndpointsTests(WebApplicationFactory<Program> fact
         Assert.Equal(versionId, draft!.SongVersionId);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Draft_OnAnotherUsersVersion_Returns404()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var owner = NewClient();
         await Authenticate(owner);
         var versionId = await CreateVersion(owner);
@@ -151,10 +151,10 @@ public sealed class RackPresetEndpointsTests(WebApplicationFactory<Program> fact
         Assert.Equal(0, await DraftCount(versionId));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task VizPresets_AreUserScoped()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var a = NewClient();
         await Authenticate(a);
         var b = NewClient();
@@ -222,14 +222,4 @@ public sealed class RackPresetEndpointsTests(WebApplicationFactory<Program> fact
         return await db.RackDrafts.CountAsync(d => d.SongVersionId == versionId);
     }
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
 }

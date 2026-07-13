@@ -41,12 +41,14 @@ class _FakeSession:
 
 
 @pytest.fixture
-def harness(monkeypatch):
+def harness(monkeypatch, tmp_path):
     added: list = []
     calls: list = []
 
     monkeypatch.setattr(td, "run_pipeline", lambda **k: {"phase1": {"ok": True}, "overall_score": 80.0})
-    monkeypatch.setattr(td, "LOCAL_ROOT", "/root")
+    # tmp_path, not a literal "/root": on Linux CI the runner user cannot
+    # stat inside /root (0700) and resolve_local raises PermissionError.
+    monkeypatch.setattr(td, "LOCAL_ROOT", str(tmp_path))
     monkeypatch.setattr(td, "_try_write_artifact", lambda *a, **k: None)
     # Story 3.2: source validation runs pre-pipeline; these tests never write a real file.
     monkeypatch.setattr(td.source_validation, "validate_source", lambda _p: 180.0)

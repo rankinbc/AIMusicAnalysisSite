@@ -55,8 +55,9 @@ export default [
     },
   },
   {
-    // Node lint/build scripts (AR39 enforcement lints live here).
-    files: ['scripts/**/*.mjs'],
+    // Node lint/build scripts (AR39 enforcement lints live here) and the
+    // Playwright fixture generator (story 12.7) — Node runtime, not browser.
+    files: ['scripts/**/*.mjs', 'playwright/**/*.mjs'],
     languageOptions: {
       globals: { ...globals.node },
     },

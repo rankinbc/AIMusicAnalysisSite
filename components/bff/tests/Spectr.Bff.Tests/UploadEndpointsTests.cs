@@ -138,7 +138,7 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
 
     // ── PartMath (pure) ──────────────────────────────────────────────────────
 
-    [Theory]
+    [SkippableTheory]
     [InlineData(1, 1)]                                  // 1 byte → 1 part
     [InlineData(16L * 1024 * 1024, 1)]                  // exactly one part
     [InlineData(16L * 1024 * 1024 + 1, 2)]              // one byte over → 2
@@ -150,10 +150,10 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
 
     // ── 501 fallback when S3 unconfigured ───────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task Init_S3Unconfigured_Returns501()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         // Default factory: no Storage:S3 config → real S3ObjectStore with
         // IsConfigured=false.
@@ -190,10 +190,10 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
         return doc.RootElement.GetProperty("error").GetProperty("code").GetString();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Init_StorageUnreachable_Returns503_NotUnhandled500()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, _) = NewThrowingStoreClient();
         var (_, token) = await TestAuth.RegisterAsync(client);
@@ -205,10 +205,10 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.Equal("storage_unreachable", await ErrorCode(resp));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task AttachmentInit_StorageUnreachable_Returns503()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, _) = NewThrowingStoreClient();
         var (_, token) = await TestAuth.RegisterAsync(client);
@@ -221,10 +221,10 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.Equal("storage_unreachable", await ErrorCode(resp));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Complete_StorageUnreachable_Returns503_NoRowsNoDispatch()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, queue) = NewThrowingStoreClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);
@@ -245,10 +245,10 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
 
     // ── init happy path ──────────────────────────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task Init_ReturnsUniformPartsAndUserScopedKey()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, store, _, _) = NewClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);
@@ -269,10 +269,10 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.Single(store.Initiated);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Init_OversizedFile_Returns400()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, _, _, _) = NewClient();
         var (_, token) = await TestAuth.RegisterAsync(client);
@@ -285,10 +285,10 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
 
     // ── complete ─────────────────────────────────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task Complete_CreatesRowsAndDispatches()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, store, queue, f) = NewClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);
@@ -320,10 +320,10 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.Equal(1, await db.AnalysisJobs.CountAsync(j => j.Id == jobId));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Complete_AnalyzeFalse_NoDispatch()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, _, queue, _) = NewClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);
@@ -344,10 +344,10 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.Empty(queue.Calls);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Complete_ForeignKey_Returns400()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, store, queue, _) = NewClient();
         var (_, token) = await TestAuth.RegisterAsync(client);
@@ -368,10 +368,10 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
 
     // ── abort ────────────────────────────────────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task Abort_OwnKey_Aborts()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, store, _, _) = NewClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);
@@ -386,10 +386,10 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.Single(store.Aborted);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Abort_ForeignKey_Returns400()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, store, _, _) = NewClient();
         var (_, token) = await TestAuth.RegisterAsync(client);
@@ -425,10 +425,10 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
         return (body!.VersionId, jobId, userId);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task AttachmentInit_Mints_JobScoped_Keys_Per_Kind()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, store, _, _) = NewClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);
@@ -460,10 +460,10 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.Equal(3, store.PresignedPuts.Count);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task AttachmentInit_Enforces_Ownership_Kinds_And_Limits()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, _, _, _) = NewClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);
@@ -491,10 +491,10 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
             new { kind = "nope", versionId, fileName = "x.wav", fileSize = 10L })).StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task StageKeys_Registers_Existing_Objects_And_Rejects_Foreign_Prefix()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, store, _, f) = NewClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);
@@ -543,10 +543,10 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.Contains("Bass.flac", raw);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task AlsKey_Registers_Without_Dispatch_When_Analyze_False()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, _, queue, f) = NewClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);
@@ -569,10 +569,10 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.NotNull(v.AlsProjectJson);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task ReferenceCompleteKey_Creates_Row_With_R2_Key()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, _, _, f) = NewClient();
         var (_, token) = await TestAuth.RegisterAsync(client);

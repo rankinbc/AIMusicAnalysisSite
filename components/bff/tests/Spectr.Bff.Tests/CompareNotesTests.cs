@@ -12,10 +12,10 @@ public sealed class CompareNotesTests(WebApplicationFactory<Program> factory)
     private readonly WebApplicationFactory<Program> _factory = factory;
     private sealed record NoteDto(string Body);
 
-    [Fact]
+    [SkippableFact]
     public async Task Notes_upsert_read_and_pair_is_order_independent()
     {
-        if (!await TestDb.Reachable(_factory)) return;
+        await TestDb.RequireAsync(_factory);
         var client = _factory.CreateClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);

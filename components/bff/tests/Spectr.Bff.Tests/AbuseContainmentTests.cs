@@ -33,21 +33,10 @@ public sealed class AbuseContainmentTests(WebApplicationFactory<Program> factory
             };
     }
 
-    private static bool RedisUp(WebApplicationFactory<Program> f)
-    {
-        try
-        {
-            using var scope = f.Services.CreateScope();
-            return scope.ServiceProvider
-                .GetRequiredService<StackExchange.Redis.IConnectionMultiplexer>().IsConnected;
-        }
-        catch { return false; }
-    }
-
-    [Fact]
+    [SkippableFact]
     public async Task Disposable_Detection_Covers_Builtin_And_Flag_Extension()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         using var scope = _factory.Services.CreateScope();
         var svc = scope.ServiceProvider.GetRequiredService<DisposableEmailService>();
@@ -57,11 +46,11 @@ public sealed class AbuseContainmentTests(WebApplicationFactory<Program> factory
         Assert.False(await svc.IsDisposableAsync("not-an-email"));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task J6_Scripted_Registration_Burst_Is_Contained()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
-        if (!RedisUp(_factory)) { return; } // limiter layer needs Redis
+        await TestDb.RequireAsync(_factory);
+        TestDb.Require(TestDb.RedisUp(_factory), "Redis"); // limiter layer needs Redis (skip-visible, story 12.7)
 
         using var f = _factory.WithWebHostBuilder(b =>
             b.UseSetting("RateLimits:Enabled", "true"));
@@ -82,11 +71,11 @@ public sealed class AbuseContainmentTests(WebApplicationFactory<Program> factory
         Assert.Contains(HttpStatusCode.TooManyRequests, results);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Disposable_Domain_Registrations_Hit_The_Tighter_Arm()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
-        if (!RedisUp(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
+        TestDb.Require(TestDb.RedisUp(_factory), "Redis"); // skip-visible (story 12.7)
 
         using var f = _factory.WithWebHostBuilder(b =>
             b.UseSetting("RateLimits:Enabled", "true"));
@@ -106,10 +95,10 @@ public sealed class AbuseContainmentTests(WebApplicationFactory<Program> factory
         Assert.Equal(HttpStatusCode.TooManyRequests, codes[^1]);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Disposable_Free_Account_Cap_Is_Reduced_At_Dispatch()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         // Story 12.1 (AC4): the disposable CAP arm now sits behind the
         // RateLimits:Enabled knob like the per-IP arm — this test must opt
@@ -155,8 +144,10 @@ public sealed class AbuseContainmentTests(WebApplicationFactory<Program> factory
             // The NORMAL free cap (3) still has room; the disposable cap (1)
             // does not — dispatch refuses.
             var resp = await client.PostAsync($"/api/versions/{versionId}/analyze", null);
-            Assert.Equal(HttpStatusCode.Conflict, resp.StatusCode);
-            Assert.Contains("entitlement_exhausted", await resp.Content.ReadAsStringAsync());
+            // Story 12.7 (AC3): full envelope contract for the disposable-cap
+            // entitlement_exhausted branch (was a substring assert).
+            await TestContract.AssertEnvelopeAsync(
+                resp, HttpStatusCode.Conflict, "entitlement_exhausted");
         }
         finally
         {
@@ -170,11 +161,11 @@ public sealed class AbuseContainmentTests(WebApplicationFactory<Program> factory
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Disposable_Cap_Arm_Is_Off_When_Limits_Disabled()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
-        if (!RedisUp(_factory)) { return; } // the ALLOWED dispatch enqueues to Redis
+        await TestDb.RequireAsync(_factory);
+        TestDb.Require(TestDb.RedisUp(_factory), "Redis"); // the ALLOWED dispatch enqueues to Redis (skip-visible)
 
         // Story 12.1 (AC4): with RateLimits:Enabled=false (dev default, the
         // base factory), a disposable-domain account past the reduced cap
@@ -229,11 +220,11 @@ public sealed class AbuseContainmentTests(WebApplicationFactory<Program> factory
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task CrossAccount_PerIp_Dispatch_Ceiling_Contains_N_Accounts()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
-        if (!RedisUp(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
+        TestDb.Require(TestDb.RedisUp(_factory), "Redis"); // skip-visible (story 12.7)
 
         // Ceiling of 2/h for the test; RateLimits ON only for this factory.
         // TestServer has a NULL RemoteIpAddress (which the dispatch arm
@@ -308,12 +299,10 @@ public sealed class AbuseContainmentTests(WebApplicationFactory<Program> factory
                 else if (resp.StatusCode == HttpStatusCode.TooManyRequests)
                 {
                     refused = true;
-                    // Story 12.1 (AC5): machine-readable code in the AR38
-                    // envelope, not just a substring anywhere in the body.
-                    using var doc = System.Text.Json.JsonDocument.Parse(
-                        await resp.Content.ReadAsStringAsync());
-                    Assert.Equal("rate_limited",
-                        doc.RootElement.GetProperty("error").GetProperty("code").GetString());
+                    // Story 12.1 (AC5) / 12.7 (AC3): the FULL AR38 envelope
+                    // contract — status, machine code, non-empty message.
+                    await TestContract.AssertEnvelopeAsync(
+                        resp, HttpStatusCode.TooManyRequests, "rate_limited");
                 }
             }
             Assert.True(refused, "third same-IP dispatch should hit the cross-account ceiling");

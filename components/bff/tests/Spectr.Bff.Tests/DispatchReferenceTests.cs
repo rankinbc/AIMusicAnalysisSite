@@ -21,17 +21,6 @@ public sealed class DispatchReferenceTests(WebApplicationFactory<Program> factor
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
-
     private (HttpClient client, RecordingJobQueue queue) NewClient()
     {
         var queue = new RecordingJobQueue();
@@ -86,10 +75,10 @@ public sealed class DispatchReferenceTests(WebApplicationFactory<Program> factor
     }
 
     // ── Happy path: analyze?referenceId=<own ref> sets AnalysisJob.ReferenceId ─
-    [Fact]
+    [SkippableFact]
     public async Task Analyze_WithOwnReference_SetsReferenceIdOnJob()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (client, queue) = NewClient();
         await AuthAsync(client, "ref-own");
         var referenceId = await CreateReferenceAsync(client);
@@ -107,10 +96,10 @@ public sealed class DispatchReferenceTests(WebApplicationFactory<Program> factor
     }
 
     // ── IDOR: dispatching with another user's referenceId → 404, no job row ────
-    [Fact]
+    [SkippableFact]
     public async Task Analyze_WithOtherUsersReference_404_NoJob()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
 
         // User A owns the reference.
         var (clientA, _) = NewClient();
@@ -136,10 +125,10 @@ public sealed class DispatchReferenceTests(WebApplicationFactory<Program> factor
     }
 
     // ── Back-compat: no referenceId → job dispatched with null ReferenceId ────
-    [Fact]
+    [SkippableFact]
     public async Task Analyze_NoReference_NullReferenceId()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (client, queue) = NewClient();
         await AuthAsync(client, "ref-none");
         var versionId = await CreateVersionAsync(client);
@@ -156,10 +145,10 @@ public sealed class DispatchReferenceTests(WebApplicationFactory<Program> factor
     }
 
     // ── setIds projection: a reference added to a set reports it on ReferenceDto ─
-    [Fact]
+    [SkippableFact]
     public async Task ListReferences_ProjectsSetMembership()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (client, _) = NewClient();
         await AuthAsync(client, "ref-sets");
         var referenceId = await CreateReferenceAsync(client);

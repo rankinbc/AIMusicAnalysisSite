@@ -40,7 +40,7 @@ public sealed class ShareReportProjectionTests(WebApplicationFactory<Program> fa
         },
     });
 
-    [Fact]
+    [SkippableFact]
     public void Projection_Is_DefaultDeny_Allowlist()
     {
         using var doc = JsonDocument.Parse(PoisonedFinalJson());
@@ -63,7 +63,7 @@ public sealed class ShareReportProjectionTests(WebApplicationFactory<Program> fa
         Assert.DoesNotContain("secret_root_field", json);
     }
 
-    [Fact]
+    [SkippableFact]
     public void Projection_Handles_Missing_And_Malformed_Input()
     {
         var empty = JsonSerializer.Serialize(ShareReportProjection.Build(null));
@@ -77,10 +77,10 @@ public sealed class ShareReportProjectionTests(WebApplicationFactory<Program> fa
     // ── integration: public endpoint serves ONLY the projection; regenerate
     //    kills the old token (Postgres-gated) ─────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task PublicShare_Serves_Projection_And_Regenerate_Kills_Old_Token()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var client = _factory.CreateClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);

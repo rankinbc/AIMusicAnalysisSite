@@ -48,7 +48,7 @@
 # Build order: E1 -> E2 -> E3 -> E4 -> E5 -> E6 -> E7 -> E8 -> E9 -> E10.
 
 generated: 2026-06-12
-last_updated: 2026-07-10
+last_updated: 2026-07-13
 # story 2-10 transitioned: backlog → ready-for-dev → in-progress → review → done (2026-06-23; nightly BillingReconciliationService + webhook replay idempotency tests + currency/price drift detection; code-review: 4 patches [sentinel false-positive, PeriodicTimer startup run, subscription-drift tests, per-row error isolation], 154/154 BFF tests). Epic-2 COMPLETE — all 10 stories done.
 # story 2-8 transitioned: backlog → ready-for-dev (create-story workflow, 2026-06-23; usage page summary + HonestMathBanner + UsageMeter nav + BFF coach-pool/honest-math surfacing)
 # story 2-9 transitioned: backlog → ready-for-dev (create-story workflow, 2026-06-23; dunning DunningBanner + next_payment_attempt persistence + graceful degradation via existing 2.7 BlurLock + AR15 results-forever)
@@ -185,6 +185,6 @@ development_status:
   12-4-fix-rack-to-listen-carry-over: backlog  # AUDIT P0: "Open in Listen rack" carries nothing (FixRackPanel.tsx:48); URL-param carrier + one-shot apply + applied chip + composeRack overlay + unmapped-fix rows + integration test
   12-5-dead-ui-sweep-and-honest-empty-states: backlog  # global search/⌘K unwired, disabled Listen tab, stale unlock chips, ProjectUnlock no CTA, fabricated percentile, Debug tab exposed, dead note input, orphan components
   12-6-coach-mix-truthfulness-and-coach-chat-polish: backlog  # arbiter unbuilt (1/15 tasks) — NEEDS PRODUCT DECISION finish-vs-relabel; remove "soon" placeholder or wire change_log; delete orphaned coach_mix pkg; fix flaky test double; refused/Stop turns vs cap
-  12-7-test-integrity-smoke-e2e-and-fail-loud-suites: backlog  # BFF suites silently no-op w/o Postgres (false-green CI); one Playwright smoke; error-code contract test
+  12-7-test-integrity-smoke-e2e-and-fail-loud-suites: review  # implemented 2026-07-13, smoke PASSING 16.8s headless, awaiting code-review; story created 2026-07-13; SkippableFact sweep (335 gated sites/52 files) + SPECTR_REQUIRE_DB CI hard-fail + CI pg/redis services, rewrite stale slice-1 Playwright spec → headless smoke (register→upload→report→Listen), rate_limited + per-IP entitlement contract tests, launcher python pin; folds 12-2 deferrals
   12-8-first-run-experience-and-feedback-loop: backlog  # seeded demo track, report-a-problem w/ correlation id, "how analysis works" link, CLAUDE.md truth pass + deferred-work ledger consolidation
   epic-12-retrospective: optional

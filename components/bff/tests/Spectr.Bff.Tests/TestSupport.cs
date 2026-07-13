@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Spectr.Bff.DTOs;
 using Spectr.Data;
 using Spectr.Data.Entities;
+using Xunit;
 
 namespace Spectr.Bff.Tests;
 
@@ -15,9 +16,61 @@ namespace Spectr.Bff.Tests;
 public static class TestDb
 {
     /// <summary>
+    /// Story 12.7: fail-loud gate. Callers must be [SkippableFact]/[SkippableTheory].
+    /// Locally without Postgres the test reports SKIPPED (visible count) instead of
+    /// silently passing with zero assertions. In CI, where the DB services are
+    /// provisioned, SPECTR_REQUIRE_DB=1 turns an unreachable DB into a hard
+    /// failure so a broken services block can never fake a green suite.
+    /// </summary>
+    public static async Task RequireAsync<TProgram>(WebApplicationFactory<TProgram> factory)
+        where TProgram : class
+        => Require(await Reachable(factory), "Postgres");
+
+    /// <summary>
+    /// Skip-visible gate for locally probed dependencies (Redis, etc.).
+    /// Pass the probe result; callers must be [SkippableFact]/[SkippableTheory].
+    /// </summary>
+    public static void Require(bool reachable, string dependency)
+    {
+        if (reachable) return;
+        var detail = LastProbeError is null ? "" : $" Last probe error: {LastProbeError}";
+        if (Environment.GetEnvironmentVariable("SPECTR_REQUIRE_DB") == "1")
+            Assert.Fail($"{dependency} required (SPECTR_REQUIRE_DB=1) but unreachable.{detail}");
+        throw new SkipException($"{dependency} unreachable — integration test skipped.{detail}");
+    }
+
+    /// <summary>Last probe exception message, surfaced in skip/fail reasons so a
+    /// remote CI failure carries its root cause (auth? port? missing migration?).</summary>
+    private static string? LastProbeError;
+
+    /// <summary>
+    /// Returns true when the app host's Redis multiplexer is connected.
+    /// Pair with <see cref="Require"/> for tests whose HTTP requests touch
+    /// Redis (rate limiter, queue enqueue) — without it a dead Redis fails
+    /// them at request time instead of skipping (story 12.7).
+    /// </summary>
+    public static bool RedisUp<TProgram>(WebApplicationFactory<TProgram> factory)
+        where TProgram : class
+    {
+        try
+        {
+            using var scope = factory.Services.CreateScope();
+            var ok = scope.ServiceProvider
+                .GetRequiredService<StackExchange.Redis.IConnectionMultiplexer>().IsConnected;
+            if (!ok) LastProbeError = "Redis multiplexer not connected";
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            LastProbeError = ex.Message;
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Returns true when the docker-compose Postgres is up and the Initial
-    /// migration has been applied.  Tests that call this and get false must
-    /// return early (skip) rather than fail.
+    /// migration has been applied. Prefer <see cref="RequireAsync{TProgram}"/> —
+    /// an early return on false is invisible to the test runner (story 12.7).
     /// </summary>
     public static async Task<bool> Reachable<TProgram>(WebApplicationFactory<TProgram> factory)
         where TProgram : class
@@ -26,12 +79,35 @@ public static class TestDb
         {
             using var scope = factory.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
+            var ok = await db.Database.CanConnectAsync();
+            if (!ok) LastProbeError = "CanConnectAsync returned false";
+            return ok;
         }
-        catch
+        catch (Exception ex)
         {
+            LastProbeError = ex.Message;
             return false;
         }
+    }
+}
+
+public static class TestContract
+{
+    /// <summary>
+    /// Story 12.7 (AC3, pairs with 12.1 AC5): the dispatch-path error CONTRACT.
+    /// Every rejection must carry the AR38 envelope `{ error: { code, message } }`
+    /// with a stable machine-readable code — the frontend keys off `code`,
+    /// never message text. Shared so every dispatch 4xx site asserts the SAME
+    /// shape (DispatchErrorContractTests, AbuseContainmentTests, …).
+    /// </summary>
+    public static async Task AssertEnvelopeAsync(
+        HttpResponseMessage resp, System.Net.HttpStatusCode expectedStatus, string expectedCode)
+    {
+        Assert.Equal(expectedStatus, resp.StatusCode);
+        using var doc = System.Text.Json.JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+        var error = doc.RootElement.GetProperty("error");
+        Assert.Equal(expectedCode, error.GetProperty("code").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(error.GetProperty("message").GetString()));
     }
 }
 
