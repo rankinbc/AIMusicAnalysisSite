@@ -111,3 +111,29 @@
   font-size: 13px;
   color: var(--orange);
 }
+
+/* Story 12.8 — "How analysis works" inline expandable */
+.howItWorks {
+  margin-top: 14px;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.howItWorks summary {
+  cursor: pointer;
+  color: var(--cyan);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+}
+.howItWorks ol {
+  margin: 8px 0 4px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  line-height: 1.45;
+}
+.howItWorks p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}

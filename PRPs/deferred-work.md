@@ -103,3 +103,19 @@ Real findings that are out of scope for the current story but worth revisiting.
 - **Comment moderation buttons no in-flight guard / no delete confirm** (11.1, `rail.tsx:655-660`) — rapid clicks race pin/unpin/resolve flips; destructive delete is one click with no prompt.
 - **`buildCommentThreads` drops reply-to-reply** (11.1, `comment-tree.ts:25-47`) — grandchildren land in `repliesByParent[replyId]` but only top-level ids are read back. Not reachable via the current UI (reply button is `!isReply`-only) and the one-level design is documented, but an API/anon/room-created nested reply would silently vanish and under-count `total`. Either flatten grandchildren under the nearest rendered ancestor or surface them as top-level.
 - **Reply to a concurrently-deleted parent** (11.1, `rail.tsx:621-630`) — `replyTo` isn't reconciled against the live list, so posting after the parent is deleted elsewhere 404s.
+
+## Epics 10–12 (consolidated 2026-07-13, story 12.8)
+
+- **12-2/12-3 at-home visual checks** — ProgressStoryline live render, DevHealthDot, windowed boot; launcher boot + MinIO-down E2E. [sprint-status 12-2/12-3 notes]
+- **12-3** — orphaned-multipart cleanup on init partial-fail; `/data` missing-root warn edge; dialog-level integration test for the attachment flow. [story 12-3 Senior Review]
+- **12-4** — carried `chain.order` intentionally not applied (overlay preserves live insert order); plan-overlay fixes don't feed the "Fixes applied" chip (polish); Playwright fix-carry leg (verify solver output under LLM_FAKE first). [story 12-4 review record]
+- **12-5** — command palette + real search endpoint if global search ever returns; per-phase re-run UI re-home (BFF endpoint + `rerun_phase` actor remain, zero UI); notes-write API before restoring the Listen "note this moment" input; email-change flow (verify-new-address) before a profile Email edit. [story 12-5 records]
+- **12-6** — fix-rack coaching layer: persist/serve `change_log` + `leftover_advice` (rack_presets column + python mirror + DTO + FixRackPanel UI; values currently discarded at `fix_rack_actor.py`); backfill exclusion for pre-12.6 refused turns (self-healing for new traffic); expression index on `coach_messages(id::text)` if the pro-pool subquery ever shows in traces. [story 12-6 review record]
+- **12-7** — non-dispatch endpoints still emit legacy `{error:"string"}`/ProblemDetails shapes (~28 files) — envelope-migration story candidate; Playwright smoke into CI once a slim worker image exists; `SPECTR_REQUIRE_DB` arms only on exact `"1"`. [story 12-7 records]
+- **10-3** — panel-5 divergence during incidents; Phase-C failure-duration observation; `--processes>1` multiproc gauge audit. [story 10-3]
+- **4-6** — missing-tver bypass sunset (flip fail-closed once pre-4.6 tokens age out — 10.x breadcrumb); async export for heavy users. [story 4-6]
+- **3-3** — retire the `?t=` JWT-in-URL audio pattern pre-public (short-lived HMAC-signed URLs); stem preview elements lack the AC4 media retry; prod R2 CORS config at deploy. [story 3-3]
+- **Deploy lane** — first VPS deploy remains the live integration test for all 10.x infra (docker images now build: azurelinux runtime, trivy re-pinned). [launch checklist]
+
+### Status corrections (2026-07-13)
+- 12-6's "arbiter vs relabel" decision is MADE and SHIPPED (relabel → "Fix Rack", PR #44); the flaky `Concurrent_Posts_Converge` double and refused-turn cap counting are FIXED — earlier entries referencing them as open are superseded.

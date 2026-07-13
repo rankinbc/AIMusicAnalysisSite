@@ -5,7 +5,7 @@ A music producer web app where users register/log in, upload audio files (MP3, F
 **v2 stack (current — primary):**
 - **`bff/`** — ASP.NET Core .NET 10 minimal-API BFF (EF Core 10, Npgsql, PyJWT-style JWT bearer, IFileStorage, dramatiq job queue dispatcher)
 - **`frontend-spectr-v2/`** — React 19 + Vite 6 + TypeScript strict + TanStack Router + TanStack Query + CSS Modules + Radix UI + WaveSurfer + Recharts + Sonner. CSS Modules + `tokens.css`. No Tailwind, no shadcn.
-- **`worker/`** — Python dramatiq worker (replaces Celery). Actors: `analyze_audio_job` (7-phase pipeline), `run_specialist` (on-demand AI verdict)
+- **`worker/`** — Python dramatiq worker (replaces Celery). Actors: `analyze_audio_job` (7-phase pipeline — 8 with .als), `run_specialist` (on-demand AI verdict)
 - **`shared/`** — `aimusic-shared` Python package: single-source SQLAlchemy ORM models for the worker (BFF has parallel EF Core entities that mirror this)
 - **`analysis/`** — `audio_analysis` Python package (7-phase pipeline, installable)
 
@@ -72,7 +72,7 @@ AIMusicAnalysisSite/
 
 **Purpose**: ASP.NET Core .NET 10 minimal-API gateway. Owns auth (JWT bearer + refresh-token httpOnly cookie), songs/versions CRUD, audio upload (multipart, ≤250 MB), audio streaming for the Listen page (Range-enabled), analysis job dispatch via dramatiq, results retrieval, verdict listing + per-specialist on-demand `/run/{slug}` dispatch.
 **Inputs**: PostgreSQL (EF Core 10 + Npgsql) + Redis (dramatiq broker) + `IFileStorage` (LocalDisk dev / R2 prod)
-**Outputs**: HTTP/JSON to the frontend; dramatiq messages on the `default` queue
+**Outputs**: HTTP/JSON to the frontend; dramatiq messages tier-routed onto `analysis-free`/`analysis-paid` (+ `coach`, `maintenance`) — there is NO `default` queue (story 2.5)
 **How to run**: `cd components/bff/src/Spectr.Bff && dotnet run` (listens on `http://localhost:5000`)
 
 **Key routes (v2):**
@@ -95,7 +95,7 @@ AIMusicAnalysisSite/
 
 ### frontend-spectr-v2 (NEW — PRIMARY frontend)
 
-**Purpose**: React 19 + Vite 6 + TypeScript strict SPA. Auth, library (grid card view + filter pills + VersionArc per song), song detail (cover hero + ProgressTimeline + VersionList + CompareDialog version-delta), results page (SongHeader with add-input chips + ResultsTabs: AI Coach (CoachChat + Specialist roster + Coach Mix) / Findings / Project (or ProjectUnlock with .als upload CTA) / Reference / Track Info / Debug (dev builds only)), Listen rack page (`features/listen-rack/` — rack + visuals + rail; the Web Audio DSP engine `useAudioGraph` still lives in `features/listen/`).
+**Purpose**: React 19 + Vite 6 + TypeScript strict SPA. Auth, library (grid card view + filter pills + VersionArc per song), song detail (cover hero + ProgressTimeline + VersionList + CompareDialog version-delta), results page (SongHeader with add-input chips + ResultsTabs: AI Coach (CoachChat + Specialist roster + Fix Rack) / Findings / Project (or ProjectUnlock with .als upload CTA) / Reference / Track Info / Debug (dev builds only)), Listen rack page (`features/listen-rack/` — rack + visuals + rail; the Web Audio DSP engine `useAudioGraph` still lives in `features/listen/`).
 **Inputs**: BFF `/api/*` REST + a couple of SSE endpoints
 **Outputs**: browser
 **How to run**: `cd components/frontend-spectr-v2 && npm run dev` (Vite dev server on port 5174, proxies `/api/*` to BFF on `:5000`)
@@ -170,7 +170,7 @@ AIMusicAnalysisSite/
 
 ### analysis (analysis.md)
 
-**Purpose**: Installable Python package (`pip install -e components/analysis`) containing all 7-phase audio analysis pipeline. Exposes `run_pipeline(file_path, reference_path=None, progress_cb=None)`. Copied and adapted from the existing AbletonAIAnalysis codebase.
+**Purpose**: Installable Python package (`pip install -e components/analysis`) containing the full analysis pipeline (7 base phases; 8 with an .als project). Exposes `run_pipeline(file_path, reference_path=None, progress_cb=None)`. Copied and adapted from the existing AbletonAIAnalysis codebase.
 **Inputs**: `data/uploads/` (audio files), `data/reference_library/` (curated reference tracks), `data/models/` (ML model weights)
 **Outputs**: structured dict returned by `run_pipeline()`; per-job JSON written to `output/analysis_results/`
 **How to run**: `pip install -e components/analysis` then `python -c "from audio_analysis import run_pipeline; print(run_pipeline('path/to/track.wav'))"`
@@ -195,8 +195,8 @@ AIMusicAnalysisSite/
 
 ### worker (automation.md — NOW DRAMATIQ)
 
-**Purpose**: Dramatiq worker. Pulls actor invocations from a Redis `default` queue, runs them, writes results to Postgres. Two actors:
-- `analyze_audio_job(job_id)` — drives the 7-phase pipeline via `audio_analysis.run_pipeline()`, writes `analyses` row, flips `analysis_jobs.status` to `complete` / `failed`. Partial-failure tolerant (per-phase try/except).
+**Purpose**: Dramatiq worker. Pulls actor invocations from four Redis queues (`coach`, `analysis-paid`, `analysis-free`, `maintenance` — see Queue topology below), runs them, writes results to Postgres. Core actors (the full roster also includes run_triage, run_reference_analyzer, classify_stems, rerun_phase, structure detection, sweep_retention, send_email, coach_reply, generate_fix_rack, delete_account_data):
+- `analyze_audio_job(job_id)` — drives the analysis pipeline (7 base phases, 8 with .als) via `audio_analysis.run_pipeline()`, writes `analyses` row, flips `analysis_jobs.status` to `complete` / `failed`. Partial-failure tolerant (per-phase try/except).
 - `run_specialist(analysis_id, specialist_slug, focus)` — on-demand AI verdict generation. Wraps the Anthropic `claude` CLI via subprocess (gated by `asyncio.Semaphore(1)`; CLI is not concurrency-safe). Validates verdict JSON via Pydantic + the moderate-baseline severity downgrade in `aimusic_shared.verdicts.scoring`.
 
 **Inputs**: `analysis_jobs.version_id → song_versions.file_path` resolved against `$STORAGE_LOCAL_ROOT` (defaults to repo `data/`); specialist prompts at `components/worker/prompts/experts/*.md`.

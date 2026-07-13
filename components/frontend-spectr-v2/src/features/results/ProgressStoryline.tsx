@@ -162,7 +162,21 @@ export function ProgressStorylineView({
         </p>
       )}
 
-      {/* Story 12-8 (AC3) will add the "How analysis works" link here. */}
+      {/* Story 12.8 (AC3): the 7 phases in one line each — inline expandable,
+          copy keyed to the BASE_PHASES display names. */}
+      <details className={s.howItWorks} data-testid="how-analysis-works">
+        <summary>How analysis works</summary>
+        <ol>
+          <li><b>Universal Mix Analysis</b> — loudness, true peak, key, tempo and the measurements every genre shares.</li>
+          <li><b>Genre Detection</b> — which genre profile your track is judged against.</li>
+          <li><b>Genre-Specific Scoring</b> — the measured values scored against that genre&apos;s reference ranges.</li>
+          <li><b>Stem Separation &amp; Clash</b> — where instruments fight for the same frequencies.</li>
+          <li><b>Reference Comparison</b> — your mix against a reference track when one is attached.</li>
+          <li><b>Gap Analysis</b> — the biggest measurable distances from the genre profile.</li>
+          <li><b>Arrangement Advice</b> — energy and structure over the timeline.</li>
+        </ol>
+        <p>Attach your Ableton project (.als) and an 8th phase names the exact project tracks to fix.</p>
+      </details>
     </div>
   );
 }

@@ -26,6 +26,14 @@ export function getAccessToken(): string | null {
   return accessToken;
 }
 
+// Story 12.8: most recent internal_error traceId (500 envelope) — the only
+// server correlation handle the client ever sees; consumed by the
+// "Report a problem" prefill.
+let lastTraceId: string | null = null;
+export function getLastTraceId(): string | null {
+  return lastTraceId;
+}
+
 export function onAuthCleared(cb: (() => void) | null): void {
   onAuthClearedCallback = cb;
 }
@@ -130,6 +138,11 @@ export async function fetcher<T>(config: FetcherConfig): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => undefined);
+    // Story 12.8: stash the unhandled-500 traceId so "Report a problem" can
+    // prefill it — the only correlation handle the client ever receives.
+    const traceId = (body as { error?: { details?: { traceId?: string } } } | undefined)
+      ?.error?.details?.traceId;
+    if (traceId) lastTraceId = traceId;
     // Story 12.1 (AC2) — prefer the AR38 envelope's human message so callers
     // that toast `err.message` show the server's wording, not "HTTP 403".
     throw new ApiError(res.status, body, extractApiError(body).message);

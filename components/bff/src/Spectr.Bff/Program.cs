@@ -213,6 +213,7 @@ builder.Services.AddScoped<RefreshTokenService>();
 builder.Services.AddScoped<AuthTokenService>();  // story 4.3 — verify/reset tokens
 builder.Services.AddScoped<DeviceService>();     // story 4.5 — anon devices + claim
 builder.Services.AddScoped<HandleSeeder>();
+builder.Services.AddScoped<DemoSeeder>();  // story 12.8 — first-run demo report
 
 // File storage — swap LocalDiskFileStorage for R2FileStorage via config when public.
 builder.Services.AddSingleton<IFileStorage, LocalDiskFileStorage>();
