@@ -23,7 +23,6 @@ public sealed class JobEndpointsCreditReversalTests(WebApplicationFactory<Progra
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-
     private static async Task<(HttpClient C, Guid UserId)> SeedAuthedAsync(
         WebApplicationFactory<Program> factory, string prefix)
     {

@@ -121,6 +121,7 @@ public sealed class SpinePrimitivesTests
     [SkippableFact]
     public async Task Opaque_token_via_query_t_is_not_accepted_as_jwt()
     {
+        TestDb.Require(RedisReachable(), "Redis"); // request pipeline touches Redis (story 12.7)
         using var factory = new WebApplicationFactory<Program>();
         var client = factory.CreateClient();
 

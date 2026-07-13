@@ -38,11 +38,14 @@ test('first-run: register → upload → report → listen', async ({ page }) =>
   // Diagnostics: API traffic + page errors land in the test output so a
   // failure at any step shows WHAT the app was doing (worker down, 4xx code,
   // console crash) without re-running under a tracer.
+  // Query strings redacted: audio/SSE URLs carry short-lived JWTs (?t=) that
+  // must not land in test logs / CI artifacts.
+  const redact = (u: string) => u.split('?')[0];
   page.on('request', (r) => {
-    if (r.url().includes('/api/')) console.log(`>> ${r.method()} ${r.url()}`);
+    if (r.url().includes('/api/')) console.log(`>> ${r.method()} ${redact(r.url())}`);
   });
   page.on('response', (r) => {
-    if (r.url().includes('/api/')) console.log(`<< ${r.status()} ${r.url()}`);
+    if (r.url().includes('/api/')) console.log(`<< ${r.status()} ${redact(r.url())}`);
   });
   page.on('pageerror', (e) => console.log(`PAGE ERROR: ${e.message}`));
 
@@ -53,24 +56,26 @@ test('first-run: register → upload → report → listen', async ({ page }) =>
   // 2. Register a fresh account (DevAutoVerify stamps it verified).
   await page.getByRole('link', { name: /Create one/i }).click();
   await expect(page).toHaveURL(/\/register$/);
-  const email = `smoke+${Date.now()}@spectr.test`;
   const emailBox = page.getByLabel('Email');
   const passwordBox = page.getByLabel('Password');
   // Cold Vite dev keeps streaming route modules after first paint; a late
   // module swap can REMOUNT the form and wipe a fill (controlled useState
   // resets), so the click submits empty fields and HTML5 `required` silently
   // blocks it. Settle the module graph, then fill→verify→submit→navigated as
-  // ONE retried unit: the only observed failure mode is a blocked submit
-  // (no POST fired), so a retry never double-registers.
+  // ONE retried unit. Retry safety: a FRESH email is generated per attempt
+  // (a slow-but-successful register can't dead-end on duplicate-email), and
+  // an attempt that finds itself already past /register short-circuits.
   await page.waitForLoadState('networkidle');
   await expect(async () => {
+    if (/\/library$/.test(new URL(page.url()).pathname)) return; // previous attempt landed
+    const email = `smoke+${Date.now()}@spectr.test`;
     await emailBox.fill(email);
     await passwordBox.fill('correct-horse-battery-staple');
     await expect(emailBox).toHaveValue(email, { timeout: 500 });
     await page.getByRole('button', { name: /Create account/i }).click();
     // 3. Registration navigates to the library (full page nav).
     await expect(page).toHaveURL(/\/library$/, { timeout: 10_000 });
-  }).toPass({ timeout: 60_000 });
+  }).toPass({ timeout: 90_000 });
   await expect(page.getByText('Your library starts here')).toBeVisible();
 
   // 4. Two-dialog flow: + New song → name → Create song → upload dialog.

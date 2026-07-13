@@ -23,7 +23,6 @@ public sealed class ResultsReadPathEntitlementFreeTest(WebApplicationFactory<Pro
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-
     // Counting subclass — ForAsync increments the shared tracker on every call.
     private sealed class CountingEntitlementService(
         AppDbContext db,

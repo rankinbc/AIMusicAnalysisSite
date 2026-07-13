@@ -33,9 +33,38 @@ public static class TestDb
     public static void Require(bool reachable, string dependency)
     {
         if (reachable) return;
+        var detail = LastProbeError is null ? "" : $" Last probe error: {LastProbeError}";
         if (Environment.GetEnvironmentVariable("SPECTR_REQUIRE_DB") == "1")
-            Assert.Fail($"{dependency} required (SPECTR_REQUIRE_DB=1) but unreachable.");
-        throw new SkipException($"{dependency} unreachable — integration test skipped.");
+            Assert.Fail($"{dependency} required (SPECTR_REQUIRE_DB=1) but unreachable.{detail}");
+        throw new SkipException($"{dependency} unreachable — integration test skipped.{detail}");
+    }
+
+    /// <summary>Last probe exception message, surfaced in skip/fail reasons so a
+    /// remote CI failure carries its root cause (auth? port? missing migration?).</summary>
+    private static string? LastProbeError;
+
+    /// <summary>
+    /// Returns true when the app host's Redis multiplexer is connected.
+    /// Pair with <see cref="Require"/> for tests whose HTTP requests touch
+    /// Redis (rate limiter, queue enqueue) — without it a dead Redis fails
+    /// them at request time instead of skipping (story 12.7).
+    /// </summary>
+    public static bool RedisUp<TProgram>(WebApplicationFactory<TProgram> factory)
+        where TProgram : class
+    {
+        try
+        {
+            using var scope = factory.Services.CreateScope();
+            var ok = scope.ServiceProvider
+                .GetRequiredService<StackExchange.Redis.IConnectionMultiplexer>().IsConnected;
+            if (!ok) LastProbeError = "Redis multiplexer not connected";
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            LastProbeError = ex.Message;
+            return false;
+        }
     }
 
     /// <summary>
@@ -50,10 +79,13 @@ public static class TestDb
         {
             using var scope = factory.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
+            var ok = await db.Database.CanConnectAsync();
+            if (!ok) LastProbeError = "CanConnectAsync returned false";
+            return ok;
         }
-        catch
+        catch (Exception ex)
         {
+            LastProbeError = ex.Message;
             return false;
         }
     }

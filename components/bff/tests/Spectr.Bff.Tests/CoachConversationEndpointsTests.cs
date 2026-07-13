@@ -69,7 +69,6 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
         return (f, queue);
     }
 
-
     private static AnalysisJob NewJob(Guid userId) => new()
     {
         Id = Guid.NewGuid(),

@@ -370,7 +370,12 @@ function Start-Apps {
     }
 
     # --- Worker ---
-    if ($PythonExe -and (Test-Path $PythonExe)) {
+    if ($env:SPECTR_PYTHON -and -not (Test-Path $env:SPECTR_PYTHON -PathType Leaf)) {
+        # A set-but-wrong override deserves its own diagnosis (a directory or
+        # typo here would otherwise abort mid-launch on the & invoke).
+        Fail "Worker NOT started: `$env:SPECTR_PYTHON is set but not a file: $env:SPECTR_PYTHON"
+    }
+    elseif ($PythonExe -and (Test-Path $PythonExe -PathType Leaf)) {
         # Story 12.2 (AC1): fail LOUD if the worker deps are missing. A worker
         # window opened with a doomed command instantly errors while the
         # launcher exits green — a dead worker from minute zero. Story 12.7

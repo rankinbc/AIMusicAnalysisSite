@@ -31,7 +31,6 @@ public sealed class SubscriptionMirrorServiceTests
         _factory = factory;
     }
 
-
     private static Subscription StripeSub(
         Guid userId,
         string customerId,

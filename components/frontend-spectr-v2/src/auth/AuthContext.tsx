@@ -9,7 +9,13 @@ import {
   type ReactNode,
 } from 'react';
 
-import { fetcher, onAuthCleared, onTokenRefreshed, setAccessToken } from '../api/fetcher';
+import {
+  fetcher,
+  onAuthCleared,
+  onTokenRefreshed,
+  refreshSession,
+  setAccessToken,
+} from '../api/fetcher';
 import { resetVerifyResendState } from '../components/verify-email';
 import { identifyUser } from '../lib/analytics';
 import type { AuthResponse, AuthedUser } from '../api/types';
@@ -32,22 +38,14 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-// Story 12.7 (found by the first-run smoke): the boot silent-refresh must be
-// SINGLE-FLIGHT. React StrictMode dev double-invokes the mount effect, firing
-// two concurrent POST /api/auth/refresh — rotation consumes the token on the
-// first, the second 401s, and applyAuth(null) logs the fresh session straight
-// back out. Module-level so every caller in the tab shares one in-flight
-// request; the RESULT is shared (a Response body can only be read once).
-let inflightRefresh: Promise<AuthResponse | null> | null = null;
-
-async function fetchRefresh(): Promise<AuthResponse | null> {
-  const res = await fetch('/api/auth/refresh', {
-    method: 'POST',
-    credentials: 'include',
-  });
-  if (!res.ok) return null;
-  return (await res.json()) as AuthResponse;
-}
+// Story 12.7 (found by the first-run smoke): refresh is single-flight and
+// lives in fetcher.refreshSession — shared with the 401 handler so the two
+// mechanisms can never race token rotation against each other.
+//
+// Session epoch: logout bumps this so a refresh that was already in flight
+// when the user logged out can never re-apply its (stale) session onto the
+// logged-out UI.
+let sessionEpoch = 0;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
@@ -72,15 +70,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refresh = useCallback(async (): Promise<boolean> => {
+    const epoch = sessionEpoch;
     try {
-      inflightRefresh ??= fetchRefresh().finally(() => {
-        inflightRefresh = null;
-      });
-      const data = await inflightRefresh;
+      const data = await refreshSession();
+      // Logout happened while this refresh was in flight — do not resurrect
+      // the stale session.
+      if (epoch !== sessionEpoch) return false;
       applyAuth(data);
       return data !== null;
     } catch {
-      applyAuth(null);
+      if (epoch === sessionEpoch) applyAuth(null);
       return false;
     }
   }, [applyAuth]);
@@ -153,6 +152,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
+    // Invalidate any in-flight refresh FIRST so its result can't re-apply
+    // a session after the user chose to leave.
+    sessionEpoch++;
     try {
       await fetcher<void>({ url: '/auth/logout', method: 'POST' });
     } finally {

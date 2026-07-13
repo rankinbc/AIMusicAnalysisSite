@@ -171,6 +171,21 @@ so that suites can never silently no-op.
 - PRPs/sprint-status.yaml (status flips)
 - PRPs/stories/12-7-test-integrity-smoke-e2e-and-fail-loud-suites.md (this file)
 
+## Senior Review Record (bmad-code-review, 2026-07-13)
+
+Three-layer adversarial review (Blind Hunter / Edge Case Hunter / Acceptance Auditor) of `master..story/12-7-test-integrity` (PR #41). Auditor verdict: **all 5 ACs Met**. Findings triaged; patches applied on the story branch:
+
+- **P1 (all 3 layers, High)**: 4 silent `RedisUp` early-return gates survived the sweep in `AbuseContainmentTests` (the sweep grep only matched `RedisReachable`) — including the test carrying the AC3 `rate_limited` contract. All 4 → `TestDb.Require(TestDb.RedisUp(_factory), "Redis")`; the private `RedisUp` folded into a shared `TestDb.RedisUp` helper.
+- **P2**: the 5 pre-existing Redis-at-boot failures (SmokeTest, ErrorEnvelopeLeakTests, Get_Plans, Webhook_Missing_Signature, SpinePrimitives opaque-token) are now Redis-gated skip-visible — the no-docker run is 0-failure for real (Task 1's original verify criterion now true). ErrorEnvelopeLeakTests' review-M3 "no gate" note updated: CI provisions Redis + REQUIRE_DB hard-fails, so the proof cannot go vacuous.
+- **P3 (Edge Case Hunter, Med — real bug)**: AuthContext and fetcher.ts each had their OWN single-flight refresh; a concurrent boot-refresh + 401-refresh still raced rotation. Unified: `fetcher.refreshSession()` is THE single-flight for the tab; fetcher's `refreshToken` and AuthContext's `refresh` both consume it.
+- **P4 (Med)**: logout/refresh interleave — logout bumps a session epoch; a refresh resolving after logout can no longer re-apply a stale session.
+- **P5**: smoke retry idempotency — fresh email per attempt + short-circuit when already on /library; toPass budget 90 s. Query strings redacted from smoke diagnostics (audio `?t=` JWTs must not land in CI artifacts).
+- **P6**: CI — `ConnectionStrings__Postgres` set explicitly on migrate + test steps (no silent coupling to the appsettings default); `dotnet-ef` pinned `--version "10.*"`.
+- **P7**: canary — logged no-op when disarmed, plus a Redis canary arm; skip/fail reasons now carry the last probe exception (`LastProbeError`).
+- **P8**: launcher — `Test-Path -PathType Leaf` + distinct message for a set-but-invalid `SPECTR_PYTHON`. Stray double blank lines from the method removals collapsed (18 files).
+- **Record corrections**: the spec's "per-IP `entitlement_exhausted` @~1146" was a mislabel — `:1146` is the DISPOSABLE-cap branch (covered); the per-IP arm emits only `rate_limited` `:1174` (covered). Counts reconciled: 276 Postgres gate call-sites rewritten + 9 Redis gates (5 in dev + 4 in review) across 53 files; 278 = gated tests skipped in the no-DB run (a test can hold >1 gate call, and some gated tests were failing pre-gate).
+- **Accepted without change (documented)**: file-scoped `[SkippableFact]` swap also covers never-gating tests in gated files (SkippableFact behaves identically to Fact absent a SkipException); `SPECTR_REQUIRE_DB` arms only on exact `"1"` (documented at both read sites); `Reachable` kept un-`[Obsolete]` (it is the probe consumed by RequireAsync + the canary); playwright/ stays outside the tsc gate (Playwright transpiles its own runner files).
+
 ## Change Log
 
 - 2026-07-13: Story created (create-story workflow) — folds in 12-2 review deferrals; scouted anchors verified against current code.

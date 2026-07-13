@@ -23,7 +23,6 @@ public sealed class AnalysisImageEndpointsTests(WebApplicationFactory<Program> f
     private static readonly byte[] FakeWebp =
         Encoding.ASCII.GetBytes("RIFF\0\0\0\0WEBPfakebytes");
 
-
     private async Task<(HttpClient client, Guid userId)> RegisterAsync(HttpClient client)
     {
         var email = $"img+{Guid.NewGuid():N}@spectr.test";

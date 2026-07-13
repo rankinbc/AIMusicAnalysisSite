@@ -22,7 +22,6 @@ public sealed class HonestMathServiceTests
     public HonestMathServiceTests(WebApplicationFactory<Program> factory)
         => _factory = factory;
 
-
     private async Task<Guid> SeedUserAsync(string prefix)
     {
         using var scope = _factory.Services.CreateScope();

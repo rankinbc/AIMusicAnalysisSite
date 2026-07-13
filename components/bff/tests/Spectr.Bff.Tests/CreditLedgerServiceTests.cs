@@ -23,7 +23,6 @@ public sealed class CreditLedgerServiceTests
         _factory = factory;
     }
 
-
     private async Task<Guid> SeedUserAsync(string emailPrefix)
     {
         using var scope = _factory.Services.CreateScope();

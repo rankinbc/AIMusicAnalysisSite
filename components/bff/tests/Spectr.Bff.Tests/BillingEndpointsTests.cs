@@ -94,7 +94,6 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
         return (f, fake);
     }
 
-
     private static async Task<(HttpClient Client, Guid UserId)> SeedAuthed(
         WebApplicationFactory<Program> factory, string prefix)
     {
@@ -123,6 +122,7 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
     [SkippableFact]
     public async Task Get_Plans_Returns_Display_Cents_For_Public()
     {
+        TestDb.Require(TestDb.RedisUp(_factory), "Redis"); // request pipeline touches Redis (story 12.7)
         var (factory, _) = BuildWithFakeStripe();
         var client = factory.CreateClient();
 

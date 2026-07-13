@@ -21,7 +21,6 @@ public sealed class DispatchReferenceTests(WebApplicationFactory<Program> factor
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-
     private (HttpClient client, RecordingJobQueue queue) NewClient()
     {
         var queue = new RecordingJobQueue();

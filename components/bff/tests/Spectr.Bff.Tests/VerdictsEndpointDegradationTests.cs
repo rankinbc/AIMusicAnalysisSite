@@ -25,7 +25,6 @@ public sealed class VerdictsEndpointDegradationTests(WebApplicationFactory<Progr
 
     private HttpClient NewClient() => _factory.CreateClient();
 
-
     [SkippableFact]
     public async Task Degraded_Analysis_Returns_Notice_And_Rule_Engine_Verdict()
     {

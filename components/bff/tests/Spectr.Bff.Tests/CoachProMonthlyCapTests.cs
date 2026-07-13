@@ -46,7 +46,6 @@ public sealed class CoachProMonthlyCapTests(WebApplicationFactory<Program> facto
         return (f, f.CreateClient());
     }
 
-
     private static async Task<(Guid UserId, string Email)> AuthAsync(HttpClient client, string prefix)
     {
         var email = $"{prefix}+{Guid.NewGuid():N}@spectr.test";

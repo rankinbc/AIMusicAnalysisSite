@@ -23,7 +23,6 @@ public sealed class DispatchQueueRoutingTests(WebApplicationFactory<Program> fac
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-
     private (HttpClient client, RecordingJobQueue queue) NewClient()
     {
         var queue = new RecordingJobQueue();

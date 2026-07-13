@@ -21,7 +21,6 @@ public sealed class DispatchEntitlementGateTests(WebApplicationFactory<Program> 
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-
     private (HttpClient client, RecordingJobQueue queue) NewClient()
     {
         var queue = new RecordingJobQueue();

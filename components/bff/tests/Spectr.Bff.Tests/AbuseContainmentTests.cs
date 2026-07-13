@@ -33,17 +33,6 @@ public sealed class AbuseContainmentTests(WebApplicationFactory<Program> factory
             };
     }
 
-    private static bool RedisUp(WebApplicationFactory<Program> f)
-    {
-        try
-        {
-            using var scope = f.Services.CreateScope();
-            return scope.ServiceProvider
-                .GetRequiredService<StackExchange.Redis.IConnectionMultiplexer>().IsConnected;
-        }
-        catch { return false; }
-    }
-
     [SkippableFact]
     public async Task Disposable_Detection_Covers_Builtin_And_Flag_Extension()
     {
@@ -61,7 +50,7 @@ public sealed class AbuseContainmentTests(WebApplicationFactory<Program> factory
     public async Task J6_Scripted_Registration_Burst_Is_Contained()
     {
         await TestDb.RequireAsync(_factory);
-        if (!RedisUp(_factory)) { return; } // limiter layer needs Redis
+        TestDb.Require(TestDb.RedisUp(_factory), "Redis"); // limiter layer needs Redis (skip-visible, story 12.7)
 
         using var f = _factory.WithWebHostBuilder(b =>
             b.UseSetting("RateLimits:Enabled", "true"));
@@ -86,7 +75,7 @@ public sealed class AbuseContainmentTests(WebApplicationFactory<Program> factory
     public async Task Disposable_Domain_Registrations_Hit_The_Tighter_Arm()
     {
         await TestDb.RequireAsync(_factory);
-        if (!RedisUp(_factory)) { return; }
+        TestDb.Require(TestDb.RedisUp(_factory), "Redis"); // skip-visible (story 12.7)
 
         using var f = _factory.WithWebHostBuilder(b =>
             b.UseSetting("RateLimits:Enabled", "true"));
@@ -176,7 +165,7 @@ public sealed class AbuseContainmentTests(WebApplicationFactory<Program> factory
     public async Task Disposable_Cap_Arm_Is_Off_When_Limits_Disabled()
     {
         await TestDb.RequireAsync(_factory);
-        if (!RedisUp(_factory)) { return; } // the ALLOWED dispatch enqueues to Redis
+        TestDb.Require(TestDb.RedisUp(_factory), "Redis"); // the ALLOWED dispatch enqueues to Redis (skip-visible)
 
         // Story 12.1 (AC4): with RateLimits:Enabled=false (dev default, the
         // base factory), a disposable-domain account past the reduced cap
@@ -235,7 +224,7 @@ public sealed class AbuseContainmentTests(WebApplicationFactory<Program> factory
     public async Task CrossAccount_PerIp_Dispatch_Ceiling_Contains_N_Accounts()
     {
         await TestDb.RequireAsync(_factory);
-        if (!RedisUp(_factory)) { return; }
+        TestDb.Require(TestDb.RedisUp(_factory), "Redis"); // skip-visible (story 12.7)
 
         // Ceiling of 2/h for the test; RateLimits ON only for this factory.
         // TestServer has a NULL RemoteIpAddress (which the dispatch arm

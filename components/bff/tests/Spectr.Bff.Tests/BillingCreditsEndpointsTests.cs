@@ -81,7 +81,6 @@ public sealed class BillingCreditsEndpointsTests(WebApplicationFactory<Program> 
         return (f, fake);
     }
 
-
     private static async Task<(HttpClient C, Guid UserId)> SeedAuthedAsync(
         WebApplicationFactory<Program> factory, string prefix)
     {

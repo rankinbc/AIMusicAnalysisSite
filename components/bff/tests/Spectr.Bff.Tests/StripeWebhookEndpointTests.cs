@@ -39,7 +39,6 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
             if (services is not null) builder.ConfigureServices(services);
         });
 
-
     private static async Task<HttpResponseMessage> PostWebhookAsync(
         HttpClient client, string rawBody, string? signature)
     {
@@ -99,6 +98,7 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
     [SkippableFact]
     public async Task Webhook_Missing_Signature_Header_Returns_400()
     {
+        TestDb.Require(TestDb.RedisUp(_factory), "Redis"); // request pipeline touches Redis (story 12.7)
         var factory = BuildConfigured();
         var client = factory.CreateClient();
 

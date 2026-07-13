@@ -33,7 +33,6 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-
     private bool RedisReachable()
     {
         try
