@@ -58,7 +58,7 @@ public static class FixRackEndpoints
         var preset = await db.RackPresets.AsNoTracking()
             .Where(p => p.SongVersionId == analysis.VersionId.Value && p.Source == "analysis")
             .OrderByDescending(p => p.CreatedAt)
-            .Select(p => new { p.Name, p.ChainJson, p.CreatedAt })
+            .Select(p => new { p.Id, p.Name, p.ChainJson, p.CreatedAt })
             .FirstOrDefaultAsync(ct);
         if (preset is null) return Results.NoContent();
 
@@ -73,6 +73,9 @@ public static class FixRackEndpoints
             return Results.NoContent();
         }
 
-        return Results.Ok(new FixRackDto(preset.Name, chain, preset.CreatedAt));
+        // Story 12.4: PresetId is the Listen carry-over handle — the panel's
+        // "Open in Listen rack" passes it as ?fixPreset= and the Listen page
+        // fetches the chain back via GET /versions/{v}/rack/presets/{id}.
+        return Results.Ok(new FixRackDto(preset.Id, preset.Name, chain, preset.CreatedAt));
     }
 }

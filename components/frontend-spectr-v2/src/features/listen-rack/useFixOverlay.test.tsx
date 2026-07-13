@@ -32,6 +32,53 @@ describe('useFixOverlay', () => {
     expect(result.current.isApplied('a')).toBe(false);
   });
 
+  it('captures the live rack as baseline at first apply and restores it when all uncheck (story 12.4)', () => {
+    const applyRackMod = vi.fn();
+    const live = { trim: { enabled: true, gainDb: -6 }, eq: { enabled: false, bands: [] } };
+    const fixes = [fix('a', [{ type: 'limiter', params: { ceiling_db: -1 } }])];
+    const { result } = renderHook(() =>
+      useFixOverlay({ versionId: 'v', fixes, applyRackMod, getLiveMod: () => live as never }));
+
+    act(() => result.current.toggle('a'));
+    let mod = applyRackMod.mock.calls.at(-1)![0];
+    expect(mod.limiter.enabled).toBe(true);
+    expect(mod.trim).toMatchObject({ enabled: true, gainDb: -6 }); // manual tweak survives overlay
+
+    act(() => result.current.toggle('a')); // uncheck everything
+    mod = applyRackMod.mock.calls.at(-1)![0];
+    expect(mod.trim).toMatchObject({ enabled: true, gainDb: -6 }); // baseline restored, not defaults
+  });
+
+  it('clears applied state + baseline when the page fires the overlay-clear event (story 12.4 reset)', async () => {
+    const { clearFixOverlay } = await import('./listenFixes');
+    const applyRackMod = vi.fn();
+    const fixes = [fix('a', eq(120))];
+    const { result } = renderHook(() => useFixOverlay({ versionId: 'v', fixes, applyRackMod }));
+
+    act(() => result.current.toggle('a'));
+    expect(result.current.isApplied('a')).toBe(true);
+
+    act(() => clearFixOverlay('v'));
+    expect(result.current.isApplied('a')).toBe(false);
+    // Next toggle recomputes from a CLEAN slate, not the stale pre-reset set.
+    act(() => result.current.toggle('a'));
+    expect(result.current.appliedIds).toEqual(['a']);
+  });
+
+  it('ignores notApplicable fixes even when stale applied ids reference them', () => {
+    const applyRackMod = vi.fn();
+    localStorage.setItem('listenApplied:v', JSON.stringify(['na']));
+    const fixes = [
+      { ...fix('na', [{ type: 'sidechain', params: {} }]), notApplicable: true },
+      fix('a', eq(120)),
+    ];
+    const { result } = renderHook(() => useFixOverlay({ versionId: 'v', fixes, applyRackMod }));
+    act(() => result.current.toggle('a'));
+    // The NA id contributes no ops — only the real fix lands.
+    const mod = applyRackMod.mock.calls.at(-1)![0];
+    expect(mod.eq.enabled).toBe(true);
+  });
+
   it('persists applied ids and restores them on mount', () => {
     const applyRackMod = vi.fn();
     const fixes = [fix('a', eq(120))];

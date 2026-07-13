@@ -29,6 +29,7 @@ function pickPhase<T>(fj: FinalJson, phaseNumber: number): T | undefined {
  */
 function ListenRackVersionRoute() {
   const { versionId } = Route.useParams();
+  const { fixPreset } = Route.useSearch();
   // Both hooks run unconditionally (rules of hooks); the flag selects which
   // one drives the page. The real hook's queries are disabled when the flag
   // is off (empty versionId gates every `enabled:`).
@@ -60,12 +61,27 @@ function ListenRackVersionRoute() {
   return (
     <ListenRackPage versionId={versionId} mode={mode} modes={modes} identity={identity}
       access={access} roomControl={roomControl} onGrant={onGrant}
+      {...(fixPreset ? { fixPreset } : {})}
       {...(track ? { track } : {})}
       {...(onModeChange ? { onModeChange } : {})}
       {...(ROOM_LIVE_SSE ? { roomLive: real.live, onStartRoom: real.startRoom } : {})} />
   );
 }
 
+// Story 12.4: ?fixPreset=<uuid> — the fix-rack carry-over handle written by
+// the report's "Open in Listen rack". Validated to uuid shape here (results-
+// route idiom); the server round-trip re-validates ownership. Kept in the URL
+// (survives refresh/back); the "Fixes applied" chip's reset clears it.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+interface ListenRackSearch {
+  fixPreset?: string;
+}
+
 export const Route = createFileRoute('/_app/listen-rack/$versionId')({
+  validateSearch: (search: Record<string, unknown>): ListenRackSearch =>
+    typeof search['fixPreset'] === 'string' && UUID_RE.test(search['fixPreset'])
+      ? { fixPreset: search['fixPreset'] }
+      : {},
   component: ListenRackVersionRoute,
 });

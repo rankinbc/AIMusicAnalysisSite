@@ -10,7 +10,9 @@ const src = (over: Partial<FixSource> = {}): FixSource => ({
 });
 
 describe('buildListenFixes', () => {
-  it('keeps only committed AND applyable fixes', () => {
+  // Story 12.4 (AC5): committed-but-unmappable fixes are KEPT and flagged —
+  // never silently dropped (previously they were filtered out entirely).
+  it('keeps every committed fix; unmappable ones are flagged notApplicable', () => {
     const sources = [
       src({ id: 'a' }),
       src({ id: 'b', ops: [] }),                       // committed but not applyable
@@ -18,8 +20,20 @@ describe('buildListenFixes', () => {
     ];
     const committed = new Set(['a', 'b']);
     const out = buildListenFixes(sources, (id) => committed.has(id));
-    expect(out.map((f) => f.fixId)).toEqual(['a']);
-    expect(out[0]).toMatchObject({ verdictId: 'v1', title: 'Tame master', sev: 'crit' });
+    expect(out.map((f) => f.fixId)).toEqual(['a', 'b']);
+    expect(out[0]).toMatchObject({ verdictId: 'v1', title: 'Tame master', sev: 'crit', notApplicable: false });
+    expect(out[1]).toMatchObject({ fixId: 'b', notApplicable: true });
+  });
+
+  it('flags sidechain/multiband-only fixes notApplicable', () => {
+    const out = buildListenFixes(
+      [
+        src({ id: 'sc', ops: [{ type: 'sidechain', params: {} }] }),
+        src({ id: 'mb', ops: [{ type: 'multiband_compressor', params: {} }] }),
+      ],
+      () => true,
+    );
+    expect(out.map((f) => f.notApplicable)).toEqual([true, true]);
   });
 });
 

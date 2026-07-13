@@ -549,6 +549,9 @@ export function PlanPanel({ rs, versionId }: { rs: RackState; versionId?: string
     versionId: versionId ?? '',
     fixes,
     applyRackMod: rs.applyRackMod,
+    // Story 12.4 (AC4): baseline = the LIVE rack at first apply, so manual
+    // knob moves survive the overlay and return when everything unchecks.
+    getLiveMod: () => rs.mod,
   });
 
   if (fixes.length === 0) {
@@ -572,24 +575,33 @@ export function PlanPanel({ rs, versionId }: { rs: RackState; versionId?: string
         Check a fix to apply it to the rack — uncheck to compare.
       </div>
       {fixes.map((f) => {
-        const on = isApplied(f.fixId);
+        const na = f.notApplicable === true;
+        const on = !na && isApplied(f.fixId);
         const c = sevColor(f.sev);
         const modules = [...new Set(f.ops.map((o) => o.type))].join(' · ');
         return (
           <label
             key={f.fixId}
-            style={{ display: 'flex', gap: 10, padding: 12, borderRadius: 9, cursor: 'pointer', background: on ? 'rgba(0,229,176,0.05)' : 'rgba(255,255,255,0.02)', border: `1px solid ${cssVar(c)}33`, borderLeft: `3px solid ${c}` }}
+            data-testid={na ? 'plan-fix-na' : 'plan-fix'}
+            style={{ display: 'flex', gap: 10, padding: 12, borderRadius: 9, cursor: na ? 'default' : 'pointer', opacity: na ? 0.55 : 1, background: on ? 'rgba(0,229,176,0.05)' : 'rgba(255,255,255,0.02)', border: `1px solid ${cssVar(c)}33`, borderLeft: `3px solid ${c}` }}
           >
             <input
               type="checkbox"
               checked={on}
+              disabled={na}
               onChange={() => toggle(f.fixId)}
               style={{ marginTop: 2, accentColor: 'var(--cyan)' }}
             />
             <div style={{ flex: 1, minWidth: 0 }}>
               {f.scope && <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.12em', color: c, fontWeight: 700 }}>{f.scope.toUpperCase()}</div>}
               <div style={{ fontSize: 12.5, fontWeight: 600, marginTop: 2, lineHeight: 1.3 }}>{f.title}</div>
-              {modules && <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)', marginTop: 4 }}>{modules}</div>}
+              {na ? (
+                <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)', marginTop: 4 }}>
+                  not applicable in the rack — take it back to your DAW
+                </div>
+              ) : (
+                modules && <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)', marginTop: 4 }}>{modules}</div>
+              )}
             </div>
           </label>
         );

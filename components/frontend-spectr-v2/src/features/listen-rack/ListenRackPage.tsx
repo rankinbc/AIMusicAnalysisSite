@@ -41,8 +41,11 @@ import type { Chain } from './chain';
 import type { ModuleState } from './data';
 import {
   asChain, buildExportEnvelope, parseImportEnvelope, useRackDraft, useRackDraftAutosave,
-  useRackPresets, useSaveRackPreset,
+  useRackPreset, useRackPresets, useSaveRackPreset,
 } from './useRackPresets';
+import { overlayChain } from './fixToRackPatch';
+import { clearFixOverlay } from './listenFixes';
+import { useNavigate } from '@tanstack/react-router';
 import type { RoomLiveSeam } from './useRoomOrchestration';
 import { asVizLook, useSaveVizPreset, useVizPresets } from './useVizPresetsServer';
 import { Transport } from './transport';
@@ -53,8 +56,12 @@ import { VizStage } from './viz';
 
 interface VizPreset { id: string; name: string; viz: VizState; stages: string[]; director: string }
 
-function TrackHeader({ track, mode, modes, identity, onModeChange }: {
+// Exported for the 12.4 chip render test (all-modes assertion).
+export function TrackHeader({ track, mode, modes, identity, onModeChange, fixesApplied, onResetFixes }: {
   track: Track; mode: ModeId; modes: ModeId[]; identity: Identity; onModeChange?: (m: ModeId) => void;
+  /** Story 12.4: carried-fix chip — renders in EVERY mode (this header is the
+   *  page's only all-modes surface). null = no carry active. */
+  fixesApplied?: number | null; onResetFixes?: () => void;
 }) {
   const t = track;
   const surface = MODE_SURFACE_MATRIX[mode];
@@ -66,6 +73,20 @@ function TrackHeader({ track, mode, modes, identity, onModeChange }: {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
           <span className="mono" style={{ fontSize: 9.5, color: 'var(--muted)', letterSpacing: '0.14em' }}>NOW PLAYING</span>
           <span className="dot" style={{ animation: 'pulseGlow 1.6s ease-in-out infinite' }} />
+          {fixesApplied != null && fixesApplied > 0 && (
+            <span className="pill cyan" data-testid="fixes-applied-chip">
+              Fixes applied: {fixesApplied}
+              {onResetFixes && (
+                <button
+                  type="button"
+                  onClick={onResetFixes}
+                  style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', font: 'inherit', padding: 0, marginLeft: 6, textDecoration: 'underline' }}
+                >
+                  reset
+                </button>
+              )}
+            </span>
+          )}
         </div>
         <h1 style={{ fontSize: 23, fontWeight: 800, letterSpacing: '-0.015em', margin: '0 0 3px' }}>{t.name}</h1>
         {t.author && (
@@ -153,9 +174,13 @@ export interface ListenRackPageProps {
   /** Story 11.5 — host-only "go live" affordance (undefined when not hostable
    *  or a session already runs). */
   onStartRoom?: (() => void) | undefined;
+  /** Story 12.4 — the fix-rack carry-over preset id (?fixPreset=). When set,
+   *  the page fetches that preset and overlays its chain onto the live rack
+   *  once (skipping the draft restore); the "Fixes applied" chip appears. */
+  fixPreset?: string;
 }
 
-export function ListenRackPage({ mode, modes, identity, access, roomControl, onModeChange, onGrant, versionId, track: trackProp, roomLive, onStartRoom }: ListenRackPageProps) {
+export function ListenRackPage({ mode, modes, identity, access, roomControl, onModeChange, onGrant, versionId, track: trackProp, roomLive, onStartRoom, fixPreset }: ListenRackPageProps) {
   const track = trackProp ?? TRACK;
   // ── Real-audio seam (Phase 1) ──
   // `versionId` present ⇒ real mode: mount <audio> + the page-agnostic audio
@@ -247,13 +272,52 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     return [{ id: d.id, name: d.name, viz: look.viz, stages: look.stages, director: look.director }];
   }), [vizPresetDtos]);
 
+  // ── Story 12.4: fix-rack carry-over (?fixPreset=) ──────────────────────────
+  // Read-only surfaces (View / Room guest) never receive a carried chain.
+  // Carry eligibility is LATCHED per fixPreset value (review: a mid-flight mode
+  // switch or SSE rack-control revoke must not strand the page with neither
+  // draft nor carry applied — the arrival-time decision holds).
+  const carryAllowedNow = Boolean(
+    fixPreset && realAudio && !resolveCapabilities(mode, identity, roomControl, access).rackReadOnly,
+  );
+  const carryArmedRef = useRef<boolean | null>(null);
+  if (carryArmedRef.current === null) carryArmedRef.current = carryAllowedNow;
+  const carryArmed = Boolean(fixPreset) && carryArmedRef.current === true;
+  const carriedPresetQuery = useRackPreset(
+    realAudio ? (versionId ?? '') : '', carryArmed ? fixPreset : undefined);
+  // null = no carry active; number = modules the carried chain enabled.
+  const [fixesApplied, setFixesApplied] = useState<number | null>(null);
+  // 'pending' while a carry is armed and unresolved; 'applied' | 'failed' settle
+  // it. The draft machinery WAITS for settlement so a slow/failed carry can
+  // never let autosave clobber the saved draft with defaults (review HIGH).
+  const [carryPhase, setCarryPhase] = useState<'none' | 'pending' | 'applied' | 'failed'>(
+    carryArmed ? 'pending' : 'none');
+  const appliedPresetRef = useRef<string | null>(null); // one-shot per preset id
+  const navigate = useNavigate();
+
+  // A NEW fixPreset value on the mounted route (back-nav restoring the param,
+  // clicking "Open in Listen rack" again after a reset) re-arms the carry.
+  useEffect(() => {
+    if (!fixPreset || appliedPresetRef.current === fixPreset) return;
+    carryArmedRef.current = carryAllowedNow;
+    if (carryArmedRef.current) setCarryPhase('pending');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-arm keys on the param only
+  }, [fixPreset]);
+
   // Autosaved draft: restore once when it resolves, then enable debounced autosave.
   // Gating autosave on `draftRestored` prevents a default-chain autosave from
   // clobbering the persisted draft before the GET returns.
+  // Story 12.4: while a carry is PENDING neither restore nor autosave runs. A
+  // successful carry skips the restore (carry wins; autosave then persists the
+  // carried chain as the new draft). A FAILED carry falls back to the normal
+  // draft restore — the saved draft is never sacrificed to a 404.
   const draftQuery = useRackDraft(realAudio ? (versionId ?? '') : '');
   const [draftRestored, setDraftRestored] = useState(false);
   useEffect(() => {
-    if (draftRestored || !realAudio || !draftQuery.isFetched) return;
+    if (draftRestored || !realAudio) return;
+    if (carryPhase === 'pending') return; // wait for the carry to settle
+    if (carryPhase === 'applied') { setDraftRestored(true); return; }
+    if (!draftQuery.isFetched) return;
     const chain = draftQuery.data ? asChain(draftQuery.data.chain) : null;
     if (chain) {
       rsRef.current.recallPreset({
@@ -263,8 +327,64 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
       rsRef.current.setMasterBypass(chain.masterBypass);
     }
     setDraftRestored(true);
-  }, [draftRestored, realAudio, draftQuery.isFetched, draftQuery.data]);
+  }, [draftRestored, realAudio, carryPhase, draftQuery.isFetched, draftQuery.data]);
   useRackDraftAutosave(versionId ?? '', currentChain, realAudio && draftRestored);
+
+  // Apply the carried chain ONCE per preset id when it resolves: overlay onto
+  // the live module map (manual knobs on modules the chain doesn't enable
+  // survive; pitch never written). React state is enough for "after the graph
+  // is ready" — live pushes no-op until ensureContext(), and the first-play
+  // togglePlay pushFullRack syncs from rsRef.
+  useEffect(() => {
+    if (!carryArmed || !fixPreset || appliedPresetRef.current === fixPreset) return;
+    if (carriedPresetQuery.isError) {
+      appliedPresetRef.current = fixPreset;
+      setCarryPhase('failed');
+      toast.error('Could not load the carried fix rack — your saved draft is untouched.');
+      return;
+    }
+    const dto = carriedPresetQuery.data;
+    if (!dto) return; // still loading
+    const chain = asChain(dto.chain);
+    // Count what the overlay will actually APPLY: enabled, non-pitch modules.
+    const applied = chain
+      ? Object.entries(chain.modules).filter(([id, m]) => id !== 'pitch' && m?.enabled).length
+      : 0;
+    appliedPresetRef.current = fixPreset;
+    if (!chain || applied === 0) {
+      // Malformed or empty chain: never half-apply (a bare masterBypass with
+      // no chip would silently mute the rack with no affordance to undo).
+      setCarryPhase('failed');
+      toast.error('The carried fix rack could not be applied.');
+      return;
+    }
+    rsRef.current.applyRackMod(overlayChain(rsRef.current.mod, chain.modules));
+    rsRef.current.setMasterBypass(chain.masterBypass);
+    setFixesApplied(applied);
+    setCarryPhase('applied');
+  }, [carryArmed, fixPreset, carriedPresetQuery.isError, carriedPresetQuery.data]);
+
+  // Chip reset: restore neutral rack, clear the URL param (so refresh doesn't
+  // re-apply), and clear the Plan-tab overlay (through the hook's event seam so
+  // a mounted PlanPanel's checkboxes/baseline reset too — not just localStorage).
+  const onResetCarriedFixes = useCallback(() => {
+    rsRef.current.reset();
+    if (versionId) clearFixOverlay(versionId);
+    setFixesApplied(null);
+    setCarryPhase('none');
+    void navigate({
+      to: '/listen-rack/$versionId',
+      params: { versionId: versionId ?? '' },
+      // Omit-by-destructure: exactOptionalPropertyTypes forbids an explicit
+      // `fixPreset: undefined`; other (future) search params survive.
+      search: (prev: Record<string, unknown>) => {
+        const rest = { ...prev };
+        delete rest['fixPreset'];
+        return rest;
+      },
+      replace: true,
+    });
+  }, [versionId, navigate]);
 
   // Unified preset/look handlers — server on the real route, in-memory on mock.
   const onSaveRackPreset = useCallback(() => {
@@ -657,7 +777,9 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
           visualizer backdrop (VizStage background mode portals to <body> at
           z-index 0); the global top nav is z-index 50 and stays on top too. */}
       <div className="lr-page" style={{ position: 'relative', zIndex: 1 }}>
-        <TrackHeader track={track} mode={mode} modes={modes} identity={identity} {...(onModeChange ? { onModeChange } : {})} />
+        <TrackHeader track={track} mode={mode} modes={modes} identity={identity}
+          fixesApplied={fixesApplied} onResetFixes={onResetCarriedFixes}
+          {...(onModeChange ? { onModeChange } : {})} />
 
         {mode === 'room' && (roomLive || onStartRoom) && (
           <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '10px 0 2px', fontSize: 10.5 }}>

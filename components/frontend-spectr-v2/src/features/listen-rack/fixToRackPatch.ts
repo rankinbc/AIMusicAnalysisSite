@@ -70,23 +70,61 @@ function freshDefaults(): Record<string, ModuleState> {
   return JSON.parse(JSON.stringify(MODULE_DEFAULTS)) as Record<string, ModuleState>;
 }
 
-/** Recompute a full rack from neutral defaults + each applied fix's ops, in
- *  order. EQ bands from all fixes are allocated to sequential slots (slot i for
- *  the i-th band); overflow past the 8 slots stacks onto the last slot. */
-export function composeRack(appliedOps: VerdictDspOp[][]): Record<string, ModuleState> {
-  const base = freshDefaults();
+/** Story 12.4: merge a carried chain's modules onto the LIVE module map.
+ *  Only modules the carried chain ENABLES are merged — a compiled analysis
+ *  chain enumerates every module (disabled ones at defaults), and spreading
+ *  those would wipe manual knob moves, making "overlay" a lie (review
+ *  finding). `pitch` is never written (separate BufferSource lane; clobbering
+ *  it spuriously enters/exits pitch mode). Used by the ?fixPreset= carry-over
+ *  apply on the Listen page. */
+export function overlayChain(
+  live: Record<string, ModuleState>,
+  carried: Partial<Record<string, ModuleState>>,
+): Record<string, ModuleState> {
+  const next = JSON.parse(JSON.stringify(live)) as Record<string, ModuleState>;
+  for (const id of Object.keys(carried)) {
+    if (id === 'pitch') continue;
+    const mod = carried[id];
+    if (!mod?.enabled) continue; // disabled entries must not clobber live tweaks
+    next[id] = { ...next[id], ...(mod as ModuleState) };
+  }
+  return next;
+}
+
+/** Recompose a full rack from `base` + each applied fix's ops, in order.
+ *  EQ bands from all fixes are allocated to sequential slots (slot i for the
+ *  i-th band); overflow past the 8 slots stacks onto the last slot.
+ *
+ *  Story 12.4: `base` defaults to neutral MODULE_DEFAULTS (the historical
+ *  behavior), but callers applying fixes onto a LIVE rack pass the current
+ *  module map so manual knob moves survive. `pitch` is never written — it is
+ *  not an insert effect (separate BufferSource lane) and clobbering it
+ *  spuriously enters/exits pitch mode. */
+export function composeRack(
+  appliedOps: VerdictDspOp[][],
+  liveBase?: Record<string, ModuleState>,
+): Record<string, ModuleState> {
+  const base = liveBase
+    ? (JSON.parse(JSON.stringify(liveBase)) as Record<string, ModuleState>)
+    : freshDefaults();
   const collectedEq: EqBand[] = [];
 
   for (const ops of appliedOps) {
     const patch = fixToRackPatch(ops);
     for (const id of Object.keys(patch.modules)) {
+      if (id === 'pitch') continue; // never touch the pitch lane (12.4 AC4)
       base[id] = { ...base[id], ...patch.modules[id] } as ModuleState;
     }
     collectedEq.push(...patch.eqBands);
   }
 
   if (collectedEq.length > 0) {
-    const bands = (base.eq.bands as EqBand[]).map((b) => ({ ...b }));
+    // A live base restored from a drifted server chain may lack eq/bands —
+    // fall back to the default 8 slots instead of throwing (review finding).
+    const baseBands = Array.isArray(base.eq?.bands) && (base.eq.bands as EqBand[]).length > 0
+      ? (base.eq.bands as EqBand[])
+      : (freshDefaults().eq.bands as EqBand[]);
+    const bands = baseBands.map((b) => ({ ...b }));
     collectedEq.forEach((band, i) => {
       bands[Math.min(i, bands.length - 1)] = { ...band };
     });
