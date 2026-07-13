@@ -1,6 +1,6 @@
 # Story 12.8: First-Run Experience & Feedback Loop
 
-Status: review
+Status: done
 
 ## Story
 
@@ -125,6 +125,50 @@ Claude Fable 5 (claude-fable-5), dev-story workflow, 2026-07-13.
 - PRPs/sprint-status.yaml (status flips)
 - PRPs/stories/12-8-first-run-experience-and-feedback-loop.md (this file)
 
+Review patches (senior review, same day):
+
+- components/worker/app/retention_actor.py (modified — SHARED_STORAGE_KEYS exclusion)
+- components/worker/app/account_deletion_actor.py (modified — same exclusion)
+- components/worker/tests/test_retention_sweep.py (modified — exclusion test)
+- components/bff/src/Spectr.Bff/Services/DemoSeeder.cs (modified — P2/P3/P10 hardening)
+- components/bff/src/Spectr.Bff/Endpoints/AuthEndpoints.cs (modified — CancellationToken.None)
+- components/bff/tests/Spectr.Bff.Tests/DemoSeederTests.cs (modified — Range 206 assert)
+- components/frontend-spectr-v2/src/lib/report-problem.ts (modified — CRLF/app-line/strict uuid)
+- components/frontend-spectr-v2/src/lib/__tests__/report-problem.test.ts (modified)
+- components/frontend-spectr-v2/src/api/fetcher.ts (modified — traceId TTL + clear)
+- components/frontend-spectr-v2/src/features/results/ProgressStoryline.tsx (modified — PHASE_EXPLAINERS map)
+- components/frontend-spectr-v2/src/features/results/__tests__/ProgressStoryline.test.tsx (modified — scoped alias assert)
+- components/frontend-spectr-v2/.env.example (new)
+
+## Senior Review Record
+
+### Review Date / Model
+
+2026-07-13, Claude Fable 5 — 3-layer adversarial review (Blind Hunter diff-only / Edge Case Hunter diff+repo / Acceptance Auditor diff+spec) on master..story/12-8-first-run (PR #45).
+
+### Findings & Resolutions (all patched on the story branch)
+
+- **P1 CRITICAL — shared demo blob purged by retention sweep AND GDPR delete**: every seeded SongVersion points at the ONE canonical `audio/demo/source.wav`; `retention_actor._version_keys` and `account_deletion_actor._collect_storage_keys` would delete it when the first demo-owning account expired/deleted, breaking the demo for every other user (self-heals only on the NEXT registration). Fix: `SHARED_STORAGE_KEYS` frozenset in `retention_actor.py`, filtered from both collectors; test `test_version_keys_excludes_shared_demo_key`.
+- **P2 HIGH — seeder catch left a poisoned ChangeTracker**: SaveChangesAsync failure kept 4 tracked demo entities in the scoped DbContext shared with the rest of Register — the refresh-token SaveChanges would retry the failed inserts and fail registration (the exact thing the try/catch exists to prevent). Fix: `db.ChangeTracker.Clear()` in the catch.
+- **P3 — EnsureDemoAudio TOCTOU + torn-write risk** (the observed suite flake): exists-check then write, no size validation. Fix: JSON precondition checked FIRST (cheap), size-validated rewrite (`44 + 882000` bytes), IOException race tolerated only when the other writer's object exists.
+- **P4 — Register passed the request `ct` to SeedAsync**: a client disconnect mid-seed = OCE swallowed = permanently demo-less account (no re-seed path). Fix: `CancellationToken.None` at the call site.
+- **P5 — mailto contract**: CRLF line joins (RFC 6068; bare `\n` renders run-on in Outlook), `app: spectr-v2 (mode)` line, strict UUID regex in `jobIdFromPath` (was `[0-9a-f-]{36}`), `.env.example` documenting `VITE_SUPPORT_EMAIL` (personal-email fallback accepted for private beta).
+- **P6 — lastTraceId hygiene**: 30-min TTL + cleared on `setAccessToken(null)` so a stale/other-session trace never rides a report.
+- **P7 — explainer copy drift risk**: hardcoded `<li>` list replaced by `PHASE_EXPLAINERS: Record<(typeof BASE_PHASES)[number], string>` rendered from BASE_PHASES — a phase rename now breaks the build, not the copy. (Surfaced a latent test bug: the alias no-duplicate test matched the whole HTML including the explainer; scoped to the phase `<ol>`.)
+- **P8 — CLAUDE.md**: 5th stale claim fixed (thin songs/versions route summary → full sub-resource surface) + new self-contradiction removed (`maintenance` queue "provisioned-but-empty until Epic 3/4" vs the actor roster — it carries `sweep_retention`/`send_email`/`delete_account_data`).
+- **P9 — test gaps**: DemoSeederTests now asserts Range → 206 with exact byte count (Listen scrubbing contract); smoke's contradictory doubled comment cleaned.
+- **P10 — hardening**: sample final_json cached in a static + parse-validated (corrupt asset → skip, never seed garbage).
+
+### Gates after patches
+
+- BFF: build 0 errors; `dotnet test` (SPECTR_REQUIRE_DB=1) **368/368 passed** — pre-patch flake (P3) gone.
+- Frontend: tsc clean, lint clean, build clean, vitest **748/748**.
+- Worker: ruff clean, venv pytest **590 passed, 3 xfailed**.
+- Playwright smoke (headless, patched BFF + LLM_FAKE worker): see Change Log entry.
+
+**Outcome: APPROVED** — all findings patched and verified on branch.
+
 ## Change Log
 
 - 2026-07-13: Story created (create-story workflow) — copy-per-user seed decision (user-scoped queries make shared-demo infeasible); honesty rule for sample-data labeling; mailto prefill limited to what the client can actually read (jobId + opportunistic traceId).
+- 2026-07-13: Senior review — 10 findings (1 critical: shared demo blob vs retention/GDPR purge) all patched; gates re-run green; smoke re-verified against the patched BFF.

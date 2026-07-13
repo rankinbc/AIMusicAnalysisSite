@@ -83,8 +83,16 @@ def _as_json(v):
     return v
 
 
+# Story 12.8: the first-run demo audio is ONE shared object referenced by a
+# per-user demo SongVersion in EVERY account. Purging it via any single user's
+# retention/deletion pass would break demo playback fleet-wide.
+SHARED_STORAGE_KEYS = frozenset({"audio/demo/source.wav"})
+
+
 def _version_keys(row) -> list[str]:
-    """Every raw-audio storage key a version row references (exact keys only)."""
+    """Every raw-audio storage key a version row references (exact keys only).
+    Shared objects (the 12.8 demo tone) are never returned — they are not any
+    one user's data."""
     keys: list[str] = []
     if row.file_path:
         keys.append(row.file_path)
@@ -105,7 +113,8 @@ def _version_keys(row) -> list[str]:
             keys.append(e)
     # De-dup while preserving order (grouped stem_paths repeat raw keys).
     seen: set[str] = set()
-    return [k for k in keys if not (k in seen or seen.add(k))]
+    return [k for k in keys if k not in SHARED_STORAGE_KEYS
+            and not (k in seen or seen.add(k))]
 
 
 def _classify_users(session, now: datetime, lapsed_days: int) -> tuple[set, set]:

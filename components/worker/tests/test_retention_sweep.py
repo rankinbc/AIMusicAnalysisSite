@@ -384,3 +384,21 @@ def test_paid_signal_at_purge_time_spares_the_user(db):
     assert stats["purged_versions"] == 0
     assert all(f.exists() for f in files)
     assert _purged_at(factory, vid) is None
+
+
+# ── Story 12.8: the shared demo blob is never any one user's data ────────────
+
+def test_version_keys_excludes_shared_demo_key():
+    from app.retention_actor import SHARED_STORAGE_KEYS, _version_keys
+
+    class Row:
+        file_path = "audio/demo/source.wav"
+        reference_path = "audio/upload/x/ref.wav"
+        als_file_path = None
+        stem_paths = None
+        stem_paths_raw = None
+
+    keys = _version_keys(Row())
+    assert "audio/demo/source.wav" not in keys
+    assert keys == ["audio/upload/x/ref.wav"]
+    assert "audio/demo/source.wav" in SHARED_STORAGE_KEYS

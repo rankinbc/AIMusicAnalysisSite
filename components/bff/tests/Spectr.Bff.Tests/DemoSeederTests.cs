@@ -50,6 +50,15 @@ public sealed class DemoSeederTests(WebApplicationFactory<Program> factory)
             var audio = await client.GetAsync($"/api/versions/{versionId}/audio");
             Assert.True(audio.StatusCode is HttpStatusCode.OK or HttpStatusCode.PartialContent,
                 $"demo audio did not stream: {audio.StatusCode}");
+
+            // Range support — the Listen page seeks; a 200-only stream would
+            // break scrubbing on the demo just like any other version.
+            using var rangeReq = new HttpRequestMessage(HttpMethod.Get,
+                $"/api/versions/{versionId}/audio");
+            rangeReq.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, 99);
+            var partial = await client.SendAsync(rangeReq);
+            Assert.Equal(HttpStatusCode.PartialContent, partial.StatusCode);
+            Assert.Equal(100, (await partial.Content.ReadAsByteArrayAsync()).Length);
         }
         finally
         {

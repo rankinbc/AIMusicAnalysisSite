@@ -11,6 +11,9 @@ describe('jobIdFromPath', () => {
     expect(jobIdFromPath('/library')).toBeNull();
     expect(jobIdFromPath('/songs/abc')).toBeNull();
   });
+  it('rejects a 36-char non-uuid segment', () => {
+    expect(jobIdFromPath('/songs/abc/results/------------------------------------')).toBeNull();
+  });
 });
 
 describe('buildProblemReportMailto', () => {
@@ -26,6 +29,15 @@ describe('buildProblemReportMailto', () => {
     expect(body).toContain('page: https://app/songs/a/results/b?tab=coach');
     expect(body).toContain('job: job-123');
     expect(body).toContain('trace: trace-456');
+    expect(body).toContain('app: spectr-v2 (');
+  });
+
+  it('joins body lines with CRLF (RFC 6068 mailto)', () => {
+    const body = decodeURIComponent(
+      buildProblemReportMailto({ email: 'x@y.z', url: 'https://app/library' }).split('&body=')[1]!,
+    );
+    expect(body).toContain('\r\n');
+    expect(body.split('\r\n').join('')).not.toContain('\n'); // no bare LF
   });
 
   it('omits absent context lines', () => {

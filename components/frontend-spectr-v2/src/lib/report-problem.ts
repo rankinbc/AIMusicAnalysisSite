@@ -4,7 +4,8 @@
 // internal_error traceId when one was captured (there is no ambient
 // correlation id on the happy path — 10.3's correlation is server-side only).
 
-const RESULTS_ROUTE = /\/songs\/[^/]+\/results\/([0-9a-f-]{36})/i;
+const RESULTS_ROUTE =
+  /\/songs\/[^/]+\/results\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
 
 export function jobIdFromPath(pathname: string): string | null {
   const m = RESULTS_ROUTE.exec(pathname);
@@ -28,8 +29,11 @@ export function buildProblemReportMailto(input: {
   ];
   if (input.jobId) lines.push(`job: ${input.jobId}`);
   if (input.traceId) lines.push(`trace: ${input.traceId}`);
+  lines.push(`app: spectr-v2 (${import.meta.env.MODE})`);
   lines.push(`time: ${new Date().toISOString()}`);
-  return `mailto:${input.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join('\n'))}`;
+  // RFC 2368/6068: mailto bodies use CRLF line breaks — bare \n renders as
+  // one run-on line in some mail clients (Outlook).
+  return `mailto:${input.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join('\r\n'))}`;
 }
 
 export const SUPPORT_EMAIL: string =

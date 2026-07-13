@@ -36,9 +36,11 @@ public sealed class DemoSeeder(
                     .AnyAsync(s => s.UserId == userId && s.Name == DemoSongName, ct))
                 return;
 
-            await EnsureDemoAudioAsync(ct);
+            // Cheap precondition first: no point writing ~880 KB of audio if
+            // the report asset is missing.
             var finalJson = await LoadSampleFinalJsonAsync(ct);
             if (finalJson is null) return; // sample asset missing — skip quietly
+            await EnsureDemoAudioAsync(ct);
 
             var song = new Song
             {
@@ -89,6 +91,11 @@ public sealed class DemoSeeder(
         catch (Exception ex)
         {
             // Never fail registration for a demo (device-claim precedent).
+            // CRITICAL (review P2): drop any tracked-but-unsaved demo entities —
+            // the scoped DbContext is shared with the rest of the Register
+            // request, and a poisoned tracker would make the NEXT SaveChanges
+            // (refresh-token issuance) retry the failed inserts and blow up.
+            db.ChangeTracker.Clear();
             logger.LogWarning(ex, "Demo seed failed for user {UserId} — registration unaffected", userId);
         }
     }
@@ -97,9 +104,23 @@ public sealed class DemoSeeder(
     // once through IFileStorage (works for LocalDisk dev and R2 prod alike).
     private async Task EnsureDemoAudioAsync(CancellationToken ct)
     {
-        if (await storage.ExistsAsync(DemoAudioKey, ct)) return;
-        using var wav = new MemoryStream(GenerateToneWav());
-        await storage.WriteAsync(DemoAudioKey, wav, "audio/wav", ct);
+        // Size-validated (review P3): a torn write from a crashed/raced first
+        // registration must not become the permanent canonical demo audio.
+        var expected = 44L + 44100L * 5 * 2 * 2;
+        var size = await storage.GetFileSizeAsync(DemoAudioKey, ct);
+        if (size == expected) return;
+        try
+        {
+            using var wav = new MemoryStream(GenerateToneWav());
+            await storage.WriteAsync(DemoAudioKey, wav, "audio/wav", ct);
+        }
+        catch (IOException)
+        {
+            // Concurrent first registrations can race the same key — if the
+            // other writer won, fine; otherwise rethrow into the best-effort
+            // outer catch (that user just skips the demo, self-heals later).
+            if (!await storage.ExistsAsync(DemoAudioKey, ct)) throw;
+        }
     }
 
     // 5 s stereo 440 Hz sine, 44.1 kHz s16le (~880 KB) — same math as the
@@ -133,14 +154,28 @@ public sealed class DemoSeeder(
 
     // The bundled sample report (schemas/samples, linked into the BFF output as
     // a content file — kept at its schemas/ home, no duplication).
+    private static string? _sampleJsonCache;
+
     private async Task<string?> LoadSampleFinalJsonAsync(CancellationToken ct)
     {
+        if (_sampleJsonCache is not null) return _sampleJsonCache;
         var path = Path.Combine(AppContext.BaseDirectory, "DemoAssets", "demo-final-json.json");
         if (!File.Exists(path))
         {
             logger.LogWarning("Demo sample final_json missing at {Path} — demo seed skipped", path);
             return null;
         }
-        return await File.ReadAllTextAsync(path, ct);
+        var text = await File.ReadAllTextAsync(path, ct);
+        try
+        {
+            using var _ = System.Text.Json.JsonDocument.Parse(text); // corrupt asset → skip, don't seed garbage
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            logger.LogWarning(ex, "Demo sample final_json unparseable — demo seed skipped");
+            return null;
+        }
+        _sampleJsonCache = text;
+        return _sampleJsonCache;
     }
 }
