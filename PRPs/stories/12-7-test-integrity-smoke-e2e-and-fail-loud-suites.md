@@ -1,6 +1,6 @@
 # Story 12.7: Test Integrity — Smoke E2E & Fail-Loud Suites
 
-Status: review
+Status: done
 
 ## Story
 
