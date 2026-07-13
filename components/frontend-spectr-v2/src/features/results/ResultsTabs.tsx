@@ -1,15 +1,7 @@
 import type { ResultsTabKey } from './results-tab-keys';
+import { buildResultsTabs } from './results-tabs-model';
 
 export type { ResultsTabKey } from './results-tab-keys';
-
-interface TabDef {
-  id: ResultsTabKey;
-  label: string;
-  icon: string;
-  badge?: string | number | null;
-  /** A fault-bearing badge — tints the count orange (something needs attention). */
-  alert?: boolean;
-}
 
 interface ResultsTabsProps {
   current: ResultsTabKey;
@@ -34,29 +26,10 @@ export function ResultsTabs({
   projectTrackCount,
   hasReference,
 }: ResultsTabsProps) {
-  const tabs: TabDef[] = [
-    { id: 'coach', label: 'AI Coach', icon: '✦' },
-    {
-      id: 'findings',
-      label: 'Findings',
-      icon: '⚑',
-      badge: findingCount > 0 ? findingCount : null,
-      alert: findingCount > 0,
-    },
-    ...(hasProject
-      ? [
-          {
-            id: 'project' as const,
-            label: 'Project',
-            icon: '▤',
-            badge: projectTrackCount > 0 ? projectTrackCount : null,
-          },
-        ]
-      : []),
-    ...(hasReference ? [{ id: 'reference' as const, label: 'Reference', icon: '◎' }] : []),
-    { id: 'trackinfo', label: 'Track Info', icon: '▦' },
-    { id: 'debug', label: 'Debug', icon: '⟂' },
-  ];
+  const tabs = buildResultsTabs(
+    { findingCount, hasProject, projectTrackCount, hasReference },
+    import.meta.env.DEV,
+  );
 
   return (
     <div className="rtabs" role="tablist">

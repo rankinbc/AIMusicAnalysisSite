@@ -69,6 +69,10 @@ interface CoachChatProps {
   /** Optional actions rendered top-right of the coach card (redesign: the
    *  Specialist Team + Generate Coach Mix buttons live here). */
   headerActions?: React.ReactNode;
+  /** Story 12.5: unlock chips open the REAL upload dialogs (owner: ReportView).
+   *  Optional so bare mounts stay valid; without it the chip routes to the
+   *  song page copy instead of a stale "coming soon" toast. */
+  onUnlockAction?: (intent: 'add_stems' | 'add_reference') => void;
 }
 
 export function CoachChat({
@@ -77,6 +81,7 @@ export function CoachChat({
   verdicts,
   measurementsCount,
   headerActions,
+  onUnlockAction,
 }: CoachChatProps) {
   const [input, setInput] = useState('');
   // teach-mode-coach: when on, the next question is sent as mode="teach" so the
@@ -244,17 +249,26 @@ export function CoachChat({
   }, []);
 
   const handleUnlock = useCallback((intent: string) => {
-    // Story 1.9 / Phase E will wire real navigation. Today the stems
-    // upload route doesn't exist — surface intent via toast so the
-    // affordance is visible but doesn't dead-link.
-    if (intent === 'add_stems') {
-      toast.info('Stems upload coming with Phase E — your gap is noted.');
-    } else if (intent === 'add_reference') {
-      toast.info('Reference upload coming with Phase E.');
-    } else if (intent === 'upgrade') {
-      toast.info('Upgrade flow coming with Epic 2.');
+    // Story 12.5: real destinations — the stale "coming with Epic 2 /
+    // Phase E" toasts promised things that shipped long ago.
+    if (intent === 'upgrade') {
+      // Same idiom as CoachGateInline — /pricing is a _public route.
+      window.location.assign('/pricing');
+      return;
     }
-  }, []);
+    if (intent === 'add_stems' || intent === 'add_reference') {
+      if (onUnlockAction) {
+        onUnlockAction(intent);
+        return;
+      }
+      // Bare mount without the dialog owner: honest pointer, no fake promise.
+      toast.info(
+        intent === 'add_reference'
+          ? 'Add a reference from the song page to unlock this.'
+          : 'Add stems from the song page to unlock this.',
+      );
+    }
+  }, [onUnlockAction]);
 
   const send = useCallback(async () => {
     const msg = input.trim();

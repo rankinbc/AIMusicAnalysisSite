@@ -41,7 +41,7 @@ The BFF must be running on port 5000 for `/api/*` to resolve.
 /_app/library                  authed — grid card view + filter pills
 /_app/songs/$songId            authed — Song detail (hero + ProgressTimeline + VersionList)
 /_app/songs/$songId/results/$jobId   authed — Results page (5-tab strip + AI Coach + verdicts + DSP-side tabs)
-/_app/listen/$versionId        authed — Listen page (Web Audio DSP chain)
+/_app/listen-rack/$versionId   authed — Listen rack page (rack + visuals; /listen/$versionId redirects here)
 /_app/billing                  authed — manage subscription self-service (story 2.2)
 /_app/billing/success          authed — post-checkout poll for tier flip (story 2.1)
 /_public/billing/cancelled     anon  — Stripe Checkout cancellation landing (story 2.1)
@@ -59,20 +59,17 @@ Child-route gotcha: `songs.$songId.tsx` checks `useChildMatches().length > 0` an
 
 ## Results page architecture
 
-- `VerdictHero` — 340/1fr grid, grade pill + verdict text + percentile / track meta + 4-metric grid (LUFS, true peak, dyn range, danceability)
-- `ResultsTabs` — 5-tab strip: AI Coach (default + pulsing dot), Analysis, Spectrum, Reference, Arrangement. Each tab swaps the body
+- `SongHeader` — track identity + "Analyzed from" input chips; missing inputs render as live "+ Add …" buttons that open the matching upload dialog (stems/.als/reference; a new mix routes to the song page)
+- `ResultsTabs` — AI Coach (default) / Findings / Project (or `ProjectUnlock` with a real "Upload .als" CTA) / Reference / Track Info / Debug (dev builds only). Each tab swaps the body
 - `CoachChat` — featured chat block on AI Coach tab. TranceBot avatar (72 px, EQ visor idle-pulse, faster while streaming, **static under `prefers-reduced-motion: reduce`** via the `useReducedMotion` hook). Wired to the v2 BFF coach API (`POST /api/coach/{analysisId}/messages` + SSE relay at `/messages/{id}/stream` + abort-the-fetch cancel). Streams `{token|done|refusal|error}` events per AR44 with `: heartbeat` comments every 15 s. Stop button replaces "Ask →" while streaming; aborting the SSE fetch flips the BFF cancel path which SETs the Redis cancel key for the worker. Suggestion chips are derived from THIS report's verdict categories (generic fallback when verdicts are empty). Below the input: grounding scope line `Answers grounded in analysis #{shortid} · {n} measurements · {m} verdicts`. Refused turns render the worker's body text + a violet unlock pill (e.g. `Add stems`); TranceBot styling is unchanged per UX-DR17. `EvidenceChips` (`<Pill tone="cyan">` from story 1.7) render below each finalized assistant turn, scroll the matching panel into view + transient-highlight on click. AR38 error codes (`coach_offline` / `coach_unavailable` / `circuit_open` / `llm_provider_down` / `coach_queue_unavailable` / `coach_stream_idle`) flip the chat into an offline state with the canonical copy "Coach is offline — your measured analysis and rule-based findings are unaffected." plus a Retry button. Aria-live announcements are throttled to ≤1 update per 500 ms so screen readers don't stutter every token. Per-analysis cap state (story 1.9) is server-driven via the `caps` field on the conversation DTO + POST response; the `CoachCapChip` (UX-DR16 grammar, amber at 1 remaining) renders in the card header and the `CoachGateInline` (Pro upgrade + buy-credits CTAs) replaces the input row when `capReached`. Cap source-of-truth lives BFF-side (`COUNT(*)` user messages per conversation against `IOptions<CoachCapsOptions>.FreeFollowups`); the frontend never recomputes.
-- `CoachFilters` — category filter pills with persona colors + Show fixed toggle
-- `VerdictCard` — atmospheric rank numeral (88px @ 6% opacity), PersonaChip + MiniBot avatar, ImpactTag, ConfidenceMeter, FixRecipe panel
-- `SpecialistTile` — 28px MiniBot avatar + contextual status ("no issues" / "{N} findings" / "running…" / Run button)
-- `AnalysisTab` — PipelineDial (circular progress), phase rows with ✓ / partial / running / missing icons + AI specialist join + UnlockBlock zones
-- `SpectrumTab` — CSS-only vertical bars (8 bands) with genre-median overlay
-- `ReferenceTab` — ScoreRing + percentile + GapRow list (stub data until BFF surfaces genre profiles)
-- `ArrangementTab` — section bar + issue list (stub data until phase3 surfaces real sections)
+- `FindingsTab` — Problem/fault list from the rule engine + specialists
+- `ReferenceTab` — genre-profile comparison: real `phase6.percentile` ring (honest empty state when absent — never fabricated) + GapRow list
+- `TrackInfoTab` — measured phase data (stereo, translation, spectrogram/waveform images)
+- `DebugTab` — raw pipeline I/O inspector, dev builds only (story 12.5)
 
 ## Listen page architecture
 
-`/listen/$versionId` is a producer's "Now Playing" view + Web Audio DSP chain.
+`/listen-rack/$versionId` is the live Listen page (rack + visuals + rail); the legacy `/listen/$versionId` redirects to it. The Web Audio DSP engine below still lives in `features/listen/`.
 
 ### Audio graph (`features/listen/useAudioGraph.ts`)
 
@@ -114,7 +111,7 @@ Per-page rAF loop reads `AnalyserNode.getByteFrequencyData` + 2× `getFloatTimeD
 
 ### Entry points
 
-- Library card play button → `/listen/{currentVersion.id}`
+- Library card play button → `/listen-rack/{currentVersion.id}`
 - Song detail row "▶ Listen" link → `/listen/{version.id}`
 - Topnav Listen tab is disabled until we have a "currently-loaded" track context (future).
 

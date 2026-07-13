@@ -3,7 +3,6 @@ import { fmtGenre } from './helpers/format';
 
 interface ReferenceTabProps {
   genre: string | undefined;
-  score: number | undefined;
   phase6: Phase6Data | undefined;
 }
 
@@ -34,19 +33,17 @@ function titleize(key: string): string {
 // Profile-led comparison vs the genre statistical profile (phase 6). The
 // uploaded-reference-track ◇ overlay + tonal-fingerprint curve are deferred
 // until the backend produces that data — this is the profile-only state.
-export function ReferenceTab({ genre: phase2Genre, score, phase6 }: ReferenceTabProps) {
+export function ReferenceTab({ genre: phase2Genre, phase6 }: ReferenceTabProps) {
   const realGaps = phase6?.gaps ?? null;
   const realPercentile = phase6?.percentile;
   const displayGenre = phase6?.genre ?? phase2Genre;
   const genreLabel = displayGenre ? fmtGenre(displayGenre) : '—';
 
-  const percentile =
-    realPercentile != null
-      ? Math.round(realPercentile)
-      : score != null
-        ? Math.max(5, Math.min(95, Math.round(score * 0.95)))
-        : 60;
-  const topPct = 100 - percentile;
+  // Story 12.5 (AC5): the percentile is REAL or ABSENT — never invented from
+  // overall_score. A fabricated ring taught users to trust a number the
+  // pipeline never computed.
+  const percentile = realPercentile != null ? Math.round(realPercentile) : null;
+  const topPct = percentile != null ? 100 - percentile : null;
 
   const gapEntries: { key: string; gap: Phase6Gap }[] = realGaps
     ? Object.entries(realGaps).map(([key, gap]) => ({ key, gap }))
@@ -57,7 +54,7 @@ export function ReferenceTab({ genre: phase2Genre, score, phase6 }: ReferenceTab
   const stroke = 7;
   const r = (ringSize - stroke) / 2;
   const c = 2 * Math.PI * r;
-  const off = c - (percentile / 100) * c;
+  const off = percentile != null ? c - (percentile / 100) * c : c;
 
   return (
     <div>
@@ -80,50 +77,63 @@ export function ReferenceTab({ genre: phase2Genre, score, phase6 }: ReferenceTab
         </div>
       </div>
 
-      <div className="ref-verdict">
-        <div
-          className="rv-ring"
-          role="img"
-          aria-label={`${percentile}th percentile versus the genre profile — top ${topPct}%.`}
-        >
-          <svg width={ringSize} height={ringSize} style={{ transform: 'rotate(-90deg)' }} aria-hidden>
-            <circle
-              cx={ringSize / 2}
-              cy={ringSize / 2}
-              r={r}
-              stroke="rgba(255,255,255,0.06)"
-              strokeWidth={stroke}
-              fill="none"
-            />
-            <circle
-              cx={ringSize / 2}
-              cy={ringSize / 2}
-              r={r}
-              stroke="var(--cyan)"
-              strokeWidth={stroke}
-              fill="none"
-              strokeDasharray={c}
-              strokeDashoffset={off}
-              strokeLinecap="round"
-            />
-          </svg>
-          <span className="rv-num">{percentile}</span>
-        </div>
-        <div>
-          <div className="rv-h">
-            <span className="n">{percentile}</span>th percentile
+      {percentile != null ? (
+        <div className="ref-verdict">
+          <div
+            className="rv-ring"
+            role="img"
+            aria-label={`${percentile}th percentile versus the genre profile — top ${topPct}%.`}
+          >
+            <svg width={ringSize} height={ringSize} style={{ transform: 'rotate(-90deg)' }} aria-hidden>
+              <circle
+                cx={ringSize / 2}
+                cy={ringSize / 2}
+                r={r}
+                stroke="rgba(255,255,255,0.06)"
+                strokeWidth={stroke}
+                fill="none"
+              />
+              <circle
+                cx={ringSize / 2}
+                cy={ringSize / 2}
+                r={r}
+                stroke="var(--cyan)"
+                strokeWidth={stroke}
+                fill="none"
+                strokeDasharray={c}
+                strokeDashoffset={off}
+                strokeLinecap="round"
+              />
+            </svg>
+            <span className="rv-num">{percentile}</span>
           </div>
-          <div className="rv-take">
-            top {topPct}%
-            {gapEntries.length > 0 && (
-              <>
-                {' · '}
-                {inRange} of {gapEntries.length} metrics in range
-              </>
-            )}
+          <div>
+            <div className="rv-h">
+              <span className="n">{percentile}</span>th percentile
+            </div>
+            <div className="rv-take">
+              top {topPct}%
+              {gapEntries.length > 0 && (
+                <>
+                  {' · '}
+                  {inRange} of {gapEntries.length} metrics in range
+                </>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="ref-verdict">
+          <div>
+            <div className="rv-h">Genre percentile isn&rsquo;t available for this analysis</div>
+            <div className="rv-take">
+              {gapEntries.length > 0
+                ? `${inRange} of ${gapEntries.length} metrics in range vs the ${genreLabel} profile`
+                : 'the pipeline did not compute a percentile for this track'}
+            </div>
+          </div>
+        </div>
+      )}
 
       {gapEntries.length === 0 ? (
         <div className="na">

@@ -18,7 +18,7 @@ export function DepthBanner({ missing, onAddInputs }: DepthBannerProps) {
         Add {what} to turn these into <strong>device-specific fixes with exact settings</strong> —
         right now the plan is directional.
       </p>
-      <button type="button" className={`btn sm ${s.cta}`} onClick={onAddInputs}>
+      <button type="button" className={`btn sm ${s.cta}`} onClick={() => onAddInputs()}>
         Add files
       </button>
     </div>

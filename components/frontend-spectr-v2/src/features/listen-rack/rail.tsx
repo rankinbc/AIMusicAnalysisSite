@@ -508,8 +508,8 @@ function StatsPanel({ track }: { track: Track }) {
 }
 
 // ── NOTES tab — private session notes ──────────────────────────────────────
-function NotesPanel({ track, position, activeNote, onNoteClick }: {
-  track: Track; position: number; activeNote: string | null; onNoteClick: (n: TrackNote) => void;
+function NotesPanel({ track, activeNote, onNoteClick }: {
+  track: Track; activeNote: string | null; onNoteClick: (n: TrackNote) => void;
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -529,11 +529,9 @@ function NotesPanel({ track, position, activeNote, onNoteClick }: {
           </button>
         );
       })}
-      <div style={{ marginTop: 6, padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
-        <span style={{ width: 24, height: 24, borderRadius: 6, background: 'rgba(0,229,176,0.1)', border: '1px solid rgba(0,229,176,0.32)', color: 'var(--cyan)', display: 'grid', placeItems: 'center', fontSize: 12 }}>+</span>
-        <input placeholder="Note this moment…" style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 11.5, fontFamily: 'inherit' }} />
-        <span className="mono" style={{ fontSize: 9.5, color: 'var(--cyan)' }}>@ {fmtTime(position)}</span>
-      </div>
+      {/* Story 12.5: the "Note this moment" input is GONE — notes are
+          read-only today (no create-note endpoint); a dead input teaches
+          users to stop typing. Restore alongside a real notes-write API. */}
     </div>
   );
 }
@@ -803,7 +801,7 @@ export function RightRail({ mode, access, cap, rs, track, position, activeNote, 
         {active === 'people' && <PeoplePanel myStatus={myStatus} onReact={onReact} cap={cap} roomControl={roomControl} onGrant={onGrant} />}
         {active === 'chat' && <ChatPanel feed={feed} onReact={onReact} />}
         {active === 'stats' && <StatsPanel track={track} />}
-        {active === 'notes' && <NotesPanel track={track} position={position} activeNote={activeNote} onNoteClick={onNoteClick} />}
+        {active === 'notes' && <NotesPanel track={track} activeNote={activeNote} onNoteClick={onNoteClick} />}
       </div>
     </div>
   );

@@ -11,12 +11,16 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   /** Optional default genre hint inherited from the current song. */
   defaultGenre?: string;
+  /** Story 12.5: fires after a successful upload so context-aware openers
+   *  (the report page) can explain the next step — a library reference does
+   *  NOT retroactively attach to an existing analysis. */
+  onUploaded?: (title: string) => void;
 }
 
 /** Upload a commercial reference track for comparison. Mirrors
  *  UploadVersionDialog's UX but POSTs to /references/ and kicks off analysis
  *  on success so the new reference is immediately usable on the Compare page. */
-export function ReferenceUploadDialog({ open, onOpenChange, defaultGenre }: Props) {
+export function ReferenceUploadDialog({ open, onOpenChange, defaultGenre, onUploaded }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState('');
   const [artist, setArtist] = useState('');
@@ -46,6 +50,7 @@ export function ReferenceUploadDialog({ open, onOpenChange, defaultGenre }: Prop
       // Fire-and-forget analysis — once the reference-analyzer actor lands,
       // metrics will populate; until then this just flips `analyzed=true`.
       analyze.mutate(created.id);
+      onUploaded?.(created.title);
       onOpenChange(false);
       reset();
     } catch (err) {

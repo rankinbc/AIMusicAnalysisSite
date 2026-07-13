@@ -7,6 +7,7 @@ import {
   finalizeOrTrimOnAbort,
   resolveUnlockAction,
   trimEmptyPending,
+  unlockIntentToInputKey,
   type ChatTurn,
 } from '../coach-chat-helpers';
 
@@ -101,6 +102,15 @@ describe('finalizeOrTrimOnAbort (code-review P4)', () => {
     expect(last.finalized).toBe(true);
     expect(last.text).toContain('partial answer');
     expect(last.text).toMatch(/stopped/i);
+  });
+});
+
+describe('unlockIntentToInputKey (story 12.5 chip routing)', () => {
+  it('routes add_stems to the stems dialog key', () => {
+    expect(unlockIntentToInputKey('add_stems')).toBe('stems');
+  });
+  it('routes add_reference to the reference dialog key', () => {
+    expect(unlockIntentToInputKey('add_reference')).toBe('reference');
   });
 });
 

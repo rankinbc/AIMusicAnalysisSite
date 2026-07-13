@@ -92,15 +92,9 @@ function AppLayout() {
           <Link to="/reports" className={s.navTab} data-active={isReportActive}>
             Report
           </Link>
-          <button
-            type="button"
-            className={s.navTab}
-            data-active={false}
-            disabled
-            title="Open a track from your library to start listening"
-          >
-            Listen
-          </button>
+          {/* Story 12.5: the permanently-disabled Listen tab is GONE — Listen
+              is per-version (library Play button / report "Open in Listen");
+              a tooltip-only disabled tab read as broken. */}
           <Link to="/library" className={s.navTab} data-active={isLibraryActive}>
             Library
           </Link>
@@ -111,14 +105,9 @@ function AppLayout() {
         </nav>
 
         <div className={s.navRight}>
-          <div className={s.navSearch}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <circle cx="5" cy="5" r="3.5" stroke="currentColor" strokeWidth="1.4" />
-              <path d="M8 8l3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-            </svg>
-            <input placeholder="Search your tracks, notes, fixes…" />
-            <span className={s.navSearchKbd}>⌘K</span>
-          </div>
+          {/* Story 12.5: the global search box + ⌘K badge is GONE — it had no
+              handlers and no backing search machinery. Rebuild it only when a
+              real command palette + search endpoint exist. */}
           {/* Story 12.2 — dev-only aggregated-health dot. The conditional
               render keeps the /health/full query unmounted in prod builds. */}
           {import.meta.env.DEV && <DevHealthDot />}

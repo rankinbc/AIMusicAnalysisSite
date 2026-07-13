@@ -22,10 +22,18 @@ export interface ChatTurn {
 
 export interface UnlockAction {
   label: string;
-  /** Stems flow doesn't ship until Phase E; for now the unlock chip is a
-   *  noop-button that toasts. When the stems route lands, swap to a real
-   *  navigation target. */
+  /** Story 12.5: chips are LIVE — `upgrade` navigates to /pricing;
+   *  `add_stems`/`add_reference` open the real upload dialogs via the
+   *  ReportView-owned onUnlockAction callback. */
   intent: 'add_stems' | 'add_reference' | 'upgrade';
+}
+
+/** Story 12.5: unlock intent → the SongHeader input key whose dialog serves
+ *  it. Pure mapping so the chip routing is unit-testable. */
+export function unlockIntentToInputKey(
+  intent: 'add_stems' | 'add_reference',
+): 'stems' | 'reference' {
+  return intent === 'add_reference' ? 'reference' : 'stems';
 }
 
 /** Resolve a refusal reason code → optional unlock action. Returns null
