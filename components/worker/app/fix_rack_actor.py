@@ -55,6 +55,11 @@ def generate_fix_rack(analysis_id: str) -> None:
         flattened.setdefault("track_id", str(aid))
         result = solve(evaluate_problems(flattened), flattened)
         chain = result["chain"]
+        # Story 12.6 (deferred-work): result also carries change_log +
+        # leftover_advice — the solver's coaching layer. Persisting/serving
+        # them (rack_presets column + DTO + panel UI) is a scoped follow-on;
+        # until then they are intentionally dropped here (leftover count is
+        # logged below).
     except Exception:
         logger.exception("fix rack: compute failed for analysis %s; skipping", aid)
         return

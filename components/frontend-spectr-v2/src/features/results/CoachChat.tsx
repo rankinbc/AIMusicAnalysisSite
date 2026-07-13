@@ -67,7 +67,7 @@ interface CoachChatProps {
    *  contributes to the grounding scope line ({n} measurements). */
   measurementsCount: number;
   /** Optional actions rendered top-right of the coach card (redesign: the
-   *  Specialist Team + Generate Coach Mix buttons live here). */
+   *  Specialist Team + Generate Fix Rack buttons live here). */
   headerActions?: React.ReactNode;
   /** Story 12.5: unlock chips open the REAL upload dialogs (owner: ReportView).
    *  Optional so bare mounts stay valid; without it the chip routes to the

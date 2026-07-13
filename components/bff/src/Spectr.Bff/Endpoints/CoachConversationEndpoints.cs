@@ -221,6 +221,10 @@ public static class CoachConversationEndpoints
             assistantRow.Status = "error";
             assistantRow.Content = "The coach hit a transient error. Please try again.";
             assistantRow.CompletedAt = DateTimeOffset.UtcNow;
+            // Story 12.6 review: a turn the queue never even received must not
+            // bill the user — stamp the user row so the cap excludes it (same
+            // marker the worker writes on refusals/errors).
+            userRow.RefusalReason = "coach_error";
             await db.SaveChangesAsync(ct);
             return ErrorEnvelope.Build(
                 StatusCodes.Status503ServiceUnavailable,

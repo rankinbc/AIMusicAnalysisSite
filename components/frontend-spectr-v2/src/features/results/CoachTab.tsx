@@ -181,8 +181,8 @@ export function CoachTab({
               {coachMixState === 'generating'
                 ? 'Compiling…'
                 : coachMixState === 'ready'
-                  ? '↻ Regenerate Coach Mix'
-                  : '▣ Generate Coach Mix'}
+                  ? '↻ Regenerate Fix Rack'
+                  : '▣ Generate Fix Rack'}
             </button>
           </>
         }

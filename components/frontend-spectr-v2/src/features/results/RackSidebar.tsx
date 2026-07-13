@@ -11,7 +11,7 @@ interface RackSidebarProps {
   onOpenFix: (move: Move) => void;
   onAudition: () => void;
   coachMixState: 'idle' | 'generating' | 'ready';
-  /** Open the compiled Coach Mix in a modal. */
+  /** Open the compiled Fix Rack in a modal. */
   onOpenCoachMix: () => void;
   /** Open the Game Plan (.md export) modal. */
   onOpenGamePlan: () => void;
@@ -25,7 +25,7 @@ const SEV_VAR: Record<MoveSev, string> = {
 };
 
 // The persistent right rail (prototype `.side`): the fixes queued for Listen, a
-// compact Coach Mix entry (opens the rack in a modal), and the Game Plan card.
+// compact Fix Rack entry (opens the rack in a modal), and the Game Plan card.
 export function RackSidebar({
   versionId,
   moves,
@@ -54,7 +54,7 @@ export function RackSidebar({
                 ▣
               </span>
               <div className="cm-b">
-                <div className="cm-t">Coach Mix</div>
+                <div className="cm-t">Fix Rack</div>
                 <div className="cm-s">
                   calculated rack · {committed.length} {committed.length === 1 ? 'fix' : 'fixes'} solved
                 </div>
@@ -69,7 +69,7 @@ export function RackSidebar({
                 <i />
                 <i />
               </span>{' '}
-              Compiling Coach Mix…
+              Compiling Fix Rack…
             </div>
           )}
 
