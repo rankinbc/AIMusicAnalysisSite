@@ -1,6 +1,6 @@
 # Story 12.5: Dead-UI Sweep & Honest Empty States
 
-Status: review
+Status: done
 
 ## Story
 
