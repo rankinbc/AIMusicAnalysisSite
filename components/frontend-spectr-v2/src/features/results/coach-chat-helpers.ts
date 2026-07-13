@@ -22,9 +22,9 @@ export interface ChatTurn {
 
 export interface UnlockAction {
   label: string;
-  /** Stems flow doesn't ship until Phase E; for now the unlock chip is a
-   *  noop-button that toasts. When the stems route lands, swap to a real
-   *  navigation target. */
+  /** Story 12.5: chips are LIVE — `upgrade` navigates to /pricing;
+   *  `add_stems`/`add_reference` open the real upload dialogs via the
+   *  ReportView-owned onUnlockAction callback. */
   intent: 'add_stems' | 'add_reference' | 'upgrade';
 }
 

@@ -27,6 +27,9 @@ import {
   type Phase8Data,
   type Phase9Data,
 } from '../../api/types';
+import { AlsUploadDialog } from '../../components/AlsUploadDialog';
+import { ReferenceUploadDialog } from '../../components/ReferenceUploadDialog';
+import { StemsUploadDialog } from '../../components/StemsUploadDialog';
 import { AnalysisCompleteModal } from './AnalysisCompleteModal';
 import { CoachTab } from './CoachTab';
 import { CoachMixModal } from './CoachMixModal';
@@ -232,11 +235,29 @@ export function ReportView({ results, songId, tab, onTabChange }: ReportViewProp
   }, [versionId, reanalyze, navigate, songId]);
   const handleReanalyze = dispatchReanalyze;
 
-  const onAddInputs = useCallback(() => {
-    toast('Add stems, your .als, or a reference from the song page to deepen the analysis.', {
-      icon: '＋',
-    });
-  }, []);
+  // Story 12.5: the add-input chips (and the coach unlock chips) open the REAL
+  // upload dialogs — no more "go to the song page" toast.
+  const [stemsDialogOpen, setStemsDialogOpen] = useState(false);
+  const [alsDialogOpen, setAlsDialogOpen] = useState(false);
+  const [referenceDialogOpen, setReferenceDialogOpen] = useState(false);
+  const onAddInputs = useCallback((key?: keyof SongHeaderInputs) => {
+    if (key === 'reference') { setReferenceDialogOpen(true); return; }
+    if (key === 'als') {
+      if (versionId) setAlsDialogOpen(true);
+      else toast.error('No version attached — cannot upload a project.');
+      return;
+    }
+    if (key === 'mix') {
+      // A new mix is a new VERSION — that flow lives on the song page.
+      void navigate({ to: '/songs/$songId', params: { songId } });
+      return;
+    }
+    if (versionId) setStemsDialogOpen(true);
+    else toast.error('No version attached — cannot upload stems.');
+  }, [versionId, songId, navigate]);
+  const onUnlockAction = useCallback((intent: 'add_stems' | 'add_reference') => {
+    onAddInputs(intent === 'add_reference' ? 'reference' : 'stems');
+  }, [onAddInputs]);
 
   return (
     <div className={`${s.report} rdx`} data-testid="report-view">
@@ -286,6 +307,7 @@ export function ReportView({ results, songId, tab, onTabChange }: ReportViewProp
                 committedIds={committedIds}
                 onToggleCommit={toggleCommit}
                 onAddInputs={onAddInputs}
+                onUnlockAction={onUnlockAction}
                 onGenerateCoachMix={generateCoachMix}
                 coachMixState={coachMixState}
                 credits={null}
@@ -299,9 +321,11 @@ export function ReportView({ results, songId, tab, onTabChange }: ReportViewProp
               />
             )}
             {tab === 'project' && alsProject && <ProjectTab project={alsProject} phase8={phase8} />}
-            {tab === 'project' && !alsProject && <ProjectUnlock />}
+            {tab === 'project' && !alsProject && (
+              <ProjectUnlock {...(versionId ? { onUploadAls: () => setAlsDialogOpen(true) } : {})} />
+            )}
             {tab === 'reference' && (
-              <ReferenceTab genre={phase2?.genre} score={fj.overall_score} phase6={phase6} />
+              <ReferenceTab genre={phase2?.genre} phase6={phase6} />
             )}
             {tab === 'trackinfo' && (
               <TrackInfoTab
@@ -314,7 +338,9 @@ export function ReportView({ results, songId, tab, onTabChange }: ReportViewProp
                 waveformUrl={results.waveformImageUrl}
               />
             )}
-            {tab === 'debug' && <DebugTab phases={fj.phases} rawJson={results.finalJson} />}
+            {tab === 'debug' && import.meta.env.DEV && (
+              <DebugTab phases={fj.phases} rawJson={results.finalJson} />
+            )}
           </div>
         </main>
 
@@ -330,6 +356,24 @@ export function ReportView({ results, songId, tab, onTabChange }: ReportViewProp
           onOpenGamePlan={() => setExportOpen(true)}
         />
       </div>
+
+      {versionId && (
+        <StemsUploadDialog
+          open={stemsDialogOpen}
+          onOpenChange={setStemsDialogOpen}
+          versionId={versionId}
+          songId={songId}
+        />
+      )}
+      {versionId && (
+        <AlsUploadDialog
+          open={alsDialogOpen}
+          onOpenChange={setAlsDialogOpen}
+          versionId={versionId}
+          songId={songId}
+        />
+      )}
+      <ReferenceUploadDialog open={referenceDialogOpen} onOpenChange={setReferenceDialogOpen} />
 
       {fixModalMove && (
         <FixModal

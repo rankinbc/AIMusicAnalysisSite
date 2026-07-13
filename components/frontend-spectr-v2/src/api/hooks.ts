@@ -42,7 +42,6 @@ import type {
   PatchVersionRequest,
   AlsUploadResponse,
   ReanalyzeResponse,
-  RerunPhaseResponse,
   StemUploadResponse,
   StemProposalsResponse,
   ConfirmStemsRequest,
@@ -528,18 +527,11 @@ export function useJobResults(jobId: string, enabled: boolean) {
   });
 }
 
-/** Re-run a single analysis phase (2–8) in place. Returns the lightweight re-run
- *  job id; poll it with `useJob` and invalidate `['jobs', jobId, 'results']` on
- *  completion to refresh the report. */
-export function useRerunPhase(jobId: string) {
-  return useMutation({
-    mutationFn: (phase: number) =>
-      fetcher<RerunPhaseResponse>({
-        url: `/reports/${jobId}/phases/${phase}/rerun`,
-        method: 'POST',
-      }),
-  });
-}
+// Story 12.5: useRerunPhase was removed with its only consumer (the orphaned
+// AnalysisTab — never mounted by ReportView, so the per-phase re-run UI was
+// already unreachable). The BFF endpoint POST /reports/{jobId}/phases/{phase}/rerun
+// and the rerun_phase worker actor REMAIN — re-home the UI when a live surface
+// wants it (poll the returned job, then invalidate ['jobs', jobId, 'results']).
 
 export type { UploadResponse };
 

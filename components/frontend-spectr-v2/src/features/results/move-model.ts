@@ -86,8 +86,7 @@ export interface ImpactBand {
   tone: string;
 }
 
-/** Map a 0..100 priority/impact score to a display band. Thresholds match the
- *  roster's VerdictCard so the two surfaces read consistently. */
+/** Map a 0..100 priority/impact score to a display band. */
 export function impactBand(impact: number): ImpactBand {
   if (impact >= 75) return { label: 'HIGH IMPACT', glyph: '↑↑', tone: 'var(--orange)' };
   if (impact >= 45) return { label: 'MED IMPACT', glyph: '↑', tone: 'var(--yellow)' };

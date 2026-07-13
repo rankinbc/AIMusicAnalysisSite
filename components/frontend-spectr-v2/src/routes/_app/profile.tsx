@@ -396,9 +396,9 @@ function SettingRow({
       <span className={`${s.settingValue} ${muted ? s.settingValueMuted : ''}`.trim()}>
         {value}
       </span>
-      <button type="button" className="btn ghost sm" disabled>
-        Edit
-      </button>
+      {/* Story 12.5: the permanently-disabled Edit button is GONE — no
+          email-change flow exists (would need re-verification); a dead
+          button reads as broken. Read-only row until that flow ships. */}
     </div>
   );
 }

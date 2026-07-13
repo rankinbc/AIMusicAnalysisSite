@@ -22,7 +22,9 @@ interface SongHeaderProps {
   inputs: SongHeaderInputs;
   findingCount: number;
   suggestionCount: number;
-  onAddInputs: () => void;
+  /** Story 12.5: the clicked chip's input key — the parent opens the matching
+   *  real upload dialog (stems/.als/reference). Undefined = generic add. */
+  onAddInputs: (key?: keyof SongHeaderInputs) => void;
 }
 
 const INPUT_DEFS: { key: keyof SongHeaderInputs; label: string; add: string }[] = [
@@ -73,7 +75,7 @@ export function SongHeader({
                 );
               }
               return (
-                <button key={key} type="button" className="chip add" onClick={onAddInputs}>
+                <button key={key} type="button" className="chip add" onClick={() => onAddInputs(key)}>
                   <span className="pl">+</span> Add {add}
                 </button>
               );

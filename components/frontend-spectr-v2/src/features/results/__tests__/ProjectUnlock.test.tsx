@@ -11,4 +11,16 @@ describe('ProjectUnlock', () => {
     expect(html).toContain('.als'); // the invitation names the asset
     expect(html.toLowerCase()).not.toContain('no ableton project was uploaded'); // not the old placeholder
   });
+
+  // Story 12.5 (AC4): instruction-with-no-button is over — a real CTA opens
+  // the AlsUploadDialog when the parent provides the opener.
+  it('renders the Upload .als CTA when the opener is provided', () => {
+    const html = renderToStaticMarkup(<ProjectUnlock onUploadAls={() => {}} />);
+    expect(html).toContain('Upload .als');
+  });
+
+  it('renders no dead button when no opener exists (no version attached)', () => {
+    const html = renderToStaticMarkup(<ProjectUnlock />);
+    expect(html).not.toContain('<button');
+  });
 });

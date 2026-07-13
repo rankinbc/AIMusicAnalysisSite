@@ -23,6 +23,8 @@ interface CoachTabProps {
   committedIds: ReadonlySet<string>;
   onToggleCommit: (move: Move) => void;
   onAddInputs: () => void;
+  /** Story 12.5: unlock chips open the REAL upload dialogs (owned by ReportView). */
+  onUnlockAction?: (intent: 'add_stems' | 'add_reference') => void;
   onGenerateCoachMix: () => void;
   coachMixState: 'idle' | 'generating' | 'ready';
   credits: number | null;
@@ -39,6 +41,7 @@ export function CoachTab({
   committedIds,
   onToggleCommit,
   onAddInputs,
+  onUnlockAction,
   onGenerateCoachMix,
   coachMixState,
   credits,
@@ -159,6 +162,7 @@ export function CoachTab({
         analysisId={analysisId}
         verdicts={verdicts}
         measurementsCount={measurementsCount}
+        {...(onUnlockAction ? { onUnlockAction } : {})}
         headerActions={
           <>
             <button type="button" className="spec-btn" onClick={() => setSpecOpen(true)}>

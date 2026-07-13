@@ -55,7 +55,8 @@ export function ResultsTabs({
       : []),
     ...(hasReference ? [{ id: 'reference' as const, label: 'Reference', icon: '◎' }] : []),
     { id: 'trackinfo', label: 'Track Info', icon: '▦' },
-    { id: 'debug', label: 'Debug', icon: '⟂' },
+    // Story 12.5: raw pipeline I/O is a developer surface — dev builds only.
+    ...(import.meta.env.DEV ? [{ id: 'debug' as const, label: 'Debug', icon: '⟂' }] : []),
   ];
 
   return (
