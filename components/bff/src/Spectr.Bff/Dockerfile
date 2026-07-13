@@ -1,4 +1,7 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+# Distro-pinned (2026-07-13): the bare :10.0 tags moved to AzureLinux (tdnf,
+# no apt-get) and broke this file's apt-get/adduser steps with exit 127.
+# noble = Ubuntu 24.04, apt-based, matches the original Debian-style layout.
+FROM mcr.microsoft.com/dotnet/sdk:10.0-noble AS build
 WORKDIR /src
 COPY ["src/Spectr.Bff/Spectr.Bff.csproj", "src/Spectr.Bff/"]
 COPY ["src/Spectr.Data/Spectr.Data.csproj", "src/Spectr.Data/"]
@@ -9,7 +12,7 @@ COPY . .
 WORKDIR /src/src/Spectr.Bff
 RUN dotnet publish -c Release -o /app /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble
 WORKDIR /app
 COPY --from=build /app .
 EXPOSE 5000
