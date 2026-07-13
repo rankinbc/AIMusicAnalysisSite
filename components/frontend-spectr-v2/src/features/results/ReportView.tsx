@@ -41,6 +41,7 @@ import { RackSidebar } from './RackSidebar';
 import { ReferenceTab } from './ReferenceTab';
 import { TrackInfoTab } from './TrackInfoTab';
 import { DebugTab } from './DebugTab';
+import { unlockIntentToInputKey } from './coach-chat-helpers';
 import { buildMoves, moveToMarkdown, type Move } from './move-model';
 import { ResultsTabs, type ResultsTabKey } from './ResultsTabs';
 import { FindingsTab } from './FindingsTab';
@@ -58,7 +59,11 @@ interface ReportViewProps {
   onTabChange: (tab: ResultsTabKey) => void;
 }
 
-export function ReportView({ results, songId, tab, onTabChange }: ReportViewProps) {
+export function ReportView({ results, songId, tab: rawTab, onTabChange }: ReportViewProps) {
+  // Story 12.5 review: 'debug' stays a valid deep-link KEY (dev builds), but a
+  // prod user hitting ?tab=debug must not land on a blank pane with no tab
+  // highlighted — coerce to the default tab outside DEV.
+  const tab = rawTab === 'debug' && !import.meta.env.DEV ? 'coach' : rawTab;
   const fj: FinalJson = isFinalJson(results.finalJson) ? results.finalJson : {};
   const phase1 = pickPhaseData<Phase1Data>(fj, 1);
   const phase2 = pickPhaseData<Phase2Data>(fj, 2);
@@ -252,11 +257,13 @@ export function ReportView({ results, songId, tab, onTabChange }: ReportViewProp
       void navigate({ to: '/songs/$songId', params: { songId } });
       return;
     }
+    // key === 'stems' or undefined (generic "add files" affordances): stems is
+    // the most common depth gap — a DELIBERATE default, not a fall-through.
     if (versionId) setStemsDialogOpen(true);
     else toast.error('No version attached — cannot upload stems.');
   }, [versionId, songId, navigate]);
   const onUnlockAction = useCallback((intent: 'add_stems' | 'add_reference') => {
-    onAddInputs(intent === 'add_reference' ? 'reference' : 'stems');
+    onAddInputs(unlockIntentToInputKey(intent));
   }, [onAddInputs]);
 
   return (
@@ -373,7 +380,16 @@ export function ReportView({ results, songId, tab, onTabChange }: ReportViewProp
           songId={songId}
         />
       )}
-      <ReferenceUploadDialog open={referenceDialogOpen} onOpenChange={setReferenceDialogOpen} />
+      <ReferenceUploadDialog
+        open={referenceDialogOpen}
+        onOpenChange={setReferenceDialogOpen}
+        {...(phase2?.genre ? { defaultGenre: phase2.genre } : {})}
+        onUploaded={(title) =>
+          // Honest next step (story 12.5 review): a library reference does NOT
+          // retroactively attach to THIS analysis — comparison needs a re-run.
+          toast.info(`“${title}” is in your reference library — re-analyze this version to compare against it.`)
+        }
+      />
 
       {fixModalMove && (
         <FixModal

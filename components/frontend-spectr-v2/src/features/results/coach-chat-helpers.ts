@@ -28,6 +28,14 @@ export interface UnlockAction {
   intent: 'add_stems' | 'add_reference' | 'upgrade';
 }
 
+/** Story 12.5: unlock intent → the SongHeader input key whose dialog serves
+ *  it. Pure mapping so the chip routing is unit-testable. */
+export function unlockIntentToInputKey(
+  intent: 'add_stems' | 'add_reference',
+): 'stems' | 'reference' {
+  return intent === 'add_reference' ? 'reference' : 'stems';
+}
+
 /** Resolve a refusal reason code → optional unlock action. Returns null
  *  when the refusal does not map to an actionable unlock (e.g. out-of-scope
  *  refusals just acknowledge and stop). */

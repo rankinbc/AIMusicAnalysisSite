@@ -2,7 +2,6 @@
 // these once the BFF emits openapi.json against a live database.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { capture } from '../lib/analytics';
 import { fetcher } from './fetcher';
 import type {
   ActivityItemDto,
@@ -18,7 +17,6 @@ import type {
   CreateSongRequest,
   CreateTagRequest,
   EntitlementsDto,
-  FeedbackKind,
   FullHealthResponse,
   HonestMathDto,
   JobResultsDto,
@@ -604,15 +602,6 @@ export function useFixRack(jobId: string, enabled: boolean) {
   });
 }
 
-export function useDismissVerdict(jobId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (verdictId: string) =>
-      fetcher<void>({ url: `/verdicts/${verdictId}/dismiss`, method: 'POST' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['verdicts', jobId] }),
-  });
-}
-
 export function useApplyVerdict(jobId: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -622,21 +611,10 @@ export function useApplyVerdict(jobId: string) {
   });
 }
 
-export function useFeedbackVerdict(jobId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ verdictId, feedback }: { verdictId: string; feedback: FeedbackKind }) =>
-      fetcher<void>({
-        url: `/verdicts/${verdictId}/feedback`,
-        method: 'POST',
-        data: { feedback },
-      }),
-    onSuccess: (_d, vars) => {
-      capture('verdict_feedback', { feedback: vars.feedback }); // KPI: helpful/wrong
-      void qc.invalidateQueries({ queryKey: ['verdicts', jobId] });
-    },
-  });
-}
+// Story 12.5 review sweep: useDismissVerdict/useFeedbackVerdict removed with
+// their only consumer (the orphaned VerdictsPanel). The BFF endpoints
+// POST /verdicts/{id}/{dismiss,applied,feedback} REMAIN — re-home the UI when
+// a live surface wants dismiss/feedback again.
 
 // ── References ──────────────────────────────────────────────────────────────
 export function useReferences() {

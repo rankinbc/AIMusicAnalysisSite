@@ -78,9 +78,13 @@ test('first-run: register → upload → report → listen', async ({ page }) =>
   }).toPass({ timeout: 90_000 });
 
   // 3b. Story 12.5 dead-UI guard: the unwired global search box and the
-  //     permanently-disabled Listen nav tab are GONE from the shell.
+  //     permanently-disabled Listen nav tab are GONE from the shell — while
+  //     the LIVE nav tabs remain (guards against over-deletion too).
   await expect(page.getByPlaceholder(/Search your tracks/)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Listen', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Report', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Library', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Feed', exact: true })).toBeVisible();
   await expect(page.getByText('Your library starts here')).toBeVisible();
 
   // 4. Two-dialog flow: + New song → name → Create song → upload dialog.

@@ -525,6 +525,8 @@ export interface ReanalyzeResponse {
 
 // POST /api/reports/{jobId}/phases/{phase}/rerun — id of the lightweight re-run
 // job to poll; the re-run updates the existing report in place.
+// NOTE (story 12.5): no frontend consumer today — kept as the BFF-contract
+// mirror for the surviving endpoint (see the useRerunPhase tombstone in hooks.ts).
 export interface RerunPhaseResponse {
   jobId: string;
 }

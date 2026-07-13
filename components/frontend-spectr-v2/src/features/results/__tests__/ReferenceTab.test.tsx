@@ -35,7 +35,7 @@ describe('ReferenceTab percentile honesty', () => {
     // score*0.95 (or a hardcoded 60). Neither may appear now.
     expect(html).toContain('available for this analysis');
     expect(html).not.toContain('rv-ring');
-    expect(html).not.toContain('top ');
+    expect(html).not.toContain('rv-num'); // no headline percentile figure (per-gap rows keep theirs)
   });
 
   it('handles no phase6 at all without fabricating', () => {

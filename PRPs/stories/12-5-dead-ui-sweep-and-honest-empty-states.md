@@ -144,6 +144,20 @@ Claude Fable 5 (claude-fable-5), dev-story workflow, 2026-07-13.
 - PRPs/sprint-status.yaml (status flips)
 - PRPs/stories/12-5-dead-ui-sweep-and-honest-empty-states.md (this file)
 
+## Senior Review Record (bmad-code-review, 2026-07-13)
+
+Three-layer adversarial review of `master..story/12-5-dead-ui-sweep` (PR #43). Auditor: AC1–AC8 Met, AC9 Partial (one contradictory clause). Patches applied on the story branch:
+
+- **P1 (both hunters, High)**: prod `?tab=debug` deep-link rendered a BLANK pane with no highlighted tab (`'debug'` stays a valid key by design). ReportView now coerces `debug` → `coach` outside DEV.
+- **P2 (High — task-integrity)**: the promised DEV-false tab test now exists — tab assembly extracted to pure `buildResultsTabs(opts, isDev)` + `results-tabs-build.test.ts` (Debug absent when `isDev=false`).
+- **P3 (Blind Hunter M2 — the sweep was one level shallow)**: second-tier orphans confirmed by grep (0 importers each) and DELETED: `GenreScorePanel` (carried the same fabricated genre-median sin), `StereoCard`, `StreamingReadiness`, `TranslationCard`, `SongMap` (+test), `CoachFilters`, `DegradationBanner` (+`degradationCopy.ts`+test), `SpecialistTile` — plus dead hooks `useDismissVerdict`/`useFeedbackVerdict` (only consumer was the deleted VerdictsPanel; BFF endpoints remain, tombstone comment in hooks.ts). NOTE: TrackInfoTab has its own LOCAL StereoCard/TranslationCard functions — unaffected.
+- **P4 (Edge Case Hunter, Med — honest-affordance)**: the report's "+ Add reference" opens a LIBRARY upload that does NOT retroactively attach to this analysis — `ReferenceUploadDialog` gains `onUploaded`; the report passes a callback toasting "re-analyze this version to compare against it" (+ `defaultGenre` from phase2). Without this the story re-created the exact dead-affordance pattern it removes.
+- **P5**: generic `onAddInputs()` → stems documented as a DELIBERATE default; `DepthBanner` no longer passes its MouseEvent as the key param.
+- **P6 (Auditor F1)**: CLAUDE.md's contradictory re-run clause ("UI exposes Re-run on …") deleted — the bullet now consistently says no live re-run UI exists.
+- **P7 (Auditor F3/F5 + hunter)**: `unlockIntentToInputKey` extracted + unit-tested (chip routing); orphaned `.navSearch`/`.navSearchKbd` CSS deleted from `_appLayout.module.css`; smoke also asserts the LIVE nav tabs remain (Report/Library/Feed); brittle `'top '` assert replaced with `rv-num` absence; dead ring math moved behind the null check; `RerunPhaseResponse` annotated as BFF-contract mirror; README's stale component roster + `/listen/$versionId` refs corrected (found by review — README was outside the original AC9 scope).
+- **Accepted (documented)**: ProjectUnlock CTA reachable only via `?tab=project` deep-link (pre-existing Project-tab gating — the .als path is ALSO reachable via SongHeader's chip, which this story wired); shell coverage via Playwright not jsdom (router-coupled shell); `upgrade → window.location.assign('/pricing')` untested (window navigation in jsdom).
+- **Corrected accounting**: 3 deleted test FILES held 10 tests (not 8); with the second-tier sweep the deleted-test total is 12 (10 + SongMap 1 + degradation-banner 1); new tests: 3 ReferenceTab + 2 ProjectUnlock + 3 buildResultsTabs + 2 unlockIntent = 10.
+
 ## Change Log
 
 - 2026-07-13: Story created (create-story workflow) — full per-item wire-vs-remove inventory with verified importers; audit's NotImplemented.cs claim corrected (live caller exists).

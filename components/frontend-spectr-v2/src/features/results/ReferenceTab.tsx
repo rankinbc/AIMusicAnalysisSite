@@ -54,7 +54,7 @@ export function ReferenceTab({ genre: phase2Genre, phase6 }: ReferenceTabProps) 
   const stroke = 7;
   const r = (ringSize - stroke) / 2;
   const c = 2 * Math.PI * r;
-  const off = c - ((percentile ?? 0) / 100) * c;
+  const off = percentile != null ? c - (percentile / 100) * c : c;
 
   return (
     <div>
