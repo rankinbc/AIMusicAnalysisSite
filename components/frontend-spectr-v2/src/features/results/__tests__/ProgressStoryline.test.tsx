@@ -115,8 +115,11 @@ describe('ProgressStorylineView', () => {
     const html = renderToStaticMarkup(
       <ProgressStorylineView {...base} currentPhase="Arrangement" phasePct={0.9} />,
     );
-    expect(html.match(/Arrangement Advice/g)).toHaveLength(1);
-    expect(html).not.toContain('>Arrangement<');
+    // Scope the duplicate-row check to the phase list — the 12.8 "How
+    // analysis works" explainer below it legitimately repeats phase names.
+    const phaseList = html.slice(0, html.indexOf('</ol>'));
+    expect(phaseList.match(/Arrangement Advice/g)).toHaveLength(1);
+    expect(phaseList).not.toContain('>Arrangement<');
     expect(html.match(/aria-current="step"/g)).toHaveLength(1);
   });
 

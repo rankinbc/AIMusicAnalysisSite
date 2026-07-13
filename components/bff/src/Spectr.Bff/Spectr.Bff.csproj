@@ -37,4 +37,11 @@
     <PackageReference Include="prometheus-net.AspNetCore" Version="8.2.1" />
     <PackageReference Include="Sentry.AspNetCore" Version="5.0.1" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Story 12.8: the demo seed report — kept at its schemas/ home, linked
+         into output so DemoSeeder can read it at runtime. -->
+    <Content Include="..\..\..\..\schemas\samples\sample1_8aeef3b4.json"
+             Link="DemoAssets\demo-final-json.json"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

@@ -9,6 +9,8 @@ import {
 } from '@tanstack/react-router';
 
 import { useAuth } from '../auth/AuthContext';
+import { getLastTraceId } from '../api/fetcher';
+import { buildProblemReportMailto, jobIdFromPath, SUPPORT_EMAIL } from '../lib/report-problem';
 import { useEntitlements } from '../api/hooks';
 import { AppDunningNotice } from '../features/billing/AppDunningNotice';
 import { AppWorkerHealthNotice } from '../features/health/AppWorkerHealthNotice';
@@ -176,6 +178,23 @@ function AppLayout() {
                 >
                   Billing
                 </Link>
+                {/* Story 12.8 (AC2): prefilled problem report — page URL,
+                    jobId when on a results route, last 500 traceId if any. */}
+                <button
+                  type="button"
+                  className={s.avatarMenuItem}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    window.location.href = buildProblemReportMailto({
+                      email: SUPPORT_EMAIL,
+                      url: window.location.href,
+                      jobId: jobIdFromPath(window.location.pathname),
+                      traceId: getLastTraceId(),
+                    });
+                  }}
+                >
+                  Report a problem
+                </button>
                 <div className={s.avatarMenuDivider} />
                 <button type="button" className={s.avatarMenuItem} onClick={handleLogout}>
                   Sign out

@@ -20,10 +20,26 @@ let onTokenRefreshedCallback: ((token: string) => void) | null = null;
 
 export function setAccessToken(token: string | null): void {
   accessToken = token;
+  // Session boundary (logout / auth clear): a stale traceId must not leak
+  // into another user's problem report.
+  if (token === null) lastTraceId = null;
 }
 
 export function getAccessToken(): string | null {
   return accessToken;
+}
+
+// Story 12.8: most recent internal_error traceId (500 envelope) — the only
+// server correlation handle the client ever sees; consumed by the
+// "Report a problem" prefill.
+// Expires after 30 min so an old error from hours ago isn't attached to an
+// unrelated report.
+const TRACE_ID_TTL_MS = 30 * 60 * 1000;
+let lastTraceId: string | null = null;
+let lastTraceIdAt = 0;
+export function getLastTraceId(): string | null {
+  if (lastTraceId && Date.now() - lastTraceIdAt > TRACE_ID_TTL_MS) lastTraceId = null;
+  return lastTraceId;
 }
 
 export function onAuthCleared(cb: (() => void) | null): void {
@@ -130,6 +146,14 @@ export async function fetcher<T>(config: FetcherConfig): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => undefined);
+    // Story 12.8: stash the unhandled-500 traceId so "Report a problem" can
+    // prefill it — the only correlation handle the client ever receives.
+    const traceId = (body as { error?: { details?: { traceId?: string } } } | undefined)
+      ?.error?.details?.traceId;
+    if (traceId) {
+      lastTraceId = traceId;
+      lastTraceIdAt = Date.now();
+    }
     // Story 12.1 (AC2) — prefer the AR38 envelope's human message so callers
     // that toast `err.message` show the server's wording, not "HTTP 403".
     throw new ApiError(res.status, body, extractApiError(body).message);

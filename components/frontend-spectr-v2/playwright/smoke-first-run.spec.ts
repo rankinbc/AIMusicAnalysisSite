@@ -85,7 +85,10 @@ test('first-run: register → upload → report → listen', async ({ page }) =>
   await expect(page.getByRole('link', { name: 'Report', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Library', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Feed', exact: true })).toBeVisible();
-  await expect(page.getByText('Your library starts here')).toBeVisible();
+
+  // 3c. Story 12.8: a fresh library is no longer empty — the seeded demo
+  //     report replaces the 'starts here' zero state as the first-run view.
+  await expect(page.getByText('Demo: Sample Report')).toBeVisible();
 
   // 4. Two-dialog flow: + New song → name → Create song → upload dialog.
   await page.getByRole('button', { name: /\+ New song/ }).first().click();

@@ -131,6 +131,7 @@ public static class AuthEndpoints
         JwtTokenService jwt,
         RefreshTokenService refresh,
         HandleSeeder seeder,
+        DemoSeeder demoSeeder,
         AuthTokenService authTokens,
         IEmailSender email,
         IConfiguration cfg,
@@ -255,6 +256,14 @@ public static class AuthEndpoints
         // cookie must not be re-sent for 30 days.
         if (hasDeviceCookie)
             DeviceService.ClearCookie(resp);
+
+        // Story 12.8 (AC1) — first-run demo report, BEST-EFFORT: a clearly
+        // labeled sample report so the new library has something to explore
+        // before the user's first analysis. Never fails registration
+        // (DemoSeeder swallows internally; same contract as the claim above).
+        // CancellationToken.None: the user exists — a client disconnect must
+        // not leave a permanently demo-less account (no re-seed path exists).
+        await demoSeeder.SeedAsync(user.Id, CancellationToken.None);
 
         var (rawRefresh, _) = await refresh.IssueAsync(user.Id, ct);
         resp.Cookies.Append(RefreshTokenService.CookieName, rawRefresh, refresh.CookieOptions());

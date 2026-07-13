@@ -5,7 +5,7 @@ A music producer web app where users register/log in, upload audio files (MP3, F
 **v2 stack (current — primary):**
 - **`bff/`** — ASP.NET Core .NET 10 minimal-API BFF (EF Core 10, Npgsql, PyJWT-style JWT bearer, IFileStorage, dramatiq job queue dispatcher)
 - **`frontend-spectr-v2/`** — React 19 + Vite 6 + TypeScript strict + TanStack Router + TanStack Query + CSS Modules + Radix UI + WaveSurfer + Recharts + Sonner. CSS Modules + `tokens.css`. No Tailwind, no shadcn.
-- **`worker/`** — Python dramatiq worker (replaces Celery). Actors: `analyze_audio_job` (7-phase pipeline), `run_specialist` (on-demand AI verdict)
+- **`worker/`** — Python dramatiq worker (replaces Celery). Actors: `analyze_audio_job` (7-phase pipeline — 8 with .als), `run_specialist` (on-demand AI verdict)
 - **`shared/`** — `aimusic-shared` Python package: single-source SQLAlchemy ORM models for the worker (BFF has parallel EF Core entities that mirror this)
 - **`analysis/`** — `audio_analysis` Python package (7-phase pipeline, installable)
 
@@ -72,12 +72,13 @@ AIMusicAnalysisSite/
 
 **Purpose**: ASP.NET Core .NET 10 minimal-API gateway. Owns auth (JWT bearer + refresh-token httpOnly cookie), songs/versions CRUD, audio upload (multipart, ≤250 MB), audio streaming for the Listen page (Range-enabled), analysis job dispatch via dramatiq, results retrieval, verdict listing + per-specialist on-demand `/run/{slug}` dispatch.
 **Inputs**: PostgreSQL (EF Core 10 + Npgsql) + Redis (dramatiq broker) + `IFileStorage` (LocalDisk dev / R2 prod)
-**Outputs**: HTTP/JSON to the frontend; dramatiq messages on the `default` queue
+**Outputs**: HTTP/JSON to the frontend; dramatiq messages tier-routed onto `analysis-free`/`analysis-paid` (+ `coach`, `maintenance`) — there is NO `default` queue (story 2.5)
 **How to run**: `cd components/bff/src/Spectr.Bff && dotnet run` (listens on `http://localhost:5000`)
 
 **Key routes (v2):**
 - Auth: `POST /api/auth/{login,register,refresh,logout}`, `GET /api/auth/me`
-- Songs/versions: `GET/POST /api/songs`, `GET/POST/DELETE /api/versions/{id}` (chunked multipart upload)
+- Songs: `GET/POST /api/songs`, `GET/PATCH/DELETE /api/songs/{id}` (+ `/permanent`, `/restore`, `/tags`)
+- Versions: `POST /api/versions` (chunked multipart upload), `GET/PATCH/DELETE /api/versions/{id}`, plus per-version sub-resources: `/analyze`, `/set-current`, `/notes` CRUD, `/rating`, `/als` (upload + download), `/reference`, `/files`, and the stems flow `/stems/{stage,classify,confirm}` + `GET /stems` + `GET /stems/{stemId}/audio` (see VersionEndpoints.cs for the full surface)
 - Audio: `GET /api/versions/{id}/audio` — streams the original upload with `Accept-Ranges: bytes`. Accepts JWT via `Authorization` header OR `?t=<jwt>` query param (since `<audio>` / `EventSource` can't attach headers — whitelisted to paths matching `/audio`).
 - Jobs/results: `GET /api/jobs/{id}`, `GET /api/jobs/{id}/results`
 - Verdicts: `GET /api/reports/{job_id}/verdicts` (list + routing plan), `POST /api/reports/{job_id}/verdicts/run/{slug}` (on-demand specialist), `POST /api/verdicts/{id}/{dismiss,applied}`, `POST /api/verdicts/{id}/feedback`
@@ -95,7 +96,7 @@ AIMusicAnalysisSite/
 
 ### frontend-spectr-v2 (NEW — PRIMARY frontend)
 
-**Purpose**: React 19 + Vite 6 + TypeScript strict SPA. Auth, library (grid card view + filter pills + VersionArc per song), song detail (cover hero + ProgressTimeline + VersionList + CompareDialog version-delta), results page (SongHeader with add-input chips + ResultsTabs: AI Coach (CoachChat + Specialist roster + Coach Mix) / Findings / Project (or ProjectUnlock with .als upload CTA) / Reference / Track Info / Debug (dev builds only)), Listen rack page (`features/listen-rack/` — rack + visuals + rail; the Web Audio DSP engine `useAudioGraph` still lives in `features/listen/`).
+**Purpose**: React 19 + Vite 6 + TypeScript strict SPA. Auth, library (grid card view + filter pills + VersionArc per song), song detail (cover hero + ProgressTimeline + VersionList + CompareDialog version-delta), results page (SongHeader with add-input chips + ResultsTabs: AI Coach (CoachChat + Specialist roster + Fix Rack) / Findings / Project (or ProjectUnlock with .als upload CTA) / Reference / Track Info / Debug (dev builds only)), Listen rack page (`features/listen-rack/` — rack + visuals + rail; the Web Audio DSP engine `useAudioGraph` still lives in `features/listen/`).
 **Inputs**: BFF `/api/*` REST + a couple of SSE endpoints
 **Outputs**: browser
 **How to run**: `cd components/frontend-spectr-v2 && npm run dev` (Vite dev server on port 5174, proxies `/api/*` to BFF on `:5000`)
@@ -170,7 +171,7 @@ AIMusicAnalysisSite/
 
 ### analysis (analysis.md)
 
-**Purpose**: Installable Python package (`pip install -e components/analysis`) containing all 7-phase audio analysis pipeline. Exposes `run_pipeline(file_path, reference_path=None, progress_cb=None)`. Copied and adapted from the existing AbletonAIAnalysis codebase.
+**Purpose**: Installable Python package (`pip install -e components/analysis`) containing the full analysis pipeline (7 base phases; 8 with an .als project). Exposes `run_pipeline(file_path, reference_path=None, progress_cb=None)`. Copied and adapted from the existing AbletonAIAnalysis codebase.
 **Inputs**: `data/uploads/` (audio files), `data/reference_library/` (curated reference tracks), `data/models/` (ML model weights)
 **Outputs**: structured dict returned by `run_pipeline()`; per-job JSON written to `output/analysis_results/`
 **How to run**: `pip install -e components/analysis` then `python -c "from audio_analysis import run_pipeline; print(run_pipeline('path/to/track.wav'))"`
@@ -195,8 +196,8 @@ AIMusicAnalysisSite/
 
 ### worker (automation.md — NOW DRAMATIQ)
 
-**Purpose**: Dramatiq worker. Pulls actor invocations from a Redis `default` queue, runs them, writes results to Postgres. Two actors:
-- `analyze_audio_job(job_id)` — drives the 7-phase pipeline via `audio_analysis.run_pipeline()`, writes `analyses` row, flips `analysis_jobs.status` to `complete` / `failed`. Partial-failure tolerant (per-phase try/except).
+**Purpose**: Dramatiq worker. Pulls actor invocations from four Redis queues (`coach`, `analysis-paid`, `analysis-free`, `maintenance` — see Queue topology below), runs them, writes results to Postgres. Core actors (the full roster also includes run_triage, run_reference_analyzer, classify_stems, rerun_phase, structure detection, sweep_retention, send_email, coach_reply, generate_fix_rack, delete_account_data):
+- `analyze_audio_job(job_id)` — drives the analysis pipeline (7 base phases, 8 with .als) via `audio_analysis.run_pipeline()`, writes `analyses` row, flips `analysis_jobs.status` to `complete` / `failed`. Partial-failure tolerant (per-phase try/except).
 - `run_specialist(analysis_id, specialist_slug, focus)` — on-demand AI verdict generation. Wraps the Anthropic `claude` CLI via subprocess (gated by `asyncio.Semaphore(1)`; CLI is not concurrency-safe). Validates verdict JSON via Pydantic + the moderate-baseline severity downgrade in `aimusic_shared.verdicts.scoring`.
 
 **Inputs**: `analysis_jobs.version_id → song_versions.file_path` resolved against `$STORAGE_LOCAL_ROOT` (defaults to repo `data/`); specialist prompts at `components/worker/prompts/experts/*.md`.
@@ -212,7 +213,7 @@ AIMusicAnalysisSite/
 - **Demucs pre-loaded at worker startup**, not per-task. Model reference survives across actor invocations.
 - **concurrency=1 always**: Demucs is memory-heavy. `--processes 1 --threads 1` for dramatiq.
 - **Two-pass Problem engine (`verdict_lib/rule_engine.py`) — LIVE on the degraded/free path**: a deterministic IDENTIFY-tier engine emitting Problem records (Verdicts with `fix=None`). `degraded.run_rule_engine_for_analysis` calls `evaluate_problems` (validated + persisted with the Problem columns); the legacy flat `@rule`/`evaluate_rules` path is kept only as an importable alias for residual callers (retirement is a follow-on). New rules register via `@single` (Tier-A/B/S/P, one metric → one Problem) + `@composite` (Tier-C, corroborated multi-metric); `evaluate_problems` runs singles → composites → `suppression.apply` (each composite absorbs its child singles, with a `related_verdict_ids` audit trail). Thresholds are **genre-relative**, resolved from `verdict_lib/config/genre-profiles.json` via `genre_config` (same measured value → different severity per genre; `rule-bindings.json` maps rule→profile path + `genre_map`). Rules carry a `data_tier` (audio_only / stems / project_midi) and **never grade absent data** (guard inputs → `None`); `suspected=True` flags placeholder thresholds pending a measured spectral corpus (`config/genre-ref-values.md` is the provenance). **Persistence**: 8 IDENTIFY columns (`problem_id`/`kind`/`source`/`data_tier`/`fixable`/`suspected`/`where`/`refines`) on the `verdicts` table — EF `Verdict.cs` (canonical) → `aimusic_shared.models.Verdict` mirror → both worker mappers (`degraded._to_row`, `verdict_actor._persist_verdict`) → `VerdictDto`. The idempotency guard keys on `source == "rule_engine"` (NOT exact `specialist`, now `rule_engine.<slug>`). **Runs on every completed analysis** — `tasks_dramatiq.analyze_audio_job` Phase C2 calls `run_rule_engine_for_analysis(analysis_id)` after the `analyses` row commits (idempotent + best-effort: a failure never undoes the analysis), so it's no longer degraded-only. Remaining follow-on: retire the legacy `@rule` list. Plans: `PRPs/problem-engine-mixcoach-rules.md` + `PRPs/problem-engine-reconcile-persist.md`.
-- **Queue topology (AR23 / D4 — shipped in story 2.5)**: four queues, **no `default`**. Prod runs two pools (process separation is the FR34 starvation guarantee, NOT intra-worker priority — `--queues` is an unordered set): **W1 `worker-paid`** consumes `coach analysis-paid`; **W2 `worker-free`** consumes `analysis-free maintenance`. Dev = one worker consuming all four (`docker/docker-compose.prod.yml` is the prod overlay). `analyze_audio_job` is **tier-routed by the BFF** (`DispatchAnalysisAsync`: pro/credits → `analysis-paid`, free/anon → `analysis-free`) but **declares `analysis-free`** because it is the sole declarer of that queue (a Dramatiq consumer only attaches to a *declared* queue; dispatch is by `actor_name` so the one actor is consumed from both lanes — do NOT change its decorator to `analysis-paid` or every free job is orphaned). The 5 auxiliary actors (`run_triage`, `run_specialist`, `run_reference_analyzer`, `classify_stems`, `rerun_phase`) are on `analysis-paid`. `maintenance` is provisioned-but-empty (declared in `dramatiq_app.py`) until Epic 3/4 add `sweep_retention`/`send_email`. An enforcement test (`tests/test_actor_queues.py`) asserts no actor and no BFF enqueue site targets `default`.
+- **Queue topology (AR23 / D4 — shipped in story 2.5)**: four queues, **no `default`**. Prod runs two pools (process separation is the FR34 starvation guarantee, NOT intra-worker priority — `--queues` is an unordered set): **W1 `worker-paid`** consumes `coach analysis-paid`; **W2 `worker-free`** consumes `analysis-free maintenance`. Dev = one worker consuming all four (`docker/docker-compose.prod.yml` is the prod overlay). `analyze_audio_job` is **tier-routed by the BFF** (`DispatchAnalysisAsync`: pro/credits → `analysis-paid`, free/anon → `analysis-free`) but **declares `analysis-free`** because it is the sole declarer of that queue (a Dramatiq consumer only attaches to a *declared* queue; dispatch is by `actor_name` so the one actor is consumed from both lanes — do NOT change its decorator to `analysis-paid` or every free job is orphaned). The 5 auxiliary actors (`run_triage`, `run_specialist`, `run_reference_analyzer`, `classify_stems`, `rerun_phase`) are on `analysis-paid`. `maintenance` carries the housekeeping actors: `sweep_retention` (story 3.4), `send_email` (story 4.2), `delete_account_data`. An enforcement test (`tests/test_actor_queues.py`) asserts no actor and no BFF enqueue site targets `default`.
 
 ### shared (aimusic-shared)
 

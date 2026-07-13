@@ -41,7 +41,7 @@ def _collect_storage_keys(s, uid) -> list[str]:
         "SELECT v.file_path, v.reference_path, v.als_file_path, v.stem_paths, v.stem_paths_raw "
         "FROM song_versions v JOIN songs sg ON sg.id = v.song_id WHERE sg.user_id = :uid"
     ), {"uid": uid}).all()
-    from .retention_actor import _as_json  # shared coercion helpers
+    from .retention_actor import SHARED_STORAGE_KEYS, _as_json  # shared helpers
 
     for r in rows:
         for k in (r.file_path, r.reference_path, r.als_file_path):
@@ -75,7 +75,10 @@ def _collect_storage_keys(s, uid) -> list[str]:
     keys.extend(r.file_path for r in refs)
 
     seen: set[str] = set()
-    return [k for k in keys if not (k in seen or seen.add(k))]
+    # Story 12.8: never collect shared objects (the demo tone) — deleting one
+    # user must not break every other account's demo playback.
+    return [k for k in keys if k not in SHARED_STORAGE_KEYS
+            and not (k in seen or seen.add(k))]
 
 
 # Deepest-first. Version-scoped FK cascades (song_tags, rack_*, share_settings,

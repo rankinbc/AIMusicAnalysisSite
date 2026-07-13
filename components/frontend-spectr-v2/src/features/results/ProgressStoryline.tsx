@@ -35,6 +35,21 @@ const PHASE_ALIASES: Record<string, string> = {
   Arrangement: 'Arrangement Advice',
 };
 
+// Story 12.8 (AC3): one-line explainer per phase. Typed against BASE_PHASES so
+// a phase rename breaks the build here instead of silently orphaning its copy.
+const PHASE_EXPLAINERS: Record<(typeof BASE_PHASES)[number], string> = {
+  'Universal Mix Analysis':
+    'loudness, true peak, key, tempo and the measurements every genre shares.',
+  'Genre Detection': 'which genre profile your track is judged against.',
+  'Genre-Specific Scoring':
+    "the measured values scored against that genre's reference ranges.",
+  'Stem Separation & Clash': 'where instruments fight for the same frequencies.',
+  'Reference Comparison':
+    'your mix against a reference track when one is attached.',
+  'Gap Analysis': 'the biggest measurable distances from the genre profile.',
+  'Arrangement Advice': 'energy and structure over the timeline.',
+};
+
 // Soft "taking longer than usual" thresholds — deliberately constants, not
 // config: they only tune a hint, and a wrong value is a copy nit, not a bug.
 const SLOW_ELAPSED_MS = 10 * 60 * 1000; // any status, 10 min total
@@ -162,7 +177,19 @@ export function ProgressStorylineView({
         </p>
       )}
 
-      {/* Story 12-8 (AC3) will add the "How analysis works" link here. */}
+      {/* Story 12.8 (AC3): the 7 phases in one line each — inline expandable,
+          copy keyed to the BASE_PHASES display names. */}
+      <details className={s.howItWorks} data-testid="how-analysis-works">
+        <summary>How analysis works</summary>
+        <ol>
+          {BASE_PHASES.map((name) => (
+            <li key={name}>
+              <b>{name}</b> — {PHASE_EXPLAINERS[name]}
+            </li>
+          ))}
+        </ol>
+        <p>Attach your Ableton project (.als) and an 8th phase names the exact project tracks to fix.</p>
+      </details>
     </div>
   );
 }
