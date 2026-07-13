@@ -1,6 +1,6 @@
 # Story 12.6: Coach Mix Truthfulness & Coach Chat Polish
 
-Status: review
+Status: done
 
 ## Story
 
