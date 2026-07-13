@@ -38,10 +38,11 @@
     <PackageReference Include="Sentry.AspNetCore" Version="5.0.1" />
   </ItemGroup>
   <ItemGroup>
-    <!-- Story 12.8: the demo seed report — kept at its schemas/ home, linked
-         into output so DemoSeeder can read it at runtime. -->
-    <Content Include="..\..\..\..\schemas\samples\sample1_8aeef3b4.json"
-             Link="DemoAssets\demo-final-json.json"
+    <!-- Story 12.8: the demo seed report read by DemoSeeder at runtime.
+         Committed copy of schemas/samples/sample1_8aeef3b4.json (source of
+         truth) — a repo-root link breaks the Docker build, whose context is
+         components/bff only. The fixture is frozen; re-copy if it ever moves. -->
+    <Content Update="DemoAssets\demo-final-json.json"
              CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
