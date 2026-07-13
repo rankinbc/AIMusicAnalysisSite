@@ -10,7 +10,7 @@ interface CoachMixModalProps {
   onClose: () => void;
 }
 
-// The compiled Coach Mix shown full-width in a modal (the sidebar only carries a
+// The compiled Fix Rack (né "Coach Mix" — relabeled, story 12.6) shown full-width in a modal (the sidebar only carries a
 // compact entry — the rack needs room). Reuses FixRackPanel for the actual rack.
 export function CoachMixModal({
   jobId,
@@ -29,11 +29,11 @@ export function CoachMixModal({
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label="Coach Mix"
+        aria-label="Fix Rack"
       >
         <div className="modal-hd">
           <div className="mt">
-            <div className="mk">Coach Mix · calculated rack</div>
+            <div className="mk">Fix Rack · calculated rack</div>
             <div className="mn">{trackName}</div>
           </div>
           <button type="button" className="modal-x" onClick={onClose} aria-label="Close">

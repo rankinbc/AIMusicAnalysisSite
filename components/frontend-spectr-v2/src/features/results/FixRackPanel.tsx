@@ -9,8 +9,9 @@ import s from './FixRackPanel.module.css';
 // Phase 2 "act on them": committed fixable Moves -> a mastering chain you hear in
 // Listen. POST /reports/{jobId}/fix-rack (202) -> poll GET (204 -> 200 FixRackDto).
 // The chain is byte-identical to the Listen rack's, so "Open in Listen rack" hands
-// it straight over. The change_log / leftover_advice coaching layer is solver-
-// computed but not wired yet — the panel holds its place with a placeholder.
+// it straight over. The solver's change_log / leftover_advice
+// coaching layer is computed but not persisted/served — wiring it end-to-end
+// is a deferred follow-on (story 12.6 decision).
 
 interface Props {
   jobId: string;
@@ -19,7 +20,7 @@ interface Props {
   committedCount: number;
   /** Controlled mode (redesign): when provided, the panel reflects this
    *  generation flag and delegates the trigger to `onGenerate` — so the coach
-   *  header's "Generate Coach Mix" button and this sidebar panel share one
+   *  header's "Generate Fix Rack" button and this sidebar panel share one
    *  flow. Omit both for the original self-contained behavior. */
   requested?: boolean;
   onGenerate?: () => void;
@@ -130,16 +131,10 @@ export function FixRackPanel({ jobId, versionId, committedCount, requested, onGe
           ))}
         </div>
 
-        <div className={s.coach}>
-          <span className={s.coachIc}>✦</span>
-          <div>
-            <div className={s.coachTitle}>Why these settings · what’s left <span className={s.soon}>soon</span></div>
-            <div className={s.sub}>
-              The solver computes a note per module and the problems a master rack can’t fix. That coaching
-              layer isn’t wired to the page yet — this panel is holding its place.
-            </div>
-          </div>
-        </div>
+        {/* Story 12.6: the "Why these settings · soon" placeholder is GONE —
+            the solver's change_log/leftover_advice are computed but not
+            persisted/served yet; wiring them is a scoped follow-on. No
+            promises on the page until then. */}
       </div>
     );
   }

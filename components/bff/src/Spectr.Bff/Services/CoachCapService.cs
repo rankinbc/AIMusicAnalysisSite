@@ -65,10 +65,16 @@ public sealed class CoachCapService(AppDbContext db, EntitlementService ents)
             .Where(c => c.AnalysisId == analysisId && c.UserId == userId)
             .Select(c => (Guid?)c.Id)
             .FirstOrDefaultAsync(ct);
+        // Story 12.6: refused turns don't count. The worker stamps the USER
+        // row's RefusalReason when its turn ends refused (sole terminalizer),
+        // and the cap read-side-excludes stamped rows — the invalid_file
+        // pattern (EntitlementService): no second write path, no decrement.
         var usedFree = conversationId is null
             ? 0
             : await db.CoachMessages.AsNoTracking()
-                .CountAsync(m => m.ConversationId == conversationId && m.Role == "user", ct);
+                .CountAsync(m => m.ConversationId == conversationId
+                    && m.Role == "user"
+                    && m.RefusalReason == null, ct);
         return new CoachCapState(
             Used: usedFree,
             Limit: freeLimit,
@@ -93,10 +99,15 @@ public sealed class CoachCapService(AppDbContext db, EntitlementService ents)
         CancellationToken ct)
     {
         var limit = GetFlag(flags, "coach_pro_monthly", CoachProMonthlyDefault);
+        // Story 12.6: exclude events whose turn ended refused — the event's
+        // Reference is the user message id, which the worker stamps with
+        // RefusalReason on refusal (read-side exclusion, invalid_file pattern).
         var used = await db.UsageEvents.AsNoTracking()
             .CountAsync(e => e.UserId == userId
                 && e.EventType == "coach_message"
-                && e.BillingPeriod == billingPeriod, ct);
+                && e.BillingPeriod == billingPeriod
+                && !db.CoachMessages.Any(m =>
+                    m.Id.ToString() == e.Reference && m.RefusalReason != null), ct);
         return new CoachCapState(
             Used: used,
             Limit: limit,

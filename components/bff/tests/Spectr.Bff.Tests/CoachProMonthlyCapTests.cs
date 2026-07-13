@@ -120,6 +120,54 @@ public sealed class CoachProMonthlyCapTests(WebApplicationFactory<Program> facto
         await db.SaveChangesAsync();
     }
 
+    // ── Story 12.6 (AC5): refused turns excluded from the pro pooled count ──
+    [SkippableFact]
+    public async Task Refused_Turn_UsageEvent_Excluded_From_Pro_Pool()
+    {
+        await TestDb.RequireAsync(_factory);
+        var (f, client) = NewClient();
+        var (userId, _) = await AuthAsync(client, "coachpro-refund");
+        await SeedProAsync(userId);
+        var analysisId = await SeedAnalysisAsync(userId);
+
+        // Two ordinary metered turns + ONE whose user row the worker stamped
+        // refused. The pool must count 2, not 3.
+        await SeedCoachUsageAsync(userId, 2);
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var conv = new Conversation { AnalysisId = analysisId, UserId = userId };
+            db.Conversations.Add(conv);
+            var refusedUserRow = new CoachMessage
+            {
+                ConversationId = conv.Id,
+                Role = "user",
+                Status = "complete",
+                Content = "unanswerable",
+                RefusalReason = "missing_data", // worker's story-12.6 stamp
+            };
+            db.CoachMessages.Add(refusedUserRow);
+            db.UsageEvents.Add(new UsageEvent
+            {
+                UserId = userId,
+                EventType = "coach_message",
+                BillingPeriod = DateTimeOffset.UtcNow.ToString("yyyy-MM"),
+                Reference = refusedUserRow.Id.ToString(),
+            });
+            await db.SaveChangesAsync();
+        }
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var ents = scope.ServiceProvider.GetRequiredService<EntitlementService>();
+            var flags = await ents.GetFlagsAsync(CancellationToken.None);
+            var state = await CoachCapService.ResolveProPoolAsync(
+                db, flags, userId, DateTimeOffset.UtcNow.ToString("yyyy-MM"), CancellationToken.None);
+            Assert.Equal(2, state.Used); // the refused turn is not billed
+        }
+    }
+
     // ── AC1: Pro chip is pooled-monthly (scope "month", ResetsAt set) ─────────
     [SkippableFact]
     public async Task ProUser_Conversation_Reports_MonthlyScope_With_ResetsAt()

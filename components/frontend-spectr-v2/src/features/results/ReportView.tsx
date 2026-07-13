@@ -151,7 +151,7 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
     void navigate({ to: '/listen-rack/$versionId', params: { versionId } });
   }, [navigate, versionId]);
 
-  // ── Coach Mix (fix rack) — generation flag is shared between the coach
+  // ── Fix Rack (né "Coach Mix", story 12.6) — generation flag is shared between the coach
   // header button and the sidebar panel. ──
   const qc = useQueryClient();
   const genFixRack = useGenerateFixRack(jobId);
@@ -168,7 +168,7 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
       ? 'generating'
       : 'idle';
 
-  // Coach Mix + Game Plan open in modals (the sidebar carries compact entries).
+  // Fix Rack + Game Plan open in modals (the sidebar carries compact entries).
   const committed = useMemo(() => moves.filter((m) => committedIds.has(m.id)), [moves, committedIds]);
   const [coachMixOpen, setCoachMixOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);

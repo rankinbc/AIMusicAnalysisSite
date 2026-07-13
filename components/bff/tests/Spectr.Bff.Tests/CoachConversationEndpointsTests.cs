@@ -33,7 +33,9 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
     // task name + args + queue without standing up a real Redis.
     private sealed class RecordingJobQueue : IJobQueue
     {
-        public readonly List<(string Task, object[] Args, string Queue)> Calls = new();
+        // Story 12.6: ConcurrentQueue — Concurrent_Posts_Converge fires 3
+        // parallel POSTs; a plain List<> tore/lost adds and flaked the count.
+        public readonly System.Collections.Concurrent.ConcurrentQueue<(string Task, object[] Args, string Queue)> Calls = new();
 
         public Task EnqueueAsync(string taskName, object[] args, CancellationToken ct = default)
             => EnqueueAsync(taskName, args, DramatiqQueues.Default, ct);
@@ -43,14 +45,14 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
             // Story 4.3: registration enqueues a verification send_email on
             // this interface — irrelevant to coach-dispatch assertions.
             if (taskName != DramatiqTasks.SendEmail)
-                Calls.Add((taskName, args, queueName));
+                Calls.Enqueue((taskName, args, queueName));
             return Task.CompletedTask;
         }
 
         public Task EnqueueDelayedAsync(string taskName, object[] args, string queueName, TimeSpan delay, CancellationToken ct = default)
         {
             if (taskName != DramatiqTasks.SendEmail)
-                Calls.Add((taskName, args, queueName));
+                Calls.Enqueue((taskName, args, queueName));
             return Task.CompletedTask;
         }
     }
@@ -170,7 +172,7 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
             // (conversation_id, user_message_id, assistant_message_id) so
             // the actor doesn't have to infer the user-question from the tail.
             Assert.Single(queue.Calls);
-            var call = queue.Calls[0];
+            var call = queue.Calls.Single();
             Assert.Equal(DramatiqTasks.CoachReply, call.Task);
             Assert.Equal(DramatiqQueues.Coach, call.Queue);
             Assert.Equal(3, call.Args.Length);
@@ -408,6 +410,61 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
                 .ToListAsync();
             Assert.Equal(6, msgs.Count);
             Assert.Equal(3, queue.Calls.Count);
+        }
+        finally
+        {
+            await CleanupUser(factory, userId);
+        }
+    }
+
+    // ── Story 12.6 (AC5): refused turns don't count against the free cap ────
+
+    [SkippableFact]
+    public async Task Refused_Turn_Does_Not_Count_Against_Free_Cap()
+    {
+        // The worker stamps the USER row's RefusalReason when its turn ends
+        // refused; the free-cap count read-side-excludes stamped rows — so a
+        // user whose question the coach couldn't answer gets that turn back.
+        await TestDb.RequireAsync(_factory);
+
+        var (factory, queue) = BuildWithFakeQueue();
+        var (client, userId, analysisId) = await SeedAuthedUserAndAnalysis(factory, "coach-refund");
+
+        try
+        {
+            for (var i = 1; i <= 3; i++)
+            {
+                var ok = await client.PostAsJsonAsync(
+                    $"/api/coach/{analysisId}/messages",
+                    new CreateCoachMessageRequest($"Q{i}"));
+                Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+            }
+
+            // Simulate the worker refusing turn 2: stamp its USER row (the
+            // worker isn't running under the fake queue).
+            using (var scope = factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var conv = await db.Conversations.SingleAsync(c => c.UserId == userId);
+                var secondUser = await db.CoachMessages
+                    .Where(m => m.ConversationId == conv.Id && m.Role == "user")
+                    .OrderBy(m => m.CreatedAt)
+                    .Skip(1).FirstAsync();
+                secondUser.RefusalReason = "missing_data";
+                await db.SaveChangesAsync();
+            }
+
+            // The cap has headroom again — the 4th POST succeeds and reports
+            // used=3 AFTER this send (2 counted priors + this one).
+            var resp = await client.PostAsJsonAsync(
+                $"/api/coach/{analysisId}/messages",
+                new CreateCoachMessageRequest("Q4 — the refused turn gave me this one back"));
+            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+            var body = await resp.Content.ReadFromJsonAsync<CreateCoachMessageResponse>();
+            Assert.NotNull(body);
+            Assert.Equal(3, body!.Caps.Used);
+            Assert.True(body.Caps.CapReached); // back at the limit
+            Assert.Equal(4, queue.Calls.Count);
         }
         finally
         {
