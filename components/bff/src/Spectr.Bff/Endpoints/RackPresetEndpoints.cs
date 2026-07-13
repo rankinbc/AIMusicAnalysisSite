@@ -22,6 +22,7 @@ public static class RackPresetEndpoints
         var rack = app.MapGroup("/versions/{versionId:guid}/rack")
             .WithTags("rack").RequireAuthorization();
         rack.MapGet("/presets", ListPresets);
+        rack.MapGet("/presets/{presetId:guid}", GetPreset);
         rack.MapPost("/presets", SavePreset);
         rack.MapDelete("/presets/{presetId:guid}", DeletePreset);
         rack.MapGet("/draft", GetDraft);
@@ -68,6 +69,22 @@ public static class RackPresetEndpoints
             .OrderByDescending(p => p.UpdatedAt)
             .ToListAsync(ct);
         return Results.Ok(rows.Select(ToDto).ToList());
+    }
+
+    // GET by id — story 12.4: ANY source (user/coach/analysis). This is the
+    // "own audition flow" the ListPresets comment reserves for generated rows:
+    // the fix-rack carry-over (?fixPreset=) fetches the analysis preset here.
+    // Ownership via the version join, same as every sibling.
+    private static async Task<IResult> GetPreset(
+        Guid versionId, Guid presetId, ClaimsPrincipal currentUser,
+        AppDbContext db, CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        if (!await OwnsVersion(db, versionId, userId, ct)) return Results.NotFound();
+
+        var row = await db.RackPresets.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == presetId && p.SongVersionId == versionId, ct);
+        return row is null ? Results.NotFound() : Results.Ok(ToDto(row));
     }
 
     private static async Task<IResult> SavePreset(

@@ -81,6 +81,19 @@ export function useRackPresets(versionId: string) {
   });
 }
 
+/** Story 12.4: fetch ONE preset by id — any source (user/coach/analysis).
+ *  The fix-rack carry-over (?fixPreset=) resolves its chain through this. */
+export function useRackPreset(versionId: string, presetId: string | undefined) {
+  return useQuery({
+    queryKey: [...presetsKey(versionId), presetId] as const,
+    queryFn: () =>
+      fetcher<RackPresetDto>({ url: `/versions/${versionId}/rack/presets/${presetId}`, method: 'GET' }),
+    enabled: Boolean(versionId && presetId),
+    staleTime: Infinity, // generated preset is immutable per id
+    retry: 1, // a bad/foreign id 404s — don't hammer
+  });
+}
+
 export function useSaveRackPreset(versionId: string) {
   const qc = useQueryClient();
   return useMutation({

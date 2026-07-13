@@ -46,7 +46,15 @@ export function FixRackPanel({ jobId, versionId, committedCount, requested, onGe
     gen.mutate();
   };
   const openInListen = () => {
-    if (versionId) void navigate({ to: '/listen-rack/$versionId', params: { versionId } });
+    if (!versionId) return;
+    // Story 12.4: carry the generated chain by preset id — the Listen page
+    // fetches it back and applies it once (see listen-rack route). A stale
+    // cached DTO without presetId still navigates (never block the button).
+    void navigate({
+      to: '/listen-rack/$versionId',
+      params: { versionId },
+      search: rack?.presetId ? { fixPreset: rack.presetId } : {},
+    });
   };
 
   // ── empty: nothing committed to apply ──

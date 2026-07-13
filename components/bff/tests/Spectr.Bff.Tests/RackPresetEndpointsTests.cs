@@ -181,6 +181,81 @@ public sealed class RackPresetEndpointsTests(WebApplicationFactory<Program> fact
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
+    // ── Story 12.4: GET preset by id — the fix-rack carry-over fetch ────────
+
+    [SkippableFact]
+    public async Task GetPreset_ById_Returns_Analysis_Source_Row()
+    {
+        await TestDb.RequireAsync(_factory);
+        var client = NewClient();
+        await Authenticate(client);
+        var versionId = await CreateVersion(client);
+
+        // Seed an ANALYSIS-source preset directly (the generator's row shape);
+        // ListPresets must keep hiding it, GET-by-id must serve it.
+        Guid presetId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var row = new Spectr.Data.Entities.RackPreset
+            {
+                Id = Guid.NewGuid(),
+                SongVersionId = versionId,
+                Name = "Coach fix rack",
+                Source = "analysis",
+                ChainJson = System.Text.Json.JsonSerializer.Serialize(SampleChain()),
+            };
+            db.RackPresets.Add(row);
+            await db.SaveChangesAsync();
+            presetId = row.Id;
+        }
+
+        var byId = await client.GetFromJsonAsync<RackPresetDto>(
+            $"/api/versions/{versionId}/rack/presets/{presetId}");
+        Assert.NotNull(byId);
+        Assert.Equal(presetId, byId!.Id);
+        Assert.Equal("analysis", byId.Source);
+        Assert.Equal("Coach fix rack", byId.Name);
+
+        // The personal library stays user-source-only (11-2 decision).
+        var list = await client.GetFromJsonAsync<List<RackPresetDto>>(
+            $"/api/versions/{versionId}/rack/presets");
+        Assert.DoesNotContain(list!, p => p.Id == presetId);
+    }
+
+    [SkippableFact]
+    public async Task GetPreset_ById_ForeignUser_Returns404()
+    {
+        await TestDb.RequireAsync(_factory);
+
+        var owner = NewClient();
+        await Authenticate(owner);
+        var versionId = await CreateVersion(owner);
+        var save = await owner.PostAsJsonAsync(
+            $"/api/versions/{versionId}/rack/presets",
+            new { name = "mine", chain = SampleChain() });
+        var dto = await save.Content.ReadFromJsonAsync<RackPresetDto>();
+
+        var attacker = NewClient();
+        await Authenticate(attacker);
+        var resp = await attacker.GetAsync(
+            $"/api/versions/{versionId}/rack/presets/{dto!.Id}");
+        Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+    }
+
+    [SkippableFact]
+    public async Task GetPreset_ById_UnknownId_Returns404()
+    {
+        await TestDb.RequireAsync(_factory);
+        var client = NewClient();
+        await Authenticate(client);
+        var versionId = await CreateVersion(client);
+
+        var resp = await client.GetAsync(
+            $"/api/versions/{versionId}/rack/presets/{Guid.NewGuid()}");
+        Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+    }
+
     private HttpClient NewClient() => _factory.CreateClient();
 
     private static async Task Authenticate(HttpClient client)

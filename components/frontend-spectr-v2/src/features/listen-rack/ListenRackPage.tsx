@@ -41,8 +41,11 @@ import type { Chain } from './chain';
 import type { ModuleState } from './data';
 import {
   asChain, buildExportEnvelope, parseImportEnvelope, useRackDraft, useRackDraftAutosave,
-  useRackPresets, useSaveRackPreset,
+  useRackPreset, useRackPresets, useSaveRackPreset,
 } from './useRackPresets';
+import { overlayChain } from './fixToRackPatch';
+import { writeAppliedIds } from './listenFixes';
+import { useNavigate } from '@tanstack/react-router';
 import type { RoomLiveSeam } from './useRoomOrchestration';
 import { asVizLook, useSaveVizPreset, useVizPresets } from './useVizPresetsServer';
 import { Transport } from './transport';
@@ -53,8 +56,12 @@ import { VizStage } from './viz';
 
 interface VizPreset { id: string; name: string; viz: VizState; stages: string[]; director: string }
 
-function TrackHeader({ track, mode, modes, identity, onModeChange }: {
+// Exported for the 12.4 chip render test (all-modes assertion).
+export function TrackHeader({ track, mode, modes, identity, onModeChange, fixesApplied, onResetFixes }: {
   track: Track; mode: ModeId; modes: ModeId[]; identity: Identity; onModeChange?: (m: ModeId) => void;
+  /** Story 12.4: carried-fix chip — renders in EVERY mode (this header is the
+   *  page's only all-modes surface). null = no carry active. */
+  fixesApplied?: number | null; onResetFixes?: () => void;
 }) {
   const t = track;
   const surface = MODE_SURFACE_MATRIX[mode];
@@ -66,6 +73,20 @@ function TrackHeader({ track, mode, modes, identity, onModeChange }: {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
           <span className="mono" style={{ fontSize: 9.5, color: 'var(--muted)', letterSpacing: '0.14em' }}>NOW PLAYING</span>
           <span className="dot" style={{ animation: 'pulseGlow 1.6s ease-in-out infinite' }} />
+          {fixesApplied != null && fixesApplied > 0 && (
+            <span className="pill cyan" data-testid="fixes-applied-chip">
+              Fixes applied: {fixesApplied}
+              {onResetFixes && (
+                <button
+                  type="button"
+                  onClick={onResetFixes}
+                  style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', font: 'inherit', padding: 0, marginLeft: 6, textDecoration: 'underline' }}
+                >
+                  reset
+                </button>
+              )}
+            </span>
+          )}
         </div>
         <h1 style={{ fontSize: 23, fontWeight: 800, letterSpacing: '-0.015em', margin: '0 0 3px' }}>{t.name}</h1>
         {t.author && (
@@ -153,9 +174,13 @@ export interface ListenRackPageProps {
   /** Story 11.5 — host-only "go live" affordance (undefined when not hostable
    *  or a session already runs). */
   onStartRoom?: (() => void) | undefined;
+  /** Story 12.4 — the fix-rack carry-over preset id (?fixPreset=). When set,
+   *  the page fetches that preset and overlays its chain onto the live rack
+   *  once (skipping the draft restore); the "Fixes applied" chip appears. */
+  fixPreset?: string;
 }
 
-export function ListenRackPage({ mode, modes, identity, access, roomControl, onModeChange, onGrant, versionId, track: trackProp, roomLive, onStartRoom }: ListenRackPageProps) {
+export function ListenRackPage({ mode, modes, identity, access, roomControl, onModeChange, onGrant, versionId, track: trackProp, roomLive, onStartRoom, fixPreset }: ListenRackPageProps) {
   const track = trackProp ?? TRACK;
   // ── Real-audio seam (Phase 1) ──
   // `versionId` present ⇒ real mode: mount <audio> + the page-agnostic audio
@@ -247,13 +272,30 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     return [{ id: d.id, name: d.name, viz: look.viz, stages: look.stages, director: look.director }];
   }), [vizPresetDtos]);
 
+  // ── Story 12.4: fix-rack carry-over (?fixPreset=) ──────────────────────────
+  // Read-only surfaces (View / Room guest) never receive a carried chain.
+  const carryAllowed = Boolean(
+    fixPreset && realAudio && !resolveCapabilities(mode, identity, roomControl, access).rackReadOnly,
+  );
+  const carriedPresetQuery = useRackPreset(
+    realAudio ? (versionId ?? '') : '', carryAllowed ? fixPreset : undefined);
+  // null = no carry active; number = modules the carried chain enabled.
+  const [fixesApplied, setFixesApplied] = useState<number | null>(null);
+  const carryAppliedRef = useRef(false); // one-shot per mount (refresh re-applies by design)
+  const navigate = useNavigate();
+
   // Autosaved draft: restore once when it resolves, then enable debounced autosave.
   // Gating autosave on `draftRestored` prevents a default-chain autosave from
   // clobbering the persisted draft before the GET returns.
-  const draftQuery = useRackDraft(realAudio ? (versionId ?? '') : '');
+  // Story 12.4: when a carried chain is inbound, SKIP the draft restore — the
+  // carry-over deterministically wins, and arming autosave persists it as the
+  // new draft once applied.
+  const draftQuery = useRackDraft(realAudio && !carryAllowed ? (versionId ?? '') : '');
   const [draftRestored, setDraftRestored] = useState(false);
   useEffect(() => {
-    if (draftRestored || !realAudio || !draftQuery.isFetched) return;
+    if (draftRestored || !realAudio) return;
+    if (carryAllowed) { setDraftRestored(true); return; }
+    if (!draftQuery.isFetched) return;
     const chain = draftQuery.data ? asChain(draftQuery.data.chain) : null;
     if (chain) {
       rsRef.current.recallPreset({
@@ -263,8 +305,38 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
       rsRef.current.setMasterBypass(chain.masterBypass);
     }
     setDraftRestored(true);
-  }, [draftRestored, realAudio, draftQuery.isFetched, draftQuery.data]);
+  }, [draftRestored, realAudio, carryAllowed, draftQuery.isFetched, draftQuery.data]);
   useRackDraftAutosave(versionId ?? '', currentChain, realAudio && draftRestored);
+
+  // Apply the carried chain ONCE when it resolves: overlay onto the live module
+  // map (manual knobs on untouched modules survive; pitch never written). React
+  // state is enough for "after the graph is ready" — live pushes no-op until
+  // ensureContext(), and the first-play togglePlay pushFullRack syncs from rsRef.
+  useEffect(() => {
+    if (carryAppliedRef.current || !carryAllowed) return;
+    const dto = carriedPresetQuery.data;
+    if (!dto) return; // still loading (404/error leaves the rack untouched)
+    const chain = asChain(dto.chain);
+    if (!chain) { carryAppliedRef.current = true; return; }
+    carryAppliedRef.current = true;
+    rsRef.current.applyRackMod(overlayChain(rsRef.current.mod, chain.modules));
+    rsRef.current.setMasterBypass(chain.masterBypass);
+    setFixesApplied(Object.values(chain.modules).filter((m) => m?.enabled).length);
+  }, [carryAllowed, carriedPresetQuery.data]);
+
+  // Chip reset: restore neutral rack, clear the URL param (so refresh doesn't
+  // re-apply), and clear any Plan-tab applied ids for this version.
+  const onResetCarriedFixes = useCallback(() => {
+    rsRef.current.reset();
+    if (versionId) writeAppliedIds(versionId, []);
+    setFixesApplied(null);
+    void navigate({
+      to: '/listen-rack/$versionId',
+      params: { versionId: versionId ?? '' },
+      search: {},
+      replace: true,
+    });
+  }, [versionId, navigate]);
 
   // Unified preset/look handlers — server on the real route, in-memory on mock.
   const onSaveRackPreset = useCallback(() => {
@@ -657,7 +729,9 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
           visualizer backdrop (VizStage background mode portals to <body> at
           z-index 0); the global top nav is z-index 50 and stays on top too. */}
       <div className="lr-page" style={{ position: 'relative', zIndex: 1 }}>
-        <TrackHeader track={track} mode={mode} modes={modes} identity={identity} {...(onModeChange ? { onModeChange } : {})} />
+        <TrackHeader track={track} mode={mode} modes={modes} identity={identity}
+          fixesApplied={fixesApplied} onResetFixes={onResetCarriedFixes}
+          {...(onModeChange ? { onModeChange } : {})} />
 
         {mode === 'room' && (roomLive || onStartRoom) && (
           <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '10px 0 2px', fontSize: 10.5 }}>
