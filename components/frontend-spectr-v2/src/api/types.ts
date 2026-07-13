@@ -1288,8 +1288,9 @@ export interface SpecialistStatus {
  *  GET /reports/{jobId}/fix-rack returns this once generated (204 until then). */
 export interface FixRackDto {
   /** Story 12.4: the persisted analysis RackPreset id — the Listen carry-over
-   *  handle passed as ?fixPreset= by "Open in Listen rack". */
-  presetId: string;
+   *  handle passed as ?fixPreset= by "Open in Listen rack". Optional because a
+   *  cached pre-12.4 DTO may lack it (the panel falls back to a plain navigate). */
+  presetId?: string;
   name: string;
   chain: unknown;
   createdAt: string;

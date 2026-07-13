@@ -159,6 +159,21 @@ Claude Fable 5 (claude-fable-5), dev-story workflow, 2026-07-13.
 - PRPs/sprint-status.yaml (status flips)
 - PRPs/stories/12-4-fix-rack-to-listen-carry-over.md (this file)
 
+## Senior Review Record (bmad-code-review, 2026-07-13)
+
+Three-layer adversarial review (Blind Hunter / Edge Case Hunter / Acceptance Auditor) of `master..story/12-4-fix-rack-carry-over` (PR #42). Auditor: AC1–AC5 Met, AC6 Partial (route wiring untested). Patches applied on the story branch:
+
+- **P1 (all 3 layers, HIGH — draft loss)**: autosave was armed the moment a carry was inbound, BEFORE the preset resolved — a slow/failed/malformed carry let the debounced autosave persist the DEFAULT chain over the user's saved draft. Reworked to a `carryPhase` state machine (`pending → applied|failed`): the draft machinery WAITS for settlement; a failed carry falls back to the normal draft restore (draft never sacrificed); failures surface a toast (no more silent consumption).
+- **P2 (HIGH — re-entry dead)**: the one-shot ref never reset, so back-nav restoring `?fixPreset` or re-clicking "Open in Listen rack" on the mounted route applied nothing. One-shot now keys on the preset id (`appliedPresetRef`) and re-arms when the param value changes. Carry eligibility is LATCHED at arrival (`carryArmedRef`) so a mid-flight mode switch / SSE rack-revoke can't strand the page with neither draft nor carry.
+- **P3 (MED — PlanPanel desync)**: chip reset wrote localStorage behind `useFixOverlay`'s back — mounted checkboxes stayed checked and the next toggle re-applied "reset" fixes from stale state. New `clearFixOverlay(versionId)` seam (window event) — the hook clears applied ids + baseline in lockstep.
+- **P4 (MED — overlay semantics)**: a compiled analysis chain enumerates EVERY module; spreading disabled entries wiped manual tweaks, making "overlay" vacuous. `overlayChain` now merges only ENABLED carried modules. Chip N counts enabled non-pitch modules (was: including pitch, which is never applied). An all-disabled/malformed chain now applies NOTHING (previously could silently masterBypass-mute the rack with no chip).
+- **P5 (MED)**: `composeRack` EQ slot allocation crashes/no-ops when a drifted live base lacks `eq.bands` — falls back to default slots.
+- **P6 (MED)**: stale applied-ids referencing now-`notApplicable` fixes no longer flow into recompute (`byId` excludes NA fixes).
+- **P7**: `FixRackDto.presetId` typed optional (the code's stale-cache guard now matches the type); foreign-user 404 BFF test re-seeded with the ANALYSIS-source row (the IDOR-relevant combination); reset preserves future search params (delete-key reducer, not `search: {}`); carryOver test cleanup + fake graph typed without `as never`; new `listenRackSearch.test.ts` covers the route's uuid narrowing (shrinks the AC6 wiring gap).
+- **Accepted (documented)**: carried `chain.order` intentionally NOT applied (overlay preserves live insert order; server-compiled order is a preset-recall concern); mid-overlay manual tweaks revert on final uncheck (baseline-restore semantics, strictly better than the pre-story defaults-wipe); mode-flip AFTER arrival honors the arrival-time carry decision; chip stays scoped to carried fixes (AC3 letter — plan-overlay chip is a follow-on polish); `useNavigate` in the page body (page is always router-mounted).
+
+Gates after patches: BFF full suite green (see below), vitest 754/754 (+6 review tests), tsc/lint clean, smoke re-run PASSED headless.
+
 ## Change Log
 
 - 2026-07-13: Story created (create-story workflow) — dual-scout code recon; carrier design settled on server-side preset id (analysis RackPreset already persisted, id just not surfaced).

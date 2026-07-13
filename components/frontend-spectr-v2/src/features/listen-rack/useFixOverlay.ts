@@ -11,7 +11,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { composeRack } from './fixToRackPatch';
-import { readAppliedIds, writeAppliedIds, type ListenFix } from './listenFixes';
+import {
+  FIX_OVERLAY_CLEAR_EVENT, readAppliedIds, writeAppliedIds, type ListenFix,
+} from './listenFixes';
 import type { ModuleState } from './data';
 import type { RackState } from './rackState';
 
@@ -40,7 +42,26 @@ export function useFixOverlay({ versionId, fixes, applyRackMod, getLiveMod }: Us
     setAppliedIds(restored);
   }, [versionId]);
 
-  const byId = useMemo(() => new Map(fixes.map((f) => [f.fixId, f])), [fixes]);
+  // Story 12.4 review: the page's chip reset clears the overlay through this
+  // event so a mounted PlanPanel's checkboxes + baseline reset in lockstep
+  // (the page already reset the rack — no applyRackMod here).
+  useEffect(() => {
+    const onClear = (e: Event) => {
+      const detail = (e as CustomEvent<{ versionId?: string }>).detail;
+      if (detail?.versionId !== versionId) return;
+      appliedRef.current = [];
+      baselineRef.current = null;
+      setAppliedIds([]);
+    };
+    window.addEventListener(FIX_OVERLAY_CLEAR_EVENT, onClear);
+    return () => window.removeEventListener(FIX_OVERLAY_CLEAR_EVENT, onClear);
+  }, [versionId]);
+
+  // notApplicable fixes are display-only rows — never resolvable into ops, so
+  // stale applied-ids pointing at them can't hold the baseline hostage.
+  const byId = useMemo(
+    () => new Map(fixes.filter((f) => f.notApplicable !== true).map((f) => [f.fixId, f])),
+    [fixes]);
 
   const recompute = useCallback((ids: string[]) => {
     const ops = ids.map((id) => byId.get(id)?.ops).filter((o): o is ListenFix['ops'] => Array.isArray(o));

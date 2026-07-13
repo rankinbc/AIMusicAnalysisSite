@@ -99,4 +99,28 @@ describe('overlayChain (story 12.4 carried-preset apply)', () => {
     const next = overlayChain(live, { pitch: { enabled: true } as unknown as ModuleState });
     expect(next.pitch).toEqual({ enabled: false });
   });
+
+  it('DISABLED carried modules never clobber live tweaks (full compiled chains enumerate everything)', () => {
+    const live = composeRack([]);
+    live.trim = { ...live.trim, enabled: true, gainDb: -6 }; // manual tweak
+    // A compiled analysis chain carries EVERY module; disabled ones at defaults.
+    const next = overlayChain(live, {
+      trim: { enabled: false, gainDb: 0 } as unknown as ModuleState,
+      limiter: { enabled: true, ceilingDb: -1 } as unknown as ModuleState,
+    });
+    expect(next.trim).toMatchObject({ enabled: true, gainDb: -6 }); // untouched
+    expect(next.limiter).toMatchObject({ enabled: true, ceilingDb: -1 });
+  });
+});
+
+describe('composeRack eq-band resilience (review)', () => {
+  it('falls back to default band slots when the live base lacks eq bands', () => {
+    const live = composeRack([]);
+    live.eq = { enabled: false, bands: [] } as unknown as ModuleState;
+    const r = composeRack(
+      [[{ type: 'peaking_eq', params: { frequency_hz: 300, gain_db: -2, q: 1 } }]], live);
+    const bands = r.eq.bands as EqBand[];
+    expect(r.eq.enabled).toBe(true);
+    expect(bands[0]).toMatchObject({ freq: 300, gainDb: -2 });
+  });
 });

@@ -19,17 +19,19 @@ import type { Identity } from '../identity';
 
 function fakeGraph(): RackGraphBindings & { params: Array<[string, unknown]> } {
   const params: Array<[string, unknown]> = [];
-  return {
+  const graph: RackGraphBindings & { params: Array<[string, unknown]> } = {
     params,
-    setEffectParams: vi.fn((id: string, patch: unknown) => { params.push([id, patch]); }) as never,
+    setEffectParams: (id, patch) => { params.push([id, patch]); },
     reorder: vi.fn(),
     setMasterBypass: vi.fn(),
     resetAll: vi.fn(),
-    readEffectMeter: vi.fn(() => null),
+    readEffectMeter: () => null,
   };
+  return graph;
 }
 
 describe('carry-over → rack state through the graph handle (AC6)', () => {
+  afterEach(cleanup);
   it('applies a carried chain via overlayChain + applyRackMod: state updates and the graph receives the push', () => {
     const graph = fakeGraph();
     const { result } = renderHook(() => useRackState(graph));

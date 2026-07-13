@@ -70,11 +70,13 @@ function freshDefaults(): Record<string, ModuleState> {
   return JSON.parse(JSON.stringify(MODULE_DEFAULTS)) as Record<string, ModuleState>;
 }
 
-/** Story 12.4: merge a carried full chain's modules onto the LIVE module map
- *  module-by-module — manual knob moves on modules the carried chain doesn't
- *  touch survive, and `pitch` is never written (separate BufferSource lane;
- *  clobbering it spuriously enters/exits pitch mode). Used by the ?fixPreset=
- *  carry-over apply on the Listen page. */
+/** Story 12.4: merge a carried chain's modules onto the LIVE module map.
+ *  Only modules the carried chain ENABLES are merged — a compiled analysis
+ *  chain enumerates every module (disabled ones at defaults), and spreading
+ *  those would wipe manual knob moves, making "overlay" a lie (review
+ *  finding). `pitch` is never written (separate BufferSource lane; clobbering
+ *  it spuriously enters/exits pitch mode). Used by the ?fixPreset= carry-over
+ *  apply on the Listen page. */
 export function overlayChain(
   live: Record<string, ModuleState>,
   carried: Partial<Record<string, ModuleState>>,
@@ -82,7 +84,9 @@ export function overlayChain(
   const next = JSON.parse(JSON.stringify(live)) as Record<string, ModuleState>;
   for (const id of Object.keys(carried)) {
     if (id === 'pitch') continue;
-    next[id] = { ...next[id], ...(carried[id] as ModuleState) };
+    const mod = carried[id];
+    if (!mod?.enabled) continue; // disabled entries must not clobber live tweaks
+    next[id] = { ...next[id], ...(mod as ModuleState) };
   }
   return next;
 }
@@ -115,7 +119,12 @@ export function composeRack(
   }
 
   if (collectedEq.length > 0) {
-    const bands = (base.eq.bands as EqBand[]).map((b) => ({ ...b }));
+    // A live base restored from a drifted server chain may lack eq/bands —
+    // fall back to the default 8 slots instead of throwing (review finding).
+    const baseBands = Array.isArray(base.eq?.bands) && (base.eq.bands as EqBand[]).length > 0
+      ? (base.eq.bands as EqBand[])
+      : (freshDefaults().eq.bands as EqBand[]);
+    const bands = baseBands.map((b) => ({ ...b }));
     collectedEq.forEach((band, i) => {
       bands[Math.min(i, bands.length - 1)] = { ...band };
     });

@@ -44,7 +44,7 @@ import {
   useRackPreset, useRackPresets, useSaveRackPreset,
 } from './useRackPresets';
 import { overlayChain } from './fixToRackPatch';
-import { writeAppliedIds } from './listenFixes';
+import { clearFixOverlay } from './listenFixes';
 import { useNavigate } from '@tanstack/react-router';
 import type { RoomLiveSeam } from './useRoomOrchestration';
 import { asVizLook, useSaveVizPreset, useVizPresets } from './useVizPresetsServer';
@@ -274,27 +274,49 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
 
   // ── Story 12.4: fix-rack carry-over (?fixPreset=) ──────────────────────────
   // Read-only surfaces (View / Room guest) never receive a carried chain.
-  const carryAllowed = Boolean(
+  // Carry eligibility is LATCHED per fixPreset value (review: a mid-flight mode
+  // switch or SSE rack-control revoke must not strand the page with neither
+  // draft nor carry applied — the arrival-time decision holds).
+  const carryAllowedNow = Boolean(
     fixPreset && realAudio && !resolveCapabilities(mode, identity, roomControl, access).rackReadOnly,
   );
+  const carryArmedRef = useRef<boolean | null>(null);
+  if (carryArmedRef.current === null) carryArmedRef.current = carryAllowedNow;
+  const carryArmed = Boolean(fixPreset) && carryArmedRef.current === true;
   const carriedPresetQuery = useRackPreset(
-    realAudio ? (versionId ?? '') : '', carryAllowed ? fixPreset : undefined);
+    realAudio ? (versionId ?? '') : '', carryArmed ? fixPreset : undefined);
   // null = no carry active; number = modules the carried chain enabled.
   const [fixesApplied, setFixesApplied] = useState<number | null>(null);
-  const carryAppliedRef = useRef(false); // one-shot per mount (refresh re-applies by design)
+  // 'pending' while a carry is armed and unresolved; 'applied' | 'failed' settle
+  // it. The draft machinery WAITS for settlement so a slow/failed carry can
+  // never let autosave clobber the saved draft with defaults (review HIGH).
+  const [carryPhase, setCarryPhase] = useState<'none' | 'pending' | 'applied' | 'failed'>(
+    carryArmed ? 'pending' : 'none');
+  const appliedPresetRef = useRef<string | null>(null); // one-shot per preset id
   const navigate = useNavigate();
+
+  // A NEW fixPreset value on the mounted route (back-nav restoring the param,
+  // clicking "Open in Listen rack" again after a reset) re-arms the carry.
+  useEffect(() => {
+    if (!fixPreset || appliedPresetRef.current === fixPreset) return;
+    carryArmedRef.current = carryAllowedNow;
+    if (carryArmedRef.current) setCarryPhase('pending');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-arm keys on the param only
+  }, [fixPreset]);
 
   // Autosaved draft: restore once when it resolves, then enable debounced autosave.
   // Gating autosave on `draftRestored` prevents a default-chain autosave from
   // clobbering the persisted draft before the GET returns.
-  // Story 12.4: when a carried chain is inbound, SKIP the draft restore — the
-  // carry-over deterministically wins, and arming autosave persists it as the
-  // new draft once applied.
-  const draftQuery = useRackDraft(realAudio && !carryAllowed ? (versionId ?? '') : '');
+  // Story 12.4: while a carry is PENDING neither restore nor autosave runs. A
+  // successful carry skips the restore (carry wins; autosave then persists the
+  // carried chain as the new draft). A FAILED carry falls back to the normal
+  // draft restore — the saved draft is never sacrificed to a 404.
+  const draftQuery = useRackDraft(realAudio ? (versionId ?? '') : '');
   const [draftRestored, setDraftRestored] = useState(false);
   useEffect(() => {
     if (draftRestored || !realAudio) return;
-    if (carryAllowed) { setDraftRestored(true); return; }
+    if (carryPhase === 'pending') return; // wait for the carry to settle
+    if (carryPhase === 'applied') { setDraftRestored(true); return; }
     if (!draftQuery.isFetched) return;
     const chain = draftQuery.data ? asChain(draftQuery.data.chain) : null;
     if (chain) {
@@ -305,35 +327,61 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
       rsRef.current.setMasterBypass(chain.masterBypass);
     }
     setDraftRestored(true);
-  }, [draftRestored, realAudio, carryAllowed, draftQuery.isFetched, draftQuery.data]);
+  }, [draftRestored, realAudio, carryPhase, draftQuery.isFetched, draftQuery.data]);
   useRackDraftAutosave(versionId ?? '', currentChain, realAudio && draftRestored);
 
-  // Apply the carried chain ONCE when it resolves: overlay onto the live module
-  // map (manual knobs on untouched modules survive; pitch never written). React
-  // state is enough for "after the graph is ready" — live pushes no-op until
-  // ensureContext(), and the first-play togglePlay pushFullRack syncs from rsRef.
+  // Apply the carried chain ONCE per preset id when it resolves: overlay onto
+  // the live module map (manual knobs on modules the chain doesn't enable
+  // survive; pitch never written). React state is enough for "after the graph
+  // is ready" — live pushes no-op until ensureContext(), and the first-play
+  // togglePlay pushFullRack syncs from rsRef.
   useEffect(() => {
-    if (carryAppliedRef.current || !carryAllowed) return;
+    if (!carryArmed || !fixPreset || appliedPresetRef.current === fixPreset) return;
+    if (carriedPresetQuery.isError) {
+      appliedPresetRef.current = fixPreset;
+      setCarryPhase('failed');
+      toast.error('Could not load the carried fix rack — your saved draft is untouched.');
+      return;
+    }
     const dto = carriedPresetQuery.data;
-    if (!dto) return; // still loading (404/error leaves the rack untouched)
+    if (!dto) return; // still loading
     const chain = asChain(dto.chain);
-    if (!chain) { carryAppliedRef.current = true; return; }
-    carryAppliedRef.current = true;
+    // Count what the overlay will actually APPLY: enabled, non-pitch modules.
+    const applied = chain
+      ? Object.entries(chain.modules).filter(([id, m]) => id !== 'pitch' && m?.enabled).length
+      : 0;
+    appliedPresetRef.current = fixPreset;
+    if (!chain || applied === 0) {
+      // Malformed or empty chain: never half-apply (a bare masterBypass with
+      // no chip would silently mute the rack with no affordance to undo).
+      setCarryPhase('failed');
+      toast.error('The carried fix rack could not be applied.');
+      return;
+    }
     rsRef.current.applyRackMod(overlayChain(rsRef.current.mod, chain.modules));
     rsRef.current.setMasterBypass(chain.masterBypass);
-    setFixesApplied(Object.values(chain.modules).filter((m) => m?.enabled).length);
-  }, [carryAllowed, carriedPresetQuery.data]);
+    setFixesApplied(applied);
+    setCarryPhase('applied');
+  }, [carryArmed, fixPreset, carriedPresetQuery.isError, carriedPresetQuery.data]);
 
   // Chip reset: restore neutral rack, clear the URL param (so refresh doesn't
-  // re-apply), and clear any Plan-tab applied ids for this version.
+  // re-apply), and clear the Plan-tab overlay (through the hook's event seam so
+  // a mounted PlanPanel's checkboxes/baseline reset too — not just localStorage).
   const onResetCarriedFixes = useCallback(() => {
     rsRef.current.reset();
-    if (versionId) writeAppliedIds(versionId, []);
+    if (versionId) clearFixOverlay(versionId);
     setFixesApplied(null);
+    setCarryPhase('none');
     void navigate({
       to: '/listen-rack/$versionId',
       params: { versionId: versionId ?? '' },
-      search: {},
+      // Omit-by-destructure: exactOptionalPropertyTypes forbids an explicit
+      // `fixPreset: undefined`; other (future) search params survive.
+      search: (prev: Record<string, unknown>) => {
+        const rest = { ...prev };
+        delete rest['fixPreset'];
+        return rest;
+      },
       replace: true,
     });
   }, [versionId, navigate]);

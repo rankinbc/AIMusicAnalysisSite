@@ -231,15 +231,30 @@ public sealed class RackPresetEndpointsTests(WebApplicationFactory<Program> fact
         var owner = NewClient();
         await Authenticate(owner);
         var versionId = await CreateVersion(owner);
-        var save = await owner.PostAsJsonAsync(
-            $"/api/versions/{versionId}/rack/presets",
-            new { name = "mine", chain = SampleChain() });
-        var dto = await save.Content.ReadFromJsonAsync<RackPresetDto>();
+
+        // The IDOR-relevant row is the SYSTEM-GENERATED analysis preset (no
+        // user id of its own — ownership derives solely from the version join).
+        Guid presetId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var row = new Spectr.Data.Entities.RackPreset
+            {
+                Id = Guid.NewGuid(),
+                SongVersionId = versionId,
+                Name = "Coach fix rack",
+                Source = "analysis",
+                ChainJson = System.Text.Json.JsonSerializer.Serialize(SampleChain()),
+            };
+            db.RackPresets.Add(row);
+            await db.SaveChangesAsync();
+            presetId = row.Id;
+        }
 
         var attacker = NewClient();
         await Authenticate(attacker);
         var resp = await attacker.GetAsync(
-            $"/api/versions/{versionId}/rack/presets/{dto!.Id}");
+            $"/api/versions/{versionId}/rack/presets/{presetId}");
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
     }
 

@@ -74,6 +74,21 @@ export function readListenFixes(versionId: string): ListenFix[] {
   }
 }
 
+// Story 12.4 review: the chip reset must clear a MOUNTED PlanPanel's overlay
+// state too, not just localStorage (stale React state would re-apply "reset"
+// fixes on the next toggle). The page can't reach the hook instance, so the
+// clear flows through a window event the hook subscribes to.
+export const FIX_OVERLAY_CLEAR_EVENT = 'spectr:fix-overlay-clear';
+
+export function clearFixOverlay(versionId: string): void {
+  writeAppliedIds(versionId, []);
+  try {
+    window.dispatchEvent(new CustomEvent(FIX_OVERLAY_CLEAR_EVENT, { detail: { versionId } }));
+  } catch {
+    /* non-fatal (SSR/test env without CustomEvent) */
+  }
+}
+
 export function readAppliedIds(versionId: string): string[] {
   try {
     const raw = localStorage.getItem(appliedKey(versionId));
