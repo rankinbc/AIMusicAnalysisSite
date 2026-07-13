@@ -441,15 +441,15 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
             }
 
             // Simulate the worker refusing turn 2: stamp its USER row (the
-            // worker isn't running under the fake queue).
+            // worker isn't running under the fake queue). Content-keyed —
+            // CreatedAt ordering can tie under rapid POSTs.
             using (var scope = factory.Services.CreateScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                 var conv = await db.Conversations.SingleAsync(c => c.UserId == userId);
                 var secondUser = await db.CoachMessages
-                    .Where(m => m.ConversationId == conv.Id && m.Role == "user")
-                    .OrderBy(m => m.CreatedAt)
-                    .Skip(1).FirstAsync();
+                    .SingleAsync(m => m.ConversationId == conv.Id
+                        && m.Role == "user" && m.Content == "Q2");
                 secondUser.RefusalReason = "missing_data";
                 await db.SaveChangesAsync();
             }
@@ -465,6 +465,13 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
             Assert.Equal(3, body!.Caps.Used);
             Assert.True(body.Caps.CapReached); // back at the limit
             Assert.Equal(4, queue.Calls.Count);
+
+            // …and the cap still ENFORCES after the refund: a 5th POST 403s.
+            var over = await client.PostAsJsonAsync(
+                $"/api/coach/{analysisId}/messages",
+                new CreateCoachMessageRequest("Q5 — over the refunded line"));
+            Assert.Equal(HttpStatusCode.Forbidden, over.StatusCode);
+            Assert.Equal(4, queue.Calls.Count); // no enqueue for the refused POST
         }
         finally
         {

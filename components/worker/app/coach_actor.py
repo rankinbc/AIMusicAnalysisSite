@@ -127,20 +127,31 @@ def _mark_refused(
 
 
 def _stamp_user_row_refused(s, user_message_id, refusal_reason) -> None:
-    """Mark the paired user row so cap counts can exclude the refused turn
-    (story 12.6). No-op when the id is absent or already stamped."""
+    """Mark the paired user row so cap counts can exclude the turn
+    (story 12.6). No-op when the id is absent or already stamped.
+
+    Guarded so a stamp failure can never roll back the assistant-row
+    terminalization it rides with (review P2) — losing the refund is
+    recoverable; a perpetually-pending assistant row is not.
+    """
     if user_message_id is None:
         return
-    from aimusic_shared.models import CoachMessage  # noqa: PLC0415
+    try:
+        from aimusic_shared.models import CoachMessage  # noqa: PLC0415
 
-    urow = s.get(CoachMessage, user_message_id)
-    if urow is not None and urow.role == "user" and urow.refusal_reason is None:
-        urow.refusal_reason = refusal_reason
+        urow = s.get(CoachMessage, user_message_id)
+        if urow is not None and urow.role == "user" and urow.refusal_reason is None:
+            # Review P3: a refusal payload could carry a null reason — the cap
+            # exclusion keys on non-null, so fall back to a generic marker.
+            urow.refusal_reason = refusal_reason or "refused"
+    except Exception:
+        logger.exception("user-row refusal stamp failed for %s", user_message_id)
 
 
 def _mark_error(
     message_id: uuid.UUID, *, body: str = COACH_GENERIC_ERROR_BODY,
     llm_call_id: str | None = None,
+    user_message_id: uuid.UUID | None = None,
 ) -> None:
     """Set the assistant row to ``status="error"`` with a generic body.
     Idempotent — only updates if still ``pending``.
@@ -158,6 +169,9 @@ def _mark_error(
             row.evidence = []
             row.llm_call_id = llm_call_id
             row.completed_at = _utc_now()
+            # Story 12.6 review: an ERRORED turn is the system's fault — it
+            # must not bill the user either. Same stamp, same exclusion.
+            _stamp_user_row_refused(s, user_message_id, "coach_error")
     except Exception:
         logger.exception("mark_error failed for message %s", message_id)
 
@@ -369,7 +383,7 @@ def coach_reply(
                     user_message_id,
                 )
                 publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
-                _mark_error(mid, body=COACH_GENERIC_ERROR_BODY)
+                _mark_error(mid, body=COACH_GENERIC_ERROR_BODY, user_message_id=uid_msg)
                 return
             user_question = user_row.content
             # teach-mode flag rides the user row (default qa); the dramatiq
@@ -380,14 +394,14 @@ def coach_reply(
             if conversation is None:
                 logger.warning("coach_reply: conversation %s missing", conversation_id)
                 publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
-                _mark_error(mid, body=COACH_GENERIC_ERROR_BODY)
+                _mark_error(mid, body=COACH_GENERIC_ERROR_BODY, user_message_id=uid_msg)
                 return
             analysis = s.get(Analysis, conversation.analysis_id)
             if analysis is None:
                 logger.warning("coach_reply: analysis %s missing",
                                conversation.analysis_id)
                 publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
-                _mark_error(mid, body=COACH_GENERIC_ERROR_BODY)
+                _mark_error(mid, body=COACH_GENERIC_ERROR_BODY, user_message_id=uid_msg)
                 return
 
             raw_final = analysis.final_json
@@ -423,7 +437,7 @@ def coach_reply(
         logger.exception("coach_reply Phase A failed for assistant %s",
                          assistant_message_id)
         publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
-        _mark_error(mid)
+        _mark_error(mid, user_message_id=uid_msg)
         return
 
     # ── Phase A.1: degraded short-circuit ─────────────────────────────────
@@ -437,7 +451,7 @@ def coach_reply(
     if not user_question.strip():
         logger.warning("coach_reply: empty user question on %s", user_message_id)
         publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
-        _mark_error(mid)
+        _mark_error(mid, user_message_id=uid_msg)
         return
 
     # Story 1.5 code review E-H1 + story 1.6: any unexpected failure in
@@ -479,7 +493,7 @@ def coach_reply(
             except FileNotFoundError:
                 logger.exception("coach_reply: teach prompt file missing")
                 publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
-                _mark_error(mid)
+                _mark_error(mid, user_message_id=uid_msg)
                 return
             model_pin = load_coach_teach_model()
             prompt_slug = "coach_teach"
@@ -489,7 +503,7 @@ def coach_reply(
             except FileNotFoundError:
                 logger.exception("coach_reply: coach prompt file missing")
                 publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
-                _mark_error(mid)
+                _mark_error(mid, user_message_id=uid_msg)
                 return
             model_pin = load_coach_grounded_model()
             prompt_slug = "coach_grounded"
@@ -542,7 +556,7 @@ def coach_reply(
             logger.info("coach_reply: LLM call failed for %s: %s",
                         assistant_message_id, exc)
             publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
-            _mark_error(mid, llm_call_id=exc.llm_call_id)
+            _mark_error(mid, llm_call_id=exc.llm_call_id, user_message_id=uid_msg)
             return
 
         llm_call_id = (
@@ -578,7 +592,7 @@ def coach_reply(
                     assistant_message_id,
                 )
                 publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
-                _mark_error(mid, llm_call_id=llm_call_id)
+                _mark_error(mid, llm_call_id=llm_call_id, user_message_id=uid_msg)
             return
 
         # Sentinel was seen — parse Section 2 and re-inject the prose body
@@ -591,7 +605,7 @@ def coach_reply(
                 assistant_message_id,
             )
             publisher.error(code="coach_parse_failed", message=COACH_GENERIC_ERROR_BODY)
-            _mark_error(mid, llm_call_id=llm_call_id)
+            _mark_error(mid, llm_call_id=llm_call_id, user_message_id=uid_msg)
             return
 
         meta["body"] = parsed.prose.strip()
@@ -603,7 +617,7 @@ def coach_reply(
                 assistant_message_id, exc,
             )
             publisher.error(code="coach_parse_failed", message=COACH_GENERIC_ERROR_BODY)
-            _mark_error(mid, llm_call_id=llm_call_id)
+            _mark_error(mid, llm_call_id=llm_call_id, user_message_id=uid_msg)
             return
 
         # Teach mode states general craft numbers ("-1 dBTP", "200-500 Hz")
@@ -616,7 +630,7 @@ def coach_reply(
                 assistant_message_id,
             )
             publisher.error(code="coach_parse_failed", message=COACH_GENERIC_ERROR_BODY)
-            _mark_error(mid, llm_call_id=llm_call_id)
+            _mark_error(mid, llm_call_id=llm_call_id, user_message_id=uid_msg)
             return
 
         # ── Phase F: resolve evidence ──────────────────────────────────────
@@ -646,7 +660,7 @@ def coach_reply(
             assistant_message_id,
         )
         publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
-        _mark_error(mid)
+        _mark_error(mid, user_message_id=uid_msg)
         return
 
 

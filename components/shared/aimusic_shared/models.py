@@ -491,7 +491,7 @@ class CoachMessage(Base):
 
     ``evidence`` carries the citation chips that survived resolution
     against the in-memory context bundle (unresolvable paths dropped per
-    AR10). ``refusal_reason`` is set on assistant rows that emitted a
+    AR10). ``refusal_reason`` is set on assistant rows (and, story 12.6, stamped on the USER row of refused/errored turns so cap counts can exclude them) that emitted a
     structured refusal: ``"missing_data"``, ``"out_of_scope"``,
     ``"injection_attempt"`` (from the prompt), or the coach-offline
     marker ``"coach_offline"`` written when ``LlmBudgetExceeded`` fires

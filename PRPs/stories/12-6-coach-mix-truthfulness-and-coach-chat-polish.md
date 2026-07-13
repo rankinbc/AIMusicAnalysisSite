@@ -140,6 +140,17 @@ Claude Fable 5 (claude-fable-5), dev-story workflow, 2026-07-13.
 - PRPs/sprint-status.yaml (status flips)
 - PRPs/stories/12-6-coach-mix-truthfulness-and-coach-chat-polish.md (this file)
 
+## Senior Review Record (bmad-code-review, 2026-07-13)
+
+Three-layer adversarial review of `master..story/12-6-coach-mix-relabel` (PR #44). Auditor: **all 5 ACs Met**; Edge Case Hunter verified stamp-completeness, tx atomicity (stamp + terminalization commit/roll together; dramatiq redelivery safe), read-path consistency (all cap reads funnel through the two patched sites incl. EntitlementService's pool), ConcurrentQueue conversion, and that the frontend keys refusal UI on `status` — the user-row stamp is invisible. Patches applied:
+
+- **P1 (extension, recorded decision)**: ERRORED turns don't bill either — a turn that dies on a worker/LLM error or a BFF enqueue failure is the system's fault. `_mark_error` now stamps the user row (`coach_error`, all 12 call sites pass `user_message_id`), and the BFF's enqueue-failure catch stamps `userRow.RefusalReason = "coach_error"` in the same SaveChanges. The recorded scope is now: refused → refunded; errored → refunded; user-aborted → still counts (real LLM spend; `_mark_complete_partial` deliberately unstamped).
+- **P2**: the stamp is failure-isolated (inner try/except) — a stamp error can log-and-lose the refund but can never roll back the assistant-row terminalization (perpetual-pending hazard).
+- **P3**: null refusal reason falls back to a generic `"refused"` marker (the exclusion keys on non-null).
+- **P4**: worker-side write path now TESTED — `test_coach_refusal_stamp.py` (5 tests: stamps, fallback, idempotent, role/None guards, failure-swallow). Review had correctly flagged that both BFF tests hand-stamped rows, leaving the linchpin unproven.
+- **P5**: free-tier test hardened — refused row selected by content (CreatedAt can tie), plus a 5th-POST 403 assert proving the cap still ENFORCES after the refund; `aimusic_shared` docstring + 2 CSS comments updated.
+- **Accepted (documented)**: pro-pool correlated subquery uses the `Id.ToString() == Reference` shape — verbatim the `invalid_file` precedent; non-sargable cast acknowledged, tables are small pre-launch, expression-index follow-on if it ever shows in traces. NO backfill for pre-12.6 refused turns (self-healing for new traffic; ledger item for 12-8). 60s entitlements-cache window can briefly show a stale pool on the usage page after a refund (bounded, self-healing). Refused/errored turns still consume LLM *provider* budget — bounded by the 1.4 budget ceilings, not by per-user caps; honesty outranks the marginal spend. Component/file identifiers keep the CoachMix name (copy-deep relabel by design).
+
 ## Change Log
 
 - 2026-07-13: Story created (create-story workflow) — relabel decision recorded; AC2 resolved to REMOVE with deferred wiring; AC5 abort-still-counts decision recorded.

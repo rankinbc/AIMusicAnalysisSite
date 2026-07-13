@@ -11,7 +11,7 @@
 }
 
 /* Two-column shell: the report main column + the persistent right rail
-   (Fixes for Listen / Coach Mix / Game Plan), visible across every tab. */
+   (Fixes for Listen / Fix Rack (né Coach Mix) / Game Plan), visible across every tab. */
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 288px;
