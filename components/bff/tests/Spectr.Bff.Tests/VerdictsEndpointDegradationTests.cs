@@ -25,21 +25,11 @@ public sealed class VerdictsEndpointDegradationTests(WebApplicationFactory<Progr
 
     private HttpClient NewClient() => _factory.CreateClient();
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
 
-    [Fact]
+    [SkippableFact]
     public async Task Degraded_Analysis_Returns_Notice_And_Rule_Engine_Verdict()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var client = NewClient();
         var email = $"degr+{Guid.NewGuid():N}@spectr.test";
@@ -143,10 +133,10 @@ public sealed class VerdictsEndpointDegradationTests(WebApplicationFactory<Progr
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Healthy_Analysis_Returns_Null_Degradation()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var client = NewClient();
         var email = $"healthy+{Guid.NewGuid():N}@spectr.test";

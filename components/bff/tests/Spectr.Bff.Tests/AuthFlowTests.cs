@@ -66,10 +66,10 @@ public sealed class AuthFlowTests(WebApplicationFactory<Program> factory)
             s => s.SetProperty(u => u.EmailVerifiedAt, (DateTimeOffset?)null));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Register_Sends_Verification_And_Token_Verifies_Once()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (f, email) = Build();
         var client = f.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
@@ -108,10 +108,10 @@ public sealed class AuthFlowTests(WebApplicationFactory<Program> factory)
         Assert.Equal(HttpStatusCode.BadRequest, junk.StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Tokens_Are_Purpose_Bound()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (f, email) = Build();
         var client = f.CreateClient();
@@ -136,10 +136,10 @@ public sealed class AuthFlowTests(WebApplicationFactory<Program> factory)
         Assert.Equal(HttpStatusCode.NoContent, verify.StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Forgot_Password_Never_Reveals_Account_Existence()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (f, email) = Build();
         var client = f.CreateClient();
@@ -156,10 +156,10 @@ public sealed class AuthFlowTests(WebApplicationFactory<Program> factory)
         Assert.Equal(HttpStatusCode.NoContent, malformed.StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Reset_Rotates_Password_And_Kills_All_Sessions()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (f, email) = Build();
         var client = f.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
@@ -212,10 +212,10 @@ public sealed class AuthFlowTests(WebApplicationFactory<Program> factory)
         Assert.Equal(HttpStatusCode.BadRequest, replay.StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Resend_Verification_Noops_When_Already_Verified()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (f, email) = Build();
         var client = f.CreateClient();
@@ -240,10 +240,10 @@ public sealed class AuthFlowTests(WebApplicationFactory<Program> factory)
 
     // ── Story 12.1 — dev verify-gate satisfiability ─────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task Register_AutoVerifies_In_Development_When_Flag_On()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         // Base factory runs env=Development + appsettings.Development.json
         // (Auth:DevAutoVerify=true) — registration must come out verified so
@@ -265,10 +265,10 @@ public sealed class AuthFlowTests(WebApplicationFactory<Program> factory)
         Assert.Single(email.Sent, s => s.Template == EmailTemplates.Verification);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Register_Does_Not_AutoVerify_When_Flag_Off()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var email = new RecordingEmailSender();
         using var f = _factory.WithWebHostBuilder(b =>
@@ -289,10 +289,10 @@ public sealed class AuthFlowTests(WebApplicationFactory<Program> factory)
         Assert.Null(verifiedAt);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Register_Does_Not_AutoVerify_When_Flag_Absent()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         // Guards against a future default-ON regression (e.g. switching the
         // comparison to `!= "false"`): a blank/absent flag must read as OFF.
@@ -317,10 +317,10 @@ public sealed class AuthFlowTests(WebApplicationFactory<Program> factory)
         Assert.Null(verifiedAt);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task DevAutoVerify_Is_Inert_Outside_Development()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         // Guard test: even with the flag EXPLICITLY true, a non-Development
         // boot must not honor it (defense in depth, dev-login precedent).
@@ -350,10 +350,10 @@ public sealed class AuthFlowTests(WebApplicationFactory<Program> factory)
         Assert.Null(verifiedAt);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task DevLogin_Stamps_Verified_On_Target_Account()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (f, email) = Build();
         var client = f.CreateClient();
@@ -382,11 +382,11 @@ public sealed class AuthFlowTests(WebApplicationFactory<Program> factory)
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Login_Rate_Limit_Returns_429()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
-        if (!await RedisReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
+        TestDb.Require(await RedisReachable(), "Redis");
 
         // Development disables auth rate limits for the suite; this test
         // opts back in to prove the 429 path.

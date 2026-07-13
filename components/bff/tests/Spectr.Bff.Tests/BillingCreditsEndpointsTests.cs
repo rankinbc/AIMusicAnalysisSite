@@ -81,16 +81,6 @@ public sealed class BillingCreditsEndpointsTests(WebApplicationFactory<Program> 
         return (f, fake);
     }
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
 
     private static async Task<(HttpClient C, Guid UserId)> SeedAuthedAsync(
         WebApplicationFactory<Program> factory, string prefix)
@@ -121,10 +111,10 @@ public sealed class BillingCreditsEndpointsTests(WebApplicationFactory<Program> 
 
     // ── POST /checkout/credits ─────────────────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task PostCheckoutCredits_With_Pack5_Returns_Stripe_Url()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, fake) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthedAsync(f, "credits-5");
         try
@@ -157,10 +147,10 @@ public sealed class BillingCreditsEndpointsTests(WebApplicationFactory<Program> 
         finally { await CleanupAsync(f, userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task PostCheckoutCredits_With_Invalid_Pack_Size_Returns_400()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, _) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthedAsync(f, "credits-invalid");
         try
@@ -175,10 +165,10 @@ public sealed class BillingCreditsEndpointsTests(WebApplicationFactory<Program> 
         finally { await CleanupAsync(f, userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task PostCheckoutCredits_Without_Credit_Pack_Config_Returns_503()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, _) = BuildWithFakeStripe(configured: true, creditsConfigured: false);
         var (client, userId) = await SeedAuthedAsync(f, "credits-no-pack-config");
         try
@@ -195,10 +185,10 @@ public sealed class BillingCreditsEndpointsTests(WebApplicationFactory<Program> 
 
     // ── GET /credits ───────────────────────────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task GetCredits_Returns_Balance_And_Entries()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, _) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthedAsync(f, "credits-get");
         try
@@ -231,10 +221,10 @@ public sealed class BillingCreditsEndpointsTests(WebApplicationFactory<Program> 
 
     // ── Webhook: checkout.session.completed mode=payment ───────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task Webhook_CheckoutSession_Payment_Mode_Appends_Purchase_Ledger_Row()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, _) = BuildWithFakeStripe();
         var (_, userId) = await SeedAuthedAsync(f, "credits-webhook");
         try
@@ -267,10 +257,10 @@ public sealed class BillingCreditsEndpointsTests(WebApplicationFactory<Program> 
         finally { await CleanupAsync(f, userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Webhook_CheckoutSession_Payment_Mode_Replay_Is_Idempotent()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, _) = BuildWithFakeStripe();
         var (_, userId) = await SeedAuthedAsync(f, "credits-webhook-replay");
         try

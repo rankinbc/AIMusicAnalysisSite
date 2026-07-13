@@ -15,10 +15,10 @@ public sealed class DeployTopologyTests(WebApplicationFactory<Program> factory)
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-    [Fact]
+    [SkippableFact]
     public async Task Healthz_Reports_Ok_When_Dependencies_Are_Up()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var resp = await _factory.CreateClient().GetAsync("/healthz");
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
@@ -26,10 +26,10 @@ public sealed class DeployTopologyTests(WebApplicationFactory<Program> factory)
         Assert.Equal("ok", body.GetProperty("status").GetString());
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Metrics_Endpoint_Exposes_Http_And_Queue_Depth_Gauges()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         // Warm one HTTP request so http metrics families exist, then scrape.
         var client = _factory.CreateClient();
@@ -49,10 +49,10 @@ public sealed class DeployTopologyTests(WebApplicationFactory<Program> factory)
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task BootMigrator_Is_A_NoOp_On_A_Migrated_Schema_And_Reruns_Safely()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         // The dev DB is at head — both passes must be clean no-ops, and the
         // advisory lock must be acquired/released without deadlocking the

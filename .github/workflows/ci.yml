@@ -60,10 +60,37 @@ jobs:
 
   bff:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: components/bff
+    # Story 12.7 (AC1/AC4): real Postgres + Redis so the integration suite
+    # EXECUTES in CI. Before this, every DB test silently no-op'd (early
+    # return on unreachable DB) and 5 host-boot tests failed on Redis —
+    # green here meant "it compiled". Versions match docker/docker-compose.yml.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: spectr
+          POSTGRES_PASSWORD: spectr
+          POSTGRES_DB: spectr
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U spectr"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-dotnet@v5
@@ -71,7 +98,21 @@ jobs:
           global-json-file: components/bff/global.json
       - name: Build
         run: dotnet build
+      # Development env: dotnet-ef boots Program, and non-Development boot
+      # refuses to start without real signing keys (story 4.1) — dev keys
+      # live in appsettings.Development.json. Connection string default is
+      # already localhost:5432 spectr/spectr (appsettings.json).
+      - name: Apply EF migrations
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+        run: |
+          dotnet tool install --global dotnet-ef
+          dotnet ef database update --project src/Spectr.Data --startup-project src/Spectr.Bff
+      # SPECTR_REQUIRE_DB=1 arms the fail-loud tripwire: an unreachable DB is
+      # a FAILURE here (TestDb.RequireAsync + CiDbCanaryTests), never a skip.
       - name: Test
+        env:
+          SPECTR_REQUIRE_DB: "1"
         run: dotnet test --no-build
 
   frontend:

@@ -17,10 +17,10 @@ public sealed class HealthEndpointsTests(WebApplicationFactory<Program> factory)
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-    [Fact]
+    [SkippableFact]
     public async Task Full_Health_Returns_200_With_The_Aggregated_Shape()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var client = _factory.CreateClient();
         var resp = await client.GetAsync("/api/health/full");
@@ -51,10 +51,10 @@ public sealed class HealthEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.True(storage.GetProperty("ok").ValueKind is JsonValueKind.True or JsonValueKind.False);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Full_Health_Is_Anonymous()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         // No Authorization header at all — must not 401 (same anonymous
         // group as /api/health/worker).

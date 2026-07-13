@@ -74,10 +74,10 @@ public sealed class FeedEndpointsTests(WebApplicationFactory<Program> factory)
         return await resp.Content.ReadFromJsonAsync<JsonElement>();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Feed_Shows_Followed_Public_Shares_Only_Reverse_Chron()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (reader, _, _) = await AuthedWithHandleAsync();
         var (_, aliceId, aliceHandle) = await AuthedWithHandleAsync();
@@ -105,10 +105,10 @@ public sealed class FeedEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.False(feed.GetProperty("hasMore").GetBoolean());
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Feed_Shows_Published_Recaps_Gated_On_Public_Version()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (reader, _, _) = await AuthedWithHandleAsync();
         var (_, hostId, hostHandle) = await AuthedWithHandleAsync();
@@ -134,10 +134,10 @@ public sealed class FeedEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.Contains(items, i => i.GetProperty("kind").GetString() == "share");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Empty_Feed_Carries_Suggestions_And_Requires_Auth()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (reader, readerId, readerHandle) = await AuthedWithHandleAsync();
         var (_, sharerId, sharerHandle) = await AuthedWithHandleAsync();
@@ -159,10 +159,10 @@ public sealed class FeedEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.Equal(HttpStatusCode.Unauthorized, (await anon.GetAsync("/api/me/feed/")).StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Deactivated_Followee_Content_Never_Surfaces()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (reader, _, _) = await AuthedWithHandleAsync();
         var (_, ghostId, ghostHandle) = await AuthedWithHandleAsync();
@@ -186,10 +186,10 @@ public sealed class FeedEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.Empty(feed.GetProperty("items").EnumerateArray());
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Feed_Pages_With_HasMore()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (reader, _, _) = await AuthedWithHandleAsync();
         var (_, aliceId, aliceHandle) = await AuthedWithHandleAsync();

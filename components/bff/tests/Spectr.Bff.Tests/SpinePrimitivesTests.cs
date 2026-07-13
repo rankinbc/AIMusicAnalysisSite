@@ -27,7 +27,7 @@ public sealed class SpinePrimitivesTests
     }
 
     // ── ActorRef ───────────────────────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public void ActorKey_is_type_prefixed_so_user_and_anon_never_collide()
     {
         var id = Guid.NewGuid();
@@ -42,7 +42,7 @@ public sealed class SpinePrimitivesTests
     }
 
     // ── AnonIdentity: signed cookie ──────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public void Anon_cookie_round_trips_and_rejects_forgery()
     {
         var anonId = Guid.NewGuid().ToString("N");
@@ -57,7 +57,7 @@ public sealed class SpinePrimitivesTests
         Assert.Null(AnonIdentity.Verify($"{anonId}.zz", Key));         // non-hex signature
     }
 
-    [Fact]
+    [SkippableFact]
     public void Capture_requires_resolution_then_trims_and_caps_display_name()
     {
         var anon = new AnonIdentity();
@@ -75,7 +75,7 @@ public sealed class SpinePrimitivesTests
     }
 
     // ── No-op sinks ──────────────────────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task NoOp_sinks_complete_without_side_effects()
     {
         INotificationSink notif = new NoOpNotificationSink();
@@ -97,7 +97,7 @@ public sealed class SpinePrimitivesTests
                 token == "good" ? new ResolvedResource("test", Guid.Empty) : null);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task ResourceTokenAuth_resolves_opaque_token_with_anon_actor()
     {
         var anon = new AnonIdentity { AnonId = "anon-1" };
@@ -118,7 +118,7 @@ public sealed class SpinePrimitivesTests
     }
 
     // ── Hard rule: an opaque token via ?t= is NOT honored by JwtBearer ───────────
-    [Fact]
+    [SkippableFact]
     public async Task Opaque_token_via_query_t_is_not_accepted_as_jwt()
     {
         using var factory = new WebApplicationFactory<Program>();
@@ -131,10 +131,10 @@ public sealed class SpinePrimitivesTests
     }
 
     // ── IRateLimiter (Redis) ─────────────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task RateLimiter_allows_up_to_limit_then_denies()
     {
-        if (!RedisReachable()) return; // graceful skip when Redis isn't up
+        TestDb.Require(RedisReachable(), "Redis"); // skip-visible (story 12.7)
 
         using var mux = ConnectionMultiplexer.Connect("localhost:6379,abortConnect=false");
         var rl = new RedisRateLimiter(mux);
@@ -149,10 +149,10 @@ public sealed class SpinePrimitivesTests
         Assert.Equal(window, denied.RetryAfter);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task RateLimiter_denies_on_shared_ip_even_with_a_fresh_actor()
     {
-        if (!RedisReachable()) return; // graceful skip
+        TestDb.Require(RedisReachable(), "Redis"); // skip-visible (story 12.7)
 
         using var mux = ConnectionMultiplexer.Connect("localhost:6379,abortConnect=false");
         var rl = new RedisRateLimiter(mux);

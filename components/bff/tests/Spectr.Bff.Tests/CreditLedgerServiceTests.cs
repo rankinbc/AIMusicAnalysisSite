@@ -23,16 +23,6 @@ public sealed class CreditLedgerServiceTests
         _factory = factory;
     }
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
 
     private async Task<Guid> SeedUserAsync(string emailPrefix)
     {
@@ -68,10 +58,10 @@ public sealed class CreditLedgerServiceTests
             db, cache, NullLogger<CreditLedgerService>.Instance);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task PurchaseAsync_Inserts_Plus_Five_Row()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("ledger-purchase");
         try
         {
@@ -91,10 +81,10 @@ public sealed class CreditLedgerServiceTests
         finally { await CleanupAsync(userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task PurchaseAsync_Duplicate_Idempotency_Key_Is_NoOp()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("ledger-pdup");
         try
         {
@@ -123,10 +113,10 @@ public sealed class CreditLedgerServiceTests
         finally { await CleanupAsync(userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task SpendAsync_Inserts_Matched_Usage_And_Ledger_Rows()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("ledger-spend");
         try
         {
@@ -158,10 +148,10 @@ public sealed class CreditLedgerServiceTests
         finally { await CleanupAsync(userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task SpendAsync_Throws_On_Zero_Balance_And_Writes_Nothing()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("ledger-empty");
         try
         {
@@ -181,10 +171,10 @@ public sealed class CreditLedgerServiceTests
         finally { await CleanupAsync(userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task ReverseAsync_Inserts_Plus_One_With_IdempotencyKey()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("ledger-reverse");
         try
         {
@@ -208,10 +198,10 @@ public sealed class CreditLedgerServiceTests
         finally { await CleanupAsync(userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task ReverseAsync_Second_Call_For_Same_Job_Is_NoOp()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("ledger-rev-dup");
         try
         {
@@ -241,10 +231,10 @@ public sealed class CreditLedgerServiceTests
         finally { await CleanupAsync(userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetBalanceAsync_Sums_Across_Mixed_Entries()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("ledger-sum");
         try
         {

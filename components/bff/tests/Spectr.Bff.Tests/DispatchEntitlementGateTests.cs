@@ -21,16 +21,6 @@ public sealed class DispatchEntitlementGateTests(WebApplicationFactory<Program> 
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
 
     private (HttpClient client, RecordingJobQueue queue) NewClient()
     {
@@ -126,10 +116,10 @@ public sealed class DispatchEntitlementGateTests(WebApplicationFactory<Program> 
     }
 
     // ── (a) Free user, 2 used → succeeds, tier=free on job, usage_event created ─
-    [Fact]
+    [SkippableFact]
     public async Task FreeUser_2Used_Succeeds_TierFree_UsageCreated()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (client, queue) = NewClient();
         var (_, userId) = await AuthAsync(client, "gate-a");
         await SeedUsageAsync(userId, 2);
@@ -155,10 +145,10 @@ public sealed class DispatchEntitlementGateTests(WebApplicationFactory<Program> 
     }
 
     // ── (b) Free user, 3 used → 409 entitlement_exhausted, no rows inserted ──
-    [Fact]
+    [SkippableFact]
     public async Task FreeUser_3Used_409EntitlementExhausted_NoRowsInserted()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (client, queue) = NewClient();
         var (_, userId) = await AuthAsync(client, "gate-b");
         await SeedUsageAsync(userId, 3);
@@ -178,10 +168,10 @@ public sealed class DispatchEntitlementGateTests(WebApplicationFactory<Program> 
     }
 
     // ── (c) Credits balance=1 → succeeds, tier=credits, ledger -1, usage row ─
-    [Fact]
+    [SkippableFact]
     public async Task CreditsBalance1_Succeeds_TierCredits_LedgerSpent()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (client, queue) = NewClient();
         var (_, userId) = await AuthAsync(client, "gate-c");
         await SeedCreditAsync(userId, 1);
@@ -213,10 +203,10 @@ public sealed class DispatchEntitlementGateTests(WebApplicationFactory<Program> 
     }
 
     // ── (d) Credits balance=0 (user exhausted credits + free cap) → 409 ──────
-    [Fact]
+    [SkippableFact]
     public async Task CreditsBalance0_FreeCap_409()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (client, queue) = NewClient();
         var (_, userId) = await AuthAsync(client, "gate-d");
         // No credits (balance = 0) + 3 free analyses used → free tier exhausted.
@@ -232,10 +222,10 @@ public sealed class DispatchEntitlementGateTests(WebApplicationFactory<Program> 
     }
 
     // ── (e) Pro always succeeds regardless of usage count ────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task ProUser_AlwaysSucceeds_NullRemaining()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (client, queue) = NewClient();
         var (_, userId) = await AuthAsync(client, "gate-e");
         await SeedProSubscriptionAsync(userId);
@@ -259,10 +249,10 @@ public sealed class DispatchEntitlementGateTests(WebApplicationFactory<Program> 
     // The Serializable TX inside SpendAsync serializes the race; exactly one
     // commit wins and the second raises InsufficientCreditsException, which maps
     // to 409 insufficient_credits. The net effect: one job pending, one failed.
-    [Fact]
+    [SkippableFact]
     public async Task ConcurrentCreditDispatches_ExactlyOneSucceeds()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
 
         // Two independent authenticated clients pointing at the same user
         // isn't easily achievable — instead, the user seeds 1 credit and

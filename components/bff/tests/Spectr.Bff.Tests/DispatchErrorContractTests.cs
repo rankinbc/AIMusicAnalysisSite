@@ -24,15 +24,11 @@ public sealed class DispatchErrorContractTests(WebApplicationFactory<Program> fa
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-    private static async Task AssertEnvelopeAsync(
+    // Story 12.7: envelope assertion promoted to TestContract.AssertEnvelopeAsync
+    // so the rate_limited / disposable-cap sites assert the same shape.
+    private static Task AssertEnvelopeAsync(
         HttpResponseMessage resp, HttpStatusCode expectedStatus, string expectedCode)
-    {
-        Assert.Equal(expectedStatus, resp.StatusCode);
-        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
-        var error = doc.RootElement.GetProperty("error");
-        Assert.Equal(expectedCode, error.GetProperty("code").GetString());
-        Assert.False(string.IsNullOrWhiteSpace(error.GetProperty("message").GetString()));
-    }
+        => TestContract.AssertEnvelopeAsync(resp, expectedStatus, expectedCode);
 
     private async Task<(Guid UserId, HttpClient Client)> RegisterVerifiedAsync()
     {
@@ -57,10 +53,10 @@ public sealed class DispatchErrorContractTests(WebApplicationFactory<Program> fa
         await db.Users.Where(u => u.Id == userId).ExecuteDeleteAsync();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Verify_Gate_403_Carries_Machine_Code()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (userId, client) = await RegisterVerifiedAsync();
         var (songId, versionId) = await TestSeed.SongWithVersionAsync(_factory, userId);
@@ -87,10 +83,10 @@ public sealed class DispatchErrorContractTests(WebApplicationFactory<Program> fa
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Free_Cap_Exhaustion_409_Carries_Machine_Code()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (userId, client) = await RegisterVerifiedAsync();
         var (songId, versionId) = await TestSeed.SongWithVersionAsync(_factory, userId);
@@ -129,10 +125,10 @@ public sealed class DispatchErrorContractTests(WebApplicationFactory<Program> fa
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Insufficient_Credits_Race_409_Carries_Machine_Code()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (userId, client) = await RegisterVerifiedAsync();
         var (songId, versionId) = await TestSeed.SongWithVersionAsync(_factory, userId);
@@ -175,10 +171,10 @@ public sealed class DispatchErrorContractTests(WebApplicationFactory<Program> fa
             => throw new InvalidOperationException("entitlements backend down (test)");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Entitlements_Unavailable_503_Carries_Machine_Code()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         // Register on the healthy factory; dispatch through one whose
         // entitlement resolver throws.

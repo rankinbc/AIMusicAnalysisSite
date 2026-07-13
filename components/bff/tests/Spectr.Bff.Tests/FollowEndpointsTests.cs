@@ -37,10 +37,10 @@ public sealed class FollowEndpointsTests(WebApplicationFactory<Program> factory)
         return await resp.Content.ReadFromJsonAsync<JsonElement>();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Follow_Is_Idempotent_And_Counts_Update()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (alice, _, aliceHandle) = await AuthedWithHandleAsync();
         var (bob, _, bobHandle) = await AuthedWithHandleAsync();
@@ -66,10 +66,10 @@ public sealed class FollowEndpointsTests(WebApplicationFactory<Program> factory)
         _ = alice; // silence unused — alice exists to own the followee handle
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Self_Follow_Rejected_And_Writes_Require_Auth()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (alice, _, aliceHandle) = await AuthedWithHandleAsync();
         var self = await alice.PutAsync($"/api/u/{aliceHandle}/follow/", null);

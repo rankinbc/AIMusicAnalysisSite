@@ -20,7 +20,7 @@ namespace Spectr.Bff.Tests;
 //   • Free: per-analysis cap, limit now from the resolver (coach_free_followups).
 //   • A coach_message usage_event is appended per accepted message (the pooled
 //     count's source of truth).
-// Gated on Postgres via PostgresReachable() (mirrors CoachConversationEndpointsTests).
+// Gated on Postgres via TestDb.RequireAsync (skip-visible, story 12.7).
 public sealed class CoachProMonthlyCapTests(WebApplicationFactory<Program> factory)
     : IClassFixture<WebApplicationFactory<Program>>
 {
@@ -46,16 +46,6 @@ public sealed class CoachProMonthlyCapTests(WebApplicationFactory<Program> facto
         return (f, f.CreateClient());
     }
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
 
     private static async Task<(Guid UserId, string Email)> AuthAsync(HttpClient client, string prefix)
     {
@@ -132,10 +122,10 @@ public sealed class CoachProMonthlyCapTests(WebApplicationFactory<Program> facto
     }
 
     // ── AC1: Pro chip is pooled-monthly (scope "month", ResetsAt set) ─────────
-    [Fact]
+    [SkippableFact]
     public async Task ProUser_Conversation_Reports_MonthlyScope_With_ResetsAt()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (f, client) = NewClient();
         var (userId, _) = await AuthAsync(client, "coachpro-scope");
         await SeedProAsync(userId);
@@ -153,10 +143,10 @@ public sealed class CoachProMonthlyCapTests(WebApplicationFactory<Program> facto
     }
 
     // ── AC1: the pool is shared ACROSS analyses (the whole point of pooling) ──
-    [Fact]
+    [SkippableFact]
     public async Task ProUser_Pool_Is_Shared_Across_Analyses()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (f, client) = NewClient();
         var (userId, _) = await AuthAsync(client, "coachpro-pool");
         await SeedProAsync(userId);
@@ -193,10 +183,10 @@ public sealed class CoachProMonthlyCapTests(WebApplicationFactory<Program> facto
     }
 
     // ── AC1 + AC4: at the pooled cap, POST is refused (COUNT guard) ──────────
-    [Fact]
+    [SkippableFact]
     public async Task ProUser_AtMonthlyCap_Refuses_With_MonthScope()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (f, client) = NewClient();
         var (userId, _) = await AuthAsync(client, "coachpro-cap");
         await SeedProAsync(userId);
@@ -231,10 +221,10 @@ public sealed class CoachProMonthlyCapTests(WebApplicationFactory<Program> facto
     }
 
     // ── AC2: free-tier cap derives from the resolver and is per-analysis ─────
-    [Fact]
+    [SkippableFact]
     public async Task FreeUser_Conversation_Reports_AnalysisScope_From_Resolver()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (f, client) = NewClient();
         var (userId, _) = await AuthAsync(client, "coachfree-scope");
         var analysisId = await SeedAnalysisAsync(userId);

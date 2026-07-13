@@ -93,10 +93,10 @@ public sealed class LifecycleEmailTests(WebApplicationFactory<Program> factory)
         await db.Users.Where(u => u.Id == userId).ExecuteDeleteAsync();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Completed_Analysis_Emails_Once_With_Deep_Link()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var address = $"lc+{Guid.NewGuid():N}@spectr.test";
         var (scheduler, email, f) = Build();
@@ -129,10 +129,10 @@ public sealed class LifecycleEmailTests(WebApplicationFactory<Program> factory)
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Opted_Out_User_Gets_No_Email_But_Still_Gets_The_In_App_Notification()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var address = $"lcoff+{Guid.NewGuid():N}@spectr.test";
         var (scheduler, email, f) = Build();
@@ -155,10 +155,10 @@ public sealed class LifecycleEmailTests(WebApplicationFactory<Program> factory)
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Password_Reset_Sends_Changed_Notification()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var email = new RecordingEmailSender();
         using var f = _factory.WithWebHostBuilder(b =>
@@ -190,7 +190,7 @@ public sealed class LifecycleEmailTests(WebApplicationFactory<Program> factory)
             s.Template == EmailTemplates.PasswordChanged && s.To == address);
     }
 
-    [Fact]
+    [SkippableFact]
     public void PasswordChanged_Template_Renders_Link_Free()
     {
         var (subject, html) = EmailTemplates.Render(
@@ -199,7 +199,7 @@ public sealed class LifecycleEmailTests(WebApplicationFactory<Program> factory)
         Assert.DoesNotContain("<a ", html); // deliberately link-free (phishing hygiene)
     }
 
-    [Fact]
+    [SkippableFact]
     public void AnalysisComplete_Grade_Line_Is_Conditional()
     {
         var (_, withGrade) = EmailTemplates.Render(EmailTemplates.AnalysisComplete,
@@ -213,10 +213,10 @@ public sealed class LifecycleEmailTests(WebApplicationFactory<Program> factory)
         Assert.DoesNotContain("Grade:", withoutGrade);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Notify_Toggle_Roundtrips_Via_Patch_Me_Profile()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var client = _factory.CreateClient();
         var (_, token) = await TestAuth.RegisterAsync(client);

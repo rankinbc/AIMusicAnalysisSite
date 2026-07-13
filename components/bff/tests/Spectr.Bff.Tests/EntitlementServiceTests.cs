@@ -23,16 +23,6 @@ public sealed class EntitlementServiceTests
     public EntitlementServiceTests(WebApplicationFactory<Program> factory)
         => _factory = factory;
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
 
     private async Task<Guid> SeedUserAsync(string prefix)
     {
@@ -80,10 +70,10 @@ public sealed class EntitlementServiceTests
     }
 
     // ── Case (a) free user, 0 used → remaining = 3 ──────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task Free_ZeroUsed_Remaining3()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("ent-a");
         try
         {
@@ -109,10 +99,10 @@ public sealed class EntitlementServiceTests
     }
 
     // ── Case (b) free user, 3 used → remaining = 0 (exhausted) ─────────────
-    [Fact]
+    [SkippableFact]
     public async Task Free_ThreeUsed_RemainingZero()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("ent-b");
         try
         {
@@ -144,10 +134,10 @@ public sealed class EntitlementServiceTests
 
     // ── Story 3.2 (AR16) — an invalid_file failure restores the free slot ──
     // Also proves the EF subquery (j.Id.ToString() == e.Reference) translates.
-    [Fact]
+    [SkippableFact]
     public async Task Free_InvalidFileJob_DoesNotConsumeMonthlyCap()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("ent-inv");
         Guid jobId = Guid.NewGuid(), songId = Guid.NewGuid(), versionId = Guid.NewGuid();
         try
@@ -185,10 +175,10 @@ public sealed class EntitlementServiceTests
     }
 
     // ── Case (c) credits balance = 2 → tier = "credits", remaining = 2 ─────
-    [Fact]
+    [SkippableFact]
     public async Task Credits_Balance2_TierCredits_Remaining2()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("ent-c");
         try
         {
@@ -220,10 +210,10 @@ public sealed class EntitlementServiceTests
     }
 
     // ── Case (d) Pro active → remaining = null (unlimited) ──────────────────
-    [Fact]
+    [SkippableFact]
     public async Task Pro_Active_NullRemaining()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("ent-d");
         try
         {
@@ -256,10 +246,10 @@ public sealed class EntitlementServiceTests
     }
 
     // ── Case (e) Pro past_due → still tier = "pro" (dunning is story 2.9) ──
-    [Fact]
+    [SkippableFact]
     public async Task Pro_PastDue_StillPro()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("ent-e");
         try
         {
@@ -284,10 +274,10 @@ public sealed class EntitlementServiceTests
     }
 
     // ── Case (f) InvalidateAsync clears cache so next call recomputes ────────
-    [Fact]
+    [SkippableFact]
     public async Task InvalidateAsync_ClearsCache()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("ent-f");
         try
         {
@@ -324,10 +314,10 @@ public sealed class EntitlementServiceTests
     }
 
     // ── Case (g) feature flag free_analyses_per_month=5 overrides default 3 ─
-    [Fact]
+    [SkippableFact]
     public async Task FreeAnalysesCap_FlagOverride()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("ent-g");
         try
         {
@@ -361,10 +351,10 @@ public sealed class EntitlementServiceTests
     // ── Story 2.9 case (h) terminal `canceled` → degrades to free ──────────
     // AC #2: when Stripe Smart Retries exhaust and the subscription reaches a
     // terminal state, the tier degrades to Free (no credits on hand).
-    [Fact]
+    [SkippableFact]
     public async Task Canceled_NoCredits_DegradesToFree()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("ent-h");
         try
         {
@@ -393,10 +383,10 @@ public sealed class EntitlementServiceTests
     }
 
     // ── Story 2.9 case (i) terminal `unpaid` → degrades to free ────────────
-    [Fact]
+    [SkippableFact]
     public async Task Unpaid_NoCredits_DegradesToFree()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("ent-i");
         try
         {
@@ -424,10 +414,10 @@ public sealed class EntitlementServiceTests
     // ── Story 2.9 case (j) terminal `canceled` WITH credit balance →
     // falls through to the credits tier (still no Pro subscription, but the
     // user retains à-la-carte access — results-forever is unaffected). ─────
-    [Fact]
+    [SkippableFact]
     public async Task Canceled_WithCredits_FallsThroughToCredits()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("ent-j");
         try
         {

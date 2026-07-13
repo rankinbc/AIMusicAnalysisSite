@@ -69,16 +69,6 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
         return (f, queue);
     }
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
 
     private static AnalysisJob NewJob(Guid userId) => new()
     {
@@ -144,10 +134,10 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
         await db.Users.Where(u => u.Id == userId).ExecuteDeleteAsync();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Post_Message_Persists_Rows_And_Enqueues_Coach_Reply_On_Coach_Queue()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (factory, queue) = BuildWithFakeQueue();
         var (client, userId, analysisId) = await SeedAuthedUserAndAnalysis(factory, "coach-post");
@@ -195,10 +185,10 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Post_Second_Message_Reuses_Existing_Conversation()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (factory, queue) = BuildWithFakeQueue();
         var (client, userId, analysisId) = await SeedAuthedUserAndAnalysis(factory, "coach-reuse");
@@ -231,10 +221,10 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Post_Empty_Content_Returns_400_With_AR38_Envelope()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (factory, _) = BuildWithFakeQueue();
         var (client, userId, analysisId) = await SeedAuthedUserAndAnalysis(factory, "coach-empty");
@@ -256,10 +246,10 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Post_Against_Degraded_Analysis_Returns_503_Coach_Offline()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         const string offlineLine =
             "Coach is offline — your measured analysis and rule-based findings are unaffected.";
@@ -290,10 +280,10 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Get_Conversation_Empty_Before_Any_Post()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (factory, _) = BuildWithFakeQueue();
         var (client, userId, analysisId) = await SeedAuthedUserAndAnalysis(factory, "coach-get-empty");
@@ -314,10 +304,10 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Get_Conversation_Returns_Both_Messages_After_Post()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (factory, _) = BuildWithFakeQueue();
         var (client, userId, analysisId) = await SeedAuthedUserAndAnalysis(factory, "coach-get");
@@ -343,10 +333,10 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Cross_User_Isolation_Returns_404()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (factory, _) = BuildWithFakeQueue();
         var (clientA, userIdA, analysisIdA) = await SeedAuthedUserAndAnalysis(factory, "coach-A");
@@ -369,7 +359,7 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Concurrent_Posts_Converge_On_Same_Conversation_No_500()
     {
         // Story 1.5 code review B-H1: pre-patch, two concurrent first-POSTs
@@ -378,7 +368,7 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
         // index with an unhandled DbUpdateException → 500. The
         // GetOrCreateConversationAsync helper now catches the
         // unique-violation and re-reads the winning row.
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (factory, queue) = BuildWithFakeQueue();
         var (client, userId, analysisId) = await SeedAuthedUserAndAnalysis(
@@ -428,13 +418,13 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
 
     // ── Story 1.9: Per-Analysis Coach Caps (AC1-4) ───────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task Post_AtCapLimit_Returns_403_CoachCapReached_And_Does_Not_Enqueue()
     {
         // AC1: server rejects further messages with `coach_cap_reached`.
         // AC4: source-of-truth is COUNT user messages on the conversation.
         // Regression guard: NO new coach_messages row, NO actor enqueue.
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (factory, queue) = BuildWithFakeQueue();
         var (client, userId, analysisId) = await SeedAuthedUserAndAnalysis(factory, "coach-cap");
@@ -487,13 +477,13 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Post_OneBelowLimit_Succeeds_And_Reports_CapReached_True()
     {
         // AC2 sanity case: at used = limit - 1 the POST goes through and the
         // returned caps shows CapReached = false (still room for one more);
         // the NEXT POST should flip CapReached = true in the response.
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (factory, _) = BuildWithFakeQueue();
         var (client, userId, analysisId) = await SeedAuthedUserAndAnalysis(factory, "coach-belowcap");
@@ -530,12 +520,12 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Get_Conversation_Includes_Caps_Field_Reflecting_User_Message_Count()
     {
         // AC2 + AC4: the GET DTO must surface caps so the frontend can render
         // the chip + gate state on first paint without a separate roundtrip.
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (factory, _) = BuildWithFakeQueue();
         var (client, userId, analysisId) = await SeedAuthedUserAndAnalysis(factory, "coach-getcaps");

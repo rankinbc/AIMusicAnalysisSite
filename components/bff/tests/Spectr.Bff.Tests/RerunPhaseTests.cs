@@ -35,10 +35,10 @@ public sealed class RerunPhaseTests(WebApplicationFactory<Program> factory)
         return (client, queue);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task RerunPhase_Valid_Enqueues_And_Creates_RerunJob()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, queue) = NewClient();
         var userId = await Authenticate(client);
@@ -61,10 +61,10 @@ public sealed class RerunPhaseTests(WebApplicationFactory<Program> factory)
         Assert.Equal("pending", rerunJob!.Status);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task RerunPhase_Phase1_Rejected()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (client, queue) = NewClient();
         await Authenticate(client);
 
@@ -73,10 +73,10 @@ public sealed class RerunPhaseTests(WebApplicationFactory<Program> factory)
         Assert.Empty(queue.Calls);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task RerunPhase_OutOfRange_Rejected()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (client, queue) = NewClient();
         await Authenticate(client);
 
@@ -85,10 +85,10 @@ public sealed class RerunPhaseTests(WebApplicationFactory<Program> factory)
         Assert.Empty(queue.Calls);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task RerunPhase_UnknownAnalysis_NotFound()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (client, queue) = NewClient();
         await Authenticate(client);
 
@@ -130,17 +130,4 @@ public sealed class RerunPhaseTests(WebApplicationFactory<Program> factory)
         return jobId;
     }
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch
-        {
-            return false;
-        }
-    }
 }

@@ -26,10 +26,10 @@ public sealed class RoomEndpointsTests(WebApplicationFactory<Program> factory)
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-    [Fact]
+    [SkippableFact]
     public async Task StartSession_BlockedWhenHostingDisabled()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (owner, _, _) = await NewAuthedClient();
         var versionId = await CreateVersion(owner);
 
@@ -38,10 +38,10 @@ public sealed class RoomEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Host_GrantsRack_CreatesActiveGrant_AndAutoRevokesPrior()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (owner, _, ownerId) = await NewAuthedClient();
         var versionId = await CreateVersion(owner);
         var (_, r1Email, r1Id) = await NewAuthedClient();
@@ -71,10 +71,10 @@ public sealed class RoomEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.Equal(r2Id, active[0].GranteeUserId);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Transport_HostAllowed_JoinedNonHostForbidden()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (owner, _, ownerId) = await NewAuthedClient();
         var versionId = await CreateVersion(owner);
         // Public + public-join so an uninvited authed user is roomJoinable.
@@ -92,10 +92,10 @@ public sealed class RoomEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.Equal(HttpStatusCode.Forbidden, attackerMove.StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GranteeSave_SetsSessionProvenance_OnSuggestion()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (owner, _, ownerId) = await NewAuthedClient();
         var versionId = await CreateVersion(owner);
         var (reviewer, reviewerEmail, reviewerId) = await NewAuthedClient();
@@ -117,10 +117,10 @@ public sealed class RoomEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.Equal(grantId, row.ViaGrantId);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task EndSession_HostEnqueuesSynthesizeRecap()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var queue = new RecordingRoomQueue();
         var f = _factory.WithWebHostBuilder(b => b.ConfigureTestServices(s =>
         {
@@ -138,10 +138,10 @@ public sealed class RoomEndpointsTests(WebApplicationFactory<Program> factory)
             c.Task == "synthesize_recap" && c.Queue == DramatiqQueues.AnalysisPaid);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task React_OnLiveSession_AppendsToRedisLog()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (owner, _, ownerId) = await NewAuthedClient();
         var versionId = await CreateVersion(owner);
         var sessionId = await InsertLiveSession(versionId, ownerId);
@@ -245,14 +245,4 @@ public sealed class RoomEndpointsTests(WebApplicationFactory<Program> factory)
         return grant.Id;
     }
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
 }

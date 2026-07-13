@@ -17,22 +17,12 @@ namespace Spectr.Bff.Tests;
 // analysis enqueue to the right Dramatiq queue, and that the re-homed auxiliary
 // actor (classify_stems) lands on analysis-paid (not the dead `default` queue).
 // Uses RecordingJobQueue (UploadDeferralTests.cs) — Redis not needed. Gated on
-// Postgres via the PostgresReachable() pattern, like the other integration tests.
+// Postgres via TestDb.RequireAsync (skip-visible, story 12.7).
 public sealed class DispatchQueueRoutingTests(WebApplicationFactory<Program> factory)
     : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
 
     private (HttpClient client, RecordingJobQueue queue) NewClient()
     {
@@ -116,10 +106,10 @@ public sealed class DispatchQueueRoutingTests(WebApplicationFactory<Program> fac
     }
 
     // ── (1) Free user (0 used) → analysis-free ───────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task FreeUser_RoutesToAnalysisFree()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (client, queue) = NewClient();
         await AuthAsync(client, "route-free");
         var versionId = await CreateVersionAsync(client);
@@ -130,10 +120,10 @@ public sealed class DispatchQueueRoutingTests(WebApplicationFactory<Program> fac
     }
 
     // ── (2) Credits user (balance ≥ 1) → analysis-paid ───────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task CreditsUser_RoutesToAnalysisPaid()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (client, queue) = NewClient();
         var (_, userId) = await AuthAsync(client, "route-credits");
         await SeedCreditAsync(userId, 1);
@@ -145,10 +135,10 @@ public sealed class DispatchQueueRoutingTests(WebApplicationFactory<Program> fac
     }
 
     // ── (3) Pro user (active sub) → analysis-paid ────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task ProUser_Active_RoutesToAnalysisPaid()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (client, queue) = NewClient();
         var (_, userId) = await AuthAsync(client, "route-pro");
         await SeedSubscriptionAsync(userId, "active");
@@ -160,10 +150,10 @@ public sealed class DispatchQueueRoutingTests(WebApplicationFactory<Program> fac
     }
 
     // ── (4) Pro past_due → analysis-paid (matches 2.4 tier table; dunning = 2.9) ─
-    [Fact]
+    [SkippableFact]
     public async Task ProUser_PastDue_RoutesToAnalysisPaid()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (client, queue) = NewClient();
         var (_, userId) = await AuthAsync(client, "route-pastdue");
         await SeedSubscriptionAsync(userId, "past_due");
@@ -175,10 +165,10 @@ public sealed class DispatchQueueRoutingTests(WebApplicationFactory<Program> fac
     }
 
     // ── (AC5 re-homing lock) classify_stems must enqueue on analysis-paid, not default ─
-    [Fact]
+    [SkippableFact]
     public async Task ClassifyStems_RoutesToAnalysisPaid()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (client, queue) = NewClient();
         await AuthAsync(client, "route-stems");
         var versionId = await CreateVersionAsync(client);

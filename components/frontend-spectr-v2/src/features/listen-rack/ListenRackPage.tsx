@@ -652,7 +652,7 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
   };
 
   return (
-    <div className="lr-shell">
+    <div className="lr-shell" data-testid="listen-rack-page">
       {/* position:relative + z-index lifts the page above the full-screen
           visualizer backdrop (VizStage background mode portals to <body> at
           z-index 0); the global top nav is z-index 50 and stays on top too. */}

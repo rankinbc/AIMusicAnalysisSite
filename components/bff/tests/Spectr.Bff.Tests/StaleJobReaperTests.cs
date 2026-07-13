@@ -78,10 +78,10 @@ public sealed class StaleJobReaperTests(WebApplicationFactory<Program> factory)
         await db.AnalysisJobs.Where(j => jobIds.Contains(j.Id)).ExecuteDeleteAsync();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Pending_Jobs_Survive_The_Processing_Window_But_Not_The_Grace()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var client = _factory.CreateClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);
@@ -126,10 +126,10 @@ public sealed class StaleJobReaperTests(WebApplicationFactory<Program> factory)
     // (stale/absent heartbeat) fails queued jobs after the short grace; a
     // BUSY worker (fresh heartbeat) keeps the long grace so its queue is
     // never false-failed.
-    [Fact]
+    [SkippableFact]
     public async Task Pending_Fast_Tier_Fires_Only_When_The_Heartbeat_Is_Stale()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var client = _factory.CreateClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);
@@ -181,10 +181,10 @@ public sealed class StaleJobReaperTests(WebApplicationFactory<Program> factory)
 
     // Story 12.2 (AC2) — an ABSENT heartbeat (no worker ever registered) is a
     // dead worker too: null age must arm the fast tier.
-    [Fact]
+    [SkippableFact]
     public async Task Pending_Fast_Tier_Fires_When_No_Heartbeat_Exists()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var client = _factory.CreateClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);
@@ -208,10 +208,10 @@ public sealed class StaleJobReaperTests(WebApplicationFactory<Program> factory)
 
     // Story 12.2 (AC2) — a Redis probe error is liveness UNKNOWN, not "dead":
     // the fast tier must not fire, and the EF-only reap must keep working.
-    [Fact]
+    [SkippableFact]
     public async Task Heartbeat_Probe_Failure_Falls_Back_To_The_Long_Grace_Only()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var client = _factory.CreateClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);
@@ -249,10 +249,10 @@ public sealed class StaleJobReaperTests(WebApplicationFactory<Program> factory)
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Progress_Restores_Via_The_Poll_Path_For_A_Processing_Job()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         // Story 3.5 AC1 (FR8): the Results page restores progress by polling
         // GET /jobs/{id} — a mid-flight job must surface status + phase + pct.

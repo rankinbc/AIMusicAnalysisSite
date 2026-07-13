@@ -1,23 +1,15 @@
 # Playwright Fixtures
 
-`test-tone.wav` is consumed by `slice-1-happy-path.spec.ts`. The spec is
-intentionally environment-agnostic; any short (5–10 s) WAV/FLAC/MP3 the
-analysis pipeline can ingest will pass.
+`test-tone.wav` is consumed by `smoke-first-run.spec.ts` (story 12.7). It is
+generated automatically by `playwright/global-setup.ts` via the
+dependency-free writer in `gen-wav.mjs` (5 s stereo 440 Hz sine, 44.1 kHz
+16-bit PCM, ~880 KB) — no ffmpeg/sox required, nothing binary committed.
 
-Generate one locally with ffmpeg:
-
-```bash
-ffmpeg -f lavfi -i "sine=frequency=440:duration=5" \
-    -ar 44100 -ac 2 -c:a pcm_s16le \
-    test-tone.wav
-```
-
-Or with sox:
+Regenerate manually if needed:
 
 ```bash
-sox -n -r 44100 -c 2 test-tone.wav synth 5 sine 440
+node playwright/fixtures/gen-wav.mjs
 ```
 
-These fixtures aren't committed because the rest of the repo treats
-generated artifacts as ephemeral — the spec is gated on the file's
-presence and fails clearly if missing.
+The fixture isn't committed because the repo treats generated artifacts as
+ephemeral; global-setup recreates it on any machine before the run.

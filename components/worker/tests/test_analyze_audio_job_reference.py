@@ -44,7 +44,7 @@ class _FakeSession:
 
 
 @pytest.fixture
-def harness(monkeypatch):
+def harness(monkeypatch, tmp_path):
     """Patches SessionFactory.begin, run_pipeline (capturing), LOCAL_ROOT, and
     the artifact writer. Returns a builder that wires a registry and runs the actor."""
     captured: dict = {}
@@ -55,7 +55,9 @@ def harness(monkeypatch):
         return {"phase1": {"ok": True}, "overall_score": 80.0}
 
     monkeypatch.setattr(td, "run_pipeline", fake_run_pipeline)
-    monkeypatch.setattr(td, "LOCAL_ROOT", "/root")
+    # tmp_path, not a literal "/root": on Linux CI the runner user cannot
+    # stat inside /root (0700) and resolve_local raises PermissionError.
+    monkeypatch.setattr(td, "LOCAL_ROOT", str(tmp_path))
     monkeypatch.setattr(td, "_try_write_artifact", lambda *a, **k: None)
     # Story 3.2: source validation runs pre-pipeline; these tests never write a real file.
     monkeypatch.setattr(td.source_validation, "validate_source", lambda _p: 180.0)

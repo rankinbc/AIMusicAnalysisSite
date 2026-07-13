@@ -19,7 +19,7 @@ public sealed class DeviceClaimTests(WebApplicationFactory<Program> factory)
 
     // ── UlidGen + cookie primitives (pure) ──────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public void Ulid_Is_26_Crockford_Chars_And_Time_Prefixed()
     {
         var a = UlidGen.NewUlid();
@@ -31,7 +31,7 @@ public sealed class DeviceClaimTests(WebApplicationFactory<Program> factory)
         Assert.True(string.CompareOrdinal(a[..6], b[..6]) <= 0);
     }
 
-    [Fact]
+    [SkippableFact]
     public void Device_Cookie_Signs_And_Verifies_Constant_Time()
     {
         const string key = "unit-test-signing-key-0123456789";
@@ -47,10 +47,10 @@ public sealed class DeviceClaimTests(WebApplicationFactory<Program> factory)
 
     // ── XOR CHECK (AC2) ─────────────────────────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task Ownership_Check_Rejects_Both_And_Neither()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -79,10 +79,10 @@ public sealed class DeviceClaimTests(WebApplicationFactory<Program> factory)
 
     // ── Claim (AC3) ─────────────────────────────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task Register_With_Device_Cookie_Claims_All_Rows_In_One_Shot()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         using var scope0 = _factory.Services.CreateScope();
         var seedDb = scope0.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -168,10 +168,10 @@ public sealed class DeviceClaimTests(WebApplicationFactory<Program> factory)
 
     // ── GetOrCreate branches (AC1 service-level) ───────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task GetOrCreate_Reuses_Valid_Unclaimed_And_Mints_Fresh_For_Claimed_Or_Purged()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         using var scope = _factory.Services.CreateScope();
         var svc = scope.ServiceProvider.GetRequiredService<DeviceService>();
@@ -226,10 +226,10 @@ public sealed class DeviceClaimTests(WebApplicationFactory<Program> factory)
 
     // ── Verify gate (AC5) ───────────────────────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task Second_Analysis_Requires_Verification_For_Free_Tier()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var client = _factory.CreateClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);

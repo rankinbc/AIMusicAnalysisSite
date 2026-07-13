@@ -54,10 +54,10 @@ public sealed class AdminEndpointsTests(WebApplicationFactory<Program> factory)
         return req;
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Admin_Surface_Is_Invisible_Unconfigured_And_Locked_With_Wrong_Key()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         // Unconfigured factory (no Admin:ApiKey) → 404, not 401: invisible.
         var bare = _factory.CreateClient();
@@ -74,10 +74,10 @@ public sealed class AdminEndpointsTests(WebApplicationFactory<Program> factory)
             (await client.SendAsync(Req(HttpMethod.Get, "/api/admin/audit"))).StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Billing_Trail_Resolves_By_Email_And_Shows_Ledger()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         using var f = WithAdmin(out _);
         var client = f.CreateClient();
@@ -104,10 +104,10 @@ public sealed class AdminEndpointsTests(WebApplicationFactory<Program> factory)
         finally { await Cleanup(f, userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Refund_Writes_Ledger_Adjustment_And_Audit_Row()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         using var f = WithAdmin(out var refunds);
         var client = f.CreateClient();
@@ -157,10 +157,10 @@ public sealed class AdminEndpointsTests(WebApplicationFactory<Program> factory)
         finally { await Cleanup(f, userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Ban_Blocks_Login_Kills_Tokens_And_Audits_Unban_Restores()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         using var f = WithAdmin(out _);
         var client = f.CreateClient();
@@ -209,10 +209,10 @@ public sealed class AdminEndpointsTests(WebApplicationFactory<Program> factory)
         finally { await Cleanup(f, userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Flag_Change_Persists_Evicts_And_Audits_Prompt_Pin_Validates()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         using var f = WithAdmin(out _);
         var client = f.CreateClient();
@@ -257,10 +257,10 @@ public sealed class AdminEndpointsTests(WebApplicationFactory<Program> factory)
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Audit_Log_Is_DbEnforced_AppendOnly()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();

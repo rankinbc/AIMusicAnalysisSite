@@ -32,6 +32,23 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+// Story 12.7 (found by the first-run smoke): the boot silent-refresh must be
+// SINGLE-FLIGHT. React StrictMode dev double-invokes the mount effect, firing
+// two concurrent POST /api/auth/refresh — rotation consumes the token on the
+// first, the second 401s, and applyAuth(null) logs the fresh session straight
+// back out. Module-level so every caller in the tab shares one in-flight
+// request; the RESULT is shared (a Response body can only be read once).
+let inflightRefresh: Promise<AuthResponse | null> | null = null;
+
+async function fetchRefresh(): Promise<AuthResponse | null> {
+  const res = await fetch('/api/auth/refresh', {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as AuthResponse;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
     user: null,
@@ -56,17 +73,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async (): Promise<boolean> => {
     try {
-      const res = await fetch('/api/auth/refresh', {
-        method: 'POST',
-        credentials: 'include',
+      inflightRefresh ??= fetchRefresh().finally(() => {
+        inflightRefresh = null;
       });
-      if (!res.ok) {
-        applyAuth(null);
-        return false;
-      }
-      const data = (await res.json()) as AuthResponse;
+      const data = await inflightRefresh;
       applyAuth(data);
-      return true;
+      return data !== null;
     } catch {
       applyAuth(null);
       return false;

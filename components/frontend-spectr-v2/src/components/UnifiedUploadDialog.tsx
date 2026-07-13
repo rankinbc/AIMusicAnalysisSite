@@ -757,6 +757,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                     <input
                       type="file"
                       accept=".wav,.flac,.mp3,.aiff,.aif,.m4a,.ogg,audio/*"
+                      data-testid="mix-file-input"
                       onChange={(e) => setMix(e.target.files?.[0] ?? null)}
                       style={{ display: 'none' }}
                     />

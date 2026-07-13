@@ -22,16 +22,6 @@ public sealed class HonestMathServiceTests
     public HonestMathServiceTests(WebApplicationFactory<Program> factory)
         => _factory = factory;
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
 
     private async Task<Guid> SeedUserAsync(string prefix)
     {
@@ -77,10 +67,10 @@ public sealed class HonestMathServiceTests
         };
 
     // Two 10-packs in window → 7000c ≥ 3897c → qualifies.
-    [Fact]
+    [SkippableFact]
     public async Task HeavySpender_Qualifies()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("hm-a");
         try
         {
@@ -100,10 +90,10 @@ public sealed class HonestMathServiceTests
     }
 
     // One 5-pack → 1900c < 3897c → does NOT qualify.
-    [Fact]
+    [SkippableFact]
     public async Task LightSpender_DoesNotQualify()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("hm-b");
         try
         {
@@ -120,10 +110,10 @@ public sealed class HonestMathServiceTests
     }
 
     // Purchase older than 90 days is excluded from the window.
-    [Fact]
+    [SkippableFact]
     public async Task OldPurchase_Excluded()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("hm-c");
         try
         {
@@ -140,10 +130,10 @@ public sealed class HonestMathServiceTests
     }
 
     // Non-purchase rows (spend/adjustment) never count toward spend.
-    [Fact]
+    [SkippableFact]
     public async Task NonPurchaseRows_Excluded()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("hm-d");
         try
         {

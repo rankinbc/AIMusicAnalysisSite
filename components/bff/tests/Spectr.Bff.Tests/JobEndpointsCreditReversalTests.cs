@@ -23,16 +23,6 @@ public sealed class JobEndpointsCreditReversalTests(WebApplicationFactory<Progra
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
 
     private static async Task<(HttpClient C, Guid UserId)> SeedAuthedAsync(
         WebApplicationFactory<Program> factory, string prefix)
@@ -88,10 +78,10 @@ public sealed class JobEndpointsCreditReversalTests(WebApplicationFactory<Progra
         await db.Users.Where(u => u.Id == userId).ExecuteDeleteAsync();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetJob_With_InvalidFile_And_Prior_Spend_Refunds_Credit()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (client, userId) = await SeedAuthedAsync(_factory, "jobrev-refund");
         try
         {
@@ -115,10 +105,10 @@ public sealed class JobEndpointsCreditReversalTests(WebApplicationFactory<Progra
         finally { await CleanupAsync(userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetJob_Second_Read_Does_Not_Double_Refund()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (client, userId) = await SeedAuthedAsync(_factory, "jobrev-dup");
         try
         {
@@ -137,13 +127,13 @@ public sealed class JobEndpointsCreditReversalTests(WebApplicationFactory<Progra
         finally { await CleanupAsync(userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetJob_Without_Prior_Spend_Does_Not_Refund()
     {
         // A failed-invalid-file job on a subscription-funded user
         // (no credit spend recorded) MUST NOT cause a spurious +1
         // credit row to appear.
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (client, userId) = await SeedAuthedAsync(_factory, "jobrev-nospend");
         try
         {

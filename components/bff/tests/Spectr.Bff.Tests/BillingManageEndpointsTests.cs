@@ -107,16 +107,6 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
         return (f, fake);
     }
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
 
     private static async Task<(HttpClient C, Guid UserId)> SeedAuthedAsync(
         WebApplicationFactory<Program> factory, string prefix)
@@ -173,10 +163,10 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
 
     // ── GET /me ────────────────────────────────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task GetMe_Free_User_Returns_Free_Tier_Summary()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, _) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-free");
         try
@@ -193,10 +183,10 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
         finally { await CleanupAsync(f, userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetMe_Pro_Active_Returns_Monthly_Cadence_And_Next_Charge()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, _) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-active");
         await SeedSubscriptionAsync(f, userId);
@@ -215,10 +205,10 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
         finally { await CleanupAsync(f, userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetMe_Pro_Canceled_Hides_NextCharge()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, _) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-canc");
         await SeedSubscriptionAsync(f, userId, cancelAt: DateTimeOffset.UtcNow.AddDays(30));
@@ -235,10 +225,10 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
     }
 
     // ── Story 2.9 — dunning retry date round-trips on the summary ──────────
-    [Fact]
+    [SkippableFact]
     public async Task GetMe_Pro_PastDue_Returns_RetryAt()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, _) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-pastdue");
         var retry = DateTimeOffset.FromUnixTimeSeconds(1788393600);
@@ -256,10 +246,10 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
         finally { await CleanupAsync(f, userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetMe_Pro_Active_Has_Null_RetryAt()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, _) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-noretry");
         await SeedSubscriptionAsync(f, userId);
@@ -274,10 +264,10 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
 
     // ── POST /cancel ───────────────────────────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task PostCancel_Without_Active_Subscription_Returns_409()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, _) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-cancel-free");
         try
@@ -292,10 +282,10 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
         finally { await CleanupAsync(f, userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task PostCancel_Flips_CancelAtPeriodEnd_Via_Stripe()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, fake) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-cancel-ok");
         await SeedSubscriptionAsync(f, userId);
@@ -326,13 +316,13 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
         finally { await CleanupAsync(f, userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task PostCancel_Without_Reason_Sends_Empty_Cancel_Reason_Metadata()
     {
         // Story 2.2 review-fix P4 / D3 — metadata is ALWAYS sent with
         // the cancel_reason key (per spec text `reason ?? ""`). Sending
         // null Metadata to Stripe would clear ALL existing metadata.
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, fake) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-cancel-noreason");
         await SeedSubscriptionAsync(f, userId);
@@ -347,12 +337,12 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
         finally { await CleanupAsync(f, userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task PostCancel_Already_Canceling_Returns_409()
     {
         // Story 2.2 review-fix P7 — double-cancel is a 409 short-circuit,
         // not a wasted Stripe roundtrip.
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, fake) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-already-canc");
         await SeedSubscriptionAsync(
@@ -373,10 +363,10 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
 
     // ── POST /resubscribe ──────────────────────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task PostResubscribe_Without_Pending_Cancel_Returns_409()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, _) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-resub-none");
         await SeedSubscriptionAsync(f, userId); // no cancelAt
@@ -391,10 +381,10 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
         finally { await CleanupAsync(f, userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task PostResubscribe_Reverses_Cancel()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, fake) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-resub-ok");
         await SeedSubscriptionAsync(
@@ -421,14 +411,14 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
         finally { await CleanupAsync(f, userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task PostResubscribe_On_Terminated_Subscription_Returns_409()
     {
         // Story 2.2 review-fix P6 — once status flips past active/
         // trialing/past_due (e.g. webhook delivered `canceled` after
         // period end), resubscribe must reject up-front instead of
         // letting Stripe's 400 surface as a 500.
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, fake) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-resub-terminated");
         await SeedSubscriptionAsync(
@@ -449,10 +439,10 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
 
     // ── POST /change-cadence ───────────────────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task PostChangeCadence_Same_Cadence_Returns_409()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, _) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-same");
         await SeedSubscriptionAsync(f, userId, priceId: "price_test_monthly");
@@ -468,10 +458,10 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
         finally { await CleanupAsync(f, userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task PostChangeCadence_Annual_Swaps_Price_With_Proration()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, fake) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-swap");
         await SeedSubscriptionAsync(f, userId, priceId: "price_test_monthly");
@@ -499,12 +489,12 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
         finally { await CleanupAsync(f, userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task PostChangeCadence_While_Pending_Cancel_Returns_409()
     {
         // Story 2.2 review-fix P10 — cadence swap on a sub pending
         // cancellation would trigger a surprise proration charge.
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, fake) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-cadence-pending");
         await SeedSubscriptionAsync(
@@ -524,10 +514,10 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
         finally { await CleanupAsync(f, userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task PostChangeCadence_With_Null_StripeItemId_Returns_409()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, _) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-notready");
         await SeedSubscriptionAsync(f, userId, itemId: null!);
@@ -545,10 +535,10 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
 
     // ── POST /portal ───────────────────────────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task PostPortal_Without_Stripe_Customer_Returns_409()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, _) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-portal-nocust");
         try
@@ -562,10 +552,10 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
         finally { await CleanupAsync(f, userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task PostPortal_Returns_Stripe_Hosted_Url_With_Billing_Return_Path()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, fake) = BuildWithFakeStripe();
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-portal-ok");
         await SeedSubscriptionAsync(f, userId);
@@ -587,10 +577,10 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
         finally { await CleanupAsync(f, userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task PostCancel_Without_Stripe_Config_Returns_503()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, _) = BuildWithFakeStripe(configured: false);
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-noconfig-cancel");
         try
@@ -610,10 +600,10 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
     // /change-cadence so the no-config guard on every mutating endpoint
     // is locked.
 
-    [Fact]
+    [SkippableFact]
     public async Task PostResubscribe_Without_Stripe_Config_Returns_503()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, _) = BuildWithFakeStripe(configured: false);
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-noconfig-resub");
         try
@@ -627,10 +617,10 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
         finally { await CleanupAsync(f, userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task PostChangeCadence_Without_Stripe_Config_Returns_503()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, _) = BuildWithFakeStripe(configured: false);
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-noconfig-cad");
         try
@@ -645,10 +635,10 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
         finally { await CleanupAsync(f, userId); }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task PostPortal_Without_Stripe_Config_Returns_503()
     {
-        if (!await PostgresReachable()) { return; }
+        await TestDb.RequireAsync(_factory);
         var (f, _) = BuildWithFakeStripe(configured: false);
         var (client, userId) = await SeedAuthedAsync(f, "billmgr-noconfig-portal");
         try

@@ -20,10 +20,10 @@ public sealed class BookmarkVersionEndpointsTests(WebApplicationFactory<Program>
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-    [Fact]
+    [SkippableFact]
     public async Task AuthedBookmarkVersion_WithTNote_Dedups_AndTogglesIdentity()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (owner, _, _) = await NewAuthedClient();
         var versionId = await CreateVersion(owner);
 
@@ -47,10 +47,10 @@ public sealed class BookmarkVersionEndpointsTests(WebApplicationFactory<Program>
         Assert.Single(list!, b => b.TargetVersionId == versionId);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task BookmarkVersion_BlockedWhenBookmarkingDisallowed()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (owner, _, _) = await NewAuthedClient();
         var versionId = await CreateVersion(owner);
         await owner.PutAsJsonAsync($"/api/versions/{versionId}/share",
@@ -60,10 +60,10 @@ public sealed class BookmarkVersionEndpointsTests(WebApplicationFactory<Program>
         Assert.Equal(HttpStatusCode.Forbidden, post.StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task AnonBookmark_ViaShareLink_CountsInSignal_Anonymously()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (owner, _, _) = await NewAuthedClient();
         var versionId = await CreateVersion(owner);
         var share = await (await owner.PutAsJsonAsync($"/api/versions/{versionId}/share",
@@ -84,10 +84,10 @@ public sealed class BookmarkVersionEndpointsTests(WebApplicationFactory<Program>
         Assert.Empty(signal.Identified);    // ...but never identified (D5.4)
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Signal_IdentifiesOnlyOptedInNamed_AndIsOwnerGated()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (owner, _, _) = await NewAuthedClient();
         var versionId = await CreateVersion(owner);
         var (reviewer, reviewerEmail, reviewerId) = await NewAuthedClient();
@@ -108,10 +108,10 @@ public sealed class BookmarkVersionEndpointsTests(WebApplicationFactory<Program>
         Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task ThreeWayCheck_RejectsTwoTargets()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (owner, _, ownerId) = await NewAuthedClient();
         var versionId = await CreateVersion(owner);
 
@@ -155,14 +155,4 @@ public sealed class BookmarkVersionEndpointsTests(WebApplicationFactory<Program>
         return (await resp.Content.ReadFromJsonAsync<UploadResponse>())!.VersionId;
     }
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
 }

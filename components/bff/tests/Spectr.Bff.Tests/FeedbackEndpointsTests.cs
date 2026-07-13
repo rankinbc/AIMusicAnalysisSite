@@ -27,10 +27,10 @@ public sealed class FeedbackEndpointsTests(WebApplicationFactory<Program> factor
         masterBypass = false,
     };
 
-    [Fact]
+    [SkippableFact]
     public async Task OwnerPostsComment_ListsIt_AndModeratesStatus()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (owner, _) = await NewAuthedClient();
         var versionId = await CreateVersion(owner);
 
@@ -48,10 +48,10 @@ public sealed class FeedbackEndpointsTests(WebApplicationFactory<Program> factor
         Assert.Equal(HttpStatusCode.NoContent, patch.StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task NonOwner_CannotModerateComment()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (owner, _) = await NewAuthedClient();
         var versionId = await CreateVersion(owner);
         var dto = await (await owner.PostAsJsonAsync($"/api/versions/{versionId}/comments",
@@ -62,10 +62,10 @@ public sealed class FeedbackEndpointsTests(WebApplicationFactory<Program> factor
         Assert.Equal(HttpStatusCode.Forbidden, patch.StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task InvitedReviewer_Suggests_OwnerAccepts_ForksRackPreset()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (owner, _) = await NewAuthedClient();
         var versionId = await CreateVersion(owner);
         var (reviewer, reviewerEmail) = await NewAuthedClient();
@@ -94,10 +94,10 @@ public sealed class FeedbackEndpointsTests(WebApplicationFactory<Program> factor
         Assert.Equal("accepted", refreshed.Status);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Anon_Comment_AllowedUnderLink_BlockedUnderNamed()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (owner, _) = await NewAuthedClient();
         var versionId = await CreateVersion(owner);
         var s = await (await owner.PutAsJsonAsync($"/api/versions/{versionId}/share",
@@ -115,10 +115,10 @@ public sealed class FeedbackEndpointsTests(WebApplicationFactory<Program> factor
         Assert.Equal(HttpStatusCode.Forbidden, blocked.StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task ThreeWayCheck_RejectsTwoTargets()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
@@ -158,14 +158,4 @@ public sealed class FeedbackEndpointsTests(WebApplicationFactory<Program> factor
         return (await resp.Content.ReadFromJsonAsync<UploadResponse>())!.VersionId;
     }
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
 }

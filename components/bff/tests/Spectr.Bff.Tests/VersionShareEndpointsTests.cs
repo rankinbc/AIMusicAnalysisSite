@@ -17,10 +17,10 @@ public sealed class VersionShareEndpointsTests(WebApplicationFactory<Program> fa
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
-    [Fact]
+    [SkippableFact]
     public async Task Owner_Access_GrantsWorkAndCoach_NotHostableAtLaunch()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (client, _) = await NewAuthedClient();
         var versionId = await CreateVersion(client);
 
@@ -33,10 +33,10 @@ public sealed class VersionShareEndpointsTests(WebApplicationFactory<Program> fa
         Assert.False(acc.RoomHostable);    // room_hosting_enabled=false at launch
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task NonOwner_Access_OnPrivateVersion_IsNone()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (owner, _) = await NewAuthedClient();
         var versionId = await CreateVersion(owner);
 
@@ -49,10 +49,10 @@ public sealed class VersionShareEndpointsTests(WebApplicationFactory<Program> fa
         Assert.False(acc.CoachAvailable);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task UpdateShare_LeavingPrivate_MintsToken_AndRotateReplacesIt()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (client, _) = await NewAuthedClient();
         var versionId = await CreateVersion(client);
 
@@ -74,10 +74,10 @@ public sealed class VersionShareEndpointsTests(WebApplicationFactory<Program> fa
         Assert.NotEqual(unlisted.ShareToken, rotated.ShareToken);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task InvitedReviewer_GetsView_ButNotWorkOrCoach()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (owner, _) = await NewAuthedClient();
         var versionId = await CreateVersion(owner);
         var (reviewer, reviewerEmail) = await NewAuthedClient();
@@ -94,10 +94,10 @@ public sealed class VersionShareEndpointsTests(WebApplicationFactory<Program> fa
         Assert.False(acc.CoachAvailable);  // X.1
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task InviteAccept_BindsUser_AndRevokeRemovesAccess()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (owner, _) = await NewAuthedClient();
         var versionId = await CreateVersion(owner);
         var (reviewer, _) = await NewAuthedClient();
@@ -122,10 +122,10 @@ public sealed class VersionShareEndpointsTests(WebApplicationFactory<Program> fa
         Assert.Equal("none", afterRevoke.Role);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task AnonView_CommentsPolicy_NamedBlocksAnon_LinkAllows()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (owner, _) = await NewAuthedClient();
         var versionId = await CreateVersion(owner);
 
@@ -144,10 +144,10 @@ public sealed class VersionShareEndpointsTests(WebApplicationFactory<Program> fa
         Assert.True(link!.Gates.CanComment);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task AnonView_TokenStopsResolving_WhenBackToPrivate()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (owner, _) = await NewAuthedClient();
         var versionId = await CreateVersion(owner);
         var s = await PutShare(owner, versionId, new { visibility = "unlisted" });
@@ -163,10 +163,10 @@ public sealed class VersionShareEndpointsTests(WebApplicationFactory<Program> fa
 
     // Story 11.11 — /v/{token} carries the owner's public identity for the
     // follow-producer CTA (null when the owner has no handle or is inactive).
-    [Fact]
+    [SkippableFact]
     public async Task VersionView_Carries_Owner_Handle_When_Followable()
     {
-        if (!await PostgresReachable()) return;
+        await TestDb.RequireAsync(_factory);
         var (owner, email) = await NewAuthedClient();
         var versionId = await CreateVersion(owner);
         var s = await PutShare(owner, versionId, new { visibility = "unlisted" });
@@ -234,15 +234,4 @@ public sealed class VersionShareEndpointsTests(WebApplicationFactory<Program> fa
         return await resp.Content.ReadFromJsonAsync<ShareSettingsDto>();
     }
 
-    private async Task<bool> PostgresReachable()
-    {
-        try
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider
-                .GetRequiredService<Spectr.Data.AppDbContext>();
-            return await db.Database.CanConnectAsync();
-        }
-        catch { return false; }
-    }
 }

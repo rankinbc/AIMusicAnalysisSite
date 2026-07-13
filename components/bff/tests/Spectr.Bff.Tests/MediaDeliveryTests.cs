@@ -45,10 +45,10 @@ public sealed class MediaDeliveryTests(WebApplicationFactory<Program> factory)
         return (userId, versionId);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Audio_S3OnlyObject_Redirects_To_Presigned_Get()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, store, f) = NewClient();
         var key = $"audio/u/{Guid.NewGuid()}/source.wav";
@@ -65,10 +65,10 @@ public sealed class MediaDeliveryTests(WebApplicationFactory<Program> factory)
         Assert.Equal("audio/wav", store.PresignedGets.First().ContentType);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Audio_LocalFile_Still_Proxies_Bytes()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, store, f) = NewClient();
         var key = $"audio/test/{Guid.NewGuid()}/source.wav";
@@ -86,10 +86,10 @@ public sealed class MediaDeliveryTests(WebApplicationFactory<Program> factory)
         Assert.Empty(store.PresignedGets); // local-first — no presign minted
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Audio_Missing_Everywhere_404s()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, store, f) = NewClient();
         store.ObjectExists = false;
@@ -99,10 +99,10 @@ public sealed class MediaDeliveryTests(WebApplicationFactory<Program> factory)
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Als_Download_Redirect_Carries_Download_Name()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, store, f) = NewClient();
         var (_, versionId) = await SeedVersionAsync(f, client, $"audio/u/{Guid.NewGuid()}/source.wav");
@@ -122,10 +122,10 @@ public sealed class MediaDeliveryTests(WebApplicationFactory<Program> factory)
         Assert.Equal("project.als", store.PresignedGets.Single().DownloadName);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Share_Audio_Redirects_For_S3_Object()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, _, f) = NewClient();
         var key = $"audio/u/{Guid.NewGuid()}/source.flac";
@@ -156,10 +156,10 @@ public sealed class MediaDeliveryTests(WebApplicationFactory<Program> factory)
         Assert.Contains(key, resp.Headers.Location!.ToString());
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Image_S3Only_Redirects_Without_Immutable_Cache_Header()
     {
-        if (!await TestDb.Reachable(_factory)) { return; }
+        await TestDb.RequireAsync(_factory);
 
         var (client, _, f) = NewClient();
         var key = $"analysis/images/{Guid.NewGuid()}/spectrogram.webp";
