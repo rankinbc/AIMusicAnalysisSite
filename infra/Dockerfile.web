@@ -15,6 +15,8 @@ COPY components/frontend-spectr-v2/ ./
 RUN npm run build
 
 # Minor-pinned: the TLS edge must not absorb unreviewed major/minor bumps.
-FROM caddy:2.8
+# 2.8 (alpine 3.20) hit Trivy CRITICALs (openssl CVE-2026-31789, embedded
+# smallstep CVE-2025-44005) — bumped 2026-07-13.
+FROM caddy:2.11
 COPY infra/Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/dist /srv
