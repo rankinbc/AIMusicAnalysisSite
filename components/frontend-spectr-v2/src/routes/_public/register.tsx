@@ -105,6 +105,12 @@ function RegisterPage() {
         Already have an account?
         <Link to="/login">Sign in</Link>
       </p>
+      {/* Story 6.2 (AC2) — the trust commitments, one tap from the signup form. */}
+      <p className={`mono ${s.trustLine}`}>
+        <a href="/trust/no-training">No AI training on your audio</a>
+        {' · '}
+        <a href="/trust/results-forever">reports stay yours</a>
+      </p>
     </div>
   );
 }

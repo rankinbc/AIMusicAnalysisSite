@@ -15,6 +15,9 @@ public sealed class PublicSiteShellTests(WebApplicationFactory<Program> factory)
     [Theory]
     [InlineData("/", "SPECTR — AI mix analysis for producers")]
     [InlineData("/pricing", "Pricing — SPECTR")]
+    [InlineData("/trust/no-training", "No AI training on your audio — SPECTR")]
+    [InlineData("/trust/results-forever", "Your results stay yours — SPECTR")]
+    [InlineData("/trust/privacy", "Privacy defaults — SPECTR")]
     public async Task Shell_Serves_Html_With_Meta_And_Canonical(string path, string expectedTitle)
     {
         var client = _factory.CreateClient();

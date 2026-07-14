@@ -59,7 +59,10 @@ export function LandingPage() {
         <footer className={s.footer}>
           <a href="/pricing" className={s.footerLink}>Pricing</a>
           <a href="/login" className={s.footerLink}>Sign in</a>
-          {/* Trust pages land here in story 6.2: no-training pledge · results forever · privacy. */}
+          {/* Story 6.2 — trust pages. */}
+          <a href="/trust/no-training" className={s.footerLink}>No AI training</a>
+          <a href="/trust/results-forever" className={s.footerLink}>Results forever</a>
+          <a href="/trust/privacy" className={s.footerLink}>Privacy</a>
           <span className={`mono ${s.footerNote}`}>SPECTR</span>
         </footer>
       </main>

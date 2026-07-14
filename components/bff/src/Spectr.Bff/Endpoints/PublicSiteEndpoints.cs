@@ -15,6 +15,25 @@ public static class PublicSiteEndpoints
     {
         app.MapGet("/", LandingShell).AllowAnonymous().WithTags("public-site");
         app.MapGet("/pricing", PricingShell).AllowAnonymous().WithTags("public-site");
+        // Story 6.2 — trust pages.
+        app.MapGet("/trust/no-training", (HttpContext c) => Shell(c,
+            path: "/trust/no-training",
+            title: "No AI training on your audio — SPECTR",
+            description: "SPECTR's versioned no-training pledge: your audio never trains a model, and raw audio is never sent to any LLM.",
+            heading: "No AI training on your audio",
+            body: "Your audio never trains a model. Raw audio is never sent to any LLM — only derived report text.")).AllowAnonymous().WithTags("public-site");
+        app.MapGet("/trust/results-forever", (HttpContext c) => Shell(c,
+            path: "/trust/results-forever",
+            title: "Your results stay yours — SPECTR",
+            description: "Every report you generate remains accessible after cancellation. Raw audio retention is separate and stated plainly.",
+            heading: "Your results stay yours — forever",
+            body: "Reports never expire, even after you cancel. Raw audio follows a stated retention schedule; the report always remains.")).AllowAnonymous().WithTags("public-site");
+        app.MapGet("/trust/privacy", (HttpContext c) => Shell(c,
+            path: "/trust/privacy",
+            title: "Privacy defaults — SPECTR",
+            description: "Private-by-default library, opt-in revocable share links, anonymous data purged in 72 hours, full export and deletion.",
+            heading: "Privacy defaults",
+            body: "Private by default. Share links are opt-in and revocable. Export or delete everything, any time.")).AllowAnonymous().WithTags("public-site");
         return app;
     }
 
