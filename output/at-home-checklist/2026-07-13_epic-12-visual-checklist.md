@@ -57,3 +57,12 @@ Needs TWO browser sessions (or one + an incognito reviewer) on a shared/View-abl
 - [ ] As OWNER: suggestion card shows "show moves (n)" expander — readable moves match what the reviewer did; Audition plays the suggested chain, Revert restores yours; Accept → preset "From @handle" appears in preset list.
 - [ ] Owner audition then mode-switch away: your rack is back to normal (audition auto-reverted), and your saved draft was NOT overwritten.
 - [ ] Anon share page /v/{token}: no "suggestions open" pill anywhere.
+
+## 6-1 — Landing & pricing pages (added 2026-07-14)
+
+- [ ] Anonymous visit to /: landing renders — hero, "Analyze my track free" CTA, sample report (F grade, framed as "rough mix on purpose"), honesty strip. Feel check: does the F-grade framing land right or scare?
+- [ ] Logged in, visit /: bounces to /library (brief landing flash acceptable).
+- [ ] Logged in, open /pricing via a coach upgrade chip: chrome shows "Open library", NOT Sign in/Analyze free.
+- [ ] Lighthouse on / (incognito): LCP < 2.5 s.
+- [ ] Pricing page: tax note visible, terms under the buttons, no asterisks anywhere.
+- [ ] Post-deploy: curl -A discordbot https://<domain>/ and /pricing → meta shell (og:image present); plain curl → SPA. robots.txt parses.
