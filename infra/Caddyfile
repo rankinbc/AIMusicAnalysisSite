@@ -23,6 +23,17 @@ www.{$SPECTR_DOMAIN} {
 		reverse_proxy bff:5000
 	}
 
+	# Story 6.1 — crawlers on the public funnel pages get the BFF meta shell
+	# (title/description/OG/canonical); humans fall through to the SPA. Same
+	# UA set as @share_bots. Extend the path list when 6.2 adds trust pages.
+	@site_bots {
+		path / /pricing
+		header_regexp ua User-Agent (?i)(discordbot|slackbot|twitterbot|facebookexternalhit|whatsapp|telegrambot|linkedinbot|googlebot|bingbot|embedly|pinterest|skypeuripreview)
+	}
+	handle @site_bots {
+		reverse_proxy bff:5000
+	}
+
 	handle /api/* {
 		reverse_proxy bff:5000 {
 			# SSE (job/coach streams): no buffering, no idle cutoff.
