@@ -980,7 +980,7 @@ So that I can decide to try it in one scroll.
 
 **Acceptance Criteria:**
 
-1. **Given** the landing page (FR40), **When** loaded cold, **Then** LCP <2.5 s (prerendered/static), the ambient atmosphere tokens apply, the primary CTA is `Analyze my track free`, **And** a live sample report embed renders a real VerdictHero with demo data — not a screenshot (UX-DR24).
+1. **Given** the landing page (FR40), **When** loaded cold, **Then** LCP <2.5 s (prerendered/static), the ambient atmosphere tokens apply, the primary CTA is `Analyze my track free`, **And** a live sample report embed renders a real grade hero with demo data — not a screenshot (UX-DR24). _(As built 6.1: `GradeHero` — the "VerdictHero" named here never existed; crawler-only prerender via the Caddy bot split, human LCP via a lean SPA chunk.)_
 2. **Given** the pricing page, **When** rendered, **Then** PricingTable shows Free/Pro/credits with a tax-inclusive note, no asterisks, and terms restated at the buttons (UX-DR25).
 3. **Given** public chrome (UX-DR6), **When** funnel pages render, **Then** the slim variant shows (brand + Pricing + Sign in + `Analyze free`).
 4. **Given** SEO (PRD strategy), **When** crawled, **Then** landing/pricing/trust pages are prerendered with meta tags while the SPA stays auth-gated.

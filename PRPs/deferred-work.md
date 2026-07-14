@@ -113,6 +113,12 @@ Real findings that are out of scope for the current story but worth revisiting.
 - **`buildCommentThreads` drops reply-to-reply** (11.1, `comment-tree.ts:25-47`) — grandchildren land in `repliesByParent[replyId]` but only top-level ids are read back. Not reachable via the current UI (reply button is `!isReply`-only) and the one-level design is documented, but an API/anon/room-created nested reply would silently vanish and under-count `total`. Either flatten grandchildren under the nearest rendered ancestor or surface them as top-level.
 - **Reply to a concurrently-deleted parent** (11.1, `rail.tsx:621-630`) — `replyTo` isn't reconciled against the live list, so posting after the parent is deleted elsewhere 404s.
 
+## Deferred from: story 6.1 (2026-07-14)
+
+- **Authed `/` → `/library` redirect has no automated coverage** [src/routes/index.tsx + src/main.tsx:53-58] — the redirect depends on `RouterBridge`'s `router.invalidate()` on auth resolve (one load-bearing effect). Needs an authed router-harness test; the smoke is anon-only.
+- **Human-facing prerender/SSG dropped** — epics FR40 said "prerendered/static"; as built: crawler-only BFF shells + a lean SPA chunk. LCP <2.5 s verified at home (Lighthouse); revisit real SSG only if the measurement fails.
+- **Landing CTA targets /register** [PublicChrome.tsx, LandingPage.tsx] — retarget to `/analyze` when story 6.3 ships the anonymous instant-analysis page (comments mark both spots).
+
 ## Epics 10–12 (consolidated 2026-07-13, story 12.8)
 
 - **12-2/12-3 at-home visual checks** — ProgressStoryline live render, DevHealthDot, windowed boot; launcher boot + MinIO-down E2E. [sprint-status 12-2/12-3 notes]

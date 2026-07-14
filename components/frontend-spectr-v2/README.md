@@ -36,7 +36,7 @@ The BFF must be running on port 5000 for `/api/*` to resolve.
 /                              → redirect to /library
 /_public/login                 anon
 /_public/register              anon
-/_public/pricing               anon — pricing page (story 2.1)
+/pricing                       anon — pricing page (story 2.1; moved out of _public in 6.1 — slim PublicChrome)
 /_public/r/$token              anon — public share-link reviewer
 /_app/library                  authed — grid card view + filter pills
 /_app/songs/$songId            authed — Song detail (hero + ProgressTimeline + VersionList)

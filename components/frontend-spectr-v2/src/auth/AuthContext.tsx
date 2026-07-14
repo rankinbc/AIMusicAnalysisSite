@@ -36,7 +36,9 @@ interface AuthContextValue extends AuthState {
   updateUser: (user: AuthedUser) => void;
 }
 
-const AuthContext = createContext<AuthContextValue | null>(null);
+// Exported for tests only (PublicChrome authed-variant pin) — app code goes
+// through AuthProvider/useAuth/useOptionalAuth.
+export const AuthContext = createContext<AuthContextValue | null>(null);
 
 // Story 12.7 (found by the first-run smoke): refresh is single-flight and
 // lives in fetcher.refreshSession — shared with the 401 handler so the two
@@ -178,4 +180,11 @@ export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
   return ctx;
+}
+
+/** Story 6.1 — non-throwing variant for components that render both inside the
+ *  app (provider present) and in static-render tests (no provider). Returns
+ *  null outside an AuthProvider instead of throwing. */
+export function useOptionalAuth(): AuthContextValue | null {
+  return useContext(AuthContext);
 }

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 // Story 12.7 (AC2) — the first-run smoke: one headless pass that catches
 // verify-gate, dead-handoff, and dead-UI regressions together.
 //
-//   anon → / → /login (redirect via the _app guard)
+//   anon → / → LANDING PAGE (story 6.1; no more redirect-to-login) → CTA → /register
 //   register a fresh account → /library (empty first-run state)
 //   + New song → NewSongDialog → UnifiedUploadDialog (mix only)
 //   Upload & analyze → /songs/$songId/results/$jobId
@@ -49,12 +49,20 @@ test('first-run: register → upload → report → listen', async ({ page }) =>
   });
   page.on('pageerror', (e) => console.log(`PAGE ERROR: ${e.message}`));
 
-  // 1. Anon visit bounces to login.
+  // 1. Anon visit renders the landing page (story 6.1) with the primary CTA.
   await page.goto('/');
-  await expect(page).toHaveURL(/\/login(\?.*)?$/);
+  await expect(page.getByTestId('landing-cta')).toBeVisible();
+  await expect(page.getByTestId('landing-cta')).toHaveText(/Analyze my track free/);
 
-  // 2. Register a fresh account (DevAutoVerify stamps it verified).
-  await page.getByRole('link', { name: /Create one/i }).click();
+  // 1b. The _app guard still bounces anon users off protected routes — the
+  //     old anon /→/login assertion was this suite's only proof of the guard
+  //     (review finding: keep it exercised now that / is public).
+  await page.goto('/library');
+  await expect(page).toHaveURL(/\/login(\?.*)?$/);
+  await page.goto('/');
+
+  // 2. CTA → register a fresh account (DevAutoVerify stamps it verified).
+  await page.getByTestId('landing-cta').click();
   await expect(page).toHaveURL(/\/register$/);
   const emailBox = page.getByLabel('Email');
   const passwordBox = page.getByLabel('Password');

@@ -1,14 +1,16 @@
-import { Link, createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-import { getAccessToken } from '../../api/fetcher';
+import { getAccessToken } from '../api/fetcher';
 import type {
   CreateCheckoutSessionResponse,
   PlansResponse,
-} from '../../api/types';
-import { Pill } from '../../ui/Pill';
-import { formatCents } from '../../features/billing/format-price';
+} from '../api/types';
+import { Pill } from '../ui/Pill';
+import { formatCents } from '../features/billing/format-price';
+import { PublicChrome } from '../components/PublicChrome';
+import { usePageMeta } from '../lib/usePageMeta';
 import s from './pricing.module.css';
 
 // Story 2.1 / UX-DR + UX-spec line 318 — public pricing route. Display
@@ -16,12 +18,17 @@ import s from './pricing.module.css';
 // (AR39) stays clean. Two CTAs on the Pro card: Monthly + Annual; both
 // POST /api/billing/checkout/subscription and redirect to the hosted
 // Stripe Checkout URL (UX-spec line 137 + line 357 — Stripe-hosted only).
+// Story 6.1: moved OUT of the _public layout (same /pricing path) so the
+// slim PublicChrome renders instead of the narrow auth column; 6 existing
+// consumers link /pricing by path and are unaffected.
 
-export const Route = createFileRoute('/_public/pricing')({
+export const Route = createFileRoute('/pricing')({
   component: PricingPage,
 });
 
-function PricingPage() {
+// Exported for the 6.1 static-render test (renders the skeleton state —
+// effects don't run under renderToStaticMarkup, so no fetch fires).
+export function PricingPage() {
   const [plans, setPlans] = useState<PlansResponse | null>(null);
   const [pending, setPending] = useState<'monthly' | 'annual' | null>(null);
 
@@ -97,7 +104,14 @@ function PricingPage() {
     }
   }
 
+  usePageMeta(
+    'Pricing — SPECTR',
+    'Free, Pro, and per-release credits. Honest billing, no asterisks — reports stay yours forever, even after you cancel.',
+  );
+
   return (
+    <>
+    <PublicChrome />
     <main className={s.shell}>
       <header className={s.header}>
         <span className="label">Plans &amp; pricing</span>
@@ -105,6 +119,10 @@ function PricingPage() {
         <p className={s.subtitle}>
           Pay monthly, annually, or per-release with credits.
           Reports stay yours forever — even after you cancel.
+        </p>
+        {/* Story 6.1 (UX-DR25): tax honesty up front, not in a footnote. */}
+        <p className={`mono ${s.taxNote}`}>
+          Prices in USD. Tax is calculated and shown at checkout before you pay.
         </p>
       </header>
 
@@ -130,7 +148,6 @@ function PricingPage() {
           <p className={s.planLine}>Unlimited analyses</p>
           <p className={s.planLine}>Full coach + all specialists</p>
           <p className={s.planLine}>Stems + .als + reference library</p>
-          <p className={s.planLine}>Tax calculated at checkout.</p>
           <div className={s.cadenceRow}>
             <button
               type="button"
@@ -157,6 +174,10 @@ function PricingPage() {
                   : 'Annual'}
             </button>
           </div>
+          {/* Story 6.1 (UX-DR25): terms restated AT the buttons — no asterisks. */}
+          <p className={`mono ${s.buttonTerms}`}>
+            Monthly renews monthly · Annual is billed once a year · cancel anytime in two clicks
+          </p>
         </article>
 
         <article className={`card ${s.planCard}`}>
@@ -169,6 +190,7 @@ function PricingPage() {
           <button type="button" className="btn ghost" disabled>
             Coming soon
           </button>
+          <p className={`mono ${s.buttonTerms}`}>One-time purchase · credits never expire</p>
         </article>
       </section>
 
@@ -178,9 +200,11 @@ function PricingPage() {
           cancellation.
         </p>
         <p className={s.fineprint}>
-          <Link to="/login">Sign in</Link> if you already have an account.
+          {/* Plain <a>: static-render testable + full-nav is fine on funnel pages. */}
+          <a href="/login">Sign in</a> if you already have an account.
         </p>
       </footer>
     </main>
+    </>
   );
 }

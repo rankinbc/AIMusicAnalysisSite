@@ -76,6 +76,21 @@
   flex-wrap: wrap;
 }
 
+/* Story 6.1 (UX-DR25) */
+.taxNote {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.buttonTerms {
+  margin: 6px 0 0;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
 .footer {
   text-align: center;
   display: flex;

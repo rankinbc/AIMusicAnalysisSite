@@ -557,6 +557,8 @@ app.UseAnonIdentity();
 // Story 7.2 — root-level (non-/api) crawler OG shell for /r/{token}; nginx
 // routes bot user-agents here, humans get the SPA.
 app.MapOgShareEndpoints();
+// Story 6.1 — crawler meta shells for / and /pricing (Caddy @site_bots split).
+app.MapPublicSiteEndpoints();
 
 var api = app.MapGroup("/api");
 
@@ -592,8 +594,8 @@ api.MapAccountEndpoints();       // story 4.6 — /api/me/export + /api/me/delet
 api.MapAdminEndpoints();         // story 10.5 — /api/admin/* (X-Admin-Key elevated auth)
 app.MapEmailWebhookEndpoints();  // story 4.2 — POST /api/email/webhook (svix-verified)
 
-app.MapGet("/", () => Results.Json(new { status = "ok", version = "2.0.0" }))
-   .AllowAnonymous();
+// Story 6.1: the legacy root status JSON (v1 FastAPI habit) is replaced by the
+// crawler landing shell in PublicSiteEndpoints — health probes use /healthz.
 
 // Story 10.8 (NFR9) — Development-only detonator (dev-login precedent):
 // exercises the UNCONDITIONAL exception handler above, which is byte-for-
