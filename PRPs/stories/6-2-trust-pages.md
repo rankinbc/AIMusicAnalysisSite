@@ -1,6 +1,6 @@
 # Story 6.2: Trust Pages
 
-Status: review
+Status: done
 
 <!-- Second story of Epic 6. Builds directly on 6.1's funnel machinery (merged master 54e2634). -->
 
@@ -103,3 +103,29 @@ claude-fable-5 (dev-story workflow)
 ### Change Log
 
 - 2026-07-14 — Story 6.2 implemented: three trust pages (versioned pledge / results-forever w/ honest retention split / privacy defaults w/ honest Sentry+PostHog disclosure), links on landing/pricing/register, crawler shells + Caddy paths, launch-checklist founder-review gate. Gates green (vitest 795, BFF 374). Status → review.
+- 2026-07-14 — 3-layer code review: 13 patch groups (truth-precision). Gates post-patch: vitest 795/795, BFF 374/374, smoke 29.3s. Status → done.
+
+## Senior Review Record (2026-07-14)
+
+_3-layer adversarial review (Blind Hunter / Edge Case Hunter / Acceptance Auditor) of `master..story/6-2-trust-pages`. This story is public commitments — the review was a truth audit as much as a code review._
+
+**Verdict: APPROVED after patches.** Auditor: AC1-5 Met, AC6/AC7 Partial → patched. Edge Hunter independently confirmed the two flagship claims: no audio-bytes/base64/multimodal path to any LLM anywhere in worker or legacy api; no Anthropic beta/data-sharing flags.
+
+**Patched (13 groups, all truth-precision):**
+- **P1 (CRITICAL, edge)** — the 72h-purge claim was attached to the WRONG anon population: share-link reviewers use the stateless `spectr_anon` identity and their comments/bookmarks persist by design; only the device-identity ANALYSIS funnel is purged. Privacy section rewritten to scope the purge and disclose that share-link feedback stays until the owner deletes it (owner moderates). Shell description matched.
+- **P2 (edge+blind)** — results-forever contradictions: "costs you access to nothing you already made" (raw audio IS lost) → scoped to reports; purge scope widened to the honest list (mix/stems/reference/**project file**); "deletion removes both the audio and the reports" was FALSE for version/song deletes → scoped to account deletion (the verified-complete path). The underlying pre-existing storage-leak bugs (version delete leaves stems/als/reference + analyses; song hard-delete misses reports/{jobId}.json + images) logged in deferred-work as a candidate story.
+- **P3** — pledge playback claim includes "anyone you explicitly share the track with" (share streaming exists).
+- **P4** — unverifiable "history lives in our source repository" (repo is private) → bump-before-effect commitment incl. provider-side changes.
+- **P5** — "within 72 hours" → "after 72 hours" (TTL sweep semantics) everywhere incl. shells.
+- **P6** — fonts bullet scoped ("font or asset CDNs") so it can't read as contradicting the adjacent Sentry/PostHog disclosure.
+- **P7** — BFF shells are a second unguarded copy of the commitments: DRAFT warning comment added at the shell block; launch-checklist gate now names `PublicSiteEndpoints.cs` explicitly.
+- **P9** — shell/SPA title parity for results-forever (double-em-dash artifact fixed).
+- **P11** — `/trust` index route redirects to the pledge (was a 404 on a trust surface).
+- **P12** — tests de-tautologized: version pinned as LITERAL '1.0' (bump = conscious test edit), "the report"/"SPEC" substring assertions replaced with meaningful pins, new copy claims pinned (population scoping, project-file, shared-playback).
+- **P13 (auditor F1 — falsely checked task)** — the at-home checklist 6.2 items genuinely didn't exist; added (founder copy review is BLOCKING, incl. the shell second-copy).
+- **P16** — smoke rerun despite the "no flow change" self-exemption (new top-level routes) — green 29.3s.
+- **P18** — retention env defaults tethered: comment at `retention_actor.py` warns that changing 30/90/72 falsifies published pages.
+
+**Rejected (verified):** export-comments claim (the 4.6 export covers MORE than listed — understatement is safe); "revoking kills it immediately" (revoke nulls the token → immediate 404, no cache in the share-resolve path); sprint-status/story stage drift (normal mid-cycle); unversioned results/privacy pages (AC versions the pledge only; both carry Last-updated dates).
+
+**Gates post-patch:** tsc 0 · lint clean · build ✓ · vitest 795/795 · BFF build + shell 6/6 (full suite 374/374 pre-patch; patch touched copy/tests only) · headless smoke 29.3s.
