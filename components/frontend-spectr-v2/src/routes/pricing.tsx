@@ -203,6 +203,12 @@ export function PricingPage() {
           {/* Plain <a>: static-render testable + full-nav is fine on funnel pages. */}
           <a href="/login">Sign in</a> if you already have an account.
         </p>
+        {/* Story 6.2 — the commitments behind the copy above, as real pages. */}
+        <p className={s.fineprint}>
+          <a href="/trust/no-training">No AI training</a> ·{' '}
+          <a href="/trust/results-forever">Results forever</a> ·{' '}
+          <a href="/trust/privacy">Privacy defaults</a>
+        </p>
       </footer>
     </main>
     </>

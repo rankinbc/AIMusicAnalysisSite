@@ -119,6 +119,12 @@ Real findings that are out of scope for the current story but worth revisiting.
 - **Human-facing prerender/SSG dropped** — epics FR40 said "prerendered/static"; as built: crawler-only BFF shells + a lean SPA chunk. LCP <2.5 s verified at home (Lighthouse); revisit real SSG only if the measurement fails.
 - **Landing CTA targets /register** [PublicChrome.tsx, LandingPage.tsx] — retarget to `/analyze` when story 6.3 ships the anonymous instant-analysis page (comments mark both spots).
 
+## Deferred from: story 6.2 code review (2026-07-14) — PRE-EXISTING storage-leak bugs surfaced by trust-page truth-tracing
+
+- **Version delete leaves artifacts** [VersionEndpoints.cs:360-384] — `Delete` removes the `song_versions` row + the MIX blob only; stems/.als/reference blobs, the version's `analyses` rows (+verdicts/conversations), and `reports/{jobId}.json` all survive. Candidate follow-up story; trust-page copy was scoped around it (account deletion is the verified-complete path).
+- **Song hard-delete misses durable report artifacts** [SongEndpoints.cs:257-264] — `blobKeys` collects FilePath/Als/Reference/stems but never `reports/{jobId}.json` or spectrogram/waveform images (the account-deletion actor DOES collect these — proof they're known deletable). Orphaned objects with no owning row after a "permanent" delete.
+- **Register trust-line render untested** [register.tsx] — register uses TanStack `Link` (needs a router harness for static render); the 6.2 trust line is pinned only by the at-home visual pass. Add when a router test harness exists.
+
 ## Epics 10–12 (consolidated 2026-07-13, story 12.8)
 
 - **12-2/12-3 at-home visual checks** — ProgressStoryline live render, DevHealthDot, windowed boot; launcher boot + MinIO-down E2E. [sprint-status 12-2/12-3 notes]

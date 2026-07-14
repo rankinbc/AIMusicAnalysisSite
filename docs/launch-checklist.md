@@ -92,6 +92,11 @@ Run in TEST mode with test clocks before flipping live keys:
       runbook checklist; NO blanket lifecycle rule
 - [ ] Status page published on GitHub Pages (10.4 template) + linked from
       the ntfy incident habit
+- [ ] Trust pages copy reviewed + approved by founder (story 6.2 —
+      remove the `DRAFT` markers from the three `/trust/*` route files
+      AND update the matching BFF shell strings in
+      `PublicSiteEndpoints.cs`, which crawlers serve as a second copy);
+      real ToS + legal Privacy Policy exist or are consciously deferred
 
 ## Non-blocking (first-week follow-ups)
 

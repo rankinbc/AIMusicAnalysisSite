@@ -94,3 +94,17 @@
   margin: 0;
   word-break: break-all;
 }
+
+/* Story 6.2 — trust-links line under the register form. */
+.trustLine {
+  margin: 10px 0 0;
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  text-align: center;
+}
+
+.trustLine a {
+  color: var(--cyan);
+  text-decoration: none;
+}

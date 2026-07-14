@@ -66,3 +66,9 @@ Needs TWO browser sessions (or one + an incognito reviewer) on a shared/View-abl
 - [ ] Lighthouse on / (incognito): LCP < 2.5 s.
 - [ ] Pricing page: tax note visible, terms under the buttons, no asterisks anywhere.
 - [ ] Post-deploy: curl -A discordbot https://<domain>/ and /pricing → meta shell (og:image present); plain curl → SPA. robots.txt parses.
+
+## 6-2 — Trust pages (added 2026-07-14)
+
+- [ ] BLOCKING before public launch: read all three trust pages (/trust/no-training, /trust/results-forever, /trust/privacy) as the founder — approve or edit the copy, then remove the DRAFT markers AND update the matching BFF shell strings (PublicSiteEndpoints.cs). Cross-ref launch checklist "Security & privacy".
+- [ ] Visual pass: three pages render clean, cross-links + chrome work, register form shows the trust line, landing/pricing footers link them.
+- [ ] /trust (no page) redirects to the pledge.
