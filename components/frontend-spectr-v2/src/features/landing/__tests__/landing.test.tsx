@@ -1,6 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
+import { AuthContext } from '../../../auth/AuthContext';
+import type { AuthedUser } from '../../../api/types';
 import { PublicChrome } from '../../../components/PublicChrome';
 import { PricingPage } from '../../../routes/pricing';
 import { LandingPage } from '../LandingPage';
@@ -11,21 +13,38 @@ import { SAMPLE_REPORT } from '../sample-report';
 // RouterProvider is needed; effects don't run, so no fetch fires).
 
 describe('PublicChrome (story 6.1 AC3 — UX-DR6 slim chrome)', () => {
-  it('renders brand + Pricing + Sign in + Analyze free with correct hrefs', () => {
+  it('renders brand + Pricing + Sign in + Analyze free with correct hrefs (anon variant)', () => {
+    // No AuthProvider → useOptionalAuth() is null → anon chrome.
     const html = renderToStaticMarkup(<PublicChrome />);
     expect(html).toContain('href="/"');
     expect(html).toContain('href="/pricing"');
     expect(html).toContain('href="/login"');
     expect(html).toContain('href="/register"');
     expect(html).toContain('Analyze free');
+    expect(html).not.toContain('Open library');
     expect(html).toContain('SPEC'); // wordmark
+  });
+
+  it('swaps to "Open library" for an authed user (no register dead-end mid-upgrade)', () => {
+    const user: AuthedUser = { id: 'u1', email: 'a@b', handle: 'a', displayName: null, tier: 'free' };
+    const value = { user, accessToken: 't', isLoading: false } as never;
+    const html = renderToStaticMarkup(
+      <AuthContext.Provider value={value}>
+        <PublicChrome />
+      </AuthContext.Provider>,
+    );
+    expect(html).toContain('Open library');
+    expect(html).toContain('href="/library"');
+    expect(html).not.toContain('href="/register"');
+    expect(html).not.toContain('Sign in');
   });
 });
 
 describe('SampleReportEmbed (story 6.1 AC1 — UX-DR24 live sample, not a screenshot)', () => {
   it('renders the real grade hero, metadata pills, and all findings', () => {
     const html = renderToStaticMarkup(<SampleReportEmbed />);
-    expect(html).toContain(SAMPLE_REPORT.grade); // GradeHero letter
+    // The grade letter as element text (`>F<`), not a substring of other copy.
+    expect(html).toMatch(new RegExp(`>${SAMPLE_REPORT.grade}<`));
     expect(html).toContain(`${SAMPLE_REPORT.bpm}`);
     expect(html).toContain(SAMPLE_REPORT.detectedKey);
     expect(html).toContain(SAMPLE_REPORT.lufs.toFixed(1));

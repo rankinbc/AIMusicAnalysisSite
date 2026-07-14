@@ -23,12 +23,15 @@ www.{$SPECTR_DOMAIN} {
 		reverse_proxy bff:5000
 	}
 
-	# Story 6.1 — crawlers on the public funnel pages get the BFF meta shell
-	# (title/description/OG/canonical); humans fall through to the SPA. Same
-	# UA set as @share_bots. Extend the path list when 6.2 adds trust pages.
+	# Story 6.1 — SOCIAL-PREVIEW bots on the public funnel pages get the BFF
+	# meta shell (title/description/OG/canonical); humans fall through to the
+	# SPA. Deliberately NOT googlebot/bingbot (unlike @share_bots): search
+	# engines index body content, and serving them a two-sentence stub while
+	# humans get the real page is thin-content/cloaking — they render the SPA
+	# fine. Extend the path list when 6.2 adds trust pages.
 	@site_bots {
-		path / /pricing
-		header_regexp ua User-Agent (?i)(discordbot|slackbot|twitterbot|facebookexternalhit|whatsapp|telegrambot|linkedinbot|googlebot|bingbot|embedly|pinterest|skypeuripreview)
+		path / /pricing /pricing/
+		header_regexp ua User-Agent (?i)(discordbot|slackbot|twitterbot|facebookexternalhit|whatsapp|telegrambot|linkedinbot|applebot|redditbot|embedly|pinterest|skypeuripreview)
 	}
 	handle @site_bots {
 		reverse_proxy bff:5000

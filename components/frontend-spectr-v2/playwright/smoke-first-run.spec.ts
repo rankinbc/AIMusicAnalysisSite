@@ -54,6 +54,13 @@ test('first-run: register → upload → report → listen', async ({ page }) =>
   await expect(page.getByTestId('landing-cta')).toBeVisible();
   await expect(page.getByTestId('landing-cta')).toHaveText(/Analyze my track free/);
 
+  // 1b. The _app guard still bounces anon users off protected routes — the
+  //     old anon /→/login assertion was this suite's only proof of the guard
+  //     (review finding: keep it exercised now that / is public).
+  await page.goto('/library');
+  await expect(page).toHaveURL(/\/login(\?.*)?$/);
+  await page.goto('/');
+
   // 2. CTA → register a fresh account (DevAutoVerify stamps it verified).
   await page.getByTestId('landing-cta').click();
   await expect(page).toHaveURL(/\/register$/);

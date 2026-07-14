@@ -18,8 +18,8 @@ public static class PublicSiteEndpoints
         return app;
     }
 
-    private static IResult LandingShell(HttpRequest request) =>
-        Shell(request,
+    private static IResult LandingShell(HttpContext context) =>
+        Shell(context,
             path: "/",
             title: "SPECTR — AI mix analysis for producers",
             description: "Upload a track, get a graded 7-phase mix report with concrete fixes — " +
@@ -27,8 +27,8 @@ public static class PublicSiteEndpoints
             heading: "Know exactly what's wrong with your mix",
             body: "A graded report across loudness, low end, stereo image and arrangement — with concrete fixes you can hear.");
 
-    private static IResult PricingShell(HttpRequest request) =>
-        Shell(request,
+    private static IResult PricingShell(HttpContext context) =>
+        Shell(context,
             path: "/pricing",
             title: "Pricing — SPECTR",
             description: "Free, Pro, and per-release credits. Honest billing, no asterisks — " +
@@ -37,10 +37,18 @@ public static class PublicSiteEndpoints
             body: "Free, Pro, and per-release credits. Reports stay yours forever — even after you cancel.");
 
     private static IResult Shell(
-        HttpRequest request, string path, string title, string description, string heading, string body)
+        HttpContext context, string path, string title, string description, string heading, string body)
     {
+        var request = context.Request;
         var origin = $"{request.Scheme}://{request.Host}";
         var url = $"{origin}{(path == "/" ? "/" : path)}";
+
+        // Review findings: (1) shells are cacheable — copy changes only on
+        // deploy; (2) the anon-identity middleware minted a Set-Cookie for
+        // cookieless crawler hits, which must never ride a cacheable response
+        // (shared-cache cookie bleed the moment an edge cache appears).
+        context.Response.Headers.CacheControl = "public, max-age=3600";
+        context.Response.Headers.Remove("Set-Cookie");
         // Static trusted strings only — no user input reaches this HTML.
         var html = $$"""
 <!doctype html>
@@ -56,9 +64,11 @@ public static class PublicSiteEndpoints
 <meta property="og:title" content="{{title}}">
 <meta property="og:description" content="{{description}}">
 <meta property="og:url" content="{{url}}">
-<meta name="twitter:card" content="summary">
+<meta property="og:image" content="{{origin}}/og-share.png">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{{title}}">
 <meta name="twitter:description" content="{{description}}">
+<meta name="twitter:image" content="{{origin}}/og-share.png">
 <style>
   body{margin:0;background:#070a12;color:#e2e8f4;font:16px/1.5 system-ui,sans-serif;
        display:grid;place-items:center;min-height:100vh;text-align:center;padding:24px}

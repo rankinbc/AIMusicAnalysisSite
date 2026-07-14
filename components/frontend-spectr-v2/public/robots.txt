@@ -1,0 +1,6 @@
+# SPECTR — story 6.1. The site is now deliberately indexable (landing +
+# pricing carry canonicals); without this file, /robots.txt fell through to
+# the SPA index.html as an unparseable 200 (Search Console parse errors).
+User-agent: *
+Allow: /
+Disallow: /api/

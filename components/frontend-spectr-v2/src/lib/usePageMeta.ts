@@ -1,32 +1,61 @@
 /* Story 6.1 (AC4) — per-route document metadata for the public funnel pages.
  * Client-side only: crawlers never execute this (they get the BFF meta shell
- * via the Caddy bot split); this keeps the tab title + description honest for
- * humans and history entries. Restores the previous values on unmount so
- * app routes keep the base "SPECTR" title. */
+ * via the Caddy bot split); this keeps the tab title + description + OG tags
+ * honest for humans and JS-executing scrapers (review finding: the static
+ * index.html OG tags are landing-specific and must not leak onto /pricing).
+ * Restores the previous values on unmount so app routes keep the base meta. */
 import { useEffect } from 'react';
+
+function upsert(selector: string, create: () => HTMLMetaElement, content: string): () => void {
+  let meta = document.head.querySelector<HTMLMetaElement>(selector);
+  const created = !meta;
+  const prev = meta?.content ?? null;
+  if (!meta) {
+    meta = create();
+    document.head.appendChild(meta);
+  }
+  meta.content = content;
+  const el = meta;
+  return () => {
+    if (created) el.remove();
+    else if (prev !== null) el.content = prev;
+  };
+}
+
+function named(name: string): () => HTMLMetaElement {
+  return () => {
+    const m = document.createElement('meta');
+    m.name = name;
+    return m;
+  };
+}
+
+function property(prop: string): () => HTMLMetaElement {
+  return () => {
+    const m = document.createElement('meta');
+    m.setAttribute('property', prop);
+    return m;
+  };
+}
 
 export function usePageMeta(title: string, description?: string): void {
   useEffect(() => {
     const prevTitle = document.title;
     document.title = title;
 
-    let meta = document.querySelector<HTMLMetaElement>('meta[name="description"]');
-    const created = !meta;
-    const prevDescription = meta?.content ?? null;
+    const restores: Array<() => void> = [
+      upsert('meta[property="og:title"]', property('og:title'), title),
+    ];
     if (description) {
-      if (!meta) {
-        meta = document.createElement('meta');
-        meta.name = 'description';
-        document.head.appendChild(meta);
-      }
-      meta.content = description;
+      restores.push(
+        upsert('meta[name="description"]', named('description'), description),
+        upsert('meta[property="og:description"]', property('og:description'), description),
+      );
     }
 
     return () => {
       document.title = prevTitle;
-      if (!meta) return;
-      if (created) meta.remove();
-      else if (prevDescription !== null) meta.content = prevDescription;
+      for (const restore of restores) restore();
     };
   }, [title, description]);
 }

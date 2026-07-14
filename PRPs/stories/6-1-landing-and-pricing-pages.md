@@ -1,6 +1,6 @@
 # Story 6.1: Landing & Pricing Pages
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 <!-- First story of Epic 6 (Free Analyzer Funnel & Public Site). Epic flips to in-progress. -->
@@ -137,3 +137,28 @@ claude-fable-5 (dev-story workflow)
 ### Change Log
 
 - 2026-07-14 — Story 6.1 implemented: public landing at `/` (authed → /library preserved) with live sample-report embed (real components, real trimmed sample data), slim PublicChrome on landing+pricing, pricing tax/terms polish, SEO via usePageMeta + BFF meta shells + Caddy @site_bots, smoke updated. Removed legacy BFF root status JSON (route collision, zero live consumers). Gates green (vitest 788, BFF 371, smoke 34.7s). Status → review.
+- 2026-07-14 — 3-layer code review: 10 patch groups applied (see Senior Review Record). Gates post-patch: vitest 789/789, BFF 371/371, smoke 27.8s. Status → done.
+
+## Senior Review Record (2026-07-14)
+
+_3-layer adversarial review (Blind Hunter / Edge Case Hunter / Acceptance Auditor) of `master..story/6-1-landing-pricing`._
+
+**Verdict: APPROVED after patches.** Acceptance Auditor: 5/5 ACs Met, all 15 subtasks verified, File List exact.
+
+**Patched findings (10 groups):**
+- **P1 (conversion bug, edge)** — PublicChrome was auth-blind: a LOGGED-IN free user reaching /pricing via the coach upgrade chips or the billing CTA saw "Sign in" + a register-bound "Analyze free" — a duplicate-account dead end mid-upgrade. Fix: new `useOptionalAuth()` (non-throwing) in AuthContext; chrome swaps to "Open library" when a user resolves; authed-variant render test added (AuthContext exported for tests).
+- **P2 (SEO, blind+edge)** — `@site_bots` included googlebot/bingbot: search engines index BODY content, and serving them a two-sentence stub while humans get the real page is thin-content/cloaking that would actively hurt ranking. Fix: site matcher is SOCIAL-preview bots only (googlebot/bingbot fall through to the SPA, which they render fine); `/pricing/` trailing-slash added; applebot/redditbot added.
+- **P3 (blind+edge)** — shells had no `og:image` (flagship pages unfurled text-only while /r/ share links unfurl rich). Fix: `{origin}/og-share.png` + `summary_large_image` in the shells + og:image in index.html; test asserts it.
+- **P4 (blind+edge)** — no Cache-Control (task said "cache headers") AND the anon-identity middleware minted a `Set-Cookie` on every crawler hit — a shared-cache cookie-bleed the moment an edge cache appears. Fix: `Cache-Control: public, max-age=3600` + `Set-Cookie` stripped in the shell handler; both test-asserted.
+- **P5** — folded into P2 (trailing slash + UA additions).
+- **P6 (edge)** — the site is now deliberately indexable but `/robots.txt` fell through to the SPA as unparseable 200 HTML (Search Console errors). Fix: `public/robots.txt` (Allow / · Disallow /api/).
+- **P7 (blind)** — static index.html OG tags are landing-specific and leaked onto every route for JS-executing scrapers. Fix: `usePageMeta` now also upserts `og:title`/`og:description` (restore-on-unmount).
+- **P8 (blind+auditor)** — test tightening: grade asserted as element text (`>F<`, not a substring of "Free"); PublicChrome anon test pins absence of "Open library".
+- **P9 (blind)** — the old anon `/`→`/login` smoke assertion was the suite's only proof of the `_app` guard; the landing update dropped it. Fix: smoke step 1b visits `/library` anonymously and asserts the `/login` bounce.
+- **P10 (record-keeping, auditor+edge)** — epics.md 6.1 AC1 as-built note (GradeHero — "VerdictHero" never existed; crawler-only prerender); README route table `/pricing` fix; nginx.conf prod-only-split comment; findings-shape substitution (tag/text from top_fixes/coached_fixes — the sample has no verdicts array) recorded here.
+
+**Rejected (verified false positives):** authed-redirect-never-fires (main.tsx:53-58 `RouterBridge` invalidates on auth resolve — pre-existing, verified); canonical http:// scheme (ForwardedHeaders enabled in compose.prod.yml:61 + Program.cs:471-482); root-JSON removal blast radius (repo-wide sweep: /healthz everywhere, only an archived PRP curl'd /); landing chunk leanness unenforced (vite `autoCodeSplitting: true` + verified transitive import graph is primitives-only); anon-identity per-hit state (stateless, no DB row — cookie handled in P4).
+
+**Deferred:** authed `/`→`/library` automated coverage (needs an authed router harness; the load-bearing line is `main.tsx:53-58` — noted in deferred-work); human-facing SSG/prerender (story-recorded narrowing: crawler shells + lean SPA chunk; LCP measured at home).
+
+**Gates post-patch:** tsc 0 · lint clean · build ✓ · vitest 789/789 · BFF build + 371/371 (SPECTR_REQUIRE_DB=1) · headless smoke 27.8s.

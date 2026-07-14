@@ -27,10 +27,16 @@ public sealed class PublicSiteShellTests(WebApplicationFactory<Program> factory)
         Assert.Contains($"<title>{expectedTitle}</title>", html);
         Assert.Contains("og:title", html);
         Assert.Contains("og:description", html);
+        Assert.Contains("og:image", html);
         Assert.Contains("meta name=\"description\"", html);
         Assert.Contains("rel=\"canonical\"", html);
         // Unlike /r/{token} these ARE the public pages — no noindex.
         Assert.DoesNotContain("noindex", html);
+
+        // Review findings: shells are cacheable AND must never carry the
+        // anon-identity Set-Cookie (shared-cache cookie bleed).
+        Assert.Contains("public", resp.Headers.CacheControl?.ToString());
+        Assert.False(resp.Headers.Contains("Set-Cookie"));
     }
 
     [Fact]
