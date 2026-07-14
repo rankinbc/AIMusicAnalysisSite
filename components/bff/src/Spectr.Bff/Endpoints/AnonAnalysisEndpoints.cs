@@ -175,18 +175,44 @@ public static class AnonAnalysisEndpoints
             || Eq(4, "ftyp");                       // m4a/mp4 (box at offset 4)
     }
 
-    // ── GET /api/anon/jobs/current — AC5 refresh restore ─────────────────────
+    // ── GET /api/anon/jobs/current — AC5 refresh restore + 6.4 resume card ────
+    // Returns the device's latest job with enough to (a) restore on /analyze
+    // (jobId) and (b) render the landing resume card (status + when + grade).
+    // Grade is only present once a completed Analysis exists for the job.
     private static async Task<IResult> GetCurrent(
         HttpContext httpCtx, AppDbContext db, DeviceService devices, CancellationToken ct)
     {
         var deviceId = devices.ReadDeviceId(httpCtx.Request);
         if (deviceId is null) return Results.NotFound();
-        var jobId = await db.AnalysisJobs.AsNoTracking()
+        var row = await db.AnalysisJobs.AsNoTracking()
             .Where(j => j.DeviceId == deviceId)
             .OrderByDescending(j => j.DispatchedAt)
-            .Select(j => (Guid?)j.Id)
+            .Select(j => new { j.Id, j.Status, j.DispatchedAt })
             .FirstOrDefaultAsync(ct);
-        return jobId is Guid id ? Results.Ok(new AnonAnalysisResponse(id)) : Results.NotFound();
+        if (row is null) return Results.NotFound();
+
+        // Grade for the card chip — only when a completed Analysis exists (one
+        // small row on an infrequent resume fetch). Null while pending/failed.
+        string? gradeValue = null;
+        if (row.Status == "complete")
+        {
+            var finalJson = await db.Analyses.AsNoTracking()
+                .Where(a => a.JobId == row.Id && a.DeviceId == deviceId)
+                .Select(a => a.FinalJson)
+                .FirstOrDefaultAsync(ct);
+            if (!string.IsNullOrEmpty(finalJson))
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(finalJson);
+                    if (doc.RootElement.TryGetProperty("grade", out var g) && g.ValueKind == JsonValueKind.String)
+                        gradeValue = g.GetString();
+                }
+                catch (JsonException) { /* corrupt payload — no grade chip */ }
+            }
+        }
+
+        return Results.Ok(new AnonResumeDto(row.Id, row.Status, row.DispatchedAt, gradeValue));
     }
 
     // ── GET /api/anon/jobs/{id} — device-scoped status (JobEndpoints fork) ───

@@ -81,3 +81,10 @@ Needs TWO browser sessions (or one + an incognito reviewer) on a shared/View-abl
 - [ ] Refresh mid-analysis and mid-report: state restores from the device cookie.
 - [ ] Second upload while one is running: honest "one at a time" message.
 - [ ] Landing + chrome "Analyze free" CTAs now land on /analyze.
+
+## 6-4 — Resume cards (added 2026-07-14)
+
+- [ ] Run an anon analysis, then return to / (same browser): resume card shows "Your report from today" + grade chip; "Open report" reopens it on /analyze.
+- [ ] Dismiss the card (✕) → reload / → stays gone.
+- [ ] Mid-analysis: return to / while it's still running → card says "still being analyzed / Resume".
+- [ ] Logged in: no resume card on / (redirects to library).

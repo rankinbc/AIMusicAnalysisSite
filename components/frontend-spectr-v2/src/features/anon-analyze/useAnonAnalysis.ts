@@ -76,11 +76,20 @@ export function useAnonUpload() {
   return { ...state, upload, cancel };
 }
 
-/** AC5 — the device's latest job, for refresh restore. Fires once on mount. */
+/** Story 6.4 — the device's latest job: jobId (for /analyze restore) + the
+ *  fields the landing resume card needs (status, when, grade-if-complete). */
+export interface ResumeInfo {
+  jobId: string;
+  status: string;
+  dispatchedAt: string;
+  grade: string | null;
+}
+
+/** AC5 (6.3) restore + AC1 (6.4) resume card. Fires once on mount. */
 export function useAnonCurrentJob(enabled: boolean) {
   return useQuery({
     queryKey: ['anon', 'jobs', 'current'],
-    queryFn: () => anonGet<{ jobId: string }>('/api/anon/jobs/current'),
+    queryFn: () => anonGet<ResumeInfo>('/api/anon/jobs/current'),
     enabled,
     staleTime: Infinity,
     retry: false,

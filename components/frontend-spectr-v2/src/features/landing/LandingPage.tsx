@@ -5,6 +5,7 @@
  * wavesurfer/recharts/listen-rack. */
 import { PublicChrome } from '../../components/PublicChrome';
 import { usePageMeta } from '../../lib/usePageMeta';
+import { LandingResumeSlot } from '../anon-analyze/LandingResumeSlot';
 import { SampleReportEmbed } from './SampleReportEmbed';
 import s from './landing.module.css';
 
@@ -26,6 +27,10 @@ export function LandingPage() {
       <PublicChrome />
 
       <main className={s.main}>
+        {/* Story 6.4 — returning-visitor resume card (renders only when a
+            device has an unclaimed job; null in SSR/static render). */}
+        <LandingResumeSlot />
+
         <section className={s.hero}>
           <span className="label">AI Music Analysis</span>
           <h1 className={s.title}>
