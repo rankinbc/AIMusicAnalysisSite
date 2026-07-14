@@ -8,14 +8,19 @@ import { formatRelative } from '../../ui/relativeTime';
 import type { ResumeInfo } from './useAnonAnalysis';
 import s from './resume-card.module.css';
 
+// Genuinely-resumable in-progress states — an allowlist so a future/unknown
+// status degrades to "no card" rather than a misleading "still analyzing"
+// (review). `complete` is the report; everything else here = show progress.
+const RUNNING_STATUSES = new Set(['pending', 'processing', 'awaiting_stem_mapping', 'queued']);
+
 export function ResumeCard({ resume, onDismiss }: {
   resume: ResumeInfo;
   onDismiss: () => void;
 }) {
-  // Failed / unknown jobs offer nothing to resume.
-  if (resume.status === 'failed') return null;
+  const running = RUNNING_STATUSES.has(resume.status);
+  // Nothing to resume: failed, or an unrecognized status.
+  if (resume.status !== 'complete' && !running) return null;
 
-  const running = resume.status !== 'complete';
   const when = formatRelative(new Date(resume.dispatchedAt));
 
   return (

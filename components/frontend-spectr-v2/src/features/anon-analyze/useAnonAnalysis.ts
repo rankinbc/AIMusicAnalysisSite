@@ -26,7 +26,9 @@ export interface AnonUploadState {
 }
 
 async function anonGet<T>(url: string): Promise<T | null> {
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  // credentials: include — the anon vertical is scoped by the spectr_device
+  // cookie; same-origin today (Caddy), but this survives a cross-origin split.
+  const res = await fetch(url, { headers: { Accept: 'application/json' }, credentials: 'include' });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return (await res.json()) as T;

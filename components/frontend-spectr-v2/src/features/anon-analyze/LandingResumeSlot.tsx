@@ -13,27 +13,38 @@ import { dismissResume, isResumeDismissed } from './resume-dismissed';
 import type { ResumeInfo } from './useAnonAnalysis';
 
 export function LandingResumeSlot() {
-  const authed = Boolean(useOptionalAuth()?.user);
+  const auth = useOptionalAuth();
+  // Wait for auth to RESOLVE before deciding — during the silent-refresh boot
+  // user is null, and firing the anon fetch then would flash a resume card for
+  // a logged-in visitor who still holds a device cookie (review).
+  const authSettled = !auth || !auth.isLoading;
+  const authed = Boolean(auth?.user);
   const [resume, setResume] = useState<ResumeInfo | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    if (authed) return;
-    let live = true;
+    if (!authSettled || authed) return;
+    const ctrl = new AbortController();
     (async () => {
       try {
-        const res = await fetch('/api/anon/jobs/current', { headers: { Accept: 'application/json' } });
-        if (!res.ok || !live) return;
+        // credentials: include — the endpoint is scoped entirely by the
+        // spectr_device cookie; default same-origin would drop it cross-origin.
+        const res = await fetch('/api/anon/jobs/current', {
+          headers: { Accept: 'application/json' },
+          credentials: 'include',
+          signal: ctrl.signal,
+        });
+        if (!res.ok) return;
         const info = (await res.json()) as ResumeInfo;
-        if (live && !isResumeDismissed(info.jobId)) setResume(info);
+        if (typeof info?.jobId === 'string' && !isResumeDismissed(info.jobId)) setResume(info);
       } catch {
-        /* no cookie / network — simply no resume card */
+        /* no cookie / aborted / network — simply no resume card */
       }
     })();
-    return () => { live = false; };
-  }, [authed]);
+    return () => ctrl.abort();
+  }, [authSettled, authed]);
 
-  if (authed || !resume || dismissed || resume.status === 'failed') return null;
+  if (!authSettled || authed || !resume || dismissed || resume.status === 'failed') return null;
 
   return (
     <ResumeCard

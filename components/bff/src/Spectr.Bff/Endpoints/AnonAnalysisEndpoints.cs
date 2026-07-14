@@ -184,20 +184,29 @@ public static class AnonAnalysisEndpoints
     {
         var deviceId = devices.ReadDeviceId(httpCtx.Request);
         if (deviceId is null) return Results.NotFound();
+        // AC1 "within 72h": the nightly sweep is the real purge, but bound the
+        // query too so a 72–96h-old-but-unswept job doesn't surface a stale
+        // "report from 3d ago" card (review). Matches the anon retention window.
+        var since = DateTimeOffset.UtcNow.AddHours(-72);
         var row = await db.AnalysisJobs.AsNoTracking()
-            .Where(j => j.DeviceId == deviceId)
+            .Where(j => j.DeviceId == deviceId && j.DispatchedAt > since)
             .OrderByDescending(j => j.DispatchedAt)
             .Select(j => new { j.Id, j.Status, j.DispatchedAt })
             .FirstOrDefaultAsync(ct);
         if (row is null) return Results.NotFound();
 
-        // Grade for the card chip — only when a completed Analysis exists (one
-        // small row on an infrequent resume fetch). Null while pending/failed.
+        // Grade for the card chip — only when a completed Analysis exists. Scope
+        // by JobId ONLY: the job above is already proven device-owned, and the
+        // analysis is 1:1 with the job, so re-filtering on DeviceId would make
+        // the grade silently depend on Analysis.DeviceId being set (review).
+        // NOTE (deferred): this materializes the full final_json to read one
+        // scalar — fine at resume-fetch frequency; denormalize a grade column
+        // if the landing endpoint ever gets hot.
         string? gradeValue = null;
         if (row.Status == "complete")
         {
             var finalJson = await db.Analyses.AsNoTracking()
-                .Where(a => a.JobId == row.Id && a.DeviceId == deviceId)
+                .Where(a => a.JobId == row.Id)
                 .Select(a => a.FinalJson)
                 .FirstOrDefaultAsync(ct);
             if (!string.IsNullOrEmpty(finalJson))

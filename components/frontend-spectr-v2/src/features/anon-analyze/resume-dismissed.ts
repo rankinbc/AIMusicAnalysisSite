@@ -21,11 +21,13 @@ export function isResumeDismissed(jobId: string): boolean {
 
 export function dismissResume(jobId: string): void {
   if (typeof window === 'undefined') return;
-  const set = new Set(read());
-  set.add(jobId);
+  // Re-insert at the END so the cap below is true LRU — a re-dismissed id must
+  // not keep its old position and get evicted while newer ones survive (review).
+  const ids = read().filter((id) => id !== jobId);
+  ids.push(jobId);
   try {
     // Cap the list so it can't grow unbounded across many devices/jobs.
-    window.localStorage.setItem(KEY, JSON.stringify([...set].slice(-50)));
+    window.localStorage.setItem(KEY, JSON.stringify(ids.slice(-50)));
   } catch {
     /* storage full / disabled — dismissal just won't persist */
   }

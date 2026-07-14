@@ -43,6 +43,13 @@ describe('ResumeCard (story 6.4 AC1/2)', () => {
     );
     expect(html).toBe('');
   });
+
+  it('unknown/future status: renders nothing (allowlist, not exclusion)', () => {
+    const html = renderToStaticMarkup(
+      <ResumeCard resume={resume({ status: 'some_future_state', grade: null })} onDismiss={() => {}} />,
+    );
+    expect(html).toBe('');
+  });
 });
 
 describe('resume-dismissed (story 6.4 AC3)', () => {

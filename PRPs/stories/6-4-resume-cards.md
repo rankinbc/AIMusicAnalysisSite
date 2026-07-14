@@ -1,6 +1,6 @@
 # Story 6.4: Resume Cards
 
-Status: review
+Status: done
 
 <!-- Fourth story of Epic 6. Rides 6-3's device machinery (merged 5d7b589) —
      the resume data source already exists. Scoped tight for a focused cycle. -->
@@ -101,3 +101,21 @@ claude-fable-5 (dev-story workflow)
 ### Change Log
 
 - 2026-07-14 — Story 6.4 implemented: landing resume card for returning anon visitors (extended jobs/current DTO, status-aware ResumeCard, localStorage dismissal). Checkout-nudge deliberately deferred (Stripe stateless). Gates green (vitest 808, BFF 381). Status → review.
+- 2026-07-14 — 2-layer adversarial review (Blind + Edge; acceptance covered in this record for a small story): 7 hardening patches, no real P1/P2 defects. Gates post-patch: vitest 809, BFF 381. Status → done.
+
+## Senior Review Record (2026-07-14)
+
+_Blind Hunter + Edge Case Hunter (this ~1h story ran 2 adversarial layers; AC compliance is recorded in Completion Notes). Edge Hunter independently verified the grade path is correct end-to-end (pipeline emits a top-level grade string; the worker sets `Analysis.DeviceId`) and found no unhandled P1/P2._
+
+**Patched (7 hardening):**
+- **Grade filter by JobId only** (was `JobId && DeviceId`) — the job is already proven device-owned and the analysis is 1:1, so re-filtering on DeviceId made the grade silently depend on `Analysis.DeviceId` being set (a diff-only reviewer couldn't see the worker sets it; JobId-only is robust regardless).
+- **72h age filter on the query** — `DispatchedAt > now-72h` so a 72–96h-old-but-unswept job can't surface a stale "report from 3d ago" card. Makes AC1 "within 72h" literal, not just sweep-enforced.
+- **`credentials: 'include'`** on the slot fetch AND `anonGet` — the anon vertical is cookie-scoped; same-origin today (Caddy) but this survives a cross-origin split.
+- **isLoading no-flash gate** — the slot waits for auth to RESOLVE (`!auth.isLoading`) before firing, so a logged-in visitor who still holds a device cookie doesn't flash a resume card during silent-refresh boot.
+- **LRU dismissal** — re-dismissed jobId re-inserts at the end so the 50-cap can't evict a recently-acted id.
+- **Response type guard** — `typeof info?.jobId === 'string'` before using it (a proxy error page as JSON no longer renders a card with an undefined jobId).
+- **Running-status allowlist** — `RUNNING_STATUSES` set; an unknown/future status renders no card instead of a misleading "still analyzing". `AbortController` replaces the `live` flag.
+
+**Accepted / recorded (not patched):** FinalJson materialized to read one scalar (fine at resume-fetch frequency; denormalize a grade column only if the endpoint gets hot — noted in the code + deferred-work); failed-newest-job hides an older completed report (consistent with the restore path, which also takes the latest — product call); dismiss-while-processing shares the jobId key with the completed card (intended); the endpoint is now dual-sourced (`useAnonCurrentJob` + the slot) — accepted tradeoff for a provider-free landing render.
+
+**Gates post-patch:** tsc 0 · lint clean · build ✓ · vitest 809/809 · BFF build + anon 7/7 (full suite 381/381 pre-patch; patch touched the anon endpoint + frontend only).
