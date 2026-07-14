@@ -150,7 +150,11 @@ export function chainToMoves(chain: unknown): string[] {
     const m = mods[id];
     if (!m || typeof m !== 'object') continue;
     const rec = m as Rec;
-    if (rec.enabled !== true) continue; // disabled modules are not moves
+    // Skip only EXPLICITLY disabled modules (same semantics as bands). Room
+    // chains fold knob deltas without an `enabled` key — a module present in
+    // the map was touched, and hiding its moves while chainSummary chips list
+    // it would contradict the card (review finding).
+    if (rec.enabled === false) continue;
     moves.push(...moduleMoves(id, rec));
   }
   return moves;

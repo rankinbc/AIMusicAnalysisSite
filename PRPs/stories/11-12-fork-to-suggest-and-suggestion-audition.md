@@ -1,6 +1,6 @@
 # Story 11.12: Fork-to-Suggest & Suggestion Audition
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 <!-- Propose-side completion of 11.2 (accept-side) + the 11.2 deferred audition. Reopens Epic 11. -->
@@ -150,3 +150,28 @@ claude-fable-5 (dev-story workflow)
 ### Change Log
 
 - 2026-07-14 — Story 11.12 implemented: fork-to-suggest in View mode (snapshot/restore state machine, A/B original-vs-draft with blocked-original editing, play nudge, submit via existing `useCreateSuggestion`), Audition/Revert on SuggestionCard via new rs-based `applySuggestionChain` (deviation: graph-only `auditionSuggestion` retired — desynced knob UI), `chainToMoves` readable move list with expander, anon suggest pill removed. Gates green (tsc/lint/build/vitest 772). Status → review.
+- 2026-07-14 — 3-layer code review: 10 patch groups applied (see Senior Review Record). Gates post-patch: tsc 0, lint clean, build ✓, vitest 781/781. Status → done.
+
+## Senior Review Record (2026-07-14)
+
+_3-layer adversarial review (Blind Hunter / Edge Case Hunter / Acceptance Auditor) of `master..story/11-12-fork-to-suggest`._
+
+**Verdict: APPROVED after patches.** Acceptance Auditor: 9/10 ACs Met (AC5 via the recorded deviation, independently verified sound — graph-only apply desyncs knob UI three ways: stale render, stale setParam spread, pushFullRack bulldoze on next play); AC10 Partial → patched to Met.
+
+**Patched findings (10 groups):**
+- **P1 (CRITICAL, blind+edge)** — draft autosave had no fork/audition gate: an owner auditioning a suggestion would have the reviewer's chain autosaved over their real draft 1.2 s later; a non-owner's fork edits fired silent failing PUTs per knob move. Fix: `useRackDraftAutosave(..., realAudio && draftRestored && !suggesting && auditioningId == null)` + state hoisted above the draft block.
+- **P2 (CRITICAL, blind+edge)** — active audition survived a mode switch (only fork was exited), silently making the suggested chain the owner's live rack with Revert unreachable; fork/audition refs also survived a same-mount versionId change. Fix: exit effect reverts audition too; versionId-keyed cleanup effect drops all cross-version state (no restore — the rack belongs to the new version).
+- **P3 (blind+edge)** — `applySuggestionChain` crashed on drifted/hostile chains: unknown module ids injected half-formed ModuleStates the renderers dereference (`MANIFEST_BY_ID[id]` crash), and a partial order made `pushFullRack → reorder` throw "not a permutation" uncaught. Fix: merge only base-known ids; applied order is always a dedup'd permutation of the base order. Tests added.
+- **P4 (edge)** — fork/audition engageable before the saved-draft restore (or a pending 12-4 carry) settled → snapshot captured defaults, late restore stomped the fork, autosave then persisted defaults. Fix: `rackSettledRef` guard in both entry points.
+- **P5 (blind+edge+auditor)** — SuggestModeChip only rendered in the rack bottom-view; forking then switching to VISUALS/STEMS stranded the reviewer in an invisible fork with no Submit/Discard. Fix: chip renders whenever suggesting.
+- **P6 (auditor M×2)** — AC1 badge gating and the AC8 A-side edit block were untested (lived only in a render conditional). Fix: extracted pure `resolveRackSurface` (page renders from it) + 7 tests pinning fork-button/readonly/original-block/editable outcomes.
+- **P7 (blind+edge)** — rail fork seam was inside the `canComment` composer branch; a canSuggest-without-canComment grant lost it. Fix: button moved outside the branch.
+- **P8 (blind+edge)** — `chainToMoves` skipped modules missing an `enabled` key while counting bands missing it — and Room chains (RoomBus NeutralChain + folded knob deltas, verified) legitimately omit `enabled`, so their moves vanished while the chips listed the module. Fix: skip only explicit `enabled === false` (band semantics); test added.
+- **P9 (blind+auditor)** — misleading "asserted at the page seam" test comment fixed; whole-markup `disabled` assertions tightened to per-button regex pins (chip Submit+Discard, card Audition).
+- **P10 (auditor)** — epics.md AC5 (added this story) still named the deleted `auditionSuggestion`; amended with the as-built note.
+
+**Rejected (verified false positives):** owner-edits-A-side + edit-during-audition (View mode `rackReadOnly` is unconditional — `capabilities.ts:71` — so the overlay blocks both; auditor had cited the work-mode line); `restoreRack` aliasing (`recallPreset` JSON-clones its input, `rackState.ts:120`); fork lifting a Room control gate (fork affordances are `mode === 'view'`-gated and the exit effect enforces); submit-in-flight vs mode-switch draft loss (user-initiated abandonment; Discard is disabled while pending; restore no-ops on the cleared ref); auditionSeam render identity (no memoized consumers — the `position` prop re-renders the panel every tick regardless).
+
+**Deferred:** MOCK_ACCESS grant-all fallback while `GET /access` is loading/failed makes fork affordances render for actors whose Submit will 403 — pre-existing access-wiring gap (`useRoomOrchestration.ts:70`, flagged in `access.ts` header), logged in deferred-work.
+
+**Gates post-patch:** tsc --noEmit 0 · eslint --max-warnings 0 clean · vite build ✓ · vitest 781/781.

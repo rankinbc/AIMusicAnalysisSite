@@ -46,7 +46,8 @@ import {
 import { overlayChain } from './fixToRackPatch';
 import { clearFixOverlay } from './listenFixes';
 import {
-  applySuggestionChain, chainFromSnapshot, restoreRack, snapshotRack, type RackSnapshot,
+  applySuggestionChain, chainFromSnapshot, resolveRackSurface, restoreRack, snapshotRack,
+  type RackSnapshot,
 } from './suggest-draft';
 import { SuggestModeChip } from './SuggestModeChip';
 import { useCreateSuggestion } from '../listen/useSuggestions';
@@ -259,6 +260,20 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     () => ({ order: rs.order, modules: rs.mod, masterBypass: rs.masterBypass }),
     [rs.order, rs.mod, rs.masterBypass],
   );
+
+  // ── Story 11.12: fork-to-suggest + audition STATE (handlers live below the
+  // draft block). Declared up here because the draft autosave gate must see it:
+  // fork edits and auditioned chains are transient rack states, never the
+  // user's draft (review CRITICAL — an owner auditioning a suggestion would
+  // otherwise have it autosaved over their real draft 1.2 s later, and a
+  // non-owner reviewer's fork edits would spam failing PUTs).
+  const [suggesting, setSuggesting] = useState(false);
+  const [abSide, setAbSide] = useState<'draft' | 'original'>('draft');
+  const forkSnapshotRef = useRef<RackSnapshot | null>(null);
+  const draftHoldRef = useRef<RackSnapshot | null>(null);
+  const [auditioningId, setAuditioningId] = useState<string | null>(null);
+  const auditionSnapshotRef = useRef<RackSnapshot | null>(null);
+
   const { data: rackPresetDtos } = useRackPresets(realAudio ? (versionId ?? '') : '');
   const saveRackPresetMut = useSaveRackPreset(versionId ?? '');
   const serverRackPresets = useMemo<RackPreset[]>(() => (rackPresetDtos ?? []).flatMap((d) => {
@@ -335,7 +350,11 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     }
     setDraftRestored(true);
   }, [draftRestored, realAudio, carryPhase, draftQuery.isFetched, draftQuery.data]);
-  useRackDraftAutosave(versionId ?? '', currentChain, realAudio && draftRestored);
+  // 11.12: autosave is OFF while forked or auditioning — those are transient
+  // rack states (the fork draft belongs to the suggestion; the audition chain
+  // belongs to the proposer), never the user's persisted draft.
+  useRackDraftAutosave(versionId ?? '', currentChain,
+    realAudio && draftRestored && !suggesting && auditioningId == null);
 
   // Apply the carried chain ONCE per preset id when it resolves: overlay onto
   // the live module map (manual knobs on modules the chain doesn't enable
@@ -393,22 +412,24 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     });
   }, [versionId, navigate]);
 
-  // ── Story 11.12: fork-to-suggest + suggestion audition ─────────────────────
+  // ── Story 11.12: fork-to-suggest + suggestion audition HANDLERS ────────────
   // Fork = page-local state that lifts the View-mode read-only overlay and lets
   // the reviewer edit the LIVE rack (so the draft is audible). Everything is
   // snapshot/restore over `rs` — every capture is a deep clone (`rs.mod` is a
   // live mutable map; a shallow ref would alias the state being edited and turn
-  // restore into a no-op). No server write until Submit.
-  const [suggesting, setSuggesting] = useState(false);
-  const [abSide, setAbSide] = useState<'draft' | 'original'>('draft');
-  const forkSnapshotRef = useRef<RackSnapshot | null>(null);
-  const draftHoldRef = useRef<RackSnapshot | null>(null);
-  const [auditioningId, setAuditioningId] = useState<string | null>(null);
-  const auditionSnapshotRef = useRef<RackSnapshot | null>(null);
+  // restore into a no-op). No server write until Submit. (State declared above
+  // the draft block — the autosave gate reads it.)
   const createSuggestionMut = useCreateSuggestion(versionId ?? '');
+  // The saved-draft restore (and a pending 12-4 carry) must settle before any
+  // snapshot is taken — otherwise fork/audition captures the default chain and
+  // the late restore stomps the live fork (review finding). Ref'd so the
+  // stable callbacks read the live value.
+  const rackSettled = !realAudio || draftRestored;
+  const rackSettledRef = useRef(rackSettled);
+  rackSettledRef.current = rackSettled;
 
   const startSuggesting = useCallback(() => {
-    if (forkSnapshotRef.current) return; // already forked
+    if (forkSnapshotRef.current || !rackSettledRef.current) return;
     // Auditioning + forking never overlap — revert any active audition first so
     // the fork snapshot captures the reviewer's real baseline, not a preview.
     if (auditionSnapshotRef.current) {
@@ -463,16 +484,40 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     });
   }, [versionId, abSide, createSuggestionMut, endSuggesting]);
 
-  // Leaving View mode exits fork-to-suggest (and restores the pre-fork chain).
+  const onRevertAudition = useCallback(() => {
+    if (auditionSnapshotRef.current) restoreRack(rsRef.current, auditionSnapshotRef.current);
+    auditionSnapshotRef.current = null;
+    setAuditioningId(null);
+  }, []);
+
+  // Leaving View mode — or navigating to a different version without an
+  // unmount — exits fork-to-suggest AND reverts any active audition. Without
+  // the audition leg, an owner auditioning in View then switching to Work
+  // would silently keep the reviewer's chain as their live rack with the
+  // Revert affordance unreachable (review CRITICAL).
   useEffect(() => {
-    if (mode !== 'view' && forkSnapshotRef.current) endSuggesting(true);
-  }, [mode, endSuggesting]);
+    if (mode !== 'view') {
+      if (forkSnapshotRef.current) endSuggesting(true);
+      if (auditionSnapshotRef.current) onRevertAudition();
+    }
+  }, [mode, endSuggesting, onRevertAudition]);
+  useEffect(() => () => {
+    // versionId changed (or unmount): drop cross-version state. No restore —
+    // the rack about to render belongs to the NEW version (restoring would
+    // paint track A's chain onto track B).
+    forkSnapshotRef.current = null;
+    draftHoldRef.current = null;
+    auditionSnapshotRef.current = null;
+    setSuggesting(false);
+    setAbSide('draft');
+    setAuditioningId(null);
+  }, [versionId]);
 
   // Audition: apply a suggestion's chain via rs (state + graph stay in sync),
   // one at a time. The FIRST audition takes the snapshot; switching suggestions
   // re-applies from that original snapshot — never from an auditioned state.
   const onAuditionSuggestion = useCallback((sg: SuggestionDto) => {
-    if (forkSnapshotRef.current) return; // disabled while forked (button also disabled)
+    if (forkSnapshotRef.current || !rackSettledRef.current) return; // forked (button disabled) or draft not settled
     const base = auditionSnapshotRef.current ?? snapshotRack(rsRef.current);
     if (!applySuggestionChain(rsRef.current, base, sg.chain)) {
       toast.error('This suggestion’s chain could not be applied.');
@@ -480,11 +525,6 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     }
     auditionSnapshotRef.current = base;
     setAuditioningId(sg.id);
-  }, []);
-  const onRevertAudition = useCallback(() => {
-    if (auditionSnapshotRef.current) restoreRack(rsRef.current, auditionSnapshotRef.current);
-    auditionSnapshotRef.current = null;
-    setAuditioningId(null);
   }, []);
   const auditionSeam: SuggestionAuditionSeam | null = realAudio ? {
     activeId: auditioningId,
@@ -933,6 +973,13 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
             </div>
 
             <div style={{ marginTop: 16 }}>
+              {/* 11.12: the chip is the ONLY Submit/Discard surface — it must
+                  survive a bottom-view switch to VISUALS/STEMS or the reviewer
+                  is stranded in an invisible fork (review finding). */}
+              {suggesting && (
+                <SuggestModeChip playing={playing} abSide={abSide} submitting={createSuggestionMut.isPending}
+                  onToggleAb={toggleAbSide} onSubmit={submitSuggestion} onDiscard={() => endSuggesting(true)} />
+              )}
               <div style={{ display: 'flex', gap: 6, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                 <button type="button" onClick={() => setBottomView('rack')} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 11, fontWeight: 700, padding: '7px 14px', borderRadius: 8, color: bottomView === 'rack' ? '#06151a' : 'var(--muted)', background: bottomView === 'rack' ? 'var(--cyan)' : 'rgba(255,255,255,0.03)', border: '1px solid ' + (bottomView === 'rack' ? 'transparent' : 'var(--border)') }}>▦ RACK</button>
                 <button type="button" onClick={() => setBottomView('lights')} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 11, fontWeight: 700, padding: '7px 14px', borderRadius: 8, color: bottomView === 'lights' ? '#06151a' : 'var(--muted)', background: bottomView === 'lights' ? 'var(--cyan)' : 'rgba(255,255,255,0.03)', border: '1px solid ' + (bottomView === 'lights' ? 'transparent' : 'var(--border)') }}>☀ VISUALS</button>
@@ -974,36 +1021,34 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
                 </div>)}
               </div>
               {bottomView === 'rack'
-                ? (
-                  <>
-                    {suggesting && (
-                      <SuggestModeChip playing={playing} abSide={abSide} submitting={createSuggestionMut.isPending}
-                        onToggleAb={toggleAbSide} onSubmit={submitSuggestion} onDiscard={() => endSuggesting(true)} />
-                    )}
-                    {(rackReadOnly && !(suggesting && abSide === 'draft'))
-                      ? (
-                        <div style={{ position: 'relative' }}>
-                          <div style={{ pointerEvents: 'none', opacity: 0.9 }}>
-                            <InlineRack rs={rs} playing={playing} controller={roomControl.rackHolder?.handle ?? null} />
-                          </div>
-                          {/* Story 11.12: the "FORK TO SUGGEST" fragment is a real button in
-                              View mode; while A/B'ing the original, the overlay blocks edits
-                              (editing the original by accident would corrupt the draft). */}
-                          {suggesting ? (
-                            <div className="mono" style={{ position: 'absolute', top: 12, right: 14, zIndex: 2, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--violet)', padding: '4px 9px', borderRadius: 7, background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.4)' }}>ORIGINAL (A) — FLIP BACK TO EDIT</div>
-                          ) : (cap.canSuggest && mode === 'view' && realAudio) ? (
-                            <button type="button" data-testid="fork-to-suggest-badge" onClick={startSuggesting}
-                              className="mono" style={{ position: 'absolute', top: 12, right: 14, zIndex: 2, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--violet)', padding: '4px 9px', borderRadius: 7, background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.4)', cursor: 'pointer' }}>
-                              READ-ONLY · ⌁ FORK TO SUGGEST
-                            </button>
-                          ) : (
-                            <div className="mono" style={{ position: 'absolute', top: 12, right: 14, zIndex: 2, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--violet)', padding: '4px 9px', borderRadius: 7, background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.4)' }}>READ-ONLY</div>
-                          )}
+                ? (() => {
+                    const surface = resolveRackSurface({
+                      rackReadOnly, suggesting, abSide, canSuggest: cap.canSuggest, mode, realAudio,
+                    });
+                    if (surface.editable) {
+                      return <InlineRack rs={rs} playing={playing} controller={roomControl.rackHolder?.handle ?? null} />;
+                    }
+                    return (
+                      <div style={{ position: 'relative' }}>
+                        <div style={{ pointerEvents: 'none', opacity: 0.9 }}>
+                          <InlineRack rs={rs} playing={playing} controller={roomControl.rackHolder?.handle ?? null} />
                         </div>
-                      )
-                      : <InlineRack rs={rs} playing={playing} controller={roomControl.rackHolder?.handle ?? null} />}
-                  </>
-                )
+                        {/* Story 11.12: the "FORK TO SUGGEST" fragment is a real button in
+                            View mode; while A/B'ing the original, the overlay blocks edits
+                            (editing the original by accident would corrupt the draft). */}
+                        {surface.badge === 'original-block' ? (
+                          <div className="mono" style={{ position: 'absolute', top: 12, right: 14, zIndex: 2, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--violet)', padding: '4px 9px', borderRadius: 7, background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.4)' }}>ORIGINAL (A) — FLIP BACK TO EDIT</div>
+                        ) : surface.badge === 'fork-button' ? (
+                          <button type="button" data-testid="fork-to-suggest-badge" onClick={startSuggesting}
+                            className="mono" style={{ position: 'absolute', top: 12, right: 14, zIndex: 2, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--violet)', padding: '4px 9px', borderRadius: 7, background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.4)', cursor: 'pointer' }}>
+                            READ-ONLY · ⌁ FORK TO SUGGEST
+                          </button>
+                        ) : (
+                          <div className="mono" style={{ position: 'absolute', top: 12, right: 14, zIndex: 2, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--violet)', padding: '4px 9px', borderRadius: 7, background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.4)' }}>READ-ONLY</div>
+                        )}
+                      </div>
+                    );
+                  })()
                 : bottomView === 'stems'
                   ? <StemDeck stems={deckStems} isLoading={stemsLoading} stemUrl={stemUrl} engine={stemEngine}
                       playing={stemPlaying} onActivate={activateStemMode} onPlayPause={setStemPlaying} />

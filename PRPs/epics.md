@@ -1446,7 +1446,7 @@ So that the owner receives a concrete, audition-able rack chain instead of a tex
 2. **Given** fork engaged, **Then** the rack is locally editable and audible with a suggest-mode chip (Submit/Discard); no server write until Submit; capabilities/mode untouched.
 3. **Given** Submit, **Then** the draft chain posts via the existing `useCreateSuggestion` (never a new endpoint), the card appears in "Suggested fixes", and the pre-fork chain is restored.
 4. **Given** Discard or leaving fork mode, **Then** the pre-fork chain is fully restored (order/params/bypass; pitch untouched).
-5. **Given** a `SuggestionCard` where the page audio graph is available, **Then** an Audition button previews the chain non-destructively (existing `auditionSuggestion`) with Revert; no status write.
+5. **Given** a `SuggestionCard` where the page audio graph is available, **Then** an Audition button previews the chain non-destructively with Revert; no status write. (As built: rs-based `applySuggestionChain` — the graph-only `auditionSuggestion` helper desynced the knob UI and was retired.)
 6. **Given** `/v/{token}`, **Then** the "suggestions open" pill is removed (no suggest UI exists there — honest UI); anon suggest UI deferred, backend route stays.
 7. **Given** fork mode with playback paused, **Then** the chip nudges "press play to hear your draft".
 8. **Given** fork mode, **Then** an A/B toggle flips between pre-fork chain and draft (original-vs-draft, not masterBypass); edits on A auto-flip back; Submit always posts the draft.

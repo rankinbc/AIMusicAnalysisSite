@@ -80,8 +80,7 @@ describe('SuggestionCard — audition + moves (story 11.12)', () => {
 
   it('disables Audition while fork-to-suggest is engaged', () => {
     const html = render(sg({}), false, seam({ disabled: true }));
-    expect(html).toContain('Audition');
-    expect(html).toContain('disabled');
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>▶ Audition<\/button>/);
     expect(html).toContain('Finish your suggestion first');
   });
 

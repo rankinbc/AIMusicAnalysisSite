@@ -750,20 +750,23 @@ export function CommentsPanel({ versionId, access, isOwner, position, onSeek, on
             <button type="button" onClick={() => setPinTime((p) => !p)} title="pin to current time" className="mono" style={{ fontSize: 9.5, color: pinTime ? 'var(--cyan)' : 'var(--muted)', background: 'none', padding: 0 }}>@{fmtTime(position)}</button>
             <button type="button" onClick={submit} disabled={postMut.isPending || !text.trim()} className="btn sm primary" style={{ padding: '4px 12px', fontSize: 11 }}>Post</button>
           </div>
-          {access.gates.canSuggest && onForkToSuggest && (
-            <button
-              type="button"
-              data-testid="fork-to-suggest"
-              className="mono"
-              onClick={onForkToSuggest}
-              style={{ alignSelf: 'flex-start', fontSize: 9, color: 'var(--cyan)', background: 'rgba(0,229,176,0.05)', border: '1px dashed rgba(0,229,176,0.35)', borderRadius: 6, padding: '4px 9px' }}
-            >
-              ⌁ Fork the rack &amp; suggest a chain
-            </button>
-          )}
         </div>
       ) : (
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>Comments are closed on this track.</div>
+      )}
+
+      {/* 11.12: OUTSIDE the canComment branch — a canSuggest-without-canComment
+          grant must still get the rail fork seam (review finding). */}
+      {access.gates.canSuggest && onForkToSuggest && (
+        <button
+          type="button"
+          data-testid="fork-to-suggest"
+          className="mono"
+          onClick={onForkToSuggest}
+          style={{ alignSelf: 'flex-start', fontSize: 9, color: 'var(--cyan)', background: 'rgba(0,229,176,0.05)', border: '1px dashed rgba(0,229,176,0.35)', borderRadius: 6, padding: '4px 9px' }}
+        >
+          ⌁ Fork the rack &amp; suggest a chain
+        </button>
       )}
     </div>
   );

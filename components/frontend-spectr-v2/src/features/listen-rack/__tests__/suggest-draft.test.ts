@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { ModuleState } from '../data';
 import type { RackPreset } from '../rackState';
 import {
-  applySuggestionChain, chainFromSnapshot, restoreRack, snapshotRack, type RackRestoreTarget,
+  applySuggestionChain, chainFromSnapshot, resolveRackSurface, restoreRack, snapshotRack,
+  type RackRestoreTarget,
 } from '../suggest-draft';
 
 function mod(over: Partial<ModuleState> = {}): ModuleState {
@@ -104,8 +105,24 @@ describe('suggest-draft (story 11.12)', () => {
       expect(rs.state.mod.comp.ratio).toBe(5);
       expect(rs.state.mod.comp.thresholdDb).toBe(-18); // base param survives the merge
       expect(rs.state.mod.trim.enabled).toBe(false);   // disabled entry IS applied
-      expect(rs.state.order).toEqual(['comp', 'eq']);
+      // chain-known ids lead in chain order; remaining base ids append —
+      // the applied order is ALWAYS a permutation of the base order.
+      expect(rs.state.order).toEqual(['comp', 'eq', 'trim']);
       expect(rs.state.masterBypass).toBe(true);
+    });
+
+    it('ignores unknown module ids (hostile/drifted chain) and keeps the order a base permutation', () => {
+      const rs = fakeRs();
+      const base = snapshotRack(rs.state);
+      const ok = applySuggestionChain(rs, base, {
+        order: ['ghost', 'trim', 'trim'],
+        modules: { ghost: { enabled: true, zap: 11 }, trim: { enabled: true, gainDb: 2 } },
+        masterBypass: false,
+      });
+      expect(ok).toBe(true);
+      expect(rs.state.mod.ghost).toBeUndefined();          // never injected
+      expect(rs.state.mod.trim.gainDb).toBe(2);
+      expect(rs.state.order).toEqual(['trim', 'eq', 'comp']); // dedup'd, permutation of base
     });
 
     it('never writes pitch and falls back to the base order when the chain order is empty', () => {
@@ -131,6 +148,39 @@ describe('suggest-draft (story 11.12)', () => {
       expect(applySuggestionChain(rs, base, null)).toBe(false);
       expect(applySuggestionChain(rs, base, 'chain')).toBe(false);
       expect(rs.state).toEqual(before);
+    });
+  });
+
+  // AC1 badge gating + AC2 fork lift + AC8 A-side block, pinned as pure logic
+  // (they'd otherwise live only in a page-render conditional).
+  describe('resolveRackSurface', () => {
+    const base = { rackReadOnly: true, suggesting: false, abSide: 'draft' as const, canSuggest: true, mode: 'view', realAudio: true };
+
+    it('read-only View with canSuggest → fork button badge (AC1)', () => {
+      expect(resolveRackSurface(base)).toEqual({ editable: false, badge: 'fork-button' });
+    });
+
+    it.each([
+      ['canSuggest false', { ...base, canSuggest: false }],
+      ['not view mode', { ...base, mode: 'room' }],
+      ['mock route', { ...base, realAudio: false }],
+    ])('plain READ-ONLY badge when %s (AC1 fallback)', (_label, args) => {
+      expect(resolveRackSurface(args)).toEqual({ editable: false, badge: 'readonly' });
+    });
+
+    it('fork on the draft side lifts the read-only overlay (AC2)', () => {
+      expect(resolveRackSurface({ ...base, suggesting: true }))
+        .toEqual({ editable: true, badge: null });
+    });
+
+    it('A side blocks edits with the original badge (AC8)', () => {
+      expect(resolveRackSurface({ ...base, suggesting: true, abSide: 'original' }))
+        .toEqual({ editable: false, badge: 'original-block' });
+    });
+
+    it('editable rack stays editable when not suggesting', () => {
+      expect(resolveRackSurface({ ...base, rackReadOnly: false }))
+        .toEqual({ editable: true, badge: null });
     });
   });
 });

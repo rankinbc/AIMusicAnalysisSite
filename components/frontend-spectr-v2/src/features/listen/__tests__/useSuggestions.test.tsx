@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 /* Story 11.12 (AC3) — the submit payload contract: fork-to-suggest posts the
  * draft chain to the EXISTING endpoint via useCreateSuggestion, body = { chain }
- * in the { order, modules, masterBypass } wire shape. Error path stays forked
- * (asserted at the page seam; here we pin the request itself). */
+ * in the { order, modules, masterBypass } wire shape. The stay-forked-on-error
+ * behavior is page logic (submitSuggestion's onError deliberately skips
+ * endSuggesting) — here we pin the request and the error propagation. */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';

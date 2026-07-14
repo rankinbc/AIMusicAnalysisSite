@@ -32,9 +32,11 @@ describe('SuggestModeChip (story 11.12)', () => {
     expect(html).toContain('flip back to keep editing');
   });
 
-  it('disables Submit/Discard while the POST is in flight', () => {
+  it('disables BOTH Submit and Discard while the POST is in flight', () => {
     const html = render({ submitting: true });
-    expect(html).toContain('Sending…');
-    expect(html).toContain('disabled');
+    // Per-button pins — a whole-markup 'disabled' check would stay green if
+    // Discard lost its guard (the submit-vs-discard race).
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>Sending…<\/button>/);
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>Discard<\/button>/);
   });
 });

@@ -101,6 +101,7 @@ Real findings that are out of scope for the current story but worth revisiting.
 - **Anon suggest UI on `/v/{token}`** [v.$token.tsx] — no audio graph/rack exists on that page; building fork-to-suggest there means mounting a rack for anons. The anon POST route (`PostSuggestionAnon`) + `usePostAnonSuggestion` stay ready; the `canSuggest` pill was removed (honest UI) until a UI exists.
 - **DAW preset export (.adv/.als)** — `chainToMoves` readable move list is the v1 stand-in for "what do I do in my DAW"; real export via the `preset_compiler.py` mapping is a project of its own.
 - **Per-reviewer suggestion caps (authed)** [FeedbackEndpoints.cs] — anon POST is rate-limited, authed is not, and there's no per-version open-suggestion cap. Deliberately skipped at current user count; revisit at scale.
+- **MOCK_ACCESS fallback shows fork affordances that will 403** [useRoomOrchestration.ts:70] — `apiAccess ?? MOCK_ACCESS` grants all gates while `GET /access` is loading or permanently failed, so fork-to-suggest renders for actors whose Submit gets `suggest_forbidden`. Pre-existing access-wiring gap (every gate suffers it, flagged in access.ts header); fix belongs to the real-access wiring pass, not 11.12.
 
 ## Deferred from: code review of stories 11.1/11.2/11.3 (2026-06-28)
 

@@ -52,6 +52,34 @@ export function restoreRack(rs: RackRestoreTarget, snap: RackSnapshot): void {
   rs.setMasterBypass(snap.masterBypass);
 }
 
+/** How the rack surface renders given read-only + fork state (AC1/AC2/AC8).
+ *  Pure so the badge gating and the A-side edit block are unit-testable —
+ *  they'd otherwise live only in a page-render conditional. */
+export type RackSurface =
+  | { editable: true; badge: null }
+  | { editable: false; badge: 'readonly' | 'fork-button' | 'original-block' };
+
+export function resolveRackSurface(args: {
+  rackReadOnly: boolean;
+  suggesting: boolean;
+  abSide: 'draft' | 'original';
+  canSuggest: boolean;
+  mode: string;
+  realAudio: boolean;
+}): RackSurface {
+  const { rackReadOnly, suggesting, abSide, canSuggest, mode, realAudio } = args;
+  // While A/B'ing the ORIGINAL, edits are blocked — editing the original by
+  // accident would be silently discarded on the flip back to the draft (AC8).
+  if (suggesting && abSide === 'original') return { editable: false, badge: 'original-block' };
+  // Fork (draft side) lifts the read-only overlay (AC2).
+  if (suggesting) return { editable: true, badge: null };
+  if (!rackReadOnly) return { editable: true, badge: null };
+  return {
+    editable: false,
+    badge: canSuggest && mode === 'view' && realAudio ? 'fork-button' : 'readonly',
+  };
+}
+
 /** A snapshot as the wire Chain shape (the CreateSuggestionRequest payload). */
 export function chainFromSnapshot(snap: RackSnapshot): Chain {
   return { order: [...snap.order], modules: structuredClone(snap.mod), masterBypass: snap.masterBypass };
@@ -74,16 +102,24 @@ export function applySuggestionChain(
   if (!chain) return false;
   const mod = structuredClone(base.mod);
   for (const id of Object.keys(chain.modules)) {
-    if (id === 'pitch') continue;
+    // Merge ONLY ids the base rack knows. An unknown id (drifted or hostile
+    // chain — the server validates shape, not content) would inject a
+    // half-formed ModuleState the renderers dereference (MANIFEST_BY_ID[id])
+    // and crash the page on click (review finding).
+    if (id === 'pitch' || mod[id] == null) continue;
     const m = chain.modules[id];
     if (m && typeof m === 'object') mod[id] = { ...mod[id], ...m };
   }
-  // Only ids the merged map actually has; a drifted order id would push nothing
-  // but keeping the order honest costs one filter.
-  const order = chain.order.filter((id) => id !== 'pitch' && mod[id] != null);
+  // The applied order must stay a PERMUTATION of the base order — pushFullRack
+  // → reorder throws "not a permutation" on a partial/drifted order (review
+  // finding). Chain-known ids keep the chain's relative order; the rest of the
+  // base order appends behind them.
+  const baseIds = new Set(base.order);
+  const fromChain = chain.order.filter((id, i) => baseIds.has(id) && chain.order.indexOf(id) === i);
+  const order = [...fromChain, ...base.order.filter((id) => !fromChain.includes(id))];
   rs.recallPreset({
     id: 'suggest-audition', name: 'suggest-audition', by: 'you',
-    order: order.length > 0 ? order : [...base.order], mod, n: 0,
+    order, mod, n: 0,
   });
   rs.setMasterBypass(chain.masterBypass);
   return true;

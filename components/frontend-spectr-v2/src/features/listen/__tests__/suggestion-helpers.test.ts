@@ -83,6 +83,15 @@ describe('chainToMoves (story 11.12)', () => {
     expect(moves).toEqual([]);
   });
 
+  it('includes modules WITHOUT an enabled key (room chains fold knob deltas bare)', () => {
+    const moves = chainToMoves({
+      order: [],
+      modules: { comp: { thresholdDb: -12, ratio: 4 } }, // no `enabled` — touched in a room
+      masterBypass: false,
+    });
+    expect(moves).toEqual(['comp 4:1 @ -12 dB']);
+  });
+
   it('emits a generic "on" move for creative modules and orders drift ids last', () => {
     const moves = chainToMoves({
       order: ['reverb'],
