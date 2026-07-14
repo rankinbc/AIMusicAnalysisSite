@@ -92,7 +92,15 @@ Real findings that are out of scope for the current story but worth revisiting.
 
 ## Deferred from: story 11.2 (2026-06-28)
 
-- **Suggestion audition (non-destructive chain preview)** [components/frontend-spectr-v2/src/features/listen/SuggestionCard.tsx + features/listen/useSuggestions.ts] — `auditionSuggestion(graph, suggestion)` already exists (applies the proposed `Chain` to the live `AudioGraphHandle` via the PRP-1 apply loop), but the `SuggestionCard` renders inside the rail `CommentsPanel`, which doesn't hold the audio graph (`rs`/`graph` live in `ListenRackPage`). Not among the 5 ACs. To wire: thread an `onAudition(suggestion)` callback from `ListenRackPage` → `RightRail` → `CommentsPanel` → `SuggestionCard`, calling `auditionSuggestion(graph, sg)`; add a "revert" to restore the prior chain.
+- ~~**Suggestion audition (non-destructive chain preview)**~~ — DONE in story 11.12 (2026-07-14): audition seam threaded `ListenRackPage` → `RightRail` → `CommentsPanel` → `SuggestionCard` with Revert; applied via `applySuggestionChain` (rs-based, keeps knob UI + graph in sync) rather than the graph-only `auditionSuggestion`.
+
+## Deferred from: story 11.12 (2026-07-14)
+
+- **Suggestion diff view** [SuggestionCard.tsx] — "what did they change vs my rack" needs the forked-from base chain stored with the suggestion; embedding `basedOn` in the payload would pollute the accept-time preset fork. Design question, not code.
+- **sessionStorage draft persistence for fork-to-suggest** [ListenRackPage.tsx] — a reviewer's draft dies on accidental nav. Persisting interacts with the restore state machine (restore-on-mount vs restore-on-exit); deliberately skipped for v1.
+- **Anon suggest UI on `/v/{token}`** [v.$token.tsx] — no audio graph/rack exists on that page; building fork-to-suggest there means mounting a rack for anons. The anon POST route (`PostSuggestionAnon`) + `usePostAnonSuggestion` stay ready; the `canSuggest` pill was removed (honest UI) until a UI exists.
+- **DAW preset export (.adv/.als)** — `chainToMoves` readable move list is the v1 stand-in for "what do I do in my DAW"; real export via the `preset_compiler.py` mapping is a project of its own.
+- **Per-reviewer suggestion caps (authed)** [FeedbackEndpoints.cs] — anon POST is rate-limited, authed is not, and there's no per-version open-suggestion cap. Deliberately skipped at current user count; revisit at scale.
 
 ## Deferred from: code review of stories 11.1/11.2/11.3 (2026-06-28)
 

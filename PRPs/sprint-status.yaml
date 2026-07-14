@@ -48,7 +48,7 @@
 # Build order: E1 -> E2 -> E3 -> E4 -> E5 -> E6 -> E7 -> E8 -> E9 -> E10.
 
 generated: 2026-06-12
-last_updated: 2026-07-13
+last_updated: 2026-07-14
 # story 2-10 transitioned: backlog → ready-for-dev → in-progress → review → done (2026-06-23; nightly BillingReconciliationService + webhook replay idempotency tests + currency/price drift detection; code-review: 4 patches [sentinel false-positive, PeriodicTimer startup run, subscription-drift tests, per-row error isolation], 154/154 BFF tests). Epic-2 COMPLETE — all 10 stories done.
 # story 2-8 transitioned: backlog → ready-for-dev (create-story workflow, 2026-06-23; usage page summary + HonestMathBanner + UsageMeter nav + BFF coach-pool/honest-math surfacing)
 # story 2-9 transitioned: backlog → ready-for-dev (create-story workflow, 2026-06-23; dunning DunningBanner + next_payment_attempt persistence + graceful degradation via existing 2.7 BlurLock + AR15 results-forever)
@@ -165,7 +165,7 @@ development_status:
   # Epic 11 added 2026-06-27 (sprint plan: PRPs/stories + plan file). Social backend ~90% built
   # via the Listen-V3 PRP slice; this epic surfaces it in UI + adds notifications + social graph.
   # First sprint = 11-1/11-3/11-5 (ready-for-dev), 11-2 stretch; remainder backlog.
-  epic-11: done  # all 11 stories merged (PR #2/#3/#4, 2026-07-03)
+  epic-11: in-progress  # reopened 2026-07-14 for 11-12 (propose-side of 11.2 was never built); original 11 stories merged (PR #2/#3/#4, 2026-07-03)
   11-1-threaded-timestamped-comments-panel: done  # implemented + code-reviewed 2026-06-28: rail CommentsPanel -> real useComments (threaded/moderated) + comment-tree helper; 2 review patches applied (Enter-guard, loading state); gates green, vitest 572
   11-2-reviewer-rack-suggestions-and-accept-to-preset: done  # code-reviewed 2026-06-28: 1 patch (rejected-state render test); audition deferred; gates green, vitest 590
   11-3-bookmarks-rail-and-owner-heat-signal: done  # code-reviewed 2026-06-28: 4 patches (note-edit double-save/Escape-cancel, aria-hidden markers, IME guard, NaN-t guard); 4 defers logged; gates green, vitest 590
@@ -177,6 +177,7 @@ development_status:
   11-9-follow-graph: done  # merged via PR #3; FollowRelation (unique pair + no-self CHECK, migration, python mirror) + /api/u/{handle}/follow GET/PUT/DELETE (idempotent, rate-limited) + profile counts/button; 2 BFF + frontend tests
   11-10-activity-feed: done  # merged to master via PR #4 (2026-07-03); recap_published_at column (+python mirror) closes the published-recap gap; GET /api/me/feed (followees' public shares + published recaps, visibility-gated, paged, empty-state suggestions) + /feed page + nav tab; 9 review patches applied (page cap, infinite-query accumulate, merge tiebreak, IsActive, feed invalidation, publish tx, ItemId key, partial index, test coverage) + pre-existing SubscriptionMirrorService webhook upsert race fixed; PR #4; gates green (BFF 257, vitest 642)
   11-11-discovery-entry-points: done  # merged to master via PR #4 (2026-07-03); GET /api/u/?q= handle search (mention-grammar-validated, IsActive, rate-limited) + features/mentions autocomplete in both composers + comment/roster avatar → /u/{handle} links + /v/{token} owner identity + RegisterCta(via+next)/FollowProducerCta post-claim loop; 12 review patches applied (token encoding, full-token replace, caret restore, IME guard, reactive auth + isSelf, keepPreviousData, key collision, test hardening); gates green (BFF 262, vitest 661); PR #4
+  11-12-fork-to-suggest-and-suggestion-audition: review  # implemented 2026-07-14 — fork/A-B/audition state machine on ListenRackPage + suggest-draft.ts helpers + SuggestModeChip + SuggestionCard audition/moves + anon pill honesty; gates green (tsc/lint/build/vitest 772); DEVIATION: auditionSuggestion retired for rs-based applySuggestionChain (graph-only apply desyncs knob UI). Created 2026-07-14 — propose-side of 11.2 (fork read-only View rack → editable audible draft → POST suggestion via existing useCreateSuggestion; SuggestionCard Audition/Revert per deferred-work.md plan; anon pill honesty). v1 pull-ins added same day: play nudge, A/B original-vs-draft toggle, chainToMoves readable move list. Backend zero-change; frontend-only
   epic-11-retrospective: optional
   epic-12: in-progress  # added 2026-07-10 from full-app audit + team review; see PRPs/epics.md Epic 12
   12-1-analysis-dispatch-unblocked-in-dev-and-verify-gate-ux: done  # code-reviewed 2026-07-10 (3 adversarial layers, all 5 ACs Met, 6 patches applied incl. loopback-gated token log + logout cooldown reset + banner entitlement wait); full gates post-patch: BFF 350/350 (live PG+Redis), vite build + tsc 0 + lints clean + vitest 699/699. Impl: DevAutoVerify (Development-only, double guard) + console verify link + dev-login stamp; AR38-message-first ApiError + verify-gate toast w/ resend; VerifyEmailBanner in shell; disposable arm behind limitsOn; 5-code dispatch error contract tests

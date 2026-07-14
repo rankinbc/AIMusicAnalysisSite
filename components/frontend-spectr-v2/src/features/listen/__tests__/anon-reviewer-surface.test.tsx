@@ -10,18 +10,25 @@ function gates(over: Partial<GatesDto> = {}): GatesDto {
   return { canComment: false, canSuggest: false, canBookmark: false, ...over };
 }
 
-describe('AnonGatePills (story 11.4 gating matrix)', () => {
+describe('AnonGatePills (story 11.4 gating matrix; 11.12 drops the suggest pill)', () => {
   it.each([
     [gates({ canComment: true }), ['comments open'], ['suggestions open', 'bookmarks open']],
-    [gates({ canSuggest: true }), ['suggestions open'], ['comments open', 'bookmarks open']],
     [gates({ canBookmark: true }), ['bookmarks open'], ['comments open', 'suggestions open']],
     [gates({ canComment: true, canSuggest: true, canBookmark: true }),
-      ['comments open', 'suggestions open', 'bookmarks open'], ['listen only']],
+      ['comments open', 'bookmarks open'], ['listen only', 'suggestions open']],
     [gates(), ['listen only'], ['comments open', 'suggestions open', 'bookmarks open']],
   ])('renders exactly the granted gates (%#)', (g, present, absent) => {
     const html = renderToStaticMarkup(<AnonGatePills gates={g} />);
     for (const p of present) expect(html).toContain(p);
     for (const a of absent) expect(html).not.toContain(a);
+  });
+
+  // Story 11.12 AC6 — this page has no suggestion UI, so canSuggest must never
+  // light a pill (dead promise), and a suggest-only grant reads as listen-only.
+  it('never advertises suggestions; suggest-only grant renders listen only', () => {
+    const html = renderToStaticMarkup(<AnonGatePills gates={gates({ canSuggest: true })} />);
+    expect(html).not.toContain('suggestions open');
+    expect(html).toContain('listen only');
   });
 });
 
