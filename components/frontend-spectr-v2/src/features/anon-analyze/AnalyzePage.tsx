@@ -215,11 +215,13 @@ export function AnalyzePage() {
   }, [stage]);
 
   // Story 6.5 — funnel telemetry (PII-free; no-op without a PostHog key).
-  // analyze_completed fires ONCE when the report first renders (the stage
-  // persists across re-renders — a ref guards against re-fire).
+  // analyze_completed fires ONCE, and ONLY for a job THIS session started —
+  // a returning visitor whose completed report is RESTORED must not re-fire
+  // it (no paired analyze_started → orphaned/negative TTFI; review).
+  const startedThisSessionRef = useRef(false);
   const completedFiredRef = useRef(false);
   useEffect(() => {
-    if (stage === 'report' && jobId && !completedFiredRef.current) {
+    if (stage === 'report' && jobId && startedThisSessionRef.current && !completedFiredRef.current) {
       completedFiredRef.current = true;
       capture('analyze_completed', { job_id: jobId });
     }
@@ -228,7 +230,11 @@ export function AnalyzePage() {
   const onFile = useCallback((file: File) => {
     setRestoreDismissed(false);
     void uploadApi.upload(file)
-      .then((r) => { setJobId(r.jobId); capture('analyze_started', { job_id: r.jobId }); })
+      .then((r) => {
+        startedThisSessionRef.current = true;
+        setJobId(r.jobId);
+        capture('analyze_started', { job_id: r.jobId });
+      })
       .catch(() => { /* error state shown */ });
   }, [uploadApi]);
 

@@ -19,9 +19,9 @@ describe('readAttribution (story 6.5 AC4)', () => {
     expect(readAttribution()).toEqual({});
   });
 
-  it('reads the localStorage stash and DRAINS it (attaches once)', () => {
-    window.localStorage.setItem(KEY, 'share_abc');
-    expect(readAttribution()).toEqual({ source: 'share_abc' });
+  it('reduces a share TOKEN to the channel "share" (no de-anonymizing token) and drains once', () => {
+    window.localStorage.setItem(KEY, 'share_abc123');
+    expect(readAttribution()).toEqual({ source: 'share' }); // token dropped
     // Drained — a later unrelated signup must not inherit it.
     expect(readAttribution()).toEqual({});
     expect(window.localStorage.getItem(KEY)).toBeNull();
@@ -30,10 +30,23 @@ describe('readAttribution (story 6.5 AC4)', () => {
   it('prefers the ?via / ?ref URL param over the stash and still drains the stash', () => {
     window.localStorage.setItem(KEY, 'share_stale');
     setSearch('via=share_fresh');
-    expect(readAttribution()).toEqual({ source: 'share_fresh' });
+    expect(readAttribution()).toEqual({ source: 'share' });
     expect(window.localStorage.getItem(KEY)).toBeNull(); // drained regardless
 
     setSearch('ref=producthunt');
+    expect(readAttribution()).toEqual({ source: 'producthunt' });
+  });
+
+  it('slugifies a ref and DROPS anything email-like / not a plausible campaign slug (privacy)', () => {
+    setSearch('ref=' + encodeURIComponent('jane.doe@gmail.com'));
+    // @ and . stripped → "janedoegmailcom" (no PII punctuation survives).
+    expect(readAttribution().source).toBe('janedoegmailcom');
+    setSearch('ref=' + encodeURIComponent('!!!'));
+    expect(readAttribution()).toEqual({}); // nothing slug-shaped → dropped
+  });
+
+  it('an empty ?via= falls through to ?ref= instead of shadowing it', () => {
+    setSearch('via=&ref=producthunt');
     expect(readAttribution()).toEqual({ source: 'producthunt' });
   });
 });

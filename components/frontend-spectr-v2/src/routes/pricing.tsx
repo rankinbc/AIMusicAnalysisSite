@@ -51,10 +51,11 @@ export function PricingPage() {
 
   const startCheckout = async (cadence: 'monthly' | 'annual') => {
     setPending(cadence);
-    capture('checkout_started', { cadence }); // 6.5 — free→paid funnel edge
     const token = getAccessToken();
     if (!token) {
       // Anonymous users hit /pricing too; bounce them to register first.
+      // No checkout_started here — no Stripe redirect happens, so counting it
+      // would inflate the free→paid edge with anon click-throughs (review).
       toast.info('Create an account to subscribe.');
       window.location.assign(`/register?next=${encodeURIComponent('/pricing')}`);
       setPending(null);
@@ -92,6 +93,8 @@ export function PricingPage() {
         toast.error('Refusing to redirect: checkout URL is not a Stripe host.');
         return;
       }
+      // 6.5 — fire ONLY when a real validated Stripe redirect is imminent.
+      capture('checkout_started', { cadence });
       window.location.assign(data.url);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Network error');

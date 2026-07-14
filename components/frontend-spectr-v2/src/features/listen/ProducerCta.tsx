@@ -3,6 +3,7 @@
  * back to this share page, so the return trip is the "post-claim" moment.
  * Authed viewer (incl. the freshly-claimed) → "Follow @owner" via the 11.9
  * follow surface. Renders nothing without an owner handle or for the owner. */
+import { ATTRIBUTION_KEY } from '../../lib/attribution';
 
 export function RegisterCta({ token, ownerHandle }: { token: string; ownerHandle: string | null }) {
   const next = `/v/${token}`;
@@ -15,8 +16,8 @@ export function RegisterCta({ token, ownerHandle }: { token: string; ownerHandle
       data-testid="register-cta"
       href={`/register?via=${via}&next=${encodeURIComponent(next)}`}
       onClick={() => {
-        // 7.4 attribution carry — write-only stash until 6.5 instrumentation.
-        try { localStorage.setItem('spectr_attribution', `share_${token}`); } catch { /* private mode */ }
+        // 7.4 attribution carry — drained by 6.5 readAttribution (shared key).
+        try { localStorage.setItem(ATTRIBUTION_KEY, `share_${token}`); } catch { /* private mode */ }
       }}
     >
       {ownerHandle ? `Join SPECTR & follow @${ownerHandle} →` : 'Analyze your own track free →'}

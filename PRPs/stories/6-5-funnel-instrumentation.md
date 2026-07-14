@@ -1,6 +1,6 @@
 # Story 6.5: Funnel Instrumentation
 
-Status: review
+Status: done
 
 <!-- Last story of Epic 6. Wires PostHog events onto the funnel edges built in
      6-1/6-3/6-4. Tight cycle — the analytics wrapper + identity stitch already exist. -->
@@ -98,3 +98,19 @@ claude-fable-5 (dev-story workflow)
 ### Change Log
 
 - 2026-07-14 — Story 6.5 implemented: PostHog funnel-edge events across landing/pricing/anon-analyze/resume surfaces + attribution drain, all PII-free via the 10.3 no-op-safe wrapper. Epic 6 complete. Gates green (vitest 816). Status → review.
+- 2026-07-14 — 2-layer adversarial review (privacy-focused): 5 patch groups. Gates post-patch: vitest 817. Status → done.
+
+## Senior Review Record (2026-07-14)
+
+_Blind Hunter + Edge Case Hunter — a privacy audit of the telemetry. Both converged; Edge Hunter verified the identify-ordering (report_claimed lands under the anon distinct_id, then identify stitches — correct), no null job_id, and static-render safety._
+
+**Patched (5):**
+- **P1 (CRITICAL) — attribution `source` forwarded de-anonymizing values.** A `share_{token}` resolves to a specific account; `?ref=` is uncontrolled free text (`?ref=jane@x.com`). Both went verbatim into `report_claimed.source`, breaking the PII-free contract. Fix: `sanitizeSource` reduces a share token to the CHANNEL `"share"` (per-share/viral join stays server-side via the /register `?via=` handler) and slugifies a ref to `[a-z0-9-]` capped at 32 (drops non-slug junk). Tests pin token→channel + ref slugify + junk-dropped.
+- **P2 — `analyze_completed` fired on RESTORE with no paired `analyze_started`** (returning visitor whose completed report is restored) → inflated completions + orphaned/negative TTFI. Fix: `startedThisSessionRef` gates it — fires only for a job this mount actually uploaded.
+- **P2 — `checkout_started` fired before the auth gate** (anon click → bounce to /register, no Stripe redirect) → inflated free→paid edge. Fix: moved to fire ONLY after the validated Stripe URL, immediately before the redirect.
+- **P3 — `||` not `??`** so an empty `?via=` no longer shadows the `?ref=` fallback.
+- **P3 — `ATTRIBUTION_KEY` exported + bound** — the two writers (`r.$token.tsx`, `ProducerCta.tsx`) now import the const instead of a duplicated `'spectr_attribution'` literal (drift = broken feature with no failing test, closed). Vacuous static-markup resume test replaced with the DOM click assertion.
+
+**Accepted / recorded (deferred-work):** attribution attaches only on the /analyze inline claim (register-path signup attribution is a follow-up — the server-side `?via=` still has it); stale-first-attach (bounded); resume_clicked/view-event delivery on full-nav / StrictMode double-fire (low-impact counts); post-register de-anonymization is by design (documented in the runbook).
+
+**Gates post-patch:** tsc 0 · lint clean · build ✓ · vitest 817/817. Frontend-only.

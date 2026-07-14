@@ -4,7 +4,6 @@
  * AnalyzePage upload/claim transitions are async-network and are covered by
  * the anon-funnel Playwright spec + the wiring being straight-line. */
 import { render } from '@testing-library/react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const capture = vi.fn();
@@ -32,19 +31,7 @@ describe('funnel events (story 6.5)', () => {
     expect(capture).toHaveBeenCalledWith('pricing_viewed');
   });
 
-  it('resume card "Open" click fires resume_clicked with status', () => {
-    // onOpen is what LandingResumeSlot binds to capture('resume_clicked', …);
-    // here we assert the card invokes it on the anchor click.
-    const onOpen = vi.fn();
-    const html = renderToStaticMarkup(
-      <ResumeCard resume={resume()} onOpen={onOpen} onDismiss={() => {}} />,
-    );
-    // The anchor carries the onClick (rendered as a real handler in the DOM
-    // render path); static markup proves the wiring point exists.
-    expect(html).toContain('data-testid="resume-open"');
-  });
-
-  it('resume card click invokes onOpen (DOM)', () => {
+  it('resume card "Open" click invokes onOpen (→ resume_clicked in the slot)', () => {
     const onOpen = vi.fn();
     const { getByTestId } = render(
       <ResumeCard resume={resume()} onOpen={onOpen} onDismiss={() => {}} />,
