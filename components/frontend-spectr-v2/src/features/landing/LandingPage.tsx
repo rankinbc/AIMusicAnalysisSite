@@ -36,13 +36,13 @@ export function LandingPage() {
             arrangement — with concrete fixes you can hear, not vibes.
           </p>
           <div className={s.ctaRow}>
-            {/* CTA targets /register until story 6.3 ships /analyze — retarget then. */}
-            <a href="/register" className="btn primary" data-testid="landing-cta">
+            {/* Story 6.3 — straight into the anon instant-analysis funnel. */}
+            <a href="/analyze" className="btn primary" data-testid="landing-cta">
               Analyze my track free
             </a>
             <a href="/pricing" className="btn ghost">See pricing</a>
           </div>
-          <p className={`mono ${s.ctaHint}`}>WAV · FLAC · MP3 · free analyses every month · no card</p>
+          <p className={`mono ${s.ctaHint}`}>WAV · FLAC · MP3 · no account needed for the first one</p>
         </section>
 
         <SampleReportEmbed />

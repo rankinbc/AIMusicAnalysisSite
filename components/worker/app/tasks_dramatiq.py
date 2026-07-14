@@ -178,27 +178,34 @@ def analyze_audio_job(job_id: str) -> None:
                 job_id, job.status, job.error_code,
             )
             return
+        # Story 6.3 — song-less anonymous jobs: version_id is null and the
+        # audio key lives on the job itself (audio/anon/{deviceId}/{jobId}/…).
+        # No song/version/reference/als/stems context on that path.
         if job.version_id is None:
-            raise ValueError(f"job {job_id} has no version_id")
-        version = s.get(SongVersion, job.version_id)
-        if version is None:
-            raise ValueError(f"version {job.version_id} not found")
-        song = s.get(Song, version.song_id)
+            if not job.file_path:
+                raise ValueError(f"job {job_id} has neither version_id nor file_path")
+            version = None
+            song = None
+        else:
+            version = s.get(SongVersion, job.version_id)
+            if version is None:
+                raise ValueError(f"version {job.version_id} not found")
+            song = s.get(Song, version.song_id)
 
         job.status = JOB_STATUS_PROCESSING
         job.started_at = _utc_now()
         job.current_phase = "starting"
         job.phase_pct = 0.0
 
-        file_rel = version.file_path
+        file_rel = version.file_path if version is not None else job.file_path
         user_id = job.user_id
         # Story 4.5 (AR24): anon jobs carry device_id instead of user_id; the
         # analyses insert must propagate it or ck_analyses_owner_xor fires the
         # moment 6.3 dispatches a device-owned job.
         device_id = job.device_id
         tier = job.tier  # billing tier stamped by the BFF at dispatch (story 2.4)
-        version_id = version.id
-        song_id = version.song_id
+        version_id = version.id if version is not None else None
+        song_id = version.song_id if version is not None else None
         song_name = song.name if song is not None else None
 
         # Reference resolution: a saved library reference (job.reference_id) takes
@@ -207,17 +214,17 @@ def analyze_audio_job(job_id: str) -> None:
         # version's one-off path — never crash the job over it. The used_count
         # bump is deferred to Phase C (on success) so a failed pipeline — or a
         # dramatiq retry — doesn't permanently inflate the counter.
-        reference_path = version.reference_path
+        reference_path = version.reference_path if version is not None else None
         bump_reference_id: uuid.UUID | None = None
-        if job.reference_id is not None:
+        if job.reference_id is not None and version is not None:
             ref = s.get(ReferenceTrack, job.reference_id)
             if ref is not None and ref.file_path:
                 reference_path = ref.file_path
                 bump_reference_id = ref.id
 
-        als_file_path = version.als_file_path
-        stem_paths = version.stem_paths
-        stem_mode = version.stem_analysis_mode or "grouped"
+        als_file_path = version.als_file_path if version is not None else None
+        stem_paths = version.stem_paths if version is not None else None
+        stem_mode = (version.stem_analysis_mode or "grouped") if version is not None else "grouped"
 
     # ── Phase B — run pipeline outside any long-held DB transaction ──────────
     # Live per-phase progress: the pipeline calls progress_cb(phase, name, pct)

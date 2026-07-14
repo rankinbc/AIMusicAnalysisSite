@@ -29,8 +29,8 @@ export function PublicChrome() {
         ) : (
           <>
             <a href="/login" className={s.navLink}>Sign in</a>
-            {/* CTA targets /register until story 6.3 ships /analyze — retarget then. */}
-            <a href="/register" className="btn primary sm">Analyze free</a>
+            {/* Story 6.3 — the anon instant-analysis funnel is live. */}
+            <a href="/analyze" className="btn primary sm">Analyze free</a>
           </>
         )}
       </nav>

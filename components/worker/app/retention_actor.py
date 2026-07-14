@@ -183,10 +183,10 @@ def _purge_unclaimed_anonymous(now: datetime) -> int:
     means there is no owner to keep a report for — that IS the 72 h deal the
     anonymous funnel offers. Claimed devices' rows were already re-parented
     to a user (device_id NULL) so they can never match. Runs in its OWN
-    session; any failure is logged and never poisons the sweep. Storage
-    objects for anon jobs are deleted when 6.3 fixes the anon key
-    convention — today anon rows have no uploaded keys to chase (row purge
-    is the complete story until then).
+    session; any failure is logged and never poisons the sweep. Story 6.3:
+    anon uploads key as audio/anon/{device_id}/{job_id}/source.* on
+    analysis_jobs.file_path — those objects are deleted here (fail-soft per
+    key, same policy as the main sweep) before the rows go.
 
     Returns the number of devices purged. Tolerates the table being absent
     (pre-4.5 databases, partial sqlite test mirrors).
@@ -214,6 +214,28 @@ def _purge_unclaimed_anonymous(now: datetime) -> int:
                 stale = [r.id for r in s.execute(text(select_sql), {"cutoff": cutoff}).all()]
                 if not stale:
                     break
+
+                # Story 6.3 — delete the anon upload objects BEFORE the rows
+                # (rows are the only manifest of the keys; objects-before-rows
+                # is the 4.6 ordering). Fail-soft per key: a storage hiccup
+                # must not strand the row purge — the trust-page 72h promise
+                # is about the DATA being gone, and a leaked orphan object is
+                # logged for the next sweep's operator, not fatal.
+                key_rows = s.execute(
+                    text(
+                        "SELECT file_path FROM analysis_jobs "
+                        "WHERE device_id IN :dids AND file_path IS NOT NULL"
+                    ).bindparams(bindparam("dids", expanding=True)),
+                    {"dids": stale},
+                ).all()
+                for (key,) in key_rows:
+                    try:
+                        object_store.delete_object(key, LOCAL_ROOT)
+                    except Exception:
+                        logger.warning(
+                            "sweep_retention: anon object delete failed key=%s", key,
+                            exc_info=True,
+                        )
 
                 s.execute(
                     text(

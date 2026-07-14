@@ -1,0 +1,230 @@
+.page {
+  min-height: 100vh;
+}
+
+.main {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 24px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ── full-bleed drop zone (AC1) ──────────────────────────────────────── */
+.dropZone {
+  margin-top: 48px;
+  min-height: 52vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  text-align: center;
+  border: 2px dashed var(--border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.015);
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.dropZoneActive {
+  border-color: var(--cyan);
+  background: rgba(0, 229, 176, 0.05);
+}
+
+.dropTitle {
+  margin: 0;
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(26px, 4.5vw, 42px);
+  font-weight: 800;
+  line-height: 1.15;
+  max-width: 640px;
+}
+
+.dropSub {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 15px;
+  max-width: 520px;
+}
+
+.dropHints {
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.dropError {
+  margin: 0;
+  color: var(--red);
+  font-size: 12.5px;
+}
+
+/* ── uploading / processing ─────────────────────────────────────────── */
+.center {
+  margin-top: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+}
+
+.stageTitle {
+  margin: 0;
+  font-family: 'Syne', sans-serif;
+  font-size: 24px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.stageHint {
+  font-size: 10.5px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.uploadBar {
+  width: 100%;
+  accent-color: var(--cyan);
+}
+
+.explainer {
+  font-size: 11px;
+  color: var(--text-2);
+  text-align: center;
+  min-height: 2.4em;
+}
+
+/* ── report ─────────────────────────────────────────────────────────── */
+.report {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.topFinding {
+  padding: 16px 20px;
+}
+
+.topFindingText {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.lockedList {
+  padding: 16px 20px;
+}
+
+.lockedList ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.coachIntro {
+  margin: 12px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.lockHint {
+  font-size: 10.5px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.claimBanner {
+  font-size: 11px;
+  color: var(--text-2);
+  text-align: center;
+  padding: 10px 14px;
+  border: 1px solid rgba(0, 229, 176, 0.35);
+  border-radius: 9px;
+  background: rgba(0, 229, 176, 0.05);
+}
+
+.claimBanner a {
+  color: var(--cyan);
+  text-decoration: none;
+}
+
+/* ── inline register overlay (AC4) — the report stays visible behind ── */
+.registerOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  background: rgba(7, 10, 18, 0.55);
+  backdrop-filter: blur(2px);
+  padding: 24px;
+}
+
+.registerCard {
+  width: min(400px, 100%);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.registerTitle {
+  margin: 0;
+  font-family: 'Syne', sans-serif;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.registerSub {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.registerLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.registerInput {
+  background: var(--card-2, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.registerInput:focus {
+  outline: none;
+  border-color: var(--cyan);
+}
+
+.registerActions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.registerTrust {
+  margin: 4px 0 0;
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.registerTrust a {
+  color: var(--cyan);
+  text-decoration: none;
+}

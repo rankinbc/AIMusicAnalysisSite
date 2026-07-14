@@ -72,3 +72,12 @@ Needs TWO browser sessions (or one + an incognito reviewer) on a shared/View-abl
 - [ ] BLOCKING before public launch: read all three trust pages (/trust/no-training, /trust/results-forever, /trust/privacy) as the founder — approve or edit the copy, then remove the DRAFT markers AND update the matching BFF shell strings (PublicSiteEndpoints.cs). Cross-ref launch checklist "Security & privacy".
 - [ ] Visual pass: three pages render clean, cross-links + chrome work, register form shows the trust line, landing/pricing footers link them.
 - [ ] /trust (no page) redirects to the pledge.
+
+## 6-3 — Anonymous instant analysis (added 2026-07-14)
+
+- [ ] Incognito, /analyze: drop a real track — the whole funnel FEELS instant and honest (drop zone → phase dots + rotating explainers → graded report).
+- [ ] Report: grade hero + #1 finding + streaming readiness readable; the blur makes you WANT the account without feeling hostage-y.
+- [ ] Claim moment: inline register over the visible report; after claim the banner reads right ("verification gates your NEXT analysis").
+- [ ] Refresh mid-analysis and mid-report: state restores from the device cookie.
+- [ ] Second upload while one is running: honest "one at a time" message.
+- [ ] Landing + chrome "Analyze free" CTAs now land on /analyze.

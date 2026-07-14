@@ -125,6 +125,13 @@ Real findings that are out of scope for the current story but worth revisiting.
 - **Song hard-delete misses durable report artifacts** [SongEndpoints.cs:257-264] — `blobKeys` collects FilePath/Als/Reference/stems but never `reports/{jobId}.json` or spectrogram/waveform images (the account-deletion actor DOES collect these — proof they're known deletable). Orphaned objects with no owning row after a "permanent" delete.
 - **Register trust-line render untested** [register.tsx] — register uses TanStack `Link` (needs a router harness for static render); the 6.2 trust line is pinned only by the at-home visual pass. Add when a router test harness exists.
 
+## Deferred from: story 6.3 (2026-07-14)
+
+- **Presigned anon uploads** [AnonAnalysisEndpoints.cs] — the anon vertical is proxy-only (streamed multipart ≤250 MB); presigned-first for anons adds surface (key IDOR + registration split) for little gain at current scale.
+- **Song-less claimed reports have no library surface** [library/song routes] — after a claim the report is user-owned but has no Song/Version rows; it's reachable via the /analyze page's authed refetch + direct job URL only. Follow-up: a "claimed reports" library section or ad-hoc song creation at claim time.
+- **Claim-on-login** [AuthEndpoints] — the 4.5 claim runs on REGISTER only; an existing user running an anon analysis then logging in doesn't claim it (4.5 deferral, still open).
+- **Anon report shows top_fixes, not rule-engine verdicts** [AnalyzePage.tsx] — Problems/verdicts are persisted for anon analyses (Phase C2 runs on every completed analysis) but there's no anon verdicts endpoint; the #1 finding comes from finalJson.top_fixes. Wire an anon verdicts read if the funnel needs severity chips.
+
 ## Epics 10–12 (consolidated 2026-07-13, story 12.8)
 
 - **12-2/12-3 at-home visual checks** — ProgressStoryline live render, DevHealthDot, windowed boot; launcher boot + MinIO-down E2E. [sprint-status 12-2/12-3 notes]

@@ -22,6 +22,7 @@ from sqlalchemy import (
     Numeric,
     SmallInteger,
     String,
+    Text,
     UniqueConstraint,
     func,
     text,
@@ -228,6 +229,9 @@ class AnalysisJob(Base):
         ForeignKey("song_versions.id", ondelete="CASCADE"),
         nullable=True,
     )
+    # Story 6.3 — song-less anon jobs carry their audio key directly
+    # (audio/anon/{deviceId}/{jobId}/source.*); set only when version_id is null.
+    file_path: Mapped[Optional[str]] = mapped_column("file_path", Text, nullable=True)
     status: Mapped[str] = mapped_column("status", String(32), nullable=False, default=JOB_STATUS_PENDING)
     current_phase: Mapped[str] = mapped_column("current_phase", String(64), nullable=False, default="")
     phase_pct: Mapped[float] = mapped_column("phase_pct", Float, nullable=False, default=0.0)

@@ -277,6 +277,35 @@ def test_unclaimed_devices_purge_with_owned_rows(db):
         assert s.execute(text("SELECT count(*) FROM verdicts")).scalar() == 0
 
 
+def test_anon_purge_deletes_upload_objects(db, tmp_path, monkeypatch):
+    """Story 6.3 (AC7): the 72h anon purge deletes audio/anon/{device}/{job}
+    storage objects carried on analysis_jobs.file_path — the trust page's
+    'purged after 72 hours' must be true for FILES, not just rows. A storage
+    failure is fail-soft (rows still purge)."""
+    from aimusic_shared.models import AnalysisJob, Device
+
+    factory, _ = db
+    monkeypatch.setattr(ra, "LOCAL_ROOT", str(tmp_path))
+    dev = "A" * 26
+    jid = uuid.uuid4()
+    key = f"audio/anon/{dev}/{jid}/source.wav"
+    obj = tmp_path / "audio" / "anon" / dev / str(jid) / "source.wav"
+    obj.parent.mkdir(parents=True)
+    obj.write_bytes(b"RIFFxxxx")
+
+    with factory.begin() as s:
+        s.add(Device(id=dev, ip_hash="i", ua_hash="u",
+                     created_at=NOW - timedelta(hours=73)))
+        s.add(AnalysisJob(id=jid, device_id=dev, status="complete", file_path=key))
+
+    stats = ra.run_sweep(now=NOW)
+
+    assert stats["anon_purged"] == 1
+    assert not obj.exists()
+    with factory() as s:
+        assert s.execute(text("SELECT count(*) FROM devices")).scalar() == 0
+
+
 def test_auth_tokens_purge_and_absent_table_tolerance(db):
     """Story 4.3: consumed + long-expired auth tokens are deleted; live ones
     survive; a DB without the table (sqlite mirrors) is a logged no-op."""
