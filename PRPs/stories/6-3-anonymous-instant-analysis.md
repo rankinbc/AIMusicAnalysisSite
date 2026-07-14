@@ -1,6 +1,6 @@
 # Story 6.3: Anonymous Instant Analysis
 
-Status: review
+Status: done
 
 <!-- Third story of Epic 6 — THE acquisition funnel. Largest story of the epic:
      a full anon vertical (BFF endpoints + migration + worker branch) + the
@@ -139,3 +139,27 @@ claude-fable-5 (dev-story workflow)
 ### Change Log
 
 - 2026-07-14 — Story 6.3 implemented: full anonymous instant-analysis vertical (BFF /api/anon/*, analysis_jobs.file_path migration + worker song-less branch, purge object deletion) + /analyze funnel page + CTA retargets + new anon-funnel Playwright spec (green 1.5m). All gates green. Status → review.
+- 2026-07-14 — 3-layer code review: 11 patch groups. Gates post-patch: vitest 803, BFF 380, worker 593, both smokes green. Status → done.
+
+## Senior Review Record (2026-07-14)
+
+_3-layer adversarial review (Blind Hunter / Edge Case Hunter / Acceptance Auditor) of the anon vertical (an unauthenticated attack surface). Auditor: 6/8 ACs Met; the two Partials (AC2 explainer, AC8 rate-limit test) patched to Met._
+
+**Patched (11 groups):**
+- **P1 (CRITICAL, blind) — the account gate was cosmetic.** `GET /api/anon/jobs/{id}/results` shipped the ENTIRE finalJson; BlurLock only blurred it client-side, so `curl` read every withheld finding. Fix: new `AnonReportProjection` server-side reduces the payload to grade/score/danceability + phase-1 (streaming) + the #1 finding + a total count; the full report is served ONLY by the authed endpoint post-claim. Frontend re-architected around an `AnonReportVM` (locked = anon projection, unlocked = authed full); the blur now teases placeholders over a count, never real text. Test asserts SECRET findings never leave the server.
+- **P1 (CRITICAL, edge) — register-during-processing stranded the analysis.** A user registering while an anon job was mid-pipeline got the job re-parented, but the worker's Phase C inserted the Analysis with the STALE device_id → results 404 forever + never purged. Fix: Phase C re-reads ownership from the current job row (`done.user_id`/`done.device_id`), keeping the Analysis owner in lockstep with a just-claimed job.
+- **P2 (all three) — no magic-byte validation on the unauthenticated upload.** Extension-only (violated the CLAUDE.md rule, doubly bad unauth). Fix: `LooksLikeAudioAsync` header sniff (RIFF/fLaC/ID3/MP3-sync/FORM/OggS/ftyp) before storage; server-derived Content-Type persisted (not the client's). Test: junk bytes with a .wav name → 400.
+- **P2 (all three) — 72h purge leaked derived artifacts.** Only the source key was deleted; spectrogram/waveform images + the durable `reports/{jobId}.json` survived, falsifying the trust page. Fix: the purge now collects every analysis artifact and deletes them all AFTER the row tx commits (no S3 I/O held inside the FOR UPDATE lock — a concurrent register-claim no longer blocks on the sweep).
+- **P2 (auditor) — AC2 explainer wasn't keyed to the current phase** and had a lying comment. Fix: `ExplainerLine` shows the current phase's explainer (gentle rotation only before the first phase name).
+- **P2/P3 — failed-job restore trap.** "Try another file" looped back to the cached failed job (restore query `staleTime: Infinity`). Fix: a `restoreDismissed` gate.
+- **AC8 (auditor) — rate-limit contract test promised but missing.** Added (fresh cookie-less clients from one fake IP trip the `uploads_init` IP arm → 429 `rate_limited`).
+- **P3 (blind) — anon results 500 on malformed finalJson.** Guarded (returns an empty projection).
+- **P3 (edge) — claim banner over-promised the library.** Reworded ("full report unlocked here and saved to your account") since song-less claimed reports have no library grid entry (deferred).
+- **P3 — 0-findings blur copy** ("see all 0 findings") suppressed.
+- Stale deferred-work "retarget CTA" entry retired; TOCTOU one-active, authed-user-quota-bypass, and library-surface gaps recorded in deferred-work.
+
+**Rejected (verified):** DispatchedAt-null ordering (entity default `= UtcNow`); IStartupFilter-less IP (test uses the AbuseContainment idiom); rule-engine/structure-detection/reaper on device jobs (all verified guarded); cookie/auth plumbing (SameSite=Lax rides same-origin; register sets the token before the post-claim refetch).
+
+**Root-caused a smoke flake, not a defect:** the first post-patch anon-smoke run left jobs `pending` — traced to ORPHANED stale workers from earlier boots (the Windows spawn-orphan gotcha in CLAUDE.md) consuming the queue with pre-migration code that raised "no version_id". A fresh worker processes the anon path correctly (a junk-WAV probe correctly hit `invalid_file`); after killing all workers + booting one clean, both smokes pass (anon 16.6s, first-run 16.4s).
+
+**Gates post-patch:** tsc 0 · lint clean · build ✓ · vitest 803/803 · BFF 380/380 (SPECTR_REQUIRE_DB=1) · worker 593 passed/3 xfailed + ruff clean · both headless Playwright specs green.

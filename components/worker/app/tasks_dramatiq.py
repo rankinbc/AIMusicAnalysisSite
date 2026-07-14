@@ -199,10 +199,10 @@ def analyze_audio_job(job_id: str) -> None:
 
         file_rel = version.file_path if version is not None else job.file_path
         user_id = job.user_id
-        # Story 4.5 (AR24): anon jobs carry device_id instead of user_id; the
-        # analyses insert must propagate it or ck_analyses_owner_xor fires the
-        # moment 6.3 dispatches a device-owned job.
-        device_id = job.device_id
+        # Ownership for the analyses insert is re-read from the job in Phase C
+        # (not captured here) so a mid-pipeline register-claim is reflected —
+        # see the Phase C comment. `user_id` here only feeds the version-gated
+        # structure-detection guard, which anon (version-less) jobs skip.
         tier = job.tier  # billing tier stamped by the BFF at dispatch (story 2.4)
         version_id = version.id if version is not None else None
         song_id = version.song_id if version is not None else None
@@ -350,12 +350,22 @@ def analyze_audio_job(job_id: str) -> None:
             # Shouldn't happen — job row was here in Phase A.
             raise RuntimeError(f"job {job_id} disappeared between phases")
 
+        # Story 6.3 review (CRITICAL): re-read ownership from the CURRENT job
+        # row, not the Phase-A capture. A user who registers WHILE an anon job
+        # is mid-pipeline gets the job re-parented (device_id → user_id) by the
+        # 4.5 claim tx; if we insert the Analysis with the stale device_id it
+        # lands on a now-claimed device → results 404 forever AND is never
+        # purged (purge requires claimed_at IS NULL). Trusting done.* keeps the
+        # Analysis owner in lockstep with the (possibly just-claimed) job.
+        owner_user_id = done.user_id
+        owner_device_id = done.device_id if done.user_id is None else None
+
         s.add(Analysis(
             id=analysis_id,
             job_id=jid,
-            user_id=user_id,
+            user_id=owner_user_id,
             # AR24 exactly-one: anon jobs propagate device ownership.
-            device_id=device_id if user_id is None else None,
+            device_id=owner_device_id,
             version_id=version_id,
             song_id=song_id,
             song_name=song_name,

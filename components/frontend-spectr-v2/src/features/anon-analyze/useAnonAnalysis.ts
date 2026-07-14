@@ -8,7 +8,16 @@
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useRef, useState } from 'react';
 
-import type { JobResultsDto, JobStatusDto } from '../../api/types';
+import type { JobStatusDto } from '../../api/types';
+
+/** Story 6.3 — the REDUCED anon report (server-gated). The full report is
+ *  served only by the authed endpoint after claim. `finalJson` here carries
+ *  grade/score/danceability + phase-1 + the single top finding, nothing else. */
+export interface AnonReport {
+  finalJson: unknown;
+  topFinding: string | null;
+  totalFindings: number;
+}
 
 export interface AnonUploadState {
   isUploading: boolean;
@@ -91,11 +100,11 @@ export function useAnonJob(jobId: string | null) {
   });
 }
 
-/** Device-scoped results once the job completes. */
+/** Device-scoped REDUCED results once the job completes. */
 export function useAnonResults(jobId: string | null, enabled: boolean) {
   return useQuery({
     queryKey: ['anon', 'results', jobId],
-    queryFn: () => anonGet<JobResultsDto>(`/api/anon/jobs/${jobId}/results`),
+    queryFn: () => anonGet<AnonReport>(`/api/anon/jobs/${jobId}/results`),
     enabled: Boolean(jobId) && enabled,
     staleTime: Infinity,
   });

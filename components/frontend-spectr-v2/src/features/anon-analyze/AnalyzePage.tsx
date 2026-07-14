@@ -9,20 +9,20 @@
  * register card. Registration re-parents the device rows server-side (4.5) —
  * the page then unlocks in place via the authed results endpoint.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAuth } from '../../auth/AuthContext';
 import { fetcher } from '../../api/fetcher';
-import type { FinalJson, JobResultsDto, Phase1Data } from '../../api/types';
-import { isFinalJson } from '../../api/types';
+import type { JobResultsDto } from '../../api/types';
 import { BlurLock } from '../../components/BlurLock';
 import { PublicChrome } from '../../components/PublicChrome';
 import { usePageMeta } from '../../lib/usePageMeta';
 import { GradeHero } from '../results/GradeHero';
 import { ProgressStorylineView } from '../results/ProgressStoryline';
-import { PHASE_EXPLAINERS } from '../results/progress-phases';
+import { BASE_PHASES, PHASE_EXPLAINERS } from '../results/progress-phases';
 import { StreamingCard } from '../results/StreamingCard';
 import { useAnonCurrentJob, useAnonJob, useAnonResults, useAnonUpload } from './useAnonAnalysis';
+import { type AnonReportVM, vmFromAnon, vmFromFull } from './anon-report-vm';
 import s from './analyze.module.css';
 
 // ── pure pieces (static-render testable) ────────────────────────────────────
@@ -77,60 +77,74 @@ export function DropZoneView({ onFile, error, disabled }: {
   );
 }
 
-/** Rotating educational one-liner: cycles through the explainer for the
- *  current phase and its neighbors every 6s (AC2). Pure given an index. */
-export function ExplainerLine({ tick }: { tick: number }) {
-  const entries = useMemo(() => Object.entries(PHASE_EXPLAINERS), []);
-  const [name, text] = entries[tick % entries.length]!;
+/** Rotating educational one-liner, KEYED to the current phase (AC2): shows the
+ *  explainer for whatever phase the worker reports, advancing with the job.
+ *  Falls back to a gentle rotation before the first phase name arrives. */
+export function ExplainerLine({ currentPhase, tick }: { currentPhase: string; tick: number }) {
+  const known = (BASE_PHASES as readonly string[]).indexOf(currentPhase);
+  const name = known >= 0 ? BASE_PHASES[known] : BASE_PHASES[tick % BASE_PHASES.length]!;
   return (
     <p className={`mono ${s.explainer}`} data-testid="rotating-explainer">
-      <b>{name}</b> — {text}
+      <b>{name}</b> — {PHASE_EXPLAINERS[name]}
     </p>
   );
 }
 
-export function AnonReportView({ results, locked, onUnlock }: {
-  results: JobResultsDto;
+export function AnonReportView({ vm, locked, onUnlock }: {
+  vm: AnonReportVM;
   locked: boolean;
   onUnlock: () => void;
 }) {
-  const fj: FinalJson = isFinalJson(results.finalJson) ? (results.finalJson as FinalJson) : {};
-  const phase1 = fj.phases?.find((p) => p.phase === 1)?.data as Phase1Data | undefined;
-  const findings = fj.top_fixes ?? fj.coached_fixes ?? [];
-  const topFinding = findings[0];
-  const lockedCount = Math.max(0, findings.length - 1);
-
+  const lockedCount = Math.max(0, vm.totalFindings - 1);
   return (
     <div className={s.report} data-testid="anon-report">
-      <GradeHero grade={fj.grade} score={fj.overall_score} danceability={fj.danceability_score} />
+      <GradeHero grade={vm.grade} score={vm.score} danceability={vm.danceability} />
 
-      {topFinding && (
+      {vm.topFinding && (
         <section className={`card ${s.topFinding}`}>
           <span className="label">#1 finding</span>
-          <p className={s.topFindingText}>{topFinding}</p>
+          <p className={s.topFindingText}>{vm.topFinding}</p>
         </section>
       )}
 
-      <StreamingCard phase1={phase1} />
+      <StreamingCard phase1={vm.phase1} />
 
-      <BlurLock
-        locked={locked}
-        reason={`Create a free account to keep this report + see all ${findings.length} findings.`}
-        ctaLabel="Create free account"
-        onUnlock={onUnlock}
-      >
-        <section className={`card ${s.lockedList}`}>
-          <span className="label">All findings</span>
-          <ul>
-            {findings.map((f, i) => <li key={i}>{f}</li>)}
-          </ul>
-          {fj.coach_intro && <p className={s.coachIntro}>{fj.coach_intro}</p>}
-        </section>
-      </BlurLock>
+      {locked ? (
+        // The withheld findings are NOT in this payload (server-gated) — the
+        // blur teases a count over a placeholder, never the real text.
+        vm.totalFindings > 0 && (
+          <BlurLock
+            locked
+            reason={`Create a free account to keep this report + see all ${vm.totalFindings} findings.`}
+            ctaLabel="Create free account"
+            onUnlock={onUnlock}
+          >
+            <section className={`card ${s.lockedList}`} aria-hidden>
+              <span className="label">All findings</span>
+              <ul>
+                {Array.from({ length: lockedCount }, (_, i) => (
+                  <li key={i}>••••••••••••••••••••••••</li>
+                ))}
+              </ul>
+            </section>
+          </BlurLock>
+        )
+      ) : (
+        // Claimed — the full authed report is in hand; show everything.
+        vm.allFindings && vm.allFindings.length > 0 && (
+          <section className={`card ${s.lockedList}`}>
+            <span className="label">All findings</span>
+            <ul>
+              {vm.allFindings.map((f, i) => <li key={i}>{f}</li>)}
+            </ul>
+            {vm.coachIntro && <p className={s.coachIntro}>{vm.coachIntro}</p>}
+          </section>
+        )
+      )}
 
       {locked && lockedCount > 0 && (
         <p className={`mono ${s.lockHint}`}>
-          {lockedCount} more finding{lockedCount === 1 ? '' : 's'} behind the blur — they&rsquo;re already computed.
+          {lockedCount} more finding{lockedCount === 1 ? '' : 's'} behind the blur — already computed, yours to keep.
         </p>
       )}
     </div>
@@ -154,12 +168,16 @@ export function AnalyzePage() {
   const [showRegister, setShowRegister] = useState(false);
   const [startedAtMs] = useState(() => Date.now());
   const [tick, setTick] = useState(0);
+  // Once the user resets (after a failure, or to analyze another), STOP the
+  // restore query from dragging the same job back — the query is staleTime:
+  // Infinity, so without this the failed/old job id reappears forever (review).
+  const [restoreDismissed, setRestoreDismissed] = useState(false);
 
   // AC5 — restore the device's latest job on a cold mount.
-  const restore = useAnonCurrentJob(jobId === null && !uploadApi.isUploading);
+  const restore = useAnonCurrentJob(jobId === null && !uploadApi.isUploading && !restoreDismissed);
   useEffect(() => {
-    if (jobId === null && restore.data?.jobId) setJobId(restore.data.jobId);
-  }, [jobId, restore.data]);
+    if (jobId === null && !restoreDismissed && restore.data?.jobId) setJobId(restore.data.jobId);
+  }, [jobId, restoreDismissed, restore.data]);
 
   const job = useAnonJob(jobId);
   const status = job.data?.status;
@@ -171,8 +189,14 @@ export function AnalyzePage() {
         ? 'report'
         : 'processing';
 
+  const resetToDropZone = useCallback(() => {
+    setJobId(null);
+    setRestoreDismissed(true); // do not let the cached failed/old job restore
+  }, []);
+
   const anonResults = useAnonResults(jobId, stage === 'report' && !claimed);
-  // Post-claim the device rows are re-parented — the AUTHED endpoint owns them.
+  // Post-claim the device rows are re-parented — the AUTHED endpoint owns them
+  // and serves the FULL report (the anon endpoint only ever sent the teaser).
   const [claimedResults, setClaimedResults] = useState<JobResultsDto | null>(null);
   useEffect(() => {
     if (!claimed || !jobId || claimedResults) return;
@@ -189,10 +213,15 @@ export function AnalyzePage() {
   }, [stage]);
 
   const onFile = useCallback((file: File) => {
+    setRestoreDismissed(false);
     void uploadApi.upload(file).then((r) => setJobId(r.jobId)).catch(() => { /* error state shown */ });
   }, [uploadApi]);
 
-  const results = claimedResults ?? anonResults.data ?? null;
+  const vm: AnonReportVM | null = claimedResults
+    ? vmFromFull(claimedResults)
+    : anonResults.data
+      ? vmFromAnon(anonResults.data)
+      : null;
 
   return (
     <div className={s.page}>
@@ -220,11 +249,11 @@ export function AnalyzePage() {
               elapsedMs={Date.now() - startedAtMs}
               workerOffline={false}
             />
-            <ExplainerLine tick={tick} />
+            <ExplainerLine currentPhase={job.data?.currentPhase ?? ''} tick={tick} />
             {status === 'failed' && (
               <p className={s.dropError}>
                 {job.data?.errorMessage ?? 'Analysis failed.'}{' '}
-                <button type="button" className="btn sm ghost" onClick={() => setJobId(null)}>
+                <button type="button" className="btn sm ghost" onClick={resetToDropZone}>
                   Try another file
                 </button>
               </p>
@@ -232,14 +261,14 @@ export function AnalyzePage() {
           </section>
         )}
 
-        {stage === 'report' && results && (
+        {stage === 'report' && vm && (
           <AnonReportView
-            results={results}
+            vm={vm}
             locked={!claimed && !auth.user}
             onUnlock={() => setShowRegister(true)}
           />
         )}
-        {stage === 'report' && !results && (
+        {stage === 'report' && !vm && (
           <p className={`mono ${s.stageHint}`}>Loading your report…</p>
         )}
 
@@ -252,7 +281,7 @@ export function AnalyzePage() {
 
         {claimed && (
           <p className={`mono ${s.claimBanner}`} data-testid="claim-banner">
-            This report is yours — saved to your account.{' '}
+            Your full report is unlocked here and saved to your account.{' '}
             Email verification gates your <b>next</b> analysis, not this one.{' '}
             <a href="/library">Go to your library →</a>
           </p>

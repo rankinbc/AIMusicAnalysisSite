@@ -1,4 +1,8 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Spectr.Data;
@@ -18,6 +22,23 @@ public sealed class AnonAnalysisTests(WebApplicationFactory<Program> factory)
     : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
+
+    // TestServer's RemoteIpAddress is null, which fail-opens the IP rate arm.
+    // Stamp a fixed client IP so the per-IP ceilings actually engage (the
+    // AbuseContainment idiom).
+    private sealed class FakeIpStartupFilter : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) =>
+            app =>
+            {
+                app.Use(async (ctx, nxt) =>
+                {
+                    ctx.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("203.0.113.9");
+                    await nxt();
+                });
+                next(app);
+            };
+    }
 
     // The spectr_device cookie is Secure=true (repo cookie policy; browsers
     // allow Secure on localhost but HttpClient's CookieContainer drops it over
@@ -188,7 +209,7 @@ public sealed class AnonAnalysisTests(WebApplicationFactory<Program> factory)
     }
 
     [SkippableFact]
-    public async Task Anon_Upload_Rejects_Non_Audio_With_Code()
+    public async Task Anon_Upload_Rejects_Non_Audio_Extension_With_Code()
     {
         await TestDb.RequireAsync(_factory);
         var client = Client();
@@ -197,5 +218,116 @@ public sealed class AnonAnalysisTests(WebApplicationFactory<Program> factory)
         content.Add(part, "file", "notes.txt");
         var resp = await client.PostAsync("/api/anon/analyses", content);
         await TestContract.AssertEnvelopeAsync(resp, HttpStatusCode.BadRequest, "invalid_file");
+    }
+
+    [SkippableFact]
+    public async Task Anon_Upload_Rejects_Wrong_Magic_Bytes_Despite_Audio_Extension()
+    {
+        await TestDb.RequireAsync(_factory);
+        var client = Client();
+        // .wav extension but the bytes are not RIFF/any known audio signature.
+        var content = new MultipartFormDataContent();
+        var junk = new ByteArrayContent(new byte[64]); // all zeros
+        junk.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("audio/wav");
+        content.Add(junk, "file", "evil.wav");
+        var resp = await client.PostAsync("/api/anon/analyses", content);
+        await TestContract.AssertEnvelopeAsync(resp, HttpStatusCode.BadRequest, "invalid_file");
+    }
+
+    [SkippableFact]
+    public async Task Anon_Upload_Rate_Limited_Carries_Code()
+    {
+        await TestDb.RequireAsync(_factory);
+        TestDb.Require(TestDb.RedisUp(_factory), "Redis"); // limiter needs Redis
+
+        using var limited = _factory.WithWebHostBuilder(b =>
+        {
+            b.UseSetting("RateLimits:Enabled", "true");
+            b.ConfigureServices(sv => sv.AddSingleton<
+                Microsoft.AspNetCore.Hosting.IStartupFilter, FakeIpStartupFilter>());
+        });
+        HttpResponseMessage? limitedResp = null;
+        // The one-active 409 caps a SINGLE device to one in-flight job, so the
+        // realistic abuse the IP arm catches is many DEVICES from one machine:
+        // a FRESH cookie-less client each iteration mints a new device (passes
+        // the active check) but shares the fake IP → the 10/min uploads_init IP
+        // arm trips.
+        for (var i = 0; i < 14; i++)
+        {
+            var fresh = limited.CreateClient(
+                new WebApplicationFactoryClientOptions { HandleCookies = false });
+            var resp = await fresh.PostAsync("/api/anon/analyses", Wav($"burst{i}.wav"));
+            if (resp.StatusCode == HttpStatusCode.TooManyRequests) { limitedResp = resp; break; }
+        }
+
+        try
+        {
+            Assert.NotNull(limitedResp);
+            await TestContract.AssertEnvelopeAsync(limitedResp!, HttpStatusCode.TooManyRequests, "rate_limited");
+        }
+        finally
+        {
+            // Clean every device this fake IP minted before it tripped.
+            using var scope = limited.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await TestAuth.AllowPurgeAsync(db);
+            var devs = await db.AnalysisJobs.AsNoTracking()
+                .Where(j => j.DeviceId != null).Select(j => j.DeviceId!).Distinct().ToListAsync();
+            await db.AnalysisJobs.Where(j => j.DeviceId != null).ExecuteDeleteAsync();
+            await db.Devices.Where(d => devs.Contains(d.Id)).ExecuteDeleteAsync();
+        }
+    }
+
+    [SkippableFact]
+    public async Task Anon_Results_Are_Reduced_Full_Findings_Never_Leave_The_Server()
+    {
+        await TestDb.RequireAsync(_factory);
+        var client = Client();
+        var resp = await client.PostAsync("/api/anon/analyses", Wav());
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        CarryDeviceCookie(resp, client);
+        var jobId = (await resp.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("jobId").GetGuid();
+
+        string deviceId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var job = await db.AnalysisJobs.AsNoTracking().SingleAsync(j => j.Id == jobId);
+            deviceId = job.DeviceId!;
+            db.Analyses.Add(new Analysis
+            {
+                Id = Guid.NewGuid(),
+                JobId = jobId,
+                DeviceId = deviceId,
+                FinalJson = """
+                {"grade":"D","overall_score":51.0,
+                 "top_fixes":["FIX ONE — the only one anon may see","SECRET FIX TWO","SECRET FIX THREE"],
+                 "coach_intro":"SECRET COACH INTRO",
+                 "phases":[{"phase":1,"data":{"lufs":-9.0}},{"phase":4,"data":{"secret":"PAID PHASE DETAIL"}}]}
+                """,
+            });
+            await db.AnalysisJobs.Where(j => j.Id == jobId)
+                .ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, "complete"));
+            await db.SaveChangesAsync();
+        }
+
+        try
+        {
+            var results = await client.GetAsync($"/api/anon/jobs/{jobId}/results");
+            Assert.Equal(HttpStatusCode.OK, results.StatusCode);
+            var raw = await results.Content.ReadAsStringAsync();
+
+            // The #1 finding + count ship; the withheld content NEVER does.
+            Assert.Contains("FIX ONE", raw);
+            Assert.Equal(3, (await results.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("totalFindings").GetInt32());
+            Assert.DoesNotContain("SECRET FIX TWO", raw);
+            Assert.DoesNotContain("SECRET FIX THREE", raw);
+            Assert.DoesNotContain("SECRET COACH INTRO", raw);
+            Assert.DoesNotContain("PAID PHASE DETAIL", raw); // non-phase-1 stripped
+        }
+        finally
+        {
+            await CleanupDeviceAsync(deviceId);
+        }
     }
 }

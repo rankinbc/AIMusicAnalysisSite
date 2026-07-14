@@ -193,6 +193,8 @@ def _purge_unclaimed_anonymous(now: datetime) -> int:
     """
     cutoff = now - timedelta(hours=_anon_hours())
     total = 0
+    # Accumulated across ALL batches; deleted once the row purge fully commits.
+    anon_keys: list[str] = []
     try:
         while True:  # batches of 500 — expanding IN must never blow the param limit
             with SessionFactory.begin() as s:
@@ -215,27 +217,36 @@ def _purge_unclaimed_anonymous(now: datetime) -> int:
                 if not stale:
                     break
 
-                # Story 6.3 — delete the anon upload objects BEFORE the rows
-                # (rows are the only manifest of the keys; objects-before-rows
-                # is the 4.6 ordering). Fail-soft per key: a storage hiccup
-                # must not strand the row purge — the trust-page 72h promise
-                # is about the DATA being gone, and a leaked orphan object is
-                # logged for the next sweep's operator, not fatal.
-                key_rows = s.execute(
+                # Story 6.3 (review): collect EVERY storage object this device's
+                # analyses produced — the source upload AND the derived artifacts
+                # (spectrogram/waveform images + the durable report JSON copy).
+                # The trust page says "device data and its analyses" are purged;
+                # deleting only the source would leak images/reports of the
+                # user's audio forever with no owning row to find them again.
+                # Keys are gathered INSIDE the row lock but DELETED after the tx
+                # commits (below) — never hold the FOR UPDATE lock across S3
+                # network I/O, or a concurrent register-claim blocks on it.
+                for (key,) in s.execute(
                     text(
                         "SELECT file_path FROM analysis_jobs "
                         "WHERE device_id IN :dids AND file_path IS NOT NULL"
                     ).bindparams(bindparam("dids", expanding=True)),
                     {"dids": stale},
-                ).all()
-                for (key,) in key_rows:
-                    try:
-                        object_store.delete_object(key, LOCAL_ROOT)
-                    except Exception:
-                        logger.warning(
-                            "sweep_retention: anon object delete failed key=%s", key,
-                            exc_info=True,
-                        )
+                ).all():
+                    anon_keys.append(key)
+                for row in s.execute(
+                    text(
+                        "SELECT spectrogram_image_path, waveform_image_path, job_id "
+                        "FROM analyses WHERE device_id IN :dids"
+                    ).bindparams(bindparam("dids", expanding=True)),
+                    {"dids": stale},
+                ).all():
+                    if row[0]:
+                        anon_keys.append(row[0])
+                    if row[1]:
+                        anon_keys.append(row[1])
+                    # Durable report JSON copy (story 3.3) keyed by job id.
+                    anon_keys.append(f"reports/{row[2]}.json")
 
                 s.execute(
                     text(
@@ -270,6 +281,18 @@ def _purge_unclaimed_anonymous(now: datetime) -> int:
                 total += len(stale)
             if len(stale) < 500:
                 break
+        # Objects deleted AFTER every row tx commits — the FOR UPDATE lock is
+        # released, so a concurrent register-claim never blocks on S3 latency.
+        # Fail-soft per key (objects-before-rows already lost; a leaked orphan
+        # is an operator log line for the next sweep, not a fatal error).
+        for key in anon_keys:
+            try:
+                object_store.delete_object(key, LOCAL_ROOT)
+            except Exception:
+                logger.warning(
+                    "sweep_retention: anon object delete failed key=%s", key,
+                    exc_info=True,
+                )
         if total:
             logger.info("sweep_retention: purged %d unclaimed anon device(s)", total)
         return total

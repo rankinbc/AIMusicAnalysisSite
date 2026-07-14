@@ -60,6 +60,15 @@ public static class AnonAnalysisEndpoints
         if (ext is not (".wav" or ".flac" or ".mp3" or ".aiff" or ".aif" or ".m4a" or ".ogg"))
             return ErrorEnvelope.Build(400, "invalid_file",
                 "That doesn't look like an audio file — WAV, FLAC or MP3 work best.");
+        // Magic-byte sniff (CLAUDE.md rule: never trust extension/Content-Type
+        // on an upload — doubly so on an UNAUTHENTICATED surface). Rejects a
+        // 250 MB `evil.wav` of junk before it reaches storage + the worker.
+        await using (var probe = file.OpenReadStream())
+        {
+            if (!await LooksLikeAudioAsync(probe, ct))
+                return ErrorEnvelope.Build(400, "invalid_file",
+                    "That file isn't a recognized audio format (WAV, FLAC, MP3, AIFF, M4A or OGG).");
+        }
 
         var device = await devices.GetOrCreateAsync(httpCtx);
 
@@ -98,7 +107,10 @@ public static class AnonAnalysisEndpoints
         var key = $"audio/anon/{device.Id}/{jobId}/source{ext}";
         await using (var src = file.OpenReadStream())
         {
-            await storage.WriteAsync(key, src, file.ContentType ?? "application/octet-stream", ct);
+            // Server-derived content type — never persist the client's (a
+            // spoofed text/html could bite when the object is served same-origin
+            // after claim). audio/* is correct for everything we accept here.
+            await storage.WriteAsync(key, src, "audio/" + ext.TrimStart('.'), ct);
         }
 
         // Song-less, version-less job; the worker resolves audio from FilePath.
@@ -142,6 +154,27 @@ public static class AnonAnalysisEndpoints
         return Results.Ok(new AnonAnalysisResponse(jobId));
     }
 
+    // Magic-byte sniff for the formats the anon zone accepts. Content-Type and
+    // extension are both spoofable; these header signatures are not. Falls back
+    // to true only when the stream can't be peeked (never on an IFormFile).
+    private static async Task<bool> LooksLikeAudioAsync(Stream s, CancellationToken ct)
+    {
+        if (!s.CanSeek) return true;
+        var buf = new byte[12];
+        var n = await s.ReadAsync(buf.AsMemory(0, 12), ct);
+        s.Position = 0;
+        if (n < 4) return false;
+        bool Eq(int off, string sig) =>
+            n >= off + sig.Length && sig.Select((c, i) => (byte)c == buf[off + i]).All(x => x);
+        return Eq(0, "RIFF")                        // wav
+            || Eq(0, "fLaC")                        // flac
+            || Eq(0, "ID3")                         // mp3 w/ ID3 tag
+            || (n >= 2 && buf[0] == 0xFF && (buf[1] & 0xE0) == 0xE0) // mp3 frame sync
+            || Eq(0, "FORM")                        // aiff (FORM....AIFF)
+            || Eq(0, "OggS")                        // ogg
+            || Eq(4, "ftyp");                       // m4a/mp4 (box at offset 4)
+    }
+
     // ── GET /api/anon/jobs/current — AC5 refresh restore ─────────────────────
     private static async Task<IResult> GetCurrent(
         HttpContext httpCtx, AppDbContext db, DeviceService devices, CancellationToken ct)
@@ -177,23 +210,35 @@ public static class AnonAnalysisEndpoints
             row.DispatchedAt, row.StartedAt, row.CompletedAt, row.FailedAt));
     }
 
-    // ── GET /api/anon/jobs/{id}/results — device-scoped results ──────────────
+    // ── GET /api/anon/jobs/{id}/results — device-scoped, REDUCED projection ──
+    // Review CRITICAL: a client-side BlurLock is cosmetic — the account gate is
+    // only real if the withheld findings never leave the server. The anon
+    // surface returns ONLY what UX-DR27 shows unlocked (grade/score, phase-1 for
+    // streaming readiness, the #1 finding) plus a COUNT of the rest. The full
+    // report is served exclusively by the authed /jobs/{id}/results after claim.
     private static async Task<IResult> GetResults(
         Guid jobId, HttpContext httpCtx, AppDbContext db, DeviceService devices, CancellationToken ct)
     {
         var deviceId = devices.ReadDeviceId(httpCtx.Request);
         if (deviceId is null) return Results.NotFound();
-        var row = await db.Analyses.AsNoTracking()
+        var raw = await db.Analyses.AsNoTracking()
             .Where(a => a.JobId == jobId && a.DeviceId == deviceId)
-            .Select(a => new { a.Id, a.JobId, a.FinalJson })
+            .Select(a => a.FinalJson)
             .FirstOrDefaultAsync(ct);
-        if (row is null) return Results.NotFound();
+        if (raw is null) return Results.NotFound();
 
-        using var doc = JsonDocument.Parse(row.FinalJson);
-        var finalJson = doc.RootElement.Clone();
-        // No share token, no als project, no images on the anon surface —
-        // the report is claim-bait, not the full authed experience.
-        return Results.Ok(new JobResultsDto(
-            row.JobId, row.Id, null, null, null, finalJson, null, null, null, null));
+        JsonElement full;
+        try
+        {
+            using var doc = JsonDocument.Parse(string.IsNullOrEmpty(raw) ? "{}" : raw);
+            full = doc.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            // A malformed/partial-failure payload must not 500 the funnel.
+            return Results.Ok(AnonReportProjection.Empty(jobId));
+        }
+
+        return Results.Ok(AnonReportProjection.Build(jobId, full));
     }
 }

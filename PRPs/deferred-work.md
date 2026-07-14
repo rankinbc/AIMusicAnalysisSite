@@ -117,7 +117,7 @@ Real findings that are out of scope for the current story but worth revisiting.
 
 - **Authed `/` → `/library` redirect has no automated coverage** [src/routes/index.tsx + src/main.tsx:53-58] — the redirect depends on `RouterBridge`'s `router.invalidate()` on auth resolve (one load-bearing effect). Needs an authed router-harness test; the smoke is anon-only.
 - **Human-facing prerender/SSG dropped** — epics FR40 said "prerendered/static"; as built: crawler-only BFF shells + a lean SPA chunk. LCP <2.5 s verified at home (Lighthouse); revisit real SSG only if the measurement fails.
-- **Landing CTA targets /register** [PublicChrome.tsx, LandingPage.tsx] — retarget to `/analyze` when story 6.3 ships the anonymous instant-analysis page (comments mark both spots).
+- ~~Landing CTA targets /register~~ — DONE in story 6.3 (retargeted to /analyze).
 
 ## Deferred from: story 6.2 code review (2026-07-14) — PRE-EXISTING storage-leak bugs surfaced by trust-page truth-tracing
 
@@ -131,6 +131,9 @@ Real findings that are out of scope for the current story but worth revisiting.
 - **Song-less claimed reports have no library surface** [library/song routes] — after a claim the report is user-owned but has no Song/Version rows; it's reachable via the /analyze page's authed refetch + direct job URL only. Follow-up: a "claimed reports" library section or ad-hoc song creation at claim time.
 - **Claim-on-login** [AuthEndpoints] — the 4.5 claim runs on REGISTER only; an existing user running an anon analysis then logging in doesn't claim it (4.5 deferral, still open).
 - **Anon report shows top_fixes, not rule-engine verdicts** [AnalyzePage.tsx] — Problems/verdicts are persisted for anon analyses (Phase C2 runs on every completed analysis) but there's no anon verdicts endpoint; the #1 finding comes from finalJson.top_fixes. Wire an anon verdicts read if the funnel needs severity chips.
+- **One-active-per-device is a non-atomic TOCTOU** [AnonAnalysisEndpoints.cs] — `HasActiveAnalysisAsync` then insert, no partial-unique constraint; two concurrent uploads on one device (double-click) can both pass. Bounded by the per-IP dispatch arm; the proper fix is a partial-unique index on (device_id) WHERE status IN active — deferred (migration, low severity, IP-bounded).
+- **Authed users using /analyze bypass their entitlement/verify gate** [AnonAnalysisEndpoints.cs] — the anon endpoint is by-design entitlement-free; a logged-in user hitting /analyze runs an anon analysis that skips their quota/verify gate. The only ceiling is the per-IP arm (which is the intended anon ceiling). Accepted; revisit if it becomes an abuse vector (e.g. redirect authed users off /analyze).
+- **Claimed anon report has no library grid entry** [library] — song-less claimed analyses are user-owned and fully readable on /analyze post-claim (and via the authed job endpoints), but don't appear in the songs-based library list. Banner reworded to not over-promise. Needs a "claimed reports" surface or ad-hoc song creation at claim time.
 
 ## Epics 10–12 (consolidated 2026-07-13, story 12.8)
 

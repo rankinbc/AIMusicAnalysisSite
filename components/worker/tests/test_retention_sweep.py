@@ -278,30 +278,43 @@ def test_unclaimed_devices_purge_with_owned_rows(db):
 
 
 def test_anon_purge_deletes_upload_objects(db, tmp_path, monkeypatch):
-    """Story 6.3 (AC7): the 72h anon purge deletes audio/anon/{device}/{job}
-    storage objects carried on analysis_jobs.file_path — the trust page's
-    'purged after 72 hours' must be true for FILES, not just rows. A storage
-    failure is fail-soft (rows still purge)."""
-    from aimusic_shared.models import AnalysisJob, Device
+    """Story 6.3 (AC7 + review): the 72h anon purge deletes the source upload
+    AND the derived artifacts (spectrogram/waveform images + durable report
+    JSON) — the trust page's 'device data and its analyses purged' must be true
+    for every FILE, not just rows. A delete spy captures the requested keys
+    (storage-form-independent: the durable report key is reconstructed from the
+    analyses.job_id, whose text form differs under the sqlite test mirror)."""
+    from aimusic_shared.models import Analysis, AnalysisJob, Device
 
     factory, _ = db
     monkeypatch.setattr(ra, "LOCAL_ROOT", str(tmp_path))
+    deleted: list[str] = []
+    monkeypatch.setattr(ra.object_store, "delete_object",
+                        lambda key, root: deleted.append(key) or True)
+
     dev = "A" * 26
     jid = uuid.uuid4()
-    key = f"audio/anon/{dev}/{jid}/source.wav"
-    obj = tmp_path / "audio" / "anon" / dev / str(jid) / "source.wav"
-    obj.parent.mkdir(parents=True)
-    obj.write_bytes(b"RIFFxxxx")
+    src = f"audio/anon/{dev}/{jid}/source.wav"
+    spec = f"analysis/images/{jid}/spectrogram.webp"
+    wave = f"analysis/images/{jid}/waveform.webp"
 
     with factory.begin() as s:
         s.add(Device(id=dev, ip_hash="i", ua_hash="u",
                      created_at=NOW - timedelta(hours=73)))
-        s.add(AnalysisJob(id=jid, device_id=dev, status="complete", file_path=key))
+        s.add(AnalysisJob(id=jid, device_id=dev, status="complete", file_path=src))
+        s.add(Analysis(id=uuid.uuid4(), job_id=jid, device_id=dev, final_json={},
+                       spectrogram_image_path=spec, waveform_image_path=wave,
+                       created_at=NOW))
 
     stats = ra.run_sweep(now=NOW)
 
     assert stats["anon_purged"] == 1
-    assert not obj.exists()
+    # Source + both images requested by exact key; the durable report by prefix
+    # (its job-id text form is DB-dependent, hyphenated in prod Postgres).
+    assert src in deleted
+    assert spec in deleted
+    assert wave in deleted
+    assert any(k.startswith("reports/") and k.endswith(".json") for k in deleted)
     with factory() as s:
         assert s.execute(text("SELECT count(*) FROM devices")).scalar() == 0
 
