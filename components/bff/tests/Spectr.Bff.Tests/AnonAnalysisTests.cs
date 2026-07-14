@@ -209,6 +209,60 @@ public sealed class AnonAnalysisTests(WebApplicationFactory<Program> factory)
     }
 
     [SkippableFact]
+    public async Task Anon_Jobs_Current_Carries_Resume_Fields()
+    {
+        await TestDb.RequireAsync(_factory);
+        var client = Client();
+        var resp = await client.PostAsync("/api/anon/analyses", Wav());
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        CarryDeviceCookie(resp, client);
+        var jobId = (await resp.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("jobId").GetGuid();
+
+        string deviceId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            deviceId = (await db.AnalysisJobs.AsNoTracking().SingleAsync(j => j.Id == jobId)).DeviceId!;
+        }
+
+        try
+        {
+            // Pending: status carried, grade null (no completed analysis yet).
+            var pending = await (await client.GetAsync("/api/anon/jobs/current"))
+                .Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(jobId, pending.GetProperty("jobId").GetGuid());
+            Assert.Equal("pending", pending.GetProperty("status").GetString());
+            Assert.Equal(JsonValueKind.Null, pending.GetProperty("grade").ValueKind);
+
+            // Complete it with a graded analysis → grade now surfaces.
+            using (var scope = _factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                db.Analyses.Add(new Analysis
+                {
+                    Id = Guid.NewGuid(), JobId = jobId, DeviceId = deviceId,
+                    FinalJson = """{"grade":"B","overall_score":80.0,"phases":[]}""",
+                });
+                await db.AnalysisJobs.Where(j => j.Id == jobId)
+                    .ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, "complete"));
+                await db.SaveChangesAsync();
+            }
+
+            var done = await (await client.GetAsync("/api/anon/jobs/current"))
+                .Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal("complete", done.GetProperty("status").GetString());
+            Assert.Equal("B", done.GetProperty("grade").GetString());
+
+            // Cross-device still sees nothing.
+            Assert.Equal(HttpStatusCode.NotFound, (await Client().GetAsync("/api/anon/jobs/current")).StatusCode);
+        }
+        finally
+        {
+            await CleanupDeviceAsync(deviceId);
+        }
+    }
+
+    [SkippableFact]
     public async Task Anon_Upload_Rejects_Non_Audio_Extension_With_Code()
     {
         await TestDb.RequireAsync(_factory);

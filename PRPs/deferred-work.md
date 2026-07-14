@@ -125,6 +125,12 @@ Real findings that are out of scope for the current story but worth revisiting.
 - **Song hard-delete misses durable report artifacts** [SongEndpoints.cs:257-264] — `blobKeys` collects FilePath/Als/Reference/stems but never `reports/{jobId}.json` or spectrogram/waveform images (the account-deletion actor DOES collect these — proof they're known deletable). Orphaned objects with no owning row after a "permanent" delete.
 - **Register trust-line render untested** [register.tsx] — register uses TanStack `Link` (needs a router harness for static render); the 6.2 trust line is pinned only by the at-home visual pass. Add when a router test harness exists.
 
+## Deferred from: story 6.4 (2026-07-14)
+
+- **Resume-card grade reads the full final_json** [AnonAnalysisEndpoints.cs GetCurrent] — extracting one grade letter materializes the multi-MB `final_json`. Fine at resume-fetch frequency; denormalize a `grade`/`overall_score` column on `analyses` (or a `->>'grade'` SQL projection) if the landing endpoint ever gets hot.
+- **Failed newest anon job hides an older completed report** [GetCurrent orders by DispatchedAt desc] — if the device's latest job failed, the resume card shows nothing even when an earlier completed report exists. Consistent with the /analyze restore (also latest-only); revisit if the funnel wants "your last good report".
+- **Checkout-resume nudge not built** [6.4 AC2] — Stripe is stateless (no charge, `billing.cancelled.tsx` routes back to /pricing); no honest resumable state. A "finish choosing a plan" landing nudge could be added if funnel data shows checkout drop-off.
+
 ## Deferred from: story 6.3 (2026-07-14)
 
 - **Presigned anon uploads** [AnonAnalysisEndpoints.cs] — the anon vertical is proxy-only (streamed multipart ≤250 MB); presigned-first for anons adds surface (key IDOR + registration split) for little gain at current scale.
