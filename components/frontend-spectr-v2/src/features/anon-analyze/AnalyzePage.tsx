@@ -13,6 +13,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAuth } from '../../auth/AuthContext';
 import { fetcher } from '../../api/fetcher';
+import { capture } from '../../lib/analytics';
+import { readAttribution } from '../../lib/attribution';
 import type { JobResultsDto } from '../../api/types';
 import { BlurLock } from '../../components/BlurLock';
 import { PublicChrome } from '../../components/PublicChrome';
@@ -212,9 +214,28 @@ export function AnalyzePage() {
     return () => clearInterval(h);
   }, [stage]);
 
+  // Story 6.5 — funnel telemetry (PII-free; no-op without a PostHog key).
+  // analyze_completed fires ONCE, and ONLY for a job THIS session started —
+  // a returning visitor whose completed report is RESTORED must not re-fire
+  // it (no paired analyze_started → orphaned/negative TTFI; review).
+  const startedThisSessionRef = useRef(false);
+  const completedFiredRef = useRef(false);
+  useEffect(() => {
+    if (stage === 'report' && jobId && startedThisSessionRef.current && !completedFiredRef.current) {
+      completedFiredRef.current = true;
+      capture('analyze_completed', { job_id: jobId });
+    }
+  }, [stage, jobId]);
+
   const onFile = useCallback((file: File) => {
     setRestoreDismissed(false);
-    void uploadApi.upload(file).then((r) => setJobId(r.jobId)).catch(() => { /* error state shown */ });
+    void uploadApi.upload(file)
+      .then((r) => {
+        startedThisSessionRef.current = true;
+        setJobId(r.jobId);
+        capture('analyze_started', { job_id: r.jobId });
+      })
+      .catch(() => { /* error state shown */ });
   }, [uploadApi]);
 
   const vm: AnonReportVM | null = claimedResults
@@ -274,7 +295,13 @@ export function AnalyzePage() {
 
         {showRegister && !claimed && (
           <InlineRegisterCard
-            onClaimed={() => { setClaimed(true); setShowRegister(false); }}
+            onClaimed={() => {
+              setClaimed(true);
+              setShowRegister(false);
+              // AC2/AC4 — the device→user moment + inbound attribution (drains
+              // the 7.4 stash). identifyUser already stitched via AuthContext.
+              capture('report_claimed', { job_id: jobId, ...readAttribution() });
+            }}
             onDismiss={() => setShowRegister(false)}
           />
         )}

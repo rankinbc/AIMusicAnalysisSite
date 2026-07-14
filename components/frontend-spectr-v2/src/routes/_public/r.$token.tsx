@@ -2,6 +2,8 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import { ATTRIBUTION_KEY } from '../../lib/attribution';
+
 import {
   usePostShareComment,
   useShareComments,
@@ -285,7 +287,8 @@ function SharedReviewerPage() {
           href={`/register?via=share_${token}`}
           onClick={() => {
             try {
-              localStorage.setItem('spectr_attribution', `share_${token}`);
+              // Shared key with 6.5 readAttribution (drained on the claim event).
+              localStorage.setItem(ATTRIBUTION_KEY, `share_${token}`);
             } catch {
               /* storage blocked — the URL param still carries it */
             }

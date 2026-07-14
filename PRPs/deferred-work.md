@@ -125,6 +125,13 @@ Real findings that are out of scope for the current story but worth revisiting.
 - **Song hard-delete misses durable report artifacts** [SongEndpoints.cs:257-264] — `blobKeys` collects FilePath/Als/Reference/stems but never `reports/{jobId}.json` or spectrogram/waveform images (the account-deletion actor DOES collect these — proof they're known deletable). Orphaned objects with no owning row after a "permanent" delete.
 - **Register trust-line render untested** [register.tsx] — register uses TanStack `Link` (needs a router harness for static render); the 6.2 trust line is pinned only by the at-home visual pass. Add when a router test harness exists.
 
+## Deferred from: story 6.5 code review (2026-07-14)
+
+- **Attribution only attaches on the /analyze inline claim** [attribution.ts + register.tsx] — the share pages navigate to `/register?via=share_`, but `register.tsx` never reads the stash/param and fires no signup event; only the /analyze `report_claimed` drains it. So the primary share→register funnel loses PostHog-side attribution (the server-side `?via=` handler still has it). Wire `readAttribution()` + a `signup` event into the register flow to close AC4 end-to-end.
+- **Stale-first-attach in readAttribution** [attribution.ts] — drain is after read, so the FIRST consumer still inherits a stale share stash (e.g. tapped a share CTA, abandoned, later claimed own track → tagged share). Bounded (drains for the next), but a TTL on the stash would harden it.
+- **resume_clicked / (anon) view events may drop on full-nav unload** [ResumeCard `<a href>`, StrictMode double-fire on landing/pricing view] — `capture` before a full page navigation isn't beacon-guaranteed; page-view effects double-fire under dev StrictMode. Low-impact undercount/overcount; revisit if the numbers matter (sendBeacon transport / route-push instead of href).
+- **Post-register de-anonymization is by design** — `identifyUser` on register retroactively links the anon funnel events to the new user id in PostHog. Expected; documented in the runbook so it isn't mistaken for anonymized-forever data.
+
 ## Deferred from: story 6.4 (2026-07-14)
 
 - **Resume-card grade reads the full final_json** [AnonAnalysisEndpoints.cs GetCurrent] — extracting one grade letter materializes the multi-MB `final_json`. Fine at resume-fetch frequency; denormalize a `grade`/`overall_score` column on `analyses` (or a `->>'grade'` SQL projection) if the landing endpoint ever gets hot.

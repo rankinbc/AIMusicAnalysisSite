@@ -184,8 +184,13 @@ migration means merge == deploy == applied.
   ```
 - **PostHog** (EU): project key = CI secret `VITE_POSTHOG_KEY`. Product
   events: `upload_completed` (attachment flags), `report_viewed`,
-  `coach_message_sent`, `verdict_feedback`. Epic 6 adds the landing/funnel
-  events.
+  `coach_message_sent`, `verdict_feedback`. Story 6.5 adds the acquisition-
+  funnel events (all PII-free): `landing_viewed`, `analyze_started` +
+  `analyze_completed` (`{job_id}` — TTFI pair), `report_claimed`
+  (`{job_id, source?}` — device→user claim + inbound attribution),
+  `pricing_viewed`, `checkout_started` (`{cadence}`), `resume_shown` /
+  `resume_clicked` (`{status}` — 6.4 return-visitor). Device→user identity
+  stitch is `AuthContext.identifyUser` on auth-resolve.
 - **KPI table → source mapping** (PRD Measurable Outcomes):
 
 | KPI row | Source |
@@ -198,7 +203,7 @@ migration means merge == deploy == applied.
 | Coach follow-up rate | `coach_message_sent` + `coach_messages` rows |
 | .als attach rate | `upload_completed.als_attached` |
 | LLM cost / analysis | `llm_calls` (Grafana panel 5) |
-| Share-link k-factor | Epic 6 share instrumentation (not yet) |
+| Share-link k-factor | `report_claimed.source` (share_ tokens) + 7.x share events |
 | Failed-payment recovery | `subscriptions.next_payment_attempt` + Stripe |
 
 ## Admin surface (story 10.5 / FR46 / NFR7)

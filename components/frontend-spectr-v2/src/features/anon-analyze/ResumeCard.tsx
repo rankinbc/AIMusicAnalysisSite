@@ -13,9 +13,10 @@ import s from './resume-card.module.css';
 // (review). `complete` is the report; everything else here = show progress.
 const RUNNING_STATUSES = new Set(['pending', 'processing', 'awaiting_stem_mapping', 'queued']);
 
-export function ResumeCard({ resume, onDismiss }: {
+export function ResumeCard({ resume, onDismiss, onOpen }: {
   resume: ResumeInfo;
   onDismiss: () => void;
+  onOpen?: () => void;
 }) {
   const running = RUNNING_STATUSES.has(resume.status);
   // Nothing to resume: failed, or an unrecognized status.
@@ -36,7 +37,7 @@ export function ResumeCard({ resume, onDismiss }: {
             : `Your report from ${when} is ready.`}
         </p>
       </div>
-      <a href="/analyze" className="btn primary sm" data-testid="resume-open">
+      <a href="/analyze" className="btn primary sm" data-testid="resume-open" onClick={onOpen}>
         {running ? 'Resume →' : 'Open report →'}
       </a>
       <button type="button" className={s.dismiss} aria-label="Dismiss" onClick={onDismiss}>
