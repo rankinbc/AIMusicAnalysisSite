@@ -10,6 +10,7 @@ import type {
 import { Pill } from '../ui/Pill';
 import { formatCents } from '../features/billing/format-price';
 import { PublicChrome } from '../components/PublicChrome';
+import { capture } from '../lib/analytics';
 import { usePageMeta } from '../lib/usePageMeta';
 import s from './pricing.module.css';
 
@@ -32,6 +33,9 @@ export function PricingPage() {
   const [plans, setPlans] = useState<PlansResponse | null>(null);
   const [pending, setPending] = useState<'monthly' | 'annual' | null>(null);
 
+  // Story 6.5 — pricing view (once per mount; no-op without a PostHog key).
+  useEffect(() => { capture('pricing_viewed'); }, []);
+
   useEffect(() => {
     const ac = new AbortController();
     (async () => {
@@ -47,6 +51,7 @@ export function PricingPage() {
 
   const startCheckout = async (cadence: 'monthly' | 'annual') => {
     setPending(cadence);
+    capture('checkout_started', { cadence }); // 6.5 — free→paid funnel edge
     const token = getAccessToken();
     if (!token) {
       // Anonymous users hit /pricing too; bounce them to register first.

@@ -5,9 +5,10 @@
  *
  * Anon-only: a logged-in user has the library (and the root route redirects
  * them to /library anyway) — useOptionalAuth guards against a flash mid-redirect. */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useOptionalAuth } from '../../auth/AuthContext';
+import { capture } from '../../lib/analytics';
 import { ResumeCard } from './ResumeCard';
 import { dismissResume, isResumeDismissed } from './resume-dismissed';
 import type { ResumeInfo } from './useAnonAnalysis';
@@ -44,11 +45,23 @@ export function LandingResumeSlot() {
     return () => ctrl.abort();
   }, [authSettled, authed]);
 
-  if (!authSettled || authed || !resume || dismissed || resume.status === 'failed') return null;
+  const visible = authSettled && !authed && resume && !dismissed && resume.status !== 'failed';
+
+  // Story 6.5 — fire resume_shown once when a card first becomes visible.
+  const shownFiredRef = useRef(false);
+  useEffect(() => {
+    if (visible && resume && !shownFiredRef.current) {
+      shownFiredRef.current = true;
+      capture('resume_shown', { status: resume.status });
+    }
+  }, [visible, resume]);
+
+  if (!visible || !resume) return null;
 
   return (
     <ResumeCard
       resume={resume}
+      onOpen={() => capture('resume_clicked', { status: resume.status })}
       onDismiss={() => { dismissResume(resume.jobId); setDismissed(true); }}
     />
   );

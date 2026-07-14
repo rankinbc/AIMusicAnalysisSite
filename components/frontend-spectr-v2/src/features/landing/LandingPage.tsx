@@ -3,7 +3,10 @@
  * root route's beforeLoad redirects authed users to /library. Keep this
  * chunk LEAN (AC4 LCP): ui primitives + GradeHero only, nothing that pulls
  * wavesurfer/recharts/listen-rack. */
+import { useEffect } from 'react';
+
 import { PublicChrome } from '../../components/PublicChrome';
+import { capture } from '../../lib/analytics';
 import { usePageMeta } from '../../lib/usePageMeta';
 import { LandingResumeSlot } from '../anon-analyze/LandingResumeSlot';
 import { SampleReportEmbed } from './SampleReportEmbed';
@@ -21,6 +24,8 @@ export function LandingPage() {
     'SPECTR — AI mix analysis for producers',
     'Upload a track, get a graded 7-phase mix report with concrete fixes — loudness, low end, stereo image, arrangement — plus an AI coach that hears what you hear.',
   );
+  // Story 6.5 — top of funnel (once per mount; no-op without a PostHog key).
+  useEffect(() => { capture('landing_viewed'); }, []);
 
   return (
     <div className={s.page}>

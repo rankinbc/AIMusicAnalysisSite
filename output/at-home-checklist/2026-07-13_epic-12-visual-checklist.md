@@ -88,3 +88,9 @@ Needs TWO browser sessions (or one + an incognito reviewer) on a shared/View-abl
 - [ ] Dismiss the card (✕) → reload / → stays gone.
 - [ ] Mid-analysis: return to / while it's still running → card says "still being analyzed / Resume".
 - [ ] Logged in: no resume card on / (redirects to library).
+
+## 6-5 — Funnel instrumentation (added 2026-07-14)
+
+- [ ] With VITE_POSTHOG_KEY set (dev): PostHog EU shows land→analyze_started→analyze_completed→report_claimed firing across a real anon run; no email/audio/token in any event props.
+- [ ] pricing_viewed + checkout_started fire on the pricing page; resume_shown/clicked on a returning-visitor card.
+- [ ] Attribution: hit /analyze via a /r/{token} share link → report_claimed carries source=share_{token}.
