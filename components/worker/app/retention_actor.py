@@ -54,6 +54,11 @@ logger = logging.getLogger(__name__)
 _LAPSED_STATUSES = ("canceled", "unpaid", "incomplete_expired")
 
 
+# NOTE (story 6.2): the public trust pages state these defaults as facts
+# (frontend-spectr-v2/src/routes/trust.results-forever.tsx: 30d/90d;
+# trust.privacy.tsx: 72h). Changing an env override or a default here
+# FALSIFIES a published commitment — update the trust pages (and bump the
+# pledge version if applicable) in the same change.
 def _free_days() -> int:
     return int(os.environ.get("RETENTION_FREE_DAYS", "30"))
 

@@ -16,6 +16,10 @@ public static class PublicSiteEndpoints
         app.MapGet("/", LandingShell).AllowAnonymous().WithTags("public-site");
         app.MapGet("/pricing", PricingShell).AllowAnonymous().WithTags("public-site");
         // Story 6.2 — trust pages.
+        // DRAFT: these shell strings are a SECOND COPY of the trust-page
+        // commitments and must be updated together with the route files when
+        // the founder copy review lands (launch checklist) — crawlers serve
+        // THESE, not the SPA copy.
         app.MapGet("/trust/no-training", (HttpContext c) => Shell(c,
             path: "/trust/no-training",
             title: "No AI training on your audio — SPECTR",
@@ -31,7 +35,7 @@ public static class PublicSiteEndpoints
         app.MapGet("/trust/privacy", (HttpContext c) => Shell(c,
             path: "/trust/privacy",
             title: "Privacy defaults — SPECTR",
-            description: "Private-by-default library, opt-in revocable share links, anonymous data purged in 72 hours, full export and deletion.",
+            description: "Private-by-default library, opt-in revocable share links, anonymous analysis data purged after 72 hours, full export and deletion.",
             heading: "Privacy defaults",
             body: "Private by default. Share links are opt-in and revocable. Export or delete everything, any time.")).AllowAnonymous().WithTags("public-site");
         return app;

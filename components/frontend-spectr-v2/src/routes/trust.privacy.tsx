@@ -16,7 +16,7 @@ export function PrivacyDefaultsPage() {
     <TrustPage
       path="/trust/privacy"
       title="Privacy defaults"
-      metaDescription="SPECTR's privacy defaults: private-by-default library, opt-in revocable share links, anonymous data purged in 72 hours, full export and deletion."
+      metaDescription="SPECTR's privacy defaults: private-by-default library, opt-in revocable share links, anonymous analysis data purged after 72 hours, full export and deletion."
       updated="2026-07-14"
     >
       <p>
@@ -34,12 +34,19 @@ export function PrivacyDefaultsPage() {
           link kills it immediately for everyone who has it.
         </li>
       </ul>
-      <h2>Anonymous listeners</h2>
-      <p>
-        People who review your track through a share link without an account get a device
-        identity, not a profile. Anonymous device data that never becomes an account is purged
-        within 72 hours.
-      </p>
+      <h2>Anonymous visitors</h2>
+      <ul>
+        <li>
+          Someone who runs an anonymous analysis without creating an account gets a device
+          identity, not a profile. That device data — and its analyses — is purged after 72
+          hours if it never becomes an account.
+        </li>
+        <li>
+          Comments and bookmarks that reviewers leave on a track you shared are different: they
+          are feedback addressed to you, so they stay with your track until you delete them (you
+          moderate and can remove any of them).
+        </li>
+      </ul>
       <h2>Your data, your controls</h2>
       <ul>
         <li>Export everything — reports, comments, account data — from your account settings.</li>
@@ -50,10 +57,11 @@ export function PrivacyDefaultsPage() {
       </ul>
       <h2>No ad trackers riding along</h2>
       <ul>
-        <li>Fonts and assets are self-hosted — no third-party font or CDN calls.</li>
+        <li>Fonts and page assets are self-hosted — no third-party font or asset CDNs.</li>
         <li>
-          We run operational tooling: error monitoring (Sentry) and product analytics (PostHog)
-          to keep the service working. No advertising trackers, and your data is never sold.
+          We do run operational tooling: error monitoring (Sentry) and product analytics
+          (PostHog), bundled with the app to keep the service working. No advertising trackers,
+          and your data is never sold.
         </li>
       </ul>
     </TrustPage>

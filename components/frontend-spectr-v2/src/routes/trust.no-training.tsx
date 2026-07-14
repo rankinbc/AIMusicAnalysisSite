@@ -49,12 +49,14 @@ export function NoTrainingPage() {
       <h2>Where your audio actually lives</h2>
       <p>
         Uploaded audio is stored in SPECTR-controlled storage and read only by the analysis
-        pipeline and your own playback. See the privacy defaults page for retention specifics.
+        pipeline and playback — yours, and anyone you explicitly share the track with. See the
+        privacy defaults page for retention specifics.
       </p>
       <h2>Versioning</h2>
       <p>
-        This pledge is versioned. Any change bumps the version number above and is noted on this
-        page — the full history lives in our source repository.
+        This pledge is versioned. Any change to these commitments — including any change in how
+        our AI provider handles data — bumps the version number above and is noted on this page
+        before it takes effect.
       </p>
     </TrustPage>
   );
