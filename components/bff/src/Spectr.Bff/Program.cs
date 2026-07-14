@@ -564,6 +564,7 @@ var api = app.MapGroup("/api");
 
 api.MapAuthEndpoints();
 api.MapMeEndpoints();
+api.MapAnonAnalysisEndpoints();  // story 6.3 — /api/anon/* device-identity vertical
 api.MapSongEndpoints();
 api.MapVersionEndpoints();
 api.MapUploadEndpoints();

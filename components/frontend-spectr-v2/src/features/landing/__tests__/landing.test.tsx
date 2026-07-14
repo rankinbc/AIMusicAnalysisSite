@@ -19,7 +19,7 @@ describe('PublicChrome (story 6.1 AC3 — UX-DR6 slim chrome)', () => {
     expect(html).toContain('href="/"');
     expect(html).toContain('href="/pricing"');
     expect(html).toContain('href="/login"');
-    expect(html).toContain('href="/register"');
+    expect(html).toContain('href="/analyze"'); // 6.3 — CTA targets the anon funnel
     expect(html).toContain('Analyze free');
     expect(html).not.toContain('Open library');
     expect(html).toContain('SPEC'); // wordmark

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { useWorkerHealth } from '../../api/hooks';
 import type { JobStatusDto } from '../../api/types';
+import { BASE_PHASES, PHASE_EXPLAINERS } from './progress-phases';
 import s from './ProgressStoryline.module.css';
 
 // Story 12.2 (AC3) — per-phase progress storyline for the results page.
@@ -9,20 +10,7 @@ import s from './ProgressStoryline.module.css';
 // from a healthy one: named phases with the current one highlighted, elapsed
 // time, and escalating hints keyed on real signals (worker heartbeat via the
 // shared useWorkerHealth poll; wall-clock thresholds as the softer fallback).
-
-// The 7 base pipeline phases, display-ready names persisted by the worker
-// (audio_analysis pipeline PHASE_DEFS). Conditional/extra phases (ALS phase 8,
-// "Mix Translation", structure_actor's "Arrangement") and any future rename
-// are tolerated: an unrecognized in-flight phase renders as an appended row.
-const BASE_PHASES = [
-  'Universal Mix Analysis',
-  'Genre Detection',
-  'Genre-Specific Scoring',
-  'Stem Separation & Clash',
-  'Reference Comparison',
-  'Gap Analysis',
-  'Arrangement Advice',
-] as const;
+// BASE_PHASES + PHASE_EXPLAINERS live in ./progress-phases (6.3 shares them).
 
 // Lifecycle markers the worker writes outside the numbered phases — these are
 // job states, not phases, so they never render as an appended phase row.
@@ -33,21 +21,6 @@ const SENTINELS = new Set(['', 'queued', 'starting', 'complete', 'failed']);
 // Without the alias it would render as a duplicate row under the base one.
 const PHASE_ALIASES: Record<string, string> = {
   Arrangement: 'Arrangement Advice',
-};
-
-// Story 12.8 (AC3): one-line explainer per phase. Typed against BASE_PHASES so
-// a phase rename breaks the build here instead of silently orphaning its copy.
-const PHASE_EXPLAINERS: Record<(typeof BASE_PHASES)[number], string> = {
-  'Universal Mix Analysis':
-    'loudness, true peak, key, tempo and the measurements every genre shares.',
-  'Genre Detection': 'which genre profile your track is judged against.',
-  'Genre-Specific Scoring':
-    "the measured values scored against that genre's reference ranges.",
-  'Stem Separation & Clash': 'where instruments fight for the same frequencies.',
-  'Reference Comparison':
-    'your mix against a reference track when one is attached.',
-  'Gap Analysis': 'the biggest measurable distances from the genre profile.',
-  'Arrangement Advice': 'energy and structure over the timeline.',
 };
 
 // Soft "taking longer than usual" thresholds — deliberately constants, not

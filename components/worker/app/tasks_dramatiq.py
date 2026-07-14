@@ -178,27 +178,34 @@ def analyze_audio_job(job_id: str) -> None:
                 job_id, job.status, job.error_code,
             )
             return
+        # Story 6.3 — song-less anonymous jobs: version_id is null and the
+        # audio key lives on the job itself (audio/anon/{deviceId}/{jobId}/…).
+        # No song/version/reference/als/stems context on that path.
         if job.version_id is None:
-            raise ValueError(f"job {job_id} has no version_id")
-        version = s.get(SongVersion, job.version_id)
-        if version is None:
-            raise ValueError(f"version {job.version_id} not found")
-        song = s.get(Song, version.song_id)
+            if not job.file_path:
+                raise ValueError(f"job {job_id} has neither version_id nor file_path")
+            version = None
+            song = None
+        else:
+            version = s.get(SongVersion, job.version_id)
+            if version is None:
+                raise ValueError(f"version {job.version_id} not found")
+            song = s.get(Song, version.song_id)
 
         job.status = JOB_STATUS_PROCESSING
         job.started_at = _utc_now()
         job.current_phase = "starting"
         job.phase_pct = 0.0
 
-        file_rel = version.file_path
+        file_rel = version.file_path if version is not None else job.file_path
         user_id = job.user_id
-        # Story 4.5 (AR24): anon jobs carry device_id instead of user_id; the
-        # analyses insert must propagate it or ck_analyses_owner_xor fires the
-        # moment 6.3 dispatches a device-owned job.
-        device_id = job.device_id
+        # Ownership for the analyses insert is re-read from the job in Phase C
+        # (not captured here) so a mid-pipeline register-claim is reflected —
+        # see the Phase C comment. `user_id` here only feeds the version-gated
+        # structure-detection guard, which anon (version-less) jobs skip.
         tier = job.tier  # billing tier stamped by the BFF at dispatch (story 2.4)
-        version_id = version.id
-        song_id = version.song_id
+        version_id = version.id if version is not None else None
+        song_id = version.song_id if version is not None else None
         song_name = song.name if song is not None else None
 
         # Reference resolution: a saved library reference (job.reference_id) takes
@@ -207,17 +214,17 @@ def analyze_audio_job(job_id: str) -> None:
         # version's one-off path — never crash the job over it. The used_count
         # bump is deferred to Phase C (on success) so a failed pipeline — or a
         # dramatiq retry — doesn't permanently inflate the counter.
-        reference_path = version.reference_path
+        reference_path = version.reference_path if version is not None else None
         bump_reference_id: uuid.UUID | None = None
-        if job.reference_id is not None:
+        if job.reference_id is not None and version is not None:
             ref = s.get(ReferenceTrack, job.reference_id)
             if ref is not None and ref.file_path:
                 reference_path = ref.file_path
                 bump_reference_id = ref.id
 
-        als_file_path = version.als_file_path
-        stem_paths = version.stem_paths
-        stem_mode = version.stem_analysis_mode or "grouped"
+        als_file_path = version.als_file_path if version is not None else None
+        stem_paths = version.stem_paths if version is not None else None
+        stem_mode = (version.stem_analysis_mode or "grouped") if version is not None else "grouped"
 
     # ── Phase B — run pipeline outside any long-held DB transaction ──────────
     # Live per-phase progress: the pipeline calls progress_cb(phase, name, pct)
@@ -343,12 +350,22 @@ def analyze_audio_job(job_id: str) -> None:
             # Shouldn't happen — job row was here in Phase A.
             raise RuntimeError(f"job {job_id} disappeared between phases")
 
+        # Story 6.3 review (CRITICAL): re-read ownership from the CURRENT job
+        # row, not the Phase-A capture. A user who registers WHILE an anon job
+        # is mid-pipeline gets the job re-parented (device_id → user_id) by the
+        # 4.5 claim tx; if we insert the Analysis with the stale device_id it
+        # lands on a now-claimed device → results 404 forever AND is never
+        # purged (purge requires claimed_at IS NULL). Trusting done.* keeps the
+        # Analysis owner in lockstep with the (possibly just-claimed) job.
+        owner_user_id = done.user_id
+        owner_device_id = done.device_id if done.user_id is None else None
+
         s.add(Analysis(
             id=analysis_id,
             job_id=jid,
-            user_id=user_id,
+            user_id=owner_user_id,
             # AR24 exactly-one: anon jobs propagate device ownership.
-            device_id=device_id if user_id is None else None,
+            device_id=owner_device_id,
             version_id=version_id,
             song_id=song_id,
             song_name=song_name,

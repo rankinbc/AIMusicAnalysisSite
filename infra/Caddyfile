@@ -30,7 +30,7 @@ www.{$SPECTR_DOMAIN} {
 	# humans get the real page is thin-content/cloaking — they render the SPA
 	# fine. Extend the path list when new funnel pages ship.
 	@site_bots {
-		path / /pricing /pricing/ /trust/no-training /trust/no-training/ /trust/results-forever /trust/results-forever/ /trust/privacy /trust/privacy/
+		path / /pricing /pricing/ /analyze /analyze/ /trust/no-training /trust/no-training/ /trust/results-forever /trust/results-forever/ /trust/privacy /trust/privacy/
 		header_regexp ua User-Agent (?i)(discordbot|slackbot|twitterbot|facebookexternalhit|whatsapp|telegrambot|linkedinbot|applebot|redditbot|embedly|pinterest|skypeuripreview)
 	}
 	handle @site_bots {

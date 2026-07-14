@@ -15,6 +15,13 @@ public static class PublicSiteEndpoints
     {
         app.MapGet("/", LandingShell).AllowAnonymous().WithTags("public-site");
         app.MapGet("/pricing", PricingShell).AllowAnonymous().WithTags("public-site");
+        // Story 6.3 — the anon funnel entry.
+        app.MapGet("/analyze", (HttpContext c) => Shell(c,
+            path: "/analyze",
+            title: "Analyze your track free — SPECTR",
+            description: "Drop a track, get a graded 7-phase mix analysis in minutes. No account, no forms — WAV, FLAC or MP3 up to 250 MB.",
+            heading: "Drop your track. Get the truth.",
+            body: "A real 7-phase mix analysis — graded, measured, no account needed.")).AllowAnonymous().WithTags("public-site");
         // Story 6.2 — trust pages.
         // DRAFT: these shell strings are a SECOND COPY of the trust-page
         // commitments and must be updated together with the route files when

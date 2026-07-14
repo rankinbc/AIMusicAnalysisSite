@@ -82,6 +82,7 @@ AIMusicAnalysisSite/
 - Audio: `GET /api/versions/{id}/audio` — streams the original upload with `Accept-Ranges: bytes`. Accepts JWT via `Authorization` header OR `?t=<jwt>` query param (since `<audio>` / `EventSource` can't attach headers — whitelisted to paths matching `/audio`).
 - Jobs/results: `GET /api/jobs/{id}`, `GET /api/jobs/{id}/results`
 - Verdicts: `GET /api/reports/{job_id}/verdicts` (list + routing plan), `POST /api/reports/{job_id}/verdicts/run/{slug}` (on-demand specialist), `POST /api/verdicts/{id}/{dismiss,applied}`, `POST /api/verdicts/{id}/feedback`
+- Anon funnel (story 6.3): `POST /api/anon/analyses` (multipart proxy ≤250 MB, mints the `spectr_device` cookie, song-less/version-less `AnalysisJob { DeviceId, FilePath }` — the worker resolves audio from `job.file_path` when `version_id` is null), `GET /api/anon/jobs/current|{id}|{id}/results` (device-cookie-scoped). One active analysis per device (409 `anon_active_analysis`); registration claims the device server-side (4.5) and re-parents jobs/analyses/conversations. Anon storage keys `audio/anon/{deviceId}/{jobId}/` are deleted by the 72h purge.
 
 **Gotchas:**
 - **EF Core 10 migrations require a manual partial-index step**: `add Initial` can't fluently express `CREATE UNIQUE INDEX ... WHERE is_current`. Append the raw SQL to `Up()` / `Down()` after scaffolding. See `bff/README.md`. Without it the library can have two `is_current=true` rows per song.

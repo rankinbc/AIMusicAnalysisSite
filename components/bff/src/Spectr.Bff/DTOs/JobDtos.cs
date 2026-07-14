@@ -32,6 +32,9 @@ public sealed record JobResultsDto(
     string? SpectrogramImageUrl = null,
     string? WaveformImageUrl = null);
 
+// Story 6.3 — the anon upload/restore response: just the job to poll.
+public sealed record AnonAnalysisResponse(Guid JobId);
+
 // Lightweight summary used by the jobs-list endpoint. Excludes final_json
 // (potentially several MB) so the list query stays fast.
 public sealed record JobSummaryDto(

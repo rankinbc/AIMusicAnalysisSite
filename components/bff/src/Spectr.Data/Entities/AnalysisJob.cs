@@ -26,6 +26,13 @@ public sealed class AnalysisJob
     [Column("version_id")]
     public Guid? VersionId { get; set; }
 
+    // Story 6.3 — song-less anonymous jobs carry their audio key directly
+    // (the worker resolves audio via version_id → song_versions.file_path
+    // otherwise). Set ONLY when version_id is null; anon key convention:
+    // audio/anon/{deviceId}/{jobId}/source.*
+    [Column("file_path")]
+    public string? FilePath { get; set; }
+
     [Column("status"), MaxLength(32)]
     public string Status { get; set; } = "pending";   // pending|processing|complete|failed|awaiting_stem_mapping
 

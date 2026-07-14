@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 // Story 12.7 (AC2) — the first-run smoke: one headless pass that catches
 // verify-gate, dead-handoff, and dead-UI regressions together.
 //
-//   anon → / → LANDING PAGE (story 6.1; no more redirect-to-login) → CTA → /register
+//   anon → / → LANDING PAGE (6.1) — CTA points at /analyze (6.3 anon funnel,
+//   covered by smoke-anon-funnel.spec.ts); this suite registers directly
 //   register a fresh account → /library (empty first-run state)
 //   + New song → NewSongDialog → UnifiedUploadDialog (mix only)
 //   Upload & analyze → /songs/$songId/results/$jobId
@@ -61,8 +62,11 @@ test('first-run: register → upload → report → listen', async ({ page }) =>
   await expect(page).toHaveURL(/\/login(\?.*)?$/);
   await page.goto('/');
 
-  // 2. CTA → register a fresh account (DevAutoVerify stamps it verified).
-  await page.getByTestId('landing-cta').click();
+  // 2. Register a fresh account (DevAutoVerify stamps it verified). The CTA
+  //    now targets the 6.3 anon funnel (/analyze — covered by its own spec);
+  //    this suite drives the AUTHED first-run, so it registers directly.
+  await expect(page.getByTestId('landing-cta')).toHaveAttribute('href', '/analyze');
+  await page.goto('/register');
   await expect(page).toHaveURL(/\/register$/);
   const emailBox = page.getByLabel('Email');
   const passwordBox = page.getByLabel('Password');
