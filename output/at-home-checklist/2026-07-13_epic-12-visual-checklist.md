@@ -43,3 +43,17 @@ the visual/audible confirmations that need human eyes and ears. Boot the stack w
 ## CI (check from any browser)
 
 - [ ] All lanes green on master `d1f41e0`+ — including the deploy lane (BFF image on azurelinux, web image on caddy:2.11).
+
+## 11-12 — Fork-to-suggest & suggestion audition (added 2026-07-14)
+
+Needs TWO browser sessions (or one + an incognito reviewer) on a shared/View-able version.
+
+- [ ] View mode, non-owner: rack shows "READ-ONLY · FORK TO SUGGEST" badge button; comments tab shows the "Fork the rack & suggest a chain" button.
+- [ ] Click fork: rack knobs become live and AUDIBLE while playing; suggest chip appears with Submit/Discard/A-B; paused shows "press play to hear your draft".
+- [ ] A/B toggle: flip to ORIGINAL — audibly reverts, rack blocked with "ORIGINAL (A)" badge; flip back — draft returns exactly.
+- [ ] Switch bottom view to VISUALS/STEMS while forked: chip stays visible.
+- [ ] Submit: success toast, rack restores to pre-fork sound, suggestion card appears under "Suggested fixes".
+- [ ] Discard: pre-fork sound restored exactly (incl. any modules you disabled during the draft).
+- [ ] As OWNER: suggestion card shows "show moves (n)" expander — readable moves match what the reviewer did; Audition plays the suggested chain, Revert restores yours; Accept → preset "From @handle" appears in preset list.
+- [ ] Owner audition then mode-switch away: your rack is back to normal (audition auto-reverted), and your saved draft was NOT overwritten.
+- [ ] Anon share page /v/{token}: no "suggestions open" pill anywhere.
