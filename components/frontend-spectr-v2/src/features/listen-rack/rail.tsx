@@ -30,7 +30,7 @@ import {
 import { buildCommentThreads, canModerate } from '../listen/comment-tree';
 import { useSuggestions } from '../listen/useSuggestions';
 import { partitionSuggestions } from '../listen/suggestion-helpers';
-import { SuggestionCard } from '../listen/SuggestionCard';
+import { SuggestionCard, type SuggestionAuditionSeam } from '../listen/SuggestionCard';
 import { useMe } from '../../api/hooks';
 import type { CommentDto as ApiCommentDto } from '../../api/types';
 import { useMentionAutocomplete } from '../mentions/useMentionAutocomplete';
@@ -611,12 +611,17 @@ export function PlanPanel({ rs, versionId }: { rs: RackState; versionId?: string
 // ── COMMENTS tab — async View feedback thread (timestamped + suggestions) ──
 // Story 11.1: real PRP-3 comments (useComments). Gating is server-side via
 // AccessService — a 403/404 from the query renders the "not permitted" state.
-export function CommentsPanel({ versionId, access, isOwner, position, onSeek }: {
+export function CommentsPanel({ versionId, access, isOwner, position, onSeek, onForkToSuggest, audition }: {
   versionId?: string;
   access: AccessDto;
   isOwner: boolean;
   position: number;
   onSeek: (t: number) => void;
+  /** Story 11.12 — engages fork-to-suggest on the page (owns the rack state).
+   *  Absent (mock route / no rack) hides the affordance. */
+  onForkToSuggest?: () => void;
+  /** Story 11.12 — audition seam threaded to each SuggestionCard. */
+  audition?: SuggestionAuditionSeam;
 }) {
   const vid = versionId ?? '';
   const commentsQ = useComments(vid);
@@ -680,7 +685,7 @@ export function CommentsPanel({ versionId, access, isOwner, position, onSeek }: 
         </div>
         <div style={{ fontSize: 11.5, color: 'var(--text-2)', marginTop: 6, lineHeight: 1.45 }}>{c.body}</div>
         {suggestionByComment.has(c.id) ? (
-          <SuggestionCard suggestion={suggestionByComment.get(c.id)!} versionId={vid} isOwner={isOwner} />
+          <SuggestionCard suggestion={suggestionByComment.get(c.id)!} versionId={vid} isOwner={isOwner} {...(audition ? { audition } : {})} />
         ) : c.suggestionId ? (
           <div className="mono" style={{ marginTop: 7, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 9, color: 'var(--cyan)', padding: '3px 8px', borderRadius: 6, border: '1px dashed rgba(0,229,176,0.35)', background: 'rgba(0,229,176,0.05)' }}>⌁ suggested a rack chain</div>
         ) : null}
@@ -712,7 +717,7 @@ export function CommentsPanel({ versionId, access, isOwner, position, onSeek }: 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span className="label" style={{ fontSize: 9, color: 'var(--muted)' }}>Suggested fixes</span>
           {standaloneSuggestions.map((sg) => (
-            <SuggestionCard key={sg.id} suggestion={sg} versionId={vid} isOwner={isOwner} />
+            <SuggestionCard key={sg.id} suggestion={sg} versionId={vid} isOwner={isOwner} {...(audition ? { audition } : {})} />
           ))}
         </div>
       )}
@@ -745,10 +750,23 @@ export function CommentsPanel({ versionId, access, isOwner, position, onSeek }: 
             <button type="button" onClick={() => setPinTime((p) => !p)} title="pin to current time" className="mono" style={{ fontSize: 9.5, color: pinTime ? 'var(--cyan)' : 'var(--muted)', background: 'none', padding: 0 }}>@{fmtTime(position)}</button>
             <button type="button" onClick={submit} disabled={postMut.isPending || !text.trim()} className="btn sm primary" style={{ padding: '4px 12px', fontSize: 11 }}>Post</button>
           </div>
-          {access.gates.canSuggest && <div className="mono" style={{ fontSize: 9, color: 'var(--muted)' }}>The rack is read-only here — edit it to <span style={{ color: 'var(--cyan)' }}>fork &amp; suggest a chain</span>.</div>}
         </div>
       ) : (
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>Comments are closed on this track.</div>
+      )}
+
+      {/* 11.12: OUTSIDE the canComment branch — a canSuggest-without-canComment
+          grant must still get the rail fork seam (review finding). */}
+      {access.gates.canSuggest && onForkToSuggest && (
+        <button
+          type="button"
+          data-testid="fork-to-suggest"
+          className="mono"
+          onClick={onForkToSuggest}
+          style={{ alignSelf: 'flex-start', fontSize: 9, color: 'var(--cyan)', background: 'rgba(0,229,176,0.05)', border: '1px dashed rgba(0,229,176,0.35)', borderRadius: 6, padding: '4px 9px' }}
+        >
+          ⌁ Fork the rack &amp; suggest a chain
+        </button>
       )}
     </div>
   );
@@ -761,7 +779,7 @@ const TAB_LABELS: Record<string, string> = {
   coach: 'Coach', plan: 'Plan', comments: 'Comments', people: 'People', chat: 'Chat', stats: 'Stats', notes: 'Notes',
 };
 
-export function RightRail({ mode, access, cap, rs, track, position, activeNote, onNoteClick, onSeek, onReact, feed, announce, myStatus, roomControl, onGrant, versionId, isOwner = false }: {
+export function RightRail({ mode, access, cap, rs, track, position, activeNote, onNoteClick, onSeek, onReact, feed, announce, myStatus, roomControl, onGrant, versionId, isOwner = false, onForkToSuggest, audition }: {
   mode: ModeId;
   access: AccessDto;
   cap: CapabilitySet;
@@ -779,6 +797,9 @@ export function RightRail({ mode, access, cap, rs, track, position, activeNote, 
   onGrant: (scope: 'rack' | 'visuals', actor: ActorRef | null) => void;
   versionId?: string;
   isOwner?: boolean;
+  /** Story 11.12 — fork-to-suggest + audition seams, forwarded to CommentsPanel. */
+  onForkToSuggest?: () => void;
+  audition?: SuggestionAuditionSeam;
 }) {
   const tabs = railTabsFor(mode, access);
   const [tab, setTab] = useState(tabs[0]);
@@ -797,7 +818,7 @@ export function RightRail({ mode, access, cap, rs, track, position, activeNote, 
       <div style={{ overflow: 'auto', flex: 1, paddingRight: 2 }}>
         {active === 'coach' && <CoachPanel rs={rs} announce={announce} />}
         {active === 'plan' && <PlanPanel rs={rs} {...(versionId ? { versionId } : {})} />}
-        {active === 'comments' && <CommentsPanel access={access} onSeek={onSeek} isOwner={isOwner} position={position} {...(versionId ? { versionId } : {})} />}
+        {active === 'comments' && <CommentsPanel access={access} onSeek={onSeek} isOwner={isOwner} position={position} {...(versionId ? { versionId } : {})} {...(onForkToSuggest ? { onForkToSuggest } : {})} {...(audition ? { audition } : {})} />}
         {active === 'people' && <PeoplePanel myStatus={myStatus} onReact={onReact} cap={cap} roomControl={roomControl} onGrant={onGrant} />}
         {active === 'chat' && <ChatPanel feed={feed} onReact={onReact} />}
         {active === 'stats' && <StatsPanel track={track} />}

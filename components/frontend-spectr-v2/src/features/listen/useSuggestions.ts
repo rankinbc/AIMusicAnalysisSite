@@ -10,8 +10,6 @@ import type {
   RackPresetDto,
   SuggestionDto,
 } from '../../api/types';
-import { applyChainToGraph, type Chain } from './chainApply';
-import type { AudioGraphHandle } from './useAudioGraph';
 
 const suggestionsKey = (versionId: string) => ['versions', versionId, 'suggestions'] as const;
 const presetsKey = (versionId: string) => ['versions', versionId, 'rack', 'presets'] as const;
@@ -63,8 +61,7 @@ export function usePostAnonSuggestion(token: string) {
   });
 }
 
-// Non-destructive preview of a proposed chain on the live graph (PRP-1 apply
-// loop; drift-tolerant, so the suggestion's chain shape is forwarded as-is).
-export function auditionSuggestion(graph: AudioGraphHandle, suggestion: SuggestionDto): void {
-  applyChainToGraph(graph, suggestion.chain as Chain);
-}
+// Story 11.12: the old graph-only `auditionSuggestion(graph, sg)` helper was
+// retired — a graph-only apply leaves the rack knob UI showing stale values.
+// Audition now goes through `listen-rack/suggest-draft.applySuggestionChain`
+// (rs-based), which keeps React state and the audio graph in sync.

@@ -6,13 +6,15 @@ import type { CommentDto, GatesDto } from '../../api/types';
 import { Pill } from '../../ui/Pill';
 
 // ── gating matrix (AC2) — pills reflect the server-resolved gates ────────────
+// Story 11.12: no `canSuggest` pill — this page has no suggestion UI, and a pill
+// advertising a capability with no affordance is a dead promise (12-5 honest-UI
+// rule). The anon suggest backend route stays; a future story may build the UI.
 export function AnonGatePills({ gates }: { gates: GatesDto }) {
   return (
     <div data-testid="gate-pills" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
       {gates.canComment && <Pill tone="cyan">comments open</Pill>}
-      {gates.canSuggest && <Pill tone="violet">suggestions open</Pill>}
       {gates.canBookmark && <Pill>bookmarks open</Pill>}
-      {!gates.canComment && !gates.canSuggest && !gates.canBookmark && (
+      {!gates.canComment && !gates.canBookmark && (
         <Pill>listen only</Pill>
       )}
     </div>

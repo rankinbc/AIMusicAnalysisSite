@@ -23,13 +23,17 @@ function comment(over: Partial<CommentDto>): CommentDto {
   };
 }
 
-function render(comments: CommentDto[], me: AuthedUser | null, isOwner: boolean, access: AccessDto = MOCK_ACCESS) {
+function render(
+  comments: CommentDto[], me: AuthedUser | null, isOwner: boolean,
+  access: AccessDto = MOCK_ACCESS, onForkToSuggest?: () => void,
+) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(['versions', 'v1', 'comments'], comments);
   if (me) qc.setQueryData(['auth', 'me'], me);
   return renderToStaticMarkup(
     <QueryClientProvider client={qc}>
-      <CommentsPanel versionId="v1" access={access} isOwner={isOwner} position={42} onSeek={() => {}} />
+      <CommentsPanel versionId="v1" access={access} isOwner={isOwner} position={42} onSeek={() => {}}
+        {...(onForkToSuggest ? { onForkToSuggest } : {})} />
     </QueryClientProvider>,
   );
 }
@@ -74,6 +78,20 @@ describe('CommentsPanel (story 11.1)', () => {
     const closed: AccessDto = { ...MOCK_ACCESS, gates: { ...MOCK_ACCESS.gates, canComment: false } };
     const html = render([], ME, false, closed);
     expect(html).toContain('Comments are closed');
+  });
+
+  // Story 11.12 AC1 — the composer teaser is a REAL fork affordance now.
+  it('renders the fork-to-suggest button only with canSuggest AND a page callback', () => {
+    const fork = () => {};
+    const withBoth = render([], ME, false, MOCK_ACCESS, fork);
+    expect(withBoth).toContain('data-testid="fork-to-suggest"');
+    expect(withBoth).toContain('suggest a chain');
+
+    const noGate: AccessDto = { ...MOCK_ACCESS, gates: { ...MOCK_ACCESS.gates, canSuggest: false } };
+    expect(render([], ME, false, noGate, fork)).not.toContain('fork-to-suggest');
+
+    // No callback (mock route / no rack) → no dead button.
+    expect(render([], ME, false, MOCK_ACCESS)).not.toContain('fork-to-suggest');
   });
 
   // Story 11.11 AC2/AC4 — author avatars deep-link to public profiles.

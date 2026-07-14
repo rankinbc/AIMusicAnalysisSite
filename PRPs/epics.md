@@ -1432,6 +1432,27 @@ So that comments, rooms, profiles, and follows reinforce each other.
 3. **Given** an anon viewer on `/v/{token}` who registers, **Then** a "follow this producer" CTA is offered post-claim.
 4. **Given** these entry-points, **Then** static-render tests cover the mention autocomplete and avatar links.
 
+### Story 11.12: Fork-to-Suggest & Suggestion Audition
+
+_Added 2026-07-14 (reopens Epic 11). Propose-side of 11.2: the accept-to-preset flow shipped, but no UI lets a reviewer create a suggestion — `useCreateSuggestion`/`usePostAnonSuggestion`/`auditionSuggestion` have zero callers, and the View-mode teaser ("edit it to fork & suggest a chain", rail.tsx) is a dead promise. Backend is complete; this is pure frontend wiring._
+
+As a producer reviewing someone else's track in View mode,
+I want to fork the read-only rack into an editable draft, shape a fix I can hear, and submit it as a suggestion,
+So that the owner receives a concrete, audition-able rack chain instead of a text comment.
+
+**Acceptance Criteria:**
+
+1. **Given** View mode with `gates.canSuggest`, **Then** the read-only rack badge and the comments-panel teaser both become real fork-to-suggest affordances; hidden without the gate.
+2. **Given** fork engaged, **Then** the rack is locally editable and audible with a suggest-mode chip (Submit/Discard); no server write until Submit; capabilities/mode untouched.
+3. **Given** Submit, **Then** the draft chain posts via the existing `useCreateSuggestion` (never a new endpoint), the card appears in "Suggested fixes", and the pre-fork chain is restored.
+4. **Given** Discard or leaving fork mode, **Then** the pre-fork chain is fully restored (order/params/bypass; pitch untouched).
+5. **Given** a `SuggestionCard` where the page audio graph is available, **Then** an Audition button previews the chain non-destructively with Revert; no status write. (As built: rs-based `applySuggestionChain` — the graph-only `auditionSuggestion` helper desynced the knob UI and was retired.)
+6. **Given** `/v/{token}`, **Then** the "suggestions open" pill is removed (no suggest UI exists there — honest UI); anon suggest UI deferred, backend route stays.
+7. **Given** fork mode with playback paused, **Then** the chip nudges "press play to hear your draft".
+8. **Given** fork mode, **Then** an A/B toggle flips between pre-fork chain and draft (original-vs-draft, not masterBypass); edits on A auto-flip back; Submit always posts the draft.
+9. **Given** a `SuggestionCard`, **Then** an expandable moves section renders the chain as readable mix moves (pure `chainToMoves`, drift-tolerant) — the owner's "what do I do in my DAW" answer.
+10. **Given** the suite, **Then** tests cover affordance gating, snapshot/restore round-trip, submit payload, audition apply/revert, the pill change, the A/B edit guard, and `chainToMoves`.
+
 ## Epic 12: Post-Audit Reliability & Product Truthfulness
 
 Close every finding from the 2026-07-10 full-app audit (`output/audit/2026-07-10_full-app-audit/findings.md`), plus the team-review improvement list. Theme: nothing in the product may lie — no dead buttons, no fabricated numbers, no silent failures, no features labeled smarter than they are. Fix batches A–E map to stories 12.1–12.6; the party-mode improvement round adds 12.7–12.8.
