@@ -1,7 +1,10 @@
 import { Link, createFileRoute } from '@tanstack/react-router';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
-import { useJob, useJobResults } from '../../api/hooks';
+import { ApiError } from '../../api/fetcher';
+import { extractApiError } from '../../api/error-utils';
+import { useFreeRetry, useJob, useJobResults } from '../../api/hooks';
 import { capture } from '../../lib/analytics';
 import { setCorrelation } from '../../lib/sentry';
 import { ProgressStoryline } from '../../features/results/ProgressStoryline';
@@ -38,6 +41,36 @@ function ResultsPage() {
   const isComplete = job.data?.status === 'complete';
   const isFailed = job.data?.status === 'failed';
   const results = useJobResults(jobId, isComplete);
+
+  // Story 5.7 (FR6): failed-job free retry. The server owns eligibility —
+  // a 409 (not eligible / already used) just hides the button.
+  const retry = useFreeRetry(jobId);
+  const [retryGone, setRetryGone] = useState(false);
+  const dispatchFreeRetry = () =>
+    retry.mutate(undefined, {
+      onSuccess: (res) => {
+        toast.success('Free retry dispatched.');
+        void navigate({
+          to: '/songs/$songId/results/$jobId',
+          params: { songId, jobId: res.jobId },
+        });
+      },
+      onError: (err) => {
+        if (err instanceof ApiError) {
+          const code = extractApiError(err.body).code;
+          if (code === 'retry_already_used' || code === 'retry_not_eligible') {
+            toast.info(
+              code === 'retry_already_used'
+                ? 'The free retry for this analysis was already used.'
+                : 'This run is not eligible for a free retry.',
+            );
+            setRetryGone(true);
+            return;
+          }
+        }
+        toast.error(err instanceof Error ? err.message : 'Could not dispatch the retry');
+      },
+    });
 
   // Story 10.3 (NFR30): frontend joins the correlation chain — render errors
   // on this page carry the job id; report_viewed pairs with job timestamps
@@ -94,6 +127,20 @@ function ResultsPage() {
           <p className={s.failTitle}>Analysis failed.</p>
           {job.data.errorMessage && (
             <pre className={s.failMessage}>{job.data.errorMessage}</pre>
+          )}
+          {/* Story 5.7 (FR6): a failed run earns one entitlement-free retry —
+              eligibility is server-decided (409 hides the button). */}
+          {!retryGone && (
+            <p>
+              <button
+                type="button"
+                className="btn sm"
+                onClick={dispatchFreeRetry}
+                disabled={retry.isPending}
+              >
+                {retry.isPending ? 'Dispatching…' : 'Retry free'}
+              </button>
+            </p>
           )}
           <p className={s.failFooter}>
             <Link to="/library">← Back to library</Link> and upload another version.

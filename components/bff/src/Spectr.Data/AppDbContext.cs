@@ -266,6 +266,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         builder.Entity<Verdict>().Property(v => v.Fixable).HasDefaultValue(true);
         builder.Entity<Verdict>().Property(v => v.Suspected).HasDefaultValue(false);
         builder.Entity<AnalysisJob>().HasIndex(j => new { j.UserId, j.Status });
+        // Story 5.7 — once-only free-retry lookup (NOT unique: origin linkage
+        // stays open for future non-free rerun surfaces; once-only is enforced
+        // in the retry endpoint's dispatch transaction).
+        builder.Entity<AnalysisJob>().HasIndex(j => j.RetryOfJobId);
         // LLM spend dashboards (Epic 10) query by time and by user.
         builder.Entity<LlmCall>().HasIndex(c => c.CreatedAt);
         builder.Entity<LlmCall>().HasIndex(c => new { c.UserId, c.CreatedAt });

@@ -40,6 +40,7 @@ import type {
   PatchVersionRequest,
   AlsUploadResponse,
   ReanalyzeResponse,
+  RetryResponse,
   StemUploadResponse,
   StemProposalsResponse,
   ConfirmStemsRequest,
@@ -278,6 +279,21 @@ export function useReanalyzeVersion(versionId: string) {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['versions', versionId] });
+      qc.invalidateQueries({ queryKey: ['songs'] });
+    },
+  });
+}
+
+/** Story 5.7 — free retry of a failed/degraded analysis. Eligibility is
+ *  server-decided (409 retry_not_eligible / retry_already_used); a success
+ *  consumes NO entitlement and returns the new jobId to navigate to. */
+export function useFreeRetry(jobId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      fetcher<RetryResponse>({ url: `/jobs/${jobId}/retry`, method: 'POST' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['jobs'] });
       qc.invalidateQueries({ queryKey: ['songs'] });
     },
   });

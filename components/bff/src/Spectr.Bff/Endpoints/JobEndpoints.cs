@@ -21,8 +21,104 @@ public static class JobEndpoints
         g.MapGet("/{jobId:guid}/stream", StreamStatus);
         g.MapGet("/{jobId:guid}/results", GetResults);
         g.MapGet("/{jobId:guid}/images/{kind}", GetImage);
+        g.MapPost("/{jobId:guid}/retry", RetryFree);
 
         return app;
+    }
+
+    public sealed record RetryResponse(Guid JobId);
+
+    // POST /api/jobs/{jobId}/retry — Story 5.7 (FR6/AR16) free retry.
+    //
+    // A failed job (≠ invalid_file) or a complete-but-degraded analysis
+    // (≥1 failed phase in final_json.phases[]) earns ONE entitlement-free
+    // re-analysis of the same version. Eligibility is 100% server-derived —
+    // no client-supplied "it failed" flag — and the free chain is capped at 1
+    // (a retry job is never itself free-retry eligible). Authed users only:
+    // device-owned anon jobs 404 here (the anon funnel has its own rules).
+    private static async Task<IResult> RetryFree(
+        Guid jobId,
+        ClaimsPrincipal currentUser,
+        AppDbContext db,
+        EntitlementService ents,
+        CreditLedgerService credits,
+        IJobQueue queue,
+        HttpContext httpCtx,
+        CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        var origin = await db.AnalysisJobs.AsNoTracking()
+            .Where(j => j.Id == jobId && j.UserId == userId)
+            .Select(j => new { j.Status, j.ErrorCode, j.VersionId, j.ReferenceId, j.RetryOfJobId })
+            .FirstOrDefaultAsync(ct);
+        if (origin is null) return Results.NotFound();
+
+        // Chain cap: one free retry per PAID analysis — a retry job never
+        // spawns another free retry, whatever happened to it.
+        if (origin.RetryOfJobId is not null)
+            return ErrorEnvelope.Build(409, "retry_not_eligible",
+                "This analysis was already a free retry.");
+
+        // Same-version re-run is the whole contract (AC2); song-less jobs
+        // (anon-claimed file_path jobs without a version) can't re-dispatch.
+        if (origin.VersionId is not Guid versionId)
+            return ErrorEnvelope.Build(409, "retry_not_eligible",
+                "This analysis has no song version to re-run.");
+
+        var eligible = origin.Status switch
+        {
+            // invalid_file: already compensated by the AR16 reversal path,
+            // and a byte-identical retry fails identically — re-export first.
+            "failed" => !string.Equals(origin.ErrorCode, "invalid_file", StringComparison.Ordinal),
+            // complete: degraded only — ≥1 failed phase in the stored report.
+            "complete" => await HasFailedPhaseAsync(db, jobId, ct),
+            _ => false, // pending/processing/awaiting_stem_mapping: nothing to retry yet
+        };
+        if (!eligible)
+            return ErrorEnvelope.Build(409, "retry_not_eligible",
+                "This analysis completed cleanly — retry isn't free.");
+
+        // Once-only (also re-checked inside the dispatch insert window).
+        if (await db.AnalysisJobs.AsNoTracking().AnyAsync(j => j.RetryOfJobId == jobId, ct))
+            return ErrorEnvelope.Build(409, "retry_already_used",
+                "The free retry for this analysis was already used.");
+
+        var (newJobId, error) = await VersionEndpoints.DispatchAnalysisAsync(
+            userId, versionId, origin.ReferenceId,
+            db, ents, credits, queue, httpCtx, ct,
+            freeRetry: true, retryOfJobId: jobId);
+        if (error is not null) return error;
+
+        return Results.Ok(new RetryResponse(newJobId));
+    }
+
+    private static async Task<bool> HasFailedPhaseAsync(AppDbContext db, Guid jobId, CancellationToken ct)
+    {
+        var finalJson = await db.Analyses.AsNoTracking()
+            .Where(a => a.JobId == jobId)
+            .Select(a => a.FinalJson)
+            .FirstOrDefaultAsync(ct);
+        if (string.IsNullOrEmpty(finalJson)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(finalJson);
+            if (!doc.RootElement.TryGetProperty("phases", out var phases)
+                || phases.ValueKind != JsonValueKind.Array)
+                return false;
+            foreach (var p in phases.EnumerateArray())
+            {
+                if (p.ValueKind == JsonValueKind.Object
+                    && p.TryGetProperty("status", out var s)
+                    && s.ValueKind == JsonValueKind.String
+                    && s.GetString() == "failed")
+                    return true;
+            }
+            return false;
+        }
+        catch (JsonException)
+        {
+            return false; // corrupt stored JSON — not eligible, don't 500
+        }
     }
 
     // GET /api/jobs?status=pending,processing&limit=50

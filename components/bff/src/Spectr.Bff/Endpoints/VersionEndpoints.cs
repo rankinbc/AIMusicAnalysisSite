@@ -1077,8 +1077,16 @@ public static class VersionEndpoints
         IJobQueue queue,
         HttpContext httpCtx,
         CancellationToken ct,
-        Guid? preallocatedJobId = null)
+        Guid? preallocatedJobId = null,
+        bool freeRetry = false,
+        Guid? retryOfJobId = null)
     {
+        // Story 5.7 (FR6/AR16): freeRetry dispatches WITHOUT consuming
+        // entitlement — the exhausted-cap gate is skipped and NOTHING is
+        // written to usage_events / credit_ledger (never-consumed beats
+        // write-then-compensate; balances are never UPDATEd either way).
+        // Eligibility is decided by the caller (JobEndpoints.RetryFree)
+        // entirely server-side. Abuse layers below still apply.
         // IDOR guard: a caller-supplied reference must belong to this user.
         // Centralized here so every dispatch site is covered (AR15 keeps reads out).
         if (referenceId is not null)
@@ -1102,7 +1110,7 @@ public static class VersionEndpoints
                 "Entitlement service temporarily unavailable."));
         }
 
-        if (ent.AnalysesRemaining == 0)
+        if (!freeRetry && ent.AnalysesRemaining == 0)
             return (Guid.Empty, ErrorEnvelope.Build(409, "entitlement_exhausted",
                 "You have used all your analyses for this billing period."));
 
@@ -1120,7 +1128,11 @@ public static class VersionEndpoints
             // only"), so it sits behind the same RateLimits:Enabled knob as
             // the per-IP arm — dev/test registrations with throwaway domains
             // must not get a mislabeled entitlement_exhausted.
-            if (limitsOn)
+            // Story 5.7: the disposable arm is an entitlement-style CAP (counts
+            // usage events), not a rate limit — a free retry consumes nothing,
+            // so it must not be blocked by an already-spent cap either. The
+            // per-IP limiter below still applies to free retries.
+            if (limitsOn && !freeRetry)
             {
                 try
                 {
@@ -1203,7 +1215,30 @@ public static class VersionEndpoints
         var jobId = preallocatedJobId ?? Guid.NewGuid();
         var billingPeriod = DateTimeOffset.UtcNow.ToString("yyyy-MM");
 
-        if (ent.Tier == "credits")
+        if (freeRetry)
+        {
+            // Story 5.7 — entitlement-free lane: job row only, NO usage event,
+            // NO credit spend. Once-only re-check rides the same SaveChanges
+            // window as the insert to shrink the double-click race (no unique
+            // constraint by design — see AppDbContext index comment).
+            if (retryOfJobId is Guid origin
+                && await db.AnalysisJobs.AsNoTracking()
+                    .AnyAsync(j => j.RetryOfJobId == origin, ct))
+                return (Guid.Empty, ErrorEnvelope.Build(409, "retry_already_used",
+                    "The free retry for this analysis was already used."));
+            db.AnalysisJobs.Add(new AnalysisJob
+            {
+                Id = jobId,
+                UserId = userId,
+                VersionId = versionId,
+                ReferenceId = referenceId,
+                Tier = ent.Tier,
+                Status = "pending",
+                RetryOfJobId = retryOfJobId,
+            });
+            await db.SaveChangesAsync(ct);
+        }
+        else if (ent.Tier == "credits")
         {
             // Insert job first (outside Serializable TX), then spend atomically.
             var job = new AnalysisJob

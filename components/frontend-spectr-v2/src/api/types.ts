@@ -523,6 +523,13 @@ export interface ReanalyzeResponse {
   jobId: string;
 }
 
+// POST /api/jobs/{jobId}/retry — story 5.7 free retry (entitlement-free
+// re-analysis of a failed/degraded origin job). 409 codes:
+// retry_not_eligible | retry_already_used.
+export interface RetryResponse {
+  jobId: string;
+}
+
 // POST /api/reports/{jobId}/phases/{phase}/rerun — id of the lightweight re-run
 // job to poll; the re-run updates the existing report in place.
 // NOTE (story 12.5): no frontend consumer today — kept as the BFF-contract

@@ -160,7 +160,9 @@ export function deriveFindings(fj: FinalJson): Finding[] {
 }
 
 // ── Pipeline ────────────────────────────────────────────────────────────────
-const PHASE_SHORT: Record<number, string> = {
+// Exported: DegradationBanner (story 5.7) names failed phases with the same
+// labels — one label table, never two.
+export const PHASE_SHORT: Record<number, string> = {
   1: 'Mix analysis',
   2: 'Genre',
   3: 'Genre scoring',
