@@ -69,11 +69,14 @@ public sealed class FreeRetryTests(WebApplicationFactory<Program> factory)
     }
 
     // Seed an origin job (+ optional analyses row) directly — the retry
-    // endpoint's eligibility reads exactly these rows.
+    // endpoint's eligibility reads exactly these rows. `consumed` (default)
+    // writes the usage event a real dispatch would have written; only
+    // consuming origins are free-retry eligible (rerun-phase guard).
     private async Task<Guid> SeedOriginAsync(
         Guid userId, Guid? versionId, string status,
         string? errorCode = null, string? finalJson = null,
-        Guid? retryOfJobId = null)
+        Guid? retryOfJobId = null, bool consumed = true,
+        string? deviceId = null)
     {
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -81,7 +84,8 @@ public sealed class FreeRetryTests(WebApplicationFactory<Program> factory)
         db.AnalysisJobs.Add(new AnalysisJob
         {
             Id = jobId,
-            UserId = userId,
+            UserId = deviceId is null ? userId : null,
+            DeviceId = deviceId,
             VersionId = versionId,
             Status = status,
             ErrorCode = errorCode,
@@ -90,12 +94,23 @@ public sealed class FreeRetryTests(WebApplicationFactory<Program> factory)
             FailedAt = status == "failed" ? DateTimeOffset.UtcNow : null,
             CompletedAt = status == "complete" ? DateTimeOffset.UtcNow : null,
         });
+        if (consumed && deviceId is null)
+        {
+            db.UsageEvents.Add(new UsageEvent
+            {
+                UserId = userId,
+                EventType = "analysis",
+                BillingPeriod = DateTimeOffset.UtcNow.ToString("yyyy-MM"),
+                Reference = jobId.ToString(),
+            });
+        }
         if (finalJson is not null)
         {
             db.Analyses.Add(new Analysis
             {
                 JobId = jobId,
-                UserId = userId,
+                UserId = deviceId is null ? userId : null,
+                DeviceId = deviceId,
                 VersionId = versionId,
                 FinalJson = finalJson,
             });
@@ -119,6 +134,21 @@ public sealed class FreeRetryTests(WebApplicationFactory<Program> factory)
                 Reference = Guid.NewGuid().ToString(),
             });
         }
+        await db.SaveChangesAsync();
+    }
+
+    private async Task SeedCreditAsync(Guid userId, int balance)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.CreditLedger.Add(new CreditLedgerEntry
+        {
+            UserId = userId,
+            Amount = balance,
+            Reason = "purchase",
+            Reference = "pi_retry_test",
+            IdempotencyKey = $"credits_purchase:retry_{Guid.NewGuid():N}",
+        });
         await db.SaveChangesAsync();
     }
 
@@ -147,7 +177,7 @@ public sealed class FreeRetryTests(WebApplicationFactory<Program> factory)
         var (client, queue) = NewClient();
         var (_, userId) = await AuthAsync(client, "retry-a");
         var versionId = await CreateVersionAsync(client);
-        await SeedUsageAsync(userId, 3); // free cap fully consumed
+        await SeedUsageAsync(userId, 2); // + the origin's own event = cap of 3 consumed
         var origin = await SeedOriginAsync(
             userId, versionId, "complete", finalJson: DegradedFinalJson);
 
@@ -184,9 +214,73 @@ public sealed class FreeRetryTests(WebApplicationFactory<Program> factory)
         Assert.Single(queue.Calls);
 
         var (usage, spends, retryJob) = await SnapshotAsync(userId, origin);
-        Assert.Equal(0, usage);
+        Assert.Equal(1, usage); // the origin's own event only — retry added none
         Assert.Equal(0, spends);
         Assert.NotNull(retryJob);
+    }
+
+    // ── Credit-tier user: retry consumes no credit, balance intact ──────────
+    [SkippableFact]
+    public async Task CreditsOrigin_RetryKeepsBalance()
+    {
+        await TestDb.RequireAsync(_factory);
+        var (client, queue) = NewClient();
+        var (_, userId) = await AuthAsync(client, "retry-j");
+        var versionId = await CreateVersionAsync(client);
+        await SeedCreditAsync(userId, 1);
+        var origin = await SeedOriginAsync(
+            userId, versionId, "complete", finalJson: DegradedFinalJson);
+
+        var resp = await client.PostAsync($"/api/jobs/{origin}/retry", null);
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Single(queue.Calls);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var balance = await db.CreditLedger
+            .Where(e => e.UserId == userId)
+            .SumAsync(e => (int?)e.Amount) ?? 0;
+        Assert.Equal(1, balance); // purchase intact — no spend row from the retry
+        var spendRows = await db.CreditLedger
+            .CountAsync(e => e.UserId == userId && e.Reason == "spend");
+        Assert.Equal(0, spendRows);
+    }
+
+    // ── Device-owned (anon) origin → 404 (authed-only surface) ──────────────
+    [SkippableFact]
+    public async Task DeviceOwnedOrigin_404()
+    {
+        await TestDb.RequireAsync(_factory);
+        var (client, queue) = NewClient();
+        var (_, userId) = await AuthAsync(client, "retry-k");
+        var origin = await SeedOriginAsync(
+            userId, versionId: null, "failed", errorCode: "worker_unavailable",
+            deviceId: "01ARZ3NDEKTSV4RRFFQ69G5FAV");
+
+        var resp = await client.PostAsync($"/api/jobs/{origin}/retry", null);
+        Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+        Assert.Empty(queue.Calls);
+    }
+
+    // ── Non-consuming origin (rerun-phase tracking job shape) → 409 ─────────
+    // A job with user+version but NO usage event / credit spend must not mint
+    // a free full analysis (review finding: rerun_phase jobs are dispatchable
+    // repeatedly and consume nothing).
+    [SkippableFact]
+    public async Task NonConsumingOrigin_409NotEligible()
+    {
+        await TestDb.RequireAsync(_factory);
+        var (client, queue) = NewClient();
+        var (_, userId) = await AuthAsync(client, "retry-l");
+        var versionId = await CreateVersionAsync(client);
+        var origin = await SeedOriginAsync(
+            userId, versionId, "failed", errorCode: null, consumed: false);
+
+        var resp = await client.PostAsync($"/api/jobs/{origin}/retry", null);
+        Assert.Equal(HttpStatusCode.Conflict, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<ErrorEnvelopeBody>();
+        Assert.Equal("retry_not_eligible", body?.Error?.Code);
+        Assert.Empty(queue.Calls);
     }
 
     // ── Second retry of the same origin → 409 retry_already_used ────────────

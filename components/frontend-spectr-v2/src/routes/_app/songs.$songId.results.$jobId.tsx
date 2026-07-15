@@ -46,6 +46,8 @@ function ResultsPage() {
   // a 409 (not eligible / already used) just hides the button.
   const retry = useFreeRetry(jobId);
   const [retryGone, setRetryGone] = useState(false);
+  // Param-only navigation keeps this component mounted — reset per job.
+  useEffect(() => setRetryGone(false), [jobId]);
   const dispatchFreeRetry = () =>
     retry.mutate(undefined, {
       onSuccess: (res) => {

@@ -20,7 +20,9 @@ namespace Spectr.Data.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_analysis_jobs_retry_of_job_id",
                 table: "analysis_jobs",
-                column: "retry_of_job_id");
+                column: "retry_of_job_id",
+                unique: true,
+                filter: "retry_of_job_id IS NOT NULL");
         }
 
         /// <inheritdoc />

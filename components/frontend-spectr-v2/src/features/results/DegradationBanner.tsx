@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { ApiError } from '../../api/fetcher';
@@ -27,6 +27,9 @@ export function DegradationBanner({ fj, jobId, onRetryDispatched }: DegradationB
   const failed = failedPhases(fj);
   const retry = useFreeRetry(jobId);
   const [retryGone, setRetryGone] = useState(false);
+  // Param-only navigation between reports does NOT remount this component —
+  // a 409 on job A must not hide the button for an eligible job B.
+  useEffect(() => setRetryGone(false), [jobId]);
 
   if (failed.length === 0) return null;
 

@@ -12,7 +12,7 @@ using Spectr.Data;
 namespace Spectr.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260715131641_Story57FreeRetry")]
+    [Migration("20260715134927_Story57FreeRetry")]
     partial class Story57FreeRetry
     {
         /// <inheritdoc />
@@ -218,7 +218,9 @@ namespace Spectr.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("RetryOfJobId");
+                    b.HasIndex("RetryOfJobId")
+                        .IsUnique()
+                        .HasFilter("retry_of_job_id IS NOT NULL");
 
                     b.HasIndex("UserId", "Status");
 

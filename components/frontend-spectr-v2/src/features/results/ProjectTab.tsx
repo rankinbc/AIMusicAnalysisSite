@@ -4,13 +4,17 @@ interface ProjectTabProps {
   project: AlsProjectJson;
   /** Worker phase-8 health/arrangement read (when the .als was analyzed). */
   phase8?: Phase8Data | undefined;
+  /** Story 5.7 (AC3): phase 8 ran and failed/was sandboxed out — the tab
+   *  renders the client-parsed map but must SAY the server analysis is
+   *  missing (health/arrangement fall back silently otherwise). */
+  phase8Failed?: boolean;
 }
 
 const SECTION_HUES = [168, 28, 280, 198, 320, 140, 48];
 
 // The Project tab (.als): health + arrangement up top, then per-track device
 // chains in signal order. Reads the client-parsed .als map + worker phase 8.
-export function ProjectTab({ project, phase8 }: ProjectTabProps) {
+export function ProjectTab({ project, phase8, phase8Failed = false }: ProjectTabProps) {
   const audioCount = project.tracks.filter((t) => t.type === 'audio').length;
   const midiCount = project.tracks.filter((t) => t.type === 'midi').length;
   const deviceTotal = phase8?.total_devices ?? project.devices.length;
@@ -22,6 +26,14 @@ export function ProjectTab({ project, phase8 }: ProjectTabProps) {
         <span className="mono">.als</span> — device chains, health, and arrangement, independent of
         the audio analysis.
       </p>
+
+      {phase8Failed && (
+        <p className="tab-intro" data-testid="project-analysis-skipped">
+          <b>Server project analysis was skipped this run</b> — it hit a snag, so health scoring
+          and MIDI findings below show what the browser could read from the file. Everything else
+          in this report is unaffected; a retry fills this in.
+        </p>
+      )}
 
       <div className="proj-grid">
         <section className="card">

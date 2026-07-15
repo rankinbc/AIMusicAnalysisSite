@@ -78,13 +78,48 @@ public static class JobEndpoints
             return ErrorEnvelope.Build(409, "retry_not_eligible",
                 "This analysis completed cleanly — retry isn't free.");
 
-        // Once-only (also re-checked inside the dispatch insert window).
+        // Review finding: only origins that actually CONSUMED entitlement earn
+        // the free re-run. The lightweight rerun-phase tracking jobs (and any
+        // other non-consuming dispatch) carry a user+version but no usage
+        // event / credit spend — without this guard each failed rerun would
+        // mint a fresh entitlement-free FULL analysis, repeatably.
+        var jobRef = jobId.ToString();
+        var consumed =
+            await db.UsageEvents.AsNoTracking()
+                .AnyAsync(e => e.UserId == userId && e.Reference == jobRef, ct)
+            || await db.CreditLedger.AsNoTracking()
+                .AnyAsync(e => e.UserId == userId && e.Reason == "spend" && e.Reference == jobRef, ct);
+        if (!consumed)
+            return ErrorEnvelope.Build(409, "retry_not_eligible",
+                "Only a full analysis run can be retried free.");
+
+        // Review finding: a retention-purged (or deleted) version dispatches
+        // fine and fails in the worker — burning the once-only retry on a
+        // guaranteed loss. Check the audio still exists first.
+        var version = await db.SongVersions.AsNoTracking()
+            .Where(v => v.Id == versionId)
+            .Select(v => new { v.RawAudioPurgedAt })
+            .FirstOrDefaultAsync(ct);
+        if (version is null || version.RawAudioPurgedAt is not null)
+            return ErrorEnvelope.Build(409, "retry_not_eligible",
+                "The original audio is no longer stored — upload the file again to re-analyze.");
+
+        // Once-only fast path (the DB's partial unique index is the authority;
+        // the dispatch insert maps its violation to the same 409).
         if (await db.AnalysisJobs.AsNoTracking().AnyAsync(j => j.RetryOfJobId == jobId, ct))
             return ErrorEnvelope.Build(409, "retry_already_used",
                 "The free retry for this analysis was already used.");
 
+        // Review finding: a since-deleted reference would 404 the whole retry
+        // forever — drop it and retry the mix alone instead.
+        var referenceId = origin.ReferenceId;
+        if (referenceId is Guid refId
+            && !await db.ReferenceTracks.AsNoTracking()
+                .AnyAsync(r => r.Id == refId && r.UserId == userId, ct))
+            referenceId = null;
+
         var (newJobId, error) = await VersionEndpoints.DispatchAnalysisAsync(
-            userId, versionId, origin.ReferenceId,
+            userId, versionId, referenceId,
             db, ents, credits, queue, httpCtx, ct,
             freeRetry: true, retryOfJobId: jobId);
         if (error is not null) return error;

@@ -215,7 +215,9 @@ namespace Spectr.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("RetryOfJobId");
+                    b.HasIndex("RetryOfJobId")
+                        .IsUnique()
+                        .HasFilter("retry_of_job_id IS NOT NULL");
 
                     b.HasIndex("UserId", "Status");
 

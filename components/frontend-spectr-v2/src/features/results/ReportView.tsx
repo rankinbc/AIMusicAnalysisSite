@@ -342,7 +342,9 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
                 onTrackActivate={() => onTabChange('project')}
               />
             )}
-            {tab === 'project' && alsProject && <ProjectTab project={alsProject} phase8={phase8} />}
+            {tab === 'project' && alsProject && (
+              <ProjectTab project={alsProject} phase8={phase8} phase8Failed={phase8Failed} />
+            )}
             {/* Story 5.7 (AC3): an .als WAS attached but phase 8 died in its
                 sandbox (timeout/crash/parse error) — say so instead of showing
                 the misleading "unlock with a project upload" CTA. */}

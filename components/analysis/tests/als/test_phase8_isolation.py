@@ -56,6 +56,15 @@ def test_child_crash_returns_typed_failure(tmp_path, monkeypatch):
     assert result["data"] == {}
 
 
+def test_garbage_timeout_env_falls_back_to_default(tmp_path, monkeypatch):
+    """Review finding: a typo'd ALS_PARSE_TIMEOUT_S must not raise in the
+    parent (that would fail the whole job) — it falls back to the default."""
+    als = make_minimal_als(tmp_path)
+    monkeypatch.setenv("ALS_PARSE_TIMEOUT_S", "60s")
+    result = analyze_als(str(als))
+    assert result["status"] == "ok"
+
+
 def test_parse_error_still_typed_failure(tmp_path):
     """A catchable parse error inside the child comes back as the impl's own
     failed result (pre-isolation semantics preserved through the pipe)."""

@@ -1,6 +1,6 @@
 # Story 5.7: Partial-Failure Reporting & Free Retry
 
-Status: review
+Status: done
 
 ## Story
 
@@ -100,6 +100,38 @@ The sprint-status comment claims "DegradationBanner + rerun hooks" exist. **They
 - 12-5 deleted the orphaned AnalysisTab + `useRerunPhase` — do NOT resurrect per-phase rerun UI in this story; the free retry is a FULL re-analysis via normal dispatch (per-phase rerun endpoint stays dormant for a future surface).
 - Analytics: story 6-5 added funnel `capture()`; optionally emit `retry_free_clicked` via the no-op-safe capture — nice-to-have, not an AC.
 
+## Senior Developer Review (AI)
+
+**Date:** 2026-07-15 · **Outcome:** Changes Requested → all action items resolved same session · **Layers:** Blind Hunter + Edge Case Hunter + Acceptance Auditor (3-layer, headless). Auditor AC verdicts pre-patch: AC1 MET, AC2 MET (hardening gaps), AC3 PARTIAL.
+
+### Action Items (all resolved)
+
+- [x] [CRITICAL][blind+edge+auditor] Once-only TOCTOU race — concurrent POSTs mint N free retries. → Partial UNIQUE index on `retry_of_job_id` (WHERE NOT NULL, migration rebuilt as 20260715134927) + `DbUpdateException` → 409 in the freeRetry insert. DB is now the authority; the original "no unique constraint" story decision was wrong and is superseded.
+- [x] [HIGH][blind+edge] Enqueue failure permanently burns the once-only retry (dead row occupies the unique slot; 500 to client). → freeRetry rows are DELETED (not marked failed) in the enqueue-failure path — nothing was consumed, retry can be re-attempted.
+- [x] [HIGH][edge] Verify-gate 403s the flagship scenario (unverified free user, degraded complete origin). → gate skipped for `freeRetry` (a retry re-runs an already-granted analysis; per-IP limiter retained).
+- [x] [HIGH][edge] Failed rerun-phase tracking jobs (entitlement-free, repeatable) qualify as origins — uncapped free-analysis mint. → consumed-origin guard: eligibility requires a usage_event or credit spend referencing the origin job.
+- [x] [HIGH][blind] `freeRetry` with null `retryOfJobId` would create an unmarked, itself-retryable free job. → hard `ArgumentException` in the dispatch lane.
+- [x] [MED][edge] Retention-purged/deleted version burns the retry on a guaranteed worker failure. → pre-dispatch check of `song_versions.raw_audio_purged_at` → 409 with re-upload message.
+- [x] [MED][blind+edge] Parent-side `float(env)` / `Pipe()` failures escape isolation and fail the whole job. → whole parent path wrapped (`als_isolation_parent_error`), timeout env parse falls back to default (also rejects NaN/≤0); regression test added.
+- [x] [MED][blind+edge] No kill() escalation after terminate(); child_conn FD leak on spawn-fail. → terminate→join→kill→join + child_conn close in finally.
+- [x] [MED][blind] `ALS_ISOLATION_TEST_MODE` backdoor live in prod. → fenced to `PYTEST_CURRENT_TEST` presence.
+- [x] [MED][blind] RLIMIT_AS is address space, not RSS — 512 MB can false-positive on spawn re-imports. → default bumped to 1024 MB + comments corrected; env name kept for compat.
+- [x] [MED][auditor] AC3 PARTIAL: Project tab silent when client-parsed map exists but phase 8 died. → `ProjectTab.phase8Failed` note ("server project analysis was skipped this run").
+- [x] [MED][auditor] Declared-but-missing tests. → added `CreditsOrigin_RetryKeepsBalance`, `DeviceOwnedOrigin_404`, plus `NonConsumingOrigin_409NotEligible`; existing tests updated for the consumed-origin guard.
+- [x] [LOW][edge] `retryGone` not keyed to jobId (param-only navigation). → `useEffect` reset on jobId in both surfaces.
+- [x] [LOW][edge] Deleted reference makes the retry permanently 404. → dead reference dropped, retry runs the mix alone.
+
+### Accepted / deferred (not patched, on the record)
+
+- Corrupt-.als free retry "doubling" (blind HIGH): accepted — bounded to ONE free retry per consumed origin (chain cap + unique index), retry consumes nothing, and a phase-8-failed report IS degraded product. Not an uncapped mint post-patch.
+- `invalid_file` fail-panel button dead-click + one-shot nature not surfaced in UI (blind LOW): server-authority pattern accepted; JobStatusDto lacks errorCode — candidate polish, deferred.
+- `HasFailedPhaseAsync` full-JSON parse per POST (blind LOW): bounded by auth + per-IP limiter; deferred.
+- No FK on retry_of_job_id (blind LOW): deferred (account-deletion cascade semantics unclear; index + app checks suffice).
+- 503 when entitlement service down (blind LOW): `ent.Tier` drives QUEUE ROUTING, not just a label — the dependency is real; deferred.
+- `RetryResponse` nested in JobEndpoints.cs not DTOs/ (auditor LOW): matches `SetRatingRequest` precedent; accepted.
+- `useFreeRetry` doesn't invalidate `['versions', id]` (auditor LOW): hook can't know versionId; navigation refetches; accepted.
+- Spawn/import time billed against the 60 s timeout (blind LOW): documented tradeoff; accepted.
+
 ## Dev Agent Record
 
 ### Agent Model Used
@@ -126,7 +158,7 @@ claude-fable-5 (Claude Code)
 
 - components/bff/src/Spectr.Data/Entities/AnalysisJob.cs (RetryOfJobId column)
 - components/bff/src/Spectr.Data/AppDbContext.cs (retry_of_job_id index)
-- components/bff/src/Spectr.Data/Migrations/20260715131641_Story57FreeRetry.cs (+ .Designer.cs, snapshot)
+- components/bff/src/Spectr.Data/Migrations/20260715134927_Story57FreeRetry.cs (+ .Designer.cs, snapshot; rebuilt in review with the partial UNIQUE index)
 - components/bff/src/Spectr.Bff/Endpoints/JobEndpoints.cs (POST /jobs/{id}/retry + eligibility + RetryResponse)
 - components/bff/src/Spectr.Bff/Endpoints/VersionEndpoints.cs (DispatchAnalysisAsync freeRetry lane)
 - components/bff/tests/Spectr.Bff.Tests/FreeRetryTests.cs (new, 9 tests)

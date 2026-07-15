@@ -1197,7 +1197,11 @@ public static class VersionEndpoints
         // dispatch requires verification. Pro/credits exempt (Stripe receipts
         // already prove a mailbox). Report VIEWING is never gated — read
         // paths don't check this.
-        if (ent.Tier is not ("pro" or "credits"))
+        // Story 5.7 review: the verify gate exists to stop a SECOND analysis
+        // grant — a free retry re-runs an ALREADY-granted one, and its origin
+        // (a degraded complete job) would otherwise count as the "one
+        // analysis" and 403 the flagship unverified-free-user scenario.
+        if (!freeRetry && ent.Tier is not ("pro" or "credits"))
         {
             var verified = await db.Users.AsNoTracking()
                 .Where(u => u.Id == userId)
@@ -1218,14 +1222,11 @@ public static class VersionEndpoints
         if (freeRetry)
         {
             // Story 5.7 — entitlement-free lane: job row only, NO usage event,
-            // NO credit spend. Once-only re-check rides the same SaveChanges
-            // window as the insert to shrink the double-click race (no unique
-            // constraint by design — see AppDbContext index comment).
-            if (retryOfJobId is Guid origin
-                && await db.AnalysisJobs.AsNoTracking()
-                    .AnyAsync(j => j.RetryOfJobId == origin, ct))
-                return (Guid.Empty, ErrorEnvelope.Build(409, "retry_already_used",
-                    "The free retry for this analysis was already used."));
+            // NO credit spend. A null origin would skip every once-only guard
+            // (an unmarked free job, itself retry-eligible) — hard-reject.
+            if (retryOfJobId is not Guid)
+                throw new ArgumentException(
+                    "freeRetry dispatch requires retryOfJobId", nameof(retryOfJobId));
             db.AnalysisJobs.Add(new AnalysisJob
             {
                 Id = jobId,
@@ -1236,7 +1237,18 @@ public static class VersionEndpoints
                 Status = "pending",
                 RetryOfJobId = retryOfJobId,
             });
-            await db.SaveChangesAsync(ct);
+            try
+            {
+                await db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException)
+            {
+                // Partial unique index on retry_of_job_id: the concurrent
+                // double-POST loser lands here — the DB, not a read-then-
+                // insert check, is the once-only authority.
+                return (Guid.Empty, ErrorEnvelope.Build(409, "retry_already_used",
+                    "The free retry for this analysis was already used."));
+            }
         }
         else if (ent.Tier == "credits")
         {
@@ -1321,11 +1333,23 @@ public static class VersionEndpoints
             var row = await db.AnalysisJobs.FirstOrDefaultAsync(j => j.Id == jobId, ct);
             if (row is not null)
             {
-                row.Status = "failed";
-                row.ErrorCode = "dispatch_failed";
-                row.ErrorMessage = "Could not queue the analysis. Try again.";
-                row.CurrentPhase = "failed";
-                row.FailedAt = DateTimeOffset.UtcNow;
+                if (freeRetry)
+                {
+                    // Story 5.7 review: a failed free-retry row would occupy the
+                    // once-only unique slot FOREVER (every later attempt → 409
+                    // retry_already_used) over a Redis blip. Nothing was
+                    // consumed and nothing references the row — delete it so
+                    // the user can retry the retry.
+                    db.AnalysisJobs.Remove(row);
+                }
+                else
+                {
+                    row.Status = "failed";
+                    row.ErrorCode = "dispatch_failed";
+                    row.ErrorMessage = "Could not queue the analysis. Try again.";
+                    row.CurrentPhase = "failed";
+                    row.FailedAt = DateTimeOffset.UtcNow;
+                }
                 await db.SaveChangesAsync(ct);
             }
             throw;

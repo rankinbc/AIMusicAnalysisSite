@@ -119,7 +119,7 @@ development_status:
   5-4-analysis-summary-tab-filters-and-specialist-roster: done  # shipped; AC1/AC2/AC3 met — final gap (sticky side rail, AnalysisTab.module.css .right) closed 2026-06-27
   5-5-frequency-stem-clash-reference-and-arrangement-panels: done  # Spectrum/Reference/Arrangement tabs
   5-6-als-project-panel-and-track-name-attribution: done  # closed 2026-07-10: code was already on master since 2026-06-27 (commit 3ff5181), tracker never flipped from review; gates were green at implementation (worker isolated; frontend tsc/lint/build/vitest 561). 2026-07-10 audit re-examined the surface: only 2 rules emit where.track_names (widening = follow-up), chip-click switches tab w/o scroll-to-row; both folded into epic-12 scope notes
-  5-7-partial-failure-reporting-and-free-retry: review  # implemented 2026-07-15 on story/5-7-partial-failure-free-retry; all gates green (BFF 390, FE vitest 822, analysis 172, worker 593); awaiting code review
+  5-7-partial-failure-reporting-and-free-retry: done  # 2026-07-15: implemented + 3-layer review + 14 patches (CRITICAL: once-only unique index; HIGH: enqueue-burn, verify-gate 403, rerun-origin mint), all gates green (BFF 393, FE 822, analysis 173, worker 593)
   5-8-song-detail-and-version-compare: done  # song detail route + ProgressTimeline + CompareDialog
   5-9-upload-dialog-polish-club-check-and-playback-verify: done  # UnifiedUploadDialog + StereoCard/ClubCheck + ResultsPlayer
   5-10-product-a11y-keyboard-and-kitchen-sink: backlog  # NOT-STARTED — ⌘K only; GAP: ⌘U, /dev/kitchen-sink, axe-core CI, focus-ring lint, responsive stacking
