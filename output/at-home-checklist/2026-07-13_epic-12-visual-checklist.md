@@ -103,3 +103,13 @@ Needs TWO browser sessions (or one + an incognito reviewer) on a shared/View-abl
 - [ ] Failed-job page (kill the worker mid-run or dispatch with Redis paused... or just trust the tests): "Retry free" button in the fail panel.
 - [ ] Project tab with corrupt .als attached: "Server project analysis was skipped this run" note (with client-parsed map) or the skip card (without) — never the "unlock" upsell.
 - [ ] Worker box sanity while a pathological .als analyzes: phase 8 runs as a CHILD python process that dies at the timeout; job completes with the phase failed, worker stays alive.
+
+## 5-10 — Keyboard, a11y, responsive, kitchen sink (added 2026-07-15 — Epic 5 at 9/10)
+
+- [ ] ⌘K (Ctrl+K) anywhere in the product: palette opens, type a song name → hits it, Enter navigates; arrow keys + Esc behave; ⌘K again closes it.
+- [ ] ⌘U (Ctrl+U): unified upload dialog opens from any product page; with ANY dialog already open, ⌘K/⌘U/? do nothing (no stacking).
+- [ ] `?`: shortcut sheet. Typing `?` inside a text field must NOT open it.
+- [ ] Tab around any page: cyan ring on every interactive (links, inputs, selects, summaries) — never invisible focus.
+- [ ] Narrow the report window <1024: rail stacks below and folds to a tap-accordion; back ≥1024: rail locked open, not keyboard-collapsible.
+- [ ] Listen page <1024: "Desktop tool" notice replaces the rack AND playback pauses when you shrink mid-play (no invisible audio).
+- [ ] /dev/kitchen-sink (dev build): full inventory renders; use it for the visual once-over.
