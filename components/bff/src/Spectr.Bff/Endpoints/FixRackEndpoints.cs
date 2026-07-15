@@ -23,7 +23,8 @@ public static class FixRackEndpoints
 
     // POST /api/reports/{jobId}/fix-rack — enqueue rack generation.
     private static async Task<IResult> Generate(
-        Guid jobId, ClaimsPrincipal user, AppDbContext db, IJobQueue queue, CancellationToken ct)
+        Guid jobId, ClaimsPrincipal user, AppDbContext db, IJobQueue queue,
+        EntitlementService ents, CancellationToken ct)
     {
         var userId = user.UserId();
         var analysis = await db.Analyses.AsNoTracking()
@@ -34,9 +35,13 @@ public static class FixRackEndpoints
         if (analysis.VersionId is null)
             return Results.BadRequest(new { error = "Analysis has no song version; cannot attach a rack preset." });
 
+        // Tier gates the coach-mix LLM arbiter's spend attribution in the worker.
+        var entitlements = await ents.ForAsync(userId, ct);
+        var tier = entitlements.Tier; // "pro" | "credits" | "free"
+
         await queue.EnqueueAsync(
             DramatiqTasks.GenerateFixRack,
-            new object[] { analysis.Id.ToString() },
+            new object[] { analysis.Id.ToString(), userId.ToString(), tier },
             DramatiqQueues.AnalysisPaid, // story 2.5: secondary op → W1
             ct);
 
@@ -58,7 +63,7 @@ public static class FixRackEndpoints
         var preset = await db.RackPresets.AsNoTracking()
             .Where(p => p.SongVersionId == analysis.VersionId.Value && p.Source == "analysis")
             .OrderByDescending(p => p.CreatedAt)
-            .Select(p => new { p.Id, p.Name, p.ChainJson, p.CreatedAt })
+            .Select(p => new { p.Id, p.Name, p.ChainJson, p.CoachMeta, p.CreatedAt })
             .FirstOrDefaultAsync(ct);
         if (preset is null) return Results.NoContent();
 
@@ -73,9 +78,20 @@ public static class FixRackEndpoints
             return Results.NoContent();
         }
 
+        JsonElement? coachMeta = null;
+        if (!string.IsNullOrEmpty(preset.CoachMeta))
+        {
+            try
+            {
+                using var cm = JsonDocument.Parse(preset.CoachMeta);
+                coachMeta = cm.RootElement.Clone();
+            }
+            catch (JsonException) { coachMeta = null; }
+        }
+
         // Story 12.4: PresetId is the Listen carry-over handle — the panel's
         // "Open in Listen rack" passes it as ?fixPreset= and the Listen page
         // fetches the chain back via GET /versions/{v}/rack/presets/{id}.
-        return Results.Ok(new FixRackDto(preset.Id, preset.Name, chain, preset.CreatedAt));
+        return Results.Ok(new FixRackDto(preset.Id, preset.Name, chain, coachMeta, preset.CreatedAt));
     }
 }
