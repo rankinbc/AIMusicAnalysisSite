@@ -52,6 +52,7 @@
 }
 @media (max-width: 1023.98px) {
   .lr-grid { display: none; }
+  .lr-desktop-only { display: none; }
   .lr-desktop-notice { display: block; }
 }
 @media (max-width: 560px) {

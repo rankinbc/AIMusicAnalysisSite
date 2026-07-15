@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import type { Move, MoveSev } from './move-model';
 
@@ -42,24 +42,46 @@ export function RackSidebar({
   const committed = moves.filter((m) => committedIds.has(m.id));
 
   // Story 5.10 (UX-DR45): the rail card is a <details> accordion when the
-  // layout stacks (<1024). Open by default on desktop; starts folded on
-  // small screens. Init-only read — no live resize tracking (CSS makes the
-  // summary inert on desktop, so it can never be collapsed there).
-  const [railOpen, setRailOpen] = useState<boolean>(
+  // layout stacks (<1024). LIVE viewport tracking (review finding: an
+  // init-only read stranded the rail collapsed after a mobile→desktop
+  // rotation, and pointer-events:none blocks mouse but NOT keyboard — the
+  // summary must be truly inert on desktop: forced open + out of tab order).
+  const [isDesktop, setIsDesktop] = useState<boolean>(
     () =>
       typeof window === 'undefined' ||
       typeof window.matchMedia !== 'function' ||
       window.matchMedia('(min-width: 1024px)').matches,
   );
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const onChange = () => setIsDesktop(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  // Mobile starts folded; desktop is forced open regardless.
+  const [railOpen, setRailOpen] = useState(false);
+  const open = isDesktop || railOpen;
 
   return (
     <aside className="side">
       <details
         className="side-card"
-        open={railOpen}
-        onToggle={(e) => setRailOpen((e.currentTarget as HTMLDetailsElement).open)}
+        open={open}
+        onToggle={(e) => {
+          const next = (e.currentTarget as HTMLDetailsElement).open;
+          if (!isDesktop) setRailOpen(next);
+          // Desktop: controlled `open` (isDesktop → true) re-asserts itself;
+          // any programmatic toggle is a no-op by construction.
+        }}
       >
-        <summary className="side-h">
+        <summary
+          className="side-h"
+          tabIndex={isDesktop ? -1 : 0}
+          onClick={(e) => {
+            if (isDesktop) e.preventDefault();
+          }}
+        >
           <span className="l">Fixes for Listen</span>
           <span className="hint">{committed.length}</span>
         </summary>

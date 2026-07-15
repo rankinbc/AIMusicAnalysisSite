@@ -162,7 +162,7 @@ export function useMe(enabled: boolean) {
 }
 
 // ── Songs ───────────────────────────────────────────────────────────────────
-export function useSongs() {
+export function useSongs(enabled = true) {
   return useQuery({
     queryKey: ['songs'],
     queryFn: () =>
@@ -170,6 +170,9 @@ export function useSongs() {
         url: '/songs/?include=versions,latest_result',
         method: 'GET',
       }),
+    // Story 5.10: the always-mounted CommandPalette passes `open` here so an
+    // idle palette doesn't subscribe every product route to the songs fetch.
+    enabled,
   });
 }
 

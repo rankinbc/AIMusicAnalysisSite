@@ -18,7 +18,9 @@ interface CommandPaletteProps {
 
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const navigate = useNavigate();
-  const { data: songs } = useSongs();
+  // enabled: open — an idle palette must not subscribe every route to the
+  // songs query (review finding).
+  const { data: songs } = useSongs(open);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const listRef = useRef<HTMLUListElement>(null);
@@ -36,6 +38,12 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     }
   }, [open]);
 
+  // Clamp whenever the list changes shape (query edit OR the async songs
+  // load resolving) — an index of -1/overflow leaves Enter dead and
+  // aria-activedescendant dangling.
+  useEffect(() => {
+    setActiveIndex((i) => Math.max(0, Math.min(i, commands.length - 1)));
+  }, [commands.length]);
   useEffect(() => {
     setActiveIndex(0);
   }, [query]);
@@ -80,6 +88,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             role="combobox"
             aria-expanded="true"
             aria-controls="cmdk-listbox"
+            aria-autocomplete="list"
             aria-activedescendant={commands[activeIndex]?.id}
             aria-label="Search songs and pages"
             placeholder="Search songs and pages…"
@@ -88,12 +97,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             onKeyDown={onKeyDown}
             autoFocus
           />
+          {commands.length === 0 && (
+            <div className={s.empty}>No matches — try a song name.</div>
+          )}
           <ul id="cmdk-listbox" role="listbox" className={s.list} ref={listRef}>
-            {commands.length === 0 && (
-              <li className={s.empty} role="presentation">
-                No matches — try a song name.
-              </li>
-            )}
             {commands.map((cmd, i) => (
               <li
                 key={cmd.id}
@@ -104,7 +111,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                 className={s.item}
                 onMouseEnter={() => setActiveIndex(i)}
                 onMouseDown={(e) => {
-                  // mousedown (not click) so the input blur doesn't race the commit
+                  // mousedown (not click) so the input blur doesn't race the
+                  // commit; primary button only — right/middle click must not
+                  // navigate (review finding).
+                  if (e.button !== 0) return;
                   e.preventDefault();
                   commit(cmd);
                 }}

@@ -8,10 +8,16 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SRC = join(fileURLToPath(new URL(".", import.meta.url)), "..", "src");
-const OUTLINE_NONE = /outline:\s*(none|0)\s*[;}]/;
+// Also catches `outline: none !important` — the most aggressive removal must
+// not be the one that escapes the lint.
+const OUTLINE_NONE = /outline:\s*(none|0)\s*(!important\s*)?[;}]/;
 // A :focus/:focus-visible selector whose block carries a visible indicator.
+// (?![\w-]) keeps :focus-within from counting; box-shadow: none doesn't count.
+// KNOWN LIMIT: file-scoped, not selector-paired — one compliant :focus block
+// whitelists the whole file (redesign.css especially). Selector pairing needs
+// a real CSS parser; revisit if a regression ever slips through.
 const FOCUS_REPLACEMENT =
-  /:focus(-visible)?[^{}]*\{[^}]*(box-shadow|border-color|outline:\s*(?!none|0)[^;}]+)/s;
+  /:focus(-visible)?(?![\w-])[^{}]*\{[^}]*(box-shadow:\s*(?!none)|border-color|outline:\s*(?!none|0)[^;}]+)/s;
 
 function* walk(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {

@@ -93,13 +93,16 @@ button {
 
 /* Story 5.10 (UX-DR44): the cyan focus ring on ALL interactives — keyboard
    focus is always visible, mouse focus stays quiet (:focus-visible). */
+/* [tabindex="-1"] excluded: Radix Dialog.Content and other programmatic
+   focus containers carry tabindex="-1" — ringing the whole panel on a
+   keyboard-initiated open is noise, not focus visibility. */
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 summary:focus-visible,
-[tabindex]:focus-visible {
+[tabindex]:not([tabindex='-1']):focus-visible {
   outline: 2px solid var(--cyan);
   outline-offset: 2px;
 }

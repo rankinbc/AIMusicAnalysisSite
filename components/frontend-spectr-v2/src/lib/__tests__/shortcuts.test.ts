@@ -17,6 +17,7 @@ function ev(overrides: Partial<ShortcutKeyEvent>): ShortcutKeyEvent {
     metaKey: false,
     ctrlKey: false,
     altKey: false,
+    shiftKey: false,
     repeat: false,
     isComposing: false,
     target: null,
@@ -38,6 +39,23 @@ describe('matchShortcut', () => {
   it('maps plain ? to sheet — but NOT modified ?', () => {
     expect(matchShortcut(ev({ key: '?' }))).toBe('sheet');
     expect(matchShortcut(ev({ key: '?', ctrlKey: true }))).toBeNull();
+  });
+
+  it('never hijacks shift chords (Ctrl+Shift+K is the Firefox console)', () => {
+    expect(matchShortcut(ev({ key: 'K', ctrlKey: true, shiftKey: true }))).toBeNull();
+    expect(matchShortcut(ev({ key: 'U', metaKey: true, shiftKey: true }))).toBeNull();
+  });
+
+  it('falls back to e.code for non-Latin layouts', () => {
+    expect(matchShortcut(ev({ key: 'л', code: 'KeyK', ctrlKey: true }))).toBe('palette');
+    expect(matchShortcut(ev({ key: 'г', code: 'KeyU', metaKey: true }))).toBe('upload');
+  });
+
+  it('does not suppress modifier chords on non-text inputs (checkbox/radio/range)', () => {
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    document.body.appendChild(cb);
+    expect(matchShortcut(ev({ key: 'k', metaKey: true, target: cb }))).toBe('palette');
   });
 
   it('ignores bare letters, repeats, IME composition, and alt combos', () => {
@@ -92,6 +110,16 @@ describe('filterCommands', () => {
     const lib = filterCommands('lib', songs);
     expect(lib).toHaveLength(1);
     expect(lib[0]).toMatchObject({ kind: 'nav', to: '/library' });
+  });
+
+  it('excludes archived songs (palette must agree with the library)', () => {
+    const mixed = [
+      { id: 'a1', name: 'Alive Track', archivedAt: null },
+      { id: 'a2', name: 'Alive Track Two' },
+      { id: 'x1', name: 'Archived Alive Track', archivedAt: '2026-01-01T00:00:00Z' },
+    ];
+    const hits = filterCommands('alive', mixed);
+    expect(hits.map((h) => h.to)).toEqual(['a1', 'a2']);
   });
 
   it('caps song hits at 8', () => {

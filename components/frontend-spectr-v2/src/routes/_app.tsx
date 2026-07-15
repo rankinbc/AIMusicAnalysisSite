@@ -72,12 +72,41 @@ function AppLayout() {
   const [uploadOpen, setUploadOpen] = useState(false);
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      // ⌘K closes the open palette even though focus sits in its (editable)
+      // input — without this special case the toggle would be unreachable.
+      if (
+        paletteOpen &&
+        (e.metaKey || e.ctrlKey) &&
+        !e.shiftKey &&
+        !e.altKey &&
+        (e.key.toLowerCase() === 'k' || e.code === 'KeyK')
+      ) {
+        e.preventDefault();
+        setPaletteOpen(false);
+        return;
+      }
+
       const action = matchShortcut(e);
       if (!action) return;
+
+      // Review finding: page-local Radix dialogs (upload/compare/confirm/…)
+      // are invisible to the shell's three open-flags — never stack a global
+      // surface over ANY open modal. DOM probe because those dialogs own
+      // their state locally.
+      const shellSurfaceOpen = paletteOpen || sheetOpen || uploadOpen;
+      const anyDialogOpen =
+        shellSurfaceOpen ||
+        document.querySelector('[role="dialog"], [role="alertdialog"]') !== null;
+      const allowed =
+        (action === 'palette' && !anyDialogOpen) ||
+        (action === 'upload' && !anyDialogOpen) ||
+        (action === 'sheet' && !anyDialogOpen);
+      if (!allowed) return; // no preventDefault — the browser keeps its chord on a no-op
+
       e.preventDefault(); // Ctrl+U is view-source; ⌘K focuses browser UI in some builds
-      if (action === 'palette' && !uploadOpen && !sheetOpen) setPaletteOpen((v) => !v);
-      else if (action === 'upload' && !paletteOpen && !sheetOpen) setUploadOpen(true);
-      else if (action === 'sheet' && !uploadOpen && !paletteOpen) setSheetOpen((v) => !v);
+      if (action === 'palette') setPaletteOpen(true);
+      else if (action === 'upload') setUploadOpen(true);
+      else setSheetOpen(true);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);

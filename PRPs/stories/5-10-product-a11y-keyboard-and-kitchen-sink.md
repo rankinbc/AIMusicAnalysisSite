@@ -1,6 +1,6 @@
 # Story 5.10: Product A11y, Keyboard & Kitchen Sink
 
-Status: review
+Status: done
 
 ## Story
 
@@ -85,6 +85,35 @@ Source: `PRPs/epics.md:957-969`. UX: `ux-design-specification.md:291-294` (UX-DR
 | Focus | `src/styles/global.css:94`, the 10 audit files, `scripts/check-focus-ring.mjs`, `package.json`, `.github/workflows/ci.yml` |
 | Kitchen sink | `src/routes/_app/dev.kitchen-sink.tsx` (+ module css) |
 | Axe | `src/features/results/__tests__/report-axe.test.tsx`, `src/routes/__tests__/kitchen-sink-axe.test.tsx`, `package.json` devDeps |
+
+## Senior Developer Review (AI)
+
+**Date:** 2026-07-15 · **Outcome:** Changes Requested → all action items resolved same session · **Layers:** Blind Hunter + Edge Case Hunter + Acceptance Auditor. Auditor AC verdicts pre-patch: 5/5 MET (AC2 via sanctioned deviation), plus hardening findings.
+
+### Action Items (all resolved)
+
+- [x] [HIGH][blind+edge+auditor] Desktop rail accordion keyboard-collapsible (pointer-events blocks mouse, not Enter/Space) + init-only matchMedia stranded it collapsed after mobile→desktop rotation. → live `matchMedia('(min-width:1024px)')` listener; desktop = forced-open controlled `open` + `tabIndex={-1}` summary + onClick preventDefault; mobile keeps user fold state (starts folded).
+- [x] [HIGH][blind+edge] Global shortcuts stacked surfaces over the ~17 page-local Radix dialogs (⌘U over an open upload dialog = two stacked upload flows). → DOM probe `[role="dialog"],[role="alertdialog"]` — no shortcut opens anything while ANY modal is open.
+- [x] [HIGH][blind+auditor] Ctrl+Shift+K / Cmd+Shift+U hijacked (Firefox console etc). → `shiftKey` added to the matrix; k/u require no-shift. Also: `e.code` fallback (KeyK/KeyU) for non-Latin layouts; editable-suppression refined (checkbox/radio/range/button inputs no longer swallow chords; `plaintext-only` contenteditable now suppressed).
+- [x] [MED][blind+edge] ⌘K couldn't close the palette (focus in its own input → suppressed; toggle dead code). → explicit close special-case before matchShortcut.
+- [x] [MED][blind] `[tabindex]:focus-visible` ringed whole Radix dialogs (Content has tabindex=-1). → `:not([tabindex='-1'])`.
+- [x] [MED][blind] Always-mounted palette subscribed every route to the songs query. → `useSongs(enabled)` param; palette passes `open`.
+- [x] [MED][edge] Palette surfaced archived songs the library hides. → `archivedAt == null` filter in filterCommands (+ test).
+- [x] [MED][edge] Right/middle-click committed palette items. → `e.button !== 0` guard.
+- [x] [MED][blind+edge] Listen <1024: audio kept playing behind the notice (display:none ≠ pause); live-room bar + TrackHeader stayed operable. → matchMedia pause-all effect (media element + pitch lane + stem deck) on crossing below; header/room controls wrapped in `.lr-desktop-only` hidden with the grid.
+- [x] [MED][blind+edge] Lint holes: `outline:none !important` escaped; `:focus-within`/`box-shadow:none` counted as replacements. → regex hardened; file-scope (not selector-paired) limit documented as a KNOWN LIMIT comment.
+- [x] [MED][blind+auditor] Responsive test asserted less than its comment claimed. → 900px-absence asserted for all three files.
+- [x] [LOW][blind] preventDefault fired on no-op'd shortcuts. → guards decided before preventDefault; blocked chords keep browser behavior.
+- [x] [LOW][blind+edge] ArrowDown on empty list → activeIndex -1; songs-load didn't reclamp. → clamp effect on `commands.length`.
+- [x] [LOW][blind] Kitchen-sink `role="button"` span with no activation handler. → role removed (plain focusable demo target). Also `aria-autocomplete="list"` added; empty-state moved outside the listbox.
+
+### Accepted / declared (not patched)
+
+- **Login-form axe coverage (auditor F1, task 5.3)**: NOT delivered — `login.tsx` needs a live router (useNavigate at top level), same constraint as ReportView. Declared here honestly instead of a hollow PublicChrome-only claim. UX-DR44 debt: axe for login/share/billing routes when a router-mounting test harness exists.
+- Hover/keyboard listbox fight in the palette (blind LOW): classic tradeoff, unmitigated — cosmetic.
+- Dev route registered in prod route tree (blind LOW): runtime DEV gate renders a stub only; matches DebugTab precedent. "Tree-shake" wording in the route comment is loose but the surface is inert.
+- 901–1023px Listen users get the notice instead of the old stacked rack (blind QUESTION): UX-DR45's explicit mandate ("Listen desktop-only with notice card <1024") — spec decision, not a regression.
+- `lint:focus` not folded into `npm run lint` (blind LOW): matches the lint:css/lint:prices pattern (separate scripts, separate CI steps).
 
 ## Dev Agent Record
 

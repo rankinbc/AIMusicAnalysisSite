@@ -12,10 +12,13 @@ describe('UX-DR45 responsive locks', () => {
   it('report layout collapses at 1024 (both layout files)', () => {
     const mod = read('../../features/results/ReportView.module.css');
     const rdx = read('../../features/results/redesign.css');
+    const listen = read('../../features/listen-rack/listenRack.css');
     expect(mod).toMatch(/@media \(max-width: 1023\.98px\)/);
     expect(rdx).toMatch(/@media \(max-width: 1023\.98px\)/);
-    // The old 900px layout collapse must be gone from both.
+    // The old 900px layout collapse must be gone from ALL THREE files.
     expect(mod).not.toMatch(/@media \(max-width: 900px\)/);
+    expect(rdx).not.toMatch(/@media \(max-width: 900px\)/);
+    expect(listen).not.toMatch(/@media \(max-width: 900px\)/);
   });
 
   it('listen rack hides below 1024 and shows the notice card', () => {

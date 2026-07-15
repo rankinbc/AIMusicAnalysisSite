@@ -191,7 +191,9 @@ export function KitchenSinkPage() {
             <summary>summary</summary>
             details content
           </details>
-          <span tabIndex={0} className="pill" role="button">
+          {/* Focusable demo target only — no role="button": a role promises
+              Enter/Space activation this strip doesn't need to deliver. */}
+          <span tabIndex={0} className="pill">
             tabindex span
           </span>
         </div>
