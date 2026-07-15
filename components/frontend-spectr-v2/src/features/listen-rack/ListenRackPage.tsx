@@ -639,6 +639,26 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     setStemPlaying((prev) => { if (prev) stemEngine.pause(); return false; });
   }, [stemEngine]);
 
+  // Story 5.10 review (UX-DR45): the <1024 swap is display-only — display:none
+  // does NOT stop audio. Crossing below the lg breakpoint pauses every lane
+  // (media element, pitch buffer, stem deck) so the "Desktop tool" notice is
+  // never a curtain over invisible playback.
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(max-width: 1023.98px)');
+    const pauseAll = () => {
+      if (!mq.matches) return;
+      if (pitchModeRef.current && graph.pitchPlaying()) graph.pitchPause();
+      const a = audioRef.current;
+      if (a && !a.paused) a.pause();
+      setPlaying(false);
+      setStemPlaying((prev) => { if (prev) stemEngine.pause(); return false; });
+    };
+    pauseAll(); // page opened already-narrow (mock mode autoplays)
+    mq.addEventListener('change', pauseAll);
+    return () => mq.removeEventListener('change', pauseAll);
+  }, [graph, stemEngine]);
+
   const directorObj: Director | undefined = useMemo(() => DIRECTORS.find((d) => d.id === director), [director]);
   const activeModules: ModuleManifest[] = useMemo(() => rs.order.filter((id) => rs.mod[id].enabled).map((id) => MANIFEST_BY_ID[id]), [rs.order, rs.mod]);
   const posRef = useRef(position); posRef.current = position;
@@ -924,6 +944,10 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
           visualizer backdrop (VizStage background mode portals to <body> at
           z-index 0); the global top nav is z-index 50 and stays on top too. */}
       <div className="lr-page" style={{ position: 'relative', zIndex: 1 }}>
+        {/* Story 5.10 review: header + room controls hide with the grid <1024 —
+            a "desktop-only" page must not leave live-room start/end buttons
+            operable under the notice card. */}
+        <div className="lr-desktop-only">
         <TrackHeader track={track} mode={mode} modes={modes} identity={identity}
           fixesApplied={fixesApplied} onResetFixes={onResetCarriedFixes}
           {...(onModeChange ? { onModeChange } : {})} />
@@ -951,6 +975,19 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
             )}
           </div>
         )}
+        </div>
+
+        {/* Story 5.10 (UX-DR45): Listen is a desktop tool — below the lg
+            breakpoint the rack grid + header hide and this notice shows
+            instead. Display swap is CSS-only; a matchMedia effect pauses
+            playback on crossing below (display:none does NOT stop audio). */}
+        <div className="card lr-desktop-notice" data-testid="listen-desktop-notice">
+          <p className="label">Desktop tool</p>
+          <p>
+            The Listen rack needs room for its EQ, meters, and rack modules — open this page on a
+            screen at least 1024&nbsp;px wide. Your report and library work great here.
+          </p>
+        </div>
 
         <div className="lr-grid">
           <div style={{ minWidth: 0 }}>

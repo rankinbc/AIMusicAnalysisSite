@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 import type { Move, MoveSev } from './move-model';
 
 interface RackSidebarProps {
@@ -39,13 +41,50 @@ export function RackSidebar({
 }: RackSidebarProps) {
   const committed = moves.filter((m) => committedIds.has(m.id));
 
+  // Story 5.10 (UX-DR45): the rail card is a <details> accordion when the
+  // layout stacks (<1024). LIVE viewport tracking (review finding: an
+  // init-only read stranded the rail collapsed after a mobile→desktop
+  // rotation, and pointer-events:none blocks mouse but NOT keyboard — the
+  // summary must be truly inert on desktop: forced open + out of tab order).
+  const [isDesktop, setIsDesktop] = useState<boolean>(
+    () =>
+      typeof window === 'undefined' ||
+      typeof window.matchMedia !== 'function' ||
+      window.matchMedia('(min-width: 1024px)').matches,
+  );
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const onChange = () => setIsDesktop(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  // Mobile starts folded; desktop is forced open regardless.
+  const [railOpen, setRailOpen] = useState(false);
+  const open = isDesktop || railOpen;
+
   return (
     <aside className="side">
-      <div className="side-card">
-        <div className="side-h">
+      <details
+        className="side-card"
+        open={open}
+        onToggle={(e) => {
+          const next = (e.currentTarget as HTMLDetailsElement).open;
+          if (!isDesktop) setRailOpen(next);
+          // Desktop: controlled `open` (isDesktop → true) re-asserts itself;
+          // any programmatic toggle is a no-op by construction.
+        }}
+      >
+        <summary
+          className="side-h"
+          tabIndex={isDesktop ? -1 : 0}
+          onClick={(e) => {
+            if (isDesktop) e.preventDefault();
+          }}
+        >
           <span className="l">Fixes for Listen</span>
           <span className="hint">{committed.length}</span>
-        </div>
+        </summary>
 
         <div className="side-body">
           {coachMixState === 'ready' && committed.length > 0 && (
@@ -119,7 +158,7 @@ export function RackSidebar({
           <span>Open in Listen</span>
           {committed.length > 0 && <span className="rl-sub">try the fixes</span>}
         </button>
-      </div>
+      </details>
 
       <button type="button" className="gameplan-card" onClick={onOpenGamePlan}>
         <span className="gpc-ic" aria-hidden>

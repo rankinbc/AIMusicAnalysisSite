@@ -23,7 +23,8 @@
   min-width: 0;
 }
 
-@media (max-width: 900px) {
+/* Story 5.10 (UX-DR45): rails stack below the lg breakpoint (1024). */
+@media (max-width: 1023.98px) {
   .layout {
     grid-template-columns: 1fr;
   }

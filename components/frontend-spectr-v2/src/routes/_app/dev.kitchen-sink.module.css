@@ -1,0 +1,98 @@
+/* Story 5.10 — kitchen-sink inventory layout. */
+.page {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 24px 20px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.375rem;
+}
+
+.sub {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 0.875rem;
+}
+
+.toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.topLink {
+  font-size: 0.75rem;
+  color: var(--text-2);
+}
+
+.sectionBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.meterCol {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 320px;
+}
+
+.bannerDemo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--orange);
+  background: var(--orange-dim);
+  border-radius: var(--radius, 10px);
+}
+
+.bannerDot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--orange);
+}
+
+.bannerMsg {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.demoInput {
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-family: inherit;
+  max-width: 140px;
+}
+
+.demoDetails {
+  font-size: 0.8125rem;
+  color: var(--text-2);
+}
