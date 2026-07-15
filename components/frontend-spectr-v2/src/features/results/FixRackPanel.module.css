@@ -142,6 +142,34 @@
   color: var(--text);
 }
 
+/* coach-mix rationale (change log + degraded badge) */
+.coach {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px dashed var(--border, rgba(255, 255, 255, 0.14));
+  background: var(--surface-2, rgba(255, 255, 255, 0.02));
+}
+.coachIc {
+  color: var(--accent);
+  flex: 0 0 auto;
+}
+.coachTitle {
+  font-weight: 600;
+  font-size: 12.5px;
+  margin-bottom: 2px;
+}
+.soon {
+  margin-left: 6px;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.16));
+  border-radius: 4px;
+  padding: 1px 5px;
+}
 
 @keyframes spin {
   to {

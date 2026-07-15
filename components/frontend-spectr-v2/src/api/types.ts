@@ -1291,7 +1291,18 @@ export interface SpecialistStatus {
   status: 'idle' | 'cached' | 'failed';
 }
 
-/** The deterministic SOLVE output for an analysis — a system-generated rack
+/** Coach Mix arbiter rationale persisted alongside the analysis preset —
+ *  change log entries with per-move "why", optional LLM arbiter notes, and a
+ *  degraded flag (true when the LLM escalation failed and the deterministic
+ *  chain was kept as-is). */
+export interface FixRackCoachMeta {
+  change_log?: { module: string; change: string; why?: string }[];
+  arbiter_notes?: string | null;
+  degraded?: boolean;
+  leftover_advice?: unknown[];
+}
+
+/** The Coach Mix synthesis output for an analysis — a system-generated rack
  *  preset (source='analysis'). `chain` is a Listen-rack Chain `{ order, modules,
  *  masterBypass }`; narrow it via features/listen-rack `asChain()` before loading.
  *  GET /reports/{jobId}/fix-rack returns this once generated (204 until then). */
@@ -1303,6 +1314,8 @@ export interface FixRackDto {
   name: string;
   chain: unknown;
   createdAt: string;
+  /** Null/absent for presets generated before the coach_meta column existed. */
+  coachMeta?: FixRackCoachMeta | null;
 }
 
 export interface RoutingPlanEntry {

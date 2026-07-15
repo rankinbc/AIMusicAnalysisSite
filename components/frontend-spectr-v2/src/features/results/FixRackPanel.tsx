@@ -9,9 +9,8 @@ import s from './FixRackPanel.module.css';
 // Phase 2 "act on them": committed fixable Moves -> a mastering chain you hear in
 // Listen. POST /reports/{jobId}/fix-rack (202) -> poll GET (204 -> 200 FixRackDto).
 // The chain is byte-identical to the Listen rack's, so "Open in Listen rack" hands
-// it straight over. The solver's change_log / leftover_advice
-// coaching layer is computed but not persisted/served — wiring it end-to-end
-// is a deferred follow-on (story 12.6 decision).
+// it straight over. The change_log / degraded coaching layer is rendered from
+// the BFF `coachMeta` (coach-mix arbiter rationale).
 
 interface Props {
   jobId: string;
@@ -85,6 +84,7 @@ export function FixRackPanel({ jobId, versionId, committedCount, requested, onGe
       );
     }
     const chain = readFixChain(rack.chain)!;
+    const meta = rack.coachMeta;
     return (
       <div className={`card ${s.panel} ${s.ready}`}>
         <div className={s.head}>
@@ -131,10 +131,24 @@ export function FixRackPanel({ jobId, versionId, committedCount, requested, onGe
           ))}
         </div>
 
-        {/* Story 12.6: the "Why these settings · soon" placeholder is GONE —
-            the solver's change_log/leftover_advice are computed but not
-            persisted/served yet; wiring them is a scoped follow-on. No
-            promises on the page until then. */}
+        <div className={s.coach}>
+          <span className={s.coachIc}>✦</span>
+          <div>
+            <div className={s.coachTitle}>
+              What Coach did
+              {meta?.degraded && <span className={s.soon}>used the rule-based master</span>}
+            </div>
+            {meta?.change_log?.length ? (
+              <ul className={s.sub}>
+                {meta.change_log.map((c, i) => (
+                  <li key={i}><b>{c.module}</b>: {c.change}{c.why && <> &mdash; {c.why}</>}</li>
+                ))}
+              </ul>
+            ) : (
+              <div className={s.sub}>No master-rack changes were needed.</div>
+            )}
+          </div>
+        </div>
       </div>
     );
   }
