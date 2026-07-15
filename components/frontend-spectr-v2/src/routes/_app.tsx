@@ -11,7 +11,11 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import { getLastTraceId } from '../api/fetcher';
 import { buildProblemReportMailto, jobIdFromPath, SUPPORT_EMAIL } from '../lib/report-problem';
+import { matchShortcut } from '../lib/shortcuts';
 import { useEntitlements } from '../api/hooks';
+import { CommandPalette } from '../components/CommandPalette';
+import { ShortcutSheet } from '../components/ShortcutSheet';
+import { UnifiedUploadDialog } from '../components/UnifiedUploadDialog';
 import { AppDunningNotice } from '../features/billing/AppDunningNotice';
 import { AppWorkerHealthNotice } from '../features/health/AppWorkerHealthNotice';
 import { DevHealthDot } from '../features/health/DevHealthDot';
@@ -57,6 +61,27 @@ function AppLayout() {
     window.addEventListener('mousedown', onClick);
     return () => window.removeEventListener('mousedown', onClick);
   }, [menuOpen]);
+
+  // Story 5.10 (UX-DR43) — global product shortcuts: ⌘K palette, ⌘U upload,
+  // `?` sheet. Registered in the authed shell ONLY, so public/anon routes
+  // carry no listener by construction. matchShortcut owns the decision
+  // matrix (modifier, repeat/IME, editable-target suppression); one modal at
+  // a time — a shortcut never opens a surface over another open one.
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const action = matchShortcut(e);
+      if (!action) return;
+      e.preventDefault(); // Ctrl+U is view-source; ⌘K focuses browser UI in some builds
+      if (action === 'palette' && !uploadOpen && !sheetOpen) setPaletteOpen((v) => !v);
+      else if (action === 'upload' && !paletteOpen && !sheetOpen) setUploadOpen(true);
+      else if (action === 'sheet' && !uploadOpen && !paletteOpen) setSheetOpen((v) => !v);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [paletteOpen, sheetOpen, uploadOpen]);
 
   if (isLoading) {
     return (
@@ -107,9 +132,9 @@ function AppLayout() {
         </nav>
 
         <div className={s.navRight}>
-          {/* Story 12.5: the global search box + ⌘K badge is GONE — it had no
-              handlers and no backing search machinery. Rebuild it only when a
-              real command palette + search endpoint exist. */}
+          {/* Story 5.10: the ⌘K palette is BACK with real machinery (nav
+              commands + client-side song search over the cached songs query)
+              — see CommandPalette. The 12.5 removal note is satisfied. */}
           {/* Story 12.2 — dev-only aggregated-health dot. The conditional
               render keeps the /health/full query unmounted in prod builds. */}
           {import.meta.env.DEV && <DevHealthDot />}
@@ -218,6 +243,12 @@ function AppLayout() {
       <main className={s.main}>
         <Outlet />
       </main>
+      {/* Story 5.10 — global keyboard surfaces. The upload dialog here is the
+          ⌘U fallback (new-song mode, mirrors the library mount); the two
+          page-local mounts keep their contextual songId/defaultGenre props. */}
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      <ShortcutSheet open={sheetOpen} onOpenChange={setSheetOpen} />
+      <UnifiedUploadDialog open={uploadOpen} onOpenChange={setUploadOpen} />
     </div>
   );
 }

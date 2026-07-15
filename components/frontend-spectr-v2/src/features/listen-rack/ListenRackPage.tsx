@@ -952,6 +952,18 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
           </div>
         )}
 
+        {/* Story 5.10 (UX-DR45): Listen is a desktop tool — below the lg
+            breakpoint the rack grid hides and this notice shows instead.
+            CSS-only swap (listenRack.css) — no matchMedia races; the hidden
+            rack is inert since the audio graph only starts on user gesture. */}
+        <div className="card lr-desktop-notice" data-testid="listen-desktop-notice">
+          <p className="label">Desktop tool</p>
+          <p>
+            The Listen rack needs room for its EQ, meters, and rack modules — open this page on a
+            screen at least 1024&nbsp;px wide. Your report and library work great here.
+          </p>
+        </div>
+
         <div className="lr-grid">
           <div style={{ minWidth: 0 }}>
             <div className="card" style={{ overflow: 'hidden', position: 'relative' }}>

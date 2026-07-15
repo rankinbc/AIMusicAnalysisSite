@@ -29,7 +29,8 @@
     gap: 26px;
     align-items: start;
   }
-  @media (max-width: 900px) {
+  /* Story 5.10 (UX-DR45): rails stack below the lg breakpoint (1024). */
+  @media (max-width: 1023.98px) {
     .layout {
       grid-template-columns: 1fr;
     }
@@ -338,6 +339,34 @@
     align-items: center;
     justify-content: space-between;
     padding: 12px 14px 10px;
+  }
+  /* Story 5.10 (UX-DR45): the rail card is a <details> — inert on desktop
+     (summary unclickable, no marker), a tap-to-fold accordion when stacked. */
+  details.side-card > summary.side-h {
+    list-style: none;
+  }
+  details.side-card > summary.side-h::-webkit-details-marker {
+    display: none;
+  }
+  @media (min-width: 1024px) {
+    details.side-card > summary.side-h {
+      pointer-events: none;
+    }
+  }
+  @media (max-width: 1023.98px) {
+    details.side-card > summary.side-h {
+      cursor: pointer;
+    }
+    details.side-card > summary.side-h::after {
+      content: '▾';
+      color: var(--muted);
+      font-size: 11px;
+      margin-left: 8px;
+      transition: transform 0.15s ease;
+    }
+    details.side-card:not([open]) > summary.side-h::after {
+      transform: rotate(-90deg);
+    }
   }
   .side-h .l {
     font-size: 11px;
@@ -1499,6 +1528,8 @@
   }
   .coach-input input:focus {
     border-color: rgba(0, 229, 176, 0.4);
+    /* Story 5.10: visible replacement ring (lint: no outline:none without one). */
+    box-shadow: 0 0 0 3px var(--cyan-dim);
   }
   .coach-input .send {
     display: inline-flex;

@@ -149,6 +149,8 @@ jobs:
         run: npm run lint:css
       - name: Lint — no price literals outside config (AR39)
         run: npm run lint:prices
+      - name: Lint — no outline:none without focus replacement (UX-DR44)
+        run: npm run lint:focus
       - name: Unit tests
         run: npx vitest run
 

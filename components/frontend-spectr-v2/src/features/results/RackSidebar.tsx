@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import type { Move, MoveSev } from './move-model';
 
 interface RackSidebarProps {
@@ -39,13 +41,28 @@ export function RackSidebar({
 }: RackSidebarProps) {
   const committed = moves.filter((m) => committedIds.has(m.id));
 
+  // Story 5.10 (UX-DR45): the rail card is a <details> accordion when the
+  // layout stacks (<1024). Open by default on desktop; starts folded on
+  // small screens. Init-only read — no live resize tracking (CSS makes the
+  // summary inert on desktop, so it can never be collapsed there).
+  const [railOpen, setRailOpen] = useState<boolean>(
+    () =>
+      typeof window === 'undefined' ||
+      typeof window.matchMedia !== 'function' ||
+      window.matchMedia('(min-width: 1024px)').matches,
+  );
+
   return (
     <aside className="side">
-      <div className="side-card">
-        <div className="side-h">
+      <details
+        className="side-card"
+        open={railOpen}
+        onToggle={(e) => setRailOpen((e.currentTarget as HTMLDetailsElement).open)}
+      >
+        <summary className="side-h">
           <span className="l">Fixes for Listen</span>
           <span className="hint">{committed.length}</span>
-        </div>
+        </summary>
 
         <div className="side-body">
           {coachMixState === 'ready' && committed.length > 0 && (
@@ -119,7 +136,7 @@ export function RackSidebar({
           <span>Open in Listen</span>
           {committed.length > 0 && <span className="rl-sub">try the fixes</span>}
         </button>
-      </div>
+      </details>
 
       <button type="button" className="gameplan-card" onClick={onOpenGamePlan}>
         <span className="gpc-ic" aria-hidden>

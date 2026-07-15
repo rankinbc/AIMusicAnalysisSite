@@ -91,7 +91,15 @@ button {
   color: inherit;
 }
 
-button:focus-visible {
+/* Story 5.10 (UX-DR44): the cyan focus ring on ALL interactives — keyboard
+   focus is always visible, mouse focus stays quiet (:focus-visible). */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
   outline: 2px solid var(--cyan);
   outline-offset: 2px;
 }

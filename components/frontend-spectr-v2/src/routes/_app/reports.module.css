@@ -53,6 +53,8 @@
 .filterInput:focus {
   outline: none;
   border-color: var(--cyan);
+  /* Story 5.10: visible replacement ring (lint: no outline:none without one). */
+  box-shadow: 0 0 0 3px var(--cyan-dim);
 }
 
 .status {

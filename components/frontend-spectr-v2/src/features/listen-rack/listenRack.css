@@ -43,10 +43,16 @@
   gap: 18px;
   align-items: start;
 }
-/* Below tablet-portrait the fixed 348px rail crushes the stage/rack — stack it
-   beneath instead of squeezing two columns into a phone width. */
-@media (max-width: 900px) {
-  .lr-grid { grid-template-columns: minmax(0, 1fr); }
+/* Story 5.10 (UX-DR45): Listen is desktop-only below the lg breakpoint —
+   the grid hides entirely and the notice card takes its place. CSS-only
+   swap: both elements are always in the DOM. */
+.lr-desktop-notice {
+  display: none;
+  padding: 18px;
+}
+@media (max-width: 1023.98px) {
+  .lr-grid { display: none; }
+  .lr-desktop-notice { display: block; }
 }
 @media (max-width: 560px) {
   .lr-page { padding: 14px 14px 56px; }
