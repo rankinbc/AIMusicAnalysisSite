@@ -1,13 +1,36 @@
+import multiprocessing
+import os
 from typing import Optional
+
 from audio_analysis.als.als_parser import ALSParser
 from audio_analysis.als.midi_analyzer import MIDIAnalyzer
 from audio_analysis.als.health_scorer import score_health
 
+# Story 5.7 / AR33 — .als parsing is isolated in a spawned subprocess with a
+# wall-clock timeout (all platforms) and an address-space cap (POSIX only;
+# Windows dev boxes rely on the timeout). A gzip/XML bomb or a pathological
+# project file can then only kill the CHILD — the analysis job survives and
+# the phase degrades to a typed failure.
+#
+# D10 prescribes concurrent.futures; we use a raw multiprocessing.Process
+# instead because future.result(timeout=) does NOT kill a running child —
+# terminate() is the only real enforcement. Spawn context always (never fork:
+# the dramatiq parent holds librosa/torch state that must not be inherited).
+_DEFAULT_TIMEOUT_S = 60.0
+# RLIMIT_AS (virtual address space, not RSS — see _child_entry). Generous:
+# the spawned child re-imports the audio_analysis package, whose transitive
+# imports reserve address space before the parse begins.
+_DEFAULT_RSS_MB = 1024
 
-def analyze_als(als_path: Optional[str]) -> dict:
-    if als_path is None:
-        return {"phase": 8, "name": "ALS Analysis", "status": "skipped", "data": {}, "error": None}
 
+def _isolation_failure(reason: str) -> dict:
+    # status "failed" (not "skipped") — "skipped" is reserved for "no .als
+    # attached"; a timeout/crash RAN and errored, and a typed failure keeps
+    # the FR6 partial-failure surface (banner + free retry) honest about it.
+    return {"phase": 8, "name": "ALS Analysis", "status": "failed", "data": {}, "error": reason}
+
+
+def _analyze_als_impl(als_path: str) -> dict:
     try:
         parser = ALSParser()
         project = parser.parse(als_path)
@@ -132,3 +155,109 @@ def analyze_als(als_path: Optional[str]) -> dict:
 
     except Exception as exc:
         return {"phase": 8, "name": "ALS Analysis", "status": "failed", "data": {}, "error": str(exc)}
+
+
+def _child_entry(als_path: str, conn) -> None:
+    # Runs in the spawned child. Cap address space first (POSIX only — the
+    # `resource` module doesn't exist on Windows; the parent's timeout is the
+    # guard there). NOTE: RLIMIT_AS caps VIRTUAL address space, not RSS — the
+    # spawn re-import of this package reserves address space before the cap
+    # lands, hence the generous default. A MemoryError from the cap lands in
+    # _analyze_als_impl's except and comes back as a typed phase failure.
+    try:
+        import resource
+
+        limit_mb = int(float(os.environ.get("ALS_PARSE_RSS_MB", _DEFAULT_RSS_MB)))
+        limit = limit_mb * 1024 * 1024
+        resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
+    except ImportError:
+        pass  # Windows — timeout is the guard
+    except Exception as exc:
+        # POSIX setrlimit failure means the gzip-bomb defense is OFF —
+        # proceed (timeout still holds) but say so, never silently.
+        print(f"phase8 als isolation: setrlimit failed, cap disabled: {exc}", flush=True)
+
+    # Spawn-safe test seam (see tests/test_phase8_isolation.py): the child
+    # re-imports this module fresh, so behavior can only be injected via env.
+    # Fenced to pytest runs — a leaked env var in a deployment manifest must
+    # not turn every .als analysis into a sleep/crash.
+    test_mode = os.environ.get("ALS_ISOLATION_TEST_MODE")
+    if test_mode and "PYTEST_CURRENT_TEST" in os.environ:
+        if test_mode == "sleep":
+            import time
+
+            time.sleep(3600)
+        elif test_mode == "crash":
+            os._exit(17)
+
+    try:
+        conn.send(_analyze_als_impl(als_path))
+    except Exception as exc:  # pickling/pipe failure — never die silently
+        try:
+            conn.send(_isolation_failure(f"als_isolation_send_failed: {exc}"))
+        except Exception:
+            pass
+    finally:
+        conn.close()
+
+
+def analyze_als(als_path: Optional[str]) -> dict:
+    if als_path is None:
+        # Zero-cost no-op — no child is ever spawned (golden-snapshot parity
+        # for every .als-less run).
+        return {"phase": 8, "name": "ALS Analysis", "status": "skipped", "data": {}, "error": None}
+
+    # NOTHING in the parent may escape as an exception — a raise here lands in
+    # the worker's job-level handler and fails the WHOLE analysis, the exact
+    # outcome AR33 exists to prevent (review finding: a typo'd env var or fd
+    # exhaustion at Pipe() would have done just that).
+    try:
+        return _analyze_als_isolated(als_path)
+    except Exception as exc:
+        return _isolation_failure(f"als_isolation_parent_error: {exc}")
+
+
+def _analyze_als_isolated(als_path: str) -> dict:
+    try:
+        timeout_s = float(os.environ.get("ALS_PARSE_TIMEOUT_S", _DEFAULT_TIMEOUT_S))
+        if not timeout_s > 0:  # also rejects NaN
+            timeout_s = _DEFAULT_TIMEOUT_S
+    except ValueError:
+        timeout_s = _DEFAULT_TIMEOUT_S
+
+    ctx = multiprocessing.get_context("spawn")
+    parent_conn, child_conn = ctx.Pipe(duplex=False)
+    proc = ctx.Process(target=_child_entry, args=(als_path, child_conn))
+    try:
+        try:
+            proc.start()
+        except Exception as exc:
+            # e.g. a daemonic parent can't spawn children — degrade, never die.
+            return _isolation_failure(f"als_isolation_spawn_failed: {exc}")
+        # Parent must drop its handle on the child end so a dead child
+        # produces EOF instead of a hang.
+        child_conn.close()
+
+        if not parent_conn.poll(timeout_s):
+            return _isolation_failure("als_isolation_timeout")
+        try:
+            result = parent_conn.recv()
+        except (EOFError, OSError):
+            # Child died before sending (hard OOM kill, segfault, os._exit).
+            return _isolation_failure("als_isolation_crashed")
+        proc.join(5)
+        return result
+    finally:
+        # terminate → join → kill → join: SIGTERM alone leaks a child stuck
+        # in uninterruptible I/O inside a long-lived concurrency=1 worker.
+        if proc.is_alive():
+            proc.terminate()
+            proc.join(5)
+        if proc.is_alive():
+            proc.kill()
+            proc.join(5)
+        try:
+            child_conn.close()  # no-op if already closed; covers spawn-fail path
+        except OSError:
+            pass
+        parent_conn.close()

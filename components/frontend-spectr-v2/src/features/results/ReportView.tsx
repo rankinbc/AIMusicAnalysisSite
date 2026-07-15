@@ -31,6 +31,7 @@ import { AlsUploadDialog } from '../../components/AlsUploadDialog';
 import { ReferenceUploadDialog } from '../../components/ReferenceUploadDialog';
 import { StemsUploadDialog } from '../../components/StemsUploadDialog';
 import { AnalysisCompleteModal } from './AnalysisCompleteModal';
+import { DegradationBanner } from './DegradationBanner';
 import { CoachTab } from './CoachTab';
 import { CoachMixModal } from './CoachMixModal';
 import { ExportModal } from './ExportModal';
@@ -79,6 +80,9 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
 
   const alsProject = results.alsProject ?? null;
   const hasProject = Boolean(alsProject);
+  // Story 5.7 (AC3): phase 8 ran (an .als existed) but failed/was sandboxed
+  // out — drives the Project-tab skip note when no client-parsed map exists.
+  const phase8Failed = fj.phases?.find((p) => p.phase === 8)?.status === 'failed';
   const hasReference = Boolean(phase6?.gaps && Object.keys(phase6.gaps).length > 0);
 
   // Verdicts are the AI-Move source + CoachChat grounding. Shared query cache
@@ -292,6 +296,17 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
             onAddInputs={onAddInputs}
           />
 
+          <DegradationBanner
+            fj={fj}
+            jobId={jobId}
+            onRetryDispatched={(newJobId) =>
+              void navigate({
+                to: '/songs/$songId/results/$jobId',
+                params: { songId, jobId: newJobId },
+              })
+            }
+          />
+
           <ResultsTabs
             current={tab}
             onChange={onTabChange}
@@ -327,8 +342,23 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
                 onTrackActivate={() => onTabChange('project')}
               />
             )}
-            {tab === 'project' && alsProject && <ProjectTab project={alsProject} phase8={phase8} />}
-            {tab === 'project' && !alsProject && (
+            {tab === 'project' && alsProject && (
+              <ProjectTab project={alsProject} phase8={phase8} phase8Failed={phase8Failed} />
+            )}
+            {/* Story 5.7 (AC3): an .als WAS attached but phase 8 died in its
+                sandbox (timeout/crash/parse error) — say so instead of showing
+                the misleading "unlock with a project upload" CTA. */}
+            {tab === 'project' && !alsProject && phase8Failed && (
+              <div className="card" data-testid="project-skip-note">
+                <p className="label">Project analysis skipped this run</p>
+                <p>
+                  Your Ableton project was attached, but its analysis hit a snag and was
+                  skipped — everything else in this report is unaffected. Re-export the
+                  .als and retry to fill this tab in.
+                </p>
+              </div>
+            )}
+            {tab === 'project' && !alsProject && !phase8Failed && (
               <ProjectUnlock {...(versionId ? { onUploadAls: () => setAlsDialogOpen(true) } : {})} />
             )}
             {tab === 'reference' && (

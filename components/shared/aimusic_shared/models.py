@@ -246,6 +246,13 @@ class AnalysisJob(Base):
     # column pre-exists in the DB). 'invalid_file' is the AR16 reversal trigger:
     # the BFF's GET /api/jobs/{id} hook refunds the credit spend when it sees it.
     error_code: Mapped[Optional[str]] = mapped_column("error_code", String(64), nullable=True)
+    # Story 5.7 — mirror of EF AnalysisJob.RetryOfJobId (migration
+    # 20260715131641_Story57FreeRetry). Links a free-retry job to its failed/
+    # degraded origin. Written ONLY by the BFF free-retry dispatch; the worker
+    # never sets it (mirrored to keep the ORM in lockstep with the schema).
+    retry_of_job_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        "retry_of_job_id", UUID(as_uuid=True), nullable=True
+    )
     dispatched_at: Mapped[datetime] = mapped_column(
         "dispatched_at", DateTime(timezone=True), nullable=False, server_default=func.now()
     )

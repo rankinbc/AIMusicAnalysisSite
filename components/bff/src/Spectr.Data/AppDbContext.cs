@@ -266,6 +266,13 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         builder.Entity<Verdict>().Property(v => v.Fixable).HasDefaultValue(true);
         builder.Entity<Verdict>().Property(v => v.Suspected).HasDefaultValue(false);
         builder.Entity<AnalysisJob>().HasIndex(j => new { j.UserId, j.Status });
+        // Story 5.7 — once-only free retry is enforced AT THE DATABASE: a
+        // partial unique index makes the concurrent double-POST race lose at
+        // commit (DbUpdateException → 409), not at a read-then-insert check
+        // (review finding: check-then-insert alone mints N free retries).
+        builder.Entity<AnalysisJob>().HasIndex(j => j.RetryOfJobId)
+            .IsUnique()
+            .HasFilter("retry_of_job_id IS NOT NULL");
         // LLM spend dashboards (Epic 10) query by time and by user.
         builder.Entity<LlmCall>().HasIndex(c => c.CreatedAt);
         builder.Entity<LlmCall>().HasIndex(c => new { c.UserId, c.CreatedAt });

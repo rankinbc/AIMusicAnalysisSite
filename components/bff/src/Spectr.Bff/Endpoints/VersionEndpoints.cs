@@ -1077,8 +1077,16 @@ public static class VersionEndpoints
         IJobQueue queue,
         HttpContext httpCtx,
         CancellationToken ct,
-        Guid? preallocatedJobId = null)
+        Guid? preallocatedJobId = null,
+        bool freeRetry = false,
+        Guid? retryOfJobId = null)
     {
+        // Story 5.7 (FR6/AR16): freeRetry dispatches WITHOUT consuming
+        // entitlement — the exhausted-cap gate is skipped and NOTHING is
+        // written to usage_events / credit_ledger (never-consumed beats
+        // write-then-compensate; balances are never UPDATEd either way).
+        // Eligibility is decided by the caller (JobEndpoints.RetryFree)
+        // entirely server-side. Abuse layers below still apply.
         // IDOR guard: a caller-supplied reference must belong to this user.
         // Centralized here so every dispatch site is covered (AR15 keeps reads out).
         if (referenceId is not null)
@@ -1102,7 +1110,7 @@ public static class VersionEndpoints
                 "Entitlement service temporarily unavailable."));
         }
 
-        if (ent.AnalysesRemaining == 0)
+        if (!freeRetry && ent.AnalysesRemaining == 0)
             return (Guid.Empty, ErrorEnvelope.Build(409, "entitlement_exhausted",
                 "You have used all your analyses for this billing period."));
 
@@ -1120,7 +1128,11 @@ public static class VersionEndpoints
             // only"), so it sits behind the same RateLimits:Enabled knob as
             // the per-IP arm — dev/test registrations with throwaway domains
             // must not get a mislabeled entitlement_exhausted.
-            if (limitsOn)
+            // Story 5.7: the disposable arm is an entitlement-style CAP (counts
+            // usage events), not a rate limit — a free retry consumes nothing,
+            // so it must not be blocked by an already-spent cap either. The
+            // per-IP limiter below still applies to free retries.
+            if (limitsOn && !freeRetry)
             {
                 try
                 {
@@ -1185,7 +1197,11 @@ public static class VersionEndpoints
         // dispatch requires verification. Pro/credits exempt (Stripe receipts
         // already prove a mailbox). Report VIEWING is never gated — read
         // paths don't check this.
-        if (ent.Tier is not ("pro" or "credits"))
+        // Story 5.7 review: the verify gate exists to stop a SECOND analysis
+        // grant — a free retry re-runs an ALREADY-granted one, and its origin
+        // (a degraded complete job) would otherwise count as the "one
+        // analysis" and 403 the flagship unverified-free-user scenario.
+        if (!freeRetry && ent.Tier is not ("pro" or "credits"))
         {
             var verified = await db.Users.AsNoTracking()
                 .Where(u => u.Id == userId)
@@ -1203,7 +1219,38 @@ public static class VersionEndpoints
         var jobId = preallocatedJobId ?? Guid.NewGuid();
         var billingPeriod = DateTimeOffset.UtcNow.ToString("yyyy-MM");
 
-        if (ent.Tier == "credits")
+        if (freeRetry)
+        {
+            // Story 5.7 — entitlement-free lane: job row only, NO usage event,
+            // NO credit spend. A null origin would skip every once-only guard
+            // (an unmarked free job, itself retry-eligible) — hard-reject.
+            if (retryOfJobId is not Guid)
+                throw new ArgumentException(
+                    "freeRetry dispatch requires retryOfJobId", nameof(retryOfJobId));
+            db.AnalysisJobs.Add(new AnalysisJob
+            {
+                Id = jobId,
+                UserId = userId,
+                VersionId = versionId,
+                ReferenceId = referenceId,
+                Tier = ent.Tier,
+                Status = "pending",
+                RetryOfJobId = retryOfJobId,
+            });
+            try
+            {
+                await db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException)
+            {
+                // Partial unique index on retry_of_job_id: the concurrent
+                // double-POST loser lands here — the DB, not a read-then-
+                // insert check, is the once-only authority.
+                return (Guid.Empty, ErrorEnvelope.Build(409, "retry_already_used",
+                    "The free retry for this analysis was already used."));
+            }
+        }
+        else if (ent.Tier == "credits")
         {
             // Insert job first (outside Serializable TX), then spend atomically.
             var job = new AnalysisJob
@@ -1286,11 +1333,23 @@ public static class VersionEndpoints
             var row = await db.AnalysisJobs.FirstOrDefaultAsync(j => j.Id == jobId, ct);
             if (row is not null)
             {
-                row.Status = "failed";
-                row.ErrorCode = "dispatch_failed";
-                row.ErrorMessage = "Could not queue the analysis. Try again.";
-                row.CurrentPhase = "failed";
-                row.FailedAt = DateTimeOffset.UtcNow;
+                if (freeRetry)
+                {
+                    // Story 5.7 review: a failed free-retry row would occupy the
+                    // once-only unique slot FOREVER (every later attempt → 409
+                    // retry_already_used) over a Redis blip. Nothing was
+                    // consumed and nothing references the row — delete it so
+                    // the user can retry the retry.
+                    db.AnalysisJobs.Remove(row);
+                }
+                else
+                {
+                    row.Status = "failed";
+                    row.ErrorCode = "dispatch_failed";
+                    row.ErrorMessage = "Could not queue the analysis. Try again.";
+                    row.CurrentPhase = "failed";
+                    row.FailedAt = DateTimeOffset.UtcNow;
+                }
                 await db.SaveChangesAsync(ct);
             }
             throw;

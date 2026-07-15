@@ -66,6 +66,14 @@ public sealed class AnalysisJob
     [Column("tier"), MaxLength(16)]
     public string? Tier { get; set; }
 
+    // Story 5.7 (FR6/AR16) — links a free-retry job to the failed/degraded
+    // origin job it re-runs. Set ONLY by the free-retry dispatch path (which
+    // skips usage_events/credit spend entirely). Eligibility is derived
+    // server-side; one free retry per origin, and a retry job (non-null here)
+    // is itself never free-retry eligible — caps the free chain at 1.
+    [Column("retry_of_job_id")]
+    public Guid? RetryOfJobId { get; set; }
+
     [Column("dispatched_at")]
     public DateTimeOffset DispatchedAt { get; set; } = DateTimeOffset.UtcNow;
 

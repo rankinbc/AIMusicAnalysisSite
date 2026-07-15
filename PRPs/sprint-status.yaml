@@ -1,5 +1,6 @@
 # generated: 2026-06-12
-# last_updated: 2026-07-10
+# last_updated: 2026-07-15
+# story 5-7 transitioned: backlog → ready-for-dev (create-story workflow, 2026-07-15; NOTE: prior "DegradationBanner + rerun hooks exist" annotation was stale — banner never built, useRerunPhase deleted in 12-5; story file carries the corrected reality check)
 # epic-12 added 2026-07-10: post-audit reliability & product truthfulness — 8 stories from the full-app audit (output/audit/2026-07-10_full-app-audit/findings.md) + team improvement review. Suggested order: 12-1/12-2/12-3 (dev-loop unblock) -> 12-4 + 12-5 parallel -> 12-6 (needs product decision) -> 12-7/12-8 anytime. Merge story 5-6 (in review) before 12-5 touches results tabs.
 # story 2-5 transitioned: backlog → ready-for-dev (create-story workflow, 2026-06-16; tier-routed analyze_audio_job + W1/W2 queue split; re-homes 5 default-queue actors to avoid prod orphaning)
 # project: Spectr
@@ -118,7 +119,7 @@ development_status:
   5-4-analysis-summary-tab-filters-and-specialist-roster: done  # shipped; AC1/AC2/AC3 met — final gap (sticky side rail, AnalysisTab.module.css .right) closed 2026-06-27
   5-5-frequency-stem-clash-reference-and-arrangement-panels: done  # Spectrum/Reference/Arrangement tabs
   5-6-als-project-panel-and-track-name-attribution: done  # closed 2026-07-10: code was already on master since 2026-06-27 (commit 3ff5181), tracker never flipped from review; gates were green at implementation (worker isolated; frontend tsc/lint/build/vitest 561). 2026-07-10 audit re-examined the surface: only 2 rules emit where.track_names (widening = follow-up), chip-click switches tab w/o scroll-to-row; both folded into epic-12 scope notes
-  5-7-partial-failure-reporting-and-free-retry: backlog  # PARTIAL — DegradationBanner + rerun hooks; GAP: free-retry entitlement-free dispatch (AR16) + .als subprocess isolation (AR33)
+  5-7-partial-failure-reporting-and-free-retry: done  # 2026-07-15: implemented + 3-layer review + 14 patches (CRITICAL: once-only unique index; HIGH: enqueue-burn, verify-gate 403, rerun-origin mint), all gates green (BFF 393, FE 822, analysis 173, worker 593)
   5-8-song-detail-and-version-compare: done  # song detail route + ProgressTimeline + CompareDialog
   5-9-upload-dialog-polish-club-check-and-playback-verify: done  # UnifiedUploadDialog + StereoCard/ClubCheck + ResultsPlayer
   5-10-product-a11y-keyboard-and-kitchen-sink: backlog  # NOT-STARTED — ⌘K only; GAP: ⌘U, /dev/kitchen-sink, axe-core CI, focus-ring lint, responsive stacking
