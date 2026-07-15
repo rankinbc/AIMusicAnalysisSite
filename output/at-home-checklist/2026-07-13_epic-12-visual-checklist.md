@@ -94,3 +94,12 @@ Needs TWO browser sessions (or one + an incognito reviewer) on a shared/View-abl
 - [ ] With VITE_POSTHOG_KEY set (dev): PostHog EU shows land→analyze_started→analyze_completed→report_claimed firing across a real anon run; no email/audio/token in any event props.
 - [ ] pricing_viewed + checkout_started fire on the pricing page; resume_shown/clicked on a returning-visitor card.
 - [ ] Attribution: hit /analyze via a /r/{token} share link → report_claimed carries source=share_{token}.
+
+## 5-7 — Partial-failure reporting & free retry (added 2026-07-15 — MVP CODE-COMPLETE)
+
+- [ ] Force a degraded report (easiest: upload a mix + a corrupt .als, or temporarily raise ALS_PARSE_TIMEOUT_S=1 and attach a big real .als): report shows the amber "hit a snag — we kept everything that worked" banner naming the phase, above the tabs.
+- [ ] Click "Retry free" with the free cap EXHAUSTED (3/3 used): dispatch succeeds, navigates to the new job, Usage page unchanged (no 4th analysis metered).
+- [ ] Click retry a second time on the same origin (back-navigate): toast "already used", button hides.
+- [ ] Failed-job page (kill the worker mid-run or dispatch with Redis paused... or just trust the tests): "Retry free" button in the fail panel.
+- [ ] Project tab with corrupt .als attached: "Server project analysis was skipped this run" note (with client-parsed map) or the skip card (without) — never the "unlock" upsell.
+- [ ] Worker box sanity while a pathological .als analyzes: phase 8 runs as a CHILD python process that dies at the timeout; job completes with the phase failed, worker stays alive.
