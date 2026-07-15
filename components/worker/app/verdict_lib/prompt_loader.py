@@ -67,6 +67,7 @@ SLUG_TO_FILENAME: dict[str, str] = {
     "stem_balance": "StemBalance",
     "stem_stereo_width": "StemStereoWidth",
     "stem_reference_delta": "StemReferenceDelta",
+    "mastering_engineer": "MasteringEngineer",
 }
 
 SPECIALIST_SLUGS: tuple[str, ...] = tuple(SLUG_TO_FILENAME.keys())
