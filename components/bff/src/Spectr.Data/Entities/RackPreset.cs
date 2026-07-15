@@ -33,6 +33,12 @@ public sealed class RackPreset
     [Column("chain_json", TypeName = "jsonb")]
     public string ChainJson { get; set; } = "{}";
 
+    // Coach-mix rationale: change log, arbiter notes, degraded flag written by
+    // the `generate_fix_rack` worker actor. Null for presets created before
+    // this column was added.
+    [Column("coach_meta", TypeName = "jsonb")]
+    public string? CoachMeta { get; set; }
+
     // Credit-chain provenance (no FK yet — the room-session + grant tables land
     // in PRP-4). Null for plain user saves.
     [Column("created_in_session_id")]

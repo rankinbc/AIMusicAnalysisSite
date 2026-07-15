@@ -69,12 +69,24 @@ def _fake_coach_text() -> str:
     })
 
 
+def _fake_coach_mix_text() -> str:
+    """Same failure mode as the coach branch above (E-H3): without this,
+    the coach-mix arbiter received specialist-shaped JSON under ``LLM_FAKE=1``,
+    ``ArbiterResponse`` rejected it, and every dev/CI fix rack persisted
+    ``degraded=True``. An empty decisions list keeps the deterministic chain
+    and reads as a real "LLM had nothing to add" run.
+    """
+    return json.dumps({"decisions": []})
+
+
 def fake_response_text(*, purpose: str, prompt_slug: str | None) -> str:
     """Canned response text for one fake call."""
     if purpose == "triage":
         return _fake_triage_text()
     if purpose == "coach":
         return _fake_coach_text()
+    if purpose == "coach_mix":
+        return _fake_coach_mix_text()
     return _fake_specialist_text(prompt_slug or "unknown")
 
 

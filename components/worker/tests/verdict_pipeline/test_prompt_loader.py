@@ -23,7 +23,10 @@ def test_slug_mapping_complete():
 def test_all_26_specialist_slugs_present():
     # 23 originals + 3 stem specialists (stem_balance, stem_stereo_width,
     # stem_reference_delta). The count must match SpecialistCatalog.cs.
+    # The coach-mix arbiter prompt lives in ARBITER_SLUG_TO_FILENAME,
+    # deliberately outside this catalog set.
     assert len(SPECIALIST_SLUGS) == 26
+    assert "mastering_engineer" not in SPECIALIST_SLUGS
 
 
 def test_parse_version_frontmatter_present():

@@ -86,6 +86,7 @@ def run_rule_engine_for_analysis(analysis_id: uuid.UUID) -> int:
         from aimusic_shared.models import Analysis, Verdict as VerdictRow  # noqa: PLC0415
 
         from app.db_sync import SessionFactory  # noqa: PLC0415
+        from app.solve_lib.router import merge as solve_merge  # noqa: PLC0415
         from app.verdict_lib.validator import validate_verdict  # noqa: PLC0415
 
         with SessionFactory.begin() as s:
@@ -110,6 +111,21 @@ def run_rule_engine_for_analysis(analysis_id: uuid.UUID) -> int:
             flattened = flatten(raw_final if isinstance(raw_final, dict) else {})
             flattened.setdefault("track_id", str(analysis.id))
             problems: list[VerdictModel] = rule_engine.evaluate_problems(flattened)
+            # SOLVE tier (deterministic): attach a parameter-exact Fix to every
+            # fixable, routed Problem so the results page renders a device + params
+            # and the Listen rack can apply it. LLM specialists stay on-demand —
+            # this is the cheap, no-LLM path that runs on every analysis. Non-fixable
+            # / unmapped Problems pass through untouched (fix=None). merge() also
+            # validates the candidate fix and drops only the fix on rejection, so
+            # the row still persists as a Problem.
+            genre = (flattened.get("phase2") or {}).get("genre")
+            try:
+                problems = solve_merge(problems, flattened, genre)
+            except Exception:  # a solver bug must not wipe the IDENTIFY Problems
+                logger.warning(
+                    "SOLVE merge failed for analysis=%s; persisting Problems "
+                    "without fixes", analysis_id, exc_info=True,
+                )
             # Validate each (caps genre-aware severity, recomputes priority_score,
             # rejects unresolvable-evidence rows) before persisting.
             written = 0

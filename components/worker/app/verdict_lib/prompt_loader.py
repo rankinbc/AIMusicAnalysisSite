@@ -300,6 +300,38 @@ def load_coach_teach_model() -> str | None:
     return parse_model_frontmatter(path.read_text(encoding="utf-8"))
 
 
+# ── Coach-mix arbiter prompt ────────────────────────────────────────────────
+# Internal judgment prompt for the coach_mix LLM arbiter. DELIBERATELY decoupled
+# from SLUG_TO_FILENAME / SpecialistCatalog (like the coach + identifier
+# prompts) — it is never user-runnable and doesn't belong in the on-demand
+# specialist catalog. The .md file lives alongside the experts in PROMPTS_DIR.
+ARBITER_SLUG_TO_FILENAME: dict[str, str] = {
+    "mastering_engineer": "MasteringEngineer",
+}
+
+
+def load_arbiter_prompt(slug: str) -> tuple[str, str]:
+    """Returns ``(version, body)`` for a coach-mix arbiter prompt by slug."""
+    name = ARBITER_SLUG_TO_FILENAME.get(slug)
+    if name is None:
+        raise KeyError(f"unknown arbiter slug: {slug!r}")
+    path = PROMPTS_DIR / f"{name}.md"
+    if not path.exists():
+        raise FileNotFoundError(f"arbiter prompt file not found: {path}")
+    return parse_version_frontmatter(path.read_text(encoding="utf-8"))
+
+
+def load_arbiter_prompt_model(slug: str) -> str | None:
+    """Optional ``model:`` pin from an arbiter prompt's frontmatter (NFR24)."""
+    name = ARBITER_SLUG_TO_FILENAME.get(slug)
+    if name is None:
+        return None
+    path = PROMPTS_DIR / f"{name}.md"
+    if not path.exists():
+        return None
+    return parse_model_frontmatter(path.read_text(encoding="utf-8"))
+
+
 # ── LLM-identifier prompts (Phase 5) ───────────────────────────────────────
 # Judgment-only IDENTIFY prompts live in their own folder, DELIBERATELY decoupled
 # from SLUG_TO_FILENAME / SpecialistCatalog (like the coach prompt). They emit
