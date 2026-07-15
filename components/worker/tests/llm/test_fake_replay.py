@@ -64,3 +64,14 @@ def test_fake_coach_parses_to_coach_reply_payload():
     # The numeric-without-evidence heuristic must NOT reject the fake body —
     # otherwise the actor will downgrade to status="error".
     assert answer_makes_numeric_claim_without_evidence(payload) is False
+
+
+def test_fake_coach_mix_parses_to_arbiter_response():
+    """Coach-mix fake parity (same E-H3 failure mode as the coach branch):
+    ``LLM_FAKE=1`` for ``purpose="coach_mix"`` MUST emit ArbiterResponse-valid
+    JSON; otherwise llm_arbiter.consult degrades every dev/CI fix rack."""
+    from app.coach_mix.decision_schema import ArbiterResponse  # noqa: PLC0415
+
+    text = fake_response_text(purpose="coach_mix", prompt_slug="mastering_engineer")
+    resp = ArbiterResponse.model_validate(json.loads(text))
+    assert resp.decisions == []

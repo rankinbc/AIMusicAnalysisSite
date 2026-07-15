@@ -17,7 +17,7 @@ from app.coach_mix.decision_schema import ArbiterResponse
 from app.coach_mix.types import ArbiterResult
 from app.llm import gateway
 from app.verdict_lib.json_extraction import extract_json_object
-from app.verdict_lib.prompt_loader import load_prompt, load_prompt_model
+from app.verdict_lib.prompt_loader import load_arbiter_prompt, load_arbiter_prompt_model
 from app.verdict_lib.rule_engine import _problem
 
 logger = logging.getLogger(__name__)
@@ -74,11 +74,11 @@ def consult(result: ArbiterResult, analysis: dict[str, Any], genre: str | None, 
     if not result.judgment_calls:
         return result, None, False
     try:
-        prompt_version, prompt_body = load_prompt(SLUG)
+        prompt_version, prompt_body = load_arbiter_prompt(SLUG)
         out = gateway.complete_sync(
             system=prompt_body, user=_build_user_message(result, analysis, genre),
             purpose="coach_mix", prompt_slug=SLUG, prompt_version=prompt_version,
-            model=load_prompt_model(SLUG), user_id=_as_uuid(user_id),
+            model=load_arbiter_prompt_model(SLUG), user_id=_as_uuid(user_id),
             tier=tier, correlation_id=correlation_id, timeout_s=120)
         parsed = extract_json_object(out.text)
         resp = ArbiterResponse.model_validate(parsed)
@@ -86,7 +86,7 @@ def consult(result: ArbiterResult, analysis: dict[str, Any], genre: str | None, 
         notes = json.dumps([d.model_dump() for d in resp.decisions])
         return updated, notes, False
     except Exception as exc:  # noqa: BLE001  — fail-open: keep deterministic chain
-        logger.info("coach_mix LLM degraded: %s", exc)
+        logger.warning("coach_mix LLM degraded: %s", exc)
         return result, None, True
 
 

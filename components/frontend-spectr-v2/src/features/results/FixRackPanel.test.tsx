@@ -52,6 +52,27 @@ describe('FixRackPanel coach meta', () => {
     expect(html).toContain('<b>limiter</b>');
   });
 
+  it('omits the coach block entirely when coachMeta is null (pre-port preset)', () => {
+    vi.mocked(useFixRack).mockReturnValueOnce({
+      data: {
+        name: 'Fix rack — Track',
+        chain: {
+          order: ['limiter'],
+          modules: { limiter: { enabled: true, ceilingDb: -1 } },
+          masterBypass: false,
+        },
+        createdAt: '2026-06-28T00:00:00Z',
+        coachMeta: null,
+      },
+    } as unknown as ReturnType<typeof useFixRack>);
+    const html = renderToStaticMarkup(
+      <FixRackPanel jobId="j" versionId="v" committedCount={1} requested />,
+    );
+    // Must not falsely claim nothing was needed under a populated chain.
+    expect(html).not.toContain('No master-rack changes were needed.');
+    expect(html).not.toContain('What Coach did');
+  });
+
   it('renders fallback message when change_log is empty', () => {
     vi.mocked(useFixRack).mockReturnValueOnce({
       data: {

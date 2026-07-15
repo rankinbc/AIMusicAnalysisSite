@@ -20,14 +20,13 @@ def test_slug_mapping_complete():
     assert "triage" not in SLUG_TO_FILENAME
 
 
-def test_all_specialist_slugs_present():
+def test_all_26_specialist_slugs_present():
     # 23 originals + 3 stem specialists (stem_balance, stem_stereo_width,
-    # stem_reference_delta) + mastering_engineer. All but mastering_engineer
-    # must match SpecialistCatalog.cs — mastering_engineer is the coach-mix
-    # arbiter's internal prompt (never user-runnable, not in the catalog).
-    assert len(SPECIALIST_SLUGS) == 27
-    catalog_slugs = set(SPECIALIST_SLUGS) - {"mastering_engineer"}
-    assert len(catalog_slugs) == 26
+    # stem_reference_delta). The count must match SpecialistCatalog.cs.
+    # The coach-mix arbiter prompt lives in ARBITER_SLUG_TO_FILENAME,
+    # deliberately outside this catalog set.
+    assert len(SPECIALIST_SLUGS) == 26
+    assert "mastering_engineer" not in SPECIALIST_SLUGS
 
 
 def test_parse_version_frontmatter_present():

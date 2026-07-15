@@ -36,7 +36,16 @@ public static class FixRackEndpoints
             return Results.BadRequest(new { error = "Analysis has no song version; cannot attach a rack preset." });
 
         // Tier gates the coach-mix LLM arbiter's spend attribution in the worker.
-        var entitlements = await ents.ForAsync(userId, ct);
+        EntitlementsDto entitlements;
+        try
+        {
+            entitlements = await ents.ForAsync(userId, ct);
+        }
+        catch (Exception)
+        {
+            return ErrorEnvelope.Build(503, "entitlements_unavailable",
+                "Entitlement service temporarily unavailable.");
+        }
         var tier = entitlements.Tier; // "pro" | "credits" | "free"
 
         await queue.EnqueueAsync(

@@ -71,18 +71,9 @@ export function FixRackPanel({ jobId, versionId, committedCount, requested, onGe
   }
 
   // ── ready ──
+  // (No empty-chain state: the arbiter always scaffolds at least a ceiling
+  // limiter, so a generated rack has >= 1 enabled module by construction.)
   if (rack) {
-    if (enabled.length === 0) {
-      return (
-        <div className={`card ${s.panel} ${s.empty}`}>
-          <span className={`${s.icon} ${s.ok}`}>✓</span>
-          <div className={s.body}>
-            <div className={s.title}>This master is already clean</div>
-            <div className={s.sub}>The solver found no master-rack move to make.</div>
-          </div>
-        </div>
-      );
-    }
     const chain = readFixChain(rack.chain)!;
     const meta = rack.coachMeta;
     return (
@@ -131,24 +122,29 @@ export function FixRackPanel({ jobId, versionId, committedCount, requested, onGe
           ))}
         </div>
 
-        <div className={s.coach}>
-          <span className={s.coachIc}>✦</span>
-          <div>
-            <div className={s.coachTitle}>
-              What Coach did
-              {meta?.degraded && <span className={s.soon}>used the rule-based master</span>}
+        {/* Pre-port presets (and unparseable coach_meta) have no meta at all —
+            say nothing rather than falsely claim "no changes were needed"
+            under a populated chain. */}
+        {meta && (
+          <div className={s.coach}>
+            <span className={s.coachIc}>✦</span>
+            <div>
+              <div className={s.coachTitle}>
+                What Coach did
+                {meta.degraded && <span className={s.soon}>used the rule-based master</span>}
+              </div>
+              {meta.change_log?.length ? (
+                <ul className={s.sub}>
+                  {meta.change_log.map((c, i) => (
+                    <li key={i}><b>{c.module}</b>: {c.change}{c.why && <> &mdash; {c.why}</>}</li>
+                  ))}
+                </ul>
+              ) : (
+                <div className={s.sub}>No master-rack changes were needed.</div>
+              )}
             </div>
-            {meta?.change_log?.length ? (
-              <ul className={s.sub}>
-                {meta.change_log.map((c, i) => (
-                  <li key={i}><b>{c.module}</b>: {c.change}{c.why && <> &mdash; {c.why}</>}</li>
-                ))}
-              </ul>
-            ) : (
-              <div className={s.sub}>No master-rack changes were needed.</div>
-            )}
           </div>
-        </div>
+        )}
       </div>
     );
   }

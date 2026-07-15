@@ -24,8 +24,8 @@ def test_consult_skips_llm_when_no_judgment_calls(monkeypatch):
 
 
 def test_consult_applies_decision_and_returns_notes(monkeypatch):
-    monkeypatch.setattr(llm_arbiter, "load_prompt", lambda slug: ("1.0.0", "sys"))
-    monkeypatch.setattr(llm_arbiter, "load_prompt_model", lambda slug: None)
+    monkeypatch.setattr(llm_arbiter, "load_arbiter_prompt", lambda slug: ("1.0.0", "sys"))
+    monkeypatch.setattr(llm_arbiter, "load_arbiter_prompt_model", lambda slug: None)
     payload = {"decisions": [{"call_index": 0, "action": "drop", "params": None, "rationale": "clean"}]}
     monkeypatch.setattr(llm_arbiter.gateway, "complete_sync", lambda **k: _Result(json.dumps(payload)))
     out, notes, degraded = llm_arbiter.consult(_res_with_glue_call(), {}, "techno",
@@ -35,8 +35,8 @@ def test_consult_applies_decision_and_returns_notes(monkeypatch):
 
 
 def test_consult_degrades_on_budget_exceeded(monkeypatch):
-    monkeypatch.setattr(llm_arbiter, "load_prompt", lambda slug: ("1.0.0", "sys"))
-    monkeypatch.setattr(llm_arbiter, "load_prompt_model", lambda slug: None)
+    monkeypatch.setattr(llm_arbiter, "load_arbiter_prompt", lambda slug: ("1.0.0", "sys"))
+    monkeypatch.setattr(llm_arbiter, "load_arbiter_prompt_model", lambda slug: None)
     def _boom(**k): raise LlmBudgetExceeded("tier_budget", "over")
     monkeypatch.setattr(llm_arbiter.gateway, "complete_sync", _boom)
     res = _res_with_glue_call()
@@ -46,8 +46,8 @@ def test_consult_degrades_on_budget_exceeded(monkeypatch):
 
 
 def test_consult_degrades_on_malformed_json(monkeypatch):
-    monkeypatch.setattr(llm_arbiter, "load_prompt", lambda slug: ("1.0.0", "sys"))
-    monkeypatch.setattr(llm_arbiter, "load_prompt_model", lambda slug: None)
+    monkeypatch.setattr(llm_arbiter, "load_arbiter_prompt", lambda slug: ("1.0.0", "sys"))
+    monkeypatch.setattr(llm_arbiter, "load_arbiter_prompt_model", lambda slug: None)
     monkeypatch.setattr(llm_arbiter.gateway, "complete_sync", lambda **k: _Result("not json"))
     res = _res_with_glue_call()
     out, notes, degraded = llm_arbiter.consult(res, {}, "techno", tier="free", user_id="u", correlation_id="c")
@@ -56,8 +56,8 @@ def test_consult_degrades_on_malformed_json(monkeypatch):
 
 
 def test_consult_degrades_on_schema_mismatch(monkeypatch):
-    monkeypatch.setattr(llm_arbiter, "load_prompt", lambda slug: ("1.0.0", "sys"))
-    monkeypatch.setattr(llm_arbiter, "load_prompt_model", lambda slug: None)
+    monkeypatch.setattr(llm_arbiter, "load_arbiter_prompt", lambda slug: ("1.0.0", "sys"))
+    monkeypatch.setattr(llm_arbiter, "load_arbiter_prompt_model", lambda slug: None)
     monkeypatch.setattr(llm_arbiter.gateway, "complete_sync",
                         lambda **k: _Result(json.dumps({"decisions": "not_a_list"})))
     res = _res_with_glue_call()
@@ -66,8 +66,8 @@ def test_consult_degrades_on_schema_mismatch(monkeypatch):
 
 
 def test_consult_skips_glue_with_invalid_params(monkeypatch):
-    monkeypatch.setattr(llm_arbiter, "load_prompt", lambda slug: ("1.0.0", "sys"))
-    monkeypatch.setattr(llm_arbiter, "load_prompt_model", lambda slug: None)
+    monkeypatch.setattr(llm_arbiter, "load_arbiter_prompt", lambda slug: ("1.0.0", "sys"))
+    monkeypatch.setattr(llm_arbiter, "load_arbiter_prompt_model", lambda slug: None)
     # ratio=99999.0 exceeds DspOp compressor max of 20.0 → DspOp validation raises → glue skipped
     payload = {"decisions": [{"call_index": 0, "action": "add_glue",
                "params": {"ratio": 99999.0}, "rationale": "bad"}]}
@@ -80,8 +80,8 @@ def test_consult_skips_glue_with_invalid_params(monkeypatch):
 
 def test_consult_forwards_tier_to_gateway(monkeypatch):
     """tier must reach gateway.complete_sync so budget is checked against the caller's tier."""
-    monkeypatch.setattr(llm_arbiter, "load_prompt", lambda slug: ("1.0.0", "sys"))
-    monkeypatch.setattr(llm_arbiter, "load_prompt_model", lambda slug: None)
+    monkeypatch.setattr(llm_arbiter, "load_arbiter_prompt", lambda slug: ("1.0.0", "sys"))
+    monkeypatch.setattr(llm_arbiter, "load_arbiter_prompt_model", lambda slug: None)
     captured: dict = {}
     payload = {"decisions": []}
 
