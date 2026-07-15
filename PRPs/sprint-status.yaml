@@ -122,7 +122,7 @@ development_status:
   5-7-partial-failure-reporting-and-free-retry: done  # 2026-07-15: implemented + 3-layer review + 14 patches (CRITICAL: once-only unique index; HIGH: enqueue-burn, verify-gate 403, rerun-origin mint), all gates green (BFF 393, FE 822, analysis 173, worker 593)
   5-8-song-detail-and-version-compare: done  # song detail route + ProgressTimeline + CompareDialog
   5-9-upload-dialog-polish-club-check-and-playback-verify: done  # UnifiedUploadDialog + StereoCard/ClubCheck + ResultsPlayer
-  5-10-product-a11y-keyboard-and-kitchen-sink: review  # implemented 2026-07-15 on story/5-10-a11y-keyboard-kitchen-sink; gates green (vitest 844, +lint:focus CI step); awaiting review
+  5-10-product-a11y-keyboard-and-kitchen-sink: done  # 2026-07-15: implemented + 3-layer review + 14 patches (HIGH: rail accordion keyboard trap, modal stacking, shift-chord hijack), gates green (FE 848, lint:focus CI step); Epic 5 now 9/10 (5-1 last remnant)
   epic-5-retrospective: optional
 
   epic-6: done  # COMPLETE 2026-07-14 — all 5 stories (6-1..6-5) shipped + merged same day; MVP public funnel land→analyze→claim→measure end-to-end
