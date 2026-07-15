@@ -253,6 +253,48 @@ def test_run_rule_engine_handles_real_pipeline_shape(install_fake_sessions):
     )
 
 
+def test_run_rule_engine_attaches_deterministic_fix_to_fixable_problem(install_fake_sessions):
+    """Regression: the results page lost its device+parameters block because the
+    SOLVE tier never ran in the analysis pipeline. Phase C2 now routes Problems
+    through ``solve_lib.router.merge``, so a fixable Problem persists with a
+    parameter-exact fix (the Listen rack reads ``fix.dsp_chain``)."""
+    aid = uuid.uuid4()
+    final = _clipping_analysis()
+    final["phase2"] = {"genre": "techno"}  # genre-relative solver targets
+    analysis = _FakeAnalysis(aid, final_json=final)
+    session = install_fake_sessions(analysis, preexisting_rule_rows=False)
+
+    written = degraded.run_rule_engine_for_analysis(aid)
+
+    assert written >= 1
+    clipping_rows = [r for r in session.added if r.category == "clipping"]
+    assert clipping_rows, "expected a clipping Problem to fire"
+    fixed = [r for r in clipping_rows if r.fix is not None]
+    assert fixed, "clipping Problem should now carry a deterministic fix"
+    # _to_row stores fix as model_dump() — a limiter is the master-rack move.
+    assert fixed[0].fix["dsp_chain"][0]["type"] == "limiter"
+
+
+def test_run_rule_engine_survives_solver_failure_and_keeps_problems(install_fake_sessions, monkeypatch):
+    """A SOLVE-tier crash must degrade to Problems-only — never wipe the IDENTIFY
+    output. The analysis still gets its Problem list, just without fixes."""
+    import app.solve_lib.router as solve_router
+
+    def _boom(*_a, **_k):
+        raise RuntimeError("solver exploded")
+
+    monkeypatch.setattr(solve_router, "merge", _boom)
+
+    aid = uuid.uuid4()
+    analysis = _FakeAnalysis(aid, final_json=_clipping_analysis())
+    session = install_fake_sessions(analysis, preexisting_rule_rows=False)
+
+    written = degraded.run_rule_engine_for_analysis(aid)
+
+    assert written >= 1, "Problems must still persist when the SOLVE tier crashes"
+    assert all(r.fix is None for r in session.added)  # degraded to no-fix
+
+
 def test_run_rule_engine_idempotent_when_rule_rows_already_exist(install_fake_sessions):
     aid = uuid.uuid4()
     analysis = _FakeAnalysis(aid, final_json=_clipping_analysis())

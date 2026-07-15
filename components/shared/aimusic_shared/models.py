@@ -683,6 +683,7 @@ class RackPreset(Base):
         "source", String(16), nullable=False, server_default="user", default="user"
     )
     chain_json: Mapped[Any] = mapped_column("chain_json", JSONB, nullable=False)
+    coach_meta: Mapped[dict | None] = mapped_column("coach_meta", JSONB, nullable=True)
     # PRP-4 — FKs bound now that the room-session + grant tables exist (SET NULL:
     # deleting a session/grant severs the credit-chain pointer, never the preset).
     created_in_session_id: Mapped[Optional[uuid.UUID]] = mapped_column(
