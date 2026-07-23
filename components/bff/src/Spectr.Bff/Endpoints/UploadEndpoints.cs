@@ -206,7 +206,19 @@ public static class UploadEndpoints
 
         var versionId = await VersionEndpoints.InsertVersionRowAsync(db, songGuid, body.Key, ct);
         var shouldAnalyze = body.Analyze ?? true;
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (DbViolations.IsUniqueViolation(ex))
+        {
+            // Wave-2 (E3.2) — race-only residual after the auto-suffix probe.
+            // Do NOT delete the finalized object: the parts are the user's only
+            // copy and a retry mints a new jobId/key at /init; the zero-row
+            // orphan is retention-swept (matches the 12.3 note above).
+            return ErrorEnvelope.Build(409, "song_name_conflict",
+                "A song with that name already exists. Pick it from the song list or rename.");
+        }
 
         if (shouldAnalyze)
         {

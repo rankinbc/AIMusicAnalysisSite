@@ -8,6 +8,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { parseErrorText } from '../../api/error-utils';
 import type { JobStatusDto } from '../../api/types';
 
 /** Story 6.3 — the REDUCED anon report (server-gated). The full report is
@@ -53,13 +54,10 @@ export function useAnonUpload() {
           resolve(JSON.parse(xhr.responseText) as { jobId: string });
           return;
         }
-        // 12-1 contract: prefer the envelope's message; code drives nothing
+        // 12-1 contract: prefer the server's message; code drives nothing
         // here beyond copy (anon flow has no retry semantics to branch on).
-        let message = 'Upload failed. Try again.';
-        try {
-          const body = JSON.parse(xhr.responseText) as { error?: { message?: string } };
-          if (body?.error?.message) message = body.error.message;
-        } catch { /* non-JSON error body */ }
+        const message =
+          parseErrorText(xhr.responseText).message ?? 'Upload failed. Try again.';
         setState({ isUploading: false, progress: 0, error: message });
         reject(new Error(message));
       });

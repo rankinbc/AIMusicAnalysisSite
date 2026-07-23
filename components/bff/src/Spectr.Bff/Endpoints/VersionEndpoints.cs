@@ -324,7 +324,20 @@ public static class VersionEndpoints
         var versionId = await InsertVersionRowAsync(db, songGuid, key, ct);
 
         var shouldAnalyze = analyze ?? true;
-        await db.SaveChangesAsync(ct);  // saves Song + SongVersion
+        try
+        {
+            await db.SaveChangesAsync(ct);  // saves Song + SongVersion
+        }
+        catch (DbUpdateException ex) when (DbViolations.IsUniqueViolation(ex))
+        {
+            // Wave-2 (E3.2) — race-only residual (auto-suffix probe vs concurrent
+            // insert). The audio object was written above with NO DB row pointing
+            // at it — best-effort cleanup; never let cleanup mask the 409.
+            try { await storage.DeleteAsync(key, ct); }
+            catch { /* orphaned object is retention's problem */ }
+            return ErrorEnvelope.Build(409, "song_name_conflict",
+                "A song with that name already exists. Pick it from the song list or rename.");
+        }
 
         if (shouldAnalyze)
         {
@@ -1008,11 +1021,30 @@ public static class VersionEndpoints
             songGuid = Guid.NewGuid();
             var stem = Path.GetFileNameWithoutExtension(fileName);
             if (string.IsNullOrWhiteSpace(stem)) stem = "Untitled";
+            if (stem.Length > 200) stem = stem[..200];
+
+            // Wave-2 (E3.2) — the derived name is NEVER user-chosen (no song_id
+            // means the dialog sent no typed name), so auto-suffix instead of
+            // letting uq_songs_user_name 500 the upload: "mix", "mix (2)", ….
+            // NO DeletedAt filter: the unique index is UNFILTERED, so a
+            // soft-deleted song still holds its name (AppDbContext uq_songs_user_name).
+            var taken = await db.Songs
+                .Where(s => s.UserId == userId && s.Name.StartsWith(stem))
+                .Select(s => s.Name)
+                .ToListAsync(ct);
+            var name = stem;
+            for (var n = 2; taken.Contains(name); n++)
+            {
+                var suffix = $" ({n})";
+                var maxBase = 200 - suffix.Length; // keep the suffixed name within the 200-char column cap
+                name = (stem.Length > maxBase ? stem[..maxBase] : stem) + suffix;
+            }
+
             db.Songs.Add(new Song
             {
                 Id = songGuid,
                 UserId = userId,
-                Name = stem.Length > 200 ? stem[..200] : stem,
+                Name = name,
                 GenreHint = string.IsNullOrWhiteSpace(genreHint) ? null : genreHint!.Trim(),
             });
         }

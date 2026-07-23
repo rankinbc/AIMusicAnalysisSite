@@ -304,6 +304,108 @@ def _purge_unclaimed_anonymous(now: datetime) -> int:
         return total
 
 
+def _staging_hours() -> int:
+    return int(os.environ.get("RETENTION_STAGED_STEMS_HOURS", "24"))
+
+
+def _purge_abandoned_stem_staging(now: datetime) -> int:
+    """Wave-2 audit remediation — staged-but-never-confirmed stem uploads.
+
+    A user who stages stems (``stem_paths_raw`` written) but never reaches
+    ``/stems/confirm`` (``stem_paths`` stays NULL) leaves orphaned staging
+    objects under ``audio/stems/{versionId}/`` / ``stems/{jobId}/`` forever:
+    the main retention phases only purge versions in the free/lapsed windows,
+    so PROTECTED (paid/credit) users' abandoned staging leaks with no owner
+    action able to reclaim it. This phase deletes those objects once the
+    version has sat unconfirmed for > RETENTION_STAGED_STEMS_HOURS and clears
+    the dead ``stem_paths_raw`` JSON so ``GET .../stems`` stops reporting
+    phantom staged rows.
+
+    NOT a published trust-page number — the staged-stems window is internal
+    hygiene of UNCONFIRMED uploads, not user-facing retention (see the
+    trust-page note above _free_days; no trust-page change is needed here).
+
+    Runs in its OWN sessions; any failure is logged and never poisons the
+    other sweep phases. Returns the number of versions purged.
+    """
+    cutoff = now - timedelta(hours=_staging_hours())
+    total = 0
+    # Accumulated across ALL batches; deleted once the row updates commit.
+    staged_keys: list[str] = []
+    try:
+        while True:  # batches of 500 — bounded work per transaction
+            with SessionFactory.begin() as s:
+                is_pg = s.get_bind().dialect.name == "postgresql"
+                # Abandoned = raw staged, never confirmed, idle past the
+                # window, and no live analysis job (a job in
+                # awaiting_stem_mapping/pending/processing still owns the
+                # staging). SKIP LOCKED: a version mid-confirm is simply not
+                # this sweep's business.
+                select_sql = (
+                    "SELECT id, stem_paths_raw FROM song_versions "
+                    "WHERE stem_paths_raw IS NOT NULL AND stem_paths IS NULL "
+                    "AND updated_at < :cutoff "
+                    "AND NOT EXISTS (SELECT 1 FROM analysis_jobs j "
+                    "  WHERE j.version_id = song_versions.id AND j.status IN "
+                    "  ('pending','processing','awaiting_stem_mapping')) "
+                    "LIMIT 500"
+                )
+                if is_pg:
+                    select_sql += " FOR UPDATE SKIP LOCKED"
+                rows = s.execute(text(select_sql), {"cutoff": cutoff}).all()
+                if not rows:
+                    break
+                for row in rows:
+                    # VERIFIED wire shape: the BFF persists snake_case entries
+                    # with the storage key under "path" (StemRawEntry,
+                    # VersionEndpoints.cs [JsonPropertyName("path")]); legacy
+                    # rows may be plain string lists — same tolerance as
+                    # _version_keys.
+                    keys: list[str] = []
+                    for e in _as_json(row.stem_paths_raw) or []:
+                        if isinstance(e, dict) and e.get("path"):
+                            keys.append(str(e["path"]))
+                        elif isinstance(e, str) and e:  # legacy plain-string
+                            keys.append(e)
+                    # Re-check stem_paths IS NULL in the UPDATE itself — a
+                    # confirm that landed between SELECT and UPDATE (non-PG
+                    # dialects have no row lock) must keep its staging intact.
+                    result = s.execute(
+                        text(
+                            "UPDATE song_versions SET stem_paths_raw = NULL "
+                            "WHERE id = :vid AND stem_paths IS NULL"
+                        ),
+                        {"vid": row.id},
+                    )
+                    if result.rowcount:
+                        staged_keys.extend(keys)
+                        total += 1
+            if len(rows) < 500:
+                break
+        # Objects deleted AFTER the row tx commits — never hold the row lock
+        # across storage network I/O (the anon-purge rule). Fail-soft per key:
+        # the row is already cleared, so a leaked object is an operator log
+        # line, not a fatal error.
+        for key in staged_keys:
+            try:
+                object_store.delete_object(key, LOCAL_ROOT)
+            except Exception:
+                logger.warning(
+                    "sweep_retention: staged-stem object delete failed key=%s",
+                    key, exc_info=True,
+                )
+        if total:
+            logger.info(
+                "sweep_retention: purged staged stems for %d abandoned version(s)",
+                total,
+            )
+        return total
+    except Exception:
+        # Never poisons the other sweep phases (existing per-phase policy).
+        logger.warning("sweep_retention: staged-stems purge failed", exc_info=True)
+        return total
+
+
 def _load_candidates(session, free_cutoff: datetime, lapsed_purgeable: set):
     """Bounded candidate load: free-window versions OR lapsed users' versions.
     Never a full unpurged-table scan."""
@@ -376,7 +478,8 @@ def run_sweep(now: datetime | None = None, lapsed_days: int | None = None) -> di
     lapsed_days = lapsed_days or _env_lapsed_days()
     stats = {
         "purged_versions": 0, "deleted_objects": 0, "missing_objects": 0,
-        "failed_versions": 0, "anon_purged": 0, "skipped": False,
+        "failed_versions": 0, "anon_purged": 0, "staged_stems_purged": 0,
+        "skipped": False,
     }
 
     # ── Phase 1: classification (own session) — FAIL-CLOSED on error ────────
@@ -449,13 +552,16 @@ def run_sweep(now: datetime | None = None, lapsed_days: int | None = None) -> di
         )
 
     stats["anon_purged"] = _purge_unclaimed_anonymous(now)
+    stats["staged_stems_purged"] = _purge_abandoned_stem_staging(now)
     stats["auth_tokens_purged"] = _purge_stale_auth_tokens(now)
     stats["orphaned_accounts_requeued"] = _requeue_orphaned_account_purges()
 
     logger.info(
-        "sweep_retention: purged=%d deleted=%d missing=%d failed=%d anon=%d skipped=%s",
+        "sweep_retention: purged=%d deleted=%d missing=%d failed=%d anon=%d "
+        "staged_stems=%d skipped=%s",
         stats["purged_versions"], stats["deleted_objects"], stats["missing_objects"],
-        stats["failed_versions"], stats["anon_purged"], stats["skipped"],
+        stats["failed_versions"], stats["anon_purged"],
+        stats["staged_stems_purged"], stats["skipped"],
     )
     return stats
 

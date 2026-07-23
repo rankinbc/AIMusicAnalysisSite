@@ -172,7 +172,8 @@ public static class AuthEndpoints
 
         var normalizedEmail = req.Email.Trim();
         var existing = await db.Users.AnyAsync(u => u.Email == normalizedEmail, ct);
-        if (existing) return Results.Conflict(new { error = "Email already registered." });
+        // Wave-2 (E2.4) — typed AR38 envelope so the frontend can key on the code.
+        if (existing) return ErrorEnvelope.Build(409, "email_taken", "Email already registered.");
 
         var handle = await seeder.SeedAsync(normalizedEmail, ct);
         var user = new User
@@ -302,7 +303,7 @@ public static class AuthEndpoints
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(req.Email) || string.IsNullOrEmpty(req.Password))
-            return Results.BadRequest(new { error = "Email and password required." });
+            return ErrorEnvelope.Build(400, "invalid_request", "Email and password required.");
 
         // NFR8: per-IP ceiling + per-email actor arm (a distributed guesser
         // burning one address still hits the actor arm).
@@ -312,10 +313,13 @@ public static class AuthEndpoints
 
         var normalizedEmail = req.Email.Trim();
         var user = await db.Users.FirstOrDefaultAsync(u => u.Email == normalizedEmail, ct);
+        // Wave-2 (E2.4) — typed envelope; the previous Results.Unauthorized() had
+        // an EMPTY body so no client could ever show useful copy. Bad credentials
+        // and inactive accounts are INTENTIONALLY indistinguishable (no oracle).
         if (user is null || !hasher.Verify(req.Password, user.HashedPassword))
-            return Results.Unauthorized();
+            return ErrorEnvelope.Build(401, "invalid_credentials", "Wrong email or password.");
         if (!user.IsActive)
-            return Results.Unauthorized();
+            return ErrorEnvelope.Build(401, "invalid_credentials", "Wrong email or password.");
         // Story 10.5 — bans block login with an EXPLICIT code (not a silent
         // 401: a banned user retrying passwords is noise for support).
         if (user.BannedAt is not null)

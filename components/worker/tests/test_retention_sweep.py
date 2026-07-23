@@ -428,6 +428,165 @@ def test_paid_signal_at_purge_time_spares_the_user(db):
     assert _purged_at(factory, vid) is None
 
 
+# ── Wave-2: abandoned staged-stems sweep ─────────────────────────────────────
+
+def _seed_staged_version(
+    factory,
+    tmp_path: Path,
+    *,
+    updated_at: datetime,
+    raw_entries=None,
+    confirmed: bool = False,
+) -> tuple[uuid.UUID, list[Path]]:
+    """A version with staged stems (stem_paths_raw set). created_at is kept
+    RECENT so the main free-window purge never selects it — these tests
+    isolate the staged-stems phase."""
+    uid, sid, vid = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    files: list[Path] = []
+
+    def _mk(k: str) -> None:
+        p = tmp_path / k
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"RIFF....WAVE")
+        files.append(p)
+
+    if raw_entries is None:
+        # VERIFIED wire shape (StemRawEntry, snake_case, key under "path").
+        raw_entries = [
+            {
+                "id": "abc",
+                "original_filename": "kick.wav",
+                "path": f"audio/stems/{vid}/abc.wav",
+                "detected_role": None,
+                "confidence": 0,
+                "evidence": None,
+                "confirmed_role": None,
+            },
+            {
+                "id": "def",
+                "original_filename": "snare.wav",
+                "path": f"audio/stems/{vid}/def.wav",
+                "detected_role": None,
+                "confidence": 0,
+                "evidence": None,
+                "confirmed_role": None,
+            },
+        ]
+    for e in raw_entries:
+        _mk(e["path"] if isinstance(e, dict) else e)
+
+    # NOTE: stem_paths must stay UNSET for the unconfirmed case — explicitly
+    # passing None to a SQLAlchemy JSON column persists JSON 'null' (not SQL
+    # NULL; none_as_null defaults False), which would defeat the sweep's
+    # `stem_paths IS NULL` selection.
+    extra = {}
+    if confirmed:
+        extra["stem_paths"] = {
+            "kick": [e["path"] if isinstance(e, dict) else e for e in raw_entries]
+        }
+
+    with factory.begin() as s:
+        s.add(User(id=uid, email=f"{uid}@t.test", hashed_password="x"))
+        s.add(Song(id=sid, user_id=uid, name=f"T{uid.hex[:6]}"))
+        s.add(SongVersion(
+            id=vid, song_id=sid, version_number=1,
+            file_path=f"audio/{uid}/{vid}/source.wav",
+            stem_paths_raw=raw_entries,
+            created_at=NOW - timedelta(days=1), updated_at=updated_at,
+            **extra,
+        ))
+    return vid, files
+
+
+def _raw_of(factory, vid: uuid.UUID):
+    with factory() as s:
+        return s.get(SongVersion, vid).stem_paths_raw
+
+
+def test_abandoned_staged_stems_are_purged(db):
+    factory, tmp_path = db
+    vid, files = _seed_staged_version(
+        factory, tmp_path, updated_at=NOW - timedelta(hours=25))
+
+    stats = ra.run_sweep(now=NOW)
+
+    assert stats["staged_stems_purged"] == 1
+    assert all(not f.exists() for f in files)
+    assert _raw_of(factory, vid) is None
+
+
+def test_confirmed_stems_are_untouched(db):
+    factory, tmp_path = db
+    vid, files = _seed_staged_version(
+        factory, tmp_path, updated_at=NOW - timedelta(hours=25), confirmed=True)
+
+    stats = ra.run_sweep(now=NOW)
+
+    assert stats["staged_stems_purged"] == 0
+    assert all(f.exists() for f in files)
+    assert _raw_of(factory, vid) is not None
+
+
+def test_fresh_staging_is_untouched(db):
+    factory, tmp_path = db
+    vid, files = _seed_staged_version(
+        factory, tmp_path, updated_at=NOW - timedelta(hours=1))
+
+    stats = ra.run_sweep(now=NOW)
+
+    assert stats["staged_stems_purged"] == 0
+    assert all(f.exists() for f in files)
+    assert _raw_of(factory, vid) is not None
+
+
+def test_staging_with_active_job_is_untouched(db):
+    from aimusic_shared.models import AnalysisJob
+
+    factory, tmp_path = db
+    vid, files = _seed_staged_version(
+        factory, tmp_path, updated_at=NOW - timedelta(hours=25))
+    with factory.begin() as s:
+        s.add(AnalysisJob(id=uuid.uuid4(), version_id=vid, status="pending"))
+
+    stats = ra.run_sweep(now=NOW)
+
+    assert stats["staged_stems_purged"] == 0
+    assert all(f.exists() for f in files)
+    assert _raw_of(factory, vid) is not None
+
+
+def test_legacy_plain_string_raw_entries_tolerated(db):
+    factory, tmp_path = db
+    legacy = [f"audio/stems/legacy/{i}.wav" for i in range(2)]
+    vid, files = _seed_staged_version(
+        factory, tmp_path, updated_at=NOW - timedelta(hours=25),
+        raw_entries=legacy)
+
+    stats = ra.run_sweep(now=NOW)
+
+    assert stats["staged_stems_purged"] == 1
+    assert all(not f.exists() for f in files)
+    assert _raw_of(factory, vid) is None
+
+
+def test_staged_delete_failure_still_clears_row_and_never_raises(db, monkeypatch):
+    """Row cleared BEFORE the (post-commit) object deletes — a failed delete
+    is an operator log line, never a sweep failure (anon-purge policy)."""
+    factory, tmp_path = db
+    vid, files = _seed_staged_version(
+        factory, tmp_path, updated_at=NOW - timedelta(hours=25))
+
+    def _boom(_key, _root):
+        raise RuntimeError("s3 down")
+
+    monkeypatch.setattr(ra.object_store, "delete_object", _boom)
+    stats = ra.run_sweep(now=NOW)  # must not raise
+
+    assert stats["staged_stems_purged"] == 1
+    assert all(f.exists() for f in files)  # objects leaked — logged, retried never
+    assert _raw_of(factory, vid) is None
+
+
 # ── Story 12.8: the shared demo blob is never any one user's data ────────────
 
 def test_version_keys_excludes_shared_demo_key():

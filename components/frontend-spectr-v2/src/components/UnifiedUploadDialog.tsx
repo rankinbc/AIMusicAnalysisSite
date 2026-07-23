@@ -618,6 +618,20 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
         showVerifyGateToast();
         return;
       }
+      // Wave 2 (E3.2) — typed duplicate-name 409. Reachable via the typed-name
+      // createSong path and the presigned /uploads/complete path (both fetcher
+      // → ApiError). The legacy XHR proxy path throws a plain Error carrying
+      // the server's message text instead — it falls through to the generic
+      // toast below (XHR errors don't carry codes in this wave).
+      if (err instanceof ApiError && extractApiError(err.body).code === 'song_name_conflict') {
+        setPhase('form');
+        setStatus('');
+        setBusy(false);
+        toast.error(
+          'A song with that name already exists — pick it from the song list or type a different name.',
+        );
+        return;
+      }
       // The version may already exist un-analyzed — let the user retry from the song page.
       setPhase('form');
       setStatus('');

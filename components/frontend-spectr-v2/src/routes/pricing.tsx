@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+import { parseErrorBody } from '../api/error-utils';
 import { getAccessToken } from '../api/fetcher';
 import type {
   CreateCheckoutSessionResponse,
@@ -71,15 +72,13 @@ export function PricingPage() {
         body: JSON.stringify({ cadence }),
       });
       if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as
-          | { error?: { code?: string; message?: string } }
-          | null;
-        if (body?.error?.code === 'stripe_not_configured') {
+        const parsed = parseErrorBody(await res.json().catch(() => null));
+        if (parsed.code === 'stripe_not_configured') {
           toast.error(
             'Stripe is not configured in this environment. Set the keys to test checkout.',
           );
         } else {
-          toast.error(body?.error?.message ?? 'Could not start checkout.');
+          toast.error(parsed.message ?? 'Could not start checkout.');
         }
         return;
       }

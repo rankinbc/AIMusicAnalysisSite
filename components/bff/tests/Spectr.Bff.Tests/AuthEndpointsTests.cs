@@ -5,6 +5,7 @@ using Spectr.Bff.DTOs;
 using Spectr.Data;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Xunit;
 
 namespace Spectr.Bff.Tests;
@@ -55,6 +56,51 @@ public sealed class AuthEndpointsTests(WebApplicationFactory<Program> factory)
         var login = await client.PostAsJsonAsync("/api/auth/login",
             new { email, password });
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+    }
+
+    // Wave-2 (E2.4) — duplicate registration returns the typed AR38 envelope.
+    [SkippableFact]
+    public async Task Register_DuplicateEmail_Returns409_WithEmailTakenCode()
+    {
+        await TestDb.RequireAsync(_factory);
+
+        var client = NewClient();
+        var email = $"dupe+{Guid.NewGuid():N}@spectr.test";
+        var password = "correct-horse-battery";
+
+        var first = await client.PostAsJsonAsync("/api/auth/register", new { email, password });
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        var second = await client.PostAsJsonAsync("/api/auth/register", new { email, password });
+        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+        using var doc = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.Equal("email_taken",
+            doc.RootElement.GetProperty("error").GetProperty("code").GetString());
+        Assert.Equal("Email already registered.",
+            doc.RootElement.GetProperty("error").GetProperty("message").GetString());
+    }
+
+    // Wave-2 (E2.4) — login 401 previously had an EMPTY body; now a typed envelope.
+    [SkippableFact]
+    public async Task Login_WrongPassword_Returns401_WithInvalidCredentialsCode()
+    {
+        await TestDb.RequireAsync(_factory);
+
+        var client = NewClient();
+        var email = $"badpw+{Guid.NewGuid():N}@spectr.test";
+
+        var reg = await client.PostAsJsonAsync("/api/auth/register",
+            new { email, password = "correct-horse-battery" });
+        Assert.Equal(HttpStatusCode.OK, reg.StatusCode);
+
+        var login = await client.PostAsJsonAsync("/api/auth/login",
+            new { email, password = "wrong-horse-battery" });
+        Assert.Equal(HttpStatusCode.Unauthorized, login.StatusCode);
+        using var doc = JsonDocument.Parse(await login.Content.ReadAsStringAsync());
+        Assert.Equal("invalid_credentials",
+            doc.RootElement.GetProperty("error").GetProperty("code").GetString());
+        Assert.Equal("Wrong email or password.",
+            doc.RootElement.GetProperty("error").GetProperty("message").GetString());
     }
 
     [SkippableFact]

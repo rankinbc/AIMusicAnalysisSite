@@ -112,7 +112,9 @@ public static class SongEndpoints
         }
         catch (DbUpdateException ex) when (IsUniqueViolation(ex))
         {
-            return Results.Conflict(new { error = "A song with that name already exists." });
+            // Wave-2 (E2.4/E3.7) — typed AR38 envelope, status unchanged.
+            return ErrorEnvelope.Build(409, "song_name_conflict",
+                "A song with that name already exists.");
         }
 
         return Results.Created($"/api/songs/{song.Id}",
@@ -211,7 +213,9 @@ public static class SongEndpoints
         }
         catch (DbUpdateException ex) when (IsUniqueViolation(ex))
         {
-            return Results.Conflict(new { error = "A song with that name already exists." });
+            // Wave-2 (E2.4/E3.7) — typed AR38 envelope, status unchanged.
+            return ErrorEnvelope.Build(409, "song_name_conflict",
+                "A song with that name already exists.");
         }
 
         return Results.NoContent();

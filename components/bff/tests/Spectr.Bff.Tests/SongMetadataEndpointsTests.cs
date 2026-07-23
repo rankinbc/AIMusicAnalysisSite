@@ -4,6 +4,7 @@ using Spectr.Bff.DTOs;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Xunit;
 
 namespace Spectr.Bff.Tests;
@@ -50,6 +51,26 @@ public sealed class SongMetadataEndpointsTests(WebApplicationFactory<Program> fa
         Assert.Equal("aurora", fetched.VisualTemplate);
         Assert.Equal("preset", fetched.ReferenceProfileKind);
         Assert.Equal("trance", fetched.ReferenceProfileId);
+    }
+
+    // Wave-2 (E2.4/E3.7) — explicit duplicate name returns the typed AR38 envelope.
+    [SkippableFact]
+    public async Task Create_DuplicateName_Returns409_WithSongNameConflictCode()
+    {
+        await TestDb.RequireAsync(_factory);
+        var (client, _) = await NewAuthedClient();
+        var name = $"Dup {Guid.NewGuid():N}";
+
+        var first = await CreateSong(client, new { name });
+        Assert.NotNull(first);
+
+        var second = await client.PostAsJsonAsync("/api/songs/", new { name });
+        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+        using var doc = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.Equal("song_name_conflict",
+            doc.RootElement.GetProperty("error").GetProperty("code").GetString());
+        Assert.Equal("A song with that name already exists.",
+            doc.RootElement.GetProperty("error").GetProperty("message").GetString());
     }
 
     [SkippableFact]

@@ -2,6 +2,7 @@
 // to wire xhr.upload.addEventListener('progress', ...) for the progress bar.
 import { useCallback, useRef, useState } from 'react';
 
+import { parseErrorText } from '../api/error-utils';
 import { getFreshAccessToken, refreshSession } from '../api/fetcher';
 import type { UploadResponse } from '../api/types';
 
@@ -75,7 +76,8 @@ export function useFileUpload() {
                 }
               });
             } else {
-              const msg = safeParseError(xhr.responseText) ?? `Upload failed (${xhr.status})`;
+              const msg =
+                parseErrorText(xhr.responseText).message ?? `Upload failed (${xhr.status})`;
               setState((s) => ({ ...s, isUploading: false, error: msg }));
               reject(new Error(msg));
             }
@@ -102,13 +104,4 @@ export function useFileUpload() {
   }, []);
 
   return { ...state, upload, cancel };
-}
-
-function safeParseError(text: string): string | null {
-  try {
-    const o = JSON.parse(text) as { error?: string; title?: string };
-    return o.error ?? o.title ?? null;
-  } catch {
-    return null;
-  }
 }

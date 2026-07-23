@@ -1,0 +1,29 @@
+/* Wave 2 — LLM-degradation notice. Same recoverable-amber grammar as the
+   phase-failure DegradationBanner (calm, not the critical red): the report
+   is still useful, the AI layer is what went quiet. */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 0.75rem);
+  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
+  margin-bottom: var(--space-4, 1rem);
+  border: 1px solid var(--orange);
+  background: var(--orange-dim);
+  border-radius: var(--radius, 10px);
+  color: var(--text);
+}
+
+.dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--orange);
+}
+
+.message {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.3;
+}

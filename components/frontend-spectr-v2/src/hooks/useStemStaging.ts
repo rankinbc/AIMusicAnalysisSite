@@ -3,6 +3,7 @@
 // /api/versions/{id}/stems/stage (field name "files").
 import { useCallback, useRef, useState } from 'react';
 
+import { parseErrorText } from '../api/error-utils';
 import { getFreshAccessToken, refreshSession } from '../api/fetcher';
 import type { StageStemsResponse } from '../api/types';
 
@@ -56,7 +57,8 @@ export function useStemStaging(versionId: string) {
                 }
               });
             } else {
-              const msg = safeParseError(xhr.responseText) ?? `Upload failed (${xhr.status})`;
+              const msg =
+                parseErrorText(xhr.responseText).message ?? `Upload failed (${xhr.status})`;
               setState((s) => ({ ...s, isUploading: false, error: msg }));
               reject(new Error(msg));
             }
@@ -81,13 +83,4 @@ export function useStemStaging(versionId: string) {
   const cancel = useCallback(() => xhrRef.current?.abort(), []);
 
   return { ...state, stage, cancel };
-}
-
-function safeParseError(text: string): string | null {
-  try {
-    const o = JSON.parse(text) as { error?: string; title?: string };
-    return o.error ?? o.title ?? null;
-  } catch {
-    return null;
-  }
 }

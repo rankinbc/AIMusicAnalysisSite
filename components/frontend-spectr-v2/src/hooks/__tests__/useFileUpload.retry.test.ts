@@ -92,6 +92,46 @@ describe('useFileUpload 401 retry (E3.9)', () => {
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
   });
 
+  // Wave 2 (E3.7b) — the XHR failure path parses ALL server error shapes via
+  // the shared parser: an envelope body must surface error.message (never
+  // "[object Object]"), a legacy body its text.
+  it('surfaces the envelope message on a non-401 failure (not "[object Object]")', async () => {
+    const { result } = renderHook(() => useFileUpload());
+    const done = result.current.upload(new File(['x'], 'a.wav'));
+    done.catch(() => undefined);
+
+    await waitFor(() => expect(MockXhr.instances).toHaveLength(1));
+    act(() =>
+      MockXhr.instances[0]!.respond(
+        400,
+        JSON.stringify({
+          error: { code: 'file_too_large', message: 'File exceeds 250 MB limit.' },
+        }),
+      ),
+    );
+
+    await expect(done).rejects.toThrow('File exceeds 250 MB limit.');
+    await waitFor(() => expect(result.current.error).toBe('File exceeds 250 MB limit.'));
+    expect(result.current.error).not.toContain('[object Object]');
+  });
+
+  it('surfaces the legacy { error: "text" } message on a non-401 failure', async () => {
+    const { result } = renderHook(() => useFileUpload());
+    const done = result.current.upload(new File(['x'], 'a.wav'));
+    done.catch(() => undefined);
+
+    await waitFor(() => expect(MockXhr.instances).toHaveLength(1));
+    act(() =>
+      MockXhr.instances[0]!.respond(
+        400,
+        JSON.stringify({ error: 'Unsupported file type.' }),
+      ),
+    );
+
+    await expect(done).rejects.toThrow('Unsupported file type.');
+    await waitFor(() => expect(result.current.error).toBe('Unsupported file type.'));
+  });
+
   it('a second 401 (refresh did not help) fails without a third attempt', async () => {
     const { result } = renderHook(() => useFileUpload());
     const done = result.current.upload(new File(['x'], 'a.wav'));

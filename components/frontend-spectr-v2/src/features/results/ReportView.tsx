@@ -32,6 +32,7 @@ import { ReferenceUploadDialog } from '../../components/ReferenceUploadDialog';
 import { StemsUploadDialog } from '../../components/StemsUploadDialog';
 import { AnalysisCompleteModal } from './AnalysisCompleteModal';
 import { DegradationBanner } from './DegradationBanner';
+import { LlmDegradationNotice } from './LlmDegradationNotice';
 import { CoachTab } from './CoachTab';
 import { CoachMixModal } from './CoachMixModal';
 import { ExportModal } from './ExportModal';
@@ -306,6 +307,12 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
               })
             }
           />
+
+          {/* Wave 2 (FR16/UX-DR17) — LLM-degradation notice, independent of the
+              phase-failure banner above; both may render at once. */}
+          {verdictsData?.degradation && (
+            <LlmDegradationNotice notice={verdictsData.degradation} />
+          )}
 
           <ResultsTabs
             current={tab}

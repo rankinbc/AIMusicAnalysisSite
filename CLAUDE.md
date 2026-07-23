@@ -490,6 +490,8 @@ zone (up to **100** stems). Flow: **stage → classify → poll → confirm**.
   in its join — `AsNoTracking()` anywhere makes the WHOLE query no-tracking, so
   `SaveChanges` silently drops the update. (The legacy `UploadStems` POST `/stems`
   has this latent bug and never persisted in v2; the new flow uses a tracked lookup.)
-- **Follow-ups (not done):** BFF endpoint integration tests; cleanup of
-  abandoned `audio/stems/{versionId}/` staging dirs; fix the legacy `/stems` endpoint's
-  AsNoTracking bug if it's kept.
+- **Follow-ups:** BFF endpoint integration tests (not done); fix the legacy `/stems`
+  endpoint's AsNoTracking bug if it's kept (not done). ~~Cleanup of abandoned
+  `audio/stems/{versionId}/` staging dirs~~ — DONE (audit wave 2): the nightly
+  `sweep_retention` purges staging abandoned >24 h before confirm
+  (`_purge_abandoned_stem_staging`, window via `RETENTION_STAGED_STEMS_HOURS`).

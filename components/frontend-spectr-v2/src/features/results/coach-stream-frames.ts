@@ -1,3 +1,4 @@
+import { parseErrorBody } from '../../api/error-utils';
 import type {
   CoachEvidenceDto,
   CoachStreamDonePayload,
@@ -96,15 +97,11 @@ export function extractErrorCode(body: unknown): string | null {
   return null;
 }
 
-/** Extract the AR38 `error.message` field. Falls back to null for
- *  non-envelope payloads (caller substitutes a generic message). */
+/** Extract the human-readable error message via the shared three-shape
+ *  parser (coach endpoints are envelope-always today — future-proofing).
+ *  Falls back to null (caller substitutes a generic message). NOTE:
+ *  extractErrorCode above stays envelope-ONLY — coach codes must never be
+ *  derived from legacy/problem shapes. */
 export function extractErrorMessage(body: unknown): string | null {
-  if (
-    isObj(body) &&
-    isObj(body.error) &&
-    typeof body.error.message === 'string'
-  ) {
-    return body.error.message;
-  }
-  return null;
+  return parseErrorBody(body).message ?? null;
 }
