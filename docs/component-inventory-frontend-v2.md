@@ -1,0 +1,218 @@
+# Frontend v2 Component Inventory — `components/frontend-spectr-v2`
+
+Companion to `docs/architecture-frontend-v2.md`. All paths relative to
+`components/frontend-spectr-v2/src/`. Test files (`__tests__/`, `*.test.*`) and CSS modules are
+excluded. "Reusable" = designed for use across features; unmarked entries are feature-specific.
+
+## Route pages (`routes/`) — 30 files (3 layouts + 27 pages)
+
+| Component | File | Purpose |
+| --- | --- | --- |
+| RootComponent | `routes/__root.tsx` | Root outlet; router context (queryClient + auth) |
+| AppLayout | `routes/_app.tsx` | Authed shell: topnav, banners, global shortcuts (⌘K/⌘U/?), account menu, auth guard |
+| PublicLayout | `routes/_public.tsx` | Narrow anonymous column with wordmark |
+| LandingPage route | `routes/index.tsx` | `/` public landing; authed users redirect to /library |
+| AnalyzePage route | `routes/analyze.tsx` | `/analyze` anonymous instant-analysis funnel |
+| PricingPage | `routes/pricing.tsx` | `/pricing` — plans from `/api/billing/plans`, Stripe checkout redirect |
+| Trust hub + pledges | `routes/trust.index.tsx`, `trust.no-training.tsx`, `trust.privacy.tsx`, `trust.results-forever.tsx` | `/trust/*` versioned trust/pledge pages |
+| LibraryPage | `routes/_app/library.tsx` | `/library` — Songs / References segmented sections |
+| SongDetailPage | `routes/_app/songs.$songId.tsx` | Song hero, version list, compare/share/edit dialogs; `<Outlet/>` when results child active |
+| ResultsPage | `routes/_app/songs.$songId.results.$jobId.tsx` | Job poll → progress storyline / fail+retry / ReportView (`?tab=` deep link) |
+| ListenRackVersionRoute | `routes/_app/listen-rack.$versionId.tsx` | Canonical Listen page; builds track model from analysis; `?fixPreset=` carry-over |
+| ReportsPage | `routes/_app/reports.tsx` | All-reports filterable table |
+| FeedPage | `routes/_app/feed.tsx` | Followed-users activity feed (accumulating pages) |
+| ProfilePage | `routes/_app/profile.tsx` | Own profile + settings tabs incl. DangerZone |
+| UsagePage | `routes/_app/usage.tsx` | Credits balance, ledger, BuyCreditsCard, UsageSummary |
+| BillingPage | `routes/_app/billing.tsx` | Self-service billing (free / pro / cancel-pending states) |
+| BillingSuccessPage | `routes/_app/billing.success.tsx` | Post-checkout; polls `/auth/me` 5 s × 60 s for tier flip |
+| KitchenSinkPage | `routes/_app/dev.kitchen-sink.tsx` | DEV-only component inventory (a11y/visual audit surface) |
+| LoginPage / RegisterPage | `routes/_public/login.tsx`, `register.tsx` | Auth forms (`?next=` support) |
+| ForgotPassword / ResetPassword / VerifyEmail | `routes/_public/forgot-password.tsx`, `reset-password.tsx`, `verify-email.tsx` | Account-flow containers over AuthFlowViews |
+| BillingCancelledPage | `routes/_public/billing.cancelled.tsx` | Stripe checkout-cancelled landing |
+| PublicProfileRoute | `routes/_public/u.$handle.tsx` | `/u/{handle}` public profile |
+| VersionViewPage | `routes/_public/v.$token.tsx` | `/v/{token}` anon version-share reviewer surface |
+| SharedReviewerPage | `routes/_public/r.$token.tsx` | `/r/{token}` shared-analysis review: audio + timestamped comments |
+
+## Feature components (`features/`)
+
+### results (32 components; hooks/helpers: `useFixRackGeneration`, `move-model`, `results-tabs-model`, `progress-phases`, `coach-stream-frames`, `fix-rack-helpers`, `helpers/*`)
+
+| Component | File | Purpose |
+| --- | --- | --- |
+| ReportView | `features/results/ReportView.tsx` | Report orchestrator: header, tabs, dialogs, fix-rack + coach-mix state |
+| ResultsTabs | `features/results/ResultsTabs.tsx` | Tab strip (Coach/Findings/Project/Reference/Track Info/Debug) with badges |
+| SongHeader | `features/results/SongHeader.tsx` | Persistent header card: identity, analyzed-input roster, inline player |
+| ProgressStoryline(+View) | `features/results/ProgressStoryline.tsx` | Per-phase progress, elapsed clock, slow/offline hints (reused by anon funnel) |
+| GradeHero | `features/results/GradeHero.tsx` | Grade letter + mix score + dance chip (reused by landing + anon report) |
+| StreamingCard | `features/results/StreamingCard.tsx` | Streaming-readiness rows (reused by anon report + Track Info) |
+| CoachTab | `features/results/CoachTab.tsx` | Coach tab: chat + specialist auto-run + move list + fix-rack trigger |
+| CoachChat | `features/results/CoachChat.tsx` | SSE chat: token stream, caps, refusals, offline state, aria-live |
+| CoachCapChip | `features/results/CoachCapChip.tsx` | `{used} of {limit} follow-ups` caps chip |
+| CoachGateInline | `features/results/CoachGateInline.tsx` | Cap-reached input replacement (upgrade paths) |
+| CoachMixModal | `features/results/CoachMixModal.tsx` | Full-width compiled Fix Rack modal |
+| FixRackPanel | `features/results/FixRackPanel.tsx` | Sidebar fix-rack lifecycle panel (idle/generating/error/timeout/ready) |
+| SpecialistTeamModal | `features/results/SpecialistTeamModal.tsx` | Specialist roster: run/running/found per slug, credits |
+| AnalysisCompleteModal | `features/results/AnalysisCompleteModal.tsx` | Post-analysis teaser/conversion modal (running + complete states) |
+| DegradationBanner | `features/results/DegradationBanner.tsx` | Degraded-run (rule-engine-only) notice |
+| DepthBanner | `features/results/DepthBanner.tsx` | "Add stems/.als for depth" banner on shallow analyses |
+| FindingsTab | `features/results/FindingsTab.tsx` | Full problems/findings list |
+| ProjectTab | `features/results/ProjectTab.tsx` | `.als` project-health panel |
+| ProjectUnlock | `features/results/ProjectUnlock.tsx` | No-.als CTA state for the Project tab |
+| ReferenceTab | `features/results/ReferenceTab.tsx` | Reference-delta panel |
+| TrackInfoTab | `features/results/TrackInfoTab.tsx` | Measurements: metadata, frequency, stereo, streaming |
+| FilesTab | `features/results/FilesTab.tsx` | Version files list + authorized downloads |
+| DebugTab | `features/results/DebugTab.tsx` | DEV-only raw pipeline I/O per phase |
+| ResultsPlayer | `features/results/ResultsPlayer.tsx` | Bar-waveform scrubber transport for the report |
+| MoveCard | `features/results/MoveCard.tsx` | Recommended-fix card with commit-to-Listen toggle |
+| FixModal | `features/results/FixModal.tsx` | Fix detail modal |
+| RackModules | `features/results/RackModules.tsx` | dsp_chain ops rendered as rack-module glyphs |
+| RackSidebar | `features/results/RackSidebar.tsx` | Report sidebar hosting rack/fix panels |
+| TrackChip | `features/results/TrackChip.tsx` | `.als` track-name chip (with highlight wiring) |
+| EvidenceChips | `features/results/EvidenceChips.tsx` | Verdict evidence value chips |
+| ExportModal | `features/results/ExportModal.tsx` | Game-plan checklist export preview |
+| TranceBot / MiniBot | `features/results/TranceBot.tsx` | Back-compat aliases for `ui/Coach` mascot |
+
+### listen — DSP engine + share/room primitives (5 components; 13 hooks; `audio/` subsystem)
+
+| Component | File | Purpose |
+| --- | --- | --- |
+| StemDeck | `features/listen/StemDeck.tsx` | Per-stem playback deck (mute/solo/gain) |
+| BookmarksRail | `features/listen/BookmarksRail.tsx` | Timestamp bookmarks rail |
+| AnonReviewerSurface | `features/listen/AnonReviewerSurface.tsx` | Pure pieces for the `/v/{token}` anon reviewer page |
+| ProducerCta | `features/listen/ProducerCta.tsx` | Register CTA on share pages (attribution + `next`) |
+| SuggestionCard | `features/listen/SuggestionCard.tsx` | Reviewer rack-suggestion card |
+
+Hooks/engine (not components): `useAudioGraph` (Web Audio DSP graph — the engine),
+`useStemEngine`, `useRoomSession`/`useRoomStream`/`useRoomActions` (rooms + SSE), `useComments`,
+`useBookmarks`/`useBookmarkSignal`, `useSuggestions`, `useInvites`, `useVersionAccess`,
+`useVersionShare`, `useAnonFeedback`; `audio/` = composer, EffectUnit, state, worklets,
+13 effect modules (`audio/effects/`), pure DSP math (`audio/dsp/`), 3 AudioWorklet processors.
+
+### listen-rack — the Listen page (8 components; state/hooks: `rackState`, `rackBindings`, `useRackPresets`, `useVizPresetsServer`, `useFixOverlay`, `useRoomOrchestration` (+mock), `roomStateReducer`, `fixToRackPatch`, `listenFixes`, `trackFromAnalysis`, `capabilities`, `access`, `identity`, `sessionEvents`, `suggest-draft`, `chain`, `data`, `helpers`)
+
+| Component | File | Purpose |
+| --- | --- | --- |
+| ListenRackPage | `features/listen-rack/ListenRackPage.tsx` | Page orchestrator: engine binding, transport, presets, rooms, fixes |
+| rackCore renderers | `features/listen-rack/rackCore.tsx` | Manifest-driven rack module renderers |
+| rackLayouts | `features/listen-rack/rackLayouts.tsx` | Rack layout arrangements |
+| ui (control primitives) | `features/listen-rack/ui.tsx` | Draggable knobs/faders/toggles/meters (neon language) |
+| transport | `features/listen-rack/transport.tsx` | Scrubber + transport controls |
+| viz (VizStage + stages) | `features/listen-rack/viz.tsx` | Visualizer stages + AUTO director (one rAF) |
+| rail | `features/listen-rack/rail.tsx` | Right panel tabs: Coach/Plan/People/Chat/Stats/Notes + meters |
+| SuggestModeChip | `features/listen-rack/SuggestModeChip.tsx` | Fork-to-suggest mode chip (A/B, submit/discard) |
+
+### billing (7 components; hooks: `useBillingPortal`, `useUpgradeCheckout`; helpers: `format-price`, `stripe-url`)
+
+| Component | File | Purpose |
+| --- | --- | --- |
+| BuyCreditsCard | `features/billing/BuyCreditsCard.tsx` | Credit-pack purchase card |
+| CreditLedgerTable | `features/billing/CreditLedgerTable.tsx` | Mono credit ledger |
+| UsageSummary | `features/billing/UsageSummary.tsx` | Analyses + coach-pool usage summary |
+| HonestMathBanner | `features/billing/HonestMathBanner.tsx` | Dismissible credits-vs-Pro comparison |
+| DunningBanner | `features/billing/DunningBanner.tsx` | Past-due fix-payment banner (billing page) |
+| AppDunningNotice | `features/billing/AppDunningNotice.tsx` | App-wide past-due notice (authed shell) |
+| CancelDialog | `features/billing/CancelDialog.tsx` | Subscription cancel confirm flow |
+
+### anon-analyze (3 components; hooks/vm: `useAnonAnalysis`, `anon-report-vm`, `resume-dismissed`)
+
+| Component | File | Purpose |
+| --- | --- | --- |
+| AnalyzePage (+DropZoneView, ExplainerLine, AnonReportView, InlineRegisterCard) | `features/anon-analyze/AnalyzePage.tsx` | Funnel state machine idle→uploading→processing→report + claim |
+| LandingResumeSlot | `features/anon-analyze/LandingResumeSlot.tsx` | Landing mount owning the resume fetch |
+| ResumeCard | `features/anon-analyze/ResumeCard.tsx` | Returning-device resume doorway (status-aware) |
+
+### Other feature folders
+
+| Component | File | Purpose |
+| --- | --- | --- |
+| LandingPage | `features/landing/LandingPage.tsx` | Public landing (hero, sample report, funnel CTAs) |
+| SampleReportEmbed | `features/landing/SampleReportEmbed.tsx` | Live sample report from real trimmed pipeline output |
+| SongsLibrarySection | `features/library/SongsLibrarySection.tsx` | Song grid: cards, filter pills, VersionArc, new-song entry |
+| ReferenceLibrarySection | `features/references/ReferenceLibrarySection.tsx` | Reference library grid + upload |
+| ReferenceCard | `features/references/ReferenceCard.tsx` | One reference tile |
+| ReferenceEditDialog | `features/references/ReferenceEditDialog.tsx` | Edit reference metadata |
+| ReanalyzeWithReferenceDialog | `features/references/ReanalyzeWithReferenceDialog.tsx` | Re-run analysis against a chosen reference |
+| ReferenceProfileSelect | `features/references/ReferenceProfileSelect.tsx` | Reference/profile picker control |
+| WorkerHealthBanner | `features/health/WorkerHealthBanner.tsx` | Worker-offline banner body (+ queue depth) |
+| AppWorkerHealthNotice | `features/health/AppWorkerHealthNotice.tsx` | Shell mount; renders only on definitive offline |
+| DevHealthDot | `features/health/DevHealthDot.tsx` | DEV-only aggregated-health dot (polls `/health/full`) |
+| FeedView | `features/feed/FeedView.tsx` | Pure feed rendering (items, suggestions, empty states); hook `useFeed` |
+| NotificationCenter / NotificationBell | `features/notifications/NotificationCenter.tsx` | Bell + inbox popover; hook `useNotifications` (30 s unread poll) |
+| MentionSuggestList | `features/mentions/MentionSuggestList.tsx` | @mention autocomplete list; hook `useMentionAutocomplete` |
+| PublicProfileView | `features/profiles/PublicProfileView.tsx` | Public profile rendering; hook `useFollow` |
+| DangerZone | `features/account/DangerZone.tsx` | Export + delete-account (password + typed DELETE) |
+| AuthFlowViews | `features/auth/AuthFlowViews.tsx` | Pure verify/forgot/reset view states |
+| TrustPage | `features/trust/TrustPage.tsx` | Trust hub content |
+| AlsPreviewPanel | `features/upload/AlsPreviewPanel.tsx` | Client-side `.als` parse preview (tracks) in upload dialogs; helpers `alsPreview`, `stemMatch`, presigned upload helpers |
+
+## Shared components (`components/`) — 20 (all reusable across features)
+
+| Component | File | Purpose |
+| --- | --- | --- |
+| UnifiedUploadDialog | `components/UnifiedUploadDialog.tsx` | THE new-upload entry: mix + stems + .als + reference, single dispatch |
+| UploadVersionDialog | `components/UploadVersionDialog.tsx` | Add a plain new version to an existing song |
+| StemsUploadDialog | `components/StemsUploadDialog.tsx` | Add stems to an analyzed version (stage/classify/review/confirm) |
+| AlsUploadDialog | `components/AlsUploadDialog.tsx` | Attach `.als` to an existing version (re-analysis) |
+| ReferenceUploadDialog | `components/ReferenceUploadDialog.tsx` | Upload a reference track |
+| NewSongDialog | `components/NewSongDialog.tsx` | Create song metadata |
+| SongEditDialog | `components/SongEditDialog.tsx` | Edit song metadata/visual |
+| SongFields | `components/SongFields.tsx` | Shared song form fields (+`song-fields-helpers`) |
+| CompareDialog | `components/CompareDialog.tsx` | Version-vs-version delta compare |
+| SharePublishDialog | `components/SharePublishDialog.tsx` | Publish/manage share links + visibility |
+| ConfirmDialog | `components/ConfirmDialog.tsx` | Generic confirm modal (reusable primitive) |
+| BlurLock | `components/BlurLock.tsx` | Universal gating surface: blur + inert + single CTA (reusable primitive) |
+| UpgradeSheet | `components/UpgradeSheet.tsx` | Cap-hit upgrade modal (PRO vs CREDITS) |
+| PlanCard | `components/PlanCard.tsx` | One plan card inside UpgradeSheet (price node composed by parent) |
+| TierChip | `components/TierChip.tsx` | Tier badge (free/pro/credits) |
+| UsageMeter | `components/UsageMeter.tsx` | Used/limit meter (nav + page variants) |
+| VerifyEmailBanner | `components/VerifyEmailBanner.tsx` | Unverified-email notice + resend (free tier) |
+| CommandPalette | `components/CommandPalette.tsx` | ⌘K palette: nav commands + client-side song search |
+| ShortcutSheet | `components/ShortcutSheet.tsx` | `?` keyboard-shortcut reference sheet |
+| PublicChrome | `components/PublicChrome.tsx` | Slim sticky chrome for funnel pages (brand/pricing/sign-in/CTA) |
+
+## UI primitives (`ui/`) — 10 components (all reusable; helpers: `hueFromId`, `relativeTime`, `songVisualModel`, `index` barrel)
+
+| Component | File | Purpose |
+| --- | --- | --- |
+| Pill | `ui/Pill.tsx` | Toned status pill |
+| GradePill | `ui/GradePill.tsx` | Grade letter pill (A–F colors, sizes) |
+| BrandMark | `ui/BrandMark.tsx` | SPECTR logo mark (glow variant) |
+| Coach / CoachMini | `ui/Coach.tsx` | Canonical animated robot mascot (+ compact bust) |
+| SpecialistBot | `ui/SpecialistBot.tsx` | Alternate specialist robot mascot |
+| CoverArt | `ui/CoverArt.tsx` | Song cover renderer (legacy aurora recipe) |
+| SongVisual | `ui/SongVisual.tsx` | Template-switched generative cover scenes |
+| SongVisualPicker | `ui/SongVisualPicker.tsx` | Cover template + color picker |
+| ProgressTimeline | `ui/ProgressTimeline.tsx` | Song-detail version/score timeline |
+| VersionArc | `ui/VersionArc.tsx` | Per-song version-history arc (library cards) |
+
+## Shared hooks (`hooks/`) — 4
+
+| Hook | File | Purpose |
+| --- | --- | --- |
+| useFileUpload | `hooks/useFileUpload.ts` | Generic XHR upload with progress (reusable) |
+| useMixUpload | `hooks/useMixUpload.ts` | Presigned-first mix upload with proxy fallback |
+| useStemStaging | `hooks/useStemStaging.ts` | Bulk-stem multipart staging with progress |
+| useReducedMotion | `hooks/useReducedMotion.ts` | prefers-reduced-motion media query (reusable) |
+
+## Dev-only surfaces
+
+| Surface | File | Notes |
+| --- | --- | --- |
+| Debug results tab | `features/results/DebugTab.tsx` | In `buildResultsTabs` only when `import.meta.env.DEV` |
+| DevHealthDot | `features/health/DevHealthDot.tsx` | Conditionally mounted in `_app.tsx` shell (DEV) so `/health/full` never polls in prod |
+| Kitchen sink | `routes/_app/dev.kitchen-sink.tsx` | Component inventory; axe target (`routes/__tests__/kitchen-sink-axe.test.tsx`) |
+| devLogin | `auth/AuthContext.tsx` | One-click dev sign-in against `/auth/dev-login` |
+| Router devtools | `@tanstack/router-devtools` | devDependency only |
+
+## Counts summary
+
+| Category | Count |
+| --- | --- |
+| Route files (`routes/`) | 30 (3 layouts, 26 pages, 1 dev-only page) |
+| Feature components (`features/`, .tsx) | 74 across 17 folders (results 32, listen-rack 8, billing 7, listen 5, references 5, anon-analyze 3, health 3, landing 2, one each: library, feed, notifications, mentions, profiles, account, auth, trust, upload) |
+| Shared components (`components/`) | 20 |
+| UI primitives (`ui/`) | 10 |
+| Shell/entry (`main.tsx`, `auth/AuthContext.tsx`) | 2 |
+| Total .tsx components (non-test) | 136 |
+| Supporting .ts modules (hooks/helpers/engine, non-test) | ~134 (incl. `api/hooks.ts` with ~80 query/mutation hooks and the `features/listen/audio/` DSP subsystem) |
+| Dev-only surfaces | 4 (+ router devtools) |

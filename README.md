@@ -66,26 +66,17 @@ After the pipeline runs, the user can click any of 26 specialist tiles on the Re
 
 ## How to run (v2 stack)
 
-Full setup guide (prerequisites, one-command boot, env-file map, troubleshooting): [docs/dev-setup.md](docs/dev-setup.md)
+**Canonical startup guide** (one-command boot, manual boot order, verification, every known startup problem + fix): [docs/STARTUP.md](docs/STARTUP.md)
 
-```bash
-# 1. Start local services
-docker compose -f docker/docker-compose.yml up -d  # PostgreSQL + Redis
+```powershell
+# One command (stops anything running, starts infra + migrations + all 3 apps):
+./scripts/start-spectr.ps1
 
-# 2. BFF schema (canonical)
-cd components/bff
-dotnet ef database update --project src/Spectr.Data --startup-project src/Spectr.Bff
-
-# 3. Install Python packages (one-time)
-pip install -e components/shared       # shared FIRST
-pip install -e components/analysis
-pip install -r components/worker/requirements.txt
-
-# 4. Start each process (separate terminals)
-cd components/bff/src/Spectr.Bff       && dotnet run            # :5000
-cd components/worker                    && python -m dramatiq app.dramatiq_app
-cd components/frontend-spectr-v2        && npm install && npm run dev   # :5174
+# Tear down:
+./scripts/start-spectr.ps1 -StopOnly
 ```
+
+Manual per-component boot, fresh-machine installs, and troubleshooting all live in [docs/STARTUP.md](docs/STARTUP.md) — don't improvise commands from memory.
 
 Frontend: http://localhost:5174 · BFF OpenAPI: http://localhost:5000/openapi/v1.json
 

@@ -17,6 +17,28 @@ Postgres 16 + Redis 7 are shared. Both stacks talk to the same DB.
 
 ---
 
+## Starting / stopping / restarting the app — READ `docs/STARTUP.md` FIRST
+
+**When asked to start, stop, restart, or debug startup of the stack, follow
+`docs/STARTUP.md` — it is the single canonical startup guide. Do not improvise
+commands from memory or from the per-component notes below.**
+
+- Default action for "start the app" / "restart the app" / "stack is broken":
+  `./scripts/start-spectr.ps1` from the repo root (safe to run anytime — it
+  stops everything first, brings up Docker infra, migrates, recovers orphaned
+  jobs, launches BFF + worker + frontend in their own windows). Teardown:
+  `-StopOnly`.
+- Before declaring the stack "up", run the verification steps in STARTUP.md
+  section 5 (a fresh worker heartbeat does NOT prove the worker is consuming).
+- If anything fails, check STARTUP.md section 6 ("Common problems") BEFORE
+  diagnosing from scratch — every entry there has actually happened on this
+  machine (zombie WSL ports, half-dead worker forks, docker CLI shadowing,
+  OpenMP silent fork death, storage-root misconfig, etc.).
+- Keep STARTUP.md current: any newly discovered startup failure mode or changed
+  boot procedure gets added there (not to this file, not to a new doc).
+
+---
+
 ## Project structure (STRICT — do not deviate)
 
 ```
@@ -27,7 +49,10 @@ AIMusicAnalysisSite/
 ├── migrations/               (Alembic DB migrations — shared by api + worker)
 ├── schemas/                  (Shared OpenAPI/TypeScript schema files)
 ├── docker/                   (Docker Compose for local dev: PostgreSQL, Redis, allin1)
+├── docs/                     (Ops docs: STARTUP.md ← canonical startup guide, runbook.md, launch-checklist.md; plus generated project knowledge — index.md is the master doc index)
+├── infra/                    (Production compose stack + deploy tooling — see docs/runbook.md)
 ├── scripts/                  (Local dev orchestration scripts — e.g. start-spectr.ps1 stack launcher)
+├── _bmad/                    (BMad workflow tooling config — core/config.yaml; committed project config)
 ├── PRPs/
 │   ├── v1_ai_music_analyzer.md
 │   ├── archive/
@@ -61,7 +86,8 @@ AIMusicAnalysisSite/
 - All outputs land in `output/<component>/<YYYY-MM-DD>_<description>/` — never at project root, never overwriting prior runs
 - Never add a new top-level folder without updating this section first
 - Never rename `components/`, `data/`, `output/`, or `PRPs/`
-- `migrations/`, `schemas/`, `docker/`, `scripts/`, and `reference_library/` are declared project-level folders — use each as described in its README
+- `migrations/`, `schemas/`, `docker/`, `docs/`, `infra/`, `scripts/`, and `reference_library/` are declared project-level folders — use each as described in its README
+- Startup/restart/troubleshooting knowledge lives ONLY in `docs/STARTUP.md` — never scatter boot instructions across new docs
 - `scripts/` holds local dev orchestration (stack launch/stop, DB reset, etc.) — not application code and not generated artifacts
 
 ---
@@ -315,12 +341,9 @@ cd components/bff && dotnet ef database update --project src/Spectr.Data --start
 alembic -c migrations/alembic.ini upgrade head
 
 # ── Integration: BFF + dramatiq + v2 frontend ───────────────────
-docker compose -f docker/docker-compose.yml up -d
-cd components/bff/src/Spectr.Bff && dotnet run &
-cd components/worker && python -m dramatiq app.dramatiq_app &
-cd components/frontend-spectr-v2 && npm run dev &
+# Start the stack per docs/STARTUP.md (canonical):  ./scripts/start-spectr.ps1
 curl -f http://localhost:5174 && echo "Frontend OK"
-curl -f http://localhost:5000/openapi/v1.json && echo "BFF OK"
+curl -f http://localhost:5000/healthz && echo "BFF OK"
 ```
 
 ---

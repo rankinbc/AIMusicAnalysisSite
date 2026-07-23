@@ -1,0 +1,60 @@
+{
+  "workflow_version": "1.2.0",
+  "timestamps": { "started": "2026-07-22T23:02:21-04:00", "last_updated": "2026-07-22T23:02:21-04:00" },
+  "mode": "initial_scan",
+  "scan_level": "deep",
+  "project_root": "C:/Users/badmin/projects/AIMusicAnalysisSite",
+  "project_knowledge": "C:/Users/badmin/projects/AIMusicAnalysisSite/docs",
+  "completed_steps": [
+    {
+      "step": "step_0_6",
+      "status": "completed",
+      "timestamp": "2026-07-22T23:02:21-04:00",
+      "summary": "No prior index.md/state; mode=initial_scan; scan_level=deep chosen by user; scope=primary v2 stack (legacy api/frontend-spectr overview-only); custom addition approved: user-journeys.md via live Playwright walkthrough"
+    },
+    {
+      "step": "step_1",
+      "status": "completed",
+      "timestamp": "2026-07-22T23:02:21-04:00",
+      "summary": "Classified as monorepo with 5 documented parts (frontend-v2=web, bff=backend, worker=backend, analysis=library, shared=library); legacy api/frontend-spectr excluded per user; parts+scope confirmed by user via question round"
+    }
+  ],
+  "current_step": "completed",
+  "completed": "2026-07-22T23:35:00-04:00",
+  "progress_notes": [
+    {"step": "step_2", "timestamp": "2026-07-22T23:05:00-04:00", "summary": "Existing docs inventoried: README.md, CLAUDE.md (rich per-component gotchas), HANDOFF.md, docs/{STARTUP,runbook,launch-checklist,dev-setup}.md, component READMEs, PRPs/{architecture.md,epics.md,STATUS.md}. User guidance: UX-friction/user-journey emphasis."},
+    {"step": "step_3_4_8", "timestamp": "2026-07-22T23:06:00-04:00", "summary": "Deep scans + architecture/API/data/component docs delegated to 4 parallel subagents (frontend-v2, bff, worker+data-models, analysis+shared), each writing its docs directly."},
+    {"step": "step_5", "timestamp": "2026-07-22T23:04:00-04:00", "summary": "source-tree-analysis.md written."},
+    {"step": "step_6", "timestamp": "2026-07-22T23:15:00-04:00", "summary": "development-guide.md + deployment-guide.md written as orientation layers over STARTUP.md/runbook.md (canonical per CLAUDE.md)."},
+    {"step": "step_7", "timestamp": "2026-07-22T23:14:00-04:00", "summary": "integration-architecture.md written (13 integration points, async delivery patterns, failure propagation)."},
+    {"step": "custom_user_journeys", "timestamp": "2026-07-22T23:12:00-04:00", "summary": "user-journeys.md written from LIVE Playwright walkthrough (8 pages: landing, /analyze, login, library, song detail, results, listen-rack, billing) + code tracing; 10 observed friction candidates recorded."},
+    {"step": "step_9_partial", "timestamp": "2026-07-22T23:15:30-04:00", "summary": "project-overview.md written. architecture-analysis.md + architecture-shared.md confirmed written by subagent. Awaiting: frontend-v2, bff, worker+data-models subagents; then index.md + validation."}
+  ],
+  "project_classification": "monorepo, 5 parts, React 19 + .NET 10 + Python dramatiq",
+  "project_types": [
+    { "part_id": "frontend-v2", "project_type_id": "web", "display_name": "SPECTR v2 frontend (React 19 + Vite 6 + TS)", "root_path": "components/frontend-spectr-v2" },
+    { "part_id": "bff", "project_type_id": "backend", "display_name": "SPECTR BFF (ASP.NET Core .NET 10 minimal API)", "root_path": "components/bff" },
+    { "part_id": "worker", "project_type_id": "backend", "display_name": "SPECTR worker (Python dramatiq)", "root_path": "components/worker" },
+    { "part_id": "analysis", "project_type_id": "library", "display_name": "audio_analysis (Python package, 7-phase pipeline)", "root_path": "components/analysis" },
+    { "part_id": "shared", "project_type_id": "library", "display_name": "aimusic-shared (SQLAlchemy ORM mirror)", "root_path": "components/shared" }
+  ],
+  "findings": {
+    "project_classification": "monorepo, 5 documented parts + 2 legacy parts (overview-only) + docker/infra",
+    "user_context": "Purpose: ground a UX-friction audit. Emphasis on user journeys (register->upload->wait->results->coach->listen->share), waiting states, click paths. Live walkthrough via Playwright approved (stack via scripts/start-spectr.ps1)."
+  },
+  "outputs_generated": [
+    "project-scan-report.json", "index.md", "project-overview.md", "source-tree-analysis.md",
+    "integration-architecture.md", "data-models.md", "user-journeys.md",
+    "architecture-frontend-v2.md", "component-inventory-frontend-v2.md",
+    "architecture-bff.md", "api-contracts-bff.md", "architecture-worker.md",
+    "architecture-analysis.md", "architecture-shared.md",
+    "development-guide.md", "deployment-guide.md"
+  ],
+  "validation": {
+    "timestamp": "2026-07-22T23:35:00-04:00",
+    "files_expected": 15, "files_present": 15,
+    "incomplete_markers_found": 0,
+    "notes": "All docs written and marker-free. data-models.md is a single shared-schema doc (deliberate deviation from per-part naming; EF canonical + SQLAlchemy mirror). Live walkthrough grounded user-journeys.md (8 pages via Playwright, dev build)."
+  },
+  "resume_instructions": "Workflow complete. To extend: re-run bmad-bmm-document-project and choose deep-dive mode for a specific area, or re-scan to refresh."
+}
