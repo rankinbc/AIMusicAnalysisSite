@@ -7,7 +7,9 @@ import { CoachChat } from './CoachChat';
 import { DepthBanner } from './DepthBanner';
 import { MoveCard } from './MoveCard';
 import { SPECIALIST_CATALOG } from './helpers/specialists';
+import { splitRouting } from './helpers/analysisModalData';
 import { SpecialistTeamModal } from './SpecialistTeamModal';
+import { TriagePlanPanel } from './TriagePlanPanel';
 import { MOVE_SEV_RANK, type Move } from './move-model';
 import type { SongHeaderInputs } from './SongHeader';
 
@@ -80,6 +82,11 @@ export function CoachTab({
   }, [verdicts]);
 
   const suggestedCount = data?.routing_plan?.specialists_to_run?.length ?? 0;
+
+  // Surface the triage plan on the report itself (the completion modal may be
+  // retired). Pending = triage hasn't written a plan and hasn't degraded.
+  const routing = useMemo(() => splitRouting(data?.routing_plan), [data]);
+  const triagePending = data != null && data.routing_plan == null && data.degradation == null;
 
   const handleRun = useCallback(
     async (slug: string) => {
@@ -191,6 +198,16 @@ export function CoachTab({
       {shallow && (
         <DepthBanner missing={{ stems: !inputs.stems, als: !inputs.als }} onAddInputs={onAddInputs} />
       )}
+
+      <TriagePlanPanel
+        routing={routing}
+        triagePending={triagePending}
+        ranSlugs={ranSlugs}
+        runningSlugs={optimisticRunning}
+        hasStems={inputs.stems}
+        onRun={(slug) => void handleRun(slug)}
+        onOpenTeam={() => setSpecOpen(true)}
+      />
 
       <div className="seclabel">
         <span className="t">Recommended fixes</span>

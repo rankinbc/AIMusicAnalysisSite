@@ -58,6 +58,8 @@ export interface InputRow {
 }
 
 export interface SpecRow {
+  /** Routing-plan slug — the run/{slug} handle (TriagePlanPanel run state). */
+  slug: string;
   label: string;
   group: SpecialistGroup;
   focus: string;
@@ -401,7 +403,7 @@ export function splitRouting(plan: RoutingPlanDto | undefined): RoutingSplit | n
   const sorted = plan.specialists_to_run.slice().sort((a, b) => a.priority - b.priority);
   const rows: SpecRow[] = sorted.map((e) => {
     const { label, group } = resolveSpec(e);
-    return { label, group, focus: e.focus };
+    return { slug: e.name, label, group, focus: e.focus };
   });
   return {
     high: rows.slice(0, 3),
