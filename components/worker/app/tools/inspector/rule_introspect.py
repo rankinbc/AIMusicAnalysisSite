@@ -8,7 +8,9 @@
 
 Caveat: the AST extractor handles the current rule idioms (simple ``_phase``
 assignment + literal ``Evidence(metric=...)``); it will not capture
-walrus/tuple-unpack binds or non-literal metric values.
+walrus/tuple-unpack binds, chained ``_phase(a, "pN").get(...)`` expressions,
+or non-literal (f-string) metric values — every Problem-engine rule carries at
+least one literal Evidence metric, so no rule goes uncatalogued.
 """
 from __future__ import annotations
 
@@ -110,9 +112,9 @@ def run_rule(fn: Callable, flattened: dict[str, Any]) -> dict[str, Any]:
 
 def rule_catalog() -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
-    for fn in rule_engine._RULES:
+    for slug, fn in rule_engine._SINGLES:
         out.append({
-            "name": fn.__name__,
+            "name": slug,
             "doc": (fn.__doc__ or "").strip(),
             "read_paths": sorted(read_paths_for_rule(fn)),
         })

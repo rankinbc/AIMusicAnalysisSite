@@ -12,6 +12,11 @@ from aimusic_shared.verdicts.scoring import (
 
 from .input_grounding import als_project_map
 
+# v3 closeout: single source of truth for the validator's version stamp,
+# written to `analyses.validator_version` at persist time. Bump when the
+# validation semantics change (severity downgrade, evidence grounding, ...).
+VALIDATOR_VERSION = "validator@1.0.0"
+
 
 @dataclass
 class ValidationFailure:

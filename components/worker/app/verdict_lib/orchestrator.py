@@ -8,7 +8,7 @@ from aimusic_shared.verdicts.models import SpecialistRoutingPlan, Verdict
 from .dedupe import dedupe_verdicts
 from .llm_protocol import LLMCaller
 from .ranker import rank_verdicts
-from .rule_engine import evaluate_rules
+from .rule_engine import evaluate_problems
 from .specialists import run_specialists
 from .triage import run_triage
 from .validator import (
@@ -45,8 +45,8 @@ async def run_pipeline(
        interleaved with `validation-failure` and `specialist-error` events
     4. One `complete` event with the full ranked + deduped final list
     """
-    # 1. Rules
-    rule_verdicts: list[Verdict] = evaluate_rules(analysis)
+    # 1. Rules (two-pass Problem engine — the sole deterministic rule path)
+    rule_verdicts: list[Verdict] = evaluate_problems(analysis)
     validated_rules: list[Verdict] = []
     for rv in rule_verdicts:
         result = validate_verdict(rv, analysis)

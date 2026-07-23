@@ -301,6 +301,11 @@ class Analysis(Base):
     )
     song_name: Mapped[Optional[str]] = mapped_column("song_name", String(200), nullable=True)
     final_json: Mapped[Any] = mapped_column("final_json", JSONB, nullable=False, default=dict)
+    # v3 closeout — mirror of EF AddAnalysisVersionStamps (2026-07-23)
+    pipeline_version: Mapped[Optional[str]] = mapped_column("pipeline_version", String(40), nullable=True)
+    rule_engine_version: Mapped[Optional[str]] = mapped_column("rule_engine_version", String(60), nullable=True)
+    validator_version: Mapped[Optional[str]] = mapped_column("validator_version", String(60), nullable=True)
+    prompt_set_version: Mapped[Optional[str]] = mapped_column("prompt_set_version", String(2000), nullable=True)
     phase_durations: Mapped[Any] = mapped_column("phase_durations", JSONB, nullable=False, default=dict)
     waveform_peaks_path: Mapped[Optional[str]] = mapped_column("waveform_peaks_path", String(500), nullable=True)
     # Storage keys for the server-rendered result images (WebP), written by

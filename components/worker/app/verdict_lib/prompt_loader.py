@@ -241,6 +241,25 @@ def load_triage() -> tuple[str, str]:
     return parse_version_frontmatter(path.read_text(encoding="utf-8"))
 
 
+def expected_prompt_version_set() -> str:
+    """Comma-joined ``<slug>@<version>`` for every specialist prompt currently
+    on disk, plus ``triage@<version>``, slugs sorted.
+
+    Replicates the frozen v1 api's ``_expected_prompt_version_set`` (its
+    verdicts router; path omitted — the boundary lint keeps new-stack files
+    path-free). Used to stamp
+    ``analyses.prompt_set_version`` at persist time — gathered from DISK, never
+    from produced verdicts (verdicts don't exist yet at Phase C insert time).
+    """
+    versions: list[str] = []
+    triage_v, _ = load_triage()
+    versions.append(f"triage@{triage_v}")
+    for slug in sorted(SLUG_TO_FILENAME):
+        v, _ = load_prompt(slug)
+        versions.append(f"{slug}@{v}")
+    return ",".join(versions)
+
+
 def load_triage_model() -> str | None:
     """Optional model pin from the Triage prompt's frontmatter (NFR24).
     ``None`` → caller uses the gateway's configured default."""

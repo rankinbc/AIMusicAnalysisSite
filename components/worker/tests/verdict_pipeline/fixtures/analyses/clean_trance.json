@@ -14,7 +14,7 @@
     "key_detection_confidence": 0.85,
     "bpm": 138.0
   },
-  "phase2": {"stereo_correlation": 0.55},
-  "phase3": {"low_mid_energy": 0.14},
-  "genre_hint": "trance"
+  "phase2": {
+    "stereo_correlation": 0.55
+  }
 }

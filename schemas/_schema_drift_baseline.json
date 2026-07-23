@@ -1,31 +1,16 @@
 {
-  "rules": [
-    "low_mid_mud_generic::genre_hint",
-    "low_mid_mud_generic::phase3.low_mid_energy",
-    "low_mid_mud_trance::genre_hint",
-    "low_mid_mud_trance::phase3.low_mid_energy"
-  ],
+  "rules": [],
   "prompts": [],
   "fixtures": [
-    "clean_trance.json::genre_hint",
     "clean_trance.json::phase1.integrated_lufs",
     "clean_trance.json::phase2.stereo_correlation",
-    "clean_trance.json::phase3.low_mid_energy",
-    "clipped_pop.json::genre_hint",
     "clipped_pop.json::phase1.integrated_lufs",
     "clipped_pop.json::phase2.stereo_correlation",
-    "clipped_pop.json::phase3.low_mid_energy",
-    "mono_broken_indie.json::genre_hint",
     "mono_broken_indie.json::phase1.integrated_lufs",
     "mono_broken_indie.json::phase2.stereo_correlation",
-    "mono_broken_indie.json::phase3.low_mid_energy",
-    "muddy_hiphop.json::genre_hint",
     "muddy_hiphop.json::phase1.integrated_lufs",
     "muddy_hiphop.json::phase2.stereo_correlation",
-    "muddy_hiphop.json::phase3.low_mid_energy",
-    "tiny_dynamics_edm.json::genre_hint",
     "tiny_dynamics_edm.json::phase1.integrated_lufs",
-    "tiny_dynamics_edm.json::phase2.stereo_correlation",
-    "tiny_dynamics_edm.json::phase3.low_mid_energy"
+    "tiny_dynamics_edm.json::phase2.stereo_correlation"
   ]
 }

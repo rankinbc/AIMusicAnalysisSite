@@ -14,7 +14,7 @@
     "key_detection_confidence": 0.82,
     "bpm": 128.0
   },
-  "phase2": {"stereo_correlation": 0.6},
-  "phase3": {"low_mid_energy": 0.18},
-  "genre_hint": "edm"
+  "phase2": {
+    "stereo_correlation": 0.6
+  }
 }

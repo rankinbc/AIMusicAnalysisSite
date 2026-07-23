@@ -55,6 +55,9 @@ def harness(monkeypatch, tmp_path):
     monkeypatch.setattr(td, "render_analysis_images", lambda *a, **k: {})
     monkeypatch.setattr(td, "_enqueue_structure_detection", lambda *a, **k: None)
     monkeypatch.setattr(td, "run_rule_engine_for_analysis", lambda aid: calls.append(aid) or 1)
+    # v3 closeout: prompt-set stamp reads every prompt file on disk (and does a
+    # pin-table lookup per slug) — stub it for unit isolation.
+    monkeypatch.setattr(td, "expected_prompt_version_set", lambda: "triage@1.0.0,low_end@2.0.0")
 
     def run(registry):
         monkeypatch.setattr(td.SessionFactory, "begin", lambda: _FakeSession(registry, added))
@@ -98,4 +101,37 @@ def test_problem_engine_failure_never_fails_the_analysis(harness):
     run(reg)  # must NOT raise
 
     # The analysis still completed despite the engine blowing up (best-effort).
+    assert reg[AnalysisJob].status == JOB_STATUS_COMPLETE
+
+
+# ── v3 closeout: version stamps on the persisted Analysis row ───────────────
+
+def test_persisted_analysis_carries_version_stamps(harness):
+    run, _mp = harness
+    added, _calls = run(_registry())
+
+    analysis = next(o for o in added if isinstance(o, Analysis))
+    # pipeline_version comes from audio_analysis.ANALYSIS_SCHEMA_VERSION.
+    assert analysis.pipeline_version == td.ANALYSIS_SCHEMA_VERSION
+    assert analysis.pipeline_version is not None
+    assert analysis.rule_engine_version == "rule_engine@1.0.0"
+    assert analysis.validator_version == "validator@1.0.0"
+    assert analysis.prompt_set_version == "triage@1.0.0,low_end@2.0.0"
+
+
+def test_prompt_set_stamp_failure_never_fails_the_persist(harness):
+    run, mp = harness
+
+    def boom():
+        raise FileNotFoundError("prompts dir gone")
+
+    mp.setattr(td, "expected_prompt_version_set", boom)
+    reg = _registry()
+    added, _calls = run(reg)  # must NOT raise
+
+    analysis = next(o for o in added if isinstance(o, Analysis))
+    assert analysis.prompt_set_version is None  # best-effort fallback
+    # The other 3 stamps are constants and still land.
+    assert analysis.rule_engine_version == "rule_engine@1.0.0"
+    assert analysis.validator_version == "validator@1.0.0"
     assert reg[AnalysisJob].status == JOB_STATUS_COMPLETE

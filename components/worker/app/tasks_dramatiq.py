@@ -97,10 +97,11 @@ def storage_boot_summary(local_root: str, results_dir: str) -> tuple[str, str | 
     return fragment, warning
 
 try:
-    from audio_analysis import run_pipeline
+    from audio_analysis import ANALYSIS_SCHEMA_VERSION, run_pipeline
 except ImportError:
     logger.warning("audio_analysis not installed — actor will raise on dispatch")
     run_pipeline = None  # type: ignore[assignment]
+    ANALYSIS_SCHEMA_VERSION = None  # type: ignore[assignment]
 
 # Result-image renderer (spectrogram + waveform). Module-level seam so tests can
 # patch it. Optional: a missing import just means no images are produced.
@@ -112,6 +113,12 @@ except ImportError:
 # Deterministic Problem engine, run on every completed analysis (healthy path).
 # Module-level binding so it's a patchable seam in tests.
 from .verdict_lib.degraded import run_rule_engine_for_analysis  # noqa: E402
+
+# v3 closeout — version stamps written onto every persisted `analyses` row so
+# tooling can recompute historical rows against the exact code that made them.
+from .verdict_lib.prompt_loader import expected_prompt_version_set  # noqa: E402
+from .verdict_lib.rule_engine import RULE_ENGINE_VERSION  # noqa: E402
+from .verdict_lib.validator import VALIDATOR_VERSION  # noqa: E402
 from .trace import trace_runs_enabled  # noqa: E402
 
 # Story 3.1 — S3/MinIO fetch shim for presigned-uploaded sources (module import
@@ -344,6 +351,16 @@ def analyze_audio_job(job_id: str) -> None:
     # ── Phase C — persist Analysis row + flip job to COMPLETE ───────────────
     analysis_id = uuid.uuid4()
     obs.set_tag("analysis_id", analysis_id)  # cross-lane trace stitch
+
+    # v3 closeout: prompt-set stamp is gathered from DISK (verdicts don't exist
+    # yet at insert time) and is strictly best-effort — a prompt-dir hiccup
+    # must never fail the persist.
+    try:
+        prompt_set_version = expected_prompt_version_set()
+    except Exception:
+        logger.warning("expected_prompt_version_set failed — stamping None", exc_info=True)
+        prompt_set_version = None
+
     with SessionFactory.begin() as s:
         done = s.get(AnalysisJob, jid)
         if done is None:
@@ -372,6 +389,11 @@ def analyze_audio_job(job_id: str) -> None:
             # JSONB columns take a Python dict — SA serializes it as JSON.
             # Passing a json.dumps()'d string would double-encode.
             final_json=result_dict,
+            # v3 closeout: provenance stamps — which code produced this row.
+            pipeline_version=ANALYSIS_SCHEMA_VERSION,
+            rule_engine_version=RULE_ENGINE_VERSION,
+            validator_version=VALIDATOR_VERSION,
+            prompt_set_version=prompt_set_version,
             phase_durations={},
             spectrogram_image_path=spectrogram_path,
             waveform_image_path=waveform_path,

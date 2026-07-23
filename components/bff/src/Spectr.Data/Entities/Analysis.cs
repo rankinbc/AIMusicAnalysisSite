@@ -38,6 +38,25 @@ public sealed class Analysis
     [Column("final_json", TypeName = "jsonb")]
     public string FinalJson { get; set; } = "{}";
 
+    // ── Version stamps (v3 closeout, 2026-07-23) ───────────────────────────
+    // Ops-facing provenance: which code produced this row. Written by the
+    // Python worker at persist time; nullable so historical rows stay valid.
+    // pipeline_version   = audio_analysis.ANALYSIS_SCHEMA_VERSION (e.g. "2.1.0")
+    // rule_engine_version = verdict_lib RULE_ENGINE_VERSION ("rule_engine@1.0.0")
+    // validator_version  = verdict_lib VALIDATOR_VERSION ("validator@1.0.0")
+    // prompt_set_version = comma-joined "<slug>@<ver>" of every prompt on disk
+    [Column("pipeline_version"), MaxLength(40)]
+    public string? PipelineVersion { get; set; }
+
+    [Column("rule_engine_version"), MaxLength(60)]
+    public string? RuleEngineVersion { get; set; }
+
+    [Column("validator_version"), MaxLength(60)]
+    public string? ValidatorVersion { get; set; }
+
+    [Column("prompt_set_version"), MaxLength(2000)]
+    public string? PromptSetVersion { get; set; }
+
     // Small map for the Results "Analysis pipeline" timeline. Shape:
     //   { "decode": 1240, "loudness": 820, "spectrum": 1480, ... }
     [Column("phase_durations", TypeName = "jsonb")]

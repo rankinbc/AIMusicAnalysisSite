@@ -83,3 +83,38 @@ def test_width_instability_graduated():
     assert RE.width_instability(a(30)).severity == "moderate"
     assert RE.width_instability(a(50)).severity == "minor"
     assert RE.width_instability(a(70)) is None
+
+
+# ── tempo_octave_error (beat tracker vs allin1 structure BPM) ────────────────
+
+def test_tempo_octave_error_fires_on_half_time():
+    v = RE.tempo_octave_error(_a(bpm=71.78, structure={"bpm": 143.0}))
+    assert v is not None
+    assert v.severity == "minor"
+    assert v.kind == "integrity"
+    assert v.fixable is False
+    assert {e.metric for e in v.evidence} == {"phase1.bpm", "phase1.structure.bpm"}
+
+
+def test_tempo_octave_error_fires_on_double_time():
+    v = RE.tempo_octave_error(_a(bpm=280.0, structure={"bpm": 140.0}))
+    assert v is not None
+    assert v.severity == "minor"
+    assert "double-time" in v.headline or "double-time" in v.summary
+
+
+def test_tempo_octave_error_silent_on_agreement():
+    assert RE.tempo_octave_error(_a(bpm=140.0, structure={"bpm": 140.0})) is None
+
+
+def test_tempo_octave_error_silent_when_structure_missing_or_deferred():
+    assert RE.tempo_octave_error(_a(bpm=140.0)) is None
+    assert RE.tempo_octave_error(_a(bpm=140.0, structure={"available": False})) is None
+
+
+def test_tempo_octave_error_passes_validator_severity_preserved():
+    a = _a(bpm=71.78, structure={"bpm": 143.0})
+    result = validate_verdict(RE.tempo_octave_error(a), a)
+    assert result.ok
+    # Deterministic rule-engine exemption: "minor" survives un-downgraded.
+    assert result.verdict is not None and result.verdict.severity == "minor"

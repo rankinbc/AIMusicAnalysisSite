@@ -9,16 +9,15 @@ from app.tools.inspector.loader import RawTrace
 def test_catalog_model_lists_rules_and_specialists():
     m = build_catalog_model()
     assert m["mode"] == "catalog"
-    assert any(r["name"] == "clipping_detected" for r in m["rules"])
+    assert any(r["name"] == "clipping_count" for r in m["rules"])
     assert "loudness" in m["specialists"]
     assert any(s["key"] == "phase1" for s in m["stages"])
 
 
 def test_catalog_flags_unmapped_rule_paths_statically():
-    # The dynamic-range rules read phase1.crest_factor, which no stage emits
-    # (Phase 1 emits peak_dbfs + rms, not crest) — a still-open Tier-2 gap that
-    # must be flagged with no analysis. (The loudness integrated_lufs gap was
-    # fixed in PRP rule-engine-tier1-field-fixes.)
+    # over_compression reads phase1.crest_factor, which no stage declares
+    # (Phase 1's stage-map entry emits peak_dbfs + rms, not crest) — a
+    # still-open stage-map gap that must be flagged with no analysis.
     m = build_catalog_model()
     unmapped = {g["path"] for g in m["static_gaps"]["unmapped_rule_paths"]}
     assert "phase1.crest_factor" in unmapped
@@ -40,15 +39,15 @@ def test_trace_model_marks_fired_rule_and_header():
     assert m["mode"] == "trace"
     assert m["header"]["grade"] == "F"
     fired = {r["name"]: r["fired"] for r in m["rules"]}
-    assert fired["clipping_detected"] is True
+    assert fired["clipping_count"] is True
     assert m["specialist_status"]["loudness"] == "ran"
     assert m["specialist_status"]["dynamics"] == "not_selected"
 
 
 def test_trace_model_diagnoses_misnamed_rule_as_bug():
-    # phase1 ran and is populated, but excessive_dynamic_range reads
-    # phase1.crest_factor (never emitted — a Tier-2 gap) — that's a bug, not an
-    # input-gated idle.
+    # phase1 ran and is populated, but over_compression reads
+    # phase1.crest_factor / phase1.loudness_range_lu, both absent from this
+    # snapshot — that's a bug diagnosis, not an input-gated idle.
     raw = RawTrace(
         id="11111111-1111-1111-1111-111111111111",
         job_id="22222222-2222-2222-2222-222222222222",
@@ -61,7 +60,7 @@ def test_trace_model_diagnoses_misnamed_rule_as_bug():
         verdicts=[],
     )
     m = build_trace_model(raw)
-    dr = next(r for r in m["rules"] if r["name"] == "excessive_dynamic_range")
+    dr = next(r for r in m["rules"] if r["name"] == "over_compression")
     assert dr["diagnosis"] == "bug"
     assert m["inputs"]["music"] is True
     assert m["inputs"]["reference"] is False

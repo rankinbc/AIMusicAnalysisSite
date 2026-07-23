@@ -9,12 +9,12 @@
     "clipped_sample_count": 0,
     "crest_factor": 7.5,
     "mono_compatibility": 0.85,
-    "low_energy": 0.20,
+    "low_energy": 0.2,
     "detected_key": "F#",
     "key_detection_confidence": 0.7,
     "bpm": 92.0
   },
-  "phase2": {"stereo_correlation": 0.6},
-  "phase3": {"low_mid_energy": 0.31},
-  "genre_hint": "hip-hop"
+  "phase2": {
+    "stereo_correlation": 0.6
+  }
 }

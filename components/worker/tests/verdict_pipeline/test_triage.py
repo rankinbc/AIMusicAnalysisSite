@@ -51,8 +51,8 @@ async def test_triage_includes_rule_verdicts_in_user_message(llm, clipped_pop, m
 
     monkeypatch.setattr(llm, "call", spy)
 
-    from app.verdict_lib.rule_engine import evaluate_rules
-    rule_verdicts = evaluate_rules(clipped_pop)
+    from app.verdict_lib.rule_engine import evaluate_problems
+    rule_verdicts = evaluate_problems(clipped_pop)
 
     await run_triage(clipped_pop, rule_verdicts=rule_verdicts, llm=llm)
     assert "rule_engine" in captured["user"]

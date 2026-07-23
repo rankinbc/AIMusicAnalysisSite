@@ -31,7 +31,7 @@ def _rules_with_producers() -> list[dict[str, Any]]:
 
 def _datapoint_consumers() -> list[dict[str, Any]]:
     # Map every declared output → its producer + the rules that read it.
-    rule_reads = {fn.__name__: read_paths_for_rule(fn) for fn in rule_engine._RULES}
+    rule_reads = {slug: read_paths_for_rule(fn) for slug, fn in rule_engine._SINGLES}
     rows: list[dict[str, Any]] = []
     for dp in sorted(declared_output_paths()):
         consumers = sorted(name for name, paths in rule_reads.items() if dp in paths)
@@ -71,7 +71,7 @@ def build_trace_model(raw: RawTrace) -> dict[str, Any]:
     # Per-rule overlay: fired/not + per-path resolution + idle diagnosis.
     model["inputs"] = analysis_inputs(flat)
     states = phase_run_states(flat)
-    _rules_by_name = {f.__name__: f for f in rule_engine._RULES}
+    _rules_by_name = {slug: fn for slug, fn in rule_engine._SINGLES}
     summary = {"fired": 0, "in_range": 0, "bug": 0, "input_gated": 0}
     for r in model["rules"]:
         fn = _rules_by_name[r["name"]]

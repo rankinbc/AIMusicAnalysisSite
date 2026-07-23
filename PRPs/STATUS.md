@@ -69,7 +69,7 @@ maintained — no action.
 
 | File | Real status |
 |---|---|
-| `problem-engine-mixcoach-rules.md` | Engine LIVE on every analysis; **~39 of ~43 IDENTIFY rules implemented** — 30 `@single` (Tier A×18, B×4, S×2, P×4) + 9 `@composite` in `verdict_lib/`. Remaining: a few datapoint-gated rules + **retire the legacy flat `@rule` registry** (the one named follow-on left in the IDENTIFY/SOLVE arc). |
+| `problem-engine-mixcoach-rules.md` | Engine LIVE on every analysis; **~40 of ~43 IDENTIFY rules implemented** — 30 `@single` (incl. `tempo_octave_error`, 2026-07-23) + 9 `@composite` in `verdict_lib/`. **Legacy flat `@rule` registry RETIRED 2026-07-23** (v3 closeout — `archive/2026-07-23_v3-analysis-closeout.md`); `evaluate_problems` is the sole rule path, lint/inspector read `_SINGLES`. Remaining: a few datapoint-gated rules. |
 | `reference-profiles-backend.md` | Persistence fields exist (`ReferenceSet.profile_json/fingerprint`, `ReferenceTrack.analysis_status`); aggregation + endpoints incomplete. |
 | `listen-v3-bookmark-ui.md` | Backend done (`BookmarkEndpoints.cs`); frontend **partial** — hooks shipped (`features/listen/useBookmarks.ts`, `useBookmarkSignal.ts`) but the **`BookmarksPanel.tsx` rail + timeline markers are unbuilt** (verified 2026-06-27). |
 

@@ -7,7 +7,8 @@ only reads it and answers "does this consumer path actually exist in what the
 pipeline emits?".
 
 Consumers checked by :func:`current_drift_offenders`:
-  - **rules** — read paths extracted from ``rule_engine._RULES`` via the
+  - **rules** — read paths extracted from ``rule_engine._SINGLES`` (the
+    two-pass Problem engine's registry of ``(slug, fn)`` tuples) via the
     inspector's AST extractor.
   - **prompts** — dotted paths cited in ``prompts/experts/*.md`` (+ Triage).
   - **fixtures** — every leaf in ``tests/verdict_pipeline/fixtures/analyses/*.json``.
@@ -103,10 +104,10 @@ def _rule_offenders(contract: dict[str, Any]) -> list[str]:
     from app.verdict_lib import rule_engine  # noqa: PLC0415
 
     out: list[str] = []
-    for fn in rule_engine._RULES:
+    for slug, fn in rule_engine._SINGLES:
         for p in sorted(read_paths_for_rule(fn)):
             if not path_resolves(p, contract):
-                out.append(f"{fn.__name__}::{p}")
+                out.append(f"{slug}::{p}")
     return out
 
 
@@ -170,7 +171,7 @@ def scan_sizes() -> dict[str, int]:
     """Counts of what was scanned (for fail-closed assertions)."""
     from app.verdict_lib import rule_engine  # noqa: PLC0415
     return {
-        "rules": len(rule_engine._RULES),
+        "rules": len(rule_engine._SINGLES),
         "prompts": len(_prompt_files()),
         "fixtures": len(list(_FIXTURES_DIR.glob("*.json"))),
     }

@@ -18,7 +18,7 @@ from .prompt_loader import (
     load_triage,
 )
 from .ranker import rank_verdicts
-from .rule_engine import evaluate_rules
+from .rule_engine import evaluate_problems
 from .triage import run_triage
 from .validator import validate_verdict
 
@@ -29,7 +29,7 @@ __all__ = [
     "SLUG_TO_FILENAME",
     "SPECIALIST_SLUGS",
     "dedupe_verdicts",
-    "evaluate_rules",
+    "evaluate_problems",
     "extract_json_object",
     "load_prompt",
     "load_triage",

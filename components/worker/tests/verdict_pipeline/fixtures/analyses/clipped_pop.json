@@ -14,7 +14,7 @@
     "key_detection_confidence": 0.8,
     "bpm": 120.0
   },
-  "phase2": {"stereo_correlation": 0.5},
-  "phase3": {"low_mid_energy": 0.18},
-  "genre_hint": "pop"
+  "phase2": {
+    "stereo_correlation": 0.5
+  }
 }

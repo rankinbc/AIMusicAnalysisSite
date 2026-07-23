@@ -38,10 +38,11 @@ from .tasks_dramatiq import LOCAL_ROOT, _utc_now
 logger = logging.getLogger(__name__)
 
 try:
-    from audio_analysis import rerun_single_phase
+    from audio_analysis import ANALYSIS_SCHEMA_VERSION, rerun_single_phase
 except ImportError:  # pragma: no cover
     logger.warning("audio_analysis not installed — rerun_phase actor will raise on dispatch")
     rerun_single_phase = None  # type: ignore[assignment]
+    ANALYSIS_SCHEMA_VERSION = None  # type: ignore[assignment]
 
 
 @dramatiq.actor(
@@ -201,6 +202,10 @@ def rerun_phase(
         if row is None:
             raise RuntimeError(f"analysis {analysis_id} disappeared mid-rerun")
         row.final_json = merged_safe
+        # v3 closeout: the merged result was produced by the CURRENT pipeline —
+        # re-stamp pipeline_version only (reruns don't regenerate verdicts, so
+        # rule/validator/prompt stamps are untouched).
+        row.pipeline_version = ANALYSIS_SCHEMA_VERSION
         report_job_id = getattr(row, "job_id", None)
 
         j = s.get(AnalysisJob, rerun_jid)

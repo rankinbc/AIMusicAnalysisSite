@@ -14,7 +14,7 @@
     "key_detection_confidence": 0.75,
     "bpm": 110.0
   },
-  "phase2": {"stereo_correlation": -0.25},
-  "phase3": {"low_mid_energy": 0.16},
-  "genre_hint": "indie"
+  "phase2": {
+    "stereo_correlation": -0.25
+  }
 }

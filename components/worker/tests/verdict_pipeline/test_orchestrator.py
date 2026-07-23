@@ -33,28 +33,29 @@ async def test_pipeline_emits_rule_verdicts_first(llm, clipped_pop):
 
 
 @pytest.mark.asyncio
-async def test_pipeline_dedupes_overlapping(llm, muddy_hiphop):
-    # Specialist emits a verdict with the same (category, metric) as the
-    # rule_engine — should merge.
-    llm.register("Triage", muddy_hiphop["track_id"], json.dumps({
-        "specialists_to_run": [{"name": "low_end", "priority": 1, "focus": "x"}],
+async def test_pipeline_dedupes_overlapping(llm, clipped_pop):
+    # Specialist emits a verdict with the same (category, primary metric) as a
+    # rule-engine Problem (true_peak_overshoot: clipping/phase1.true_peak_db)
+    # — should merge into one verdict carrying both sources.
+    llm.register("Triage", clipped_pop["track_id"], json.dumps({
+        "specialists_to_run": [{"name": "loudness", "priority": 1, "focus": "x"}],
         "skip": [],
         "rationale": "x",
         "estimated_total_tokens": 1000,
     }))
-    llm.register("Low End Specialist", muddy_hiphop["track_id"], json.dumps({
-        "specialist": "low_end",
+    llm.register("Loudness & Mastering", clipped_pop["track_id"], json.dumps({
+        "specialist": "loudness",
         "verdicts": [{
             "severity": "severe",
-            "category": "low_end",
+            "category": "clipping",
             "confidence": 0.85,
             "headline": "Specialist headline that is longer than rule",
             "summary": "Specialist summary string is also longer than the rule.",
             "evidence": [{
-                "metric": "phase3.low_mid_energy",
-                "value": 0.31,
-                "expected_range": [0.10, 0.20],
-                "label": "+50% vs target",
+                "metric": "phase1.true_peak_db",
+                "value": 0.4,
+                "expected_range": [-6.0, -1.0],
+                "label": "+0.4 dBTP",
             }],
             "fix": None,
             "why_it_matters": "Specialist context.",
@@ -62,16 +63,20 @@ async def test_pipeline_dedupes_overlapping(llm, muddy_hiphop):
     }))
 
     events: list[PipelineEvent] = []
-    async for ev in run_pipeline(muddy_hiphop, llm=llm):
+    async for ev in run_pipeline(clipped_pop, llm=llm):
         events.append(ev)
 
     complete = events[-1]
     assert complete.kind == "complete"
     final = complete.payload["verdicts"]
-    low_end_verdicts = [v for v in final if v["category"] == "low_end"]
-    assert len(low_end_verdicts) == 1
-    sources = set(low_end_verdicts[0]["sources"])
-    assert {"rule_engine", "low_end"} <= sources
+    tp_verdicts = [
+        v for v in final
+        if v["evidence"] and v["evidence"][0]["metric"] == "phase1.true_peak_db"
+    ]
+    assert len(tp_verdicts) == 1
+    assert tp_verdicts[0]["category"] == "clipping"
+    sources = set(tp_verdicts[0]["sources"])
+    assert {"rule_engine", "loudness"} <= sources
 
 
 @pytest.mark.asyncio
