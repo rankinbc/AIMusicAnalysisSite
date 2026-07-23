@@ -81,12 +81,12 @@ export function CoachTab({
     return m;
   }, [verdicts]);
 
-  const suggestedCount = data?.routing_plan?.specialists_to_run?.length ?? 0;
+  const suggestedCount = data?.routingPlan?.specialistsToRun?.length ?? 0;
 
   // Surface the triage plan on the report itself (the completion modal may be
   // retired). Pending = triage hasn't written a plan and hasn't degraded.
-  const routing = useMemo(() => splitRouting(data?.routing_plan), [data]);
-  const triagePending = data != null && data.routing_plan == null && data.degradation == null;
+  const routing = useMemo(() => splitRouting(data?.routingPlan), [data]);
+  const triagePending = data != null && data.routingPlan == null && data.degradation == null;
 
   const handleRun = useCallback(
     async (slug: string) => {
@@ -126,14 +126,14 @@ export function CoachTab({
     [run],
   );
   useEffect(() => {
-    const plan = data?.routing_plan;
+    const plan = data?.routingPlan;
     if (!plan || autoRanRef.current === analysisId) return;
     autoRanRef.current = analysisId;
     if (verdicts.some((v) => v.source === 'llm_identifier')) return; // already have AI fixes
     const already = new Set(
       (data?.specialists ?? []).filter((sp) => sp.status !== 'idle').map((sp) => sp.slug),
     );
-    for (const entry of plan.specialists_to_run) {
+    for (const entry of plan.specialistsToRun) {
       const meta = SPECIALIST_CATALOG.find((s) => s.slug === entry.name);
       if (already.has(entry.name)) continue;
       if (meta?.needsStems && !inputs.stems) continue;

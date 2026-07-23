@@ -1331,12 +1331,18 @@ export interface RoutingPlanEntry {
 
 /** Mirrors `aimusic_shared.verdicts.models.SpecialistRoutingPlan`. The Triage
  *  step produces this before any specialist runs. Cached alongside verdicts
- *  on `analysis_results.verdicts_payload.routing_plan`. */
+ *  on `analysis_results.verdicts_payload.routing_plan`.
+ *
+ *  NOTE the casing transform: the Python model is snake_case, but the BFF
+ *  deserializes into a C# record and re-serializes with
+ *  `JsonSerializerDefaults.Web` — the WIRE is camelCase (`specialistsToRun`).
+ *  Snake_case here was drift from the v1 FastAPI passthrough and left the
+ *  routing plan invisible to every consumer (fixed 2026-07-23). */
 export interface RoutingPlanDto {
-  specialists_to_run: RoutingPlanEntry[];
+  specialistsToRun: RoutingPlanEntry[];
   skip: string[];
   rationale: string;
-  estimated_total_tokens: number;
+  estimatedTotalTokens: number;
 }
 
 /** Story 1.4 / FR16: worker-set when LLM verdict generation is unavailable
@@ -1368,7 +1374,7 @@ export interface VerdictsListResponse {
   specialists: SpecialistStatus[];
   /** Present once a batch generation has run. Absent on jobs where only the
    *  piecewise `/run/{slug}` flow has fired or where Triage failed. */
-  routing_plan?: RoutingPlanDto;
+  routingPlan?: RoutingPlanDto;
   /** Present iff the report is degraded — read this BEFORE rendering verdicts
    *  to show the banner + offline-coach copy. The verdicts list still has
    *  rule-engine fallback rows; render them as normal cards under the banner. */

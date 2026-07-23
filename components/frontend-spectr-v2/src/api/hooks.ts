@@ -590,7 +590,7 @@ export function useVerdicts(jobId: string, opts: UseVerdictsOptions) {
     refetchInterval: (query) => {
       if (opts.optimisticRunning.size > 0) return 3000;
       const d = query.state.data;
-      const triagePending = d != null && d.routing_plan == null && d.degradation == null;
+      const triagePending = d != null && d.routingPlan == null && d.degradation == null;
       if (triagePending && query.state.dataUpdateCount < 25) return 3000;
       return false;
     },

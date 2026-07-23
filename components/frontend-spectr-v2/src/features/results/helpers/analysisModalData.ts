@@ -399,8 +399,8 @@ export interface RoutingSplit {
 }
 
 export function splitRouting(plan: RoutingPlanDto | undefined): RoutingSplit | null {
-  if (!plan || !plan.specialists_to_run?.length) return null;
-  const sorted = plan.specialists_to_run.slice().sort((a, b) => a.priority - b.priority);
+  if (!plan || !plan.specialistsToRun?.length) return null;
+  const sorted = plan.specialistsToRun.slice().sort((a, b) => a.priority - b.priority);
   const rows: SpecRow[] = sorted.map((e) => {
     const { label, group } = resolveSpec(e);
     return { slug: e.name, label, group, focus: e.focus };

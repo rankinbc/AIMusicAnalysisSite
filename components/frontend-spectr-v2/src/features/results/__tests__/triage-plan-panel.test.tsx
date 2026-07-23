@@ -7,8 +7,10 @@ import { specRunState } from '../helpers/triage-plan';
 import { splitRouting } from '../helpers/analysisModalData';
 import type { RoutingPlanDto } from '../../../api/types';
 
+// Field names match the BFF WIRE (JsonSerializerDefaults.Web → camelCase),
+// not the Python model — see the RoutingPlanDto note in api/types.ts.
 const plan: RoutingPlanDto = {
-  specialists_to_run: [
+  specialistsToRun: [
     { name: 'low_end', focus: 'Sub is 4 dB hot vs genre', priority: 1 },
     { name: 'loudness', focus: 'Crest factor is squashed', priority: 2 },
     { name: 'stereo_field', focus: 'Width collapses below 120 Hz', priority: 3 },
@@ -16,7 +18,7 @@ const plan: RoutingPlanDto = {
   ],
   skip: [],
   rationale: 'Low end dominates the risk on this mix.',
-  estimated_total_tokens: 1000,
+  estimatedTotalTokens: 1000,
 };
 
 const none = new Set<string>();

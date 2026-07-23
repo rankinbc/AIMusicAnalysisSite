@@ -464,7 +464,7 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
           durationSec={phase1?.duration_seconds}
           genre={phase2?.genre}
           versionLabel={undefined}
-          routingPlan={verdictsData?.routing_plan}
+          routingPlan={verdictsData?.routingPlan}
           running={null}
           onClose={dismissModal}
           onViewReport={dismissModal}
