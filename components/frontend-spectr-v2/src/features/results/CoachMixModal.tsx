@@ -1,11 +1,12 @@
 import { FixRackPanel } from './FixRackPanel';
+import type { FixRackGenPhase } from './useFixRackGeneration';
 
 interface CoachMixModalProps {
   jobId: string;
   versionId: string | null;
   trackName: string;
   committedCount: number;
-  requested: boolean;
+  genPhase: FixRackGenPhase;
   onGenerate: () => void;
   onClose: () => void;
 }
@@ -17,7 +18,7 @@ export function CoachMixModal({
   versionId,
   trackName,
   committedCount,
-  requested,
+  genPhase,
   onGenerate,
   onClose,
 }: CoachMixModalProps) {
@@ -45,7 +46,7 @@ export function CoachMixModal({
             jobId={jobId}
             versionId={versionId}
             committedCount={committedCount}
-            requested={requested}
+            genPhase={genPhase}
             onGenerate={onGenerate}
           />
         </div>

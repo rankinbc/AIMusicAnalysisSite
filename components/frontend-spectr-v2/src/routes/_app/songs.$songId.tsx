@@ -230,7 +230,7 @@ function SongDetailPage() {
                     </div>
                     <div className={s.versionAction}>
                       <Link
-                        to="/listen/$versionId"
+                        to="/listen-rack/$versionId"
                         params={{ versionId: v.id }}
                         className={s.resultsLink}
                         style={{

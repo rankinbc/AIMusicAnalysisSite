@@ -1,39 +1,39 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import { useQueryClient } from '@tanstack/react-query';
 
-import { useFixRack, useGenerateFixRack } from '../../api/hooks';
 import { MANIFEST, enabledModuleIds, moduleParams, readFixChain } from './fix-rack-helpers';
+import { useFixRackGeneration, type FixRackGenPhase } from './useFixRackGeneration';
 import s from './FixRackPanel.module.css';
 
 // Phase 2 "act on them": committed fixable Moves -> a mastering chain you hear in
 // Listen. POST /reports/{jobId}/fix-rack (202) -> poll GET (204 -> 200 FixRackDto).
 // The chain is byte-identical to the Listen rack's, so "Open in Listen rack" hands
 // it straight over. The change_log / degraded coaching layer is rendered from
-// the BFF `coachMeta` (coach-mix arbiter rationale).
+// the BFF `coachMeta` (coach-mix arbiter rationale). Generation lifecycle
+// (including the error/timeout failure paths) lives in useFixRackGeneration.
 
 interface Props {
   jobId: string;
   versionId: string | null;
   /** Number of committed moves — gates idle vs empty. */
   committedCount: number;
-  /** Controlled mode (redesign): when provided, the panel reflects this
-   *  generation flag and delegates the trigger to `onGenerate` — so the coach
+  /** Controlled mode (redesign): when provided, the panel reflects the owner's
+   *  generation phase and delegates the trigger to `onGenerate` — so the coach
    *  header's "Generate Fix Rack" button and this sidebar panel share one
-   *  flow. Omit both for the original self-contained behavior. */
-  requested?: boolean;
+   *  useFixRackGeneration flow. Omit both for self-contained behavior. */
+  genPhase?: FixRackGenPhase;
   onGenerate?: () => void;
 }
 
-export function FixRackPanel({ jobId, versionId, committedCount, requested, onGenerate }: Props) {
+export function FixRackPanel({ jobId, versionId, committedCount, genPhase, onGenerate }: Props) {
   const navigate = useNavigate();
-  const qc = useQueryClient();
-  const [internalRequested, setInternalRequested] = useState(false);
-  const gen = useGenerateFixRack(jobId);
-  const controlled = requested !== undefined;
-  const req = controlled ? requested : internalRequested;
-  const fixRack = useFixRack(jobId, req);
-  const rack = fixRack.data ?? null;
+  const controlled = genPhase !== undefined;
+  // In controlled mode the owner's hook instance drives the POST + polling;
+  // this instance stays idle but its (disabled) query still subscribes to the
+  // shared ['fix-rack', jobId] cache, so `rack` updates in both modes.
+  const flow = useFixRackGeneration(jobId);
+  const phase = controlled ? genPhase : flow.phase;
+  const rack = flow.rack;
   const enabled = useMemo(() => (rack ? enabledModuleIds(rack.chain) : []), [rack]);
 
   const generate = () => {
@@ -41,9 +41,7 @@ export function FixRackPanel({ jobId, versionId, committedCount, requested, onGe
       onGenerate?.();
       return;
     }
-    void qc.invalidateQueries({ queryKey: ['fix-rack', jobId] });
-    setInternalRequested(true);
-    gen.mutate();
+    flow.generate();
   };
   const openInListen = () => {
     if (!versionId) return;
@@ -149,8 +147,40 @@ export function FixRackPanel({ jobId, versionId, committedCount, requested, onGe
     );
   }
 
+  // ── error: the generate POST failed (entitlements 503, worker/Redis down) ──
+  if (phase === 'error') {
+    return (
+      <div className={`card ${s.panel} ${s.empty}`}>
+        <span className={`${s.icon} ${s.err}`}>✕</span>
+        <div className={s.body}>
+          <div className={s.title}>Couldn&apos;t generate the rack</div>
+          <div className={s.sub}>The generate request failed — nothing was queued. Retry when the service is back.</div>
+        </div>
+        <button type="button" className="btn primary sm" onClick={generate}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  // ── timeout: queued, but no preset landed inside the poll window ──
+  if (phase === 'timeout') {
+    return (
+      <div className={`card ${s.panel} ${s.empty}`}>
+        <span className={`${s.icon} ${s.err}`}>◴</span>
+        <div className={s.body}>
+          <div className={s.title}>This is taking longer than expected</div>
+          <div className={s.sub}>The worker hasn&apos;t produced a rack yet — it may be busy or down. Retry to queue it again.</div>
+        </div>
+        <button type="button" className="btn primary sm" onClick={generate}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   // ── generating ──
-  if (req) {
+  if (phase === 'generating') {
     return (
       <div className={`card ${s.panel} ${s.generating}`}>
         <span className={`${s.icon} ${s.busy}`}>◴</span>
@@ -173,7 +203,7 @@ export function FixRackPanel({ jobId, versionId, committedCount, requested, onGe
           <b>{committedCount}</b> {committedCount === 1 ? 'move' : 'moves'}.
         </div>
       </div>
-      <button type="button" className="btn primary sm" onClick={generate} disabled={gen.isPending}>
+      <button type="button" className="btn primary sm" onClick={generate} disabled={flow.isPosting}>
         ✦ Generate
       </button>
     </div>

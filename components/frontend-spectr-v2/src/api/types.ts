@@ -802,7 +802,9 @@ export interface PostShareCommentRequest {
   authorDisplayName?: string | null;
 }
 
-// Coach combined-view (analysis + verdicts + counts). Chat-stream lands later.
+// Coach combined-view (analysis + verdicts + counts). No frontend consumer
+// today — kept as the BFF-contract mirror for GET /api/coach/{jobId} (see the
+// useCoachView tombstone in hooks.ts).
 export interface CoachViewDto {
   jobId: string;
   songName: string | null;

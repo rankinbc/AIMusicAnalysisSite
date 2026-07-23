@@ -41,6 +41,10 @@
   color: var(--accent);
   animation: spin 1.1s linear infinite;
 }
+.icon.err {
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 45%, transparent);
+}
 
 .body {
   flex: 1 1 auto;

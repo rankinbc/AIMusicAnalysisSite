@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { ApiError } from '../../api/fetcher';
@@ -8,12 +7,11 @@ import { extractApiError } from '../../api/error-utils';
 import {
   useApplyVerdict,
   useEntitlements,
-  useFixRack,
-  useGenerateFixRack,
   useReanalyzeVersion,
   useVerdicts,
   useVersionFiles,
 } from '../../api/hooks';
+import { useFixRackGeneration } from './useFixRackGeneration';
 import { UpgradeSheet } from '../../components/UpgradeSheet';
 import {
   isFinalJson,
@@ -156,20 +154,19 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
     void navigate({ to: '/listen-rack/$versionId', params: { versionId } });
   }, [navigate, versionId]);
 
-  // ── Fix Rack (né "Coach Mix", story 12.6) — generation flag is shared between the coach
-  // header button and the sidebar panel. ──
-  const qc = useQueryClient();
-  const genFixRack = useGenerateFixRack(jobId);
-  const [coachMixRequested, setCoachMixRequested] = useState(false);
-  const fixRack = useFixRack(jobId, coachMixRequested);
-  const generateCoachMix = useCallback(() => {
-    void qc.invalidateQueries({ queryKey: ['fix-rack', jobId] });
-    setCoachMixRequested(true);
-    genFixRack.mutate();
-  }, [qc, genFixRack, jobId]);
-  const coachMixState: 'idle' | 'generating' | 'ready' = fixRack.data
+  // ── Fix Rack (né "Coach Mix", story 12.6) — generation lifecycle is shared
+  // between the coach header button and the sidebar panel via one hook, which
+  // also owns the error/timeout failure paths. ──
+  const {
+    phase: fixRackPhase,
+    rack: fixRackData,
+    generate: generateCoachMix,
+  } = useFixRackGeneration(jobId);
+  // error/timeout map to 'idle' here so the header button reverts to
+  // "Generate Fix Rack"; the detailed error UI lives in the panel/modal.
+  const coachMixState: 'idle' | 'generating' | 'ready' = fixRackData
     ? 'ready'
-    : coachMixRequested
+    : fixRackPhase === 'generating'
       ? 'generating'
       : 'idle';
 
@@ -442,7 +439,7 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
           versionId={versionId}
           trackName={trackName}
           committedCount={committed.length}
-          requested={coachMixRequested}
+          genPhase={fixRackPhase}
           onGenerate={generateCoachMix}
           onClose={() => setCoachMixOpen(false)}
         />

@@ -9,7 +9,6 @@ import type {
   AuthResponse,
   AuthedUser,
   BookmarkDto,
-  CoachViewDto,
   CompareResponseDto,
   CreateBookmarkRequest,
   CreateShareResponse,
@@ -621,15 +620,19 @@ export function useGenerateFixRack(jobId: string) {
 }
 
 /** The generated analysis fix-rack, or `null` until ready. The BFF returns 204
- *  (→ null) until the worker writes it; this polls every 1.5 s while null.
- *  Enable it only after `useGenerateFixRack` has been fired. */
+ *  (→ null) until the worker writes it; this polls every 1.5 s while null,
+ *  capped at 100 polls (150 s) so a worker that never persists a preset can't
+ *  spin the UI forever. Enable it only after `useGenerateFixRack` has been
+ *  fired; callers re-requesting (retry/regenerate) must `resetQueries` the
+ *  ['fix-rack', jobId] key so the poll count and cached data start fresh. */
 export function useFixRack(jobId: string, enabled: boolean) {
   return useQuery<FixRackDto | null>({
     queryKey: ['fix-rack', jobId],
     queryFn: async () =>
       (await fetcher<FixRackDto | null>({ url: `/reports/${jobId}/fix-rack`, method: 'GET' })) ?? null,
     enabled: enabled && Boolean(jobId),
-    refetchInterval: (query) => (query.state.data == null ? 1500 : false),
+    refetchInterval: (query) =>
+      query.state.data == null && query.state.dataUpdateCount < 100 ? 1500 : false,
     retry: false,
   });
 }
@@ -902,13 +905,11 @@ export function usePostShareComment(token: string) {
 }
 
 // ── Coach ───────────────────────────────────────────────────────────────────
-export function useCoachView(jobId: string) {
-  return useQuery<CoachViewDto>({
-    queryKey: ['coach', jobId],
-    queryFn: () => fetcher<CoachViewDto>({ url: `/coach/${jobId}`, method: 'GET' }),
-    enabled: Boolean(jobId),
-  });
-}
+// UI-cleanup sweep: useCoachView removed with zero consumers (the live coach
+// surface streams via CoachChat + CoachConversationEndpoints, not this combined
+// view). The BFF endpoint GET /api/coach/{jobId} REMAINS — re-home the hook when
+// a surface wants the combined view; CoachViewDto stays in types.ts as the
+// contract mirror.
 
 // ── Song tags ───────────────────────────────────────────────────────────────
 export function useCreateTag(songId: string) {
