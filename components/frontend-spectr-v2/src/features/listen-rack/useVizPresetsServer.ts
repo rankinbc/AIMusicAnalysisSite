@@ -50,6 +50,7 @@ export function useSaveVizPreset() {
     mutationFn: (body: SaveVizPresetRequest) =>
       fetcher<VizPresetDto>({ url: '/viz/presets', method: 'POST', data: body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: vizKey }),
+    meta: { errorToast: 'Could not save the look.' },
   });
 }
 
@@ -59,5 +60,6 @@ export function useDeleteVizPreset() {
     mutationFn: (presetId: string) =>
       fetcher<void>({ url: `/viz/presets/${presetId}`, method: 'DELETE' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: vizKey }),
+    meta: { errorToast: 'Could not delete the look.' },
   });
 }

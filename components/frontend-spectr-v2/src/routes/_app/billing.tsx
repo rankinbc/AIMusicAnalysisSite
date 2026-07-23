@@ -1,4 +1,4 @@
-import { Link, createFileRoute } from '@tanstack/react-router';
+import { Link, Outlet, createFileRoute, useChildMatches } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -32,9 +32,20 @@ function formatDate(iso: string): string {
 }
 
 function BillingPage() {
+  // billing.success.tsx nests under this route (dot-notation), so this parent
+  // must yield to an active child or /billing/success renders THIS page
+  // instead (same trap as songs.$songId.tsx — see CLAUDE.md). Latent since
+  // stories 2-8/2-9 added this file; surfaced by the wave-3 credits branch.
+  const childMatches = useChildMatches();
+  if (childMatches.length > 0) return <Outlet />;
+
+  return <BillingSummary />;
+}
+
+function BillingSummary() {
   const qc = useQueryClient();
   const portal = useBillingPortal();
-  const { data, isLoading } = useQuery<BillingSummaryResponse>({
+  const { data, isLoading, isError, refetch } = useQuery<BillingSummaryResponse>({
     queryKey: ['billing', 'me'],
     queryFn: () =>
       fetcher<BillingSummaryResponse>({ url: '/billing/me', method: 'GET' }),
@@ -45,6 +56,40 @@ function BillingPage() {
     // the UI. 30s is short enough that webhook lag is bounded.
     staleTime: 30_000,
   });
+
+  // Audit wave-3 (E8.1) — a failed summary fetch renders an honest error card
+  // with a retry, never the eternal "Loading…" skeleton.
+  if (isError) {
+    return (
+      <main className={s.shell}>
+        <header className={s.header}>
+          <span className="label">Billing</span>
+          <h1 className={s.title}>Your subscription</h1>
+        </header>
+        <section className={`card ${s.card}`}>
+          <div className={s.cardHead}>
+            <h2 className={s.cardTitle}>Couldn&rsquo;t load your billing info</h2>
+          </div>
+          <p className={s.body}>
+            Your subscription is unaffected — we just couldn&rsquo;t reach the
+            billing service.
+          </p>
+          <div className={s.actions}>
+            <button
+              type="button"
+              className="btn primary"
+              onClick={() => void refetch()}
+            >
+              Retry
+            </button>
+            <Link to="/pricing" className="btn ghost">
+              See plans
+            </Link>
+          </div>
+        </section>
+      </main>
+    );
+  }
 
   if (isLoading || !data) {
     return (

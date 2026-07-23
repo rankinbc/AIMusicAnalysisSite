@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createRouter } from '@tanstack/react-router';
 import { Toaster } from 'sonner';
 
+import { createMutationCache } from './api/mutation-error-toast';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { initAnalytics } from './lib/analytics';
 import { Sentry, initSentry } from './lib/sentry';
@@ -21,6 +22,9 @@ try {
 }
 
 const queryClient = new QueryClient({
+  // Wave-3: global mutation error handler — toasts ONLY for mutations that
+  // opt in via `meta.errorToast` (see api/mutation-error-toast.ts).
+  mutationCache: createMutationCache(),
   defaultOptions: {
     queries: {
       staleTime: 30_000,
@@ -28,6 +32,12 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+declare module '@tanstack/react-query' {
+  interface Register {
+    mutationMeta: { errorToast?: string };
+  }
+}
 
 const router = createRouter({
   routeTree,

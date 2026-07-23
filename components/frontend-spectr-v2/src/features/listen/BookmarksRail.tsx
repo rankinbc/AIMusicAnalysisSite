@@ -24,8 +24,9 @@ interface BookmarksRailProps {
 /**
  * Story 11.3 — timestamped bookmarks for the version. Markers align to the
  * transport timeline (click → seek); add at the playhead with an optional note;
- * per-bookmark name-toggle (server upsert) + note-edit (delete+recreate, no PATCH)
- * + delete. Owner sees the aggregate bookmark signal (count + opted-in names).
+ * per-bookmark name-toggle (server upsert) + note-edit (single upsert POST —
+ * the server updates the note in place, audit wave-3 E7.4) + delete. Owner
+ * sees the aggregate bookmark signal (count + opted-in names).
  */
 export function BookmarksRail({ versionId, durationSeconds, position, onSeek, isOwner }: BookmarksRailProps) {
   const myQ = useMyBookmarks();
@@ -63,22 +64,23 @@ export function BookmarksRail({ versionId, durationSeconds, position, onSeek, is
   const toggleName = (b: BookmarkDto) =>
     createMut.mutate({ targetVersionId: versionId, t: b.t, identityVisible: !b.identityVisible });
 
-  // No PATCH endpoint — edit a note by deleting and recreating at the same moment.
-  // Runs at most once per edit session (Enter, then the unmount blur, can't both fire).
+  // Audit wave-3 (E7.4) — one upsert POST edits the note in place: the server
+  // dedups on (version, t) and updates the note. `note: ""` is the explicit
+  // clear signal (absent preserves). The old DELETE+POST dance could destroy
+  // the bookmark when the second step failed; now the row survives any failure
+  // by construction. Runs at most once per edit session (Enter, then the
+  // unmount blur, can't both fire).
   const commitNote = (b: BookmarkDto) => {
     if (editCommitted.current) return;
     editCommitted.current = true;
     setEditing(null);
     const next = editText.trim() || null;
-    if (next === (b.note ?? null)) return; // unchanged — skip the delete+recreate
-    deleteMut.mutate(b.id, {
-      onSuccess: () =>
-        createMut.mutate({
-          targetVersionId: versionId,
-          t: b.t,
-          note: next,
-          identityVisible: b.identityVisible,
-        }),
+    if (next === (b.note ?? null)) return; // unchanged — skip the POST
+    createMut.mutate({
+      targetVersionId: versionId,
+      t: b.t,
+      note: next ?? '',
+      identityVisible: b.identityVisible,
     });
   };
 

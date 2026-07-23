@@ -37,7 +37,29 @@ function coachLineFor(
 }
 
 export function UsageSummary({ creditBalance }: UsageSummaryProps) {
-  const { data: ent } = useEntitlements();
+  const { data: ent, isError, refetch } = useEntitlements();
+
+  // Audit wave-3 (E8.3) — an entitlements failure is distinguishable from
+  // "loading": say so, with a retry. DECISION: the nav meter (_app.tsx) stays
+  // hidden on entitlements failure — a nav popover is the wrong place for an
+  // error state; this card on /usage carries the explicit message.
+  if (isError) {
+    return (
+      <section className={`card ${s.card}`}>
+        <div className={s.head}>
+          <h2 className={s.cardTitle}>Your plan</h2>
+        </div>
+        <p className={`mono ${s.value}`}>
+          Plan info is unavailable right now — your plan and limits are
+          unaffected.
+        </p>
+        <button type="button" className="btn sm" onClick={() => void refetch()}>
+          Retry
+        </button>
+      </section>
+    );
+  }
+
   if (!ent) return null;
 
   // Only PRO is truly unlimited. Credits also reports analysesLimit=null but is

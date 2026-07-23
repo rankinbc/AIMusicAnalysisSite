@@ -3,7 +3,7 @@
  * {items, page, limit, hasMore} · GET /me/notifications/unread-count →
  * {unread} · POST /me/notifications/{id}/read · POST /me/notifications/read-all.
  * The bell polls unread-count (TanStack refetchInterval — SSE deferred by AC1). */
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { fetcher } from '../../api/fetcher';
 
@@ -30,18 +30,24 @@ export interface NotificationPageDto {
   hasMore: boolean;
 }
 
-const listKey = (page: number) => ['me', 'notifications', page] as const;
+// Audit wave-3 (E7.7) — one infinite query (mirrors useFeed) so "More…"
+// APPENDS pages instead of replacing the list. The key stays under the
+// ['me','notifications'] prefix so markRead/markAll's prefix invalidation
+// still hits it.
+const listKey = ['me', 'notifications', 'list'] as const;
 const unreadKey = ['me', 'notifications', 'unread'] as const;
 
-export function useNotifications(page: number, enabled = true) {
-  return useQuery({
-    queryKey: listKey(page),
-    queryFn: () =>
+export function useNotifications(enabled = true) {
+  return useInfiniteQuery({
+    queryKey: listKey,
+    queryFn: ({ pageParam }) =>
       fetcher<NotificationPageDto>({
         url: '/me/notifications',
         method: 'GET',
-        params: { page },
+        params: { page: pageParam },
       }),
+    initialPageParam: 0,
+    getNextPageParam: (last) => (last.hasMore ? last.page + 1 : undefined),
     enabled,
   });
 }
@@ -70,6 +76,10 @@ export function useMarkAllRead() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => fetcher<void>({ url: '/me/notifications/read-all', method: 'POST' }),
+    // Audit wave-3 — opt into the global MutationCache error toast. useMarkRead
+    // stays silent on purpose: it fires on click-through navigation, where a
+    // failure toast is noise.
+    meta: { errorToast: 'Could not mark notifications read.' },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['me', 'notifications'] });
     },

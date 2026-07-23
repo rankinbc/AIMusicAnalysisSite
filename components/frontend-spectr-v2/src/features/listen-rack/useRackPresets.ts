@@ -7,6 +7,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 
 import { fetcher } from '../../api/fetcher';
 import type {
@@ -100,6 +101,7 @@ export function useSaveRackPreset(versionId: string) {
     mutationFn: (body: SaveRackPresetRequest) =>
       fetcher<RackPresetDto>({ url: `/versions/${versionId}/rack/presets`, method: 'POST', data: body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: presetsKey(versionId) }),
+    meta: { errorToast: 'Could not save the preset.' },
   });
 }
 
@@ -109,6 +111,7 @@ export function useDeleteRackPreset(versionId: string) {
     mutationFn: (presetId: string) =>
       fetcher<void>({ url: `/versions/${versionId}/rack/presets/${presetId}`, method: 'DELETE' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: presetsKey(versionId) }),
+    meta: { errorToast: 'Could not delete the preset.' },
   });
 }
 
@@ -126,7 +129,41 @@ export function useUpsertRackDraft(versionId: string) {
   return useMutation({
     mutationFn: (body: UpsertRackDraftRequest) =>
       fetcher<RackDraftDto>({ url: `/versions/${versionId}/rack/draft`, method: 'PUT', data: body }),
+    // E6.7 (draft half) — deliberately NOT meta.errorToast: the autosave fires
+    // this on a 1.2 s debounce, so repeated failures would stack toasts. The
+    // sonner `id` replaces the existing toast instead. Autosave stays ARMED —
+    // only a failed draft GET disarms it (see resolveDraftRestore).
+    onError: () =>
+      toast.error('Draft not saving — your rack changes may not persist.', {
+        id: 'rack-draft-save',
+      }),
   });
+}
+
+// ── Draft-restore decision (E6.6) ────────────────────────────────────────────
+export type DraftRestoreAction = 'wait' | 'arm' | 'pause' | 'restore';
+
+/**
+ * Pure decision for the page's one-shot draft-restore effect. Order matters:
+ * the story-12.4 carry gates come first (a pending carry parks everything; an
+ * applied carry arms autosave without restoring), then the GET-error PAUSE —
+ * a failed draft GET must never let autosave overwrite the persisted draft
+ * with defaults — then the fetch-settled check. 'restore' covers both a real
+ * draft and a legitimate 204 no-draft (both arm autosave).
+ */
+export function resolveDraftRestore(s: {
+  draftRestored: boolean;
+  realAudio: boolean;
+  carryPhase: 'none' | 'pending' | 'applied' | 'failed';
+  isError: boolean;
+  isFetched: boolean;
+}): DraftRestoreAction {
+  if (s.draftRestored || !s.realAudio) return 'wait';
+  if (s.carryPhase === 'pending') return 'wait';
+  if (s.carryPhase === 'applied') return 'arm';
+  if (s.isError) return 'pause';
+  if (!s.isFetched) return 'wait';
+  return 'restore';
 }
 
 /**

@@ -47,6 +47,55 @@ public sealed class BookmarkVersionEndpointsTests(WebApplicationFactory<Program>
         Assert.Single(list!, b => b.TargetVersionId == versionId);
     }
 
+    // Audit wave-3 (E7.4) — the upsert updates the note on a repeat POST so the
+    // frontend edits notes with a single request. Contract: note "" clears,
+    // absent/null preserves (the identity-toggle caller posts without a note key).
+    [SkippableFact]
+    public async Task RepeatPost_UpsertsNote_EmptyClears_AbsentPreserves()
+    {
+        await TestDb.RequireAsync(_factory);
+        var (owner, _, _) = await NewAuthedClient();
+        var versionId = await CreateVersion(owner);
+
+        var post = await owner.PostAsJsonAsync("/api/me/bookmarks",
+            new { targetVersionId = versionId, t = 12.0, note = "first take", identityVisible = true });
+        Assert.Equal(HttpStatusCode.Created, post.StatusCode);
+        var created = await post.Content.ReadFromJsonAsync<BookmarkDto>();
+        Assert.Equal("first take", created!.Note);
+
+        // Repeat POST with a new note → same row, note updated.
+        var edit = await owner.PostAsJsonAsync("/api/me/bookmarks",
+            new { targetVersionId = versionId, t = 12.0, note = "second take", identityVisible = true });
+        Assert.Equal(HttpStatusCode.OK, edit.StatusCode);
+        var edited = await edit.Content.ReadFromJsonAsync<BookmarkDto>();
+        Assert.Equal(created.Id, edited!.Id);
+        Assert.Equal("second take", edited.Note);
+
+        // Repeat POST WITHOUT a note key (the name-toggle call) → note preserved,
+        // identity toggled (the toggleName regression case).
+        var toggle = await owner.PostAsJsonAsync("/api/me/bookmarks",
+            new { targetVersionId = versionId, t = 12.0, identityVisible = false });
+        Assert.Equal(HttpStatusCode.OK, toggle.StatusCode);
+        var toggled = await toggle.Content.ReadFromJsonAsync<BookmarkDto>();
+        Assert.Equal(created.Id, toggled!.Id);
+        Assert.Equal("second take", toggled.Note);
+        Assert.False(toggled.IdentityVisible);
+
+        // Repeat POST with note "" → note cleared to null.
+        var clear = await owner.PostAsJsonAsync("/api/me/bookmarks",
+            new { targetVersionId = versionId, t = 12.0, note = "", identityVisible = false });
+        Assert.Equal(HttpStatusCode.OK, clear.StatusCode);
+        var cleared = await clear.Content.ReadFromJsonAsync<BookmarkDto>();
+        Assert.Equal(created.Id, cleared!.Id);
+        Assert.Null(cleared.Note);
+
+        // The update persisted (not just projected onto the response DTO).
+        var list = await owner.GetFromJsonAsync<List<BookmarkDto>>("/api/me/bookmarks");
+        var row = Assert.Single(list!, b => b.TargetVersionId == versionId);
+        Assert.Null(row.Note);
+        Assert.False(row.IdentityVisible);
+    }
+
     [SkippableFact]
     public async Task BookmarkVersion_BlockedWhenBookmarkingDisallowed()
     {

@@ -44,9 +44,17 @@ describe('buildTrack', () => {
     expect(t.genre.confidence).toBe(88);
   });
 
+  // Wave-3 E6.2 — the Stats rail keys "not analyzed yet" off this flag.
+  it('sets analyzed=true when phase1 is present, false when absent', () => {
+    expect(buildTrack({ name: 'x', phase1: { bpm: 120 } }).analyzed).toBe(true);
+    expect(buildTrack({ name: 'x' }).analyzed).toBe(false);
+    expect(buildTrack({ name: 'x', phase2: { genre: 'house' } }).analyzed).toBe(false);
+  });
+
   it('falls back to neutral values when analysis is absent', () => {
     const t = buildTrack({ name: '' });
     expect(t.name).toBe('—');
+    expect(t.analyzed).toBe(false);
     expect(t.bpm).toBe(0);
     expect(t.key).toBe('—');
     expect(t.genre).toEqual({ name: '—', confidence: 0 });

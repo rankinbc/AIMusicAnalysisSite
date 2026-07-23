@@ -24,6 +24,7 @@ export function usePostComment(versionId: string) {
     mutationFn: (body: PostCommentRequest) =>
       fetcher<CommentDto>({ url: `/versions/${versionId}/comments`, method: 'POST', data: body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: commentsKey(versionId) }),
+    meta: { errorToast: 'Could not post your comment.' },
   });
 }
 
@@ -33,6 +34,7 @@ export function usePatchCommentStatus(versionId: string) {
     mutationFn: (vars: { commentId: string; body: PatchCommentStatusRequest }) =>
       fetcher<void>({ url: `/comments/${vars.commentId}`, method: 'PATCH', data: vars.body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: commentsKey(versionId) }),
+    meta: { errorToast: 'Could not update the comment.' },
   });
 }
 
@@ -42,6 +44,7 @@ export function useDeleteComment(versionId: string) {
     mutationFn: (commentId: string) =>
       fetcher<void>({ url: `/comments/${commentId}`, method: 'DELETE' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: commentsKey(versionId) }),
+    meta: { errorToast: 'Could not delete the comment.' },
   });
 }
 
@@ -55,6 +58,8 @@ export function useAnonComments(token: string) {
   });
 }
 
+// NO meta.errorToast here — the call site (v.$token.tsx composer) passes its
+// own onError to .mutate(); meta would double-toast.
 export function usePostAnonComment(token: string) {
   const qc = useQueryClient();
   return useMutation({

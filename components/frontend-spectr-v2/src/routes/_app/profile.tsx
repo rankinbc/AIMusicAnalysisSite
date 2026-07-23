@@ -4,7 +4,9 @@ import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { DangerZone } from '../../features/account/DangerZone';
+import { planCardCopy } from '../../features/account/plan-copy';
 import {
+  useEntitlements,
   useMeActivity,
   useMeProfile,
   useMeStats,
@@ -13,10 +15,10 @@ import {
   useSongs,
 } from '../../api/hooks';
 import { useAuth } from '../../auth/AuthContext';
+import { TierChip, type Tier } from '../../components/TierChip';
 import { normalizeGrade } from '../../features/results/helpers/grade';
 import { CoverArt } from '../../ui/CoverArt';
 import { GradePill } from '../../ui/GradePill';
-import { Pill } from '../../ui/Pill';
 import { hueFromId } from '../../ui/hueFromId';
 import type { ActivityItemDto, MeStatsDto, SongDto } from '../../api/types';
 import s from './profile.module.css';
@@ -33,6 +35,11 @@ function ProfilePage() {
   const { data: songs, isLoading: songsLoading, error: songsError } = useSongs();
   const { data: serverStats } = useMeStats();
   const { data: serverActivity } = useMeActivity();
+  // Audit wave-3 (E8.6) — the REAL tier comes from entitlements (free/credits/
+  // pro); AuthedUser.tier can't say 'credits'. null while loading/failed —
+  // render nothing rather than guessing "Free".
+  const { data: ent } = useEntitlements();
+  const tier: Tier | null = ent?.tier ?? null;
   const [tab, setTab] = useState<TabId>('overview');
 
   const songList = useMemo(() => songs ?? [], [songs]);
@@ -99,12 +106,13 @@ function ProfilePage() {
         handle={handle}
         email={email}
         stats={stats}
+        tier={tier}
       />
 
       <TabStrip current={tab} onChange={setTab} stats={stats} activityCount={activity.length} />
 
       {tab === 'overview' && (
-        <OverviewTab songs={songList} activity={activity} />
+        <OverviewTab songs={songList} activity={activity} tier={tier} />
       )}
       {tab === 'activity' && <ActivityTab activity={activity} />}
       {tab === 'settings' && (
@@ -127,9 +135,10 @@ interface HeaderProps {
   handle: string;
   email: string;
   stats: MeStatsDto;
+  tier: Tier | null;
 }
 
-function Header({ initial, displayName, handle, email, stats }: HeaderProps) {
+function Header({ initial, displayName, handle, email, stats, tier }: HeaderProps) {
   return (
     <section className={`card ${s.header}`}>
       <div className={s.headerInner}>
@@ -140,7 +149,9 @@ function Header({ initial, displayName, handle, email, stats }: HeaderProps) {
           <div className={s.nameRow}>
             <span className={s.displayName}>{displayName}</span>
             {handle && <span className={`mono ${s.handle}`}>{handle}</span>}
-            <Pill tone="cyan">Free plan</Pill>
+            {/* E8.6 — real tier chip; no chip while entitlements are pending
+                (never guess "Free"). */}
+            {tier && <TierChip tier={tier} />}
           </div>
           <div className={`mono ${s.meta}`}>{email}</div>
           <div className={s.statsRow}>
@@ -207,9 +218,10 @@ function TabStrip({ current, onChange, stats, activityCount }: TabStripProps) {
 interface OverviewProps {
   songs: SongDto[];
   activity: ActivityItemDto[];
+  tier: Tier | null;
 }
 
-function OverviewTab({ songs, activity }: OverviewProps) {
+function OverviewTab({ songs, activity, tier }: OverviewProps) {
   const recent = useMemo(() => {
     return [...songs]
       .filter((song) => song.archivedAt == null)
@@ -240,12 +252,7 @@ function OverviewTab({ songs, activity }: OverviewProps) {
       <div className={s.column}>
         <div className="card card-body">
           <SectionTitle>Account</SectionTitle>
-          <div className={s.planCard}>
-            <div className={s.planName}>Free plan</div>
-            <div className={s.planDescription}>
-              Unlimited library size · on-demand AI specialists · single producer workspace
-            </div>
-          </div>
+          <PlanCard tier={tier} />
         </div>
 
         <div className="card card-body">
@@ -261,6 +268,23 @@ function OverviewTab({ songs, activity }: OverviewProps) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// E8.6 — the Account card renders the REAL tier's copy (plan-copy.ts owns the
+// per-tier wording + destination); unknown tier says so instead of "Free plan".
+function PlanCard({ tier }: { tier: Tier | null }) {
+  const copy = planCardCopy(tier);
+  return (
+    <div className={s.planCard}>
+      {copy.name && <div className={s.planName}>{copy.name}</div>}
+      <div className={s.planDescription}>{copy.description}</div>
+      {copy.link && (
+        <Link to={copy.link.to} className="btn ghost sm">
+          {copy.link.label}
+        </Link>
+      )}
     </div>
   );
 }

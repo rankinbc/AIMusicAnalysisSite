@@ -731,7 +731,14 @@ public static class BillingEndpoints
                     new() { Price = priceId, Quantity = 1 },
                 },
                 AutomaticTax = new SessionAutomaticTaxOptions { Enabled = true },
-                SuccessUrl = opts.SuccessUrl,
+                // Audit wave-3 (E8.4) — tag the shared SuccessUrl so the
+                // success page knows a CREDIT PACK was bought (the frontend
+                // does a full-page redirect to Stripe, so it has no memory of
+                // the product when it returns). opts.SuccessUrl already
+                // carries `?session_id={CHECKOUT_SESSION_ID}` → append with
+                // '&'. The subscription checkout stays untagged (absent
+                // param = subscription, back-compat).
+                SuccessUrl = opts.SuccessUrl + "&product=credits",
                 CancelUrl = opts.CancelUrl,
                 AllowPromotionCodes = false,
                 BillingAddressCollection = "auto",

@@ -58,6 +58,34 @@ function UsagePage() {
     );
   }
 
+  // Audit wave-3 (E8.2) — a failed credits fetch renders an honest error card
+  // with a retry; never the fake "0 credits · you haven't bought any" state
+  // (the empty-ledger copy below stays for TRUE empty success responses).
+  if (query.isError) {
+    return (
+      <main className={s.shell}>
+        <header className={s.header}>
+          <span className="label">Usage</span>
+          <h1 className={s.title}>Credits</h1>
+        </header>
+        <section className={`card ${s.ledgerCard}`}>
+          <h2 className={s.cardTitle}>Couldn&rsquo;t load your credits</h2>
+          <p className={s.empty}>
+            Your balance is unaffected — we just couldn&rsquo;t reach the
+            billing service.
+          </p>
+          <button
+            type="button"
+            className="btn primary"
+            onClick={() => void query.refetch()}
+          >
+            Retry
+          </button>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className={s.shell}>
       <header className={s.header}>

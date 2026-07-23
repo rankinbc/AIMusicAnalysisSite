@@ -176,6 +176,10 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
             Assert.True(fake.LastSessionOptions.AutomaticTax.Enabled);
             Assert.Equal(userId.ToString(),
                 fake.LastSessionOptions.ClientReferenceId);
+            // Audit wave-3 (E8.4) — the SUBSCRIPTION SuccessUrl stays untagged
+            // (absent product param = subscription, back-compat); only the
+            // credits checkout appends &product=credits.
+            Assert.DoesNotContain("product=", fake.LastSessionOptions.SuccessUrl);
 
             // User row was stamped with the new customer id (reused on
             // subsequent checkouts).

@@ -75,12 +75,13 @@ export function NotificationList({
 
 export function NotificationBell({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
-  const [page, setPage] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
   const { data: unread } = useUnreadCount();
-  const { data: pageData } = useNotifications(page, open);
+  // Audit wave-3 (E7.7) — infinite query: "More…" appends the next page
+  // instead of replacing the visible list with it.
+  const { data: pages, hasNextPage, fetchNextPage } = useNotifications(open);
   const markRead = useMarkRead();
   const markAll = useMarkAllRead();
 
@@ -123,11 +124,11 @@ export function NotificationBell({ className }: { className?: string }) {
       </button>
       {open && (
         <NotificationList
-          items={pageData?.items ?? []}
+          items={(pages?.pages ?? []).flatMap((p) => p.items)}
           onOpen={openNotification}
           onMarkAllRead={() => markAll.mutate()}
-          hasMore={pageData?.hasMore ?? false}
-          onMore={() => setPage((p) => p + 1)}
+          hasMore={hasNextPage}
+          onMore={() => void fetchNextPage()}
         />
       )}
     </div>

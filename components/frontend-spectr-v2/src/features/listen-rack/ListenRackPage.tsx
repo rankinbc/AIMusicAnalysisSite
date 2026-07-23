@@ -35,13 +35,13 @@ import { hslToHex } from './helpers';
 import './listenRack.css';
 import { InlineRack } from './rackLayouts';
 import { pushFullRack } from './rackBindings';
-import { RightRail, VisualMeters, VisualsPanel } from './rail';
+import { RightRail, VisualMeters, VisualsPanel, type ReportRef, type StatsSource } from './rail';
 import { useRackState, type RackPreset } from './rackState';
 import type { Chain } from './chain';
 import type { ModuleState } from './data';
 import {
-  asChain, buildExportEnvelope, parseImportEnvelope, useRackDraft, useRackDraftAutosave,
-  useRackPreset, useRackPresets, useSaveRackPreset,
+  asChain, buildExportEnvelope, parseImportEnvelope, resolveDraftRestore, useRackDraft,
+  useRackDraftAutosave, useRackPreset, useRackPresets, useSaveRackPreset,
 } from './useRackPresets';
 import { overlayChain } from './fixToRackPatch';
 import { clearFixOverlay } from './listenFixes';
@@ -53,7 +53,8 @@ import { SuggestModeChip } from './SuggestModeChip';
 import { useCreateSuggestion } from '../listen/useSuggestions';
 import type { SuggestionAuditionSeam } from '../listen/SuggestionCard';
 import type { SuggestionDto } from '../../api/types';
-import { useNavigate } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { VersionShareDialog } from '../listen/VersionShareDialog';
 import type { RoomLiveSeam } from './useRoomOrchestration';
 import { asVizLook, useSaveVizPreset, useVizPresets } from './useVizPresetsServer';
 import { Transport } from './transport';
@@ -65,11 +66,16 @@ import { VizStage } from './viz';
 interface VizPreset { id: string; name: string; viz: VizState; stages: string[]; director: string }
 
 // Exported for the 12.4 chip render test (all-modes assertion).
-export function TrackHeader({ track, mode, modes, identity, onModeChange, fixesApplied, onResetFixes }: {
+export function TrackHeader({ track, mode, modes, identity, onModeChange, fixesApplied, onResetFixes, reportRef, onShare }: {
   track: Track; mode: ModeId; modes: ModeId[]; identity: Identity; onModeChange?: (m: ModeId) => void;
   /** Story 12.4: carried-fix chip — renders in EVERY mode (this header is the
    *  page's only all-modes surface). null = no carry active. */
   fixesApplied?: number | null; onResetFixes?: () => void;
+  /** Wave-3 E6.5 — the song's latest report. Set ⇒ "View Report →" is a real
+   *  link; null/absent ⇒ no button (never a dead one). */
+  reportRef?: ReportRef | null;
+  /** Wave-3 E7.1 — owner-only share/invite dialog opener (real-audio route). */
+  onShare?: () => void;
 }) {
   const t = track;
   const surface = MODE_SURFACE_MATRIX[mode];
@@ -114,7 +120,18 @@ export function TrackHeader({ track, mode, modes, identity, onModeChange, fixesA
           <SegBar value={mode} onChange={(id) => onModeChange(id as ModeId)}
             options={modes.map((id) => ({ id, label: MODE_SURFACE_MATRIX[id].label }))} accent={surface.accent} />
         )}
-        <button type="button" className="btn primary sm">View Report →</button>
+        {onShare && (
+          <button type="button" className="btn sm" onClick={onShare}>Share</button>
+        )}
+        {reportRef && (
+          <Link
+            to="/songs/$songId/results/$jobId"
+            params={{ songId: reportRef.songId, jobId: reportRef.jobId }}
+            className="btn primary sm"
+          >
+            View Report →
+          </Link>
+        )}
       </div>
     </div>
   );
@@ -186,9 +203,14 @@ export interface ListenRackPageProps {
    *  the page fetches that preset and overlays its chain onto the live rack
    *  once (skipping the draft restore); the "Fixes applied" chip appears. */
   fixPreset?: string;
+  /** Wave-3 E6.5 — the song's latest report ({songId, jobId}); null/absent
+   *  hides "View Report" and the coach hand-off link. */
+  reportRef?: ReportRef | null;
+  /** Wave-3 E6.3 — which analysis feeds the Stats rail (mismatch labeling). */
+  statsSource?: StatsSource | null;
 }
 
-export function ListenRackPage({ mode, modes, identity, access, roomControl, onModeChange, onGrant, versionId, track: trackProp, roomLive, onStartRoom, fixPreset }: ListenRackPageProps) {
+export function ListenRackPage({ mode, modes, identity, access, roomControl, onModeChange, onGrant, versionId, track: trackProp, roomLive, onStartRoom, fixPreset, reportRef = null, statsSource = null }: ListenRackPageProps) {
   const track = trackProp ?? TRACK;
   // ── Real-audio seam (Phase 1) ──
   // `versionId` present ⇒ real mode: mount <audio> + the page-agnostic audio
@@ -234,6 +256,8 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
   const [myStatus, setMyStatus] = useState('🎧');
   const [bottomView, setBottomView] = useState<'rack' | 'lights' | 'stems'>('rack');
   const [vizPresets, setVizPresets] = useState<VizPreset[]>([]);
+  // Wave-3 E7.1 — owner share/invite dialog (real-audio route only).
+  const [shareOpen, setShareOpen] = useState(false);
 
   const saveVizPreset = useCallback(() => setVizPresets((p) => [...p, { id: Math.random().toString(36).slice(2), name: 'Look ' + (p.length + 1), viz, stages: [...stages], director }]), [viz, stages, director]);
   const randomizeViz = useCallback(() => {
@@ -334,22 +358,44 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
   // carried chain as the new draft). A FAILED carry falls back to the normal
   // draft restore — the saved draft is never sacrificed to a 404.
   const draftQuery = useRackDraft(realAudio ? (versionId ?? '') : '');
+  // Destructured so the effect deps are stable fields, not the query object
+  // (whose identity changes every render).
+  const {
+    isError: draftIsError, isFetched: draftIsFetched, data: draftData,
+    refetch: refetchDraft,
+  } = draftQuery;
   const [draftRestored, setDraftRestored] = useState(false);
   useEffect(() => {
-    if (draftRestored || !realAudio) return;
-    if (carryPhase === 'pending') return; // wait for the carry to settle
-    if (carryPhase === 'applied') { setDraftRestored(true); return; }
-    if (!draftQuery.isFetched) return;
-    const chain = draftQuery.data ? asChain(draftQuery.data.chain) : null;
-    if (chain) {
-      rsRef.current.recallPreset({
-        id: 'draft', name: 'draft', by: 'you', order: chain.order,
-        mod: chain.modules as Record<string, ModuleState>, n: 0,
+    // E6.6: the branch ORDER lives in resolveDraftRestore — carry gates, then
+    // the GET-error pause (draftRestored stays false ⇒ autosave stays OFF, so
+    // a transient failure can never let defaults clobber the saved draft),
+    // then the settled-fetch restore. Retry refetches, which resets the query
+    // error state and re-drives this effect via the deps below.
+    const decision = resolveDraftRestore({
+      draftRestored, realAudio, carryPhase,
+      isError: draftIsError, isFetched: draftIsFetched,
+    });
+    if (decision === 'wait') return;
+    if (decision === 'pause') {
+      toast.error("Couldn't load your saved rack draft — autosave is paused.", {
+        id: 'rack-draft-load', // dedupe: replace, never stack
+        action: { label: 'Retry', onClick: () => { void refetchDraft(); } },
       });
-      rsRef.current.setMasterBypass(chain.masterBypass);
+      return;
     }
-    setDraftRestored(true);
-  }, [draftRestored, realAudio, carryPhase, draftQuery.isFetched, draftQuery.data]);
+    if (decision === 'restore') {
+      const chain = draftData ? asChain(draftData.chain) : null;
+      if (chain) {
+        rsRef.current.recallPreset({
+          id: 'draft', name: 'draft', by: 'you', order: chain.order,
+          mod: chain.modules as Record<string, ModuleState>, n: 0,
+        });
+        rsRef.current.setMasterBypass(chain.masterBypass);
+      }
+    }
+    setDraftRestored(true); // 'arm' (carry applied) and 'restore' both arm autosave
+  }, [draftRestored, realAudio, carryPhase, draftIsError, draftIsFetched, draftData,
+    refetchDraft]);
   // 11.12: autosave is OFF while forked or auditioning — those are transient
   // rack states (the fork draft belongs to the suggestion; the audition chain
   // belongs to the proposer), never the user's persisted draft.
@@ -950,6 +996,8 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
         <div className="lr-desktop-only">
         <TrackHeader track={track} mode={mode} modes={modes} identity={identity}
           fixesApplied={fixesApplied} onResetFixes={onResetCarriedFixes}
+          reportRef={reportRef}
+          {...(identity.isOwner && realAudio && versionId ? { onShare: () => setShareOpen(true) } : {})}
           {...(onModeChange ? { onModeChange } : {})} />
 
         {mode === 'room' && (roomLive || onStartRoom) && (
@@ -1097,10 +1145,16 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
             activeNote={activeNote} onNoteClick={(n) => { setActiveNote(n.id); seek(n.t); }} onSeek={seek}
             onReact={reactHandler} feed={feedShown} announce={announce} myStatus={myStatus}
             roomControl={roomControl} onGrant={grantControl} isOwner={identity.isOwner} {...(versionId ? { versionId } : {})}
+            real={realAudio} reportRef={reportRef} statsSource={statsSource}
             {...(cap.canSuggest && mode === 'view' && realAudio && !suggesting ? { onForkToSuggest: startSuggesting } : {})}
             {...(auditionSeam ? { audition: auditionSeam } : {})} />
         </div>
       </div>
+
+      {identity.isOwner && realAudio && versionId && (
+        <VersionShareDialog open={shareOpen} onOpenChange={setShareOpen}
+          versionId={versionId} songName={track.name} />
+      )}
 
       {audioUrl && (
         <audio ref={audioRef} src={audioUrl} preload="auto" crossOrigin="anonymous" />

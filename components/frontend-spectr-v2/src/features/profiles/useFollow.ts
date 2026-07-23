@@ -32,6 +32,7 @@ export function useFollow(handle: string) {
       // graph; without this a follow-from-suggestion shows a stale empty feed.
       void qc.invalidateQueries({ queryKey: FEED_KEY });
     },
+    meta: { errorToast: 'Could not follow.' },
   });
 }
 
@@ -43,5 +44,6 @@ export function useUnfollow(handle: string) {
       void qc.invalidateQueries({ queryKey: followKey(handle) });
       void qc.invalidateQueries({ queryKey: FEED_KEY });
     },
+    meta: { errorToast: 'Could not unfollow.' },
   });
 }

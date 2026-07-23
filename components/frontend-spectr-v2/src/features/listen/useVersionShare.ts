@@ -31,6 +31,7 @@ export function useUpdateShareSettings(versionId: string) {
       qc.invalidateQueries({ queryKey: settingsKey(versionId) });
       qc.invalidateQueries({ queryKey: accessKey(versionId) });
     },
+    meta: { errorToast: 'Could not update sharing.' },
   });
 }
 
@@ -40,6 +41,7 @@ export function useRotateToken(versionId: string) {
     mutationFn: () =>
       fetcher<RotateTokenResponse>({ url: `/versions/${versionId}/share/rotate`, method: 'POST' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: settingsKey(versionId) }),
+    meta: { errorToast: 'Could not rotate the share link.' },
   });
 }
 

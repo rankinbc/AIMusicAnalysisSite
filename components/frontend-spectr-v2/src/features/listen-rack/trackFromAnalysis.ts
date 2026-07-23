@@ -64,6 +64,9 @@ export function buildTrack(src: TrackSource): Track {
     key: p1.detected_key ?? '—',
     genre: { name: p2.genre ?? '—', confidence: asPercent(p2.confidence) },
     grade: p7.grade ?? '',
+    // E6.2 — no phase1 means no completed analysis: every loudness/stereo
+    // field below is a placeholder zero, not a measurement.
+    analyzed: Boolean(src.phase1),
     loudness: {
       integrated: p1.lufs ?? 0,
       truePeak,

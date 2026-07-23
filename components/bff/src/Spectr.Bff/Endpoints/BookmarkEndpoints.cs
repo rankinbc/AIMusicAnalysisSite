@@ -113,12 +113,29 @@ public static class BookmarkEndpoints
             && b.TimestampSeconds == body.T, ct);
         if (existing is not null)
         {
+            var changed = false;
             // Allow toggling identity_visible on a repeat call (owner-signal opt-in/out).
             if (existing.TargetVersionId != null && existing.IdentityVisible != body.IdentityVisible)
             {
                 existing.IdentityVisible = body.IdentityVisible;
-                await db.SaveChangesAsync(ct);
+                changed = true;
             }
+            // Audit wave-3 (E7.4) — the upsert also updates the note so the
+            // frontend can edit a note with a single POST (no destructive
+            // DELETE+POST dance). Contract: `note: ""` clears (Trim maps
+            // empty/whitespace to null), null/absent leaves unchanged —
+            // System.Text.Json can't distinguish null from missing, and the
+            // identity-toggle caller posts without a note key.
+            if (body.Note is not null)
+            {
+                var trimmed = Trim(body.Note, 280);
+                if (existing.Note != trimmed)
+                {
+                    existing.Note = trimmed;
+                    changed = true;
+                }
+            }
+            if (changed) await db.SaveChangesAsync(ct);
             return Results.Ok(ToDto(existing));
         }
 

@@ -142,6 +142,11 @@ public sealed class BillingCreditsEndpointsTests(WebApplicationFactory<Program> 
                 fake.LastSessionOptions.PaymentIntentData.Metadata["pack_size"]);
             Assert.StartsWith("credits_session:", fake.LastSessionIdempotencyKey);
             Assert.Contains(":5:", fake.LastSessionIdempotencyKey);
+            // Audit wave-3 (E8.4) — the credits SuccessUrl is tagged with
+            // product=credits so the shared success page can confirm the
+            // right product; the {CHECKOUT_SESSION_ID} template survives.
+            Assert.EndsWith("&product=credits", fake.LastSessionOptions.SuccessUrl);
+            Assert.Contains("session_id={CHECKOUT_SESSION_ID}", fake.LastSessionOptions.SuccessUrl);
         }
         finally { await CleanupAsync(f, userId); }
     }

@@ -306,6 +306,9 @@ export interface Track {
   key: string;
   genre: { name: string; confidence: number };
   grade: string;
+  /** E6.2 — false when the version has no completed analysis: the Stats rail
+   *  must say "not analyzed yet" instead of presenting zeros as measurements. */
+  analyzed: boolean;
   loudness: { integrated: number; truePeak: number; dynamicRange: number; rms: number };
   stereo: { width: number; correlation: number; monoCompat: number };
   arrangement: { sections: TrackSection[] };
@@ -332,6 +335,8 @@ export const TRACK: Track = {
   key: 'F# minor',
   genre: { name: 'Progressive House', confidence: 89 },
   grade: 'B+',
+  analyzed: true, // demo route keeps demo behavior
+
   loudness: { integrated: -11.2, truePeak: -0.6, dynamicRange: 5.4, rms: -14.3 },
   stereo: { width: 62, correlation: 0.71, monoCompat: 0.78 },
   arrangement: { sections: SECTIONS },

@@ -1,11 +1,13 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { useMemo } from 'react';
 
+import { ApiError } from '../../api/fetcher';
 import { useJobResults, useNotes, useSong, useVersion } from '../../api/hooks';
 import {
   isFinalJson, type FinalJson, type Phase1Data, type Phase2Data, type Phase7Data,
 } from '../../api/types';
 import { ListenRackPage } from '../../features/listen-rack/ListenRackPage';
+import type { ReportRef, StatsSource } from '../../features/listen-rack/rail';
 import { buildTrack } from '../../features/listen-rack/trackFromAnalysis';
 import { useMockRoomOrchestration } from '../../features/listen-rack/useMockRoomOrchestration';
 import { useRoomOrchestration } from '../../features/listen-rack/useRoomOrchestration';
@@ -16,6 +18,32 @@ const ROOM_LIVE_SSE = import.meta.env['VITE_ROOM_LIVE_SSE'] !== '0';
 
 function pickPhase<T>(fj: FinalJson, phaseNumber: number): T | undefined {
   return fj.phases?.find((p) => p.phase === phaseNumber)?.data as T | undefined;
+}
+
+/** Wave-3 E6.1 — honest failure shell for the version load. A 404 (stale deep
+ *  link, deleted version) must NEVER fall back to the demo fixture. Exported
+ *  for the route-state test. */
+export function VersionErrorShell({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  const notFound = error instanceof ApiError && error.status === 404;
+  return (
+    <div style={{ maxWidth: 720, margin: '0 auto', padding: 32 }} data-testid="listen-rack-error">
+      {notFound ? (
+        <>
+          <h1>This version doesn&rsquo;t exist or was deleted.</h1>
+          <p style={{ color: 'var(--muted)' }}>
+            The link may be stale — check your library for the current versions.
+          </p>
+          <Link to="/library" className="btn primary sm">Go to Library</Link>
+        </>
+      ) : (
+        <>
+          <h1>Couldn&rsquo;t load this version.</h1>
+          <p style={{ color: 'var(--muted)' }}>Something went wrong fetching it.</p>
+          <button type="button" className="btn primary sm" onClick={onRetry}>Retry</button>
+        </>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -38,7 +66,8 @@ function ListenRackVersionRoute() {
   const { mode, modes, identity, access, roomControl, onModeChange, onGrant } =
     ROOM_LIVE_SSE ? real : mock;
 
-  const { data: version } = useVersion(versionId);
+  const versionQ = useVersion(versionId);
+  const version = versionQ.data;
   const { data: song } = useSong(version?.songId ?? '');
   const latestJobId = song?.latestResult?.jobId;
   const { data: results } = useJobResults(latestJobId ?? '', Boolean(latestJobId));
@@ -58,9 +87,36 @@ function ListenRackVersionRoute() {
     });
   }, [song, results, notes]);
 
+  // Wave-3 E6.5 — the song's latest report powers "View Report" + the coach
+  // hand-off; null (no analysis yet) hides both rather than dead-ending.
+  const reportRef: ReportRef | null =
+    song && song.latestResult ? { songId: song.id, jobId: song.latestResult.jobId } : null;
+  // Wave-3 E6.3 — the stats always come from the song's LATEST analysis, which
+  // may be a different version than the one playing. Label the mismatch.
+  const statsSource: StatsSource | null = results?.versionId
+    ? {
+        mismatch: results.versionId !== versionId,
+        versionNumber: results.versionNumber ?? null,
+      }
+    : null;
+
+  // Wave-3 E6.1 — never render the demo fixture for a version that failed to
+  // load (or hasn't yet): loading shell first, honest error shell on failure.
+  if (versionQ.isLoading) {
+    return (
+      <div style={{ maxWidth: 720, margin: '0 auto', padding: 32 }}>
+        <p className="mono" style={{ color: 'var(--muted)' }}>Loading version…</p>
+      </div>
+    );
+  }
+  if (versionQ.isError) {
+    return <VersionErrorShell error={versionQ.error} onRetry={() => void versionQ.refetch()} />;
+  }
+
   return (
     <ListenRackPage versionId={versionId} mode={mode} modes={modes} identity={identity}
       access={access} roomControl={roomControl} onGrant={onGrant}
+      reportRef={reportRef} statsSource={statsSource}
       {...(fixPreset ? { fixPreset } : {})}
       {...(track ? { track } : {})}
       {...(onModeChange ? { onModeChange } : {})}

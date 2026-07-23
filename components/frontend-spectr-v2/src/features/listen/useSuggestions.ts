@@ -22,6 +22,8 @@ export function useSuggestions(versionId: string) {
   });
 }
 
+// NO meta.errorToast here — the call site (ListenRackPage.submitSuggestion)
+// passes its own onError to .mutate(); meta would double-toast.
 export function useCreateSuggestion(versionId: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -42,6 +44,7 @@ export function useAcceptSuggestion(versionId: string) {
       qc.invalidateQueries({ queryKey: suggestionsKey(versionId) });
       qc.invalidateQueries({ queryKey: presetsKey(versionId) });
     },
+    meta: { errorToast: 'Could not accept the suggestion.' },
   });
 }
 
@@ -51,6 +54,7 @@ export function useRejectSuggestion(versionId: string) {
     mutationFn: (suggestionId: string) =>
       fetcher<void>({ url: `/suggestions/${suggestionId}/reject`, method: 'POST' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: suggestionsKey(versionId) }),
+    meta: { errorToast: 'Could not reject the suggestion.' },
   });
 }
 

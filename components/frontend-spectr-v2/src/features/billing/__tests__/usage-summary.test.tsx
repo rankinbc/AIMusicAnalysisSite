@@ -5,10 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // entitlements snapshot. We mock @tanstack/react-query's useQuery (the vitest
 // env is `node`, no jsdom — mirrors buy-credits-card.test.tsx).
 
-const h = vi.hoisted(() => ({ ent: null as unknown }));
+const h = vi.hoisted(() => ({ ent: null as unknown, isError: false }));
 
 vi.mock('@tanstack/react-query', () => ({
-  useQuery: () => ({ data: h.ent, isLoading: false }),
+  useQuery: () => ({ data: h.ent, isLoading: false, isError: h.isError, refetch: vi.fn() }),
   useMutation: () => ({ mutate: vi.fn() }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
@@ -18,6 +18,7 @@ import { UsageSummary } from '../UsageSummary';
 describe('UsageSummary (story 2.8)', () => {
   beforeEach(() => {
     h.ent = null;
+    h.isError = false;
   });
 
   it('free tier: analyses "{used} of {limit} · resets {date}" + coach per-analysis', () => {
@@ -89,5 +90,18 @@ describe('UsageSummary (story 2.8)', () => {
     h.ent = null;
     const html = renderToStaticMarkup(<UsageSummary creditBalance={0} />);
     expect(html).toBe('');
+  });
+
+  // Audit wave-3 (E8.3) — entitlements DOWN is distinguishable from loading:
+  // the card shell renders an explicit unavailable message + Retry instead of
+  // vanishing (which read as "nothing to show").
+  it('renders the unavailable message + Retry when entitlements errored', () => {
+    h.ent = null;
+    h.isError = true;
+    const html = renderToStaticMarkup(<UsageSummary creditBalance={0} />);
+    expect(html).toContain('Plan info is unavailable right now');
+    expect(html).toContain('your plan and limits are');
+    expect(html).toContain('Retry');
+    expect(html).toContain('Your plan'); // card shell still present
   });
 });

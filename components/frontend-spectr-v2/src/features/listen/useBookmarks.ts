@@ -24,6 +24,7 @@ export function useCreateBookmark() {
     mutationFn: (body: CreateBookmarkRequest) =>
       fetcher<BookmarkDto>({ url: '/me/bookmarks', method: 'POST', data: body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: myBookmarksKey }),
+    meta: { errorToast: 'Could not save the bookmark.' },
   });
 }
 
@@ -32,6 +33,7 @@ export function useDeleteBookmark() {
   return useMutation({
     mutationFn: (id: string) => fetcher<void>({ url: `/me/bookmarks/${id}`, method: 'DELETE' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: myBookmarksKey }),
+    meta: { errorToast: 'Could not delete the bookmark.' },
   });
 }
 

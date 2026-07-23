@@ -7,6 +7,7 @@
  *   People/Chat   → real-time presence + messages + grant-control.
  */
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { Link } from '@tanstack/react-router';
 
 import {
   railTabsFor, type AccessDto, type ActorRef, type ModeId,
@@ -293,6 +294,12 @@ export function VisualsPanel({ stages, toggleStage, director, setDirector, viz, 
   );
 }
 
+// ── Wave-3 E6.3/E6.4/E6.5 — provenance handles threaded from the route ─────
+/** The song's latest report — powers "View Report" + the coach hand-off link. */
+export interface ReportRef { songId: string; jobId: string }
+/** Which analysis feeds the Stats rail (E6.3 mismatch labeling). */
+export interface StatsSource { mismatch: boolean; versionNumber: number | null }
+
 // ── COACH tab — talk to the coach + suggestions that drive the rack ────────
 interface CoachReply { text: string; fix?: string; apply?: RackPatch }
 function coachReply(q: string): CoachReply {
@@ -305,7 +312,13 @@ function coachReply(q: string): CoachReply {
 }
 
 interface CoachMsg { who: 'you' | 'coach'; text: string; fix?: string | undefined; apply?: RackPatch | undefined }
-function CoachPanel({ rs, announce }: { rs: RackState; announce?: (text: string, title?: string) => void }) {
+export function CoachPanel({ rs, announce, real = false, reportRef = null }: {
+  rs: RackState; announce?: (text: string, title?: string) => void;
+  /** Wave-3 E6.4 — real-audio route: NO canned coachReply, NO fixture badge;
+   *  honest hand-off to the report's real AI coach instead. */
+  real?: boolean;
+  reportRef?: ReportRef | null;
+}) {
   const [applied, setApplied] = useState<Record<number, boolean>>({});
   const [msgs, setMsgs] = useState<CoachMsg[]>([]);
   const [text, setText] = useState('');
@@ -315,6 +328,35 @@ function CoachPanel({ rs, announce }: { rs: RackState; announce?: (text: string,
     setMsgs((m) => [...m, { who: 'you', text: q }, { who: 'coach', text: r.text, fix: r.fix, apply: r.apply }]);
     setText('');
   };
+  if (real) {
+    // E6.4 — the canned coachReply fabricates measurements ("−11.2 LUFS") that
+    // have nothing to do with THIS track. On a real version the rack coach is
+    // simply not live yet: say so, and point at the report's grounded coach.
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }} data-testid="coach-real-honest">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: 'linear-gradient(135deg, rgba(0,229,176,0.07), rgba(167,139,250,0.05))', border: '1px solid rgba(0,229,176,0.28)' }}>
+          <Coach size={40} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>Coach</div>
+          </div>
+        </div>
+        <div className="mono" style={{ fontSize: 10.5, color: 'var(--muted)', lineHeight: 1.55 }}>
+          The rack coach isn&rsquo;t live yet. Your real AI coach — grounded in this
+          track&rsquo;s measured analysis — is on the report.
+        </div>
+        {reportRef && (
+          <Link
+            to="/songs/$songId/results/$jobId"
+            params={{ songId: reportRef.songId, jobId: reportRef.jobId }}
+            className="btn sm"
+            style={{ alignSelf: 'flex-start', color: 'var(--cyan)', borderColor: 'rgba(0,229,176,0.4)' }}
+          >
+            Open the report&rsquo;s AI Coach →
+          </Link>
+        )}
+      </div>
+    );
+  }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: 'linear-gradient(135deg, rgba(0,229,176,0.07), rgba(167,139,250,0.05))', border: '1px solid rgba(0,229,176,0.28)' }}>
@@ -482,11 +524,32 @@ function StatRow({ label, value, tone = 'var(--text)' }: { label: string; value:
     </div>
   );
 }
-function StatsPanel({ track }: { track: Track }) {
+export function StatsPanel({ track, statsSource = null }: {
+  track: Track;
+  /** Wave-3 E6.3 — set when the stats come from a DIFFERENT version's analysis. */
+  statsSource?: StatsSource | null;
+}) {
   const dur = `${Math.floor(track.durationSec / 60)}:${String(track.durationSec % 60).padStart(2, '0')}`;
+  // E6.2 — no completed analysis: every number below would be a placeholder
+  // zero presented as a measurement. Say so instead.
+  if (!track.analyzed) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <PLabel accent="var(--cyan)">From the analysis</PLabel>
+        <div className="mono" data-testid="stats-not-analyzed" style={{ fontSize: 10.5, color: 'var(--muted)', lineHeight: 1.55 }}>
+          Not analyzed yet — run an analysis from the song page.
+        </div>
+      </div>
+    );
+  }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
       <PLabel accent="var(--cyan)">From the analysis</PLabel>
+      {statsSource?.mismatch && (
+        <div className="mono" data-testid="stats-mismatch-note" style={{ fontSize: 9.5, color: 'var(--orange)', lineHeight: 1.5, margin: '2px 0 6px' }}>
+          Stats are from the latest analysis{statsSource.versionNumber != null ? ` (v${statsSource.versionNumber})` : ''}, not the version you&rsquo;re hearing.
+        </div>
+      )}
       <StatRow label="Genre" value={`${track.genre.name} · ${track.genre.confidence}%`} tone="var(--cyan)" />
       <StatRow label="Tempo" value={`${track.bpm} BPM`} />
       <StatRow label="Key" value={track.key} />
@@ -779,7 +842,7 @@ const TAB_LABELS: Record<string, string> = {
   coach: 'Coach', plan: 'Plan', comments: 'Comments', people: 'People', chat: 'Chat', stats: 'Stats', notes: 'Notes',
 };
 
-export function RightRail({ mode, access, cap, rs, track, position, activeNote, onNoteClick, onSeek, onReact, feed, announce, myStatus, roomControl, onGrant, versionId, isOwner = false, onForkToSuggest, audition }: {
+export function RightRail({ mode, access, cap, rs, track, position, activeNote, onNoteClick, onSeek, onReact, feed, announce, myStatus, roomControl, onGrant, versionId, isOwner = false, onForkToSuggest, audition, real = false, reportRef = null, statsSource = null }: {
   mode: ModeId;
   access: AccessDto;
   cap: CapabilitySet;
@@ -800,6 +863,10 @@ export function RightRail({ mode, access, cap, rs, track, position, activeNote, 
   /** Story 11.12 — fork-to-suggest + audition seams, forwarded to CommentsPanel. */
   onForkToSuggest?: () => void;
   audition?: SuggestionAuditionSeam;
+  /** Wave-3 — real-audio route flag (E6.4) + provenance handles (E6.3/E6.5). */
+  real?: boolean;
+  reportRef?: ReportRef | null;
+  statsSource?: StatsSource | null;
 }) {
   const tabs = railTabsFor(mode, access);
   const [tab, setTab] = useState(tabs[0]);
@@ -816,12 +883,12 @@ export function RightRail({ mode, access, cap, rs, track, position, activeNote, 
         ))}
       </div>
       <div style={{ overflow: 'auto', flex: 1, paddingRight: 2 }}>
-        {active === 'coach' && <CoachPanel rs={rs} announce={announce} />}
+        {active === 'coach' && <CoachPanel rs={rs} announce={announce} real={real} reportRef={reportRef} />}
         {active === 'plan' && <PlanPanel rs={rs} {...(versionId ? { versionId } : {})} />}
         {active === 'comments' && <CommentsPanel access={access} onSeek={onSeek} isOwner={isOwner} position={position} {...(versionId ? { versionId } : {})} {...(onForkToSuggest ? { onForkToSuggest } : {})} {...(audition ? { audition } : {})} />}
         {active === 'people' && <PeoplePanel myStatus={myStatus} onReact={onReact} cap={cap} roomControl={roomControl} onGrant={onGrant} />}
         {active === 'chat' && <ChatPanel feed={feed} onReact={onReact} />}
-        {active === 'stats' && <StatsPanel track={track} />}
+        {active === 'stats' && <StatsPanel track={track} statsSource={statsSource} />}
         {active === 'notes' && <NotesPanel track={track} activeNote={activeNote} onNoteClick={onNoteClick} />}
       </div>
     </div>

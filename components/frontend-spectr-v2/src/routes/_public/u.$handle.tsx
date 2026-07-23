@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 
-import { fetcher, getAccessToken } from '../../api/fetcher';
+import { ApiError, fetcher, getAccessToken } from '../../api/fetcher';
 import { useMe } from '../../api/hooks';
 import {
   PublicProfileView,
@@ -27,7 +27,7 @@ function usePublicProfile(handle: string) {
 
 function PublicProfileRoute() {
   const { handle } = Route.useParams();
-  const { data, isLoading, error } = usePublicProfile(handle);
+  const { data, isLoading, error, refetch } = usePublicProfile(handle);
   // Owner detection only matters when a session exists.
   const authed = Boolean(getAccessToken());
   const { data: me } = useMe(authed);
@@ -42,7 +42,32 @@ function PublicProfileRoute() {
       </div>
     );
   }
-  if (error || !data) {
+  // Audit wave-3 (E7.6) — only a 404 means "no such profile". A 429 says so
+  // honestly, and any other failure gets a retry instead of the 404 copy.
+  if (error instanceof ApiError && error.status === 429) {
+    return (
+      <div style={{ maxWidth: 720, margin: '0 auto', padding: 32 }}>
+        <h1>Slow down a second</h1>
+        <p style={{ color: 'var(--muted)' }}>
+          Too many profile views — try again in a minute.
+        </p>
+      </div>
+    );
+  }
+  if (error && !(error instanceof ApiError && error.status === 404)) {
+    return (
+      <div style={{ maxWidth: 720, margin: '0 auto', padding: 32 }}>
+        <h1>Something went wrong</h1>
+        <p style={{ color: 'var(--muted)' }}>
+          Couldn&rsquo;t load this profile — try again.
+        </p>
+        <button type="button" className="btn" onClick={() => void refetch()}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+  if (!data) {
     return (
       <div style={{ maxWidth: 720, margin: '0 auto', padding: 32 }}>
         <h1>No one lives here</h1>

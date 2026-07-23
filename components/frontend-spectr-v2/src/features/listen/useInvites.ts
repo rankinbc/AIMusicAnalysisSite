@@ -24,6 +24,7 @@ export function useCreateInvite(versionId: string) {
       qc.invalidateQueries({ queryKey: invitesKey(versionId) });
       qc.invalidateQueries({ queryKey: accessKey(versionId) });
     },
+    meta: { errorToast: 'Could not create the invite.' },
   });
 }
 
@@ -36,11 +37,13 @@ export function useRevokeInvite(versionId: string) {
       qc.invalidateQueries({ queryKey: invitesKey(versionId) });
       qc.invalidateQueries({ queryKey: accessKey(versionId) });
     },
+    meta: { errorToast: 'Could not revoke the invite.' },
   });
 }
 
 // Accept by token — the invitee may be on any version, so callers refetch their
-// own access view after accepting.
+// own access view after accepting. NO meta.errorToast — the accept ROUTE
+// (/invite/{token}) renders a visible error state instead of a toast.
 export function useAcceptInvite() {
   return useMutation({
     mutationFn: (token: string) =>
