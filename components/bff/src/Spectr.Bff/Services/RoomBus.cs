@@ -71,6 +71,13 @@ public sealed class RoomBus(IConnectionMultiplexer redis)
     public async Task PublishAsync(Guid id, string evtJson) =>
         await _redis.GetSubscriber().PublishAsync(ChannelFor(id), evtJson);
 
+    // TRANSIENT signal path (e.g. the terminal "ended" on host /end): publish
+    // only — NO WAL append, NO seq. The WAL belongs to the finalize actor and
+    // is about to be flushed; durability for these signals comes from the DB
+    // session status, not the log.
+    public Task PublishTransientAsync(Guid id, string type) =>
+        PublishAsync(id, JsonSerializer.Serialize(new { type, at = NowMs() }, Json));
+
     // The common path for react/chat/status/transport/visuals/grant/presence:
     // durable record FIRST (atomic seq+append), best-effort live publish AFTER.
     public async Task<long> AppendAndPublishAsync(Guid id, object evt)

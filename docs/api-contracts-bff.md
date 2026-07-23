@@ -223,14 +223,39 @@ token): GET/POST `/api/v/{token}/comments`, POST `/api/v/{token}/suggestions`. T
 
 | Method | Path | Auth | Purpose | Notable |
 |---|---|---|---|---|
-| POST | /api/versions/{versionId}/sessions | JWT | Start room session (host) | 403 `room_not_hostable` |
-| GET | /api/versions/{versionId}/sessions | JWT | List sessions | |
-| GET | /api/sessions/{id}/stream | token/JWT | SSE fan-out (RoomBus WAL + pub/sub) | 403 `not_joinable`; 409 `session_ended` |
-| GET | /api/sessions/{id} | token/JWT | Session snapshot | |
-| POST | /api/sessions/{id}/react, /chat, /status | token/JWT | Any permitted participant (incl. anon) | 202; 403 `chat_forbidden` |
-| POST | /api/sessions/{id}/transport, /grant, /revoke, /end | JWT host | Host-authority events | 202; 403 `not_host` |
-| POST | /api/sessions/{id}/visuals, /rack | scope holder | Controller-authority events | 202; 403 `not_visuals_controller`/`not_rack_controller` |
-| POST | /api/sessions/{id}/recap/publish | JWT host | Publish recap | 409 `recap_not_ready` |
+| POST | /api/versions/{versionId}/sessions | JWT | Start room session (host) | 403 `room_not_hostable`; seeds the seq=1 WAL base |
+| GET | /api/versions/{versionId}/sessions | JWT | List sessions (newest first; status `live`/`ended`) | |
+| GET | /api/sessions/{id} | anon-capable | Session snapshot (+recap) | lazy finalize backstop (below) |
+| GET | /api/sessions/{id}/stream | anon-capable | SSE fan-out (RoomBus WAL + pub/sub) | bare 403 not-joinable / 404 |
+| POST | /api/sessions/{id}/react, /chat, /status | anon-capable | Any joined participant (incl. anon) | 202; 403 `not_joinable`/`chat_forbidden`; 409 `session_ended` |
+| POST | /api/sessions/{id}/transport, /grant, /revoke, /end | host | Host-authority events | 403 `not_host` |
+| POST | /api/sessions/{id}/visuals, /rack | scope holder | Controller-authority events | 403 `not_visuals_controller`/`not_rack_controller` |
+| POST | /api/sessions/{id}/recap/publish | host | Publish recap → version comments | 409 `recap_not_ready`; idempotent |
+
+**Auth**: only the two `/versions/{versionId}/sessions` routes require JWT. Every
+`/sessions/{id}/*` route is `AllowAnonymous` — each handler resolves the actor itself (JWT
+principal OR durable anon identity; an opaque `?token=` session/share token raises access —
+never the JWT `?t=` hook) and gates per event: host authority for transport/grant/revoke/end,
+scope-holder for visuals/rack.
+
+**SSE wire** (`GET /sessions/{id}/stream`): one `event: sync` frame at connect (no `id:` line)
+— `{type:'sync', chain, transport, visuals, roster, feed, snapshotSeq}` — then `event: event`
+frames, each preceded by an `id: <seq>` line; the relay drops deltas with `seq <= snapshotSeq`.
+Delta payload `type`s: `presence` (`state: join|leave`), `reaction`, `chat`, `status`,
+`transport`, `visuals`, `rack`, `grant` (revoke echoes the same with `revokedAt` set), plus
+the transient `ended` (below). All carry `at` (unix **ms**) + `seq` (`t` fields are track
+seconds). 15 s of silence emits an SSE comment `: heartbeat`.
+
+**Transient `ended`**: host POST `/end` publishes `{"type":"ended","at":<ms>}` to the room
+channel — publish-only, NO WAL append, NO seq (durability comes from the DB session status;
+the WAL belongs to the finalize actor). Clients fold it, render the ended state, and close
+their streams.
+
+**Finalize semantics**: `/end` only enqueues `synthesize_recap` (202). The actor SKIPS
+finalize while `room:{id}:present` is non-empty, so the session stays `live` until every
+stream closes (which the `ended` signal triggers). The last leaver enqueues a 3-min delayed
+finalize; `GET /sessions/{id}` on a presence-empty live session enqueues an immediate one
+(the lazy backstop).
 
 ## Bookmarks — `BookmarkEndpoints.cs` (JWT)
 

@@ -27,6 +27,7 @@ public static class VersionShareEndpoints
         g.MapPut("/share", UpdateSettings);
         g.MapPost("/share/rotate", RotateToken);
         g.MapGet("/access", GetAccess);
+        g.MapGet("/view", GetView);
         g.MapPost("/invites", CreateInvite);
         g.MapGet("/invites", ListInvites);
 
@@ -139,6 +140,45 @@ public static class VersionShareEndpoints
     {
         var dto = await access.ResolveAsync(versionId, currentUser.UserId(), viaValidToken: false, ct);
         return Results.Ok(dto);
+    }
+
+    // GET /api/versions/{id}/view — authed by-id twin of GET /v/{token}
+    // (VersionViewEndpoints). Invited/link/public viewers land on
+    // /listen-rack/{versionId} (invite accept, room join) where the owner-scoped
+    // GET /versions/{id} 404s for them; this is their version-metadata surface.
+    // Same VersionViewDto, gated by AccessService.CanView instead of a token.
+    private static async Task<IResult> GetView(
+        Guid versionId, ClaimsPrincipal currentUser, AccessService access,
+        AppDbContext db, CancellationToken ct)
+    {
+        var userId = currentUser.UserId();
+        var acc = await access.ResolveAsync(versionId, userId, viaValidToken: false, ct);
+        if (!acc.CanView) return Results.NotFound();
+
+        var info = await (
+            from v in db.SongVersions.AsNoTracking()
+            join s in db.Songs.AsNoTracking() on v.SongId equals s.Id
+            join u in db.Users.AsNoTracking() on s.UserId equals u.Id
+            where v.Id == versionId
+            select new
+            {
+                v.VersionNumber,
+                SongName = s.Name,
+                OwnerHandle = u.IsActive ? u.Handle : null,
+                OwnerDisplayName = u.IsActive ? u.DisplayName : null,
+            }).FirstOrDefaultAsync(ct);
+        if (info is null) return Results.NotFound();
+
+        var settings = await db.ShareSettings.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.SongVersionId == versionId, ct);
+
+        return Results.Ok(new VersionViewDto(
+            versionId, info.SongName, info.VersionNumber,
+            settings?.Visibility ?? "private",
+            settings?.ShowVerdicts ?? false,
+            Grade: null, Score: null,
+            acc.Gates,
+            info.OwnerHandle, info.OwnerDisplayName));
     }
 
     // ── Invites ──────────────────────────────────────────────────────────────

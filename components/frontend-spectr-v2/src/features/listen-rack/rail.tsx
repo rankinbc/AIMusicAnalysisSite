@@ -8,10 +8,16 @@
  */
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { Link } from '@tanstack/react-router';
+import { toast } from 'sonner';
 
+import { ApiError } from '../../api/fetcher';
+import { extractApiError } from '../../api/error-utils';
+import type { ActorRefDto } from '../../api/types';
 import {
   railTabsFor, type AccessDto, type ActorRef, type ModeId,
 } from './access';
+import { actorKey, toActorRef } from './roomStateReducer';
+import { roomPanelNotice, type RoomHeaderState } from './roomUiState';
 import {
   BG_COLORS, DIRECTORS, LASER_EFFECTS, LASER_PATTERNS, REACTION_GROUPS,
   ROOM_LISTENERS, STAGES, type RackPatch, type ReactionFeedItem, type Track, type TrackNote, type VizState,
@@ -388,18 +394,33 @@ export function CoachPanel({ rs, announce, real = false, reportRef = null }: {
 }
 
 // ── PEOPLE tab — who's in the room + their live state ──────────────────────
-function PeoplePanel({ myStatus, onReact, cap, roomControl, onGrant }: {
+// E6.14: `roster != null` ⇒ a live room — render the real participants
+// (handle + hue from the wire, `you` via actorKey, statuses from the stream).
+// `roster == null` ⇒ demo route — the ROOM_LISTENERS fixture, byte-identical.
+// Exported for the rail room test.
+export function PeoplePanel({ myStatus, onReact, cap, roomControl, onGrant, roster = null, onInvite, statusByActor, meKey = null }: {
   myStatus: string;
   onReact?: (e: string) => void;
   cap: CapabilitySet;
   roomControl: RoomControl;
   onGrant: (scope: 'rack' | 'visuals', actor: ActorRef | null) => void;
+  /** Live roster from the room stream; null keeps the demo fixture. */
+  roster?: ActorRefDto[] | null | undefined;
+  /** Opens the existing VersionShareDialog; hidden in live rooms when absent. */
+  onInvite?: (() => void) | undefined;
+  /** actorKey -> status emoji, from the live room state. */
+  statusByActor?: Record<string, string> | undefined;
+  /** The viewer's actorKey (marks the "you" row in a live roster). */
+  meKey?: string | null | undefined;
 }) {
+  const liveCount = roster != null ? roster.length : ROOM_LISTENERS.length;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><span className="dot" style={{ animation: 'pulseGlow 1.6s ease-in-out infinite' }} /><span style={{ fontSize: 13, fontWeight: 700 }}>{ROOM_LISTENERS.length} listening</span></span>
-        <button type="button" className="btn ghost sm" style={{ color: 'var(--cyan)', fontSize: 10 }}>↗ Invite</button>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><span className="dot" style={{ animation: 'pulseGlow 1.6s ease-in-out infinite' }} /><span style={{ fontSize: 13, fontWeight: 700 }}>{liveCount} listening</span></span>
+        {(roster == null || onInvite) && (
+          <button type="button" className="btn ghost sm" style={{ color: 'var(--cyan)', fontSize: 10 }} onClick={onInvite}>↗ Invite</button>
+        )}
       </div>
       <div style={{ padding: '10px 11px', borderRadius: 9, background: 'rgba(0,229,176,0.05)', border: '1px solid rgba(0,229,176,0.28)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -417,7 +438,58 @@ function PeoplePanel({ myStatus, onReact, cap, roomControl, onGrant }: {
           ))}
         </div>
       </div>
-      <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>You're hosting — grant <span style={{ color: 'var(--violet)' }}>rack</span> and <span style={{ color: 'var(--cyan)' }}>visuals</span> control to listeners separately.</div>
+      {(roster == null || cap.canGrantControl) && (
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>You're hosting — grant <span style={{ color: 'var(--violet)' }}>rack</span> and <span style={{ color: 'var(--cyan)' }}>visuals</span> control to listeners separately.</div>
+      )}
+      {roster != null && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          {roster.map((entry) => {
+            const key = actorKey(entry);
+            const you = meKey != null && key === meKey;
+            const handle = entry.handle ?? entry.displayName ?? 'anon';
+            const hue = entry.hue ?? 200;
+            const isAnon = entry.type === 'anon';
+            const status = you ? myStatus : (statusByActor?.[key] ?? '🎧');
+            const actor = toActorRef(entry);
+            const isDJ = sameActor(roomControl.rackHolder, actor);
+            const isVJ = sameActor(roomControl.visualsHolder, actor);
+            return (
+              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 9px', borderRadius: 8, background: 'rgba(255,255,255,0.02)', border: `1px solid ${you ? 'rgba(0,229,176,0.4)' : 'var(--border)'}` }}>
+                {isAnon || entry.handle == null ? (
+                  <>
+                    <Avatar handle={handle} hue={hue} anon={isAnon} size={26} />
+                    <span className="mono" style={{ fontSize: 11, color: 'var(--text-2)' }}>{isAnon ? 'anonymous' : handle}</span>
+                  </>
+                ) : (
+                  <a href={`/u/${entry.handle}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+                    <Avatar handle={entry.handle} hue={hue} size={26} />
+                    <span className="mono" style={{ fontSize: 11, color: you ? 'var(--cyan)' : 'var(--text-2)' }}>@{entry.handle}</span>
+                  </a>
+                )}
+                <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  {you && <span className="mono" style={{ fontSize: 8.5, color: 'var(--cyan)', letterSpacing: '0.1em' }}>{cap.canGrantControl ? 'HOST' : 'YOU'}</span>}
+                  {/* Grant buttons only for `type === 'user'` entries: the wire
+                      carries NO anonId on anon roster refs (server privacy
+                      choice), so a grant POST could never name an anon grantee
+                      — the server requires userId OR anonId. */}
+                  {!you && entry.type === 'user' && (
+                    <>
+                      {isDJ
+                        ? <span className="mono" style={{ fontSize: 7.5, color: 'var(--violet)', padding: '2px 5px', borderRadius: 5, border: '1px solid rgba(167,139,250,0.4)', background: 'rgba(167,139,250,0.08)' }}>● DJ</span>
+                        : cap.canGrantControl && <button type="button" onClick={() => onGrant('rack', actor)} className="btn ghost sm" style={{ fontSize: 8, padding: '3px 6px', color: 'var(--muted)' }}>+ DJ</button>}
+                      {isVJ
+                        ? <span className="mono" style={{ fontSize: 7.5, color: 'var(--cyan)', padding: '2px 5px', borderRadius: 5, border: '1px solid rgba(0,229,176,0.4)', background: 'rgba(0,229,176,0.08)' }}>● VJ</span>
+                        : cap.canGrantControl && <button type="button" onClick={() => onGrant('visuals', actor)} className="btn ghost sm" style={{ fontSize: 8, padding: '3px 6px', color: 'var(--muted)' }}>+ Vis</button>}
+                    </>
+                  )}
+                  <span style={{ fontSize: 14 }} title="current status">{status}</span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {roster == null && (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
         {ROOM_LISTENERS.map((u) => (
           <div key={u.handle} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 9px', borderRadius: 8, background: 'rgba(255,255,255,0.02)', border: `1px solid ${u.you ? 'rgba(0,229,176,0.4)' : 'var(--border)'}` }}>
@@ -455,6 +527,7 @@ function PeoplePanel({ myStatus, onReact, cap, roomControl, onGrant }: {
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 }
@@ -465,25 +538,61 @@ const SEED_CHAT = [
   { id: 's2', handle: 'forge', text: 'kick could hit harder imo', t: 70 },
 ];
 interface ChatStreamItem { id: string; handle: string; text?: string | undefined; emoji?: string | undefined; t?: number | undefined; you?: boolean | undefined; kind: 'react' | 'chat' }
-function ChatPanel({ feed, onReact }: { feed: ReactionFeedItem[]; onReact: (e: string) => void }) {
+/** The live seam: send posts over the wire (own messages come back via server
+ * echo — never appended locally); position supplies the playhead stamp. */
+export interface ChatLiveSeam { send: (body: string, t: number) => Promise<void>; position: () => number }
+// E6.14: `live` set ⇒ wire-driven — the stream IS the kind-tagged room feed
+// (no local msgs, no SEED_CHAT, no 'maek'). null ⇒ demo route, byte-identical.
+// Exported for the rail room test.
+export function ChatPanel({ feed, onReact, live = null }: { feed: ReactionFeedItem[]; onReact: (e: string) => void; live?: ChatLiveSeam | null | undefined }) {
   const [msgs, setMsgs] = useState<ChatStreamItem[]>([]);
   const [text, setText] = useState('');
-  const stream: ChatStreamItem[] = [
-    ...feed.map((f) => ({ id: f.id, handle: f.handle, text: f.text, emoji: f.emoji, t: f.t, you: f.you, kind: 'react' as const })),
-    ...msgs,
-    ...SEED_CHAT.map((c) => ({ ...c, kind: 'chat' as const })),
-  ];
+  const [sending, setSending] = useState(false);
+  const stream: ChatStreamItem[] = live
+    ? feed.map((f) => ({
+        id: f.id, handle: f.handle, text: f.text,
+        // chat items render an avatar, not their internal '💬' marker
+        emoji: f.kind === 'chat' ? undefined : f.emoji,
+        t: f.t, you: f.you, kind: f.kind ?? ('react' as const),
+      }))
+    : [
+        ...feed.map((f) => ({ id: f.id, handle: f.handle, text: f.text, emoji: f.emoji, t: f.t, you: f.you, kind: 'react' as const })),
+        ...msgs,
+        ...SEED_CHAT.map((c) => ({ ...c, kind: 'chat' as const })),
+      ];
   const send = () => {
-    if (!text.trim()) return;
-    setMsgs((m) => [{ id: Math.random().toString(36).slice(2), handle: 'maek', text: text.trim(), kind: 'chat', you: true }, ...m]);
-    setText('');
+    const body = text.trim();
+    if (!body) return;
+    if (!live) {
+      setMsgs((m) => [{ id: Math.random().toString(36).slice(2), handle: 'maek', text: body, kind: 'chat', you: true }, ...m]);
+      setText('');
+      return;
+    }
+    if (sending) return;
+    setSending(true);
+    // E6.13: clear the input only on success — a failed send keeps the text.
+    live.send(body, live.position())
+      .then(() => setText(''))
+      .catch((err: unknown) => {
+        const code = err instanceof ApiError ? extractApiError(err.body).code : undefined;
+        toast.error(
+          code === 'chat_forbidden'
+            ? 'Comments are off in this room.'
+            : code === 'session_ended'
+              ? 'This room has ended.' // the orchestration folds the ended state
+              : "Message didn't send.",
+          { id: 'room-chat' },
+        );
+      })
+      .finally(() => setSending(false));
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: '100%' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 9, flex: 1, overflow: 'auto', maxHeight: 320 }}>
         {stream.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>Say something or drop a reaction — the whole room sees it.</div>}
         {stream.map((m) => {
-          const u = ROOM_LISTENERS.find((x) => x.handle === m.handle);
+          // Fixture lookup is demo-only (hue source); live handles are real users.
+          const u = live ? undefined : ROOM_LISTENERS.find((x) => x.handle === m.handle);
           return (
             <div key={m.id} className="fade-in" style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
               {m.emoji ? <span style={{ fontSize: 15 }}>{m.emoji}</span> : <Avatar handle={m.handle} hue={u ? u.hue : 200} anon={u ? u.anon : false} size={20} />}
@@ -842,7 +951,7 @@ const TAB_LABELS: Record<string, string> = {
   coach: 'Coach', plan: 'Plan', comments: 'Comments', people: 'People', chat: 'Chat', stats: 'Stats', notes: 'Notes',
 };
 
-export function RightRail({ mode, access, cap, rs, track, position, activeNote, onNoteClick, onSeek, onReact, feed, announce, myStatus, roomControl, onGrant, versionId, isOwner = false, onForkToSuggest, audition, real = false, reportRef = null, statsSource = null }: {
+export function RightRail({ mode, access, cap, rs, track, position, activeNote, onNoteClick, onSeek, onReact, feed, announce, myStatus, roomControl, onGrant, versionId, isOwner = false, onForkToSuggest, audition, real = false, reportRef = null, statsSource = null, roster = null, onInvite, statusByActor, meKey = null, chatLive = null, roomPhase = null }: {
   mode: ModeId;
   access: AccessDto;
   cap: CapabilitySet;
@@ -867,6 +976,15 @@ export function RightRail({ mode, access, cap, rs, track, position, activeNote, 
   real?: boolean;
   reportRef?: ReportRef | null;
   statsSource?: StatsSource | null;
+  /** E6.14 — live room seams (null on the demo route keeps the fixtures). */
+  roster?: ActorRefDto[] | null;
+  onInvite?: (() => void) | undefined;
+  statusByActor?: Record<string, string> | undefined;
+  meKey?: string | null;
+  chatLive?: ChatLiveSeam | null;
+  /** E6.9/E6.10 — the room header state; lost/forbidden/ended replace the
+   *  People/Chat panels with honest copy instead of a frozen roster. */
+  roomPhase?: RoomHeaderState | null;
 }) {
   const tabs = railTabsFor(mode, access);
   const [tab, setTab] = useState(tabs[0]);
@@ -886,8 +1004,21 @@ export function RightRail({ mode, access, cap, rs, track, position, activeNote, 
         {active === 'coach' && <CoachPanel rs={rs} announce={announce} real={real} reportRef={reportRef} />}
         {active === 'plan' && <PlanPanel rs={rs} {...(versionId ? { versionId } : {})} />}
         {active === 'comments' && <CommentsPanel access={access} onSeek={onSeek} isOwner={isOwner} position={position} {...(versionId ? { versionId } : {})} {...(onForkToSuggest ? { onForkToSuggest } : {})} {...(audition ? { audition } : {})} />}
-        {active === 'people' && <PeoplePanel myStatus={myStatus} onReact={onReact} cap={cap} roomControl={roomControl} onGrant={onGrant} />}
-        {active === 'chat' && <ChatPanel feed={feed} onReact={onReact} />}
+        {(() => {
+          // Only a LIVE room (roster set) gets the notice treatment — the demo
+          // route has no stream and must render its fixtures untouched.
+          const notice = roster != null && roomPhase ? roomPanelNotice(roomPhase) : null;
+          return (
+            <>
+              {active === 'people' && (notice
+                ? <div className="mono" data-testid="room-panel-notice" style={{ fontSize: 10.5, color: 'var(--muted)', lineHeight: 1.55 }}>{notice}</div>
+                : <PeoplePanel myStatus={myStatus} onReact={onReact} cap={cap} roomControl={roomControl} onGrant={onGrant} roster={roster} onInvite={onInvite} statusByActor={statusByActor} meKey={meKey} />)}
+              {active === 'chat' && (notice
+                ? <div className="mono" data-testid="room-panel-notice" style={{ fontSize: 10.5, color: 'var(--muted)', lineHeight: 1.55 }}>{notice}</div>
+                : <ChatPanel feed={feed} onReact={onReact} live={chatLive} />)}
+            </>
+          );
+        })()}
         {active === 'stats' && <StatsPanel track={track} statsSource={statsSource} />}
         {active === 'notes' && <NotesPanel track={track} activeNote={activeNote} onNoteClick={onNoteClick} />}
       </div>

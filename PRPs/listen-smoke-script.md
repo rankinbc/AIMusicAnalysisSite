@@ -6,17 +6,17 @@ reorder click-freeness, and "does a param actually take" are all unverified by t
 432 unit tests. This is the 10-minute check that catches those runtime bugs **before**
 the UI is designed on top of the engine.
 
-A DEV-only harness exposes the audio-graph handle on `window.__spectrGraph`
-(`routes/_app/listen.$versionId.tsx`, stripped from production builds).
+A DEV-only harness exposes the audio-graph handle on `window.__spectrRackGraph`
+(`features/listen-rack/ListenRackPage.tsx`, stripped from production builds).
 
 ## Setup
 
-1. `cd components/frontend-spectr-v2 && npm run dev` (needs the BFF + a logged-in user + a version that has uploaded audio — open `docker compose -f docker/docker-compose.yml up -d` + the BFF + worker per the root CLAUDE.md run commands if not already up).
-2. Navigate to a version's **Listen** page (one with real audio).
+1. Start the stack per `docs/STARTUP.md` (`./scripts/start-spectr.ps1`) — needs the BFF + a logged-in user + a version that has uploaded audio.
+2. Navigate to a version's Listen page: **`/listen-rack/{versionId}`** (one with real audio).
 3. **Press play** — this is the user gesture that creates the AudioContext (`ensureContext`). Confirm you hear the track. Leave it playing.
 4. Open DevTools console and grab the handle:
    ```js
-   const g = window.__spectrGraph;
+   const g = window.__spectrRackGraph;
    ```
 
 ## 0. Worklet boot (the #1 risk)
@@ -119,6 +119,15 @@ g.resetAll();              // every module -> default (transparent)
 Pitch is not an insert effect; use the on-page Pitch controls (it decodes the file
 to a buffer on first enable). Confirm semitone shift works and that the page notes
 pitch+tempo coupling.
+
+## 6. Room (live two-client smoke)
+
+The live room (ROOM mode on the same `/listen-rack/{versionId}` page — roster,
+chat, host transport sync, ended/reconnect states) has its own two-client
+verification script: **`PRPs/listen-rack-room-completion.md` → "Level 3 —
+two-client live verification"**. Run it whenever the room protocol or its UI
+wiring changes. Prereq: enable the `room_hosting_enabled` feature flag in dev
+(the Level 3 script's step 0; 60 s flag cache).
 
 ## What to report
 

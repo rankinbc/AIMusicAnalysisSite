@@ -94,6 +94,37 @@ public sealed class VersionShareEndpointsTests(WebApplicationFactory<Program> fa
         Assert.False(acc.CoachAvailable);  // X.1
     }
 
+    // Room-completion PRP — the invite flow lands invitees on /listen-rack/{id},
+    // whose owner-scoped GET /versions/{id} 404s for them. The authed by-id view
+    // + audio are their surfaces; a stranger gets 404 from both.
+    [SkippableFact]
+    public async Task InvitedViewer_GetsByIdView_AndAudio_StrangerGets404()
+    {
+        await TestDb.RequireAsync(_factory);
+        var (owner, _) = await NewAuthedClient();
+        var versionId = await CreateVersion(owner);
+        var (reviewer, reviewerEmail) = await NewAuthedClient();
+        var (stranger, _) = await NewAuthedClient();
+
+        var inviteResp = await owner.PostAsJsonAsync($"/api/versions/{versionId}/invites",
+            new { role = "reviewer", invitedEmail = reviewerEmail });
+        Assert.Equal(HttpStatusCode.Created, inviteResp.StatusCode);
+
+        var view = await reviewer.GetAsync($"/api/versions/{versionId}/view");
+        Assert.Equal(HttpStatusCode.OK, view.StatusCode);
+        var dto = await view.Content.ReadFromJsonAsync<VersionViewDto>();
+        Assert.Equal(versionId, dto!.VersionId);
+        Assert.False(string.IsNullOrEmpty(dto.SongName));
+
+        var audio = await reviewer.GetAsync($"/api/versions/{versionId}/audio");
+        Assert.Equal(HttpStatusCode.OK, audio.StatusCode);
+
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await stranger.GetAsync($"/api/versions/{versionId}/view")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await stranger.GetAsync($"/api/versions/{versionId}/audio")).StatusCode);
+    }
+
     [SkippableFact]
     public async Task InviteAccept_BindsUser_AndRevokeRemovesAccess()
     {

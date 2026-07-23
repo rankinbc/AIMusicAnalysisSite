@@ -496,7 +496,7 @@ public static class RoomEndpoints
 
     // ── finalize (end) + recap publish ───────────────────────────────────────
     private static async Task<IResult> EndSession(
-        Guid id, ClaimsPrincipal user, AppDbContext db, IJobQueue queue, CancellationToken ct)
+        Guid id, ClaimsPrincipal user, AppDbContext db, IJobQueue queue, RoomBus bus, CancellationToken ct)
     {
         var userId = user.UserId();
         var hostId = await db.ListeningSessions.AsNoTracking()
@@ -507,6 +507,11 @@ public static class RoomEndpoints
         // The synthesize_recap actor is the SOLE flusher (CAS log → events_json +
         // recap). The BFF never flushes inline (no DEL-before-actor-reads race).
         await EnqueueFinalizeAsync(queue, id, delayed: false);
+
+        // Transient `ended` signal — publish-only (NO WAL append, NO seq).
+        // Clients fold it, show the ended state, and close their streams —
+        // which empties presence and lets the finalize actor proceed promptly.
+        await bus.PublishTransientAsync(id, "ended");
         return Results.Accepted();
     }
 

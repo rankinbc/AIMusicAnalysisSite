@@ -56,6 +56,9 @@ import type { SuggestionDto } from '../../api/types';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { VersionShareDialog } from '../listen/VersionShareDialog';
 import type { RoomLiveSeam } from './useRoomOrchestration';
+import { actorKey } from './roomStateReducer';
+import { reactOutcome, roomHeaderState } from './roomUiState';
+import { planTransportEmit, planTransportFollow } from './transportSync';
 import { asVizLook, useSaveVizPreset, useVizPresets } from './useVizPresetsServer';
 import { Transport } from './transport';
 import { BookmarksRail } from '../listen/BookmarksRail';
@@ -65,8 +68,12 @@ import { VizStage } from './viz';
 
 interface VizPreset { id: string; name: string; viz: VizState; stages: string[]; director: string }
 
+// Locked-transport stand-in (guests following the host): assignable to both
+// () => void and (t: number) => void handler slots.
+const noopHandler = () => undefined;
+
 // Exported for the 12.4 chip render test (all-modes assertion).
-export function TrackHeader({ track, mode, modes, identity, onModeChange, fixesApplied, onResetFixes, reportRef, onShare }: {
+export function TrackHeader({ track, mode, modes, onModeChange, fixesApplied, onResetFixes, reportRef, onShare }: {
   track: Track; mode: ModeId; modes: ModeId[]; identity: Identity; onModeChange?: (m: ModeId) => void;
   /** Story 12.4: carried-fix chip — renders in EVERY mode (this header is the
    *  page's only all-modes surface). null = no carry active. */
@@ -79,7 +86,9 @@ export function TrackHeader({ track, mode, modes, identity, onModeChange, fixesA
 }) {
   const t = track;
   const surface = MODE_SURFACE_MATRIX[mode];
-  const showSwitcher = identity.isOwner && onModeChange && modes.length > 1;
+  // Anyone with >1 available mode may switch (room-completion PRP: joinable
+  // guests need VIEW↔ROOM). The orchestration constrains switches to `modes`.
+  const showSwitcher = onModeChange && modes.length > 1;
   return (
     <div className="lr-head">
       <CoverArt hue={168} size="md" />
@@ -199,6 +208,8 @@ export interface ListenRackPageProps {
   /** Story 11.5 — host-only "go live" affordance (undefined when not hostable
    *  or a session already runs). */
   onStartRoom?: (() => void) | undefined;
+  /** E6.8 — start-room pending state (label + disable on the Start button). */
+  isStartingRoom?: boolean;
   /** Story 12.4 — the fix-rack carry-over preset id (?fixPreset=). When set,
    *  the page fetches that preset and overlays its chain onto the live rack
    *  once (skipping the draft restore); the "Fixes applied" chip appears. */
@@ -210,7 +221,7 @@ export interface ListenRackPageProps {
   statsSource?: StatsSource | null;
 }
 
-export function ListenRackPage({ mode, modes, identity, access, roomControl, onModeChange, onGrant, versionId, track: trackProp, roomLive, onStartRoom, fixPreset, reportRef = null, statsSource = null }: ListenRackPageProps) {
+export function ListenRackPage({ mode, modes, identity, access, roomControl, onModeChange, onGrant, versionId, track: trackProp, roomLive, onStartRoom, isStartingRoom = false, fixPreset, reportRef = null, statsSource = null }: ListenRackPageProps) {
   const track = trackProp ?? TRACK;
   // ── Real-audio seam (Phase 1) ──
   // `versionId` present ⇒ real mode: mount <audio> + the page-agnostic audio
@@ -709,6 +720,41 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
   const activeModules: ModuleManifest[] = useMemo(() => rs.order.filter((id) => rs.mod[id].enabled).map((id) => MANIFEST_BY_ID[id]), [rs.order, rs.mod]);
   const posRef = useRef(position); posRef.current = position;
   const modeRef = useRef(mode); modeRef.current = mode;
+  // E6.11 — live-value refs so the transport emit/follow callbacks stay stable.
+  const playingRef = useRef(playing); playingRef.current = playing;
+  const roomLiveRef = useRef(roomLive); roomLiveRef.current = roomLive;
+  const isHostRef = useRef(identity.isHost); isHostRef.current = identity.isHost;
+  const meActorKey = useMemo(() => actorKey(identity.actor), [identity.actor]);
+  // Autoplay-policy affordance: a follow-side play() rejected without a prior
+  // user gesture — render "▶ Tap to join playback" until a real click succeeds.
+  const [needsGesture, setNeedsGesture] = useState(false);
+
+  // ── E6.11 host transport emit: play/pause post immediately, seeks ride a
+  // trailing throttle (latest scrub position wins). Fire-and-forget — the
+  // stream echo is the ack; sendTransport never rejects (folds session_ended).
+  const seekEmitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSeekRef = useRef<number | null>(null);
+  const emitTransport = useCallback((kind: 'play' | 'pause' | 'seek', pos: number) => {
+    const rl = roomLiveRef.current;
+    if (!rl || !isHostRef.current) return;
+    const plan = planTransportEmit(kind);
+    if (plan.immediate) {
+      void rl.sendTransport(kind === 'play', pos);
+      return;
+    }
+    pendingSeekRef.current = pos;
+    if (seekEmitTimerRef.current !== null) return; // trailing: one timer, latest value
+    seekEmitTimerRef.current = setTimeout(() => {
+      seekEmitTimerRef.current = null;
+      const latest = pendingSeekRef.current;
+      pendingSeekRef.current = null;
+      const live = roomLiveRef.current;
+      if (live && latest !== null) void live.sendTransport(playingRef.current, latest);
+    }, plan.delayMs);
+  }, []);
+  useEffect(() => () => {
+    if (seekEmitTimerRef.current !== null) clearTimeout(seekEmitTimerRef.current);
+  }, []);
 
   const announce = useCallback((text: string, title?: string) => setAnnouncement({ id: Math.random().toString(36).slice(2), text, title }), []);
   const grantControl = useCallback((scope: 'rack' | 'visuals', actor: ActorRef | null) => {
@@ -913,6 +959,21 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
 
   useEffect(() => { if (!announcement) return undefined; const t = setTimeout(() => setAnnouncement(null), 4800); return () => clearTimeout(t); }, [announcement]);
 
+  // Shared play internals — used by togglePlay AND the listener follow /
+  // tap-to-join paths (E6.11), so every play goes through ensureContext + the
+  // full-rack sync. May THROW synchronously (engine init) and the returned
+  // promise may reject (autoplay policy) — callers pick the copy/affordance.
+  const startPlayback = useCallback((): Promise<void> => {
+    const a = audioRef.current;
+    if (!a) return Promise.resolve();
+    stopStems();
+    graph.ensureContext();
+    // Now that the AudioContext + nodes exist, sync the full rack so any knob
+    // moved (or preset recalled) while paused is reflected before audio starts.
+    pushFullRack(graph, rsRef.current.mod, rsRef.current.order, rsRef.current.masterBypass);
+    return a.play().then(() => setPlaying(true));
+  }, [graph, stopStems]);
+
   // Transport actions. Real mode operates the <audio> element (ensureContext on
   // the gesture BEFORE play(), per the autoplay policy); mock mode toggles the
   // rAF clock. `seek` takes seconds (Transport already converts pct→seconds).
@@ -925,6 +986,7 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
       if (graph.pitchPlaying()) {
         graph.pitchPause();
         setPlaying(false);
+        emitTransport('pause', posRef.current);
       } else {
         try {
           graph.ensureContext();
@@ -935,51 +997,121 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
         stopStems();
         graph.pitchResume();
         setPlaying(true);
+        emitTransport('play', posRef.current);
       }
       return;
     }
-    if (!a.paused) { a.pause(); setPlaying(false); return; }
-    stopStems();
+    if (!a.paused) { a.pause(); setPlaying(false); emitTransport('pause', a.currentTime); return; }
+    let played: Promise<void>;
     try {
-      graph.ensureContext();
-      // Now that the AudioContext + nodes exist, sync the full rack so any knob
-      // moved (or preset recalled) while paused is reflected before audio starts.
-      pushFullRack(graph, rsRef.current.mod, rsRef.current.order, rsRef.current.masterBypass);
+      played = startPlayback();
     } catch (err) {
       toast.error(`Audio engine failed: ${err instanceof Error ? err.message : String(err)}`);
       return;
     }
-    a.play()
-      .then(() => setPlaying(true))
+    played
+      .then(() => emitTransport('play', a.currentTime))
       .catch((err: unknown) => {
         toast.error(`Playback failed: ${err instanceof Error ? err.message : String(err)}`);
         setPlaying(false);
       });
-  }, [realAudio, graph, stopStems]);
+  }, [realAudio, graph, stopStems, startPlayback, emitTransport]);
 
   const seek = useCallback((t: number) => {
     if (!realAudio) { setPosition(t); return; }
-    if (pitchModeRef.current) { graph.pitchSeek(t); setPosition(t); return; }
+    if (pitchModeRef.current) { graph.pitchSeek(t); setPosition(t); emitTransport('seek', t); return; }
     const a = audioRef.current;
     if (!a) return;
     a.currentTime = t;
     setPosition(t);
-  }, [realAudio, graph]);
+    emitTransport('seek', t);
+  }, [realAudio, graph, emitTransport]);
 
   const cap = resolveCapabilities(mode, identity, roomControl, access);
   const rackReadOnly = cap.rackReadOnly;
 
+  // E6.11 — guest transport lockout: while the room lives and this client
+  // follows the host, local transport handlers no-op (Transport has no
+  // disabled prop; the room header shows FOLLOWING HOST). An ended room
+  // unlocks — the listener gets their playback back.
+  const transportLocked = Boolean(roomLive) && cap.transportFollowsHost && !roomLive?.state.ended;
+
+  // ── E6.11 listener follow: apply the host's folded transport event to the
+  // real audio. Self-echo skipped via actorKey; >2 s drift snaps; play()
+  // rejection (autoplay policy) surfaces the tap-to-join affordance.
+  const transportEvent = roomLive?.state.transport ?? null;
+  useEffect(() => {
+    if (!realAudio || !transportEvent || !transportLocked) return;
+    const action = planTransportFollow(
+      { playing: playingRef.current, position: posRef.current },
+      transportEvent,
+      meActorKey,
+      Date.now(),
+    );
+    if (action.seekTo != null) {
+      if (pitchModeRef.current) {
+        graph.pitchSeek(action.seekTo);
+      } else {
+        const a = audioRef.current;
+        if (a) a.currentTime = action.seekTo;
+      }
+      setPosition(action.seekTo);
+    }
+    if (action.pause) {
+      if (pitchModeRef.current && graph.pitchPlaying()) graph.pitchPause();
+      const a = audioRef.current;
+      if (a && !a.paused) a.pause();
+      setPlaying(false);
+    }
+    if (action.play) {
+      try {
+        startPlayback()
+          .then(() => setNeedsGesture(false))
+          .catch(() => setNeedsGesture(true)); // NotAllowedError without a prior gesture
+      } catch {
+        setNeedsGesture(true); // engine init refused outside a gesture
+      }
+    }
+  }, [transportEvent, transportLocked, realAudio, graph, startPlayback, meActorKey]);
+  useEffect(() => {
+    if (!transportLocked) setNeedsGesture(false);
+  }, [transportLocked]);
+
+  // "▶ Tap to join playback" — a REAL gesture, so ensureContext + play are allowed.
+  const joinPlayback = useCallback(() => {
+    try {
+      startPlayback()
+        .then(() => setNeedsGesture(false))
+        .catch((err: unknown) => {
+          toast.error(`Playback failed: ${err instanceof Error ? err.message : String(err)}`);
+        });
+    } catch (err) {
+      toast.error(`Audio engine failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [startPlayback]);
+
   // Story 11.5 — live seam: a running session's SSE feed replaces the local
-  // mock feed, and reactions/status POST to the room (fan-out returns them
-  // through the stream; the local pop is just immediate visual feedback).
+  // mock feed, and reactions/status POST to the room. E6.13 — the presence
+  // pop only fires when the server ACCEPTED the reaction (no optimistic pop);
+  // a rejected status send rolls the local status chip back.
   const feedShown = roomLive ? roomLive.state.feed : feed;
   const reactHandler = (e: string) => {
-    setMyStatus(e);
     if (roomLive) {
-      roomLive.sendReact(e, posRef.current);
-      roomLive.sendStatus(e);
-      spawnPresence({ handle: identity.actor.handle ?? 'you', hue: identity.actor.hue ?? 168, anon: identity.actor.type === 'anon' }, e);
+      const prevStatus = myStatus;
+      setMyStatus(e);
+      const live = roomLive;
+      void Promise.allSettled([live.sendReact(e, posRef.current), live.sendStatus(e)]).then(
+        ([reactRes, statusRes]) => {
+          const outcome = reactOutcome({ react: reactRes.status, status: statusRes.status });
+          if (outcome.pop) {
+            spawnPresence({ handle: identity.actor.handle ?? 'you', hue: identity.actor.hue ?? 168, anon: identity.actor.type === 'anon' }, e);
+          }
+          if (outcome.toast) toast.error("Reaction didn't send.", { id: 'room-send' });
+          if (outcome.revertStatus) setMyStatus(prevStatus);
+        },
+      );
     } else {
+      setMyStatus(e);
       spawnReaction(e, 'maek');
     }
   };
@@ -1002,23 +1134,54 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
 
         {mode === 'room' && (roomLive || onStartRoom) && (
           <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '10px 0 2px', fontSize: 10.5 }}>
-            {roomLive ? (
-              <>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--orange)', fontWeight: 700, letterSpacing: '0.12em' }}>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: roomLive.streamStatus === 'open' ? 'var(--orange)' : 'var(--muted)', boxShadow: roomLive.streamStatus === 'open' ? '0 0 8px var(--orange)' : 'none' }} />
-                  LIVE ROOM · {roomLive.state.roster.length} listening
-                  {roomLive.streamStatus !== 'open' && ` · ${roomLive.streamStatus}`}
-                </span>
-                {identity.isHost && (
-                  <button type="button" className="btn sm ghost" style={{ fontSize: 10 }}
-                    disabled={roomLive.isEnding} onClick={roomLive.endRoom}>
-                    {roomLive.isEnding ? 'Ending…' : 'End room + publish recap'}
-                  </button>
-                )}
-              </>
-            ) : (
-              <button type="button" className="btn sm primary" style={{ fontSize: 10.5 }} onClick={onStartRoom}>
-                ◉ Start live room
+            {roomLive ? (() => {
+              // E6.9/E6.10 — honest room chrome per stream/ended state.
+              const hs = roomHeaderState(roomLive.streamStatus, roomLive.state.ended);
+              if (hs === 'ended') {
+                return (
+                  <span data-testid="room-ended-banner" style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ color: 'var(--muted)', fontWeight: 700, letterSpacing: '0.12em' }}>THIS ROOM HAS ENDED</span>
+                    {identity.isHost && roomLive.recapPublished && (
+                      <span style={{ color: 'var(--cyan)' }}>Recap published to comments</span>
+                    )}
+                    {onModeChange && (
+                      <button type="button" className="btn sm ghost" style={{ fontSize: 10 }}
+                        onClick={() => onModeChange(identity.isOwner ? 'work' : 'view')}>
+                        Back to {identity.isOwner ? 'Work' : 'View'}
+                      </button>
+                    )}
+                  </span>
+                );
+              }
+              const dotColor = hs === 'live' ? 'var(--orange)' : hs === 'reconnecting' ? 'var(--yellow)' : 'var(--muted)';
+              return (
+                <>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--orange)', fontWeight: 700, letterSpacing: '0.12em' }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: dotColor, boxShadow: hs === 'live' ? '0 0 8px var(--orange)' : 'none' }} />
+                    LIVE ROOM · {roomLive.state.roster.length} listening
+                    {hs === 'reconnecting' && <span style={{ color: 'var(--yellow)', fontWeight: 400, letterSpacing: 'normal' }}> · reconnecting…</span>}
+                    {hs === 'lost' && <span style={{ color: 'var(--red)', fontWeight: 400, letterSpacing: 'normal' }}> · connection lost</span>}
+                  </span>
+                  {hs === 'forbidden' && (
+                    <span style={{ color: 'var(--muted)' }}>You no longer have access to this room.</span>
+                  )}
+                  {hs === 'lost' && (
+                    <button type="button" className="btn sm ghost" style={{ fontSize: 10 }} onClick={roomLive.retryStream}>Retry</button>
+                  )}
+                  {transportLocked && (
+                    <span className="pill" style={{ fontSize: 8.5, letterSpacing: '0.1em' }}>FOLLOWING HOST</span>
+                  )}
+                  {identity.isHost && (
+                    <button type="button" className="btn sm ghost" style={{ fontSize: 10 }}
+                      disabled={roomLive.isEnding} onClick={roomLive.endRoom}>
+                      {roomLive.isEnding ? 'Ending…' : 'End room + publish recap'}
+                    </button>
+                  )}
+                </>
+              );
+            })() : (
+              <button type="button" className="btn sm primary" style={{ fontSize: 10.5 }} onClick={onStartRoom} disabled={isStartingRoom}>
+                {isStartingRoom ? '◉ Starting…' : '◉ Start live room'}
               </button>
             )}
           </div>
@@ -1041,6 +1204,15 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
           <div style={{ minWidth: 0 }}>
             <div className="card" style={{ overflow: 'hidden', position: 'relative' }}>
               <PresencePops items={pops} />
+              {/* E6.11 — autoplay-policy affordance: the follow-side play()
+                  was rejected without a user gesture; this click IS one. */}
+              {needsGesture && transportLocked && (
+                <div style={{ position: 'absolute', inset: 0, zIndex: 9, display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,0.45)' }}>
+                  <button type="button" className="btn primary" data-testid="tap-to-join-playback" onClick={joinPlayback}>
+                    ▶ Tap to join playback
+                  </button>
+                </div>
+              )}
               <VisualMeters track={track} playing={playing} open={metersOpen} setOpen={setMetersOpen}
                 frame={realAudio ? meterFrame : null} />
               <VizStage playing={playing} stages={stages} setStages={setStages} viz={viz}
@@ -1048,8 +1220,12 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
                 {...(realAudio ? { getFrame: () => graph.readFrame() } : {})} />
               <CoachToast msg={announcement} />
               <div style={{ borderTop: '1px solid var(--border)' }}>
-                <Transport track={track} playing={playing} position={position} duration={duration} onTogglePlay={togglePlay}
-                  onSeek={seek} notes={track.notes} onNoteClick={(n) => { setActiveNote(n.id); seek(n.t); }} activeNote={activeNote} reactions={feedShown} />
+                <Transport track={track} playing={playing} position={position} duration={duration}
+                  onTogglePlay={transportLocked ? noopHandler : togglePlay}
+                  onSeek={transportLocked ? noopHandler : seek}
+                  notes={track.notes}
+                  onNoteClick={(n) => { setActiveNote(n.id); if (!transportLocked) seek(n.t); }}
+                  activeNote={activeNote} reactions={feedShown} />
                 {realAudio && versionId && (
                   <BookmarksRail versionId={versionId} durationSeconds={duration} position={position}
                     onSeek={seek} isOwner={identity.isOwner} />
@@ -1146,6 +1322,12 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
             onReact={reactHandler} feed={feedShown} announce={announce} myStatus={myStatus}
             roomControl={roomControl} onGrant={grantControl} isOwner={identity.isOwner} {...(versionId ? { versionId } : {})}
             real={realAudio} reportRef={reportRef} statsSource={statsSource}
+            roster={roomLive ? roomLive.state.roster : null}
+            onInvite={identity.isOwner && realAudio && versionId ? () => setShareOpen(true) : undefined}
+            {...(roomLive ? { statusByActor: roomLive.state.statusByActor } : {})}
+            meKey={roomLive ? meActorKey : null}
+            chatLive={roomLive ? { send: roomLive.sendChat, position: () => posRef.current } : null}
+            roomPhase={roomLive ? roomHeaderState(roomLive.streamStatus, roomLive.state.ended) : null}
             {...(cap.canSuggest && mode === 'view' && realAudio && !suggesting ? { onForkToSuggest: startSuggesting } : {})}
             {...(auditionSeam ? { audition: auditionSeam } : {})} />
         </div>

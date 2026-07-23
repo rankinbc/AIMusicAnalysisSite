@@ -29,6 +29,8 @@ function stubFetch(opts: {
       ok: r.status >= 200 && r.status < 300,
       status: r.status,
       json: () => Promise.resolve(r.body),
+      // fetcher parses success bodies via text() (room PRP: empty 202 = void)
+      text: () => Promise.resolve(r.body === undefined ? '' : JSON.stringify(r.body)),
     });
   });
   vi.stubGlobal('fetch', mock);

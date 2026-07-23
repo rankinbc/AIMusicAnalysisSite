@@ -46,7 +46,8 @@ describe('applySnapshot (AC1 — sync frame hydrates)', () => {
     expect(s.synced).toBe(true);
     expect(s.lastSeq).toBe(10);
     expect(s.roster).toHaveLength(2);
-    expect(s.transport).toEqual({ playing: true, position: 42 });
+    // Snapshot transport carries no actor/at → seeded with receipt time + null key.
+    expect(s.transport).toMatchObject({ playing: true, position: 42, actorKey: null });
     // Newest first, floored t, `you` derived from meKey.
     expect(s.feed.map((f) => f.id)).toEqual(['r7', 'r3']);
     expect(s.feed[0]).toMatchObject({ emoji: '💜', handle: 'vela', text: 'that drop', t: 90, you: true });
@@ -91,10 +92,74 @@ describe('applyEvent (AC1 — deltas after snapshot)', () => {
     expect(s.statusByActor['user:u-forge']).toBe('🕺');
   });
 
-  it('applies transport deltas', () => {
+  it('applies transport deltas with at + actorKey (follow-side drift/self-echo inputs)', () => {
     let s = applySnapshot(snap(), ME_KEY);
-    s = applyEvent(s, { seq: 11, at: 0, type: 'transport', actor: vela, playing: true, position: 128 }, ME_KEY);
-    expect(s.transport).toEqual({ playing: true, position: 128 });
+    s = applyEvent(s, { seq: 11, at: 7500, type: 'transport', actor: vela, playing: true, position: 128 }, ME_KEY);
+    expect(s.transport).toEqual({ playing: true, position: 128, at: 7500, actorKey: 'user:u-vela' });
+  });
+
+  it('seeds snapshot transport with the provided nowMs and a null actorKey', () => {
+    const s = applySnapshot(snap({ transport: { playing: false, position: 30 } }), ME_KEY, 99_000);
+    expect(s.transport).toEqual({ playing: false, position: 30, at: 99_000, actorKey: null });
+  });
+});
+
+describe('feed kind tagging (chat vs reaction)', () => {
+  it('tags chat events kind=chat and reactions kind=react', () => {
+    let s = applySnapshot(snap(), ME_KEY);
+    s = applyEvent(s, { seq: 11, at: 0, type: 'chat', id: 'c1', actor: forge, body: 'hi', t: 5 }, ME_KEY);
+    s = applyEvent(s, { seq: 12, at: 0, type: 'reaction', id: 'r1', actor: forge, emoji: '🔥', t: 6 }, ME_KEY);
+    expect(s.feed[0]).toMatchObject({ id: 'r1', kind: 'react' });
+    expect(s.feed[1]).toMatchObject({ id: 'c1', kind: 'chat' });
+  });
+
+  it('tags snapshot feed entries kind=react', () => {
+    const s = applySnapshot(snap({
+      feed: [{ seq: 3, at: 3000, type: 'reaction', id: 'r3', actor: forge, emoji: '🔥', t: 61.9 }],
+    }), ME_KEY);
+    expect(s.feed[0]).toMatchObject({ id: 'r3', kind: 'react' });
+  });
+});
+
+describe('ended (E6.10 — transient terminal signal)', () => {
+  it('folds ended before the seq guard (no seq on the wire)', () => {
+    const s0 = applySnapshot(snap({ snapshotSeq: 10 }), ME_KEY);
+    const s = applyEvent(s0, { type: 'ended', at: 1_000 }, ME_KEY);
+    expect(s.ended).toBe(true);
+    // Everything else untouched — the page renders the ended state over it.
+    expect(s.lastSeq).toBe(10);
+  });
+
+  it('stays ended regardless of later events (latched)', () => {
+    let s = applySnapshot(snap(), ME_KEY);
+    s = applyEvent(s, { type: 'ended', at: 0 }, ME_KEY);
+    s = applyEvent(s, { seq: 11, at: 0, type: 'presence', actor: forge, state: 'join' }, ME_KEY);
+    expect(s.ended).toBe(true);
+    expect(s.roster).toHaveLength(1); // late frames still fold (ordering intact)
+  });
+
+  it('is an identity fold when already ended', () => {
+    let s = applySnapshot(snap(), ME_KEY);
+    s = applyEvent(s, { type: 'ended', at: 0 }, ME_KEY);
+    expect(applyEvent(s, { type: 'ended', at: 1 }, ME_KEY)).toBe(s);
+  });
+});
+
+describe('snapshot reset after events (reconnect resync)', () => {
+  it('applySnapshot on a dirtied state fully replaces roster/feed/seq/ended', () => {
+    let s = applySnapshot(snap({ snapshotSeq: 10 }), ME_KEY);
+    s = applyEvent(s, { seq: 11, at: 0, type: 'presence', actor: forge, state: 'join' }, ME_KEY);
+    s = applyEvent(s, { seq: 12, at: 0, type: 'reaction', id: 'r1', actor: forge, emoji: '🔥', t: 3 }, ME_KEY);
+    s = applyEvent(s, { seq: 13, at: 0, type: 'status', actor: forge, status: '🕺' }, ME_KEY);
+    expect(s.roster).toHaveLength(1); // dirtied
+
+    // A fresh connect re-sends `sync` — the reducer resets to exactly it.
+    const fresh = applySnapshot(snap({ snapshotSeq: 40, roster: [vela] }), ME_KEY);
+    expect(fresh.lastSeq).toBe(40);
+    expect(fresh.roster).toEqual([vela]);
+    expect(fresh.feed).toEqual([]);
+    expect(fresh.statusByActor).toEqual({});
+    expect(fresh.ended).toBe(false);
   });
 });
 

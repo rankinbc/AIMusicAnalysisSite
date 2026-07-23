@@ -55,3 +55,16 @@ export function useVersionView(token: string) {
     retry: false,
   });
 }
+
+// Authed by-id twin of the token view (room-completion PRP): invited/link
+// viewers land on /listen-rack/{versionId} where the owner-scoped
+// GET /versions/{id} 404s — this is their version-metadata surface.
+export function useAuthedVersionView(versionId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['versions', versionId, 'view'],
+    queryFn: () =>
+      fetcher<VersionViewDto>({ url: `/versions/${versionId}/view`, method: 'GET' }),
+    enabled: Boolean(versionId) && enabled,
+    retry: false,
+  });
+}

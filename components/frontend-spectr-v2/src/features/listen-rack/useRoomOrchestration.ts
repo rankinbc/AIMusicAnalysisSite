@@ -5,12 +5,14 @@
  * Composes the already-written-and-tested hooks: useRoomSession (lifecycle),
  * useRoomStream (receive), useRoomActions (send). Server is the authority —
  * every action POSTs and the change comes back through the stream (the
- * senders are fire-and-forget, never optimistic cache writes).
- */
+ * senders are promise-returning so callers can surface failures — E6.13 —
+ * but never optimistic cache writes). */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
-import { fetcher } from '../../api/fetcher';
+import { ApiError, fetcher } from '../../api/fetcher';
+import { extractApiError } from '../../api/error-utils';
 import { useMe } from '../../api/hooks';
 import type { AccessDto as ApiAccessDto, RoomSnapshot, SessionEvent } from '../../api/types';
 import { useRoomActions } from '../listen/useRoomActions';
@@ -38,11 +40,20 @@ export interface RoomLiveSeam {
   sessionId: string;
   streamStatus: RoomStreamStatus;
   state: RoomLiveState;
-  sendReact: (emoji: string, t: number) => void;
-  sendChat: (body: string, t: number) => void;
-  sendStatus: (emoji: string) => void;
+  // Promise-returning (E6.13): callers decide what a failed send looks like.
+  // Any rejection with code `session_ended` ALSO folds state.ended locally.
+  sendReact: (emoji: string, t: number) => Promise<void>;
+  sendChat: (body: string, t: number) => Promise<void>;
+  sendStatus: (emoji: string) => Promise<void>;
+  /** Host-only caller (server 403s others). Never rejects — the stream echo is
+   *  the ack; a failed emit self-heals on the next one (E6.11). */
+  sendTransport: (playing: boolean, position: number) => Promise<void>;
+  /** Manual reconnect from the 'lost' stream state (E6.9). */
+  retryStream: () => void;
   endRoom: () => void; // host: end + publish recap (AC4)
   isEnding: boolean;
+  /** True once the recap publish succeeded (the ended banner links to it). */
+  recapPublished: boolean;
 }
 
 export interface RoomOrchestration extends MockRoomOrchestration {
@@ -60,9 +71,14 @@ function useVersionAccess(versionId: string) {
   });
 }
 
+function isSessionEnded(err: unknown): boolean {
+  return err instanceof ApiError && extractApiError(err.body).code === 'session_ended';
+}
+
 export function useRoomOrchestration(versionId: string): RoomOrchestration {
   const { data: me } = useMe(true);
   const { data: apiAccess } = useVersionAccess(versionId);
+  const qc = useQueryClient();
 
   // api AccessDto roles are a subset of the page's (which adds 'reviewer');
   // fall back to the owner mock only while access is loading so the page
@@ -114,10 +130,34 @@ export function useRoomOrchestration(versionId: string): RoomOrchestration {
     }),
     [],
   );
-  const streamStatus = useRoomStream(sessionId, handlers);
+  // E6.10 — once ended, close the stream (null sessionId aborts it). Emptying
+  // presence is what unblocks the backend's finalize path.
+  const effectiveSessionId = state.ended ? null : sessionId;
+  const { status: streamStatus, retry: retryStream } = useRoomStream(effectiveSessionId, handlers);
   useEffect(() => {
     if (!sessionId) setState(initialRoomState());
   }, [sessionId]);
+
+  // Ended: re-fetch the session history so liveSession clears once the server
+  // finalizes (lazy GET backstop / last-leaver job).
+  useEffect(() => {
+    if (state.ended && versionId) {
+      void qc.invalidateQueries({ queryKey: ['versions', versionId, 'sessions'] });
+    }
+  }, [state.ended, versionId, qc]);
+
+  // A dead room discovered via POST (409 session_ended), not just via event.
+  const foldEnded = useCallback(() => {
+    setState((s) => (s.ended ? s : { ...s, ended: true }));
+  }, []);
+  const withEndedFold = useCallback(
+    (p: Promise<void>): Promise<void> =>
+      p.catch((err: unknown) => {
+        if (isSessionEnded(err)) foldEnded();
+        throw err;
+      }),
+    [foldEnded],
+  );
 
   // ── actions (AC2, AC3) ────────────────────────────────────────────────────
   const actions = useRoomActions(sessionId ?? '');
@@ -142,28 +182,86 @@ export function useRoomOrchestration(versionId: string): RoomOrchestration {
     [sessionId, actions],
   );
 
+  // E6.12 — recap publish is idempotent server-side, so the failure toast
+  // carries a Retry that re-posts the same request.
+  const publishRecap = useCallback(
+    function publish(sid: string) {
+      recapMut.mutate(
+        { sessionId: sid, body: { momentIds: [] } },
+        {
+          onError: () =>
+            toast.error('Room ended — recap publish failed.', {
+              id: 'room-recap',
+              action: { label: 'Retry', onClick: () => publish(sid) },
+            }),
+        },
+      );
+    },
+    [recapMut],
+  );
+
   const endRoom = useCallback(() => {
     if (!sessionId) return;
     endMut.mutate(sessionId, {
-      onSuccess: () => recapMut.mutate({ sessionId, body: { momentIds: [] } }),
+      onSuccess: () => publishRecap(sessionId),
+      onError: () => toast.error("Couldn't end the room.", { id: 'room-end' }),
     });
-  }, [sessionId, endMut, recapMut]);
+  }, [sessionId, endMut, publishRecap]);
+
+  // E6.8 — explicit start-failure copy. Click-driven, so mutate-level
+  // callbacks are safe (the StrictMode trap is fire-on-mount only).
+  const startRoom = useCallback(() => {
+    startMut.mutate(undefined, {
+      onError: (err: unknown) => {
+        const code = err instanceof ApiError ? extractApiError(err.body).code : undefined;
+        toast.error(
+          code === 'room_not_hostable'
+            ? "Room hosting isn't enabled for your account."
+            : "Couldn't start the room — try again.",
+          { id: 'room-start' },
+        );
+      },
+    });
+  }, [startMut]);
 
   const live: RoomLiveSeam | null = sessionId
     ? {
         sessionId,
         streamStatus,
         state,
-        sendReact: (emoji, t) => void actions.react({ emoji, t }),
-        sendChat: (body, t) => void actions.chat({ body, t }),
-        sendStatus: (emoji) => void actions.status({ emoji }),
+        sendReact: (emoji, t) => withEndedFold(actions.react({ emoji, t })),
+        sendChat: (body, t) => withEndedFold(actions.chat({ body, t })),
+        sendStatus: (emoji) => withEndedFold(actions.status({ emoji })),
+        sendTransport: (playing, position) =>
+          actions.transport({ playing, position }).catch((err: unknown) => {
+            // Fire-and-forget by contract: fold a dead room, swallow the rest
+            // (the next transport emit self-heals).
+            if (isSessionEnded(err)) foldEnded();
+          }),
+        retryStream,
         endRoom,
         isEnding: endMut.isPending || recapMut.isPending,
+        recapPublished: recapMut.isSuccess,
       }
     : null;
 
   // Live grant/revoke state wins once synced; otherwise nobody holds control.
   const roomControl: RoomControl = state.roomControl;
+
+  // Mode is client-local UI state; `modes` (from server access) is the real
+  // gate. Owner-only switching (the 11-5 placeholder) locked joinable guests
+  // out of ROOM entirely — an invitee could be IN the presence roster (the
+  // stream is mode-independent) with no way to see the room UI. Anyone may
+  // switch among their available modes; single-mode visitors get no switcher.
+  const onModeChange = useMemo(
+    () =>
+      modes.length > 1
+        ? (m: ModeId) => {
+            if (modes.includes(m)) setMode(m);
+          }
+        : undefined,
+    [modes],
+  );
 
   return {
     mode,
@@ -171,10 +269,10 @@ export function useRoomOrchestration(versionId: string): RoomOrchestration {
     identity,
     access,
     roomControl,
-    onModeChange: identity.isOwner ? setMode : undefined,
+    onModeChange,
     onGrant,
     live,
-    startRoom: access.roomHostable && !sessionId ? () => startMut.mutate() : undefined,
+    startRoom: access.roomHostable && !sessionId ? startRoom : undefined,
     isStartingRoom: startMut.isPending,
   };
 }

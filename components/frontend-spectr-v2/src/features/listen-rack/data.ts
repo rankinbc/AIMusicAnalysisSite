@@ -479,7 +479,9 @@ export const PLAN_ITEMS: PlanItem[] = [
 export const BG_COLORS = ['#00e5b0', '#34d399', '#22d3ee', '#60a5fa', '#818cf8', '#a78bfa', '#f472b6', '#f43f5e', '#fb923c', '#fbbf24'];
 
 // ── Live collaboration shapes (mock-driven; replace with real-time stream) ──
-export interface ReactionFeedItem { id: string; emoji: string; handle: string; text: string; t: number; you?: boolean | undefined }
+// `kind` is additive (live rooms tag chat vs reaction explicitly instead of
+// matching on the '💬' emoji); demo fixtures omit it and stay valid.
+export interface ReactionFeedItem { id: string; emoji: string; handle: string; text: string; t: number; you?: boolean | undefined; kind?: 'react' | 'chat' | undefined }
 export interface PresencePopItem { id: string; handle: string; hue: number; anon?: boolean | undefined; emoji: string; x: number; y: number; ring: string }
 export interface AnnouncementMsg { id: string; text: string; title?: string | undefined }
 

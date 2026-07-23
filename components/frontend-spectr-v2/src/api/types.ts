@@ -1556,7 +1556,11 @@ export type SessionEvent =
   | (SessionEventBase & { type: 'grant'; grant: ControlGrantDto })
   | (SessionEventBase & { type: 'transport'; actor: ActorRefDto; playing: boolean; position: number })
   | (SessionEventBase & { type: 'visuals'; actor: ActorRefDto; patch: unknown; stages?: string[] | null; director?: string | null })
-  | (SessionEventBase & { type: 'rack'; actor: ActorRefDto; effectId: string; params: Record<string, unknown> });
+  | (SessionEventBase & { type: 'rack'; actor: ActorRefDto; effectId: string; params: Record<string, unknown> })
+  // Transient terminal signal published by the BFF /end handler — publish-only
+  // (no WAL append), so it carries NO seq and no actor. Durability comes from
+  // the DB session status; clients fold it and close their streams.
+  | { type: 'ended'; at: number };
 
 export type ReactionEvent = Extract<SessionEvent, { type: 'reaction' }>;
 

@@ -2,8 +2,8 @@
  *
  * Folds the SSE contract (first `sync` snapshot, then `SessionEvent` deltas)
  * into the state the page consumes: roster, reaction/chat feed, control
- * holders, transport. Pure functions — unit-tested with fixture events, no
- * live SSE (the stream plumbing lives in useRoomStream).
+ * holders, transport, ended flag. Pure functions — unit-tested with fixture
+ * events, no live SSE (the stream plumbing lives in useRoomStream).
  */
 import type { ActorRefDto, RoomSnapshot, SessionEvent } from '../../api/types';
 
@@ -19,8 +19,14 @@ export interface RoomLiveState {
   roster: ActorRefDto[];
   feed: ReactionFeedItem[]; // newest first — reactions + chat share the rail feed
   roomControl: RoomControl;
-  transport: { playing: boolean; position: number } | null;
+  // `at` (unix ms) + actorKey ride along so the follow side can compute drift
+  // and skip self-echoed host events (E6.11). Snapshot transport carries
+  // neither → at = snapshot receipt time, actorKey = null.
+  transport: { playing: boolean; position: number; at: number; actorKey: string | null } | null;
   statusByActor: Record<string, string>; // actorKey -> emoji
+  // E6.10 — the room was ended (transient `ended` event, or a POST rejected
+  // with `session_ended`). Latched: no later event un-ends a room.
+  ended: boolean;
 }
 
 export function initialRoomState(): RoomLiveState {
@@ -32,6 +38,7 @@ export function initialRoomState(): RoomLiveState {
     roomControl: { rackHolder: null, visualsHolder: null },
     transport: null,
     statusByActor: {},
+    ended: false,
   };
 }
 
@@ -45,7 +52,15 @@ export function toActorRef(a: ActorRefDto): ActorRef {
   return ref;
 }
 
-function actorKey(a: ActorRefDto): string {
+/** Stable identity key — type-prefixed so user/anon never collide. Accepts both
+ * the wire ActorRefDto (nullable fields) and the page ActorRef (optional
+ * fields); exported so the People panel derives `you` without duplicating. */
+export function actorKey(a: {
+  type: 'user' | 'anon';
+  userId?: string | null | undefined;
+  handle?: string | null | undefined;
+  displayName?: string | null | undefined;
+}): string {
   return `${a.type}:${a.userId ?? a.handle ?? a.displayName ?? ''}`;
 }
 
@@ -56,6 +71,7 @@ function feedItem(
   text: string,
   t: number,
   meKey: string | null,
+  kind: 'react' | 'chat',
 ): ReactionFeedItem {
   return {
     id,
@@ -64,20 +80,29 @@ function feedItem(
     text,
     t: Math.floor(t),
     you: meKey !== null && actorKey(actor) === meKey,
+    kind,
   };
 }
 
-export function applySnapshot(snapshot: RoomSnapshot, meKey: string | null): RoomLiveState {
+export function applySnapshot(
+  snapshot: RoomSnapshot,
+  meKey: string | null,
+  nowMs: number = Date.now(),
+): RoomLiveState {
   const s = initialRoomState();
   s.synced = true;
   s.lastSeq = snapshot.snapshotSeq;
   s.roster = snapshot.roster;
-  s.transport = snapshot.transport;
+  // Snapshot transport carries no actor/at → seed with receipt time + null key
+  // (a late joiner's first follow snaps off this).
+  s.transport = snapshot.transport
+    ? { playing: snapshot.transport.playing, position: snapshot.transport.position, at: nowMs, actorKey: null }
+    : null;
   s.feed = snapshot.feed
     .slice()
     .sort((a, b) => b.seq - a.seq)
     .slice(0, FEED_CAP)
-    .map((e) => feedItem(e.id, e.emoji, e.actor, e.text ?? '', e.t, meKey));
+    .map((e) => feedItem(e.id, e.emoji, e.actor, e.text ?? '', e.t, meKey, 'react'));
   return s;
 }
 
@@ -86,6 +111,11 @@ export function applyEvent(
   e: SessionEvent,
   meKey: string | null,
 ): RoomLiveState {
+  // `ended` is transient (no seq — published outside the WAL): fold BEFORE the
+  // seq guard, regardless of ordering.
+  if (e.type === 'ended') {
+    return state.ended ? state : { ...state, ended: true };
+  }
   // The relay guarantees deltas after snapshotSeq; drop stale/duplicate frames.
   if (e.seq <= state.lastSeq) return state;
   const s: RoomLiveState = { ...state, lastSeq: e.seq };
@@ -98,12 +128,12 @@ export function applyEvent(
       return s;
     }
     case 'reaction': {
-      s.feed = [feedItem(e.id, e.emoji, e.actor, e.text ?? '', e.t, meKey), ...s.feed].slice(0, FEED_CAP);
+      s.feed = [feedItem(e.id, e.emoji, e.actor, e.text ?? '', e.t, meKey, 'react'), ...s.feed].slice(0, FEED_CAP);
       return s;
     }
     case 'chat': {
       // Chat rides the same rail feed (ReactionFeedItem.text carries the body).
-      s.feed = [feedItem(e.id, '💬', e.actor, e.body, e.t, meKey), ...s.feed].slice(0, FEED_CAP);
+      s.feed = [feedItem(e.id, '💬', e.actor, e.body, e.t, meKey, 'chat'), ...s.feed].slice(0, FEED_CAP);
       return s;
     }
     case 'status': {
@@ -120,7 +150,7 @@ export function applyEvent(
       return s;
     }
     case 'transport': {
-      s.transport = { playing: e.playing, position: e.position };
+      s.transport = { playing: e.playing, position: e.position, at: e.at, actorKey: actorKey(e.actor) };
       return s;
     }
     // visuals/rack deltas mutate the shared performance surfaces; applying the

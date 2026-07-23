@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 
 import { ApiError } from '../../api/fetcher';
 import { useJobResults, useNotes, useSong, useVersion } from '../../api/hooks';
+import { useAuthedVersionView } from '../../features/listen/useVersionShare';
 import {
   isFinalJson, type FinalJson, type Phase1Data, type Phase2Data, type Phase7Data,
 } from '../../api/types';
@@ -71,21 +72,34 @@ function ListenRackVersionRoute() {
   const { data: song } = useSong(version?.songId ?? '');
   const latestJobId = song?.latestResult?.jobId;
   const { data: results } = useJobResults(latestJobId ?? '', Boolean(latestJobId));
-  const { data: notes } = useNotes(versionId);
+  // Notes are owner-scoped — only fetch once the owner-scoped version resolved
+  // (a guest's notes GET would 404-spam).
+  const { data: notes } = useNotes(version ? versionId : '');
+
+  // Room-completion PRP: the owner-scoped GET /versions/{id} 404s for
+  // invited/link viewers (who legitimately land here via invite accept or a
+  // room join). Fall back to the authed by-id view — access-gated server-side.
+  const guestViewQ = useAuthedVersionView(versionId, versionQ.isError);
+  const guestView = guestViewQ.data;
 
   // Build the real track once the song name resolves; stats fill in as the
   // analysis loads. Until then the page falls back to the TRACK fixture.
   const track = useMemo(() => {
-    if (!song) return undefined;
-    const fj: FinalJson = isFinalJson(results?.finalJson) ? results.finalJson : {};
-    return buildTrack({
-      name: song.name,
-      phase1: pickPhase<Phase1Data>(fj, 1),
-      phase2: pickPhase<Phase2Data>(fj, 2),
-      phase7: pickPhase<Phase7Data>(fj, 7),
-      notes: notes ?? [],
-    });
-  }, [song, results, notes]);
+    if (song) {
+      const fj: FinalJson = isFinalJson(results?.finalJson) ? results.finalJson : {};
+      return buildTrack({
+        name: song.name,
+        phase1: pickPhase<Phase1Data>(fj, 1),
+        phase2: pickPhase<Phase2Data>(fj, 2),
+        phase7: pickPhase<Phase7Data>(fj, 7),
+        notes: notes ?? [],
+      });
+    }
+    // Guest: name-only track (no phase data on the view DTO — stats stay
+    // hidden behind the room/view tab matrix; duration fills from the element).
+    if (guestView) return buildTrack({ name: guestView.songName, notes: [] });
+    return undefined;
+  }, [song, results, notes, guestView]);
 
   // Wave-3 E6.5 — the song's latest report powers "View Report" + the coach
   // hand-off; null (no analysis yet) hides both rather than dead-ending.
@@ -102,14 +116,16 @@ function ListenRackVersionRoute() {
 
   // Wave-3 E6.1 — never render the demo fixture for a version that failed to
   // load (or hasn't yet): loading shell first, honest error shell on failure.
-  if (versionQ.isLoading) {
+  // A guest's owner-scoped 404 first tries the by-id view (above); the error
+  // shell only renders when BOTH paths refuse.
+  if (versionQ.isLoading || (versionQ.isError && guestViewQ.isLoading)) {
     return (
       <div style={{ maxWidth: 720, margin: '0 auto', padding: 32 }}>
         <p className="mono" style={{ color: 'var(--muted)' }}>Loading version…</p>
       </div>
     );
   }
-  if (versionQ.isError) {
+  if (versionQ.isError && !guestView) {
     return <VersionErrorShell error={versionQ.error} onRetry={() => void versionQ.refetch()} />;
   }
 
@@ -120,7 +136,9 @@ function ListenRackVersionRoute() {
       {...(fixPreset ? { fixPreset } : {})}
       {...(track ? { track } : {})}
       {...(onModeChange ? { onModeChange } : {})}
-      {...(ROOM_LIVE_SSE ? { roomLive: real.live, onStartRoom: real.startRoom } : {})} />
+      {...(ROOM_LIVE_SSE
+        ? { roomLive: real.live, onStartRoom: real.startRoom, isStartingRoom: real.isStartingRoom }
+        : {})} />
   );
 }
 

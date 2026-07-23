@@ -200,5 +200,11 @@ export async function fetcher<T>(config: FetcherConfig): Promise<T> {
     throw new ApiError(res.status, body, extractApiError(body).message);
   }
   if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  // Room-completion PRP: 202-Accepted endpoints (room event posts, /end) send
+  // Content-Length: 0 — res.json() on an empty body REJECTS, which made every
+  // successful fire-and-forget call look like a failure to its caller. Treat
+  // any empty success body as void rather than keying on specific statuses.
+  const text = await res.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
 }

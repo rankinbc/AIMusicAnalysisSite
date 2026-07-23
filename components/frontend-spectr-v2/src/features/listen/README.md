@@ -1,15 +1,16 @@
-# Listen — Shared Audio Engine
+# Listen — Shared Audio Engine + Social Hooks
 
-> **Living document.** `features/listen/` is now the **shared real-time Web Audio
-> engine**: the `useAudioGraph` handle, the modular `EffectUnit` graph (`audio/**`),
-> and the stem deck (`StemDeck` / `useStemEngine` / `stemGains`). The Listen PAGE
-> that consumes it lives in **`features/listen-rack/`** (route
-> `/listen-rack/$versionId`) — the legacy page that used to live here was retired
-> once the new page reached parity. Keep this updated when you change the engine,
-> the handle, or the stem deck.
+> **Living document.** `features/listen/` is the **shared real-time Web Audio
+> engine** — the `useAudioGraph` handle, the modular `EffectUnit` graph (`audio/**`),
+> and the stem deck (`StemDeck` / `useStemEngine` / `stemGains`) — **plus the
+> social/sharing hook layer** (rooms, access, invites, comments, bookmarks; see §2)
+> consumed by the listen-rack page and the public routes. The Listen PAGE itself
+> lives in **`features/listen-rack/`** (route `/listen-rack/$versionId`). Keep this
+> updated when you change the engine, the handle, the stem deck, or the hooks.
 >
-> Last updated: 2026-06-25. Status: audio **engine done + frozen**; the V3 page port
-> (`features/listen-rack/`) is **complete** and is the only Listen page.
+> Last updated: 2026-07-23. Status: audio **engine done + frozen**;
+> `features/listen-rack/` is the only Listen page; the room hooks are being wired
+> into its live UI by `PRPs/listen-rack-room-completion.md`.
 
 ---
 
@@ -30,8 +31,25 @@ creates the graph (`const graph = useAudioGraph(audioRef)`), and composes the he
 visualizer stage (driven by `graph.readFrame()` in a rAF loop), transport, the rack
 (`InlineRack` bound to the engine via `features/listen-rack/rackBindings.ts`), the
 right rail, the stem deck (`StemDeck`), and the pitch lane. See
-`features/listen-rack/PORTING_NOTES.md` for that page's wiring map. The legacy
-`/listen/$versionId` route now only redirects to `/listen-rack/$versionId`.
+`features/listen-rack/PORTING_NOTES.md` for that page's current real-vs-mock map.
+(The legacy `/listen/$versionId` route is gone.)
+
+Beyond the engine, this folder also hosts the **social / sharing hook layer**,
+consumed by the listen-rack page AND the public + invite routes
+(`_public/v.$token`, `_public/r.$token`, `_app/invite.$token`):
+
+- **Room realtime**: `useRoomStream` (fetch-SSE reader for `GET /sessions/{id}/stream`),
+  `useRoomActions` (the POST senders: react/chat/status/transport/visuals/rack/grant/revoke),
+  `useRoomSession` (session history / start / end / recap) — composed by
+  `features/listen-rack/useRoomOrchestration`.
+- **Access / share / invites**: `useVersionAccess`, `useVersionShare`, `useInvites`,
+  `VersionShareDialog`.
+- **Feedback**: `useComments`, `useSuggestions`, `SuggestionCard`, `comment-tree`,
+  plus the anon share surface (`useAnonFeedback`, `AnonReviewerSurface`, `ProducerCta`).
+- **Bookmarks**: `useBookmarks`, `useBookmarkSignal`, `BookmarksRail`.
+- **Playback resilience**: `media-retry` (shared `<audio>` retry helper for the
+  authed and public players).
+- **Chain currency**: `chainApply.ts` (`applyChainToGraph` / `snapshotChainFromGraph`).
 
 ## 3. Audio engine architecture (`features/listen/`)
 
@@ -201,6 +219,10 @@ the only real exercise of the runtime; run it before trusting the engine). Gates
 
 ## Change log
 
+- **2026-07-23** — Doc refreshed: the folder is the shared engine **+ social hook
+  layer** (room stream/actions/session, access/share/invites, comments/suggestions,
+  bookmarks, media-retry) consumed by `features/listen-rack/` and the public/invite
+  routes. Legacy-page prose removed (the `/listen/$versionId` redirect is gone).
 - **2026-06-25** — Listen V3 page port complete; `features/listen-rack/` is the only Listen page
   and the legacy page was retired. This folder is now the **shared engine** (`useAudioGraph`,
   `StemDeck`/`useStemEngine`/`stemGains`, `audio/**`) consumed by the page. Deleted the legacy-only

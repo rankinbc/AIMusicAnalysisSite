@@ -139,6 +139,57 @@ public sealed class RoomEndpointsTests(WebApplicationFactory<Program> factory)
     }
 
     [SkippableFact]
+    public async Task EndSession_PublishesTransientEndedEvent()
+    {
+        await TestDb.RequireAsync(_factory);
+        TestDb.Require(RedisReachable(), "Redis");
+        var queue = new RecordingRoomQueue();
+        var f = _factory.WithWebHostBuilder(b => b.ConfigureTestServices(s =>
+        {
+            s.RemoveAll(typeof(IJobQueue));
+            s.AddSingleton<IJobQueue>(queue);
+        }));
+        var owner = f.CreateClient();
+        var ownerId = await Register(owner);
+        var versionId = await CreateVersion(owner);
+        var sessionId = await InsertLiveSession(versionId, ownerId);
+
+        // Subscribe to the raw room channel BEFORE the POST, then poll for the
+        // transient publish (CoachStreamEndpointTests receivers pattern). The
+        // ended signal is publish-only: it must NOT land in the WAL.
+        using var mux = ConnectionMultiplexer.Connect("localhost:6379");
+        var channel = new RedisChannel($"room:{sessionId:N}", RedisChannel.PatternMode.Literal);
+        var received = new List<string>();
+        await mux.GetSubscriber().SubscribeAsync(channel, (_, value) =>
+        {
+            var p = value.ToString();
+            if (!string.IsNullOrEmpty(p)) lock (received) received.Add(p);
+        });
+
+        var end = await owner.PostAsync($"/api/sessions/{sessionId}/end", null);
+        Assert.Equal(HttpStatusCode.Accepted, end.StatusCode);
+
+        var ended = new List<string>();
+        for (var i = 0; i < 40; i++)
+        {
+            lock (received) ended = received.Where(m => m.Contains("\"type\":\"ended\"")).ToList();
+            if (ended.Count > 0) break;
+            await Task.Delay(50);
+        }
+        // Small settle window so a duplicate publish (a bug) would be caught.
+        await Task.Delay(100);
+        lock (received) ended = received.Where(m => m.Contains("\"type\":\"ended\"")).ToList();
+        Assert.Single(ended);
+        Assert.Contains("\"at\":", ended[0]);
+        Assert.DoesNotContain("\"seq\":", ended[0]);
+
+        // Publish-only: the WAL must not contain the transient ended signal.
+        var redis = _factory.Services.GetRequiredService<IConnectionMultiplexer>();
+        var log = await redis.GetDatabase().ListRangeAsync($"room:{sessionId:N}:log");
+        Assert.DoesNotContain(log, e => e.HasValue && e.ToString().Contains("\"ended\""));
+    }
+
+    [SkippableFact]
     public async Task React_OnLiveSession_AppendsToRedisLog()
     {
         await TestDb.RequireAsync(_factory);
@@ -159,6 +210,16 @@ public sealed class RoomEndpointsTests(WebApplicationFactory<Program> factory)
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
+    private static bool RedisReachable()
+    {
+        try
+        {
+            using var mux = ConnectionMultiplexer.Connect("localhost:6379,abortConnect=false,connectTimeout=500");
+            return mux.GetDatabase().Ping() < TimeSpan.FromSeconds(2);
+        }
+        catch { return false; }
+    }
+
     private sealed class RecordingRoomQueue : IJobQueue
     {
         public readonly List<(string Task, string Queue)> Calls = new();
