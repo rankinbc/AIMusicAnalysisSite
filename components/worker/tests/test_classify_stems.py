@@ -62,6 +62,33 @@ def test_classify_stems_writes_detected_roles(monkeypatch):
     assert seen["names"] == ["a.wav", "b.wav"]
 
 
+def test_classify_stems_hard_failure_degrades_all_to_other(monkeypatch):
+    # E3.1 — a whole-actor crash (resolve/classify blowing up) must still write
+    # a detected_role for EVERY entry so the BFF poll reports classified=true
+    # and the review UI can fall back to manual assignment. No raise.
+    raw = [
+        {"id": "1", "original_filename": "a.wav", "path": "audio/stems/v/1.wav",
+         "detected_role": None, "confidence": 0, "evidence": None, "confirmed_role": None},
+        {"id": "2", "original_filename": "b.wav", "path": "audio/stems/v/2.wav",
+         "detected_role": None, "confidence": 0, "evidence": None, "confirmed_role": None},
+    ]
+    version = _FakeVersion(raw)
+    monkeypatch.setattr(t.SessionFactory, "begin", lambda: _FakeSession(version))
+
+    def _boom(paths, names=None):
+        raise RuntimeError("classifier import exploded")
+
+    monkeypatch.setattr("audio_analysis.stems.classify_stems", _boom)
+
+    t.classify_stems(str(uuid.uuid4()))  # must not raise
+
+    assert [e["detected_role"] for e in version.stem_paths_raw] == ["other", "other"]
+    assert all(e["confidence"] == 0.0 for e in version.stem_paths_raw)
+    assert all(e["evidence"] == "classification unavailable" for e in version.stem_paths_raw)
+    # confirmed_role stays the user's to set.
+    assert version.stem_paths_raw[0]["confirmed_role"] is None
+
+
 def test_classify_stems_noop_when_empty(monkeypatch):
     version = _FakeVersion([])
     monkeypatch.setattr(t.SessionFactory, "begin", lambda: _FakeSession(version))

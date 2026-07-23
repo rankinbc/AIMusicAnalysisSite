@@ -534,16 +534,31 @@ def classify_stems(version_id: str) -> None:
         # can keyword-match (Kick/Snare/Bass/...) before falling back to audio content.
         names = [e.get("original_filename") or Path(e["path"]).name for e in entries]
         proposals = classify_audio(abs_paths, names)
+        updated = []
+        for e, prop in zip(entries, proposals):
+            ne = dict(e)
+            ne["detected_role"] = prop.role.value
+            ne["confidence"] = round(float(prop.confidence), 3)
+            ne["evidence"] = prop.evidence
+            updated.append(ne)
+    except Exception:
+        # E3.1 — a whole-actor crash (resolve/fetch/import failure) used to
+        # leave every entry without a detected_role, so the BFF's poll reported
+        # classified=false forever and the review UI spun. Degrade ALL entries
+        # to "other" and still write Phase C: classified flips true and the
+        # review UI falls back to manual role assignment. Do not re-raise —
+        # a dramatiq retry would race the user's manual confirm.
+        logger.exception("classify_stems: hard failure version=%s — degrading all "
+                         "entries to role 'other'", version_id)
+        updated = []
+        for e in entries:
+            ne = dict(e)
+            ne["detected_role"] = "other"
+            ne["confidence"] = 0.0
+            ne["evidence"] = "classification unavailable"
+            updated.append(ne)
     finally:
         object_store.cleanup_all(fetched)
-
-    updated = []
-    for e, prop in zip(entries, proposals):
-        ne = dict(e)
-        ne["detected_role"] = prop.role.value
-        ne["confidence"] = round(float(prop.confidence), 3)
-        ne["evidence"] = prop.evidence
-        updated.append(ne)
 
     # Phase C — write the proposals back (fresh short tx). Reassign so
     # SQLAlchemy flags the JSONB column dirty (in-place mutation isn't tracked).

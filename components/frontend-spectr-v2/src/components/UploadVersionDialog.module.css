@@ -288,6 +288,12 @@
   flex-wrap: wrap;
 }
 
+/* E3.1 — Retry / Assign-manually actions under the stalled-classification note. */
+.stallActions {
+  display: flex;
+  gap: 8px;
+}
+
 .benefitChip {
   display: inline-flex;
   align-items: center;

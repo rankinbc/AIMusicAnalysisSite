@@ -21,8 +21,12 @@ The Triage prompt produces:
       "estimated_total_tokens": <int>
     }
 
-We don't write a fail-marker on failure — the column just stays NULL and the
-BFF can re-enqueue on the next ListVerdicts call.
+Terminal failures (budget, LLM error, invalid plan) write the degradation
+notice + rule-engine findings; ``routing_plan`` stays NULL but the BFF's
+DegradationNotice guard stops re-enqueuing (E5.3 — previously every
+ListVerdicts call dispatched another LLM attempt, unbounded spend). Only the
+transient Phase A/C failures (DB blip, prompt missing) still bare-return so
+the next ListVerdicts can retry.
 """
 from __future__ import annotations
 
@@ -129,7 +133,14 @@ def run_triage(analysis_id: str) -> None:
         run_rule_engine_for_analysis(aid)
         return
     except LlmError as exc:
+        # E5.3: a bare return here left routing_plan AND degradation_notice
+        # NULL, so every ListVerdicts re-enqueued another LLM call — unbounded
+        # spend. Terminal LLM failure now degrades exactly like budget
+        # exhaustion: notice + rule-engine findings, and the BFF's
+        # DegradationNotice guard stops all future enqueues.
         logger.info("run_triage: LLM call failed for %s: %s", analysis_id, exc)
+        write_degradation_notice(aid, reason="triage_failed", detail=str(exc)[:500])
+        run_rule_engine_for_analysis(aid)
         return
 
     # ── E: parse + validate ────────────────────────────────────────────────
@@ -137,7 +148,10 @@ def run_triage(analysis_id: str) -> None:
         obj = extract_json_object(result.text)
         plan = SpecialistRoutingPlan(**obj)
     except Exception as exc:  # noqa: BLE001 — any parse/validation failure → skip
+        # E5.3: same terminal-degradation treatment as the LlmError branch.
         logger.info("run_triage: invalid plan for %s: %s", analysis_id, exc)
+        write_degradation_notice(aid, reason="triage_failed", detail=str(exc)[:500])
+        run_rule_engine_for_analysis(aid)
         return
 
     # ── F: persist (idempotent — only write if still NULL) ─────────────────

@@ -1,4 +1,4 @@
-import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
+import { Link, createFileRoute, useNavigate, useRouter } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 import { z } from 'zod';
 
@@ -20,6 +20,7 @@ const DEV_EMAIL = 'brankin92@yahoo.com';
 function LoginPage() {
   const { login, devLogin } = useAuth();
   const navigate = useNavigate();
+  const router = useRouter();
   const { next } = Route.useSearch();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -32,7 +33,10 @@ function LoginPage() {
     setPending(true);
     try {
       await login(email, password);
-      void navigate({ to: next ?? '/library' });
+      // F8: the _app guard reads router context — invalidate so it sees the
+      // fresh auth state BEFORE navigating, or the first click bounces back.
+      await router.invalidate();
+      await navigate({ to: next ?? '/library' });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign-in failed');
     } finally {
@@ -46,7 +50,8 @@ function LoginPage() {
     setPending(true);
     try {
       await devLogin(DEV_EMAIL);
-      void navigate({ to: next ?? '/library' });
+      await router.invalidate();
+      await navigate({ to: next ?? '/library' });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Dev sign-in failed');
     } finally {

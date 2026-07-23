@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.RegularExpressions;
@@ -99,6 +101,8 @@ public sealed class SecretsHardeningTests(WebApplicationFactory<Program> factory
         var reg = await client.PostAsJsonAsync("/api/auth/register",
             new { email, password = "CorrectHorse9!" });
         reg.EnsureSuccessStatusCode();
+        var regBody = await reg.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        var userId = regBody.GetProperty("user").GetProperty("id").GetGuid();
         var firstCookie = ExtractRefreshCookie(reg);
         Assert.NotNull(firstCookie);
 
@@ -111,9 +115,24 @@ public sealed class SecretsHardeningTests(WebApplicationFactory<Program> factory
         Assert.NotNull(secondCookie);
         Assert.NotEqual(firstCookie, secondCookie);
 
-        // Replaying the CONSUMED first cookie must be rejected (rotation).
-        var replay = await SendRefresh(client, firstCookie!);
-        Assert.Equal(HttpStatusCode.Unauthorized, replay.StatusCode);
+        // Audit wave 1 (E2.1): a rotation-revoked cookie gets a 60 s grace
+        // window (concurrent-tab refresh). The hardening property is now:
+        // a replay can mint an ACCESS token but never a NEW refresh cookie…
+        var replayInGrace = await SendRefresh(client, firstCookie!);
+        Assert.Equal(HttpStatusCode.OK, replayInGrace.StatusCode);
+        Assert.Null(ExtractRefreshCookie(replayInGrace));
+
+        // …and once the grace window has passed, the replay is dead for good.
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<Spectr.Data.AppDbContext>();
+            await db.RefreshTokens
+                .Where(t => t.UserId == userId && t.RevokedAt != null)
+                .ExecuteUpdateAsync(s => s.SetProperty(
+                    t => t.RevokedAt, DateTimeOffset.UtcNow.AddMinutes(-2)));
+        }
+        var replayAfterGrace = await SendRefresh(client, firstCookie!);
+        Assert.Equal(HttpStatusCode.Unauthorized, replayAfterGrace.StatusCode);
 
         // The rotated cookie still works.
         var refresh2 = await SendRefresh(client, secondCookie!);

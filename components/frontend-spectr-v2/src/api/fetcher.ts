@@ -74,23 +74,59 @@ interface FetcherConfig {
  */
 export async function refreshSession(): Promise<AuthResponse | null> {
   refreshInFlight ??= (async () => {
+    const doRefresh = async (): Promise<AuthResponse | null> => {
+      try {
+        const r = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          credentials: 'include',
+        });
+        if (!r.ok) return null;
+        const data = (await r.json()) as AuthResponse;
+        accessToken = data.accessToken;
+        onTokenRefreshedCallback?.(data.accessToken);
+        return data;
+      } catch {
+        return null;
+      }
+    };
     try {
-      const r = await fetch('/api/auth/refresh', {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (!r.ok) return null;
-      const data = (await r.json()) as AuthResponse;
-      accessToken = data.accessToken;
-      onTokenRefreshedCallback?.(data.accessToken);
-      return data;
-    } catch {
-      return null;
+      // E2.1: serialize rotation across tabs of the same browser. The server's
+      // 60 s rotation grace is the correctness net (a loser tab's stale cookie
+      // still resolves); the lock just cuts rotation churn. Feature-detect —
+      // Safari <15.4 and some webviews lack Web Locks.
+      return typeof navigator !== 'undefined' && navigator.locks?.request
+        ? ((await navigator.locks.request('spectr_refresh', doRefresh)) as AuthResponse | null)
+        : await doRefresh();
     } finally {
       refreshInFlight = null;
     }
   })();
   return refreshInFlight;
+}
+
+/**
+ * For XHR upload paths (E3.9): returns an access token guaranteed to live at
+ * least `minTtlSeconds` more, silently refreshing first when needed. XHR can't
+ * ride the fetcher's 401-retry (re-sending a 200 MB body is the failure mode
+ * we're avoiding), so uploads pre-flight their token freshness instead.
+ */
+export async function getFreshAccessToken(minTtlSeconds = 120): Promise<string | null> {
+  let fresh = false;
+  if (accessToken) {
+    try {
+      const seg = accessToken.split('.')[1] ?? '';
+      const payload = JSON.parse(
+        atob(seg.replace(/-/g, '+').replace(/_/g, '/')),
+      ) as { exp?: number };
+      fresh =
+        typeof payload.exp === 'number' &&
+        payload.exp * 1000 - Date.now() > minTtlSeconds * 1000;
+    } catch {
+      fresh = false; // undecodable → treat as stale
+    }
+  }
+  if (!fresh) await refreshSession();
+  return accessToken;
 }
 
 async function refreshToken(): Promise<string | null> {
@@ -130,10 +166,15 @@ async function doFetch(config: FetcherConfig, token: string | null): Promise<Res
   return fetch(url, init);
 }
 
+// E2.2/E2.3: only credential-presenting endpoints are excluded from the 401
+// refresh-retry. Everything else — logout, /auth/me GET+PATCH,
+// resend-verification, verify-email — must survive an expired access token.
+const NO_REFRESH_RETRY = ['/auth/refresh', '/auth/login', '/auth/register', '/auth/dev-login'];
+
 export async function fetcher<T>(config: FetcherConfig): Promise<T> {
   let res = await doFetch(config, accessToken);
 
-  if (res.status === 401 && !config.url.startsWith('/auth/')) {
+  if (res.status === 401 && !NO_REFRESH_RETRY.some((p) => config.url.startsWith(p))) {
     // Try once: silent refresh, then retry.
     const fresh = await refreshToken();
     if (fresh) {

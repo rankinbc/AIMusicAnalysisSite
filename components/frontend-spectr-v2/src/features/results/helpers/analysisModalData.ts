@@ -272,6 +272,21 @@ function summarize(fj: FinalJson, p: PhaseResult): PhaseRow {
     }
     case 7: {
       const d = (p.data ?? {}) as Phase7Data;
+      // E5.1: the background structure job has its own lifecycle — an eternal
+      // "analyzing…" is a lie once the worker marked it failed.
+      if (d.arrangement_status === 'pending') {
+        row.detail = 'Arrangement analysis running…';
+        row.note =
+          'Structure detection runs in the background — the score fills in when it lands.';
+        break;
+      }
+      if (d.arrangement_status === 'failed') {
+        row.detail = 'Arrangement analysis failed';
+        row.note = d.arrangement_error
+          ? `The background structure job failed (${d.arrangement_error}). The rest of the report is unaffected — re-analyze to try again.`
+          : 'The background structure job failed. The rest of the report is unaffected — re-analyze to try again.';
+        break;
+      }
       row.detail = `Grade ${d.grade ?? '—'}${d.section_count ? ` · ${d.section_count} sections` : ''}`;
       row.kv = [
         { k: 'Arrangement grade', v: d.grade ?? '—', tone: 'good' },

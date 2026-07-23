@@ -19,7 +19,9 @@ public static class AuthEndpoints
         g.MapPost("/login", Login).AllowAnonymous();
         g.MapPost("/dev-login", DevLogin).AllowAnonymous();
         g.MapPost("/refresh", Refresh).AllowAnonymous();
-        g.MapPost("/logout", Logout).RequireAuthorization();
+        // Anonymous on purpose (E2.2): the handler is cookie-driven, and a user whose
+        // access token expired while idle must still be able to revoke server-side.
+        g.MapPost("/logout", Logout).AllowAnonymous();
         g.MapGet("/me", Me).RequireAuthorization();
         g.MapPatch("/me", PatchMe).RequireAuthorization();
 
@@ -401,18 +403,24 @@ public static class AuthEndpoints
         if (!httpReq.Cookies.TryGetValue(RefreshTokenService.CookieName, out var raw) || string.IsNullOrEmpty(raw))
             return Results.Unauthorized();
 
-        var row = await refresh.ResolveAsync(raw, ct);
-        if (row is null) return Results.Unauthorized();
+        var resolved = await refresh.ResolveWithGraceAsync(raw, RefreshTokenService.RotationGrace, ct);
+        if (resolved is null) return Results.Unauthorized();
 
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == row.UserId, ct);
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == resolved.Row.UserId, ct);
         if (user is null || !user.IsActive) return Results.Unauthorized();
         // Story 10.5 — a banned account must not mint fresh access tokens.
         if (user.BannedAt is not null)
             return ErrorEnvelope.Build(403, "account_banned",
                 "This account is suspended. Contact support.");
 
-        var (newRaw, _) = await refresh.RotateAsync(row, ct);
-        resp.Cookies.Append(RefreshTokenService.CookieName, newRaw, refresh.CookieOptions());
+        if (!resolved.GraceHit)
+        {
+            var (newRaw, _) = await refresh.RotateAsync(resolved.Row, ct);
+            resp.Cookies.Append(RefreshTokenService.CookieName, newRaw, refresh.CookieOptions());
+        }
+        // Grace hit (E2.1): another tab already rotated — the browser holds the
+        // successor cookie. Mint the access token only; rotating again or re-appending
+        // the cookie would clobber the successor.
 
         var access = jwt.Issue(user);
         return Results.Ok(new AuthResponse(access,

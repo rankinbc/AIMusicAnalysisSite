@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { fetcher } from './fetcher';
+import { terminalPoll } from './poll-helpers';
 import type {
   ActivityItemDto,
   AuthResponse,
@@ -346,11 +347,13 @@ export function useStemProposals(versionId: string, enabled: boolean) {
     // reports classified OR there are no staged stems to classify — otherwise a
     // version with an empty stem_paths_raw (e.g. the Listen page) polls forever,
     // since the BFF returns classified=false when entries.Count == 0.
-    refetchInterval: (query) => {
-      const data = query.state.data;
-      if (!data) return 1500;
-      return data.classified || data.stems.length === 0 ? false : 1500;
-    },
+    // E3.1: maxPolls ~4 min mirrors the review-OFF waitClassified bound — a dead
+    // worker must not spin "Classifying stems…" forever.
+    refetchInterval: terminalPoll<StemProposalsResponse>({
+      pollMs: 1500,
+      active: (d) => !d.classified && d.stems.length > 0,
+      maxPolls: 160,
+    }),
     retry: false,
   });
 }
@@ -494,11 +497,15 @@ export function useJob(jobId: string, opts?: { pollMs?: number }) {
     queryKey: ['jobs', jobId],
     queryFn: () => fetcher<JobStatusDto>({ url: `/jobs/${jobId}`, method: 'GET' }),
     enabled: Boolean(jobId),
-    refetchInterval: (query) => {
-      const status = query.state.data?.status;
-      if (status === 'complete' || status === 'failed') return false;
-      return opts?.pollMs ?? 2000;
-    },
+    // E5.6/E5.11: awaiting_stem_mapping is terminal for THIS poll (the stems
+    // review on the song page owns the next step); 404/error caps via helper.
+    refetchInterval: terminalPoll<JobStatusDto>({
+      pollMs: opts?.pollMs ?? 2000,
+      active: (d) =>
+        d.status !== 'complete' &&
+        d.status !== 'failed' &&
+        d.status !== 'awaiting_stem_mapping',
+    }),
     retry: false,
   });
 }
@@ -539,8 +546,14 @@ export function useJobResults(jobId: string, enabled: boolean) {
     retry: false,
     // Structure detection (allin1) runs in the background — ~10-15 s on GPU but
     // many minutes on CPU for a full-length track. Poll on a relaxed interval
-    // until the deferred Phase 7 fills in, then stop.
-    refetchInterval: (query) => (isArrangementPending(query.state.data) ? 8000 : false),
+    // until the deferred Phase 7 fills in, then stop. E5.1: ~10 min backstop —
+    // a crashed structure job now writes arrangement_status='failed', and the
+    // cap covers the crash-before-write hole.
+    refetchInterval: terminalPoll<JobResultsDto>({
+      pollMs: 8000,
+      active: isArrangementPending,
+      maxPolls: 75,
+    }),
   });
 }
 

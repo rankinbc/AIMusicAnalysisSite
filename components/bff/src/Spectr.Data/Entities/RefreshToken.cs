@@ -21,6 +21,11 @@ public sealed class RefreshToken
     [Column("revoked_at")]
     public DateTimeOffset? RevokedAt { get; set; }
 
+    // Set ONLY by rotation — points at the successor row. Logout/reset revocations
+    // leave this null, which is what excludes them from the rotation grace window.
+    [Column("replaced_by_id")]
+    public Guid? ReplacedById { get; set; }
+
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

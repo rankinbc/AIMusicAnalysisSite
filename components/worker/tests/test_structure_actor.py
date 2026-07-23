@@ -93,6 +93,52 @@ def test_detect_structure_failure_marks_job_and_preserves_analysis(monkeypatch):
     assert analysis.final_json == final  # report not corrupted
 
 
+def test_detect_structure_failure_writes_arrangement_failed(monkeypatch):
+    # E5.1 — a crash must flip the report's still-'pending' Phase 7 to 'failed'
+    # so the frontend's arrangement poll terminates on an honest state.
+    final = {"phases": [{"phase": 7, "status": "ok",
+                         "data": {"arrangement_status": "pending"}, "error": None}],
+             "overall_score": 70.0}
+    registry, job, analysis = _registry(final)
+    monkeypatch.setattr(st.SessionFactory, "begin", lambda: _FakeSession(registry))
+
+    def boom(*_a, **_k):
+        raise RuntimeError("kaboom")
+
+    monkeypatch.setattr(st, "detect_structure_and_rescore", boom)
+
+    with pytest.raises(RuntimeError):
+        st.detect_structure_job(str(uuid.uuid4()), str(uuid.uuid4()))
+
+    assert job.status == "failed"
+    p7 = analysis.final_json["phases"][0]["data"]
+    assert p7["arrangement_status"] == "failed"
+    assert "kaboom" in p7["arrangement_error"]
+
+
+def test_detect_structure_failure_never_clobbers_scored_phase7(monkeypatch):
+    # Idempotence: only a still-'pending' status is flipped — a completed
+    # rerun's scored Phase 7 must survive a later retry's crash untouched.
+    final = {"phases": [{"phase": 7, "status": "ok",
+                         "data": {"arrangement_status": "scored", "grade": "A"},
+                         "error": None}],
+             "overall_score": 70.0}
+    registry, job, analysis = _registry(final)
+    monkeypatch.setattr(st.SessionFactory, "begin", lambda: _FakeSession(registry))
+
+    def boom(*_a, **_k):
+        raise RuntimeError("kaboom")
+
+    monkeypatch.setattr(st, "detect_structure_and_rescore", boom)
+
+    with pytest.raises(RuntimeError):
+        st.detect_structure_job(str(uuid.uuid4()), str(uuid.uuid4()))
+
+    p7 = analysis.final_json["phases"][0]["data"]
+    assert p7["arrangement_status"] == "scored"
+    assert "arrangement_error" not in p7
+
+
 def test_detect_structure_missing_job_is_noop(monkeypatch):
     # Stale/orphaned message: the structure-job row doesn't exist. Should no-op
     # (not raise → no pointless retries) and never run allin1.

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Spectr.Bff.Auth;
 using Spectr.Bff.DTOs;
 using Spectr.Bff.Services;
@@ -35,6 +36,7 @@ public static class VerdictEndpoints
         ClaimsPrincipal user,
         AppDbContext db,
         IJobQueue queue,
+        IMemoryCache cache,
         CancellationToken ct)
     {
         var userId = user.UserId();
@@ -58,7 +60,14 @@ public static class VerdictEndpoints
         // the worker would just re-trip the same budget/breaker exception
         // and waste a queue dispatch. The worker actors are also idempotent
         // on degraded analyses (degraded.py helpers no-op when state is set).
-        if (analysisRow.RoutingPlan is null && analysisRow.DegradationNotice is null)
+        //
+        // Wave-1 hardening (E5.3): throttle the lazy-fire per analysis (10 min,
+        // per-instance IMemoryCache). The degradation notice stops the loop for
+        // terminal worker failures; this guards the crash-BEFORE-write loop the
+        // notice can't catch. Spend throttle, not correctness — the throttle is
+        // only stamped after a successful enqueue so a queue blip still retries.
+        if (analysisRow.RoutingPlan is null && analysisRow.DegradationNotice is null
+            && !cache.TryGetValue($"triage:{analysisRow.Id}", out _))
         {
             try
             {
@@ -67,6 +76,7 @@ public static class VerdictEndpoints
                     new object[] { analysisRow.Id.ToString() },
                     DramatiqQueues.AnalysisPaid, // story 2.5: interactive LLM work → W1
                     ct);
+                cache.Set($"triage:{analysisRow.Id}", true, TimeSpan.FromMinutes(10));
             }
             catch
             {

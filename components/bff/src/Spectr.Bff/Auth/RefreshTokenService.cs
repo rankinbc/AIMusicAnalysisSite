@@ -12,6 +12,10 @@ public sealed class RefreshTokenService(AppDbContext db, IConfiguration config)
 
     public const string CookieName = "spectr_refresh";
 
+    // Fixed by design (PRP wave 1) — long enough for a burst of restored tabs to
+    // settle, short enough that a stolen pre-rotation cookie is useless in a minute.
+    public static readonly TimeSpan RotationGrace = TimeSpan.FromSeconds(60);
+
     // Returns (rawToken, persistedRow). Raw goes to the cookie; SHA-256(raw) is persisted.
     public async Task<(string Raw, RefreshToken Row)> IssueAsync(Guid userId, CancellationToken ct = default)
     {
@@ -39,7 +43,8 @@ public sealed class RefreshTokenService(AppDbContext db, IConfiguration config)
         return row;
     }
 
-    // Revoke current + issue new — atomic rotation.
+    // Revoke current + issue new — atomic rotation. ReplacedById marks the row as
+    // rotation-revoked (vs logout/reset), which qualifies it for the grace window.
     public async Task<(string Raw, RefreshToken Row)> RotateAsync(RefreshToken current, CancellationToken ct = default)
     {
         current.RevokedAt = DateTimeOffset.UtcNow;
@@ -51,9 +56,35 @@ public sealed class RefreshTokenService(AppDbContext db, IConfiguration config)
             TokenHash = HashRaw(raw),
             ExpiresAt = DateTimeOffset.UtcNow.AddDays(_days),
         };
+        current.ReplacedById = fresh.Id;
         db.RefreshTokens.Add(fresh);
         await db.SaveChangesAsync(ct);
         return (raw, fresh);
+    }
+
+    public sealed record ResolveResult(RefreshToken Row, bool GraceHit);
+
+    // Concurrent-refresh tolerance (E2.1): a token revoked BY ROTATION within `grace`
+    // still resolves as long as its successor is alive — the other tab won the rotation
+    // race and this tab's request carried the stale cookie. Rows revoked by logout or
+    // password reset never have a successor, so they never get grace.
+    public async Task<ResolveResult?> ResolveWithGraceAsync(string rawCookie, TimeSpan grace, CancellationToken ct = default)
+    {
+        var hash = HashRaw(rawCookie);
+        var row = await db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash, ct);
+        if (row is null) return null;
+
+        var now = DateTimeOffset.UtcNow;
+        if (row.RevokedAt is null)
+            return row.ExpiresAt >= now ? new ResolveResult(row, false) : null;
+
+        if (row.RevokedAt >= now - grace && row.ReplacedById is Guid succId)
+        {
+            var succ = await db.RefreshTokens.FirstOrDefaultAsync(t => t.Id == succId, ct);
+            if (succ is { RevokedAt: null } && succ.ExpiresAt >= now)
+                return new ResolveResult(row, true);
+        }
+        return null;
     }
 
     public async Task RevokeAsync(RefreshToken row, CancellationToken ct = default)

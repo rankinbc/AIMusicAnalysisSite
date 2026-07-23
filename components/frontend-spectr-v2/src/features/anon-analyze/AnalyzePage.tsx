@@ -155,7 +155,7 @@ export function AnonReportView({ vm, locked, onUnlock }: {
 
 // ── the page ────────────────────────────────────────────────────────────────
 
-type Stage = 'idle' | 'uploading' | 'processing' | 'report';
+type Stage = 'idle' | 'uploading' | 'processing' | 'report' | 'lost';
 
 export function AnalyzePage() {
   usePageMeta(
@@ -187,9 +187,11 @@ export function AnalyzePage() {
     ? 'uploading'
     : jobId === null
       ? 'idle'
-      : status === 'complete'
-        ? 'report'
-        : 'processing';
+      : job.lost
+        ? 'lost' // E1.1 — the job vanished for this device; no fake spinner
+        : status === 'complete'
+          ? 'report'
+          : 'processing';
 
   const resetToDropZone = useCallback(() => {
     setJobId(null);
@@ -279,6 +281,19 @@ export function AnalyzePage() {
                 </button>
               </p>
             )}
+          </section>
+        )}
+
+        {stage === 'lost' && (
+          <section className={s.center} data-testid="anon-lost">
+            <h2 className={s.stageTitle}>We lost track of this analysis</h2>
+            <p className={`mono ${s.stageHint}`}>
+              It may have been claimed on another device, expired, or your browser is
+              blocking the cookie that ties it to you.
+            </p>
+            <button type="button" className="btn primary" onClick={resetToDropZone}>
+              Start over
+            </button>
           </section>
         )}
 

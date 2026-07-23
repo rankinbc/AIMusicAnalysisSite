@@ -146,6 +146,9 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
   const [refGenre, setRefGenre] = useState(defaultGenre ?? '');
   const [stemRows, setStemRows] = useState<StemRow[]>([]);
   const [reviewStems, setReviewStems] = useState(false);
+  // E3.1: user chose to proceed without the classifier (it stalled/failed) —
+  // enables the role editors + confirm with rows defaulted to 'other'.
+  const [manualAssign, setManualAssign] = useState(false);
   const [perStem, setPerStem] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [mixDrag, setMixDrag] = useState(false);
@@ -256,6 +259,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
     setRefGenre(defaultGenre ?? '');
     setStemRows([]);
     setReviewStems(false);
+    setManualAssign(false);
     setPerStem(false);
     setPlayingId(null);
     setVersionId('');
@@ -649,6 +653,42 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
   };
 
   const classified = proposals.data?.classified ?? false;
+  const hasStems = stemRows.length > 0;
+  // E3.1: the proposals poll is bounded (terminalPoll, ~4 min / 3 errors), but
+  // its final unchanged-data tick doesn't re-render this component (structural
+  // sharing → no notify), so the stalled state needs its OWN clock. The timer
+  // matches the poll budget; whichever fires, the spinner stops lying. If a
+  // late classification still lands, `classified` flips true and wins.
+  const [stallNonce, setStallNonce] = useState(0); // bumped by Retry
+  const [stallTimerFired, setStallTimerFired] = useState(false);
+  useEffect(() => {
+    if (phase !== 'review' || classified || manualAssign || !hasStems) {
+      setStallTimerFired(false);
+      return;
+    }
+    const h = setTimeout(() => setStallTimerFired(true), 250_000);
+    return () => clearTimeout(h);
+  }, [phase, classified, manualAssign, hasStems, stallNonce]);
+
+  const classificationStalled =
+    phase === 'review' &&
+    !classified &&
+    !manualAssign &&
+    hasStems &&
+    (stallTimerFired || proposals.isError);
+
+  const retryClassification = async () => {
+    try {
+      await fetcher<unknown>({ url: `/versions/${versionId}/stems/classify`, method: 'POST' });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not restart classification');
+      return;
+    }
+    setStallTimerFired(false);
+    setStallNonce((n) => n + 1);
+    // Reset wipes the query's update counts so the bounded poll starts fresh.
+    await qc.resetQueries({ queryKey: ['stems', versionId] });
+  };
   // Depth gates (UX-DR29). Stems + .als are Pro-tier inputs to a NEW analysis —
   // gating them here (not delivered reports) keeps results-forever intact (AR15).
   // Locked only once we positively know the tier lacks the feature.
@@ -681,8 +721,38 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
               {phase === 'review' ? (
                 <>
                   <p className={s.subhead}>
-                    {classified ? 'Confirm stem roles' : 'Classifying stems…'}
+                    {classified
+                      ? 'Confirm stem roles'
+                      : manualAssign
+                        ? 'Assign stem roles manually'
+                        : classificationStalled
+                          ? 'Stem classification failed'
+                          : 'Classifying stems…'}
                   </p>
+                  {classificationStalled && (
+                    <div className={s.optionGroup}>
+                      <p className={s.dropHint}>
+                        The classifier didn&apos;t respond — the analysis worker may be
+                        down. Retry, or assign the roles yourself and continue.
+                      </p>
+                      <div className={s.stallActions}>
+                        <button
+                          type="button"
+                          className="btn sm"
+                          onClick={() => void retryClassification()}
+                        >
+                          Retry classification
+                        </button>
+                        <button
+                          type="button"
+                          className="btn sm ghost"
+                          onClick={() => setManualAssign(true)}
+                        >
+                          Assign roles manually
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <div className={s.stemTable}>
                     {stemRows.map((r) => (
                       <div key={r.localId} className={s.stemItem}>
@@ -1113,7 +1183,11 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                 <button
                   type="button"
                   onClick={handleConfirm}
-                  disabled={busy || !classified || buildConfirmPayload(stemRows).length === 0}
+                  disabled={
+                    busy ||
+                    !(classified || manualAssign) ||
+                    buildConfirmPayload(stemRows).length === 0
+                  }
                   className={`${f.button} ${f.buttonPrimary}`}
                 >
                   {busy ? 'Starting…' : 'Confirm & analyze'}

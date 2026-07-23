@@ -152,6 +152,28 @@ function ResultsPage() {
     );
   }
 
+  // E5.6: awaiting_stem_mapping never resolves on its own — the stems review on
+  // the song page owns the next step. Honest copy instead of an eternal spinner
+  // (the useJob poll already treats this status as terminal).
+  if (job.data?.status === 'awaiting_stem_mapping') {
+    return (
+      <FrameWithBack songId={songId}>
+        <div className={s.failPanel}>
+          <p className={s.failTitle}>Waiting on stem role confirmation.</p>
+          <p>
+            This analysis starts after you finish the stems review — confirm the
+            detected roles from the song page.
+          </p>
+          <p className={s.failFooter}>
+            <Link to="/songs/$songId" params={{ songId }}>
+              Go to the song page →
+            </Link>
+          </p>
+        </div>
+      </FrameWithBack>
+    );
+  }
+
   return (
     <FrameWithBack songId={songId}>
       <h1 className={s.heading}>Analysis in progress</h1>

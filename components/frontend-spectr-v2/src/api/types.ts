@@ -1095,9 +1095,12 @@ export interface Phase7Data {
   /** UI state for the arrangement score:
    *  - `pending`     — structure detection (allin1) is running in the background;
    *  - `unavailable` — the detector isn't set up (Docker/image missing);
+   *  - `failed`      — the background structure job crashed (E5.1);
    *  - `scored`      — a real arrangement score is present.
    *  Absent on older analyses. */
-  arrangement_status?: 'pending' | 'unavailable' | 'scored';
+  arrangement_status?: 'pending' | 'unavailable' | 'failed' | 'scored';
+  /** Truncated failure reason, written alongside arrangement_status='failed'. */
+  arrangement_error?: string;
 }
 
 /** Phase 8 — Ableton project parse. Only populated when user uploaded .als. */
@@ -1343,7 +1346,13 @@ export interface RoutingPlanDto {
  *  records, so the field names here are camelCase. The enum string literals
  *  (`reason`) are passed through verbatim from the Python gateway.
  */
-export type DegradationReason = 'tier_budget' | 'global_budget' | 'circuit_breaker';
+export type DegradationReason =
+  | 'tier_budget'
+  | 'global_budget'
+  | 'circuit_breaker'
+  // Wave 1 (E5.3): Triage hit a terminal LLM/parse failure — rule-engine
+  // findings only, and the BFF stops re-enqueuing triage.
+  | 'triage_failed';
 
 export interface DegradationNoticeDto {
   reason: DegradationReason;

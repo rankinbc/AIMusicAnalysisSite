@@ -6,7 +6,7 @@
  * fetches against /api/anon/* (no auth token, no fetcher 401-refresh dance).
  */
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { JobStatusDto } from '../../api/types';
 
@@ -98,17 +98,43 @@ export function useAnonCurrentJob(enabled: boolean) {
   });
 }
 
-/** Poll the device-scoped job status while processing. */
+/** Poll the device-scoped job status while processing.
+ *
+ *  E1.1 — the documented exception to terminalPoll: anonGet maps 404 → NULL
+ *  RESOLVED DATA (not an error), so the shared helper's ApiError-404 stop can
+ *  never fire here. A streak of 3 consecutive nulls means the job is gone for
+ *  this device (cookies blocked, claimed on another device, 72 h purge) —
+ *  `lost` flips true and polling stops instead of spinning forever. */
 export function useAnonJob(jobId: string | null) {
-  return useQuery({
+  const [lost, setLost] = useState(false);
+  const nullStreak = useRef(0);
+  useEffect(() => {
+    nullStreak.current = 0;
+    setLost(false);
+  }, [jobId]);
+
+  const query = useQuery({
     queryKey: ['anon', 'jobs', jobId],
-    queryFn: () => anonGet<JobStatusDto>(`/api/anon/jobs/${jobId}`),
+    queryFn: async () => {
+      const r = await anonGet<JobStatusDto>(`/api/anon/jobs/${jobId}`);
+      if (r === null) {
+        nullStreak.current += 1;
+        if (nullStreak.current >= 3) setLost(true);
+      } else {
+        nullStreak.current = 0;
+      }
+      return r;
+    },
     enabled: Boolean(jobId),
     refetchInterval: (q) => {
+      if (nullStreak.current >= 3) return false;
+      if (q.state.errorUpdateCount >= 3) return false;
       const s = q.state.data?.status;
       return s === 'complete' || s === 'failed' ? false : 2000;
     },
+    retry: false,
   });
+  return { ...query, lost };
 }
 
 /** Device-scoped REDUCED results once the job completes. */
