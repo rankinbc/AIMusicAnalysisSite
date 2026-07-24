@@ -439,14 +439,19 @@ public static class CoachConversationEndpoints
                 FullMode = BoundedChannelFullMode.DropOldest,
             });
 
-        void Handler(RedisChannel _, RedisValue value)
+        void Handler(ChannelMessage msg)
         {
-            var payload = value.ToString();
+            var payload = msg.Message.ToString();
             if (!string.IsNullOrEmpty(payload))
                 frames.Writer.TryWrite(payload);
         }
 
-        await sub.SubscribeAsync(channelName, Handler);
+        // Ordered form: ChannelMessageQueue processes messages one at a time,
+        // in the order received — the delegate SubscribeAsync(channel, Handler)
+        // overload used previously gives no such guarantee, even for messages
+        // on the same channel (confirmed bug, PRPs/coach-stream-ordering-fix.md).
+        var messageQueue = await sub.SubscribeAsync(channelName);
+        messageQueue.OnMessage(Handler);
 
         try
         {
@@ -467,7 +472,7 @@ public static class CoachConversationEndpoints
         }
         finally
         {
-            try { await sub.UnsubscribeAsync(channelName, Handler); } catch { /* best-effort */ }
+            try { await messageQueue.UnsubscribeAsync(); } catch { /* best-effort */ }
             frames.Writer.TryComplete();
 
             // Client disconnect → flag the worker to stop generating mid-stream.
