@@ -1,0 +1,100 @@
+/* Shared read-only device-chain renderer. Ported verbatim from
+   FixRackPanel.module.css so the Coach Mix row, preset rows, and the preset
+   modal render device modules identically. */
+
+.rack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.rackTitle {
+  font-weight: 600;
+  font-size: 13px;
+}
+.emptyRack {
+  color: var(--muted);
+  font-size: 12.5px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px dashed var(--border, rgba(255, 255, 255, 0.14));
+  background: var(--surface-2, rgba(255, 255, 255, 0.02));
+}
+
+/* signal-flow bar */
+.chainbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.03));
+  font-size: 11.5px;
+}
+.flowEnd {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.node {
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--ac) 40%, transparent);
+  color: var(--ac);
+  white-space: nowrap;
+}
+
+/* module cards */
+.modules {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+}
+.mod {
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  border-left: 2px solid var(--ac);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.02));
+}
+.modHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.modGlyph {
+  color: var(--ac);
+  font-size: 14px;
+}
+.modLabel {
+  font-weight: 600;
+  font-size: 12.5px;
+  flex: 1 1 auto;
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.dot.on {
+  background: var(--accent);
+}
+.modParams {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.param {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11.5px;
+}
+.paramLabel {
+  color: var(--muted);
+}
+.paramVal {
+  color: var(--text);
+}

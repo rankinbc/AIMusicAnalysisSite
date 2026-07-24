@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 
-import { MANIFEST, enabledModuleIds, moduleParams, readFixChain } from './fix-rack-helpers';
+import { enabledModuleIds } from './fix-rack-helpers';
+import { RackView } from './RackView';
 import { useFixRackGeneration, type FixRackGenPhase } from './useFixRackGeneration';
 import s from './FixRackPanel.module.css';
 
@@ -72,7 +73,6 @@ export function FixRackPanel({ jobId, versionId, committedCount, genPhase, onGen
   // (No empty-chain state: the arbiter always scaffolds at least a ceiling
   // limiter, so a generated rack has >= 1 enabled module by construction.)
   if (rack) {
-    const chain = readFixChain(rack.chain)!;
     const meta = rack.coachMeta;
     return (
       <div className={`card ${s.panel} ${s.ready}`}>
@@ -90,35 +90,7 @@ export function FixRackPanel({ jobId, versionId, committedCount, genPhase, onGen
           </div>
         </div>
 
-        <div className={`mono ${s.chainbar}`}>
-          <span className={s.flowEnd}>in</span>
-          {enabled.map((id) => (
-            <span key={id} className={s.node} style={{ ['--ac' as string]: MANIFEST.get(id)?.accent ?? 'var(--muted)' }}>
-              {MANIFEST.get(id)?.glyph ?? '·'} {MANIFEST.get(id)?.label ?? id}
-            </span>
-          ))}
-          <span className={s.flowEnd}>out</span>
-        </div>
-
-        <div className={s.modules}>
-          {enabled.map((id) => (
-            <div key={id} className={s.mod} style={{ ['--ac' as string]: MANIFEST.get(id)?.accent ?? 'var(--muted)' }}>
-              <div className={s.modHead}>
-                <span className={s.modGlyph}>{MANIFEST.get(id)?.glyph ?? '·'}</span>
-                <span className={s.modLabel}>{MANIFEST.get(id)?.label ?? id}</span>
-                <span className={`${s.dot} ${s.on}`} title="enabled in the chain" />
-              </div>
-              <div className={s.modParams}>
-                {moduleParams(id, chain.modules[id]).map((p, i) => (
-                  <div key={i} className={s.param}>
-                    <span className={s.paramLabel}>{p.label}</span>
-                    <span className={`mono ${s.paramVal}`}>{p.val}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+        <RackView chain={rack.chain} />
 
         {/* Pre-port presets (and unparseable coach_meta) have no meta at all —
             say nothing rather than falsely claim "no changes were needed"
