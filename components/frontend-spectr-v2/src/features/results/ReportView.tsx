@@ -11,7 +11,6 @@ import {
   useVerdicts,
   useVersionFiles,
 } from '../../api/hooks';
-import { useFixRackGeneration } from './useFixRackGeneration';
 import { UpgradeSheet } from '../../components/UpgradeSheet';
 import {
   isFinalJson,
@@ -33,12 +32,10 @@ import { AnalysisCompleteModal } from './AnalysisCompleteModal';
 import { DegradationBanner } from './DegradationBanner';
 import { LlmDegradationNotice } from './LlmDegradationNotice';
 import { CoachTab } from './CoachTab';
-import { CoachMixModal } from './CoachMixModal';
 import { ExportModal } from './ExportModal';
-import { FixModal } from './FixModal';
 import { ProjectTab } from './ProjectTab';
 import { ProjectUnlock } from './ProjectUnlock';
-import { RackSidebar } from './RackSidebar';
+import { SendToListenCard } from './SendToListenCard';
 import { ReferenceTab } from './ReferenceTab';
 import { TrackInfoTab } from './TrackInfoTab';
 import { DebugTab } from './DebugTab';
@@ -155,35 +152,12 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
   );
 
   const navigate = useNavigate();
-  const audition = useCallback(() => {
-    if (!versionId) {
-      toast.error('No version attached — open Listen from the song page.');
-      return;
-    }
-    void navigate({ to: '/listen-rack/$versionId', params: { versionId } });
-  }, [navigate, versionId]);
 
-  // ── Fix Rack (né "Coach Mix", story 12.6) — generation lifecycle is shared
-  // between the coach header button and the sidebar panel via one hook, which
-  // also owns the error/timeout failure paths. ──
-  const {
-    phase: fixRackPhase,
-    rack: fixRackData,
-    generate: generateCoachMix,
-  } = useFixRackGeneration(jobId);
-  // error/timeout map to 'idle' here so the header button reverts to
-  // "Generate Fix Rack"; the detailed error UI lives in the panel/modal.
-  const coachMixState: 'idle' | 'generating' | 'ready' = fixRackData
-    ? 'ready'
-    : fixRackPhase === 'generating'
-      ? 'generating'
-      : 'idle';
-
-  // Fix Rack + Game Plan open in modals (the sidebar carries compact entries).
+  // Fix-rack generation now lives inside SendToListenCard (its own
+  // useFixRackGeneration instance); ReportView only owns the committed set +
+  // the Game Plan export.
   const committed = useMemo(() => moves.filter((m) => committedIds.has(m.id)), [moves, committedIds]);
-  const [coachMixOpen, setCoachMixOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
-  const [fixModalMove, setFixModalMove] = useState<Move | null>(null);
   const downloadGamePlan = useCallback(() => {
     const md = moveToMarkdown(committed, trackName);
     const blob = new Blob([md], { type: 'text/markdown' });
@@ -344,8 +318,6 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
                 onToggleCommit={toggleCommit}
                 onAddInputs={onAddInputs}
                 onUnlockAction={onUnlockAction}
-                onGenerateCoachMix={generateCoachMix}
-                coachMixState={coachMixState}
                 credits={null}
               />
             )}
@@ -402,17 +374,14 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
           </div>
         </main>
 
-        <RackSidebar
-          versionId={versionId}
-          moves={moves}
-          committedIds={committedIds}
-          onRemove={toggleCommit}
-          onOpenFix={setFixModalMove}
-          onAudition={audition}
-          coachMixState={coachMixState}
-          onOpenCoachMix={() => setCoachMixOpen(true)}
-          onOpenGamePlan={() => setExportOpen(true)}
-        />
+        <aside className="side">
+          <SendToListenCard
+            jobId={jobId}
+            versionId={versionId}
+            committedCount={committed.length}
+            onOpenGamePlan={() => setExportOpen(true)}
+          />
+        </aside>
       </div>
 
       {versionId && (
@@ -441,26 +410,6 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
           toast.info(`“${title}” is in your reference library — re-analyze this version to compare against it.`)
         }
       />
-
-      {fixModalMove && (
-        <FixModal
-          move={fixModalMove}
-          onRemove={toggleCommit}
-          onClose={() => setFixModalMove(null)}
-        />
-      )}
-
-      {coachMixOpen && (
-        <CoachMixModal
-          jobId={jobId}
-          versionId={versionId}
-          trackName={trackName}
-          committedCount={committed.length}
-          genPhase={fixRackPhase}
-          onGenerate={generateCoachMix}
-          onClose={() => setCoachMixOpen(false)}
-        />
-      )}
 
       {exportOpen && (
         <ExportModal

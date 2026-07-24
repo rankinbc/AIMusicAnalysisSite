@@ -171,7 +171,13 @@ function GenreVerdict({ percentile, inRange, total }: { percentile: number; inRa
           <span className={s.n}>{percentile}</span>th percentile
         </div>
         <div className={s.vtake}>
-          top {100 - percentile}% · {inRange} of {total} placed metrics in range
+          top {100 - percentile}%
+          {total > 0 && (
+            <>
+              {' · '}
+              {inRange} of {total} placed metrics in range
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -190,7 +196,7 @@ function fmtSigned(v: number) {
   return `${v > 0 ? '+' : ''}${v.toFixed(1)}`;
 }
 
-function GapRow({ m, onGoToFindings }: { m: GenreGapMetric; onGoToFindings?: () => void }) {
+function GapRow({ m, onGoToFindings }: { m: GenreGapMetric; onGoToFindings?: (() => void) | undefined }) {
   const u = m.unit ? ` ${m.unit}` : '';
   return (
     <div className={`${s.gap} ${m.inRange ? '' : s.out}`} title={m.description}>
@@ -236,7 +242,7 @@ function DeltaBar({ mag, warn }: { mag: number; warn: boolean }) {
   );
 }
 
-function DeltaRow({ d, onGoToFindings }: { d: RefDeltaRow; onGoToFindings?: () => void }) {
+function DeltaRow({ d, onGoToFindings }: { d: RefDeltaRow; onGoToFindings?: (() => void) | undefined }) {
   const u = d.unit ? ` ${d.unit}` : '';
   return (
     <div className={s.rd}>

@@ -27,8 +27,6 @@ interface CoachTabProps {
   onAddInputs: () => void;
   /** Story 12.5: unlock chips open the REAL upload dialogs (owned by ReportView). */
   onUnlockAction?: (intent: 'add_stems' | 'add_reference') => void;
-  onGenerateCoachMix: () => void;
-  coachMixState: 'idle' | 'generating' | 'ready';
   credits: number | null;
 }
 
@@ -44,8 +42,6 @@ export function CoachTab({
   onToggleCommit,
   onAddInputs,
   onUnlockAction,
-  onGenerateCoachMix,
-  coachMixState,
   credits,
 }: CoachTabProps) {
   const [optimisticRunning, setOptimisticRunning] = useState<ReadonlySet<string>>(
@@ -160,8 +156,6 @@ export function CoachTab({
     />
   );
 
-  const mixDisabled = queued === 0 || coachMixState === 'generating';
-
   return (
     <div>
       <CoachChat
@@ -171,27 +165,13 @@ export function CoachTab({
         measurementsCount={measurementsCount}
         {...(onUnlockAction ? { onUnlockAction } : {})}
         headerActions={
-          <>
-            <button type="button" className="spec-btn" onClick={() => setSpecOpen(true)}>
-              <span aria-hidden>✦</span> Specialist Team
-              <span className="mono sb-counts">
-                <span className="cnt">{ranSlugs.size} run</span>
-                {suggestedCount > 0 && <span className="cnt sug">{suggestedCount} suggested</span>}
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`genmix-btn${coachMixState === 'ready' ? ' ready' : ''}`}
-              onClick={onGenerateCoachMix}
-              disabled={mixDisabled}
-            >
-              {coachMixState === 'generating'
-                ? 'Compiling…'
-                : coachMixState === 'ready'
-                  ? '↻ Regenerate Fix Rack'
-                  : '▣ Generate Fix Rack'}
-            </button>
-          </>
+          <button type="button" className="spec-btn" onClick={() => setSpecOpen(true)}>
+            <span aria-hidden>✦</span> Specialist Team
+            <span className="mono sb-counts">
+              <span className="cnt">{ranSlugs.size} run</span>
+              {suggestedCount > 0 && <span className="cnt sug">{suggestedCount} suggested</span>}
+            </span>
+          </button>
         }
       />
 

@@ -151,7 +151,9 @@ export function buildGenreSection(
   }
 
   return {
-    confident: percentile != null && metrics.length > 0,
+    // A real percentile means we CAN place the mix (show the ring), even if no
+    // per-metric gap rows are available. Absent percentile → honest can't-place.
+    confident: percentile != null,
     percentile,
     inRange: metrics.filter((m) => m.inRange).length,
     total: metrics.length,

@@ -47,8 +47,10 @@ describe('presetRows', () => {
   });
 
   it('carries presetId for the Listen carry-over handle', () => {
-    const rows = presetRows(fixRack({ presetId: undefined }), [userPreset('a', ['eq'])]);
-    expect(rows[0].presetId).toBeUndefined(); // pre-12.4 cached rack
+    // A pre-12.4 cached rack with no presetId (omitted, not explicitly undefined).
+    const noId: FixRackDto = { name: 'Coach Mix', chain: chain(['eq', 'limiter']), createdAt: '2026-07-24T00:00:00Z' };
+    const rows = presetRows(noId, [userPreset('a', ['eq'])]);
+    expect(rows[0].presetId).toBeUndefined();
     expect(rows[1].presetId).toBe('a');
   });
 });

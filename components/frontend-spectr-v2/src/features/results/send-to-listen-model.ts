@@ -12,7 +12,7 @@ export interface PresetRow {
   auto: boolean;
   chain: unknown;
   /** Listen carry-over handle (?fixPreset=) — absent on pre-12.4 cached racks. */
-  presetId?: string;
+  presetId?: string | undefined;
   moduleCount: number;
 }
 
