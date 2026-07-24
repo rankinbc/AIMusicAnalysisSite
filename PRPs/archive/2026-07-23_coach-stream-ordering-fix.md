@@ -1,6 +1,6 @@
 # Coach Stream Chunk-Ordering Fix (follow-up to item 2)
 
-## Status: design approved, ready for implementation planning
+## Status: fixed and verified — both Coach and Room now use the ordered ChannelMessageQueue subscribe form; both regression tests pass reliably (10/10 local runs)
 
 This PRP tracks a confirmed root cause discovered during
 `PRPs/archive/*_first-upload-trust-quickwins.md` Task 4 (item 2). That task's
