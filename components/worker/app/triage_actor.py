@@ -34,8 +34,10 @@ import logging
 import uuid
 
 import dramatiq
+from sqlalchemy import select
 
 from aimusic_shared.models import Analysis
+from aimusic_shared.models import Verdict as VerdictRow
 from aimusic_shared.verdicts.models import SpecialistRoutingPlan
 
 from . import obs
@@ -93,6 +95,24 @@ def run_triage(analysis_id: str) -> None:
             caller_id = analysis.user_id  # for the metering row
             # cross-lane trace stitch (getattr: test stubs omit the column)
             obs.set_tag("job_id", getattr(analysis, "job_id", None))
+            # Phase C2 (tasks_dramatiq.py) runs the rule engine unconditionally
+            # before Triage fires — surface its findings so Triage stops
+            # reasoning half-blind. The `specialist` condition mirrors
+            # validator._is_deterministic() (a bare `source == "rule_engine"`
+            # filter alone would wrongly sweep in a mis-tagged specialist row —
+            # see _hydrate()'s source-mislabeling gotcha).
+            rule_rows = list(
+                s.execute(
+                    select(VerdictRow)
+                    .where(VerdictRow.analysis_id == aid)
+                    .where(VerdictRow.source == "rule_engine")
+                    .where(
+                        (VerdictRow.specialist == "rule_engine")
+                        | (VerdictRow.specialist.startswith("rule_engine."))
+                    )
+                    .order_by(VerdictRow.priority_score.desc())
+                ).scalars().all()
+            )
     except Exception:
         logger.exception("run_triage Phase A failed for %s", analysis_id)
         return
@@ -107,7 +127,7 @@ def run_triage(analysis_id: str) -> None:
         return
 
     # ── D: LLM call (via the metered gateway) ──────────────────────────────
-    user_msg = build_triage_user_message(flattened)
+    user_msg = build_triage_user_message(flattened, rule_rows)
     try:
         result = gateway.complete_sync(
             system=prompt_body,

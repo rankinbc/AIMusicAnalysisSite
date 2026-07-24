@@ -84,12 +84,21 @@ class _FakeSession:
     def execute(self, _stmt):
         outer = self
 
+        class _Scalars:
+            def all(self_inner):
+                # Only consulted by triage_actor.run_triage's rule-row query —
+                # the degraded-path tests below don't assert its contents.
+                return []
+
         class _Result:
             def first(self_inner):
                 return ("vrd_already",) if outer.preexisting_rule_rows else None
 
             def scalar_one(self_inner):
                 return None
+
+            def scalars(self_inner):
+                return _Scalars()
 
         return _Result()
 
@@ -304,6 +313,44 @@ def test_run_rule_engine_idempotent_when_rule_rows_already_exist(install_fake_se
 
     assert written == 0
     assert session.added == []
+
+
+def test_run_rule_engine_force_bypasses_existence_check(install_fake_sessions):
+    """Item 1: a post-genre-correction refresh must NOT be silently no-op'd
+    by the normal idempotency guard — force=True re-evaluates even though
+    rule-engine rows already exist."""
+    aid = uuid.uuid4()
+    analysis = _FakeAnalysis(aid, final_json=_clipping_analysis())
+    session = install_fake_sessions(analysis, preexisting_rule_rows=True)
+
+    written = degraded.run_rule_engine_for_analysis(aid, force=True)
+
+    assert written > 0
+    assert session.added != []
+
+
+def test_run_rule_engine_force_issues_a_delete_before_reevaluating(install_fake_sessions):
+    """force=True must delete the prior rule-engine rows (scoped to
+    source == "rule_engine" AND specialist == "rule_engine"/"rule_engine.*",
+    mirroring validator._is_deterministic()) rather than just re-inserting
+    on top of them."""
+    aid = uuid.uuid4()
+    analysis = _FakeAnalysis(aid, final_json=_clipping_analysis())
+    session = install_fake_sessions(analysis, preexisting_rule_rows=True)
+
+    executed_statements = []
+    orig_execute = session.execute
+
+    def spy_execute(stmt):
+        executed_statements.append(stmt)
+        return orig_execute(stmt)
+
+    session.execute = spy_execute  # type: ignore[method-assign]
+
+    degraded.run_rule_engine_for_analysis(aid, force=True)
+
+    from sqlalchemy.sql import Delete
+    assert any(isinstance(stmt, Delete) for stmt in executed_statements)
 
 
 def test_run_rule_engine_handles_missing_analysis(install_fake_sessions):

@@ -1,5 +1,6 @@
 import { CoverArt } from '../../ui/CoverArt';
 import { hueFromId } from '../../ui/hueFromId';
+import { GenreCorrectChip } from './GenreCorrectChip';
 import { fmtGenre } from './helpers/format';
 import { ResultsPlayer } from './ResultsPlayer';
 
@@ -15,6 +16,9 @@ export interface SongHeaderInputs {
 interface SongHeaderProps {
   songId: string;
   versionId: string | null;
+  /** Item 1 (genre confirm/correct) — the report jobId the correct-genre
+   *  action targets. Undefined on surfaces with no completed report yet. */
+  jobId?: string | undefined;
   versionLabel: string | null;
   trackName: string;
   genre: string | null | undefined;
@@ -37,6 +41,7 @@ const INPUT_DEFS: { key: keyof SongHeaderInputs; label: string; add: string }[] 
 export function SongHeader({
   songId,
   versionId,
+  jobId,
   versionLabel,
   trackName,
   genre,
@@ -61,7 +66,17 @@ export function SongHeader({
             <span className="rh-name">{trackName}</span>
             {versionLabel && <span className="rh-ver">{versionLabel}</span>}
           </div>
-          {genreLabel && <div className="rh-genre">{genreLabel}</div>}
+          {genreLabel && (
+            <div className="rh-genre">
+              {genreLabel}
+              {jobId && (
+                <>
+                  {' '}
+                  <GenreCorrectChip jobId={jobId} genre={genre} />
+                </>
+              )}
+            </div>
+          )}
 
           <div className="rh-chips">
             <span className="rh-chips-label">Analyzed from</span>

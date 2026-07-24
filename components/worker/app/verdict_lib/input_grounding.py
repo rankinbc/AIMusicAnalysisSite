@@ -175,11 +175,13 @@ def build_triage_user_message(
 ) -> str:
     """Triage user message: grounding preamble + analysis + rule-engine findings.
 
-    ``rule_verdicts`` is the rule-engine output (legacy api orchestrator path);
-    the worker lazy-fire path never runs the rule engine and passes ``None``,
-    which renders an empty ``rule_engine_findings`` list. Each verdict is
-    duck-typed for ``category`` / ``severity`` / ``headline`` to avoid a model
-    import cycle.
+    ``rule_verdicts`` is the rule-engine output. The worker's ``run_triage``
+    actor now queries the already-persisted rule-engine ``Verdict`` rows
+    (Phase C2 of ``analyze_audio_job`` runs the rule engine unconditionally
+    before Triage fires) and passes them through; callers that have no
+    rule-engine rows yet pass ``None``, which renders an empty
+    ``rule_engine_findings`` list. Each verdict is duck-typed for
+    ``category`` / ``severity`` / ``headline`` to avoid a model import cycle.
     """
     rule_summary = [
         {

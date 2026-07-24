@@ -141,6 +141,14 @@
     font-family: 'JetBrains Mono', monospace;
     font-weight: 700;
   }
+  /* Item 1 — genre confirm/correct chip: inline group of option chips,
+     same gap rhythm as .rh-chips, no new visual language. */
+  .chip-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
   .rh-genre {
     font-size: 12.5px;
     color: var(--text-2);
@@ -1049,6 +1057,11 @@
     color: var(--violet);
     border-color: rgba(167, 139, 250, 0.26);
   }
+  .move-src.suspected {
+    color: var(--sev-moderate);
+    border-color: rgba(251, 191, 36, 0.3);
+    border-style: dashed;
+  }
   .move-foot .spacer {
     flex: 1;
   }
@@ -1721,6 +1734,11 @@
   .finding-spec .src.ai {
     color: var(--violet);
     border-color: rgba(167, 139, 250, 0.3);
+  }
+  .finding-spec .src.suspected {
+    color: var(--sev-moderate);
+    border-color: rgba(251, 191, 36, 0.35);
+    border-style: dashed;
   }
   .finding-head {
     font-size: 15px;

@@ -97,6 +97,60 @@ public sealed class RerunPhaseTests(WebApplicationFactory<Program> factory)
         Assert.Empty(queue.Calls);
     }
 
+    // ── item 1: genre_hint validation + wiring ──────────────────────────────
+
+    [SkippableFact]
+    public async Task RerunPhase_GenreHint_On_NonPhase2_Rejected()
+    {
+        await TestDb.RequireAsync(_factory);
+        var (client, queue) = NewClient();
+        var userId = await Authenticate(client);
+        var jobId = await SeedAnalysis(userId);
+
+        var resp = await client.PostAsJsonAsync(
+            $"/api/reports/{jobId}/phases/4/rerun",
+            new RerunPhaseRequest(null, "techno"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        Assert.Empty(queue.Calls);
+    }
+
+    [SkippableFact]
+    public async Task RerunPhase_Invalid_GenreHint_Value_Rejected()
+    {
+        await TestDb.RequireAsync(_factory);
+        var (client, queue) = NewClient();
+        var userId = await Authenticate(client);
+        var jobId = await SeedAnalysis(userId);
+
+        var resp = await client.PostAsJsonAsync(
+            $"/api/reports/{jobId}/phases/2/rerun",
+            new RerunPhaseRequest(null, "dubstep"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        Assert.Empty(queue.Calls);
+    }
+
+    [SkippableFact]
+    public async Task RerunPhase_Valid_GenreHint_Enqueues_With_Hint_In_Payload()
+    {
+        await TestDb.RequireAsync(_factory);
+        var (client, queue) = NewClient();
+        var userId = await Authenticate(client);
+        var jobId = await SeedAnalysis(userId);
+
+        var resp = await client.PostAsJsonAsync(
+            $"/api/reports/{jobId}/phases/2/rerun",
+            new RerunPhaseRequest(null, "techno"));
+
+        Assert.Equal(HttpStatusCode.Accepted, resp.StatusCode);
+        Assert.Single(queue.Payloads);
+        var (task, args) = queue.Payloads.First();
+        Assert.Equal(DramatiqTasks.RerunPhase, task);
+        // args: [rerunJobId, analysisId, phase, referenceProfile, genreHint]
+        Assert.Equal("techno", args[4]);
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private static async Task<Guid> Authenticate(HttpClient client)

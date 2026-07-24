@@ -101,6 +101,11 @@ describe('verdictToMove', () => {
     expect(verdictToMove(makeVerdict({ userState: { applied: true, dismissed: false, feedback: null } })).status).toBe('committed');
     expect(verdictToMove(makeVerdict({ userState: { applied: false, dismissed: true, feedback: null } })).status).toBe('dismissed');
   });
+
+  it('carries the suspected flag through from the verdict (item 6)', () => {
+    expect(verdictToMove(makeVerdict({ suspected: true })).suspected).toBe(true);
+    expect(verdictToMove(makeVerdict({ suspected: false })).suspected).toBe(false);
+  });
 });
 
 describe('ruleFixToMove', () => {
@@ -124,6 +129,11 @@ describe('ruleFixToMove', () => {
     expect(m.isRule).toBe(true);
     expect(m.specialist).toBeNull();
     expect(m.impact).toBeGreaterThan(0);
+  });
+
+  it('carries no suspected flag (the string baseline has no such data)', () => {
+    const m = ruleFixToMove('Master bus: leave headroom', 0);
+    expect(m.suspected).toBeFalsy();
   });
 });
 

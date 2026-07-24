@@ -384,3 +384,57 @@ class TestPipeline:
         assert _score_to_grade(65.0) == "D"
         assert _score_to_grade(55.0) == "F"
         assert _score_to_grade(0.0) == "F"
+
+    def test_danceability_uses_real_transients_per_second(self, tmp_path):
+        """finalize_result must source the rhythm term from phase1's
+        transients_per_second, not the dead phase2 onset_count fallback
+        (which is always 0 since phase2_genre never emits onset_count)."""
+        from audio_analysis.pipeline import finalize_result
+
+        p1_with_rhythm = {"bpm": 128.0, "low_energy": 0.2, "transients": {"transients_per_second": 6.0}}
+        p1_no_rhythm = {"bpm": 128.0, "low_energy": 0.2, "transients": {"transients_per_second": 0.0}}
+        phase_results = [{"phase": 1, "status": "ok"}, {"phase": 2, "status": "ok"}]
+
+        rich = finalize_result(
+            {1: p1_with_rhythm, 2: {"genre": "house"}}, phase_results, "x.wav"
+        )
+        silent = finalize_result(
+            {1: p1_no_rhythm, 2: {"genre": "house"}}, phase_results, "x.wav"
+        )
+        assert rich["danceability_score"] > silent["danceability_score"]
+
+    def test_danceability_falls_back_when_transients_missing(self):
+        """Fixtures/legacy phase-1 dicts with no 'transients' key must still
+        fall through to the degenerate-input default (4.0), not raise."""
+        from audio_analysis.pipeline import finalize_result
+
+        phase_results = [{"phase": 1, "status": "ok"}, {"phase": 2, "status": "ok"}]
+        result = finalize_result(
+            {1: {"bpm": 128.0, "low_energy": 0.2}, 2: {"genre": "house"}},
+            phase_results,
+            "x.wav",
+        )
+        assert isinstance(result["danceability_score"], int)
+
+    def test_pipeline_danceability_reflects_real_track_rhythm(self, tmp_path):
+        """End-to-end: a real analyzed track's danceability_score must not be
+        zeroed-out by a dead onset_density fallback."""
+        from audio_analysis import run_pipeline
+        from audio_analysis.scorers.danceability import danceability_score
+
+        wav = make_test_wav(tmp_path)
+        with patch("audio_analysis.phases.phase4_stems.get_model", return_value=None):
+            result = run_pipeline(str(wav))
+
+        # Recompute what the score would have been under the old dead-fallback
+        # formula (onset_density always 0.0 for a real track) to prove the fix
+        # actually changes the result, not just that it runs.
+        p1 = next(p for p in result["phases"] if p["phase"] == 1)
+        stale = danceability_score(
+            bpm=p1["data"]["bpm"],
+            onset_density=0.0,
+            low_energy=p1["data"]["low_energy"],
+            genre="house",
+        )
+        assert result["danceability_score"] != stale
+        assert p1["data"]["transients"]["transients_per_second"] > 0.0

@@ -75,3 +75,23 @@ describe('FindingsTab track-name chips (FR12)', () => {
     expect(html).not.toMatch(/<button[^>]*>SUB-DEEP<\/button>/);
   });
 });
+
+describe('FindingsTab suspected flag (item 6)', () => {
+  it('renders an "Unverified" chip when suspected is true', () => {
+    const html = renderToStaticMarkup(
+      <FindingsTab
+        verdicts={[makeVerdict({ suspected: true })]}
+        onGoToActions={() => {}}
+      />,
+    );
+    expect(html).toContain('Unverified');
+    expect(html).toMatch(/class="src suspected"/);
+  });
+
+  it('does not render the "Unverified" chip when suspected is false', () => {
+    const html = renderToStaticMarkup(
+      <FindingsTab verdicts={[makeVerdict({ suspected: false })]} onGoToActions={() => {}} />,
+    );
+    expect(html).not.toContain('Unverified');
+  });
+});

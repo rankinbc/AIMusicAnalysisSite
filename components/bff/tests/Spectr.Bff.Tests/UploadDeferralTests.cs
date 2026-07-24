@@ -24,16 +24,20 @@ internal sealed class RecordingJobQueue : IJobQueue
     // assert tier → queue. The 2-arg overload records the implicit `default`.
     public ConcurrentQueue<(string Task, string Queue)> Enqueues { get; } = new();
 
+    // Item 1: the payload args array itself, so tests can assert a specific
+    // positional arg (e.g. genre_hint) actually flowed into the dispatch.
+    public ConcurrentQueue<(string Task, object[] Args)> Payloads { get; } = new();
+
     public Task EnqueueAsync(string taskName, object[] args, CancellationToken ct = default)
-        => Record(taskName, DramatiqQueues.Default);
+        => Record(taskName, DramatiqQueues.Default, args);
 
     public Task EnqueueAsync(string taskName, object[] args, string queueName, CancellationToken ct = default)
-        => Record(taskName, queueName);
+        => Record(taskName, queueName, args);
 
     public Task EnqueueDelayedAsync(string taskName, object[] args, string queueName, TimeSpan delay, CancellationToken ct = default)
-        => Record(taskName, queueName);
+        => Record(taskName, queueName, args);
 
-    private Task Record(string taskName, string queueName)
+    private Task Record(string taskName, string queueName, object[] args)
     {
         // Story 4.3: registration now enqueues a verification send_email on
         // this same interface — irrelevant to every dispatch-count assertion
@@ -42,6 +46,7 @@ internal sealed class RecordingJobQueue : IJobQueue
         {
             Calls.Enqueue(taskName);
             Enqueues.Enqueue((taskName, queueName));
+            Payloads.Enqueue((taskName, args));
         }
         return Task.CompletedTask;
     }

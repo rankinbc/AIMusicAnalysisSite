@@ -25,8 +25,9 @@ class _Analysis:
 
 
 class _FakeSession:
-    def __init__(self, analysis):
+    def __init__(self, analysis, rule_rows=None):
         self._analysis = analysis
+        self._rule_rows = rule_rows or []
 
     def __enter__(self):
         return self
@@ -37,9 +38,22 @@ class _FakeSession:
     def get(self, _model, _aid):
         return self._analysis
 
+    def execute(self, _stmt):
+        rows = self._rule_rows
 
-def _setup(monkeypatch, analysis):
-    monkeypatch.setattr(ta.SessionFactory, "begin", lambda: _FakeSession(analysis))
+        class _Result:
+            def scalars(self_inner):
+                class _Scalars:
+                    def all(self_inner2):
+                        return rows
+
+                return _Scalars()
+
+        return _Result()
+
+
+def _setup(monkeypatch, analysis, rule_rows=None):
+    monkeypatch.setattr(ta.SessionFactory, "begin", lambda: _FakeSession(analysis, rule_rows))
     monkeypatch.setattr(ta, "load_triage", lambda: ("v1", "system prompt"))
     monkeypatch.setattr(ta, "load_triage_model", lambda: None)
     calls: dict = {"notice": None, "rules": 0}
@@ -91,6 +105,43 @@ def test_invalid_plan_writes_notice_and_runs_rules(monkeypatch):
     assert calls["notice"][1] == "triage_failed"
     assert calls["rules"] == 1
     assert analysis.routing_plan is None
+
+
+class _FakeRuleVerdict:
+    def __init__(self, category, severity, headline):
+        self.category = category
+        self.severity = severity
+        self.headline = headline
+
+
+def test_run_triage_includes_rule_engine_findings_in_user_message(monkeypatch):
+    """Task 2 / item 5: Triage's user message must carry the analysis's
+    already-persisted rule-engine findings, not just the flattened analysis."""
+    analysis = _Analysis()
+    rule_rows = [_FakeRuleVerdict("low_end", "severe", "Kick/bass collision")]
+    calls = _setup(monkeypatch, analysis, rule_rows=rule_rows)
+
+    class _Result:
+        text = (
+            '{"specialists_to_run": [], "skip": [], '
+            '"rationale": "ok", "estimated_total_tokens": 100}'
+        )
+
+    captured = {}
+
+    def spy(**kwargs):
+        captured["user"] = kwargs["user"]
+        return _Result()
+
+    monkeypatch.setattr(ta.gateway, "complete_sync", spy)
+
+    ta.run_triage(str(uuid.uuid4()))
+
+    assert calls["notice"] is None
+    assert "user" in captured
+    assert "rule_engine_findings" in captured["user"]
+    assert "Kick/bass collision" in captured["user"]
+    assert analysis.routing_plan is not None
 
 
 def test_existing_degradation_notice_short_circuits(monkeypatch):

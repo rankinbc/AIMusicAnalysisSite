@@ -35,9 +35,13 @@ public sealed record VersionFileEntry(
 // job to poll; the re-run updates the existing analysis in place.
 public sealed record RerunPhaseResponse(Guid JobId);
 
-// Optional body for a phase-6 re-run override: compare against a chosen profile.
-// kind "user" → setId (aggregate embedded by the server); kind "genre" → preset.
-public sealed record RerunPhaseRequest(ReferenceProfileRef? ReferenceProfile);
+// Optional body for a phase re-run override.
+// - ReferenceProfile: phase-6 only — compare against a chosen profile.
+//   kind "user" → setId (aggregate embedded by the server); kind "genre" → preset.
+// - GenreHint: phase-2 only (item 1) — a user genre CORRECTION. The server
+//   cascades the rerun across phases 2/3/5/6 (every genre-reading phase) and
+//   refreshes rule-engine findings; see ReportPhaseEndpoints.RerunPhase.
+public sealed record RerunPhaseRequest(ReferenceProfileRef? ReferenceProfile, string? GenreHint);
 public sealed record ReferenceProfileRef(string Kind, Guid? SetId, string? Preset);
 
 public sealed record VersionFilesResponse(Guid VersionId, List<VersionFileEntry> Files);

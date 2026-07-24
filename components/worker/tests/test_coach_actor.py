@@ -1127,3 +1127,50 @@ def test_phase_a_failure_publishes_error_frame(
     assert any(f["type"] == "error" for f in frames), (
         "Phase A failure must publish an error frame before _mark_error"
     )
+
+
+# ── item 6: `_load_verdicts_for_bundle` field-set assertions ──────────────
+
+
+def test_load_verdicts_for_bundle_includes_suspected(sqlite_db):
+    """Item 6: the coach's field-selection choke point must project
+    `suspected` so the LLM can hedge on unverified thresholds."""
+    from app import coach_actor  # noqa: PLC0415
+    from aimusic_shared.models import Verdict  # noqa: PLC0415
+
+    with sqlite_db.SessionFactory.begin() as s:
+        analysis_id = _seed_analysis(s)
+        s.add(Verdict(
+            id="vrd_suspected1",
+            analysis_id=analysis_id,
+            specialist="rule_engine.some_rule",
+            prompt_version="n/a",
+            model="n/a",
+            severity="moderate",
+            category="low_end",
+            confidence=0.8,
+            priority_score=60,
+            headline="Suspected low-end issue",
+            source="rule_engine",
+            suspected=True,
+        ))
+        s.add(Verdict(
+            id="vrd_confirmed1",
+            analysis_id=analysis_id,
+            specialist="rule_engine.other_rule",
+            prompt_version="n/a",
+            model="n/a",
+            severity="severe",
+            category="dynamics",
+            confidence=0.9,
+            priority_score=90,
+            headline="Confirmed dynamics issue",
+            source="rule_engine",
+            suspected=False,
+        ))
+
+    bundle = coach_actor._load_verdicts_for_bundle(analysis_id=analysis_id)
+    assert len(bundle) == 2
+    by_headline = {v["headline"]: v for v in bundle}
+    assert by_headline["Suspected low-end issue"]["suspected"] is True
+    assert by_headline["Confirmed dynamics issue"]["suspected"] is False

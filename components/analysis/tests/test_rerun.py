@@ -99,6 +99,38 @@ def test_rerun_phase8_reparses_als(tmp_path):
     assert after[1]["data"]["bpm"] == 128.0
 
 
+def test_rerun_phase2_forwards_genre_hint(tmp_path):
+    """Item 1: correcting the genre must actually reach phase2_genre.classify,
+    not silently stay hardcoded to None."""
+    wav = make_wav(tmp_path)
+    prior = _prior()
+    captured = {}
+
+    def fake_classify(_wav_path, _phase1, _progress_cb=None, genre_hint=None):
+        captured["genre_hint"] = genre_hint
+        return {"genre": genre_hint or "other", "confidence": 1.0, "bpm": 128.0}
+
+    with patch("audio_analysis.phases.phase2_genre.classify", side_effect=fake_classify):
+        merged = rerun_single_phase(2, str(wav), prior, genre_hint="techno")
+
+    assert captured["genre_hint"] == "techno"
+    after = {p["phase"]: p for p in merged["phases"]}
+    assert after[2]["data"]["genre"] == "techno"
+
+
+def test_rerun_non_phase2_ignores_genre_hint(tmp_path):
+    """genre_hint is only consulted for phase_num == 2 — other phases must not
+    even reference it (there is no genre_hint param on their signatures)."""
+    wav = make_wav(tmp_path)
+    prior = _prior()
+    with patch(
+        "audio_analysis.phases.phase3_genre_specific.score",
+        return_value={"total_score": 88.0},
+    ):
+        merged = rerun_single_phase(3, str(wav), prior, genre_hint="techno")
+    assert merged["overall_score"] == 88.0
+
+
 def test_rerun_failed_phase_stays_failed_without_corrupting_others(tmp_path):
     wav = make_wav(tmp_path)
     prior = _prior()

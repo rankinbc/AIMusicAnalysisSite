@@ -532,10 +532,19 @@ export interface RetryResponse {
 
 // POST /api/reports/{jobId}/phases/{phase}/rerun — id of the lightweight re-run
 // job to poll; the re-run updates the existing report in place.
-// NOTE (story 12.5): no frontend consumer today — kept as the BFF-contract
-// mirror for the surviving endpoint (see the useRerunPhase tombstone in hooks.ts).
+// Item 1 (genre confirm/correct): `useConfirmGenre` in hooks.ts is the first
+// live consumer — POSTs { genreHint } to phase 2 and lets the BFF cascade
+// into phases 3/5/6 + refresh rule-engine findings server-side.
 export interface RerunPhaseResponse {
   jobId: string;
+}
+
+// Body for POST /api/reports/{jobId}/phases/{phase}/rerun. `genreHint` is
+// phase-2-only (server rejects it on any other phase) and must be one of
+// Phase 2's own classifier categories — not free text.
+export interface RerunPhaseRequest {
+  referenceProfile?: { kind: string; setId?: string; preset?: string } | null;
+  genreHint?: string | null;
 }
 
 export interface StemUploadResponse {

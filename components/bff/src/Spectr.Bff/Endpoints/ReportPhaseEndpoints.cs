@@ -14,6 +14,12 @@ namespace Spectr.Bff.Endpoints;
 // lightweight re-run AnalysisJob (so the existing job-status/SSE infra surfaces it).
 public static class ReportPhaseEndpoints
 {
+    // Phase 2's actual classifier output vocabulary (phase2_genre.py) — the
+    // only genre_hint values the pipeline and the verdict-layer genre_map
+    // know how to resolve. Free text is deliberately not accepted.
+    private static readonly HashSet<string> ValidGenreHints =
+        new(StringComparer.OrdinalIgnoreCase) { "trance", "house", "techno", "dnb", "other" };
+
     public static IEndpointRouteBuilder MapReportPhaseEndpoints(this IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/reports/{jobId:guid}/phases").WithTags("reports").RequireAuthorization();
@@ -37,6 +43,15 @@ public static class ReportPhaseEndpoints
         // buttons appear (4/5/8 + retry-failed); the server just enforces the range.
         if (phase < 2 || phase > 9)
             return Results.BadRequest(new { error = "Phase must be 2–9. Phase 1 is a full re-analyze." });
+
+        // Item 1 — GenreHint is a phase-2-only genre CORRECTION that cascades
+        // into 3/5/6 worker-side; it makes no sense attached to any other phase.
+        if (!string.IsNullOrEmpty(body?.GenreHint) && phase != 2)
+            return ErrorEnvelope.Build(400, "genre_hint_requires_phase_2",
+                "GenreHint can only be set when phase == 2.");
+        if (!string.IsNullOrEmpty(body?.GenreHint) && !ValidGenreHints.Contains(body!.GenreHint))
+            return ErrorEnvelope.Build(400, "invalid_genre_hint",
+                $"GenreHint must be one of: {string.Join(", ", ValidGenreHints)}.");
 
         var userId = currentUser.UserId();
         var analysis = await db.Analyses.AsNoTracking()
@@ -74,7 +89,11 @@ public static class ReportPhaseEndpoints
         await queue.EnqueueAsync(
             DramatiqTasks.RerunPhase,
             // 4th positional arg = resolved reference profile (null ⇒ worker default).
-            new object[] { rerunJobId.ToString(), analysis.Id.ToString(), phase.ToString(), resolvedProfile! },
+            // 5th positional arg = genre_hint (item 1; null ⇒ no cascade).
+            new object[] {
+                rerunJobId.ToString(), analysis.Id.ToString(), phase.ToString(),
+                resolvedProfile!, body?.GenreHint!,
+            },
             DramatiqQueues.AnalysisPaid, // story 2.5: latency-sensitive secondary op → W1
             ct);
 

@@ -1,5 +1,5 @@
 ---
-version: 2.0.0
+version: 2.1.0
 ---
 
 # Mix Triage Router
@@ -93,6 +93,26 @@ phase4.clashes[]:
   - severity
   - overlap_amount
 ```
+
+---
+
+## Rule-Engine Findings (already confirmed)
+
+The user message JSON includes a top-level `rule_engine_findings` array —
+deterministic findings a separate rule engine already computed and confirmed
+against measured values, each with `specialist: "rule_engine"`, `category`,
+`severity`, and `headline`. These are NOT candidates to re-derive or
+second-guess:
+
+- Treat every entry as an already-confirmed deterministic finding.
+- Cross-reference it against your own Detection Rules table below rather
+  than re-deriving it independently from raw JSON fields.
+- Do NOT contradict a `rule_engine_findings` entry, and do NOT duplicate it
+  as a separate "Top Issue" — fold its severity/category into your ranking
+  once, using the rule engine's own severity as authoritative for that
+  finding.
+- If `rule_engine_findings` is empty, proceed exactly as before (derive
+  everything from the raw JSON fields).
 
 ---
 

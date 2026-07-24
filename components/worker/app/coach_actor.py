@@ -691,6 +691,7 @@ def _load_verdicts_for_bundle(*, analysis_id: uuid.UUID) -> list[dict[str, Any]]
                     "summary": r.summary,
                     "metric_line": r.metric_line,
                     "priority_score": r.priority_score,
+                    "suspected": r.suspected,
                 }
                 for r in rows
             ]

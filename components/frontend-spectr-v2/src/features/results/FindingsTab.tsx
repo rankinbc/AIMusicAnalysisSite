@@ -213,6 +213,14 @@ function FindingCard({
             ) : (
               <span className="src measured">Measured</span>
             )}
+            {v.suspected && (
+              <span
+                className="src suspected"
+                title="Threshold not yet corpus-validated — treat as a hint, not a certainty"
+              >
+                Unverified
+              </span>
+            )}
             <span>{specName(v)}</span>
           </span>
         </div>

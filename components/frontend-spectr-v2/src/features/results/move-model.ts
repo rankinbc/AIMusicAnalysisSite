@@ -78,6 +78,10 @@ export interface Move {
   /** Raw solver DSP ops (`fix.dsp_chain`), structured — drives the Listen rack
    *  apply. Empty for rule-engine moves and verdicts without a fix. */
   ops: VerdictDspOp[];
+  /** True when the underlying rule's threshold is not yet corpus-validated
+   *  (`VerdictDto.suspected`) — orthogonal to `isRule`/`source`; absent/false
+   *  for the rule-engine string baseline, which carries no such data. */
+  suspected?: boolean;
 }
 
 export interface ImpactBand {
@@ -201,6 +205,7 @@ export function verdictToMove(v: VerdictDto): Move {
     status: statusFromUserState(v.userState),
     verdictId: v.id,
     ops,
+    suspected: v.suspected,
   };
 }
 

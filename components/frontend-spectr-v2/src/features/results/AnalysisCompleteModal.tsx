@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 
 import type { FinalJson, RoutingPlanDto } from '../../api/types';
+import { GenreCorrectChip } from './GenreCorrectChip';
 import {
   GROUP_COLORS,
   coachMessage,
@@ -92,6 +93,7 @@ export interface RunningState {
 
 interface Props {
   fj: FinalJson;
+  jobId: string;
   songName?: string | undefined;
   durationSec?: number | undefined;
   genre?: string | undefined;
@@ -178,6 +180,12 @@ export function AnalysisCompleteModal(props: Props) {
                   <>
                     <span className={s.sep}>·</span>
                     <span>{props.genre}</span>
+                  </>
+                )}
+                {!isRunning && (
+                  <>
+                    <span className={s.sep}>·</span>
+                    <GenreCorrectChip jobId={props.jobId} genre={props.genre} />
                   </>
                 )}
               </div>

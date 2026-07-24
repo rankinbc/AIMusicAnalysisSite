@@ -281,6 +281,7 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
           <SongHeader
             songId={songId}
             versionId={versionId}
+            jobId={jobId}
             versionLabel={
               results.versionLabel ??
               (results.versionNumber != null ? `v${results.versionNumber}` : null)
@@ -460,6 +461,7 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
       {showModal && (
         <AnalysisCompleteModal
           fj={fj}
+          jobId={jobId}
           songName={trackName}
           durationSec={phase1?.duration_seconds}
           genre={phase2?.genre}

@@ -1,203 +1,210 @@
 <!--
   INITIAL.md — feature intake for /generate-prp.
 
-  Feature: Listen-rack live Room completion — real roster/chat/transport + honest failure states
-  Authored: 2026-07-23 from docs/edge-case-report.md E6.8–E6.14 + a fresh REAL-vs-FIXTURE code map
+  Feature: First-upload trust & accuracy quick-wins bundle
+  Authored: 2026-07-23 from _bmad-output/brainstorming/brainstorming-session-2026-07-23-1357.md
+  (Quick-win repair list + facilitator idea #46), grounded in two Explore-agent code maps
+  from the same session.
 -->
 
 ## FEATURE
 
-Finish the live Room on the canonical Listen page (`/listen-rack/$versionId`). The entire
-Room BACKEND is real and shipped (PRP-4 / Epic 11-5): `RoomEndpoints.cs` implements
-sessions CRUD, an SSE relay over Redis pub/sub (snapshot-then-delta, heartbeat, presence),
-`react/chat/status/transport/visuals/rack/grant/revoke/end/recap-publish` event posts, the
-`listening_sessions` + `control_grants` tables exist, and the `synthesize_recap` dramatiq
-actor finalizes the Redis WAL to Postgres. The frontend orchestration spine is also real:
-`useRoomOrchestration` (mounted from `routes/_app/listen-rack.$versionId.tsx`, gated by
-`VITE_ROOM_LIVE_SSE`) composes `useRoomSession`/`useRoomStream`/`useRoomActions`, and
-start/end/react/grant/recap all hit the wire.
+Six small, independently-shippable fixes that repair places where the analysis/coaching
+pipeline currently misleads the user or leaves known-good data unused. All are additive
+per CLAUDE.md's project rules — nothing here removes existing behavior, only repairs or
+extends it. None depend on each other, but #5 (triage sees rule findings) is also step 1
+of the larger "Mix Diagnosis & Cohesive Podium" flagship work tracked separately — doing
+it now is not wasted effort either way.
 
-What is NOT real is the part users would actually see in a live room — the edge-case
-report's E6.8–E6.14 cluster (its #1-ranked risk):
+1. **Genre confirm chip.** Phase 2 genre detection (`components/analysis/src/audio_analysis/phases/phase2_genre.py:42-56`)
+   is BPM-window rules only (dnb/trance/house/techno/other) with hardcoded confidences
+   (0.50-0.75) — no ML despite the package README's claim. Genre conditions Phase 3
+   scoring, Phase 5 reference presets, Phase 6 profile selection, and the verdict-layer
+   `genre_map` (`components/worker/app/verdict_lib/config/rule-bindings.json:10-19`,
+   which collapses house/dnb/other all onto the `modern_trance` profile). The phase
+   ALREADY supports a trusted override: `genre_hint` short-circuits detection to
+   confidence 1.0 (`phase2_genre.py:32-34`) — this feature is primarily a UI + wiring
+   problem, not a detection-accuracy problem.
+   - Deliverable: after Phase 1+2 complete (genre can't be known before BPM is
+     detected, so this is NOT literally pre-upload), surface the detected genre +
+     confidence with a confirm/correct affordance. On correction, feed it back as
+     `genre_hint` and re-run genre-dependent downstream phases.
+   - **Open question for /generate-prp research**: the BFF already exposes per-phase
+     re-run (`POST /api/reports/{jobId}/phases/{phase}/rerun`, accepts phases 2-8, see
+     CLAUDE.md bff Gotchas) via the `rerun_phase` worker actor →
+     `audio_analysis.rerun_single_phase`. Confirm whether re-running phase 2 alone is
+     sufficient or whether phases 3/5/6/7 (all genre-conditioned) need to cascade —
+     read `rerun_single_phase` in `components/analysis/src/audio_analysis/pipeline.py`
+     to determine current cascade behavior before designing the UI trigger.
 
-- **E6.14 (Critical) — People and Chat panels are pure fixtures.** `PeoplePanel`
-  (`rail.tsx:391-460`) renders hard-coded `ROOM_LISTENERS`; the real
-  `roomLive.state.roster` is never passed in, so real participants never appear and the
-  "+DJ"/"+Vis" grant buttons target fixture actors (grants POST with `userId:null`).
-  "↗ Invite" has no click handler. `ChatPanel.send()` (`rail.tsx:476-480`) appends
-  locally under the hardcoded handle `'maek'` and never calls `roomLive.sendChat`;
-  fixture `SEED_CHAT` renders into real rooms. The core room loop — see who's here,
-  grant them control, talk to them — silently does not function.
-- **E6.8 (High) — "Start live room" refusal is silent.** `startRoom` is
-  `() => startMut.mutate()` with no error handling (`useRoomOrchestration.ts:177`);
-  a 403 `room_not_hostable` looks like a dead button.
-- **E6.9 (High) — any SSE hiccup permanently freezes the room.** 403 `not_joinable`,
-  409 `session_ended`, and transient network blips all collapse to `status
-  'error'|'closed'` with no reconnect and no user-facing state beyond a raw status word
-  in the header (`useRoomStream.ts:55-101`; SSE `id:` lines ignored).
-- **E6.11 (High) — transport sync wholly absent.** `useRoomActions.transport` has zero
-  call sites; the reducer folds incoming `transport` into state but nothing reads it;
-  playback is local-only. "Live synchronized playback" is the pivot's core promise.
-  (Incoming `visuals`/`rack` deltas are deliberately dropped — remote rack/visuals
-  APPLICATION stays deferred per the Epic 11-5 note; do NOT pull it into this PRP.)
-- **E6.10 (Medium) — zombie sessions.** Host closes the tab without `/end`; the server
-  finalizes ~3 min later via the delayed-recap backstop, but the client has no `ended`
-  event handling, so listeners sit in a dead room and the next visitor can join a
-  still-`live`-looking session.
-- **E6.12 (Medium) — recap publish failure is silent.** `endRoom` chains
-  `recapMut.mutate` inside `endMut.onSuccess`, no `onError` on either.
-- **E6.13 (Medium) — react/chat/status failures look delivered.** `void
-  actions.react(...)` discards the rejection and the local presence pop fires anyway.
+2. **Coach reply chunk-reordering bug.** Brian observed a real coach chat response
+   where two prose fragments appeared reordered/interleaved (pasted example:
+   "cking up down there. First, the clasTwo things are stasic mud zone" — decodes to
+   two chunks, "Two things are sta[cking...]" and "[...]cking up down there. First, the
+   clas[sic mud zone]", swapped in the rendered output). **Investigated during the
+   brainstorming session**: `components/worker/app/coach_lib/stream_parser.py`
+   (`StreamSplitter`) is the sentinel-aware `<<<EVIDENCE>>>` splitter and is provably
+   clean by inspection — it publishes strictly append-only, in call order
+   (`self._published.append(...)`, joined at `finish()`), and has its own exhaustive
+   test suite (`components/worker/tests/test_coach_stream_parser.py`). The reordering
+   is a CHUNK-level swap, not a sentinel-boundary corruption, which rules out this
+   module as the root cause.
+   - This is a bug, not a spec — needs a `systematic-debugging`-style live-repro pass
+     BEFORE a fix is designed, not a guessed patch. Suspect areas to start from: the
+     BFF's SSE relay for coach chat (chunk ordering/buffering across the relay hop) and
+     the frontend's SSE token-accumulation in `CoachChat.tsx` (races in how deltas are
+     appended to render state). Do not scope a fix in the PRP itself — scope a
+     reproduction + root-cause step, then the fix once the actual site is confirmed.
 
-Deliverable: one PR-sized change set (frontend-first; BFF only if a small seam is
-missing) that makes a real two-person room work end to end — host starts, guest joins
-via the existing share/invite surface, both see the real roster, chat crosses the wire,
-host transport drives the guest's playback, failures are visible, disconnects reconnect,
-ended rooms say so. Closes E6.8–E6.14 (E6.11 scoped to transport only).
+3. **"Is this even a song?" input gate.** Live-tested during the brainstorming session:
+   a test-tone beep was uploaded and the full pipeline — every rule threshold, every
+   specialist, the coach — produced a fully confident, fully fabricated diagnosis (mud
+   buildup, phase-width warnings, EQ order-of-operations) for audio that was not a song.
+   Nothing in the 9-phase pipeline currently classifies input content type before
+   applying full-track genre-relative thresholds.
+   - Deliverable: a lightweight content-type classification (full mix / loop / single
+     instrument / stem / test tone / silence / speech) that runs early (ideally as
+     part of or immediately after Phase 1, before genre-relative scoring commits to a
+     verdict). Degenerate inputs (tone/silence) get honest handling in the report
+     ("this looks like a test tone — upload a full mix for a real analysis") instead of
+     a fabricated diagnosis. Partial inputs (e.g. an 8-bar loop) get explicitly scoped
+     analysis with inapplicable dimensions skipped, stated plainly — not silently
+     scored as if they were a full track.
+   - **Scope flag**: this item is larger than the other five (new classification logic
+     + gating behavior touching multiple phases/the rule engine/the coach). If
+     /generate-prp's research finds the surface area doesn't fit cleanly alongside the
+     other five smaller items in one PR-sized change, it should be split into its own
+     PRP rather than forced into this bundle — note that explicitly in the generated
+     PRP rather than silently cutting scope.
 
-Also fold in the small "cutover tail" doc debt (same page, trivial): refresh the stale
-`features/listen-rack/PORTING_NOTES.md` (still describes the pre-cutover mock world but
-is cited as the live wiring map from `ListenRackPage.tsx:12`) and
-`features/listen/README.md` (describes the deleted page); re-point
-`PRPs/listen-smoke-script.md` at the live route + `window.__spectrRackGraph`.
+4. **`onset_density` wiring fix.** `finalize_result` reads `onset_density`/`onset_count`
+   from Phase 2's output to compute the danceability rhythm component
+   (`components/analysis/src/audio_analysis/pipeline.py:162-166`), but Phase 2
+   (`phase2_genre.py`) never emits those fields — so for every real track,
+   `onset_density = 0/dur = 0.0`, zeroing the 40%-weighted rhythm score in
+   `scorers/danceability.py:57-58`. Phase 1 already computes real transient data
+   (`transients.transients_per_second`,
+   `components/analysis/src/audio_analysis/phases/phase1_universal.py:434`) that is
+   simply never wired to the consumer.
+   - Deliverable: wire `finalize_result` (or Phase 2) to source onset/transient density
+     from Phase 1's existing `transients` output instead of the dead Phase-2 field.
+     Verify the danceability score changes sensibly on a golden-snapshot track
+     (pipeline output is guarded byte-identical by golden snapshots per CLAUDE.md bff
+     Gotchas — check whether `components/analysis/tests/` has an equivalent snapshot
+     guard that needs updating).
 
-**Out of scope:** remote rack/visuals application (Epic 11-5 deferral stands), audio-driven
-beat/drop visuals (synthetic stays), PRP-5 game-plan work, flipping `room_hosting_enabled`
-in prod (admin decision — dev seeds it ON for verification), anything on the mock/demo
-listen-rack route (`/listen-rack` demo must stay byte-identical where feasible).
+5. **Triage receives rule-engine findings.** The triage LLM call is built with
+   `rule_verdicts=None` passed from the worker
+   (`components/worker/app/verdict_lib/triage_actor.py:110`), so
+   `input_grounding.build_triage_user_message`'s `rule_engine_findings` list is always
+   empty (`components/worker/app/verdict_lib/input_grounding.py:173-203`) — triage
+   currently reasons about specialist routing while blind to everything the
+   deterministic rule engine (which runs on every completed analysis, Phase C2,
+   `tasks_dramatiq.py:428-436`) already found.
+   - Deliverable: fetch the analysis's existing `source="rule_engine"` verdict rows and
+     pass them into the triage call so routing decisions account for what's already
+     been deterministically identified, instead of duplicating or ignoring it.
+   - This is also literally step 1 of the separately-tracked "Mix Diagnosis & Cohesive
+     Podium" flagship work — safe to land independently now.
+
+6. **Surface the `suspected` flag.** Many Tier-A/B rule thresholds ship
+   `suspected=True` because they're placeholder values pending a measured corpus (e.g.
+   `sub_rumble`, `missing_sidechain`, `over_compression`, `thin_low_end`,
+   `harsh_upper_mid`, `over_widened` — see
+   `components/worker/app/verdict_lib/rule_engine.py` and
+   `components/worker/app/verdict_lib/config/rule-bindings.json:69,107,121,137,159`).
+   `VerdictDto.suspected` exists end-to-end in the data model but is currently rendered
+   nowhere in the frontend — only a test fixture references it
+   (`FindingsTab.trackchip.test.tsx:36`). Every finding, measured or guessed, currently
+   wears the same confident voice.
+   - Deliverable: a distinct visual/voice treatment for `suspected=true` findings
+     (e.g. a hedged badge, "worth checking" framing, or dashed-border treatment — exact
+     visual direction is a small design decision, not specified here) wired into
+     whatever currently renders findings
+     (`components/frontend-spectr-v2/src/features/results/.../FindingsTab.tsx` and
+     `MoveCard.tsx` per the session's code map). Applies to the coach's use of these
+     findings too if the coach prompt path can distinguish suspected from measured
+     evidence when constructing its answer.
 
 ## COMPONENTS
 
-### COMPONENT: frontend-spectr-v2
+### COMPONENT: worker
 
-**Pattern**: v2 stack rules in CLAUDE.md (TS strict, CSS Modules, fetcher.ts, wave-3
-`mutation.meta.errorToast` mechanism now exists in `src/api/mutation-error-toast.ts`)
+**Pattern**: worker conventions in CLAUDE.md (sync dramatiq actors, `aimusic_shared`
+models, ruff/mypy gates)
 
-**Purpose**: Wire the room UI to the real seam; add reconnect + honest failure states;
-host→listener transport sync.
-
-**Inputs**: BFF `RoomEndpoints.cs` surface (already shipped)
-**Outputs**: browser
+**Purpose**: items 1 (genre re-run wiring), 2 (bug repro — likely BFF/frontend but worker
+streaming code is the first place to rule out), 3 (content-type gate — new phase-adjacent
+classification), 4 (onset_density wiring), 5 (triage rule-findings wiring), 6 (coach voice
+treatment if the coach path is in scope)
 
 **Notes**:
-- **Roster (E6.14a)**: `PeoplePanel` must render `roomLive.state.roster` in real rooms
-  (fixture `ROOM_LISTENERS` only on the mock/demo route). Grant buttons build `ActorRef`
-  from real roster entries (server roster events carry the actor identity — check
-  `roomStateReducer.ts` roster shape). The "N listening" count in the People tab must be
-  the same real number the header shows.
-- **Chat (E6.14b)**: `ChatPanel.send()` calls `roomLive.sendChat(text)`; render incoming
-  chat from the real feed (already folded, 💬-tagged); own messages appear via the
-  server echo (dedupe by event id if the send is also locally appended — prefer
-  server-echo-only to avoid divergence). No `SEED_CHAT` in real rooms; keep it for the
-  demo route. Sender identity = real actor handle, never `'maek'`.
-- **Invite (E6.14c)**: "↗ Invite" opens the existing `VersionShareDialog`
-  (`features/listen/VersionShareDialog.tsx`, shipped in audit wave 3) — do not build a
-  second invite surface.
-- **Start/end/recap errors (E6.8, E6.12)**: `useStartSession` gets error surfacing —
-  distinguish 403 `room_not_hostable` ("Room hosting isn't enabled for your account")
-  from generic failure; consume `isStartingRoom` for a pending state on the button.
-  `endRoom`: end and recap-publish get explicit `onError` — end failure keeps the room
-  UI up with a toast; recap failure toasts "Room ended — recap publish failed" with a
-  retry affordance (the recap endpoint is idempotent). Use the wave-3
-  `meta.errorToast` mechanism where a plain toast suffices; hook-level `onError` where
-  copy needs the error code.
-- **SSE reconnect (E6.9)**: on transient close/error, auto-reconnect with capped backoff
-  (e.g. 1s/2s/5s ×N) by re-opening the stream — the server's snapshot-then-delta design
-  makes reconnect safe (state events are LWW-idempotent, feed dedupes by event id/seq;
-  see PRP-4 G3). Distinguish terminal statuses: 403 `not_joinable` → visible "You no
-  longer have access" state; 409/`session_ended` → the ended state (below); N failed
-  reconnects → "Connection lost" state with a manual Retry. Surface a subtle
-  "reconnecting…" indicator instead of a frozen roster.
-- **Ended rooms (E6.10)**: reducer handles a session-end signal (check what the server
-  emits on end — if the stream just closes after `/end`, treat a clean close + a
-  follow-up `GET /sessions/{id}` showing `ended` as the signal; add an `ended` event
-  type only if the server already sends one). Ended state UI: "This room has ended" +
-  recap link if published + exit back to Work/View mode. Joining a session that the
-  lazy-finalize backstop has since ended must land in the same state, not a frozen room.
-- **Transport sync (E6.11, host→listener only)**: host emits `transport` events
-  (play/pause/seek — throttle seeks) via `useRoomActions.transport`; listeners read
-  `roomLive.state.transport` and follow: play/pause the local `<audio>` and correct
-  position when drift exceeds ~2 s (snap, don't micro-adjust; Web Audio pitch mode can
-  stay out — room listeners use plain element playback). Join-mid-play: the snapshot's
-  transport state seeds initial position. Listener-local transport controls in a live
-  room either disable or clearly become "follow host" — pick per the §04 capability
-  matrix (`capabilities.ts` — guests already lack transport capability in room mode;
-  verify and lean on it).
-- **Send feedback (E6.13)**: reaction/chat/status sends surface failure — at minimum the
-  optimistic local pop/append must not fire when the POST rejects (await it or roll
-  back), plus a low-noise deduped toast for repeated failures.
-- **Demo route stays demo**: all fixture rendering (ROOM_LISTENERS, SEED_CHAT, ambient
-  reaction sim) remains for the `real === false` route; every change above branches on
-  the real seam being present.
+- Item 3's content-type gate should run cheaply and early — do not add expensive
+  classification (e.g. a model inference pass) if a lightweight heuristic (energy
+  profile, spectral flatness/entropy, duration-vs-silence ratio) can distinguish
+  degenerate inputs from real mixes. Research existing Phase 1 outputs first — some of
+  this may already be computable from data Phase 1 produces.
+- Item 4's fix must not break the golden-snapshot guard mentioned in CLAUDE.md
+  (`run_pipeline` output is guarded byte-identical by golden snapshots) — check
+  `components/analysis/tests/` for the relevant fixtures and update them deliberately,
+  not accidentally.
 
 ### COMPONENT: bff
 
 **Pattern**: bff conventions in CLAUDE.md (minimal-API groups, ErrorEnvelope)
 
-**Purpose**: Only if the frontend work exposes a missing seam — candidates below; verify
-before building, the surface may already suffice.
+**Purpose**: item 1 (surfacing genre confirm UI needs a place to receive the correction
+and trigger the existing rerun-phase endpoint); item 2 (rule out the SSE relay hop as the
+chunk-reordering site)
 
 **Notes**:
-- Verify the SSE stream emits an explicit end/`ended` event when a session ends (host
-  `/end` or lazy finalize) — if it only closes the connection, add a final `ended` event
-  before close so clients don't have to poll `GET /sessions/{id}` to disambiguate.
-- Verify roster events carry enough actor identity (userId/anonId + display handle) for
-  the grant buttons to target real actors. If the roster payload lacks the id needed by
-  `grant`, extend the event payload (additive).
-- Verify SSE `id:` lines / heartbeat cadence are sufficient for the reconnect design; no
-  Last-Event-ID replay is required (snapshot-then-delta covers it) — do not build one.
-- No schema changes expected. If any endpoint change lands, extend
-  `components/bff/tests` accordingly and keep `docs/api-contracts-bff.md` current.
+- No new persistence expected for item 1 beyond what `rerun_phase`/`AnalysisJob` already
+  supports — verify before adding schema.
+- For item 2, check whether the BFF's coach-chat SSE relay does any buffering/reordering
+  (e.g. concurrent writes to the same connection, out-of-order awaits) before assuming
+  the bug is frontend-only.
 
-### COMPONENT: worker
+### COMPONENT: frontend-spectr-v2
 
-No changes expected (`synthesize_recap` already handles finalize paths). Touch nothing
-unless a verification failure traces there.
+**Pattern**: v2 stack rules in CLAUDE.md (TS strict, CSS Modules, fetcher.ts, no inline
+styles unless dynamic)
+
+**Purpose**: item 1 (genre confirm chip UI), item 2 (rule out/fix token-accumulation
+ordering in `CoachChat.tsx` if the repro lands here), item 3 (honest degenerate-input
+messaging on the report), item 6 (suspected-flag visual treatment)
+
+**Notes**:
+- Item 6's visual treatment should stay consistent with existing severity-badge / source
+  chip patterns already in `FindingsTab.tsx` (`AI` vs `Measured` chips per the session's
+  code map) rather than inventing a fourth unrelated visual language.
 
 ## SHARED DOCUMENTATION
 
-- `docs/edge-case-report.md` — E6.8–E6.14 full texts (file:line evidence per finding)
-- `PRPs/archive/2026-06-22_listen-v3-room-sessions.md` — PRP-4: the room protocol design
-  (WAL/seq semantics, snapshot-then-delta, G1/G2/G3 resolutions the reconnect leans on)
-- `PRPs/design_handoffs/design_handoff_listen_rack/LISTEN_V3_ROOM_UI_SEAMS.md` — UI↔backend
-  room seams contract
-- `components/frontend-spectr-v2/src/features/listen-rack/useRoomOrchestration.ts` — the
-  seam every UI change hangs off; `roomStateReducer.ts` — pure fold logic (extend + test)
-- `components/frontend-spectr-v2/src/features/listen/useRoomStream.ts` /
-  `useRoomSession.ts` / `useRoomActions.ts` — wire hooks (reconnect lands in useRoomStream)
-- `components/bff/src/Spectr.Bff/Endpoints/RoomEndpoints.cs` + `Services/AccessService.cs`
-  (roomHostable/roomJoinable resolution, `room_hosting_enabled` flag)
-- `src/api/mutation-error-toast.ts` — wave-3 global error-toast mechanism (reuse, don't
-  duplicate)
-- `CLAUDE.md` — validation gates, feature-flag conventions (60s cache, seed via migration)
+- `_bmad-output/brainstorming/brainstorming-session-2026-07-23-1357.md` — full session:
+  both Explore-agent research maps (file:line level detail on the entire analysis
+  pipeline and recommendation-generation path), the live artifact critiques that
+  surfaced items 2 and 3 directly, and the full prioritized roadmap this bundle is
+  extracted from.
+- `CLAUDE.md` — worker/bff/frontend gotchas referenced throughout above; validation
+  gates section.
 
 ## OTHER CONSIDERATIONS
 
-- **Dev verification needs the flag ON**: `room_hosting_enabled` is seeded false. For dev
-  + live verification, flip it in the dev DB (`UPDATE feature_flags …`) — do NOT ship a
-  migration changing the prod default. Note the 60s flag cache when testing.
-- **Two-client live verification is mandatory** (stack per `docs/STARTUP.md`): host
-  context starts a room; guest context joins via share link (`/v/{token}` or invite);
-  verify: both appear in People (real handles); chat crosses both ways; host
-  play/pause/seek drives guest playback within ~2 s; kill the guest's network (or abort
-  the stream) → guest shows reconnecting then recovers; host closes tab → guest lands in
-  the ended state within the backstop window (shrink the delayed-finalize interval in dev
-  if needed, or end via API); 403 start (flag off / free tier) shows the explicit copy.
-- **StrictMode double-mount**: the room stream + one-shot session starts must survive
-  React StrictMode (dev). Beware the wave-3 lesson: a mutation fired in a ref-guarded
-  one-shot effect loses its observer on the simulated remount — use `mutateAsync` +
-  local state for any fire-on-mount mutation (see `routes/_app/invite.$token.tsx`).
-- **Don't regress the mock/demo page**: the `/listen-rack` (no versionId) demo route and
-  its fixtures are a sales surface — keep byte-identical rendering there; every
-  real-room behavior branches on the live seam.
-- **Reducer stays pure**: reconnect/ended/transport logic that can be expressed as pure
-  state folds goes in `roomStateReducer.ts` with unit tests; the hooks stay thin wire
-  adapters. Existing tests (`roomStateReducer.test.ts`, `useRoomStream.test.ts`) must be
-  extended, not replaced.
-- **Chat/react rate limits exist server-side** (PRP-0 IRateLimiter) — surfaced 429s
-  should show "Slow down" copy, not generic failure.
-- **Validation gates**: standard set — frontend `tsc --noEmit` / `lint --max-warnings 0`
-  / `build` / `npx vitest run`; `dotnet build && dotnet test` if bff touched; plus new
-  tests: reducer (roster/chat/transport/ended folds, reconnect resync), reconnect
-  backoff logic (fake timers), transport follow logic (pure helper), send-failure
-  rollback, start/end/recap error surfacing.
+- **Additive constraint (project-wide rule, not just this feature)**: improve, don't
+  remove, unless removing is clearly more correct — see project memory
+  `feedback_spectr-coaching-product-philosophy.md` for the full standing constraints
+  (additive-only, audio-file-first, score is not the product, first-upload is the
+  conversion moment) that should inform any judgment calls made while implementing this.
+- **Item 3 may need to be split out** — see the scope flag under item 3 above. Size it
+  honestly during research rather than cramming it into a bundle PR.
+- **Item 2 needs a repro before a fix** — do not let /generate-prp write a "fix" section
+  for item 2 without first confirming the actual root-cause site. If root-causing during
+  PRP research isn't feasible without a live stack (per `docs/STARTUP.md`), the PRP
+  should scope item 2 as "add instrumentation / reproduce with a controlled test" as its
+  own validation-gated step before the fix step.
+- **Validation gates**: standard set per CLAUDE.md — worker `pytest -q
+  components/worker/tests/` + `ruff check` + `mypy`; bff `dotnet build && dotnet test` if
+  touched; frontend `tsc --noEmit` / `lint --max-warnings 0` / `build` / `npx vitest run`
+  if touched. Add tests per item: danceability score change (4), triage prompt payload
+  now includes rule findings (5), suspected-flag rendering (6), degenerate-input honest
+  handling (3).

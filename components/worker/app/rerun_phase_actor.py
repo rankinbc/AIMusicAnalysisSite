@@ -18,8 +18,12 @@ import json
 import logging
 import uuid
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import dramatiq
+
+if TYPE_CHECKING:
+    from audio_analysis.schemas import PipelineResult
 
 from aimusic_shared.models import (
     JOB_STATUS_COMPLETE,
@@ -56,10 +60,15 @@ def rerun_phase(
     analysis_id: str,
     phase: int,
     reference_profile: dict | None = None,
+    genre_hint: str | None = None,
 ) -> None:
     # reference_profile: BFF-resolved phase-6 override (4th positional arg, default
     # None for back-compat with 3-arg callers). kind:"user" carries the embedded
     # aggregate; kind:"genre" carries the genre; None ⇒ worker uses detected genre.
+    # genre_hint (item 1): when set alongside phase == 2, this is a user genre
+    # CORRECTION — the phase-2 rerun cascades into phases 3/5/6 (all genre
+    # readers) instead of stopping at phase 2 alone. Phase 7's `genre` param is
+    # provably inert (informational-only) so it is deliberately excluded.
     if rerun_single_phase is None:
         raise RuntimeError("audio_analysis package not installed in worker environment")
 
@@ -168,19 +177,41 @@ def rerun_phase(
         except Exception:  # best-effort progress
             logger.warning("rerun progress update failed (phase=%s)", p, exc_info=True)
 
-    # ── Phase B — re-run the single phase + merge (no DB tx held) ────────────
+    # ── Phase B — re-run the phase(s) + merge (no DB tx held) ────────────────
+    # A genre correction (phase == 2 with a genre_hint) cascades across every
+    # phase that reads genre — phase 2 (classification override) and its
+    # genre-reading dependents 3/5/6. Every other rerun (including a bare
+    # phase-2 re-run with no genre_hint, or the phase-6 reference-profile
+    # override) stays a single-phase call, unchanged from before.
+    cascade = phase == 2 and genre_hint is not None
     try:
-        merged = rerun_single_phase(
-            phase,
-            file_abs or "",
-            prior_final,
-            reference_path=reference_abs,
-            als_file_path=als_abs,
-            stem_paths=stem_paths,
-            stem_mode=stem_mode,
-            reference_profile=reference_profile,
-            progress_cb=_report_progress,
-        )
+        if cascade:
+            merged: dict | PipelineResult = prior_final
+            for cascade_phase in (2, 3, 5, 6):
+                merged = rerun_single_phase(
+                    cascade_phase,
+                    file_abs or "",
+                    merged,
+                    reference_path=reference_abs,
+                    als_file_path=als_abs,
+                    stem_paths=stem_paths,
+                    stem_mode=stem_mode,
+                    genre_hint=genre_hint if cascade_phase == 2 else None,
+                    progress_cb=_report_progress,
+                )
+        else:
+            merged = rerun_single_phase(
+                phase,
+                file_abs or "",
+                prior_final,
+                reference_path=reference_abs,
+                als_file_path=als_abs,
+                stem_paths=stem_paths,
+                stem_mode=stem_mode,
+                reference_profile=reference_profile,
+                genre_hint=genre_hint if phase == 2 else None,
+                progress_cb=_report_progress,
+            )
         # Coerce nested TypedDicts to JSON-safe dict (mirrors analyze_audio_job).
         merged_safe = json.loads(json.dumps(merged, default=str))
     except Exception as exc:
@@ -216,6 +247,16 @@ def rerun_phase(
             j.completed_at = _utc_now()
             j.error_message = None
             j.failed_at = None
+
+    # Item 1 — a genre correction changes the verdict-layer genre_map used
+    # pervasively by rule_engine.py's predicates, so a corrected-genre re-run
+    # must refresh rule-engine findings too, not just the analysis rollups.
+    # `force=True` clears the prior (existence-check-guarded) rows first —
+    # without it, run_rule_engine_for_analysis's normal idempotency check
+    # would silently no-op since rows from the ORIGINAL genre already exist.
+    if cascade:
+        from .verdict_lib.degraded import run_rule_engine_for_analysis  # noqa: PLC0415
+        run_rule_engine_for_analysis(aid, force=True)
 
     # Story 3.3 (AC2) — keep the durable R2 report in step with the merged
     # final_json (best-effort; Postgres stays canonical).

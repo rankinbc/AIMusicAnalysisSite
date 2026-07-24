@@ -388,6 +388,201 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
         }
     }
 
+    // ── item 2 / Task 4: coach stream chunk-ordering repro (no fix) ─────
+    //
+    // PRPs/first-upload-trust-quickwins.md item 2: a real coach reply
+    // rendered two prose chunks swapped. Leading hypothesis: StackExchange
+    // .Redis's delegate `sub.SubscribeAsync(channel, Handler)` overload
+    // (CoachConversationEndpoints.cs:442-449) gives NO ordering guarantee,
+    // even for messages on the SAME channel (see the library's own
+    // PubSubOrder.md docs), unlike the ordered `Subscribe(channel)
+    // .OnMessage(handler)` form.
+    //
+    // CONFIRMED (see PRPs/coach-stream-ordering-fix.md for full writeup):
+    // Stream_Preserves_Chunk_Order_At_Low_Concurrency — a SINGLE publisher,
+    // SINGLE channel, sequentially-awaited publishes (no client-side
+    // concurrency at all) — failed 6 of 8 live runs against the local dev
+    // stack, always an adjacent-pair swap. This is a stronger repro than
+    // hypothesized: `PublishAsync` completing has no relationship to when
+    // the BFF's `Handler` delegate actually runs, so the race is entirely
+    // inside the BFF's per-channel dispatch, not caller-side concurrency.
+    // The sibling high-concurrency test (many DIFFERENT channels, published
+    // concurrently) passed 8/8 — expected, since cross-channel ordering was
+    // never the invariant at risk; the bug is intra-channel, and the
+    // low-concurrency test already isolates and reproduces it directly.
+    // Per Task 4's explicit scope: repro + root-cause confirmation only —
+    // NO fix here; see the follow-up PRP stub for the fix design.
+
+    private static async Task<bool> PublishUntilSubscriberAttached(
+        ISubscriber sub, RedisChannel channel, string primerPayload)
+    {
+        for (var i = 0; i < 40; i++)
+        {
+            var receivers = await sub.PublishAsync(channel, primerPayload);
+            if (receivers >= 1) return true;
+            await Task.Delay(50);
+        }
+        return false;
+    }
+
+    private static List<string> TokenTextsInOrder(List<(string EventName, string Data)> frames)
+    {
+        var texts = new List<string>();
+        foreach (var f in frames)
+        {
+            if (f.EventName != "token") continue;
+            using var doc = JsonDocument.Parse(f.Data);
+            texts.Add(doc.RootElement.GetProperty("text").GetString() ?? "");
+        }
+        return texts;
+    }
+
+    [SkippableFact(Skip =
+        "Confirmed bug — see PRPs/coach-stream-ordering-fix.md, tracked for a follow-up PRP. " +
+        "Reproduces ~75% of live runs (6/8): the delegate SubscribeAsync(channel, Handler) " +
+        "overload gives no per-channel ordering guarantee. Skipped (not deleted) so CI stays " +
+        "green while the evidence + repro steps stay runnable on demand.")]
+    [Trait("Category", "Slow")]
+    public async Task Stream_Preserves_Chunk_Order_At_Low_Concurrency()
+    {
+        // Originally written as a "control" expected to always pass, paired
+        // with a high-concurrency sibling meant to manufacture the race.
+        // It turned out THIS is the one that reproduces the bug — a single
+        // publisher on a single channel is already sufficient. See the
+        // class-level comment above and PRPs/coach-stream-ordering-fix.md.
+        await TestDb.RequireAsync(_factory);
+        TestDb.Require(RedisReachable(), "Redis");
+
+        const int frameCount = 30;
+        var seed = await SeedTerminalAssistant("stream-order-lo", status: "pending", content: "");
+        using var mux = ConnectionMultiplexer.Connect("localhost:6379");
+        var channel = new RedisChannel(
+            $"coach:{seed.ConversationId}:{seed.MessageId}", RedisChannel.PatternMode.Literal);
+
+        try
+        {
+            var requestTask = seed.Client.GetAsync(
+                $"/api/coach/{seed.AnalysisId}/messages/{seed.MessageId}/stream",
+                HttpCompletionOption.ResponseHeadersRead);
+
+            var sub = mux.GetSubscriber();
+            var attached = await PublishUntilSubscriberAttached(sub, channel,
+                "{\"type\":\"token\",\"text\":\"chunk-0\"}");
+            Assert.True(attached, "BFF subscriber never attached within 2 s — relay loop is broken");
+
+            for (var i = 1; i < frameCount; i++)
+            {
+                await sub.PublishAsync(channel, $"{{\"type\":\"token\",\"text\":\"chunk-{i}\"}}");
+            }
+            await sub.PublishAsync(channel, "{\"type\":\"done\",\"evidence\":[]}");
+
+            var resp = await requestTask;
+            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+            var body = await resp.Content.ReadAsStringAsync();
+            var frames = ParseSseFrames(body);
+
+            var texts = TokenTextsInOrder(frames);
+            var expected = Enumerable.Range(0, frameCount).Select(i => $"chunk-{i}").ToList();
+            Assert.Equal(expected, texts);
+        }
+        finally
+        {
+            await CleanupUser(seed.UserId);
+        }
+    }
+
+    [SkippableFact]
+    [Trait("Category", "Slow")]
+    public async Task Stream_Preserves_Chunk_Order_At_High_Concurrency()
+    {
+        // Many simultaneous conversations sharing the same IConnectionMultiplexer
+        // singleton (Program.cs:230-238), each publishing its own rapid chunk
+        // sequence CONCURRENTLY with the others (a DIFFERENT channel per
+        // conversation). CONFIRMED (8/8 live runs): this variant does not
+        // reproduce reordering, unlike its low-concurrency sibling (which
+        // does, reliably — see that test's Skip reason). This is consistent
+        // with the confirmed root cause: the bug is in per-channel dispatch
+        // ordering, and Redis Pub/Sub makes no cross-channel ordering
+        // promise to begin with, so many-channels concurrency doesn't
+        // exercise the actual invariant at risk. Kept as a live (non-skipped)
+        // regression guard for cross-channel behavior; the low-concurrency
+        // test is the one that carries the confirmed-bug evidence.
+        await TestDb.RequireAsync(_factory);
+        TestDb.Require(RedisReachable(), "Redis");
+
+        const int conversationCount = 20;
+        const int frameCount = 20;
+
+        var seeds = new List<SeedResult>();
+        for (var i = 0; i < conversationCount; i++)
+        {
+            seeds.Add(await SeedTerminalAssistant(
+                $"stream-order-hi-{i}", status: "pending", content: ""));
+        }
+
+        using var mux = ConnectionMultiplexer.Connect("localhost:6379");
+        var sub = mux.GetSubscriber();
+
+        try
+        {
+            var requestTasks = seeds.Select(s => s.Client.GetAsync(
+                $"/api/coach/{s.AnalysisId}/messages/{s.MessageId}/stream",
+                HttpCompletionOption.ResponseHeadersRead)).ToList();
+
+            // Attach every stream's subscriber before racing any publishes —
+            // an early primer publish landing before the BFF's handler
+            // registers would be silently dropped, not a reordering signal.
+            var channels = seeds.Select(s => new RedisChannel(
+                $"coach:{s.ConversationId}:{s.MessageId}", RedisChannel.PatternMode.Literal)).ToList();
+            for (var i = 0; i < channels.Count; i++)
+            {
+                var attached = await PublishUntilSubscriberAttached(sub, channels[i],
+                    "{\"type\":\"token\",\"text\":\"chunk-0\"}");
+                Assert.True(attached, $"BFF subscriber {i} never attached within 2 s");
+            }
+
+            // Fire every conversation's remaining chunks CONCURRENTLY — this
+            // is what manufactures concurrent dispatch across the shared
+            // multiplexer (as opposed to the low-concurrency test's single
+            // serial publish loop).
+            var publishTasks = channels.Select(async channel =>
+            {
+                for (var i = 1; i < frameCount; i++)
+                {
+                    await sub.PublishAsync(channel, $"{{\"type\":\"token\",\"text\":\"chunk-{i}\"}}");
+                }
+                await sub.PublishAsync(channel, "{\"type\":\"done\",\"evidence\":[]}");
+            });
+            await Task.WhenAll(publishTasks);
+
+            var responses = await Task.WhenAll(requestTasks);
+            var expected = Enumerable.Range(0, frameCount).Select(i => $"chunk-{i}").ToList();
+
+            var mismatches = new List<string>();
+            for (var i = 0; i < responses.Length; i++)
+            {
+                Assert.Equal(HttpStatusCode.OK, responses[i].StatusCode);
+                var body = await responses[i].Content.ReadAsStringAsync();
+                var frames = ParseSseFrames(body);
+                var texts = TokenTextsInOrder(frames);
+                if (!texts.SequenceEqual(expected))
+                {
+                    mismatches.Add($"conversation {i}: got [{string.Join(",", texts)}]");
+                }
+            }
+
+            Assert.True(mismatches.Count == 0,
+                $"{mismatches.Count}/{conversationCount} conversations received out-of-order " +
+                "chunks under concurrent dispatch — CONFIRMS the delegate SubscribeAsync " +
+                $"ordering hypothesis (see PubSubOrder.md). Details: {string.Join(" | ", mismatches)}");
+        }
+        finally
+        {
+            foreach (var s in seeds)
+                await CleanupUser(s.UserId);
+        }
+    }
+
     // ── client-disconnect → coach:cancel:{messageId} SET (Task 6.5) ─────
 
     [SkippableFact]

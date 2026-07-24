@@ -70,18 +70,27 @@ def write_degradation_notice(
         )
 
 
-def run_rule_engine_for_analysis(analysis_id: uuid.UUID) -> int:
+def run_rule_engine_for_analysis(analysis_id: uuid.UUID, force: bool = False) -> int:
     """Evaluate the two-pass Problem engine (``rule_engine.evaluate_problems``)
     against the analysis and persist the de-suppressed, validated Problem rows.
     Returns the count actually written.
 
-    Idempotent — returns 0 without writing if any rule-engine row already exists
-    on this analysis. The guard keys on ``source == "rule_engine"`` (NOT an exact
-    ``specialist`` match): the Problem engine sets ``specialist="rule_engine.<slug>"``,
-    so the old exact match would never see existing rows and would double-insert.
+    Idempotent by default — returns 0 without writing if any rule-engine row
+    already exists on this analysis. The guard keys on ``source ==
+    "rule_engine"`` (NOT an exact ``specialist`` match): the Problem engine
+    sets ``specialist="rule_engine.<slug>"``, so the old exact match would
+    never see existing rows and would double-insert.
+
+    ``force=True`` (item 1 — post-genre-correction refresh) bypasses the
+    existence check and instead DELETES the prior rule-engine rows before
+    re-evaluating, since the normal existence-check guard would otherwise
+    silently no-op a deliberate refresh. The delete mirrors
+    ``validator._is_deterministic()``'s double condition (source AND
+    specialist prefix) so a mis-tagged specialist row — see ``_hydrate()``'s
+    known ``source`` mislabeling — is never wrongly swept up.
     """
     try:
-        from sqlalchemy import select  # noqa: PLC0415
+        from sqlalchemy import delete, select  # noqa: PLC0415
 
         from aimusic_shared.models import Analysis, Verdict as VerdictRow  # noqa: PLC0415
 
@@ -94,14 +103,25 @@ def run_rule_engine_for_analysis(analysis_id: uuid.UUID) -> int:
             if analysis is None:
                 logger.warning("rule engine: analysis %s not found", analysis_id)
                 return 0
-            existing = s.execute(
-                select(VerdictRow.id)
-                .where(VerdictRow.analysis_id == analysis_id)
-                .where(VerdictRow.source == "rule_engine")
-                .limit(1)
-            ).first()
-            if existing is not None:
-                return 0
+            if force:
+                s.execute(
+                    delete(VerdictRow)
+                    .where(VerdictRow.analysis_id == analysis_id)
+                    .where(VerdictRow.source == "rule_engine")
+                    .where(
+                        (VerdictRow.specialist == "rule_engine")
+                        | (VerdictRow.specialist.startswith("rule_engine."))
+                    )
+                )
+            else:
+                existing = s.execute(
+                    select(VerdictRow.id)
+                    .where(VerdictRow.analysis_id == analysis_id)
+                    .where(VerdictRow.source == "rule_engine")
+                    .limit(1)
+                ).first()
+                if existing is not None:
+                    return 0
             raw_final = analysis.final_json
             # Production pipeline writes ``{"phases": [...]}``; ``flatten``
             # pivots that into ``{"phaseN": {...}}`` shape the rule engine

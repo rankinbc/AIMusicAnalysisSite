@@ -99,6 +99,14 @@ export function MoveCard({ move, onToggleCommit }: MoveCardProps) {
             <span className="cv">{Math.round(move.confidence * 100)}%</span> conf
           </span>
           <span className={`move-src${isAi ? ' ai' : ''}`}>{move.source}</span>
+          {move.suspected && (
+            <span
+              className="move-src suspected"
+              title="Threshold not yet corpus-validated — treat as a hint, not a certainty"
+            >
+              Unverified
+            </span>
+          )}
           <span className="spacer" />
           {move.why && (
             <button

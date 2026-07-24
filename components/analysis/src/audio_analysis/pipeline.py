@@ -159,11 +159,10 @@ def finalize_result(
     p2 = phase_data.get(2, {})
     genre = p2.get("genre", "other") or "other"
 
-    onset_density = p2.get("onset_density")
+    transients = p1.get("transients", {})
+    onset_density = transients.get("transients_per_second")
     if onset_density is None:
-        dur = p1.get("duration_seconds", 0)
-        onset_count = p2.get("onset_count", 0)
-        onset_density = float(onset_count) / dur if dur > 0 else 4.0
+        onset_density = 4.0  # preserve existing degenerate-input fallback
 
     dance_score = danceability_score(
         bpm=float(p1.get("bpm", 128.0)),
@@ -273,6 +272,7 @@ def rerun_single_phase(
     reference_stem_paths: dict | None = None,
     stem_mode: str = "grouped",
     reference_profile: dict | None = None,
+    genre_hint: str | None = None,
     progress_cb=None,
 ) -> PipelineResult:
     """Re-run a single phase and merge it into *prior_result* in place, re-deriving
@@ -282,7 +282,12 @@ def rerun_single_phase(
     rebuilt into a ``phase_data`` map (ok phases only) so dependent phases (3/5/6/7)
     get phase-1 output + genre without recomputing them. Phases 2–7 re-convert the
     audio to WAV; phase 8 re-parses the ``.als``. No cascade — re-running phase N
-    does NOT re-run its dependents.
+    does NOT re-run its dependents; the caller (``rerun_phase_actor.py``) is
+    responsible for looping this function across [2, 3, 5, 6] when a genre
+    correction needs to propagate to genre-reading phases.
+
+    ``genre_hint`` is only consulted when ``phase_num == 2`` (forwarded to
+    ``phase2_genre.classify()``'s user-confirmed override); ignored otherwise.
     """
     prior_phases = list(prior_result.get("phases", []))
     phase_data: dict[int, dict] = {
@@ -307,7 +312,7 @@ def rerun_single_phase(
                 als_file_path=als_file_path,
                 stem_paths=stem_paths,
                 reference_stem_paths=reference_stem_paths,
-                genre_hint=None,
+                genre_hint=genre_hint,
                 stem_mode=stem_mode,
                 reference_profile=reference_profile,
                 progress_cb=progress_cb,

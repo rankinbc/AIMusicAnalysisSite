@@ -1,5 +1,6 @@
 // Hand-rolled API hooks for slice 1. orval-generated hooks will replace
 // these once the BFF emits openapi.json against a live database.
+import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { fetcher } from './fetcher';
@@ -48,6 +49,8 @@ import type {
   ReferenceDto,
   ReferenceSetDto,
   FixRackDto,
+  RerunPhaseRequest,
+  RerunPhaseResponse,
   RunSpecialistResponse,
   SongDto,
   UploadResponse,
@@ -561,6 +564,50 @@ export function useJobResults(jobId: string, enabled: boolean) {
 // already unreachable). The BFF endpoint POST /reports/{jobId}/phases/{phase}/rerun
 // and the rerun_phase worker actor REMAIN — re-home the UI when a live surface
 // wants it (poll the returned job, then invalidate ['jobs', jobId, 'results']).
+
+// Item 1 (genre confirm/correct chip) — Phase 2's own classifier categories.
+// Kept as a fixed choice list (not free text) so every value the user can
+// submit is one the classifier + verdict-layer genre_map already resolve.
+export const GENRE_HINT_OPTIONS = ['trance', 'house', 'techno', 'dnb', 'other'] as const;
+export type GenreHint = (typeof GENRE_HINT_OPTIONS)[number];
+
+/** Item 1: correct the detected genre on a completed analysis. POSTs to the
+ *  existing per-phase rerun endpoint (phase 2 + genreHint); the BFF cascades
+ *  the rerun across phases 2/3/5/6 and refreshes rule-engine findings, so a
+ *  single poll-to-completion + one results invalidation is enough here. */
+export function useConfirmGenre(jobId: string) {
+  return useMutation({
+    mutationFn: (genreHint: GenreHint) =>
+      fetcher<RerunPhaseResponse>({
+        url: `/reports/${jobId}/phases/2/rerun`,
+        method: 'POST',
+        data: { genreHint } satisfies RerunPhaseRequest,
+      }),
+  });
+}
+
+/** Poll the lightweight re-run job returned by {@link useConfirmGenre}, then
+ *  invalidate the report's results once it lands so the corrected genre,
+ *  score and findings show up without a manual refresh. */
+export function useRerunJobStatus(rerunJobId: string | undefined, reportJobId: string) {
+  const qc = useQueryClient();
+  const query = useQuery<JobStatusDto>({
+    queryKey: ['jobs', rerunJobId],
+    queryFn: () => fetcher<JobStatusDto>({ url: `/jobs/${rerunJobId}`, method: 'GET' }),
+    enabled: Boolean(rerunJobId),
+    refetchInterval: terminalPoll<JobStatusDto>({
+      pollMs: 1500,
+      active: (d) => d.status !== 'complete' && d.status !== 'failed',
+    }),
+    retry: false,
+  });
+  useEffect(() => {
+    if (query.data?.status === 'complete') {
+      qc.invalidateQueries({ queryKey: ['jobs', reportJobId, 'results'] });
+    }
+  }, [query.data?.status, qc, reportJobId]);
+  return query;
+}
 
 export type { UploadResponse };
 
