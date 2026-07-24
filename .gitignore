@@ -130,3 +130,6 @@ components/bff/tests/data/analysis/
 # SDD scratch (any depth)
 .superpowers/
 **/.superpowers/
+
+# Isolated worktrees for subagent-driven-development tasks
+.worktrees/
