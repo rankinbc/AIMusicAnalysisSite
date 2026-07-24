@@ -11,7 +11,11 @@ import type {
   Phase9Data,
 } from '../../api/types';
 import { fmtBpm, fmtDuration, fmtGenre } from './helpers/format';
+import { LoudnessTimelineCard } from './panels/LoudnessTimelineCard';
+import { PunchCard } from './panels/PunchCard';
+import { StructureStrip } from './panels/StructureStrip';
 import { StreamingCard } from './StreamingCard';
+import p from './track-info-panels.module.css';
 
 interface TrackInfoTabProps {
   phase1: Phase1Data | undefined;
@@ -19,6 +23,8 @@ interface TrackInfoTabProps {
   phase3: Phase3Data | undefined;
   phase4: Phase4Data | undefined;
   phase9: Phase9Data | undefined;
+  /** Top-level danceability_score (0–100) — not a phase field. */
+  danceability?: number | undefined;
   spectrogramUrl?: string | null | undefined;
   waveformUrl?: string | null | undefined;
 }
@@ -39,16 +45,19 @@ export function TrackInfoTab({
   phase3,
   phase4,
   phase9,
+  danceability,
   spectrogramUrl,
   waveformUrl,
 }: TrackInfoTabProps) {
   return (
     <div className="ti-stack">
-      <FactsRow phase1={phase1} phase2={phase2} phase3={phase3} />
+      <FactsRow phase1={phase1} phase2={phase2} phase3={phase3} danceability={danceability} />
       <LoudnessCard phase1={phase1} />
+      <LoudnessTimelineCard phase1={phase1} />
+      <PunchCard phase1={phase1} />
       <TonalBalance bands={phase1?.bands} />
-      <StereoCard phase1={phase1} />
-      <Visuals spectrogramUrl={spectrogramUrl} waveformUrl={waveformUrl} />
+      <StereoCard phase1={phase1} phase9={phase9} />
+      <Visuals phase1={phase1} spectrogramUrl={spectrogramUrl} waveformUrl={waveformUrl} />
       <ClashCard phase4={phase4} />
       <TranslationCard phase9={phase9} />
       <StreamingCard phase1={phase1} />
@@ -60,16 +69,32 @@ function FactsRow({
   phase1,
   phase2,
   phase3,
+  danceability,
 }: {
   phase1: Phase1Data | undefined;
   phase2: Phase2Data | undefined;
   phase3: Phase3Data | undefined;
+  danceability?: number | undefined;
 }) {
   void phase3;
   const genre = phase2?.genre && phase2.genre !== 'other' ? fmtGenre(phase2.genre) : '—';
   const genreConf = phase2?.confidence != null ? `${Math.round(phase2.confidence * 100)}% confidence` : null;
   const bpm = phase1?.bpm ?? phase2?.bpm;
-  const keyConf = phase1?.key_detection_confidence;
+
+  // Key detail — prefer the richer key_estimate (mode, confidence, runner-up).
+  const ke = phase1?.key_estimate;
+  const keyConf = ke?.confidence ?? phase1?.key_detection_confidence;
+  const keyValue = ke?.key
+    ? `${ke.key}${ke.mode ? ` ${ke.mode.slice(0, 3)}` : ''}`
+    : (phase1?.detected_key ?? '—');
+  const keyConfPct = keyConf != null ? `${Math.round(keyConf * 100)}%` : null;
+  const keySub =
+    keyConf != null && keyConf < 0.5
+      ? 'uncertain'
+      : ke?.second_key
+        ? `${keyConfPct ?? ''}${keyConfPct ? ' · ' : ''}alt ${ke.second_key}`
+        : keyConfPct;
+
   const facts: { label: string; value: string; unit?: string; sub?: string | null }[] = [
     { label: 'Genre', value: genre, sub: genreConf },
     {
@@ -77,11 +102,10 @@ function FactsRow({
       value: phase1?.duration_seconds != null ? fmtDuration(phase1.duration_seconds) : '—',
     },
     { label: 'Tempo', value: bpm != null ? fmtBpm(bpm) : '—', unit: bpm != null ? 'BPM' : '' },
-    {
-      label: 'Key',
-      value: phase1?.detected_key ?? '—',
-      sub: keyConf != null && keyConf < 0.5 ? 'uncertain' : null,
-    },
+    { label: 'Key', value: keyValue, sub: keySub },
+    ...(danceability != null
+      ? [{ label: 'Danceability', value: String(Math.round(danceability)), unit: '/100', sub: null }]
+      : []),
   ];
   return (
     <div className="meta-row">
@@ -221,10 +245,18 @@ function TonalBalance({ bands }: { bands: Phase1Bands | undefined }) {
   );
 }
 
-function StereoCard({ phase1 }: { phase1: Phase1Data | undefined }) {
+function StereoCard({ phase1, phase9 }: { phase1: Phase1Data | undefined; phase9: Phase9Data | undefined }) {
   const width = phase1?.stereo_width ?? 0;
   const corr = phase1?.stereo_correlation ?? 0;
   const mono = phase1?.mono_compatibility ?? 0;
+  const cb = phase1?.channel_balance;
+  const sp = phase9?.spatial;
+  const spatialCells: { label: string; value: string }[] = [];
+  if (sp?.height_score != null) spatialCells.push({ label: 'Height', value: String(Math.round(sp.height_score)) });
+  if (sp?.depth_score != null) spatialCells.push({ label: 'Depth', value: String(Math.round(sp.depth_score)) });
+  if (sp?.width_consistency != null)
+    spatialCells.push({ label: 'Width consistency', value: String(Math.round(sp.width_consistency)) });
+
   return (
     <section className="card">
       <div className="card-hd">
@@ -248,8 +280,25 @@ function StereoCard({ phase1 }: { phase1: Phase1Data | undefined }) {
               value={`${Math.round(mono * 100)}%`}
               frac={Math.max(0, Math.min(1, mono))}
             />
+            {cb?.balance_db != null && (
+              <SRow
+                label={`L/R balance (${cb.balance_db > 0 ? 'L' : cb.balance_db < 0 ? 'R' : '·'})`}
+                value={`${cb.balance_db > 0 ? '+' : ''}${cb.balance_db.toFixed(1)} dB`}
+                frac={Math.max(0, Math.min(1, 0.5 + cb.balance_db / 12))}
+              />
+            )}
           </div>
         </div>
+        {spatialCells.length > 0 && (
+          <div className={p.spatial}>
+            {spatialCells.map((c) => (
+              <div key={c.label} className={p.spCell}>
+                <div className={p.spLabel}>{c.label}</div>
+                <div className={p.spVal}>{c.value}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -298,9 +347,11 @@ function Goniometer({ width, correlation }: { width: number; correlation: number
 }
 
 function Visuals({
+  phase1,
   spectrogramUrl,
   waveformUrl,
 }: {
+  phase1: Phase1Data | undefined;
   spectrogramUrl?: string | null | undefined;
   waveformUrl?: string | null | undefined;
 }) {
@@ -326,6 +377,7 @@ function Visuals({
               onError={() => setWaveOk(false)}
             />
           </div>
+          <StructureStrip structure={phase1?.structure} durationSec={phase1?.duration_seconds} />
         </div>
       )}
       {showSpec && (
@@ -387,22 +439,31 @@ function ClashRow({ clash }: { clash: Phase4Clash }) {
 
 function TranslationCard({ phase9 }: { phase9: Phase9Data | undefined }) {
   const pb = phase9?.playback;
-  if (!pb) return null;
+  const sr = phase9?.surround;
+  if (!pb && !sr) return null;
+  // Headphones / Speakers / Mono — what we actually measure (phase 9). Mono is a
+  // 0–1 fold-down score, rescaled to the 0–100 rating band.
+  const monoScore = sr?.mono_compatibility != null ? sr.mono_compatibility * 100 : undefined;
   const systems: { name: string; score: number | undefined }[] = [
-    { name: 'Headphones', score: pb.headphone_score },
-    { name: 'Speakers', score: pb.speaker_score },
+    { name: 'Headphones', score: pb?.headphone_score },
+    { name: 'Speakers', score: pb?.speaker_score },
+    { name: 'Mono', score: monoScore },
   ];
   const rate = (s: number | undefined) => (s == null ? '—' : s >= 80 ? 'great' : s >= 60 ? 'good' : 'weak');
   const tone = (s: number | undefined) =>
     s == null ? 'var(--muted)' : s >= 80 ? 'var(--green)' : s >= 60 ? 'var(--cyan)' : 'var(--orange)';
-  const note = pb.analysis?.[0];
+  const note = pb?.analysis?.[0] ?? sr?.analysis?.[0];
+  const chips: { label: string; value: string }[] = [];
+  if (pb?.bass_translation) chips.push({ label: 'Bass', value: pb.bass_translation });
+  if (pb?.crossfeed_safe != null) chips.push({ label: 'Crossfeed', value: pb.crossfeed_safe ? 'safe' : 'risky' });
+  if (sr?.phase_score != null) chips.push({ label: 'Phase', value: String(Math.round(sr.phase_score)) });
   return (
     <section className="card">
       <div className="card-hd">
         <span className="t">
           <span className="led" /> Mix translation
         </span>
-        <span className="meta">playback systems</span>
+        <span className="meta">headphones · speakers · mono</span>
       </div>
       <div className="card-body">
         <div className="trans-row">
@@ -414,6 +475,15 @@ function TranslationCard({ phase9 }: { phase9: Phase9Data | undefined }) {
             </div>
           ))}
         </div>
+        {chips.length > 0 && (
+          <div className={p.transChips}>
+            {chips.map((c) => (
+              <span key={c.label} className={p.chip}>
+                {c.label} <b>{c.value}</b>
+              </span>
+            ))}
+          </div>
+        )}
         {note && <div className="trans-note">{note}</div>}
       </div>
     </section>

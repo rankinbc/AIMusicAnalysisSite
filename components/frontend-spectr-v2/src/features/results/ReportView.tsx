@@ -391,6 +391,7 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
                 phase3={phase3}
                 phase4={phase4}
                 phase9={phase9}
+                danceability={fj.danceability_score}
                 spectrogramUrl={results.spectrogramImageUrl}
                 waveformUrl={results.waveformImageUrl}
               />
