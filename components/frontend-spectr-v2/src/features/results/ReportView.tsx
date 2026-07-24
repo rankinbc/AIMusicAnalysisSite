@@ -21,6 +21,7 @@ import {
   type Phase2Data,
   type Phase3Data,
   type Phase4Data,
+  type Phase5Data,
   type Phase6Data,
   type Phase8Data,
   type Phase9Data,
@@ -69,6 +70,7 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
   const phase2 = pickPhaseData<Phase2Data>(fj, 2);
   const phase3 = pickPhaseData<Phase3Data>(fj, 3);
   const phase4 = pickPhaseData<Phase4Data>(fj, 4);
+  const phase5 = pickPhaseData<Phase5Data>(fj, 5);
   const phase6 = pickPhaseData<Phase6Data>(fj, 6);
   const phase8 = pickPhaseData<Phase8Data>(fj, 8);
   const phase9 = pickPhaseData<Phase9Data>(fj, 9);
@@ -82,7 +84,11 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
   // Story 5.7 (AC3): phase 8 ran (an .als existed) but failed/was sandboxed
   // out — drives the Project-tab skip note when no client-parsed map exists.
   const phase8Failed = fj.phases?.find((p) => p.phase === 8)?.status === 'failed';
-  const hasReference = Boolean(phase6?.gaps && Object.keys(phase6.gaps).length > 0);
+  // The Reference tab shows when EITHER a genre placement exists (phase 6) OR an
+  // uploaded reference was compared (phase 5) — the tab renders both sections by
+  // per-metric availability.
+  const hasReference =
+    Boolean(phase6?.gaps && Object.keys(phase6.gaps).length > 0) || phase5?.status === 'ok';
 
   // Verdicts are the AI-Move source + CoachChat grounding. Shared query cache
   // (keyed by jobId) — single fetch.
@@ -106,9 +112,12 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
       mix: files.some((f) => f.type === 'mix') || files.length === 0,
       stems: files.some((f) => f.type === 'stem') || Boolean(phase4?.stems),
       als: files.some((f) => f.type === 'als') || Boolean(phase8),
-      reference: files.some((f) => f.type === 'reference') || Boolean(phase6?.gaps),
+      reference:
+        files.some((f) => f.type === 'reference') ||
+        Boolean(phase6?.gaps) ||
+        phase5?.status === 'ok',
     };
-  }, [filesData, phase4, phase8, phase6]);
+  }, [filesData, phase4, phase8, phase6, phase5]);
 
   // ── Committed ("Added to Listen") moves — lifted here so both the Coach tab
   // (move toggles) and the sidebar (Fixes for Listen queue) stay in sync. ──
@@ -367,7 +376,13 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
               <ProjectUnlock {...(versionId ? { onUploadAls: () => setAlsDialogOpen(true) } : {})} />
             )}
             {tab === 'reference' && (
-              <ReferenceTab genre={phase2?.genre} phase6={phase6} />
+              <ReferenceTab
+                genre={phase2?.genre}
+                phase6={phase6}
+                phase5={phase5}
+                phase1={phase1}
+                onGoToFindings={() => onTabChange('findings')}
+              />
             )}
             {tab === 'trackinfo' && (
               <TrackInfoTab

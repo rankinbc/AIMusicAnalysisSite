@@ -1,0 +1,359 @@
+.tab {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* identity */
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--cyan, var(--accent));
+  box-shadow: 0 0 12px -2px var(--cyan, var(--accent));
+  flex: 0 0 auto;
+}
+.idName {
+  font-weight: 700;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.idKind {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.16));
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.idSub {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-top: 2px;
+}
+
+/* section shell */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.seclabel {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.t {
+  font-weight: 600;
+  font-size: 13.5px;
+}
+.hint {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.subhd {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-weight: 600;
+  font-size: 12.5px;
+  margin-top: 4px;
+}
+.na {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+/* honest "can't place you" */
+.cant {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px dashed var(--border, rgba(255, 255, 255, 0.16));
+  background: var(--surface-2, rgba(255, 255, 255, 0.02));
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.cant b {
+  display: block;
+}
+.cant span span,
+.cant div span {
+  color: var(--muted);
+}
+
+/* percentile verdict */
+.verdict {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.ringNum {
+  position: absolute;
+  font-weight: 700;
+  font-size: 18px;
+}
+.vh {
+  font-weight: 600;
+  font-size: 14px;
+}
+.vh .n {
+  color: var(--cyan, var(--accent));
+}
+.vtake {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-top: 2px;
+}
+
+/* genre gap rows */
+.gaps {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.gap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.gapTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.gapLabel {
+  font-weight: 600;
+  font-size: 12.5px;
+}
+.gapPct {
+  color: var(--muted);
+  font-size: 11px;
+}
+.bar {
+  position: relative;
+  height: 8px;
+  border-radius: 5px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+}
+.range {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--cyan, var(--accent)) 18%, transparent);
+}
+.meanTick {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--muted);
+  transform: translateX(-1px);
+}
+.refmark {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 11px;
+  color: var(--violet, #a78bfa);
+  line-height: 1;
+}
+.youdot {
+  position: absolute;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--cyan, var(--accent));
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 8px -1px var(--cyan, var(--accent));
+}
+.youdot.out {
+  background: var(--red, #f43f5e);
+  box-shadow: 0 0 8px -1px var(--red, #f43f5e);
+}
+.reads {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11.5px;
+  flex-wrap: wrap;
+}
+.you {
+  color: var(--text);
+}
+.you.out {
+  color: var(--red, #f43f5e);
+}
+.mean {
+  color: var(--muted);
+}
+.refval {
+  color: var(--violet, #a78bfa);
+}
+.gap.out .gapLabel {
+  color: var(--red, #f43f5e);
+}
+
+/* diverging delta rows (reference section) */
+.deltaRows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rd {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.4fr) minmax(70px, 0.9fr) 90px minmax(60px, 0.8fr) 56px auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 11.5px;
+}
+.rd.stem {
+  grid-template-columns: minmax(120px, 1.4fr) minmax(70px, 0.8fr) minmax(60px, 0.7fr) 56px auto;
+}
+.rdLabel {
+  font-weight: 600;
+}
+.rdYou {
+  color: var(--muted);
+}
+.rdRef {
+  color: var(--violet, #a78bfa);
+}
+.rdDelta {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  text-align: right;
+}
+.rdDelta.warn {
+  color: var(--orange, #fb923c);
+}
+.rdInterp {
+  color: var(--muted);
+  grid-column: 1 / -1;
+  margin-top: -2px;
+}
+
+/* diverging bar */
+.db {
+  position: relative;
+  height: 6px;
+  border-radius: 4px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.05));
+}
+.dbMid {
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--border, rgba(255, 255, 255, 0.2));
+}
+.dbFill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 4px;
+  background: var(--cyan, var(--accent));
+}
+.dbFill.warn {
+  background: var(--orange, #fb923c);
+}
+.dbYou {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--cyan, var(--accent));
+}
+.dbYou.warn {
+  background: var(--orange, #fb923c);
+}
+
+/* genre-context checks */
+.checks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+.dtile {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  background: var(--surface-2, rgba(255, 255, 255, 0.02));
+}
+.dl {
+  color: var(--muted);
+  font-size: 10.5px;
+  text-transform: capitalize;
+}
+.dv {
+  font-size: 12px;
+  margin-top: 2px;
+}
+.dv.warn {
+  color: var(--orange, #fb923c);
+}
+
+/* fix → link */
+.find {
+  background: none;
+  border: none;
+  color: var(--cyan, var(--accent));
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0;
+}
+
+/* legend */
+.legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--muted);
+}
+.lg {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.ld {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.ldYou {
+  background: var(--cyan, var(--accent));
+}
+.ldMean {
+  background: var(--muted);
+}
+.ldRange {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--cyan, var(--accent)) 30%, transparent);
+}
+.dia {
+  color: var(--violet, #a78bfa);
+}
+.warn {
+  color: var(--orange, #fb923c);
+}
