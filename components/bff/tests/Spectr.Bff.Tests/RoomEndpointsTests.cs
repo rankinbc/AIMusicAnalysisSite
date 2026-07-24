@@ -210,13 +210,14 @@ public sealed class RoomEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
     }
 
-    // ── item 2 follow-up: coach-stream-ordering-fix (PRPs/coach-stream-ordering-fix.md) ──
+    // ── item 2 follow-up: coach-stream-ordering-fix ──────────────────────
     //
     // Room's SSE relay used the identical delegate SubscribeAsync(channel, Handler)
     // pattern as Coach's — same no-ordering-guarantee exposure, just never exercised
-    // by a test before now. This test establishes the PRE-FIX baseline; Task 4 makes
-    // it pass reliably by switching Room's subscribe call to the ordered
-    // ChannelMessageQueue form (identical fix to Coach's).
+    // by a test before now. FIXED: RoomEndpoints.cs now subscribes via the ordered
+    // ChannelMessageQueue form (identical to Coach's). This test is now a live
+    // regression guard for the fix (see CoachConversationEndpoints.cs and
+    // PRPs/archive/2026-07-23_coach-stream-ordering-fix.md).
     [SkippableFact]
     [Trait("Category", "Slow")]
     public async Task Stream_Preserves_Event_Order_At_Low_Concurrency()
