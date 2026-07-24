@@ -1,4 +1,4 @@
-import type { AlsProjectJson, AlsProjectTrack, Phase8Data } from '../../api/types';
+import type { AlsProjectJson, AlsProjectTrack, Phase8Data, Phase8MidiAnalysis } from '../../api/types';
 
 interface ProjectTabProps {
   project: AlsProjectJson;
@@ -98,6 +98,10 @@ export function ProjectTab({ project, phase8, phase8Failed = false }: ProjectTab
           )}
         </div>
       </section>
+
+      {phase8?.midi_analysis && phase8.midi_analysis.length > 0 && (
+        <MidiDetailCard tracks={phase8.midi_analysis} />
+      )}
 
       <div className="proj-grid">
         <section className="card">
@@ -217,6 +221,53 @@ function TrackChain({ track }: { track: AlsProjectTrack }) {
         </div>
       )}
     </div>
+  );
+}
+
+function MidiDetailCard({ tracks }: { tracks: Phase8MidiAnalysis[] }) {
+  // Per-track chord progression + groove (chords capped 48/track by the worker).
+  const withDetail = tracks.filter(
+    (t) => (t.chords?.length ?? 0) > 0 || t.swing_ratio != null || t.humanization_score != null,
+  );
+  if (withDetail.length === 0) return null;
+  return (
+    <section className="card">
+      <div className="card-hd">
+        <span className="t">
+          <span className="led" /> MIDI detail — chords &amp; swing
+        </span>
+        <span className="meta">{withDetail.length} tracks</span>
+      </div>
+      <div className="card-body">
+        <div className="tracks-grid">
+          {withDetail.map((t, i) => (
+            <div key={`${t.track_name ?? 'track'}-${i}`}>
+              <div className="trk-head">
+                <span className="trk-name">{t.track_name ?? 'Track'}</span>
+                {t.swing_ratio != null && <span className="trk-type">swing {t.swing_ratio.toFixed(2)}</span>}
+                {t.humanization_score != null && (
+                  <span className="trk-count">human {Math.round(t.humanization_score)}</span>
+                )}
+              </div>
+              {t.chords && t.chords.length > 0 ? (
+                <div className="trk-chain">
+                  {t.chords.slice(0, 16).map((c, j) => (
+                    <span key={j} className="dev-chip">
+                      {c.chord_name ?? '?'}
+                    </span>
+                  ))}
+                  {t.chords.length > 16 && <span className="dev-chip off">+{t.chords.length - 16}</span>}
+                </div>
+              ) : (
+                <div className="trk-chain">
+                  <span className="dev-chip off">no chords detected</span>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
