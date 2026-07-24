@@ -183,12 +183,15 @@ public static class RoomEndpoints
             SingleWriter = false,
             FullMode = BoundedChannelFullMode.DropOldest,
         });
-        void Handler(RedisChannel _, RedisValue value)
+        void Handler(ChannelMessage msg)
         {
-            var p = value.ToString();
+            var p = msg.Message.ToString();
             if (!string.IsNullOrEmpty(p)) frames.Writer.TryWrite(p);
         }
-        await sub.SubscribeAsync(channel, Handler);
+        // Ordered form — see CoachConversationEndpoints.cs::StreamMessage for the
+        // identical fix + PRPs/coach-stream-ordering-fix.md for the confirmed bug.
+        var messageQueue = await sub.SubscribeAsync(channel);
+        messageQueue.OnMessage(Handler);
 
         try
         {
@@ -218,7 +221,7 @@ public static class RoomEndpoints
         }
         finally
         {
-            try { await sub.UnsubscribeAsync(channel, Handler); } catch { /* best-effort */ }
+            try { await messageQueue.UnsubscribeAsync(); } catch { /* best-effort */ }
             frames.Writer.TryComplete();
             // Leave is best-effort (ct is cancelled) — RoomBus uses no ct.
             try
