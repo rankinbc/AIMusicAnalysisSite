@@ -388,15 +388,15 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
         }
     }
 
-    // ── item 2 / Task 4: coach stream chunk-ordering repro (no fix) ─────
+    // ── item 2 / Task 4: coach stream chunk-ordering repro + fix ─────────
     //
     // PRPs/first-upload-trust-quickwins.md item 2: a real coach reply
-    // rendered two prose chunks swapped. Leading hypothesis: StackExchange
-    // .Redis's delegate `sub.SubscribeAsync(channel, Handler)` overload
-    // (CoachConversationEndpoints.cs:442-449) gives NO ordering guarantee,
-    // even for messages on the SAME channel (see the library's own
-    // PubSubOrder.md docs), unlike the ordered `Subscribe(channel)
-    // .OnMessage(handler)` form.
+    // rendered two prose chunks swapped. Root cause: StackExchange.Redis's
+    // delegate `sub.SubscribeAsync(channel, Handler)` overload
+    // (CoachConversationEndpoints.cs) gives NO ordering guarantee, even for
+    // messages on the SAME channel (see the library's own PubSubOrder.md
+    // docs), unlike the ordered `SubscribeAsync(channel)` →
+    // `ChannelMessageQueue.OnMessage(handler)` form.
     //
     // CONFIRMED (see PRPs/coach-stream-ordering-fix.md for full writeup):
     // Stream_Preserves_Chunk_Order_At_Low_Concurrency — a SINGLE publisher,
@@ -410,8 +410,8 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
     // concurrently) passed 8/8 — expected, since cross-channel ordering was
     // never the invariant at risk; the bug is intra-channel, and the
     // low-concurrency test already isolates and reproduces it directly.
-    // Per Task 4's explicit scope: repro + root-cause confirmation only —
-    // NO fix here; see the follow-up PRP stub for the fix design.
+    // FIXED: CoachConversationEndpoints.cs now subscribes via the ordered
+    // ChannelMessageQueue form (PRPs/coach-stream-ordering-fix.md).
 
     private static async Task<bool> PublishUntilSubscriberAttached(
         ISubscriber sub, RedisChannel channel, string primerPayload)
@@ -437,18 +437,15 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
         return texts;
     }
 
-    [SkippableFact(Skip =
-        "Confirmed bug — see PRPs/coach-stream-ordering-fix.md, tracked for a follow-up PRP. " +
-        "Reproduces ~75% of live runs (6/8): the delegate SubscribeAsync(channel, Handler) " +
-        "overload gives no per-channel ordering guarantee. Skipped (not deleted) so CI stays " +
-        "green while the evidence + repro steps stay runnable on demand.")]
+    [SkippableFact]
     [Trait("Category", "Slow")]
     public async Task Stream_Preserves_Chunk_Order_At_Low_Concurrency()
     {
         // Originally written as a "control" expected to always pass, paired
         // with a high-concurrency sibling meant to manufacture the race.
         // It turned out THIS is the one that reproduces the bug — a single
-        // publisher on a single channel is already sufficient. See the
+        // publisher on a single channel is already sufficient. Now a live
+        // regression guard for the ChannelMessageQueue fix — see the
         // class-level comment above and PRPs/coach-stream-ordering-fix.md.
         await TestDb.RequireAsync(_factory);
         TestDb.Require(RedisReachable(), "Redis");
