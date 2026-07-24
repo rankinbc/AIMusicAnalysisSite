@@ -9,6 +9,7 @@ using Spectr.Data;
 using Spectr.Data.Entities;
 using StackExchange.Redis;
 using System.Net;
+using System.Text.Json;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Xunit;
@@ -207,6 +208,127 @@ public sealed class RoomEndpointsTests(WebApplicationFactory<Program> factory)
         // Unknown emoji is rejected by the server-side vocabulary check.
         var bad = await owner.PostAsJsonAsync($"/api/sessions/{sessionId}/react", new { emoji = "🚀" });
         Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
+    }
+
+    // ── item 2 follow-up: coach-stream-ordering-fix (PRPs/coach-stream-ordering-fix.md) ──
+    //
+    // Room's SSE relay used the identical delegate SubscribeAsync(channel, Handler)
+    // pattern as Coach's — same no-ordering-guarantee exposure, just never exercised
+    // by a test before now. This test establishes the PRE-FIX baseline; Task 4 makes
+    // it pass reliably by switching Room's subscribe call to the ordered
+    // ChannelMessageQueue form (identical fix to Coach's).
+    [SkippableFact]
+    [Trait("Category", "Slow")]
+    public async Task Stream_Preserves_Event_Order_At_Low_Concurrency()
+    {
+        await TestDb.RequireAsync(_factory);
+        TestDb.Require(RedisReachable(), "Redis");
+
+        const int frameCount = 30;
+        var (owner, _, ownerId) = await NewAuthedClient();
+        var versionId = await CreateVersion(owner);
+        var sessionId = await InsertLiveSession(versionId, ownerId);
+
+        using var mux = ConnectionMultiplexer.Connect("localhost:6379");
+        var sub = mux.GetSubscriber();
+        var channel = new RedisChannel($"room:{sessionId:N}", RedisChannel.PatternMode.Literal);
+
+        using var cts = new CancellationTokenSource();
+        var requestTask = owner.GetAsync(
+            $"/api/sessions/{sessionId}/stream", HttpCompletionOption.ResponseHeadersRead, cts.Token);
+
+        // Payloads carry no "seq" field, so RoomEndpoints.cs's SeqOf(...) falls back
+        // to long.MaxValue and the relay forwards every one of them — no need to
+        // route these through RoomBus's WAL/seq machinery to exercise the bug.
+        var attached = await PublishUntilSubscriberAttached(sub, channel,
+            "{\"type\":\"marker\",\"text\":\"chunk-0\"}");
+        Assert.True(attached, "BFF subscriber never attached within 2 s — relay loop is broken");
+
+        for (var i = 1; i < frameCount; i++)
+        {
+            await sub.PublishAsync(channel, $"{{\"type\":\"marker\",\"text\":\"chunk-{i}\"}}");
+        }
+
+        try
+        {
+            var resp = await requestTask;
+            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+            var stream = await resp.Content.ReadAsStreamAsync(cts.Token);
+            // The reader's own presence-join event lands on this channel too
+            // (published via RoomBus before RelayLoop starts draining), so we
+            // count only "marker"-typed frames, not raw SSE frame count.
+            bool IsMarkerFrame((string EventName, string Data) f)
+            {
+                if (f.EventName != "event") return false;
+                using var doc = JsonDocument.Parse(f.Data);
+                return doc.RootElement.TryGetProperty("type", out var t) && t.GetString() == "marker";
+            }
+            var frames = await ReadSseFramesUntil(stream, IsMarkerFrame, frameCount, TimeSpan.FromSeconds(10));
+
+            var texts = MarkerTextsInOrder(frames);
+            var expected = Enumerable.Range(0, frameCount).Select(i => $"chunk-{i}").ToList();
+            Assert.Equal(expected, texts);
+        }
+        finally
+        {
+            cts.Cancel();
+        }
+    }
+
+    private static async Task<bool> PublishUntilSubscriberAttached(
+        ISubscriber sub, RedisChannel channel, string primerPayload)
+    {
+        for (var i = 0; i < 40; i++)
+        {
+            var receivers = await sub.PublishAsync(channel, primerPayload);
+            if (receivers >= 1) return true;
+            await Task.Delay(50);
+        }
+        return false;
+    }
+
+    private static async Task<List<(string EventName, string Data)>> ReadSseFramesUntil(
+        Stream stream, Func<(string EventName, string Data), bool> countPredicate,
+        int targetCount, TimeSpan timeout)
+    {
+        using var readCts = new CancellationTokenSource(timeout);
+        var frames = new List<(string, string)>();
+        using var reader = new StreamReader(stream);
+        string? evt = null;
+        string? data = null;
+        try
+        {
+            while (frames.Count(countPredicate) < targetCount)
+            {
+                var line = await reader.ReadLineAsync(readCts.Token);
+                if (line is null) break;
+                if (line.Length == 0)
+                {
+                    if (evt is not null && data is not null) frames.Add((evt, data));
+                    evt = null;
+                    data = null;
+                    continue;
+                }
+                if (line.StartsWith("event: ")) evt = line[7..];
+                else if (line.StartsWith("data: ")) data = line[6..];
+            }
+        }
+        catch (OperationCanceledException) { /* timed out — return whatever was captured */ }
+        return frames;
+    }
+
+    private static List<string> MarkerTextsInOrder(List<(string EventName, string Data)> frames)
+    {
+        var texts = new List<string>();
+        foreach (var f in frames)
+        {
+            if (f.EventName != "event") continue;
+            using var doc = JsonDocument.Parse(f.Data);
+            if (!doc.RootElement.TryGetProperty("type", out var t) || t.GetString() != "marker") continue;
+            texts.Add(doc.RootElement.GetProperty("text").GetString() ?? "");
+        }
+        return texts;
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
