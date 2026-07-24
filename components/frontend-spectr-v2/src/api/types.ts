@@ -120,6 +120,11 @@ export interface EntitlementsDto {
   /** Story 2.8 — first-of-next-month UTC the free analyses allowance resets;
    *  null when analyses are unlimited (pro/credits). */
   analysesResetsAt?: string | null;
+  /** Mirror of the server-side `credits_enabled` kill switch. When false the
+   *  credit system is off — everyone resolves as premium/unlimited — and the
+   *  frontend hides billing/tier UI (buy-credits, upgrade CTAs, tier chips,
+   *  usage meters). Optional: older payloads omit it ⇒ treat as enabled. */
+  creditsEnabled?: boolean;
 }
 
 /** Story 2.8 — GET /api/me/honest-math. The 90-day "credits vs Pro"
@@ -958,6 +963,44 @@ export interface Phase1Data {
   /** LUFS — loudest 0.4 s window. */
   momentary_max_lufs?: number;
   transients?: Phase1Transients;
+  /** Sub-30 Hz RMS energy (subsonic rumble). */
+  sub_30_energy?: number;
+  /** Per-channel L/R RMS + signed balance (B5 lift). */
+  channel_balance?: Phase1ChannelBalance;
+  /** Full 24-key Krumhansl readout — mode, confidence, runner-up key. */
+  key_estimate?: Phase1KeyEstimate;
+  /** Momentary + short-term LUFS window series over time. */
+  loudness_timeline?: Phase1LoudnessTimeline;
+}
+
+/** Per-channel L/R RMS + signed balance (`phase1.channel_balance`).
+ *  `balance_db` is +ve when the left channel is louder; 0 for mono. */
+export interface Phase1ChannelBalance {
+  l_rms_db?: number;
+  r_rms_db?: number;
+  balance_db?: number;
+}
+
+/** Full 24-key Krumhansl key readout (`phase1.key_estimate`). */
+export interface Phase1KeyEstimate {
+  key?: string;
+  mode?: string;
+  confidence?: number; // 0–1 key-profile fit
+  second_key?: string;
+  second_mode?: string;
+  profile_corrs?: number[]; // length 24
+}
+
+/** One loudness window series (`t[]` seconds, `lufs[]` values, index-aligned). */
+export interface Phase1LoudnessSeries {
+  t?: number[];
+  lufs?: number[];
+}
+
+/** `phase1.loudness_timeline` — per-window LUFS over time. */
+export interface Phase1LoudnessTimeline {
+  momentary?: Phase1LoudnessSeries;
+  short_term?: Phase1LoudnessSeries;
 }
 
 /** One allin1 song-structure segment (raw, pre-merge). */
@@ -1028,7 +1071,42 @@ export interface Phase5Check {
   value?: number;
 }
 
+/** One `phase5.deltas.<key>` entry — the signed delta (user − reference) + its
+ *  severity band. Keys: `lufs`, `rms`, `stereo_correlation`, `band_<name>`.
+ *  NOTE: only the delta is stored, not the absolute user/ref values — derive
+ *  `ref = user − value` from phase1 when an absolute pair is needed. */
+export interface Phase5Delta {
+  value?: number;
+  severity?: string;
+}
+
+/** `phase5.genre_context` — preset checks vs. the curated genre library. */
+export interface Phase5GenreContext {
+  genre?: string;
+  preset_name?: string;
+  checks?: Record<string, Phase5Check>;
+}
+
+/** One `phase5.per_stem_reference_deltas[]` row (present only when both user
+ *  stems and reference stems exist). Carries absolute user/ref values. */
+export interface Phase5PerStemDelta {
+  role?: string;
+  metric?: string;
+  user_value?: number;
+  reference_value?: number;
+  delta?: number;
+  interpretation?: string;
+  severity_tier?: string;
+}
+
 export interface Phase5Data {
+  status?: 'ok' | 'skipped' | string;
+  /** Signed deltas vs. the attached reference (empty when skipped). */
+  deltas?: Record<string, Phase5Delta>;
+  genre_context?: Phase5GenreContext;
+  per_stem_reference_deltas?: Phase5PerStemDelta[];
+  stem_reference_comparison?: string; // e.g. 'unavailable'
+  // ── legacy flat fields (older analyses) — superseded by genre_context ──
   genre?: string;
   preset_name?: string;
   checks?: Record<string, Phase5Check>;
@@ -1164,6 +1242,31 @@ export interface Phase8Data {
     pattern: string | null;
     sections: { name: string; start_beat: number; end_beat: number; duration_bars: number }[];
   };
+  /** Per-track MIDI analysis — chords + swing + humanization. Emitted at
+   *  `phase8.midi_analysis[]` (verified phase8_als.py:130); absent from the
+   *  stale contract snapshot. Empty/absent on mix-only or phase8-skipped. */
+  midi_analysis?: Phase8MidiAnalysis[];
+}
+
+/** One chord event in `phase8.midi_analysis[].chords[]` (capped 48/track). */
+export interface Phase8Chord {
+  time?: number; // seconds
+  chord_name?: string;
+  pitches?: number[];
+  duration?: number; // seconds
+}
+
+/** One `phase8.midi_analysis[]` row — per-track chord/groove readout. */
+export interface Phase8MidiAnalysis {
+  track_name?: string;
+  note_count?: number;
+  velocity_mean?: number;
+  velocity_std?: number;
+  humanization_score?: number;
+  note_density_per_bar?: number;
+  chord_count?: number;
+  chords?: Phase8Chord[];
+  swing_ratio?: number;
 }
 
 /** Phase 9 — Mix Translation. All scores are 0..100 (analyzer scale, NOT 0..1).
