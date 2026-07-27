@@ -120,6 +120,7 @@ def run_single_phase(
             status="ok",
             data=data,
             error=None,
+            duration_s=round(elapsed, 2),
         )
         if progress_cb:
             progress_cb(phase_num, phase_name, 1.0)
@@ -134,6 +135,7 @@ def run_single_phase(
             status="failed",
             data={},
             error=str(exc),
+            duration_s=round(elapsed, 2),
         )
 
 
@@ -175,10 +177,19 @@ def finalize_result(
         {**p1, "translation": phase_data.get(9, {}), "top_fixes": top_fixes}
     )
 
+    # {phase: seconds}. Phases merged from a pre-2.2.0 stored result carry no
+    # duration_s — they're simply absent here (rerun keeps what it re-measured).
+    phase_durations = {
+        str(p["phase"]): float(p["duration_s"])
+        for p in phase_results
+        if "duration_s" in p
+    }
+
     return PipelineResult(
         file_path=str(file_path),
         analysis_schema_version=ANALYSIS_SCHEMA_VERSION,
         phases=phase_results,
+        phase_durations=phase_durations,
         overall_score=overall_score,
         grade=grade,
         top_fixes=top_fixes,
@@ -247,8 +258,10 @@ def run_pipeline(
         # Phase 8: ALS analysis (skipped when als_file_path is None)
         if progress_cb:
             progress_cb(8, "ALS Analysis", 0.0)
-        phase8 = analyze_als(als_file_path)
-        phase_results.append(PhaseResult(**phase8))
+        t8 = time.perf_counter()
+        phase8 = dict(analyze_als(als_file_path))
+        phase8["duration_s"] = round(time.perf_counter() - t8, 2)
+        phase_results.append(phase8)  # type: ignore[arg-type]  # analyze_als returns the PhaseResult keys
         if progress_cb:
             progress_cb(8, "ALS Analysis", 1.0)
 
@@ -295,11 +308,15 @@ def rerun_single_phase(
     }
 
     wav_path: Path | None = None
+    new_pr: PhaseResult
     try:
         if phase_num == 8:
             if progress_cb:
                 progress_cb(8, "ALS Analysis", 0.0)
-            new_pr = PhaseResult(**analyze_als(als_file_path))
+            t8 = time.perf_counter()
+            phase8 = dict(analyze_als(als_file_path))
+            phase8["duration_s"] = round(time.perf_counter() - t8, 2)
+            new_pr = phase8  # type: ignore[assignment]  # analyze_als returns the PhaseResult keys
             if progress_cb:
                 progress_cb(8, "ALS Analysis", 1.0)
         else:
