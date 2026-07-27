@@ -103,6 +103,10 @@ export interface AudioGraphHandle {
   enterPitchMode: (audioUrl: string, fromSeconds: number) => Promise<void>;
   exitPitchMode: () => number; // returns current position so caller can resume MediaElement
   setPitchDetune: (semitones: number, cents: number) => void;
+  // Tempo multiplier for the pitch lane (buffer playbackRate). Lets the user
+  // compensate detune's speed coupling: +5 st ≈ ×1.335 speed, so tempo ≈ 0.75
+  // restores original speed at the shifted pitch.
+  setPitchRate: (rate: number) => void;
   pitchPause: () => void;
   pitchResume: () => void;
   pitchSeek: (positionSec: number) => void;
@@ -137,12 +141,14 @@ export interface AudioFrame {
 export interface PitchState {
   semitones: number; // -12..12
   cents: number; // -50..50
+  rate: number; // 0.2..5 — buffer playbackRate (tempo knob)
   enabled: boolean;
 }
 
 export const PITCH_DEFAULT: PitchState = {
   semitones: 0,
   cents: 0,
+  rate: 1,
   enabled: false,
 };
 
@@ -570,11 +576,13 @@ export function useAudioGraph(
     };
   };
 
-  // ── Pitch lane: tempo-safe pitch shift via AudioBufferSource.detune ──
-  // Note: in vanilla Web Audio, detune scales playbackRate (computedRate =
-  // playbackRate * pow(2, detune/1200)). So pitch up → tempo up too. True
-  // tempo-safe pitch shift requires an AudioWorklet phase vocoder; that's a
-  // future upgrade. For now the UX matches the v1 implementation.
+  // ── Pitch lane: pitch shift via AudioBufferSource.detune ──
+  // In vanilla Web Audio, detune scales playbackRate (computedRate =
+  // playbackRate * pow(2, detune/1200)), so pitch up → tempo up too. The
+  // separate rate control (setPitchRate) lets the user counter that manually
+  // (e.g. +5 st at rate 0.75 ≈ original speed) — but resampled, so timbre
+  // still shifts. True formant/tempo-independent pitch requires an
+  // AudioWorklet phase vocoder; that's a future upgrade.
 
   const emitPitch = (event: PitchEvent) => {
     for (const cb of pitchListenersRef.current) cb(event);
@@ -600,6 +608,26 @@ export function useAudioGraph(
     }
   };
 
+  // What Web Audio actually plays at: computedRate = playbackRate × 2^(detune/1200).
+  // Buffer position advances at this rate per wall-clock second, so all
+  // position bookkeeping must scale by it.
+  const pitchComputedRate = () => {
+    const st = pitchStateRef.current;
+    return st.rate * Math.pow(2, (st.semitones * 100 + st.cents) / 1200);
+  };
+
+  // A rate change invalidates the wall-clock→buffer-time mapping; fold the
+  // elapsed-so-far into the offset (at the OLD rate) and restart the clock
+  // before the new rate takes effect.
+  const reanchorPitchClock = () => {
+    const nodes = nodesRef.current;
+    if (!nodes || !pitchSourceRef.current || !pitchPlayingRef.current) return;
+    pitchOffsetRef.current =
+      (nodes.ctx.currentTime - pitchStartedAtRef.current) * pitchComputedRate() +
+      pitchOffsetRef.current;
+    pitchStartedAtRef.current = nodes.ctx.currentTime;
+  };
+
   const createPitchSource = (buffer: AudioBuffer, offsetSec: number) => {
     const nodes = nodesRef.current;
     if (!nodes) return;
@@ -607,6 +635,7 @@ export function useAudioGraph(
     src.buffer = buffer;
     src.detune.value =
       pitchStateRef.current.semitones * 100 + pitchStateRef.current.cents;
+    src.playbackRate.value = pitchStateRef.current.rate;
     src.connect(nodes.masterIn);
     src.onended = () => {
       // Web Audio also fires onended when we explicitly stop(); guard so
@@ -636,7 +665,8 @@ export function useAudioGraph(
         : pitchOffsetRef.current;
     }
     const pos =
-      nodes.ctx.currentTime - pitchStartedAtRef.current + pitchOffsetRef.current;
+      (nodes.ctx.currentTime - pitchStartedAtRef.current) * pitchComputedRate() +
+      pitchOffsetRef.current;
     try {
       pitchSourceRef.current.onended = null;
       pitchSourceRef.current.stop();
@@ -753,10 +783,18 @@ export function useAudioGraph(
       return pos;
     },
     setPitchDetune: (semitones, cents) => {
+      reanchorPitchClock();
       pitchStateRef.current.semitones = semitones;
       pitchStateRef.current.cents = cents;
       if (pitchSourceRef.current) {
         pitchSourceRef.current.detune.value = semitones * 100 + cents;
+      }
+    },
+    setPitchRate: (rate) => {
+      reanchorPitchClock();
+      pitchStateRef.current.rate = rate;
+      if (pitchSourceRef.current) {
+        pitchSourceRef.current.playbackRate.value = rate;
       }
     },
     pitchPause: () => {
@@ -792,7 +830,9 @@ export function useAudioGraph(
       if (!nodes) return 0;
       if (pitchSourceRef.current && pitchPlayingRef.current) {
         return (
-          nodes.ctx.currentTime - pitchStartedAtRef.current + pitchOffsetRef.current
+          (nodes.ctx.currentTime - pitchStartedAtRef.current) *
+            pitchComputedRate() +
+          pitchOffsetRef.current
         );
       }
       return pitchPausedAtRef.current >= 0

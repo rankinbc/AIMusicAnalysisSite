@@ -410,6 +410,7 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
   const pitchEnabled = realAudio && !!rs.mod['pitch']?.enabled;
   const pitchSemitones = Number(rs.mod['pitch']?.['semitones']) || 0;
   const pitchCents = Number(rs.mod['pitch']?.['cents']) || 0;
+  const pitchTempo = Number(rs.mod['pitch']?.['tempo']) || 1;
 
   // Story 5.10: crossing below the lg breakpoint pauses every lane.
   useEffect(() => {
@@ -524,10 +525,14 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     };
   }, [audioUrl, versionId]);
 
-  // Apply detune to the live BufferSource.
+  // Apply detune + tempo to the live BufferSource. Tempo lets the user cancel
+  // detune's speed coupling (e.g. +5 st ≈ ×1.335 speed → tempo 0.75 ≈ original
+  // speed at the shifted pitch).
   useEffect(() => {
-    if (pitchActive) graph.setPitchDetune(pitchSemitones, pitchCents);
-  }, [pitchSemitones, pitchCents, pitchActive, graph]);
+    if (!pitchActive) return;
+    graph.setPitchDetune(pitchSemitones, pitchCents);
+    graph.setPitchRate(pitchTempo);
+  }, [pitchSemitones, pitchCents, pitchTempo, pitchActive, graph]);
 
   // Enter/exit the pitch buffer lane on the rack's pitch toggle.
   useEffect(() => {

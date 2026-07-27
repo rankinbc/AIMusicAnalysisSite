@@ -250,12 +250,12 @@ export const RACK_MANIFEST: ModuleManifest[] = [
 
 export const PITCH_MODULE: ModuleManifest = {
   id: 'pitch', label: 'Pitch', sub: 'Shift · tempo-coupled', tier: 'transport', accent: 'var(--violet)', glyph: '♯', hasMix: false, hasMeter: false,
-  bind: 'enterPitchMode() · setPitchDetune(st, cents)',
-  summary: 'Separate buffer lane — NOT an insert. Pitch + tempo are coupled.',
+  bind: 'enterPitchMode() · setPitchDetune(st, cents) · setPitchRate(x)',
+  summary: 'Separate buffer lane — NOT an insert. Pitch shifts speed too; the Tempo knob compensates (net = tempo × 2^(st/12)).',
   params: [
     { key: 'semitones', label: 'Semitones', control: 'knob', min: -12, max: 12, step: 1, unit: 'st', default: 0 },
     { key: 'cents', label: 'Cents', control: 'slider', min: -50, max: 50, step: 1, unit: 'cents', default: 0 },
-    { key: 'tempo', label: 'Tempo', control: 'knob', min: 0.2, max: 5, step: 0.01, unit: 'x', default: 1, hint: 'coupled' },
+    { key: 'tempo', label: 'Tempo', control: 'knob', min: 0.2, max: 5, step: 0.01, unit: 'x', default: 1, hint: 'compensates pitch' },
   ],
 };
 

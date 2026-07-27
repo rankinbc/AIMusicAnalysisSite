@@ -138,7 +138,7 @@ The UI's entire contact with the engine:
 - `readEffectMeter(id): EffectMeter | null` — `comp` → `{reductionDb}`, `gate` → `{reductionDb, open}`, `limiter` → `{reductionDb}`; others null.
 - `readFrame(): AudioFrame` — `{ fftBins, bandAverages, rmsDb, lufsShort, truePeakDb, correlation, scopeL, scopeR }` for visualizers.
 - `setMasterBypass(b)`, `resetAll()`.
-- Pitch: `enterPitchMode(audioUrl, fromSeconds)`, `exitPitchMode()`, `setPitchDetune(semitones, cents)`, `pitchPause/Resume/Seek/CurrentTime/Duration/Playing/Subscribe`.
+- Pitch: `enterPitchMode(audioUrl, fromSeconds)`, `exitPitchMode()`, `setPitchDetune(semitones, cents)`, `setPitchRate(rate)` (tempo multiplier — offsets detune's speed coupling; net speed = rate × 2^(detune/1200)), `pitchPause/Resume/Seek/CurrentTime/Duration/Playing/Subscribe`.
 - Legacy (back-compat, prefer `setEffectParams`): `setEqBand`, `setEqEnabled`, `setCompressor`, `setSaturation`, `setWidth` — the last three are exact aliases of `setEffectParams`.
 
 ## 5. State + param flow
