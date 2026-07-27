@@ -16,6 +16,20 @@ per-phase re-run vehicles this runs a complete new analysis, not just the
 phase.
 
 Env: REDIS_URL, DATABASE_URL, WORKERDASH_PORT (5999), WORKER_DIR.
+
+## Watchdog
+
+    python -m workerdash.watchdog
+
+Supervises the dramatiq worker: probes process pair + heartbeat every 30 s;
+two consecutive dead/half-dead checks trigger a tree-kill + relaunch with the
+worker's stdout/stderr redirected to `data/logs/worker-<stamp>.log` (so
+crashes finally leave evidence). Three restarts inside 10 minutes = crash
+loop: the watchdog halts restarting, flags it in
+`data/logs/watchdog-status.json`, and the dashboard header shows a red
+banner. Supervision resumes automatically once the worker is healthy again
+(e.g. after a manual fix). Env: WORKER_DIR, WORKER_LOG_DIR,
+WATCHDOG_STATUS_FILE. See docs/STARTUP.md for how it fits the boot flow.
 Localhost-only, no auth — dev tool. Tests: `pytest`.
 
 ## Operations tab
