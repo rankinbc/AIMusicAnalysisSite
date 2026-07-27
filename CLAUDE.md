@@ -263,7 +263,10 @@ The original vanilla-JSX SPA. The v2 frontend at `components/frontend-spectr-v2/
 **Purpose**: Standalone local web dashboard for the dramatiq worker: queue
 contents with song/version context, worker health (healthy/half-dead/dead),
 cancel / bring-to-front / retry job actions, worker restart per STARTUP.md.
-**Inputs**: Redis (dramatiq wire format), PostgreSQL (read + job-row updates)
+Also provides an Operations tab with searchable run history (list/drill-down),
+per-run file access (audio, .als, JSON report, coach transcript), and LLM
+token/cost breakdown via `llm_calls` rollup.
+**Inputs**: Redis (dramatiq wire format), PostgreSQL (read + job-row updates), local disk or S3 for file serving (`STORAGE_LOCAL_ROOT`, optional `S3_*` env vars)
 **Outputs**: http://127.0.0.1:5999 (localhost only, no auth)
 **How to run**: `cd components/workerdash && python -m workerdash`
 
