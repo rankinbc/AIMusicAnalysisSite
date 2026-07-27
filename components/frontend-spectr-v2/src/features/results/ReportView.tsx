@@ -5,7 +5,10 @@ import { toast } from 'sonner';
 import { ApiError } from '../../api/fetcher';
 import { extractApiError } from '../../api/error-utils';
 import {
+  useApplyVerdict,
+  useDismissVerdict,
   useEntitlements,
+  useFeedbackVerdict,
   useReanalyzeVersion,
   useVerdicts,
   useVersionFiles,
@@ -39,12 +42,21 @@ import { ReferenceTab } from './ReferenceTab';
 import { TrackInfoTab } from './TrackInfoTab';
 import { DebugTab } from './DebugTab';
 import { unlockIntentToInputKey } from './coach-chat-helpers';
-import { buildMoves, moveToMarkdown, type Move } from './move-model';
+import { buildMoves, type Move } from './move-model';
+import { generateGamePlan, type ExportConfig } from './export-generator';
 import { ResultsTabs, type ResultsTabKey } from './ResultsTabs';
-import { FixBoard } from './FixBoard';
+import { FixBoard, type FixBoardMode } from './FixBoard';
 import { useFixRackGeneration } from './useFixRackGeneration';
 import { faultCount } from './problems-helpers';
+import { appendPlanLog, readPlanLog } from './plan-log';
+import type { VerdictDto } from '../../api/types';
 import { SongHeader, type SongHeaderInputs } from './SongHeader';
+import { StemsTab } from './StemsTab';
+import { NotesTab } from './NotesTab';
+import { ImprovementPlanTab } from './ImprovementPlanTab';
+import { ActionsBar } from './ActionsBar';
+import { SuggestionRows } from './SuggestionRows';
+import { useComments } from '../listen/useComments';
 import { Icon } from './Icon';
 import { buildListenFixes, readListenFixes, writeListenFixes } from '../listen-rack/listenFixes';
 import './redesign-v3.css';
@@ -94,6 +106,8 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
   // per-metric availability.
   const hasReference =
     Boolean(phase6?.gaps && Object.keys(phase6.gaps).length > 0) || phase5?.status === 'ok';
+  // Stems tab unlocks when the user-stems analysis ran clean.
+  const hasStems = (phase4?.stems as { status?: string } | undefined)?.status === 'ok';
 
   // Verdicts are the AI-Move source + CoachChat grounding. Shared query cache
   // (keyed by jobId) — single fetch.
@@ -107,6 +121,15 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
   const moves = useMemo(
     () => buildMoves({ verdicts, topFixes: fj.top_fixes, coachedFixes: fj.coached_fixes }),
     [verdicts, fj.top_fixes, fj.coached_fixes],
+  );
+  // Actions-tab badge: findings with a live fix (dismissed already dropped by
+  // buildMoves) — note rows are additive and not double-counted here.
+  const actionableCount = useMemo(() => moves.filter((m) => m.verdictId != null).length, [moves]);
+  // Notes/Feedback badge — shares the query cache with NotesTab (same key).
+  const { data: commentsData } = useComments(versionId ?? '');
+  const commentCount = useMemo(
+    () => (commentsData ?? []).filter((c) => c.status !== 'hidden').length,
+    [commentsData],
   );
 
   // Which inputs the analysis ran on — drives the header chips.
@@ -149,6 +172,104 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
     });
   }, []);
 
+  // ── v4 board state: checked fix-less findings ("notes" on Actions),
+  // cross-tab deep-link focus, coach ask-seed, spectrum band highlight,
+  // and the Improvement-Plan action log count. ──
+  const notesKey = versionId ? `findingNotes:${versionId}` : null;
+  const [checkedNoteIds, setCheckedNoteIds] = useState<ReadonlySet<string>>(() => {
+    try {
+      const raw = notesKey ? localStorage.getItem(notesKey) : null;
+      const arr = raw ? (JSON.parse(raw) as unknown) : null;
+      return new Set(Array.isArray(arr) ? (arr as string[]) : []);
+    } catch {
+      return new Set<string>();
+    }
+  });
+  const toggleNote = useCallback(
+    (verdictId: string) => {
+      setCheckedNoteIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(verdictId)) next.delete(verdictId);
+        else next.add(verdictId);
+        try {
+          if (notesKey) localStorage.setItem(notesKey, JSON.stringify([...next]));
+        } catch {
+          /* non-fatal */
+        }
+        return next;
+      });
+    },
+    [notesKey],
+  );
+  const [boardFocus, setBoardFocus] = useState<{ mode: FixBoardMode; id: string } | null>(null);
+  const consumeFocus = useCallback(() => setBoardFocus(null), []);
+  const [askSeed, setAskSeed] = useState<{ text: string; nonce: number } | null>(null);
+  const [highlightBand, setHighlightBand] = useState<[number, number] | null>(null);
+  const [planLogCount, setPlanLogCount] = useState<number>(() => readPlanLog(versionId).length);
+  const logPlan = useCallback(
+    (kind: Parameters<typeof appendPlanLog>[1]['kind'], label: string) => {
+      setPlanLogCount(appendPlanLog(versionId, { kind, label }).length);
+    },
+    [versionId],
+  );
+
+  // Server-state mutations — the ONLY writes from board actions (the Listen
+  // queue itself stays localStorage-only; 78-fixes footgun).
+  const dismissVerdict = useDismissVerdict(jobId);
+  const applyVerdict = useApplyVerdict(jobId);
+  const feedbackVerdict = useFeedbackVerdict(jobId);
+  const onIgnore = useCallback(
+    (v: VerdictDto) => dismissVerdict.mutate(v.id),
+    [dismissVerdict],
+  );
+  const onMarkApplied = useCallback(
+    (v: VerdictDto) => {
+      applyVerdict.mutate(v.id);
+      logPlan('mark_applied', v.headline);
+    },
+    [applyVerdict, logPlan],
+  );
+  const onRate = useCallback(
+    (v: VerdictDto, rating: number, notes: string) => {
+      // Server enum is helpful|wrong; the rich 1–10+notes payload stays local.
+      // TODO(backend): rich rating payload endpoint.
+      feedbackVerdict.mutate({ verdictId: v.id, feedback: rating >= 6 ? 'helpful' : 'wrong' });
+      try {
+        localStorage.setItem(`fixRating:${v.id}`, JSON.stringify({ rating, notes }));
+      } catch {
+        /* non-fatal */
+      }
+    },
+    [feedbackVerdict],
+  );
+  const onAskCoach = useCallback((v: VerdictDto) => {
+    setAskSeed({
+      text: `About the "${v.headline}" finding — can you explain what's happening and how you'd approach fixing it?`,
+      nonce: Date.now(),
+    });
+  }, []);
+  const onShowFix = useCallback(
+    (verdictId: string) => {
+      setBoardFocus({ mode: 'actions', id: verdictId });
+      onTabChange('actions');
+    },
+    [onTabChange],
+  );
+  const onShowFinding = useCallback(
+    (verdictId: string) => {
+      setBoardFocus({ mode: 'findings', id: verdictId });
+      onTabChange('coach');
+    },
+    [onTabChange],
+  );
+  const onShowSpectrum = useCallback(
+    (range: [number, number]) => {
+      setHighlightBand(range);
+      onTabChange('trackinfo');
+    },
+    [onTabChange],
+  );
+
   const navigate = useNavigate();
 
   // Fix-rack generation now lives inside SendToListenCard (its own
@@ -159,18 +280,38 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
   // compiled preset row (Send-to-Listen) share one state machine.
   const fixRack = useFixRackGeneration(jobId);
   const [exportOpen, setExportOpen] = useState(false);
-  const downloadGamePlan = useCallback(() => {
-    const md = moveToMarkdown(committed, trackName);
-    const blob = new Blob([md], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${(trackName || 'game-plan').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'game-plan'}-game-plan.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, [committed, trackName]);
+  // v4: the ExportModal's config drives the emitted file (same generator as
+  // its live preview).
+  const downloadGamePlan = useCallback(
+    (cfg: ExportConfig) => {
+      const result = generateGamePlan(
+        cfg,
+        committed,
+        {
+          bpm: phase1?.bpm,
+          key: phase1?.detected_key,
+          lufs: phase1?.lufs,
+          genre: phase2?.genre,
+        },
+        {
+          trackName,
+          versionLabel:
+            results.versionLabel ??
+            (results.versionNumber != null ? `v${results.versionNumber}` : null),
+        },
+      );
+      const blob = new Blob([result.content], { type: result.mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = result.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    },
+    [committed, trackName, phase1, phase2, results.versionLabel, results.versionNumber],
+  );
 
   // Listen handoff — persist the user's Added + applyable fixes for the Listen
   // "Plan" tab. Only fixes whose dsp_chain maps to a rack module are written;
@@ -304,6 +445,7 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
                 onGenerateCoachMix={fixRack.generate}
                 onUnlockAction={onUnlockAction}
                 credits={null}
+                askSeed={askSeed}
               />
             </div>
 
@@ -331,16 +473,65 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
               hasProject={hasProject}
               projectTrackCount={alsProject?.trackCount ?? 0}
               hasReference={hasReference}
+              hasStems={hasStems}
+              commentCount={commentCount}
+              actionableCount={actionableCount}
+              planLogCount={planLogCount}
             />
 
-            {/* Findings board (the Coach-labeled first tab). */}
+            {/* Findings board (diagnosis-first; the Coach-labeled first tab). */}
             {tab === 'coach' && (
               <div className="tabbody fade-up">
                 <FixBoard
+                  mode="findings"
                   verdicts={verdicts}
                   moves={moves}
                   committedIds={committedIds}
                   onToggleCommit={toggleCommit}
+                  checkedNoteIds={checkedNoteIds}
+                  onToggleNote={toggleNote}
+                  focusId={boardFocus?.mode === 'findings' ? boardFocus.id : null}
+                  onConsumeFocus={consumeFocus}
+                  onShowFix={onShowFix}
+                  onShowFinding={onShowFinding}
+                  onAskCoach={onAskCoach}
+                  onIgnore={onIgnore}
+                  onMarkApplied={onMarkApplied}
+                  onRate={onRate}
+                  onShowSpectrum={onShowSpectrum}
+                />
+              </div>
+            )}
+            {/* Actions board (fix-first). */}
+            {tab === 'actions' && (
+              <div className="tabbody fade-up">
+                <ActionsBar
+                  versionId={versionId}
+                  trackName={trackName}
+                  committed={committed}
+                  coachMixReady={fixRack.rack != null}
+                  coachMixGenerating={fixRack.phase === 'generating'}
+                  onGenerateCoachMix={fixRack.generate}
+                  onLogPlan={logPlan}
+                />
+                <FixBoard
+                  mode="actions"
+                  verdicts={verdicts}
+                  moves={moves}
+                  committedIds={committedIds}
+                  onToggleCommit={toggleCommit}
+                  checkedNoteIds={checkedNoteIds}
+                  onToggleNote={toggleNote}
+                  focusId={boardFocus?.mode === 'actions' ? boardFocus.id : null}
+                  onConsumeFocus={consumeFocus}
+                  onShowFix={onShowFix}
+                  onShowFinding={onShowFinding}
+                  onAskCoach={onAskCoach}
+                  onIgnore={onIgnore}
+                  onMarkApplied={onMarkApplied}
+                  onRate={onRate}
+                  onShowSpectrum={onShowSpectrum}
+                  extraActionRows={versionId ? <SuggestionRows versionId={versionId} /> : undefined}
                 />
               </div>
             )}
@@ -354,6 +545,7 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
                 danceability={fj.danceability_score}
                 spectrogramUrl={results.spectrogramImageUrl}
                 waveformUrl={results.waveformImageUrl}
+                highlightBand={highlightBand}
               />
             )}
             {tab === 'project' && alsProject && (
@@ -383,6 +575,43 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
                   phase5={phase5}
                   phase1={phase1}
                   onGoToFindings={() => onTabChange('coach')}
+                />
+              </div>
+            )}
+            {tab === 'stems' && (
+              <div className="tabbody fade-up">
+                <StemsTab
+                  stemsRaw={phase4?.stems}
+                  perStemDeltas={phase5?.per_stem_reference_deltas}
+                  versionId={versionId}
+                  verdicts={verdicts}
+                  onShowFinding={onShowFinding}
+                />
+              </div>
+            )}
+            {tab === 'notes' && (
+              <div className="tabbody fade-up">
+                <NotesTab versionId={versionId} durationSec={phase1?.duration_seconds} />
+              </div>
+            )}
+            {tab === 'dawplan' && (
+              <div className="tabbody fade-up">
+                <ImprovementPlanTab
+                  versionId={versionId}
+                  verdicts={verdicts}
+                  moves={moves}
+                  committedIds={committedIds}
+                  checkedNoteIds={checkedNoteIds}
+                  fixRack={fixRack.rack}
+                  specialistsRan={
+                    (verdictsData?.specialists ?? []).filter((s) => s.status !== 'idle').length
+                  }
+                  specialistsSuggested={
+                    verdictsData?.routingPlan?.specialistsToRun.length ?? 0
+                  }
+                  onOpenExport={() => setExportOpen(true)}
+                  onShowFinding={onShowFinding}
+                  onLogPlan={logPlan}
                 />
               </div>
             )}
@@ -435,8 +664,8 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
             genre: phase2?.genre,
           }}
           onClose={() => setExportOpen(false)}
-          onDownload={() => {
-            downloadGamePlan();
+          onDownload={(cfg) => {
+            downloadGamePlan(cfg);
             setExportOpen(false);
           }}
         />
