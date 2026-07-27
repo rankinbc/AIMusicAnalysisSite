@@ -59,11 +59,14 @@ export function EqCurveEditor({ bands, accent, dim, onBands }: {
   const bandsRef = useRef(bands);
   bandsRef.current = bands;
 
+  // NOTE: editing is NOT gated on the module being enabled (`dim` only dims
+  // the visuals) — knobs/faders everywhere stay editable while a module is
+  // off, and gating the dots made dragging silently die whenever the EQ
+  // toggle or master BYPASS was engaged.
   const startDrag = (i: number) => (e: React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setSel(i);
-    if (dim) return;
     const move = (ev: PointerEvent) => {
       const rect = svgRef.current?.getBoundingClientRect();
       if (!rect) return;
@@ -84,7 +87,6 @@ export function EqCurveEditor({ bands, accent, dim, onBands }: {
   };
 
   const onWheel = (i: number) => (e: React.WheelEvent) => {
-    if (dim) return;
     setSel(i);
     const b = bands[i];
     if (!b) return;
@@ -144,7 +146,6 @@ export function EqCurveEditor({ bands, accent, dim, onBands }: {
           <select
             className="lr-sel"
             value={selBand.type}
-            disabled={dim}
             onChange={(e) => {
               const t = e.target.value;
               patch(sel, { type: t, ...(isFilter(t) ? { gainDb: 0 } : {}) });

@@ -222,6 +222,7 @@
 .rdx .lr-eqc-g .gh {stroke:rgba(255,255,255,.06)}
 .rdx .lr-eqc-g .gz {stroke:rgba(255,255,255,.16)}
 .rdx .lr-eqc-g .gt {fill:var(--muted);font-family:'JetBrains Mono',monospace;font-size:8px}
+.rdx .lr-eqc-g {touch-action:none}
 .rdx .lr-eqc-g .bd {cursor:grab}
 .rdx .lr-eqc-g .bd.off {opacity:.35}
 .rdx .lr-eqc-g .bh {fill:transparent}

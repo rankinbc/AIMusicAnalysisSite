@@ -157,8 +157,9 @@ export function DynamicsViz({
     return () => cancelAnimationFrame(raf);
   }, [graph, id, playing, dim, accent, thresholdLabel]);
 
+  // Editable while the module is off — `dim` only dims the visuals (same
+  // rule as knobs/faders and the EQ curve editor).
   const startDrag = (e: React.PointerEvent) => {
-    if (dim) return;
     e.preventDefault();
     const apply = (clientY: number) => {
       const rect = canvasRef.current?.getBoundingClientRect();
