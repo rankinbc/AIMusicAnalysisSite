@@ -109,3 +109,58 @@ def list_jobs(conn, search=None, status=None, since=None, until=None,
         r["cost_usd"] = t["cost_usd"]
 
     return {"rows": rows, "total": total, "page": page, "page_size": page_size}
+
+
+_FILE_SLOTS_SQL = """
+SELECT v.file_path, v.reference_path, v.als_file_path, v.stem_paths,
+       v.raw_audio_purged_at::text,
+       a.waveform_image_path, a.spectrogram_image_path, a.waveform_peaks_path,
+       j.file_path
+FROM analysis_jobs j
+LEFT JOIN song_versions v ON v.id = j.version_id
+LEFT JOIN analyses a ON a.job_id = j.id
+WHERE j.id::text = %s
+"""
+
+
+def _slot(key, label, purged=False, download=False):
+    return {"key": key, "label": label, "purged": purged, "download": download}
+
+
+def file_slots(conn, job_id):
+    with conn.cursor() as cur:
+        cur.execute(_FILE_SLOTS_SQL, (job_id,))
+        row = cur.fetchone()
+    if row is None:
+        return None
+    (v_file, v_ref, v_als, stem_paths, purged_at,
+     wf_image, spec_image, peaks, job_file) = row
+
+    purged = bool(purged_at)
+    source_key = v_file if v_file else job_file
+    slots = {
+        "source": _slot(None if purged else source_key, "Source audio", purged=purged),
+        "reference": _slot(v_ref, "Reference track"),
+        "als": _slot(v_als, "Ableton project", download=True),
+        "waveform_image": _slot(wf_image, "Waveform image"),
+        "spectrogram_image": _slot(spec_image, "Spectrogram image"),
+        "waveform_peaks": _slot(peaks, "Waveform peaks (JSON)", download=True),
+    }
+    for role, entry in (stem_paths or {}).items():
+        if isinstance(entry, list):
+            for i, key in enumerate(entry):
+                slots[f"stem:{role}:{i}"] = _slot(key, f"Stem: {role} ({i})")
+        else:
+            slots[f"stem:{role}"] = _slot(entry, f"Stem: {role}")
+    return slots
+
+
+def job_analysis_id(conn, job_id):
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT a.id::text FROM analysis_jobs j "
+            "LEFT JOIN analyses a ON a.job_id = j.id WHERE j.id::text = %s",
+            (job_id,),
+        )
+        row = cur.fetchone()
+    return row[0] if row else None

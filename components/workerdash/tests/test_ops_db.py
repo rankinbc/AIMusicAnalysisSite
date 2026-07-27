@@ -135,3 +135,50 @@ def test_list_jobs_row_with_no_analysis_gets_zero_totals(monkeypatch):
     result = ops_db.list_jobs(conn)
     assert result["rows"][0]["input_tokens"] == 0
     assert result["rows"][0]["cost_usd"] == 0.0
+
+
+def test_file_slots_full_version_row():
+    row = ("v1.wav", "ref.wav", "proj.als",
+           {"drums": "stems/drums.wav", "bass": ["stems/bass_l.wav", "stems/bass_r.wav"]},
+           None,  # raw_audio_purged_at
+           "wf.webp", "spec.webp", "peaks.json", None)  # job_file (None when version exists)
+    conn = FakeConn([[row]])
+    slots = ops_db.file_slots(conn, "j1")
+    assert slots["source"] == {"key": "v1.wav", "label": "Source audio",
+                                "purged": False, "download": False}
+    assert slots["reference"]["key"] == "ref.wav"
+    assert slots["als"] == {"key": "proj.als", "label": "Ableton project",
+                             "purged": False, "download": True}
+    assert slots["stem:drums"]["key"] == "stems/drums.wav"
+    assert slots["stem:bass:0"]["key"] == "stems/bass_l.wav"
+    assert slots["stem:bass:1"]["key"] == "stems/bass_r.wav"
+    assert slots["waveform_image"]["key"] == "wf.webp"
+    assert slots["spectrogram_image"]["key"] == "spec.webp"
+    assert slots["waveform_peaks"] == {"key": "peaks.json", "label": "Waveform peaks (JSON)",
+                                        "purged": False, "download": True}
+
+
+def test_file_slots_purged_source_marked_not_fetched():
+    row = ("v1.wav", None, None, None, "2026-07-01T00:00:00Z", None, None, None, None)
+    conn = FakeConn([[row]])
+    slots = ops_db.file_slots(conn, "j1")
+    assert slots["source"]["purged"] is True
+
+
+def test_file_slots_anonymous_job_no_version():
+    # job.file_path used when version_id is null (story 6.3 anon jobs)
+    conn = FakeConn([[(None, None, None, None, None, None, None, None, "anon/j1/source.wav")]])
+    slots = ops_db.file_slots(conn, "j1")
+    assert slots["source"]["key"] == "anon/j1/source.wav"
+
+
+def test_file_slots_missing_job_returns_none():
+    conn = FakeConn([[]])
+    assert ops_db.file_slots(conn, "nope") is None
+
+
+def test_job_analysis_id_returns_id_or_none():
+    conn = FakeConn([[("a1",)]])
+    assert ops_db.job_analysis_id(conn, "j1") == "a1"
+    conn2 = FakeConn([[]])
+    assert ops_db.job_analysis_id(conn2, "j1") is None
