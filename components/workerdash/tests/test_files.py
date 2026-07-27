@@ -47,6 +47,29 @@ def test_resolve_rejects_path_traversal(tmp_path, monkeypatch):
     assert path is None and temp is None
 
 
+def test_resolve_rejects_empty_string(tmp_path, monkeypatch):
+    monkeypatch.setenv("STORAGE_LOCAL_ROOT", str(tmp_path))
+    monkeypatch.delenv("S3_ENDPOINT", raising=False)
+    path, temp = files.resolve("")
+    assert path is None and temp is None
+
+
+def test_resolve_rejects_dot(tmp_path, monkeypatch):
+    monkeypatch.setenv("STORAGE_LOCAL_ROOT", str(tmp_path))
+    monkeypatch.delenv("S3_ENDPOINT", raising=False)
+    path, temp = files.resolve(".")
+    assert path is None and temp is None
+
+
+def test_resolve_rejects_directory(tmp_path, monkeypatch):
+    monkeypatch.setenv("STORAGE_LOCAL_ROOT", str(tmp_path))
+    monkeypatch.delenv("S3_ENDPOINT", raising=False)
+    subdir = tmp_path / "subdir"
+    subdir.mkdir()
+    path, temp = files.resolve("subdir")
+    assert path is None and temp is None
+
+
 def test_resolve_missing_file_no_s3_returns_none(tmp_path, monkeypatch):
     monkeypatch.setenv("STORAGE_LOCAL_ROOT", str(tmp_path))
     monkeypatch.delenv("S3_ENDPOINT", raising=False)

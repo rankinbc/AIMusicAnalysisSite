@@ -48,11 +48,11 @@ def resolve(path_or_key: str) -> tuple[Path | None, Path | None]:
         return None, None
 
     candidate = (Path(local_root()) / path_or_key).resolve()
-    if candidate.exists():
+    if candidate.is_file():
         return candidate, None
 
     p = Path(path_or_key)
-    if p.is_absolute() and p.exists():
+    if p.is_absolute() and p.is_file():
         return p, None
 
     if s3_enabled():
