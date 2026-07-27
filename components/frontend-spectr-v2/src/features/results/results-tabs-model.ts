@@ -10,42 +10,95 @@ export interface TabDef {
   badge?: string | number | null;
   /** A fault-bearing badge — tints the count orange (something needs attention). */
   alert?: boolean;
+  /** v4: rendered but non-clickable, with a tooltip explaining how to unlock. */
+  disabled?: boolean;
+  tooltip?: string;
+  /** v4: right-aligned "hot" group (Findings · Actions · Improvement Plan). */
+  hot?: boolean;
 }
 
+export interface BuildTabsOpts {
+  findingCount: number;
+  hasProject: boolean;
+  projectTrackCount: number;
+  hasReference: boolean;
+  /** v4 tabs. */
+  hasStems: boolean;
+  commentCount: number;
+  actionableCount: number;
+  planLogCount: number;
+}
 
 /** Pure tab-list assembly — exported so the DEV-false shape (Debug hidden in
  *  prod builds, story 12.5) is unit-testable without stubbing import.meta.
  *
- *  v3 redesign: the Coach chat is a permanent hero-row surface (not a tab), so
- *  the first tab — id `coach` — is LABELED "Findings" and renders the findings
- *  master-detail board. There is no longer a standalone `findings` tab. */
-export function buildResultsTabs(
-  opts: { findingCount: number; hasProject: boolean; projectTrackCount: number; hasReference: boolean },
-  isDev: boolean,
-): TabDef[] {
-  const { findingCount, hasProject, projectTrackCount, hasReference } = opts;
+ *  v4 layout: left group = Track Analysis · Project (disabled w/ tooltip when
+ *  no .als) · Stems (disabled when no stems) · Reference (hidden when absent) ·
+ *  Notes/Feedback · Debug (dev). Right-aligned hot group = Findings (id
+ *  `coach`, back-compat) · Actions · Improvement Plan (id `dawplan`). */
+export function buildResultsTabs(opts: BuildTabsOpts, isDev: boolean): TabDef[] {
+  const {
+    findingCount,
+    hasProject,
+    projectTrackCount,
+    hasReference,
+    hasStems,
+    commentCount,
+    actionableCount,
+    planLogCount,
+  } = opts;
   return [
+    { id: 'trackinfo', label: 'Track Analysis', icon: 'chart' },
+    {
+      id: 'project',
+      label: 'Project',
+      icon: 'folder',
+      badge: hasProject && projectTrackCount > 0 ? projectTrackCount : null,
+      ...(hasProject
+        ? {}
+        : { disabled: true, tooltip: 'Upload the .als project to unlock' }),
+    },
+    {
+      id: 'stems',
+      label: 'Stems',
+      icon: 'layers',
+      ...(hasStems
+        ? {}
+        : { disabled: true, tooltip: 'Upload stems to unlock per-stem analysis' }),
+    },
+    ...(hasReference
+      ? [{ id: 'reference' as const, label: 'Reference', icon: 'diamond' as const }]
+      : []),
+    {
+      id: 'notes',
+      label: 'Notes / Feedback',
+      icon: 'message',
+      badge: commentCount > 0 ? commentCount : null,
+    },
+    // Story 12.5: raw pipeline I/O is a developer surface — dev builds only.
+    ...(isDev ? [{ id: 'debug' as const, label: 'Debug', icon: 'sliders' as const }] : []),
+    // ── Right-aligned hot group ──
     {
       id: 'coach',
       label: 'Findings',
-      icon: 'message',
+      icon: 'flag',
       badge: findingCount > 0 ? findingCount : null,
       alert: findingCount > 0,
+      hot: true,
     },
-    { id: 'trackinfo', label: 'Track Analysis', icon: 'chart' },
-    ...(hasProject
-      ? [
-          {
-            id: 'project' as const,
-            label: 'Project',
-            icon: 'folder' as const,
-            badge: projectTrackCount > 0 ? projectTrackCount : null,
-          },
-        ]
-      : []),
-    ...(hasReference ? [{ id: 'reference' as const, label: 'Reference', icon: 'diamond' as const }] : []),
-    // Story 12.5: raw pipeline I/O is a developer surface — dev builds only.
-    ...(isDev ? [{ id: 'debug' as const, label: 'Debug', icon: 'sliders' as const }] : []),
+    {
+      id: 'actions',
+      label: 'Actions',
+      icon: 'bolt',
+      badge: actionableCount > 0 ? actionableCount : null,
+      hot: true,
+    },
+    {
+      id: 'dawplan',
+      label: 'Improvement Plan',
+      icon: 'target',
+      badge: planLogCount > 0 ? planLogCount : null,
+      hot: true,
+    },
   ];
 }
-

@@ -329,35 +329,5 @@ function clampImpact(n: number): number {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
-// ── Markdown export ─────────────────────────────────────────────────────────
-
-/** Serialize committed Moves to a Game Plan .md checklist. Quick wins first,
- *  then Deeper work; each item `- [ ] scope · directive`. Only committed Moves
- *  are passed in (the export contract). */
-export function moveToMarkdown(committed: Move[], trackName: string): string {
-  const { quick, deep } = groupMoves(committed);
-  const lines: string[] = [`# Game Plan — ${trackName}`, ''];
-
-  const section = (label: string, items: Move[]) => {
-    if (items.length === 0) return;
-    lines.push(`## ${label}`, '');
-    for (const m of items) {
-      const head = m.scope ? `**${m.scope}** — ${m.directive}` : m.directive;
-      lines.push(`- [ ] ${head}`);
-      if (m.hasParams) {
-        for (const st of m.steps) {
-          lines.push(`  - ${st.where}${st.detail ? `: \`${st.detail}\`` : ''}`);
-        }
-      }
-    }
-    lines.push('');
-  };
-
-  section('⚡ Quick wins', quick);
-  section('🛠 Deeper work', deep);
-
-  if (quick.length === 0 && deep.length === 0) {
-    lines.push('_No moves committed yet. Add moves to your plan to export them._', '');
-  }
-  return lines.join('\n');
-}
+// The old moveToMarkdown Game-Plan serializer was retired in v4 — the
+// config-driven generator in export-generator.ts is the single export path.

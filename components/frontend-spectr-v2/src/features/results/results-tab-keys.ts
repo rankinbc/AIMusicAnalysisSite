@@ -6,12 +6,31 @@
 // `actions` tab is dissolved (its move list now lives under the coach), and the
 // old `analysis`/`files` tabs fold into Debug / the uploads sidebar. `project`
 // and `reference` are conditional (shown only when their inputs are attached).
+//
+// v4 (2026-07-26): Findings/Actions split — `coach` stays the Findings board's
+// key (back-compat: `findings` deep-links coerce to it in ReportView); new keys
+// `actions` (fix-first board), `stems`, `notes` (feedback), `dawplan`
+// (Improvement Plan).
 
-export type ResultsTabKey = 'coach' | 'findings' | 'project' | 'reference' | 'trackinfo' | 'debug';
+export type ResultsTabKey =
+  | 'coach'
+  | 'findings'
+  | 'actions'
+  | 'stems'
+  | 'notes'
+  | 'dawplan'
+  | 'project'
+  | 'reference'
+  | 'trackinfo'
+  | 'debug';
 
 export const RESULTS_TAB_KEYS: readonly ResultsTabKey[] = [
   'coach',
   'findings',
+  'actions',
+  'stems',
+  'notes',
+  'dawplan',
   'project',
   'reference',
   'trackinfo',

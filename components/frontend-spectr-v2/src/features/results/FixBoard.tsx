@@ -1,117 +1,86 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import type { VerdictDspOp, VerdictDto } from '../../api/types';
-import { Icon, type IconName } from './Icon';
-import { SEVERITY_RANK, severityColor, severityLabel } from './helpers/severity';
-import { SPECIALIST_CATALOG, specialistGroup, type SpecialistGroup } from './helpers/specialists';
+import type { VerdictDto } from '../../api/types';
+import { Icon } from './Icon';
+import { CoachStatic } from '../../ui/Coach';
+import { SEVERITY_RANK, severityColor } from './helpers/severity';
 import type { Move } from './move-model';
+import { groupProblems, type ProblemNode } from './problems-helpers';
+import {
+  deviceOf,
+  EMPTY_FILTERS,
+  GROUP_COLOR,
+  groupForVerdict,
+  SEV_ORDER,
+  type FilterState,
+  type Sev,
+} from './fix-board-helpers';
+import { FixBoardFilters } from './FixBoardFilters';
+import { FindingDetail } from './FindingDetail';
+import { ActionDetail } from './ActionDetail';
 
-// Findings master-detail board (prototype `.fixboard`): a dense severity-grouped
-// list on the left, the selected finding's full detail + fix on the right. This
-// is the body of the (relabeled) "Findings" tab. Queueing a fix drives the
-// Send-to-Listen count.
+// v4 dual-mode master-detail board (prototype `.fixboard`):
+//   mode="findings" — diagnosis-first. Severity-grouped finding list with
+//     per-row ignore / ask-the-coach / checkbox; detail = FindingDetail.
+//   mode="actions"  — fix-first. List rows are FIX TITLES (plus checked
+//     fix-less findings as notes); detail = ActionDetail with sub-tabs.
+// The Listen queue (checkbox/add toggles) is localStorage-only BY DESIGN —
+// only Mark-applied/ignore/rate write server state (78-fixes footgun).
 
-const SEV_ORDER = ['critical', 'severe', 'moderate', 'minor', 'win'] as const;
-type Sev = (typeof SEV_ORDER)[number];
-
-// One of the 7 display groups: prefer the specialist's group, else infer from
-// the category so rule-engine findings still slot in (mirrors FindingsTab).
-function groupForVerdict(v: VerdictDto): SpecialistGroup {
-  const g = specialistGroup(v.specialist);
-  if (g) return g;
-  const c = `${v.category} ${v.specialist}`.toLowerCase();
-  if (/lufs|loud|peak|clip|gain|stream/.test(c)) return 'Loudness';
-  if (/stereo|width|mono|phase|spatial|surround/.test(c)) return 'Stereo';
-  if (/section|arrange|structure|contrast/.test(c)) return 'Sections';
-  if (/stem/.test(c)) return 'Stems';
-  if (/dynamic|transient|density|humaniz/.test(c)) return 'Dynamics';
-  if (/freq|spectr|band|low_end|low-end|tonal|mud|air|clarity|harmonic|balance/.test(c))
-    return 'Spectrum';
-  return 'Misc';
-}
-
-function sevTitle(sev: string): string {
-  const label = severityLabel(sev);
-  return label.charAt(0).toUpperCase() + label.slice(1).toLowerCase();
-}
-
-function specName(v: VerdictDto): string {
-  const known = SPECIALIST_CATALOG.find((x) => x.slug === v.specialist);
-  if (known) return known.label;
-  return (v.category || 'Measured')
-    .split(/[_\s.]+/)
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ');
-}
-
-// Device glyph + accent per rack module type — a subset of the Listen-rack
-// vocabulary, matching the prototype's AR_MOD_META. Unknown types fall back to
-// the neutral sliders glyph so a chain always renders.
-const MODULE_META: Record<string, { icon: IconName; accent: string }> = {
-  eq: { icon: 'sliders', accent: 'var(--accent)' },
-  djfilter: { icon: 'sliders', accent: 'var(--blue)' },
-  filter: { icon: 'sliders', accent: 'var(--blue)' },
-  comp: { icon: 'pulse', accent: 'var(--blue)' },
-  compressor: { icon: 'pulse', accent: 'var(--blue)' },
-  gate: { icon: 'target', accent: 'var(--blue)' },
-  sat: { icon: 'wave', accent: 'var(--yellow)' },
-  saturation: { icon: 'wave', accent: 'var(--yellow)' },
-  bitcrusher: { icon: 'collision', accent: 'var(--orange)' },
-  width: { icon: 'spatial', accent: 'var(--violet)' },
-  pan: { icon: 'spatial', accent: 'var(--violet)' },
-  tremolo: { icon: 'pulse', accent: 'var(--violet)' },
-  delay: { icon: 'clock', accent: 'var(--blue)' },
-  reverb: { icon: 'spatial', accent: 'var(--violet)' },
-  limiter: { icon: 'bolt', accent: 'var(--orange)' },
-  trim: { icon: 'sliders', accent: 'var(--muted)' },
-  gain: { icon: 'sliders', accent: 'var(--muted)' },
-  pitch: { icon: 'music', accent: 'var(--green)' },
-};
-
-function moduleMeta(type: string): { icon: IconName; accent: string } {
-  return MODULE_META[type.toLowerCase()] ?? { icon: 'sliders', accent: 'var(--accent)' };
-}
-
-function formatParam(v: unknown): string {
-  if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(2);
-  if (v === null || v === undefined) return '';
-  return String(v);
-}
-
-function RackModule({ op }: { op: VerdictDspOp }) {
-  const meta = moduleMeta(op.type);
-  const entries = Object.entries(op.params ?? {});
-  return (
-    <div className="rackmod" style={{ ['--ac' as string]: meta.accent }}>
-      <div className="rm-hd">
-        <span className="rm-glyph">
-          <Icon name={meta.icon} size={13} />
-        </span>
-        <span className="rm-nm">
-          <span className="rm-name">{op.type}</span>
-        </span>
-      </div>
-      <div className="rm-params">
-        {entries.map(([k, v]) => (
-          <div className="rm-p" key={k}>
-            <span className="rm-k">{k}</span>
-            <span className="rm-v">{formatParam(v)}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+export type FixBoardMode = 'findings' | 'actions';
 
 interface FixBoardProps {
+  mode: FixBoardMode;
   verdicts: VerdictDto[];
   moves: Move[];
   committedIds: ReadonlySet<string>;
   onToggleCommit: (move: Move) => void;
+  /** Fix-less findings the user checked — they surface on Actions as notes. */
+  checkedNoteIds: ReadonlySet<string>;
+  onToggleNote: (verdictId: string) => void;
+  /** Cross-tab deep-link target (verdict id); consumed once landed. */
+  focusId: string | null;
+  onConsumeFocus: () => void;
+  onShowFix: (verdictId: string) => void;
+  onShowFinding: (verdictId: string) => void;
+  onAskCoach: (v: VerdictDto) => void;
+  /** Server dismiss (the ONLY row action besides applied/rate that writes
+   *  server state). */
+  onIgnore: (v: VerdictDto) => void;
+  onMarkApplied: (v: VerdictDto) => void;
+  onRate: (v: VerdictDto, rating: number, notes: string) => void;
+  onShowSpectrum?: ((range: [number, number]) => void) | undefined;
+  /** Extra list rows appended in actions mode (reviewer suggestions). */
+  extraActionRows?: ReactNode;
 }
 
-export function FixBoard({ verdicts, moves, committedIds, onToggleCommit }: FixBoardProps) {
+interface Row {
+  v: VerdictDto;
+  move: Move | null;
+  isNote: boolean;
+  depth: number;
+}
+
+export function FixBoard({
+  mode,
+  verdicts,
+  moves,
+  committedIds,
+  onToggleCommit,
+  checkedNoteIds,
+  onToggleNote,
+  focusId,
+  onConsumeFocus,
+  onShowFix,
+  onShowFinding,
+  onAskCoach,
+  onIgnore,
+  onMarkApplied,
+  onRate,
+  onShowSpectrum,
+  extraActionRows,
+}: FixBoardProps) {
+  const findingsMode = mode === 'findings';
   const findings = useMemo(
     () => verdicts.filter((v) => v.headline !== 'Specialist failed'),
     [verdicts],
@@ -121,34 +90,89 @@ export function FixBoard({ verdicts, moves, committedIds, onToggleCommit }: FixB
     return (v: VerdictDto): Move | null => (v.fixable ? (byId.get(v.id) ?? null) : null);
   }, [moves]);
 
-  const [fixableOnly, setFixableOnly] = useState(false);
-  const [filterOpen, setFilterOpen] = useState(false);
+  const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
+  const [selId, setSelId] = useState<string | null>(null);
 
-  const sorted = useMemo(
-    () =>
-      [...findings].sort(
-        (a, b) =>
-          (SEVERITY_RANK[b.severity as Sev] ?? 0) - (SEVERITY_RANK[a.severity as Sev] ?? 0) ||
-          b.priorityScore - a.priorityScore,
-      ),
+  // refines-threading: children nest under their parent (revived groupProblems).
+  const nodes: ProblemNode[] = useMemo(
+    () => groupProblems(findings).flatMap((g) => g.nodes),
     [findings],
   );
-  const list = useMemo(
-    () => (fixableOnly ? sorted.filter((f) => f.fixable) : sorted),
-    [sorted, fixableOnly],
-  );
 
-  const [selId, setSelId] = useState<string | null>(null);
+  // Base row list per mode (pre-filter).
+  const baseRows: Row[] = useMemo(() => {
+    if (findingsMode) {
+      return nodes.flatMap((n) => [
+        { v: n.problem, move: moveFor(n.problem), isNote: false, depth: 0 },
+        ...n.children.map((c) => ({ v: c, move: moveFor(c), isNote: false, depth: 1 })),
+      ]);
+    }
+    // Actions: findings with a live move (dismissed drop out of buildMoves),
+    // plus checked fix-less findings as notes.
+    return findings
+      .filter((v) => !v.userState.dismissed)
+      .map((v) => ({ v, move: moveFor(v), isNote: false, depth: 0 }))
+      .filter((r) => r.move != null || checkedNoteIds.has(r.v.id))
+      .map((r) => (r.move ? r : { ...r, isNote: true }))
+      .sort(
+        (a, b) =>
+          (SEVERITY_RANK[b.v.severity as Sev] ?? 0) - (SEVERITY_RANK[a.v.severity as Sev] ?? 0) ||
+          b.v.priorityScore - a.v.priorityScore,
+      );
+  }, [findingsMode, nodes, findings, moveFor, checkedNoteIds]);
+
+  // Filters (top-level rows only; nested children follow their parent).
+  const rows = useMemo(() => {
+    const pass = (r: Row): boolean => {
+      if (filters.fixableOnly && !r.move) return false;
+      if (filters.groups.size > 0 && !filters.groups.has(groupForVerdict(r.v))) return false;
+      if (filters.devices.size > 0) {
+        const d = r.move ? deviceOf(r.move.scope) : null;
+        if (!d || !filters.devices.has(d)) return false;
+      }
+      if (
+        filters.minPriority > 0 &&
+        r.v.severity !== 'win' &&
+        r.v.priorityScore < filters.minPriority
+      )
+        return false;
+      return true;
+    };
+    const out: Row[] = [];
+    for (let i = 0; i < baseRows.length; i++) {
+      const r = baseRows[i]!;
+      if (r.depth > 0) continue; // children ride with their parent
+      if (!pass(r)) continue;
+      out.push(r);
+      for (let j = i + 1; j < baseRows.length && baseRows[j]!.depth > 0; j++) {
+        out.push(baseRows[j]!);
+      }
+    }
+    return out;
+  }, [baseRows, filters]);
+
+  // Keep a valid selection as the list changes.
   useEffect(() => {
-    if (list.length === 0) {
+    if (rows.length === 0) {
       setSelId(null);
       return;
     }
-    if (!list.some((f) => f.id === selId)) setSelId(list[0]?.id ?? null);
-  }, [list, selId]);
+    if (!rows.some((r) => r.v.id === selId)) setSelId(rows[0]?.v.id ?? null);
+  }, [rows, selId]);
 
-  const fixableCount = findings.filter((f) => f.fixable).length;
+  // External focus (deep-link from the other tab): clear filters, select.
+  useEffect(() => {
+    if (!focusId) return;
+    if (findings.some((f) => f.id === focusId)) {
+      setFilters(EMPTY_FILTERS);
+      setSelId(focusId);
+    }
+    onConsumeFocus();
+  }, [focusId, findings, onConsumeFocus]);
+
+  const fixableCount = findings.filter((f) => moveFor(f) != null).length;
   const sel = findings.find((f) => f.id === selId) ?? null;
+  const selMove = sel ? moveFor(sel) : null;
 
   if (findings.length === 0) {
     return (
@@ -164,13 +188,36 @@ export function FixBoard({ verdicts, moves, committedIds, onToggleCommit }: FixB
     );
   }
 
+  const groupsPresent = [...new Set(findings.map(groupForVerdict))].map((g) => ({
+    name: g,
+    count: findings.filter((f) => groupForVerdict(f) === g).length,
+  }));
+  const devicesPresent = [
+    ...new Set(
+      findings
+        .map((f) => {
+          const m = moveFor(f);
+          return m ? deviceOf(m.scope) : null;
+        })
+        .filter((d): d is string => d != null),
+    ),
+  ]
+    .sort((a, b) => (a === 'Master' ? -1 : b === 'Master' ? 1 : a.localeCompare(b)))
+    .map((d) => ({
+      name: d,
+      count: findings.filter((f) => {
+        const m = moveFor(f);
+        return m != null && deviceOf(m.scope) === d;
+      }).length,
+    }));
+  const maxPriority = Math.max(0, ...findings.map((f) => f.priorityScore));
+
   const allSelected =
     fixableCount > 0 &&
     findings.every((f) => {
       const m = moveFor(f);
       return !m || committedIds.has(m.id);
     });
-
   const onSelectAll = () => {
     const target = !allSelected;
     for (const f of findings) {
@@ -184,59 +231,35 @@ export function FixBoard({ verdicts, moves, committedIds, onToggleCommit }: FixB
 
   return (
     <div className="fixboard">
-      <div className="fb-list">
+      <div className={`fb-list${findingsMode ? ' wide' : ''}`}>
         <div className="fb-lh">
-          <span className="t">Findings</span>
+          <span className="t">{findingsMode ? 'Findings' : 'Actions'}</span>
           <div className="fb-filters">
-            <button type="button" className="fpill selall" onClick={onSelectAll}>
-              {allSelected ? 'Clear all' : 'Select all'}
-            </button>
-            <div className="fb-filterdd">
-              <button
-                type="button"
-                className={`fpill fdd-btn${fixableOnly ? ' on' : ''}`}
-                onClick={() => setFilterOpen((o) => !o)}
-              >
-                <Icon name="filter" size={11} />
-                Filter
-                {fixableOnly && <span className="fn">1</span>}
-                <span className="fdd-chev">▾</span>
+            {!findingsMode && (
+              <button type="button" className="fpill selall" onClick={onSelectAll}>
+                {allSelected ? 'Clear all' : 'Select all'}
               </button>
-              {filterOpen && (
-                <>
-                  <div className="fdd-scrim" onClick={() => setFilterOpen(false)} />
-                  <div className="fdd-menu">
-                    <label className="fdd-opt">
-                      <input
-                        type="checkbox"
-                        checked={!fixableOnly}
-                        onChange={() => setFixableOnly(false)}
-                      />
-                      All findings <span className="fdd-c">{findings.length}</span>
-                    </label>
-                    <label className="fdd-opt">
-                      <input
-                        type="checkbox"
-                        checked={fixableOnly}
-                        onChange={() => setFixableOnly(true)}
-                      />
-                      Fixable only <span className="fdd-c">{fixableCount}</span>
-                    </label>
-                  </div>
-                </>
-              )}
-            </div>
+            )}
+            <FixBoardFilters
+              filters={filters}
+              onChange={setFilters}
+              totalCount={findings.length}
+              fixableCount={fixableCount}
+              groupsPresent={groupsPresent}
+              devicesPresent={devicesPresent}
+              maxPriority={maxPriority}
+            />
           </div>
         </div>
         <div className="fb-scroll">
-          {list.length === 0 ? (
+          {rows.length === 0 ? (
             <div className="na" style={{ margin: '8px 4px' }}>
               <Icon name="info" size={13} />
               Nothing matches this filter.
             </div>
           ) : (
             SEV_ORDER.map((sev) => {
-              const grp = list.filter((f) => f.severity === sev);
+              const grp = rows.filter((r) => r.v.severity === sev && r.depth === 0);
               if (grp.length === 0) return null;
               return (
                 <div key={sev}>
@@ -245,210 +268,203 @@ export function FixBoard({ verdicts, moves, committedIds, onToggleCommit }: FixB
                     {sev === 'win' ? 'wins' : sev}
                     <span className="c">{grp.length}</span>
                   </div>
-                  {grp.map((f) => {
-                    const m = moveFor(f);
-                    const added = m != null && committedIds.has(m.id);
+                  {grp.map((r) => {
+                    const children = findingsMode
+                      ? rows.filter(
+                          (c) =>
+                            c.depth > 0 &&
+                            c.v.refines != null &&
+                            c.v.refines === r.v.problemId,
+                        )
+                      : [];
                     return (
-                      <button
-                        key={f.id}
-                        type="button"
-                        className={`fb-row${f.id === selId ? ' on' : ''}${added ? ' added' : ''}`}
-                        style={{ ['--sev' as string]: severityColor(f.severity) }}
-                        onClick={() => setSelId(f.id)}
-                      >
-                        <span className="fr-dot" />
-                        <span className="fr-b">
-                          <span className="fr-head">{f.headline}</span>
-                          <span className="fr-meta mono">
-                            {groupForVerdict(f)}
-                            {m && m.hasParams ? ` · ${m.scope}` : ''}
-                            {!m ? ' · observation' : ''}
-                          </span>
-                        </span>
-                        {m ? (
-                          <span
-                            className={`fr-add${added ? ' on' : ''}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onToggleCommit(m);
-                            }}
-                            title={added ? 'Remove from Listen queue' : 'Queue this fix'}
-                          >
-                            <Icon name={added ? 'check' : 'plus'} size={12} />
-                          </span>
-                        ) : (
-                          <span className="fr-obs" title="Observation — no one-click fix" />
-                        )}
-                      </button>
+                      <div key={r.v.id}>
+                        <BoardRow
+                          row={r}
+                          mode={mode}
+                          selected={r.v.id === selId}
+                          committed={r.move != null && committedIds.has(r.move.id)}
+                          noted={checkedNoteIds.has(r.v.id)}
+                          onSelect={() => setSelId(r.v.id)}
+                          onToggleCommit={onToggleCommit}
+                          onToggleNote={onToggleNote}
+                          onAskCoach={onAskCoach}
+                          onIgnore={onIgnore}
+                        />
+                        {children.map((c) => (
+                          <BoardRow
+                            key={c.v.id}
+                            row={c}
+                            mode={mode}
+                            selected={c.v.id === selId}
+                            committed={c.move != null && committedIds.has(c.move.id)}
+                            noted={checkedNoteIds.has(c.v.id)}
+                            onSelect={() => setSelId(c.v.id)}
+                            onToggleCommit={onToggleCommit}
+                            onToggleNote={onToggleNote}
+                            onAskCoach={onAskCoach}
+                            onIgnore={onIgnore}
+                          />
+                        ))}
+                      </div>
                     );
                   })}
                 </div>
               );
             })
           )}
+          {!findingsMode && extraActionRows}
         </div>
       </div>
 
-      <FixDetail
-        f={sel}
-        move={sel ? moveFor(sel) : null}
-        added={sel != null && moveFor(sel) != null && committedIds.has(moveFor(sel)!.id)}
-        onToggle={onToggleCommit}
-      />
+      {findingsMode ? (
+        <FindingDetail
+          f={sel}
+          move={selMove}
+          onAskCoach={onAskCoach}
+          onShowFix={onShowFix}
+          onShowSpectrum={onShowSpectrum}
+        />
+      ) : (
+        <ActionDetail
+          f={sel}
+          move={selMove}
+          added={selMove != null && committedIds.has(selMove.id)}
+          onToggleCommit={onToggleCommit}
+          onShowFinding={onShowFinding}
+          onAskCoach={onAskCoach}
+          onMarkApplied={onMarkApplied}
+          onRate={onRate}
+          onShowSpectrum={onShowSpectrum}
+        />
+      )}
     </div>
   );
 }
 
-function FixDetail({
-  f,
-  move,
-  added,
-  onToggle,
+function BoardRow({
+  row,
+  mode,
+  selected,
+  committed,
+  noted,
+  onSelect,
+  onToggleCommit,
+  onToggleNote,
+  onAskCoach,
+  onIgnore,
 }: {
-  f: VerdictDto | null;
-  move: Move | null;
-  added: boolean;
-  onToggle: (move: Move) => void;
+  row: Row;
+  mode: FixBoardMode;
+  selected: boolean;
+  committed: boolean;
+  noted: boolean;
+  onSelect: () => void;
+  onToggleCommit: (move: Move) => void;
+  onToggleNote: (verdictId: string) => void;
+  onAskCoach: (v: VerdictDto) => void;
+  onIgnore: (v: VerdictDto) => void;
 }) {
-  const [whyOpen, setWhyOpen] = useState(false);
-  const [dataOpen, setDataOpen] = useState(false);
-  useEffect(() => {
-    setWhyOpen(false);
-    setDataOpen(false);
-  }, [f?.id]);
-
-  if (!f) {
-    return (
-      <div className="fb-detail empty">
-        <Icon name="info" size={18} />
-        <span>Select a finding to see the detail and its fix.</span>
-      </div>
-    );
-  }
-
-  const isAi = f.source === 'llm_identifier';
-  const group = groupForVerdict(f);
-  const spec = specName(f);
-
+  const { v, move, isNote, depth } = row;
+  const findingsMode = mode === 'findings';
+  const dismissed = v.userState.dismissed;
+  const group = groupForVerdict(v);
   return (
-    <div className="fb-detail" style={{ ['--sev' as string]: severityColor(f.severity) }}>
-      <div className="fbd-scroll">
-        <div className="fbd-toplab">Finding</div>
-        <div className="fbd-meta">
-          <span className="fbd-sev">{sevTitle(f.severity)}</span>
-          <span className="fbd-group">{group}</span>
-          {spec && spec !== group && (
-            <span className="fbd-src">
-              {isAi ? <span className="src ai">AI</span> : <span className="src measured">Measured</span>}
-              <span>{spec}</span>
+    <button
+      type="button"
+      className={
+        `fb-row${selected ? ' on' : ''}${committed ? ' added' : ''}` +
+        `${dismissed ? ' ignored' : ''}${depth > 0 ? ' nested' : ''}`
+      }
+      style={{ ['--sev' as string]: severityColor(v.severity) }}
+      onClick={onSelect}
+    >
+      {depth > 0 && <span className="fr-branch" aria-hidden>└</span>}
+      <span className="fr-dot" />
+      <span className="fr-b">
+        <span className="fr-head">{findingsMode || !move ? v.headline : move.title}</span>
+        <span className="fr-meta mono">
+          <span className="fr-grp" style={{ color: GROUP_COLOR[group] }}>
+            {group}
+          </span>
+          {move && move.hasParams ? ` · ${move.scope}` : ''}
+          {!move ? (findingsMode ? ' · observation' : ' · note · manual move') : ''}
+          {dismissed ? ' · ignored' : ''}
+        </span>
+      </span>
+      {findingsMode ? (
+        <span className="fr-acts" onClick={(e) => e.stopPropagation()}>
+          {move ? (
+            <span
+              className={`fr-ckbox gloss${committed ? ' on' : ''}`}
+              role="button"
+              tabIndex={0}
+              onClick={() => onToggleCommit(move)}
+              onKeyDown={(e) => e.key === 'Enter' && onToggleCommit(move)}
+            >
+              <Icon name={committed ? 'check' : 'plus'} size={11} />
+              <span className="gtip">A suggested fix is available — check to queue it</span>
+            </span>
+          ) : (
+            <span
+              className={`fr-ckbox off gloss${noted ? ' on' : ''}`}
+              role="button"
+              tabIndex={0}
+              onClick={() => onToggleNote(v.id)}
+              onKeyDown={(e) => e.key === 'Enter' && onToggleNote(v.id)}
+            >
+              {noted && <Icon name="check" size={11} />}
+              <span className="gtip">No one-click fix — check to add as a note to Actions</span>
             </span>
           )}
-        </div>
-
-        <h3 className="fbd-head">
-          {f.headline}
-          {f.metricLine && <span className="fbd-metric">{f.metricLine}</span>}
-        </h3>
-        <div className="fbd-cols">
-          <p className="fbd-sum">
-            {f.summary}
-            {f.whyItMatters && !whyOpen && (
-              <button type="button" className="why-link" onClick={() => setWhyOpen(true)}>
-                Why it matters
-              </button>
-            )}
-          </p>
-        </div>
-        {f.whyItMatters && whyOpen && (
-          <div className="fbd-why">
-            <button type="button" className="q why-link-open" onClick={() => setWhyOpen(false)}>
-              Why it matters ▾
-            </button>
-            <p>{f.whyItMatters}</p>
-          </div>
-        )}
-
-        {move ? (
-          <div className="fbd-fix">
-            <div className="fbd-fixhd">
-              <span className="fx-lab">The fix</span>
-              <span className="fbd-spacer" />
-            </div>
-            <div className="fbd-fixsub">
-              <span className="fx-scope mono">{move.hasParams ? move.scope : 'directional'}</span>
-              <span className="fx-conf">
-                <span className="cv">{Math.round(move.confidence * 100)}%</span> conf
-              </span>
-            </div>
-            <div className="fbd-fixtitle">{move.title}</div>
-            <div className={`directive${move.hasParams ? '' : ' directional'}`}>
-              <span className="arrow">→</span>
-              <div className="d-text">{move.directive}</div>
-            </div>
-
-            <div className="fbd-grid">
-              {move.ops.length > 0 && (
-                <div className="fbd-rack">
-                  <div className="fbd-rackhd-row">
-                    <span className="fbd-rackhd">Suggested fix</span>
-                    <span className="fbd-footnote">
-                      {added ? (
-                        <>
-                          <span className="dot on" />
-                          Queued for Listen
-                        </>
-                      ) : (
-                        'Add to apply live on the Listen page'
-                      )}
-                    </span>
-                    <button
-                      type="button"
-                      className={`rack-toggle sm${added ? ' on' : ''}`}
-                      onClick={() => onToggle(move)}
-                    >
-                      <Icon name={added ? 'check' : 'plus'} size={12} />
-                      {added ? 'Added' : 'Add to fix rack'}
-                    </button>
-                  </div>
-                  <div className="preset-mods">
-                    {move.ops.map((op, i) => (
-                      <RackModule key={i} op={op} />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            {move.evidence.metric && (
-              <div className={`fbd-data${dataOpen ? ' open' : ''}`}>
-                <button
-                  type="button"
-                  className="fbd-datahd"
-                  onClick={() => setDataOpen((o) => !o)}
-                >
-                  <span className="lab">
-                    <span className="fbd-dchev">{dataOpen ? '▾' : '▸'}</span>The data
-                  </span>
-                  <span className="metric">{move.evidence.metric}</span>
-                </button>
-                {dataOpen && (
-                  <div className="fbd-datachart fade-up">
-                    <p className="mono" style={{ fontSize: 11, color: 'var(--text-2)' }}>
-                      {move.evidence.metric}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="fbd-nofix">
-            <Icon name={f.severity === 'win' ? 'check' : 'info'} size={14} />
-            {f.severity === 'win'
-              ? 'A win — nothing to change here.'
-              : 'No one-click fix — this is an observation. Ask the Coach to dig in, or address it by hand.'}
-          </div>
-        )}
-      </div>
-    </div>
+          <span
+            className="fr-ic gloss"
+            role="button"
+            tabIndex={0}
+            onClick={() => onAskCoach(v)}
+            onKeyDown={(e) => e.key === 'Enter' && onAskCoach(v)}
+          >
+            <CoachStatic size={15} />
+            <span className="gtip">Ask the Coach about this</span>
+          </span>
+          {!dismissed && (
+            <span
+              className="fr-ic gloss"
+              role="button"
+              tabIndex={0}
+              onClick={() => onIgnore(v)}
+              onKeyDown={(e) => e.key === 'Enter' && onIgnore(v)}
+            >
+              <Icon name="eyeoff" size={13} />
+              <span className="gtip">Ignore this finding — hides its action too</span>
+            </span>
+          )}
+        </span>
+      ) : move ? (
+        <span
+          className={`fr-add${committed ? ' on' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleCommit(move);
+          }}
+          title={committed ? 'Remove from Listen queue' : 'Queue this fix'}
+        >
+          <Icon name={committed ? 'check' : 'plus'} size={12} />
+        </span>
+      ) : isNote ? (
+        <span
+          className={`fr-add note${noted ? ' on' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleNote(v.id);
+          }}
+          title={noted ? 'Unmark this note' : 'Mark this note to work on in your DAW'}
+        >
+          <Icon name={noted ? 'check' : 'plus'} size={12} />
+        </span>
+      ) : (
+        <span className="fr-obs" title="Observation — no one-click fix" />
+      )}
+    </button>
   );
 }

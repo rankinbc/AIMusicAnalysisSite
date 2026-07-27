@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 
 import { getAccessToken } from '../../api/fetcher';
@@ -30,16 +30,19 @@ interface TrackInfoTabProps {
   danceability?: number | undefined;
   spectrogramUrl?: string | null | undefined;
   waveformUrl?: string | null | undefined;
+  /** v4 ev2 deep-link: a frequency range whose overlapping tonal-balance bands
+   *  glow when landing here from a finding's evidence row. */
+  highlightBand?: [number, number] | null | undefined;
 }
 
-const BANDS: { key: keyof Phase1Bands; label: string; hz: string }[] = [
-  { key: 'sub_bass', label: 'Sub', hz: '20–60' },
-  { key: 'bass', label: 'Bass', hz: '60–250' },
-  { key: 'low_mid', label: 'Lo-mid', hz: '250–500' },
-  { key: 'mid', label: 'Mid', hz: '0.5–2k' },
-  { key: 'upper_mid', label: 'Hi-mid', hz: '2–4k' },
-  { key: 'presence', label: 'Pres', hz: '4–8k' },
-  { key: 'air', label: 'Air', hz: '8–20k' },
+const BANDS: { key: keyof Phase1Bands; label: string; hz: string; lo: number; hi: number }[] = [
+  { key: 'sub_bass', label: 'Sub', hz: '20–60', lo: 20, hi: 60 },
+  { key: 'bass', label: 'Bass', hz: '60–250', lo: 60, hi: 250 },
+  { key: 'low_mid', label: 'Lo-mid', hz: '250–500', lo: 250, hi: 500 },
+  { key: 'mid', label: 'Mid', hz: '0.5–2k', lo: 500, hi: 2000 },
+  { key: 'upper_mid', label: 'Hi-mid', hz: '2–4k', lo: 2000, hi: 4000 },
+  { key: 'presence', label: 'Pres', hz: '4–8k', lo: 4000, hi: 8000 },
+  { key: 'air', label: 'Air', hz: '8–20k', lo: 8000, hi: 20000 },
 ];
 
 const PLATFORMS: { name: string; target: number }[] = [
@@ -66,6 +69,7 @@ export function TrackInfoTab({
   danceability,
   spectrogramUrl,
   waveformUrl,
+  highlightBand,
 }: TrackInfoTabProps) {
   void phase3;
   const structure = phase1?.structure;
@@ -77,7 +81,7 @@ export function TrackInfoTab({
       </div>
       <div className="ti-grid">
         <LoudnessCard phase1={phase1} />
-        <TonalCard bands={phase1?.bands} />
+        <TonalCard bands={phase1?.bands} highlightBand={highlightBand} />
         <StereoCard phase1={phase1} spatial={phase9?.spatial} />
         <PunchCard phase1={phase1} />
         <ClashCard clashes={phase4?.clashes} />
@@ -349,13 +353,28 @@ function LoudnessCard({ phase1 }: { phase1: Phase1Data | undefined }) {
 }
 
 // ── Tonal balance — phase1.bands.* (flags from phase6.gaps, not wired here) ───
-function TonalCard({ bands }: { bands: Phase1Bands | undefined }) {
+function TonalCard({
+  bands,
+  highlightBand,
+}: {
+  bands: Phase1Bands | undefined;
+  highlightBand?: [number, number] | null | undefined;
+}) {
+  // ev2 deep-link: scroll the card into view when a band range lands.
+  useEffect(() => {
+    if (!highlightBand) return;
+    document
+      .querySelector('[data-ti-anchor="bands"]')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [highlightBand]);
   const vals = BANDS.map((b) => ({ ...b, db: bands?.[b.key] }));
   const present = vals.map((v) => v.db).filter((d): d is number => d != null);
   if (present.length === 0) return null;
   const floor = Math.min(...present) - 4;
   const ceil = Math.max(...present) + 2;
   const h = (v: number) => `${Math.max(4, clampPct(((v - floor) / (ceil - floor)) * 100))}%`;
+  const isHl = (b: { lo: number; hi: number }) =>
+    highlightBand != null && b.lo < highlightBand[1] && b.hi > highlightBand[0];
   return (
     <div className="card" data-ti-anchor="bands">
       <div className="card-hd">
@@ -368,7 +387,7 @@ function TonalCard({ bands }: { bands: Phase1Bands | undefined }) {
       <div className="card-body">
         <div className="bands">
           {vals.map((b, i) => (
-            <div className="band" key={i}>
+            <div className={`band${isHl(b) ? ' hl' : ''}`} key={i}>
               <div className="bcol" style={{ height: '100%' }}>
                 <div className="bfill" style={{ height: b.db != null ? h(b.db) : 0 }} />
               </div>

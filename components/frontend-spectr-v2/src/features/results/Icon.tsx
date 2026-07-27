@@ -28,6 +28,9 @@ export type IconName =
   | 'dots'
   | 'anchor'
   | 'eye'
+  | 'eyeoff'
+  | 'thumbup'
+  | 'thumbdown'
   | 'alert'
   | 'clock'
   | 'copy'
@@ -150,6 +153,25 @@ const PATHS: Record<IconName, ReactElement> = {
     <>
       <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
       <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  eyeoff: (
+    <>
+      <path d="M17.9 17.9A10.5 10.5 0 0 1 12 19c-6.5 0-10-7-10-7a17.6 17.6 0 0 1 4.1-5.1M9.9 5.2A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17.7 17.7 0 0 1-2.2 3.2" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+      <path d="M3 3l18 18" />
+    </>
+  ),
+  thumbup: (
+    <>
+      <path d="M7 10v11H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h3z" />
+      <path d="M7 10l4.2-7a2 2 0 0 1 3.6 1.2L14 8h5a2 2 0 0 1 2 2.4l-1.4 8A2 2 0 0 1 17.6 20H7" />
+    </>
+  ),
+  thumbdown: (
+    <>
+      <path d="M17 14V3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-3z" />
+      <path d="M17 14l-4.2 7a2 2 0 0 1-3.6-1.2L10 16H5a2 2 0 0 1-2-2.4l1.4-8A2 2 0 0 1 6.4 4H17" />
     </>
   ),
   alert: (

@@ -7,6 +7,10 @@ function v(over: Partial<VerdictDto>): VerdictDto {
   return {
     id: 'v' + Math.random(), analysisId: 'a', specialist: 'rule_engine.x', promptVersion: '1',
     model: 'rules', severity: 'moderate', category: 'low_end', confidence: 0.9, priorityScore: 50,
+    priorityBase: null,
+    priorityCategoryWeight: null,
+    priorityScopeMultiplier: null,
+    scope: null,
     impact: null, chartType: null, headline: 'h', summary: null, body: null, metricLine: null,
     whyItMatters: null, presetName: null, evidence: null, fix: null, sources: null,
     problemId: 'low_end.x.0', kind: 'fault', source: 'rule_engine', dataTier: 'audio_only',

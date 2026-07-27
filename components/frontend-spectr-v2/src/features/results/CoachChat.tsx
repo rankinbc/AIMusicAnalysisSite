@@ -77,6 +77,9 @@ interface CoachChatProps {
    *  Optional so bare mounts stay valid; without it the chip routes to the
    *  song page copy instead of a stale "coming soon" toast. */
   onUnlockAction?: (intent: 'add_stems' | 'add_reference') => void;
+  /** v4 "Ask the coach about this": pre-fills the input with a question about a
+   *  finding. `nonce` bumps so asking about the same finding twice re-seeds. */
+  askSeed?: { text: string; nonce: number } | null;
 }
 
 export function CoachChat({
@@ -86,8 +89,18 @@ export function CoachChat({
   specialistsSuggested = 0,
   greeting,
   onUnlockAction,
+  askSeed,
 }: CoachChatProps) {
   const [input, setInput] = useState('');
+  // v4 ask-the-coach: seed the input from a finding row/detail CTA and bring
+  // the composer into view. Seed only — the user still hits send.
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (!askSeed) return;
+    setInput(askSeed.text);
+    inputRef.current?.focus();
+    inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [askSeed]);
   // teach-mode-coach: the header mode toggle (Concise · Normal · Teach). "Teach"
   // sends the next question as mode="teach" so the coach teaches the relevant
   // craft grounded in this track; Concise/Normal both map to a direct Q&A.
@@ -552,6 +565,7 @@ export function CoachChat({
         ) : (
           <div className="coach-input">
             <input
+              ref={inputRef}
               placeholder={offlineState ? 'Coach is offline' : 'Ask the coach about this mix…'}
               value={input}
               onChange={(e) => setInput(e.target.value)}

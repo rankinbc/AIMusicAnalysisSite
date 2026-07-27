@@ -28,6 +28,8 @@ interface CoachTabProps {
   /** Story 12.5: unlock chips open the REAL upload dialogs (owned by ReportView). */
   onUnlockAction?: (intent: 'add_stems' | 'add_reference') => void;
   credits: number | null;
+  /** v4 "Ask the coach about this" — threaded down to CoachChat. */
+  askSeed?: { text: string; nonce: number } | null;
 }
 
 /** The hero-row Coach card (prototype `.coach-wrap`): grounded chat + the two
@@ -46,6 +48,7 @@ export function CoachTab({
   onGenerateCoachMix,
   onUnlockAction,
   credits,
+  askSeed,
 }: CoachTabProps) {
   const [optimisticRunning, setOptimisticRunning] = useState<ReadonlySet<string>>(
     () => new Set<string>(),
@@ -178,6 +181,7 @@ export function CoachTab({
         specialistsSuggested={suggestedCount}
         greeting={greeting}
         {...(onUnlockAction ? { onUnlockAction } : {})}
+        askSeed={askSeed ?? null}
       />
 
       {cmOpen && (
