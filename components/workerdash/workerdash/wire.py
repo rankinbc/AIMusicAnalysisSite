@@ -51,3 +51,59 @@ def parse_envelope(raw) -> dict:
         }
     except (json.JSONDecodeError, AttributeError) as e:
         return {"parse_error": str(e), "raw": raw[:500]}
+
+
+HEARTBEATS_KEY = f"{NAMESPACE}:__heartbeats__"
+
+
+def enqueue(r, actor_name: str, args: list, queue: str) -> str:
+    rid, payload = build_envelope(actor_name, args, queue)
+    pipe = r.pipeline(transaction=True)
+    pipe.hset(msgs_key(queue), rid, payload)
+    pipe.rpush(queue_key(queue), rid)
+    pipe.execute()
+    return rid
+
+
+def list_queue(r, queue: str) -> list[dict]:
+    ids = [i.decode() if isinstance(i, bytes) else i
+           for i in r.lrange(queue_key(queue), 0, -1)]
+    if not ids:
+        return []
+    raws = r.hmget(msgs_key(queue), ids)
+    rows = []
+    for pos, (rid, raw) in enumerate(zip(ids, raws)):
+        row = parse_envelope(raw) if raw is not None else {"parse_error": "payload missing from .msgs hash", "raw": ""}
+        row["redis_message_id"] = row.get("redis_message_id") or rid
+        row["position"] = pos
+        rows.append(row)
+    return rows
+
+
+def cancel_message(r, queue: str, rid: str) -> bool:
+    pipe = r.pipeline(transaction=True)
+    pipe.lrem(queue_key(queue), 0, rid)
+    pipe.hdel(msgs_key(queue), rid)
+    removed, _ = pipe.execute()
+    return removed > 0
+
+
+def bring_to_front(r, queue: str, rid: str) -> bool:
+    # Worker consumes from the head (LPOP); LREM+LPUSH promotes the id.
+    pipe = r.pipeline(transaction=True)
+    pipe.lrem(queue_key(queue), 0, rid)
+    pipe.lpush(queue_key(queue), rid)
+    removed, _ = pipe.execute()
+    if removed == 0:
+        # id wasn't queued — undo the phantom LPUSH we just did
+        r.lrem(queue_key(queue), 0, rid)
+        return False
+    return True
+
+
+def heartbeat_age_seconds(r):
+    top = r.zrange(HEARTBEATS_KEY, -1, -1, withscores=True)
+    if not top:
+        return None
+    now_ms = time.time() * 1000
+    return max(0.0, (now_ms - top[0][1]) / 1000)
