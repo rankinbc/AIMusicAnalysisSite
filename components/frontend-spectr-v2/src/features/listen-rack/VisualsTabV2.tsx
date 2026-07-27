@@ -228,7 +228,7 @@ export function VisualsTabV2({ viz, setViz, stages, toggleStage, director, setDi
       </VzPanel>
 
       <VzPanel led={viz.gridIntensity > 0 ? 'var(--cyan)' : 'var(--dim)'} title="Floor grid">
-        <VzSlider label="Intensity" value={viz.gridIntensity} min={0} max={100} step={5} fmt={(v) => (v === 0 ? 'off' : v + ' %')} onChange={(v) => set('gridIntensity', v)} />
+        <VzSlider label="Intensity" value={viz.gridIntensity} min={0} max={300} step={10} fmt={(v) => (v === 0 ? 'off' : v + ' %')} onChange={(v) => set('gridIntensity', v)} />
         <div className="lr-vzlbl">Grid color</div>
         <VzHue value={viz.gridHue} onChange={(v) => set('gridHue', v)} disabled={viz.gridIntensity === 0} />
       </VzPanel>

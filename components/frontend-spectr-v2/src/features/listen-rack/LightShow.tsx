@@ -47,22 +47,31 @@ export function LightShow({ playing, intensity = 1, show, gridHue = 168, gridInt
       ctx.fillStyle = hz;
       ctx.fillRect(0, 0, W, H);
       // floor grid — the scrolling "ground moving forward" lines. Hue +
-      // intensity are user settings (Visuals tab); 50 = the classic 0.05
-      // alpha, scaling linearly up to 2x at 100; 0 hides the ground.
+      // intensity are user settings (Visuals tab); 50 = the classic look,
+      // up to 300 for a full neon floor; 0 hides the ground.
       // (The static perspective spokes were REMOVED — they didn't move and
       // read as diagonal clutter slashing across the page.)
-      const gridA = 0.05 * ((gi ?? 50) / 50) * I * live;
+      // Drawn with 'lighter' + a shadow bloom so the lines EMIT light: they
+      // add over whatever is behind instead of tinting it.
+      const gs = (gi ?? 50) / 50;              // 1 = classic, up to 6
+      const gridA = Math.min(0.9, 0.05 * gs * I * live);
       if (gridA > 0.001) {
+        const hue = gh ?? 168;
         const hy = H * 0.66;
-        ctx.strokeStyle = `hsla(${gh ?? 168},90%,55%,${gridA})`;
-        ctx.lineWidth = 1;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.shadowColor = `hsla(${hue},100%,62%,${Math.min(1, gridA * 2.2)})`;
+        ctx.shadowBlur = Math.min(30, 3 + gs * 7);
+        ctx.lineWidth = Math.min(3, 1 + gs * 0.25);
+        const light = 55 + Math.min(28, gs * 6);
         for (let i = 0; i < 9; i++) {
           const p = (t * 0.06 + i / 9) % 1;
           const y = hy + Math.pow(p, 2.6) * (H - hy);
-          ctx.globalAlpha = p * 0.9;
+          // nearer lines (p→1) read brighter — that's the depth cue
+          ctx.strokeStyle = `hsla(${hue},95%,${light}%,${gridA * p * 0.9})`;
           ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
         }
-        ctx.globalAlpha = 1;
+        ctx.restore();
       }
       // lasers
       ctx.globalCompositeOperation = 'lighter';

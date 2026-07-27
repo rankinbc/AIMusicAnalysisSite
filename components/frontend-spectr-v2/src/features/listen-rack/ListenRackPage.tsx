@@ -821,7 +821,10 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
   return (
     <div className="rdx lr-shell" data-testid="listen-rack-page">
       <LightShow playing={playing} intensity={1} show gridHue={viz.gridHue} gridIntensity={viz.gridIntensity} />
-      <div className="wrap lr-glass" data-density="dense" style={{ position: 'relative', zIndex: 1 }}>
+      {/* zIndex 2: above the light-show canvas (z1), which itself sits above
+          the body-portaled fullscreen viz stage (z0) so the floor grid shows
+          through background effects. */}
+      <div className="wrap lr-glass" data-density="dense" style={{ position: 'relative', zIndex: 2 }}>
         {/* Story 5.10: everything hides with the grid <1024 — the notice card
             must never leave live-room controls operable underneath it. */}
         <div className="lr-desktop-only">

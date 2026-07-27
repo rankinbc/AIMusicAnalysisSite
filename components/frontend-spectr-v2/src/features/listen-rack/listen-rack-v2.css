@@ -402,8 +402,12 @@
 .rdx .lr-side .lr-pchip {padding:3px 7px 3px 3px;font-size:11px}
 
 /* ── light show background + glass panels ── */
-.rdx .lr-bgfx {position:fixed;inset:0;width:100vw;height:100vh;z-index:0;pointer-events:none}
-.rdx .wrap {position:relative;z-index:1}
+/* The light show sits ABOVE the fullscreen viz stage (a body-portaled fixed
+   layer at z-index 0) so the floor grid stays visible through background
+   effects; `screen` blending makes its lines add light instead of painting
+   over them. Page content stays on top at z-index 2. */
+.rdx .lr-bgfx {position:fixed;inset:0;width:100vw;height:100vh;z-index:1;pointer-events:none;mix-blend-mode:screen}
+.rdx .wrap {position:relative;z-index:2}
 .rdx .lr-glass .tabbody {background:color-mix(in srgb,#17191f 84%,transparent);backdrop-filter:blur(9px)}
 .rdx .lr-glass .rtab.active {background:color-mix(in srgb,var(--surface) 52%,transparent)}
 .rdx .lr-glass .card, .rdx .lr-glass .lr-sc {background:color-mix(in srgb,var(--surface-2) 55%,transparent);backdrop-filter:blur(9px)}
