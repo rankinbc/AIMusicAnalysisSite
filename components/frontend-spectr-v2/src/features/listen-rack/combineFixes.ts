@@ -10,6 +10,9 @@
 //           High/low-pass cutoffs merge among themselves the same way. Past the
 //           rack's 8 bands, highest total weight wins; losers are logged, never
 //           silently dropped.
+//           The clustered bands are then REFIT (eqRefit.ts) to the fewest
+//           bands that hold the same curve — legibility, and it runs before
+//           the slot cap so nothing is dropped that could have been absorbed.
 //   trim    a CONSTRAINT, not an accumulation: same-direction moves keep the
 //           BINDING one (deepest cut / largest boost), opposing ones net by
 //           weight. Clamped ±24 dB. See mergeTrims.
@@ -19,6 +22,7 @@
 // MIRROR of the worker's solve_lib/weighted_merge.py (the Coach Mix arbiter +
 // preset compiler run the same math) — change a rule here, change it there too.
 import type { VerdictDspOp } from '../../api/types';
+import { refitGainBands } from './eqRefit';
 import { MODULE_DEFAULTS, type EqBand, type ModuleState } from './data';
 
 export interface WeightedFix {
@@ -122,6 +126,43 @@ function mergeFilters(kind: 'highpass' | 'lowpass', entries: { freq: number; q: 
   };
 }
 
+/** Refit the clustered gain bands to the fewest that hold the same curve, and
+ *  re-attach merge weights: a synthesised band inherits the pull of the
+ *  original moves it stands in for (nearest in log-frequency), so the slot cap
+ *  downstream still ranks by how hard the source fixes pulled. */
+function refitMerged(bands: MergedBand[], log: string[]): MergedBand[] {
+  const isFilter = (b: MergedBand): boolean =>
+    b.band.type === 'highpass' || b.band.type === 'lowpass';
+  const filters = bands.filter(isFilter);
+  const gains = bands.filter((b) => !isFilter(b));
+  if (gains.length < 2) return bands;
+
+  const refit = refitGainBands(gains.map((b) => b.band));
+  if (refit.after >= refit.before) return bands;
+
+  const rewrapped: MergedBand[] = refit.bands
+    .filter((b) => b.type !== 'highpass' && b.type !== 'lowpass')
+    .map((band) => ({ band, weight: 0 }));
+  for (const src of gains) {
+    let nearest = rewrapped[0]!;
+    let best = Infinity;
+    for (const cand of rewrapped) {
+      const d = Math.abs(Math.log(src.band.freq) - Math.log(cand.band.freq));
+      if (d < best) {
+        best = d;
+        nearest = cand;
+      }
+    }
+    nearest.weight += src.weight;
+  }
+
+  log.push(
+    `eq: ${refit.before} bands restated as ${refit.after} — same curve to within `
+    + `${refit.maxDeviationDb} dB, so the plan is ${refit.after} moves instead of ${refit.before}`,
+  );
+  return [...filters, ...rewrapped];
+}
+
 /** Merge master-trim moves and return the rack's gainDb.
  *
  *  The master trim is ONE constraint — "put the output at the right level" —
@@ -216,6 +257,13 @@ export function combineFixes(
     mergeFilters('lowpass', lp, log),
     ...clusterGainMoves(gainMoves, log),
   ].filter((b): b is MergedBand => b != null);
+
+  // Restate the curve in as few bands as reproduce it. Runs BEFORE the slot
+  // cap, so bands the refit would have absorbed for free are never dropped —
+  // and before the chain forks into the rack and the written instructions, so
+  // what you hear and what you're told to do are the same processing.
+  bands = refitMerged(bands, log);
+
   if (bands.length > RACK_EQ_SLOTS) {
     const ranked = [...bands].sort((a, b) => b.weight - a.weight || a.band.freq - b.band.freq);
     for (const lost of ranked.slice(RACK_EQ_SLOTS)) {

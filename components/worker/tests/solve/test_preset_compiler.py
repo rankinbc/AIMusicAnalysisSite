@@ -155,3 +155,18 @@ def test_opposing_trims_net_by_weight():
 def test_single_trim_passes_through_unchanged():
     out = compile_preset([_trim("loudness.loudness_vs_target.0", -3.1)])
     assert out["chain"]["modules"]["trim"]["gainDb"] == -3.1
+
+
+# ── refit: the compiled chain is stated in as few bands as reproduce it ──────
+
+def test_compiled_chain_refits_a_crowded_low_end():
+    # Seven separate low-end cuts, each far enough apart to survive clustering.
+    freqs = [30, 40, 55, 110, 180, 300, 350]
+    out = compile_preset([
+        _vfix(f"frequency_balance.band{i}.0",
+              DspOp(type="peaking_eq", params={"frequency_hz": float(f), "gain_db": -2.0, "q": 1.0}))
+        for i, f in enumerate(freqs)
+    ])
+    enabled = [b for b in out["chain"]["modules"]["eq"]["bands"] if b["enabled"]]
+    assert len(enabled) < len(freqs)
+    assert any("restated as" in c["change"] for c in out["change_log"])

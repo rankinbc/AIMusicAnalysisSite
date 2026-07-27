@@ -15,6 +15,11 @@ not diagnose or invent fixes. Stages (PRPs/identifiers/preset-compiler.md):
                (the master level is one constraint, not a stack of steps); the
                limiter keeps the LOWEST ceiling (safety). Nothing merges across
                frequency regions.
+  3b. REFIT    restate the merged curve in the fewest bands that reproduce it
+               (solve_lib.eq_refit - mirrored by the frontend's eqRefit.ts).
+               Runs before the slot cap, and before the chain forks into the
+               audition rack and the written plan, so both describe the same
+               processing.
   4. ORDER     populate modules in place; never reorder the canonical chain.
 
 Returns ``{"chain", "leftover_advice", "change_log"}``. Nothing is silently
@@ -25,6 +30,7 @@ dropped — every unmappable move comes back as advice, every merge is logged.
 # (per-fix apply) and the merge math in .../combineFixes.ts. Keep them in sync.
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from aimusic_shared.verdicts.models import DspOp, Verdict
@@ -36,6 +42,7 @@ from app.solve_lib.rack_schema import (
     ORDER,
     PARAM_MAP,
 )
+from app.solve_lib import eq_refit as R
 from app.solve_lib import weighted_merge as W
 
 _Pair = tuple[Verdict, DspOp]
@@ -55,6 +62,49 @@ def _num(params: dict[str, Any], key: str, fallback: float) -> float:
         return float(val)
     except (TypeError, ValueError):
         return fallback
+
+
+def _refit_merged(bands: list[W.MergedBand],
+                  change_log: list[dict[str, Any]]) -> list[W.MergedBand]:
+    """Refit the clustered gain bands to the fewest holding the same curve, and
+    re-attach merge weights: a synthesised band inherits the pull of the
+    original moves it stands in for (nearest in log-frequency), so the slot cap
+    downstream still ranks by how hard the source fixes pulled, and the
+    change-log keeps every contributing problem_id."""
+    filters = [b for b in bands if b.type in ("highpass", "lowpass")]
+    gains = [b for b in bands if b.type not in ("highpass", "lowpass")]
+    if len(gains) < 2:
+        return bands
+
+    res = R.refit_gain_bands([
+        R.Band(type=b.type, freq=b.freq, gain_db=b.gain_db, q=b.q) for b in gains
+    ])
+    if res.after >= res.before:
+        return bands
+
+    rewrapped = [
+        W.MergedBand(type=b.type, freq=b.freq, gain_db=b.gain_db, q=b.q,
+                     weight=0.0, sources=[], gains=[])
+        for b in res.bands if b.type not in ("highpass", "lowpass")
+    ]
+    for src in gains:
+        nearest = min(rewrapped,
+                      key=lambda c: abs(math.log(src.freq) - math.log(c.freq)))
+        nearest.weight += src.weight
+        nearest.sources.extend(src.sources)
+        nearest.gains.extend(src.gains)
+        if nearest.rep_source is None:
+            nearest.rep_source = src.rep_source
+        # A refit band standing in for a contested cluster is still contested.
+        nearest.mixed = nearest.mixed or src.mixed
+
+    change_log.append({
+        "module": "eq",
+        "change": f"{res.before} bands restated as {res.after} - same curve to within "
+                  f"{res.max_deviation_db} dB",
+        "why": "fewest bands a human can carry into a DAW",
+    })
+    return filters + rewrapped
 
 
 def _build_eq(pairs: list[_Pair], change_log: list[dict[str, Any]]) -> dict[str, Any]:
@@ -87,6 +137,11 @@ def _build_eq(pairs: list[_Pair], change_log: list[dict[str, Any]]) -> dict[str,
             *W.cluster_gain_moves(gain_moves, change_log),
         ) if b is not None
     ]
+    # Restate the curve in as few bands as reproduce it, BEFORE the slot cap so
+    # nothing is dropped that the refit would have absorbed for free — and
+    # before the chain forks into the audition rack and the written plan, so
+    # both describe the same processing. Mirrors combineFixes.refitMerged.
+    merged = _refit_merged(merged, change_log)
     merged = W.cap_bands(merged, change_log)
 
     bands: list[dict[str, Any]] = [
@@ -100,8 +155,11 @@ def _build_eq(pairs: list[_Pair], change_log: list[dict[str, Any]]) -> dict[str,
         note = f"band@{b.freq:.0f}Hz {b.type} gainDb {b.gain_db}"
         if b.type in ("highpass", "lowpass"):
             note += " (eq band has a fixed slope; solver slope_db not applied)"
+        # A refit band can end up representing no original directly (every
+        # source landed nearer a sibling), so sources may be empty here.
         change_log.append({"module": "eq", "change": note,
-                           "from_fix": b.sources[0], "why": "weighted merge"})
+                           "from_fix": (b.sources[0] if b.sources else b.rep_source),
+                           "why": "weighted merge"})
     return {"enabled": True, "bands": bands}
 
 
