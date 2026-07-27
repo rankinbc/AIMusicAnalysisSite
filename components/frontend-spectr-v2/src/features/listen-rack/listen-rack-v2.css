@@ -215,6 +215,23 @@
 .rdx .lr-bay-row {display:flex;align-items:flex-end;gap:14px}
 .rdx .lr-bay-row.lr-wrap {flex-wrap:wrap;gap:10px}
 .rdx .lr-bay-eq {display:flex;gap:12px}
+/* Parametric EQ curve editor (Ableton-style) */
+.rdx .lr-eqc {display:flex;flex-direction:column;gap:8px;flex:1 1 460px;min-width:300px}
+.rdx .lr-eqc-g {width:100%;height:auto;border-radius:8px;background:rgba(0,0,0,.35);border:1px solid var(--border);display:block}
+.rdx .lr-eqc-g .gv {stroke:rgba(255,255,255,.05)}
+.rdx .lr-eqc-g .gh {stroke:rgba(255,255,255,.06)}
+.rdx .lr-eqc-g .gz {stroke:rgba(255,255,255,.16)}
+.rdx .lr-eqc-g .gt {fill:var(--muted);font-family:'JetBrains Mono',monospace;font-size:8px}
+.rdx .lr-eqc-g .bd {cursor:grab}
+.rdx .lr-eqc-g .bd.off {opacity:.35}
+.rdx .lr-eqc-g .bh {fill:transparent}
+.rdx .lr-eqc-g .bc {stroke-width:1.5}
+.rdx .lr-eqc-g .bd.sel .bc {stroke-width:2}
+.rdx .lr-eqc-g .bn {font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:700;text-anchor:middle;pointer-events:none}
+.rdx .lr-eqc-row {display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.rdx .lr-eqc-row .bnum {font-size:10px;font-weight:700}
+.rdx .lr-eqc-row .bfrq {font-size:10px;color:var(--text-2);min-width:52px}
+.rdx .lr-eqc-hint {font-size:8.5px;color:var(--muted);letter-spacing:.04em}
 .rdx .lr-bay .lr-pc {width:180px}
 .rdx .lr-empty {padding:26px;border-radius:11px;border:1px dashed var(--border-2);text-align:center;font-size:12px;color:var(--muted)}
 .rdx .lr-knob {display:flex;flex-direction:column;align-items:center;gap:3px;user-select:none}

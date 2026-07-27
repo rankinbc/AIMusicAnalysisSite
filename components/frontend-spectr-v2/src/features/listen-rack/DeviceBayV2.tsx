@@ -1,11 +1,12 @@
 /* Listen Rack v2 — device bay: rack-hardware editor panel for the selected
  * module (rotary knobs, vertical EQ faders, segmented LED GR meter). Ported
  * from the design handoff (lr-devices.jsx), wired to RackState. */
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 
 import { Icon } from '../results/Icon';
 import type { ModuleManifest, ParamValue } from './data';
 import { fmtVal, type EqBand } from './data';
+import { EqCurveEditor } from './EqCurveEditor';
 import { ParamControl, PSlider, PToggle, Sw } from './lrControls';
 import { lrClamp } from './lrUtil';
 import { useDeviceIo, useGainReduction, type DeviceIoState, type RackState } from './rackState';
@@ -164,6 +165,14 @@ export function DeviceBayV2({ m, i, rs, playing, showBind, onClose }: {
   const grLive = useGainReduction(rs.graph, m.id, Boolean(v?.enabled) && m.hasMeter, playing);
   // IN/OUT taps: insert devices only (the pitch lane has i < 0 and no unit).
   const io = useDeviceIo(rs.graph, m.id, i >= 0, playing);
+  // EQ view: parametric curve (default) or the classic 8-fader strip.
+  const [eqView, setEqView] = useState<'curve' | 'faders'>(() =>
+    (typeof localStorage !== 'undefined' && localStorage.getItem('lr:eqView') === 'faders') ? 'faders' : 'curve');
+  const toggleEqView = () => {
+    const next = eqView === 'curve' ? 'faders' : 'curve';
+    setEqView(next);
+    try { localStorage.setItem('lr:eqView', next); } catch { /* non-fatal */ }
+  };
   if (!v) return null;
   const on = v.enabled && !rs.masterBypass;
   const dim = !on;
@@ -196,6 +205,16 @@ export function DeviceBayV2({ m, i, rs, playing, showBind, onClose }: {
             {i < 0 ? 'buffer lane · not an insert' : '#' + String(i + 1).padStart(2, '0') + ' in chain'} · {m.sub}
           </span>
         </span>
+        {m.perBand && (
+          <button
+            type="button"
+            className="lr-ib"
+            title={eqView === 'curve' ? 'Switch to the fader view' : 'Switch to the parametric curve view'}
+            onClick={(e) => { e.stopPropagation(); toggleEqView(); }}
+          >
+            {eqView === 'curve' ? '▤' : '≈'}
+          </button>
+        )}
         {m.worklet && <span className="wk" title="AudioWorklet — brief init">wk</span>}
         {showBind && <span className="lr-bind">{m.bind}</span>}
         <button
@@ -211,6 +230,9 @@ export function DeviceBayV2({ m, i, rs, playing, showBind, onClose }: {
       </div>
       <div className="lr-bay-b">
         {m.perBand ? (
+          eqView === 'curve' ? (
+            <EqCurveEditor bands={bands} accent={m.accent} dim={dim} onBands={(nb) => rs.setEqBands(nb)} />
+          ) : (
           <div className="lr-bay-eq">
             {bands.map((b, bi) => (
               <LRFader
@@ -228,6 +250,7 @@ export function DeviceBayV2({ m, i, rs, playing, showBind, onClose }: {
               />
             ))}
           </div>
+          )
         ) : (
           <>
             {!!knobs.length && (
