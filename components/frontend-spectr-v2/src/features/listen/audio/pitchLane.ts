@@ -39,6 +39,12 @@ export function createPitchLane(ctx: AudioContext): PitchLane {
   const push = () => {
     const p = node?.parameters.get('ratio');
     if (p) p.value = ratio;
+    // Formant preservation is always on — no rack control surfaces it yet,
+    // but the AudioParam exists (default 1) for a future dial. Re-asserting
+    // it here is redundant with the processor's own default; it's cheap
+    // insurance in case that default ever changes.
+    const f = node?.parameters.get('formant');
+    if (f) f.value = 1;
   };
 
   return {
