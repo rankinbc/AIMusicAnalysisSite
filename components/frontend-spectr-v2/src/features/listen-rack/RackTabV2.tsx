@@ -114,13 +114,13 @@ function Toolbar({ rs, sticky, meters, presets, onRecallPreset, onSavePreset, on
 // ── Module card ────────────────────────────────────────────────────────
 interface ModCardProps {
   m: ModuleManifest; i: number; rs: RackState; playing: boolean;
-  sel: boolean; showWorklet: boolean;
+  sel: boolean; showWorklet: boolean; bpm?: number | undefined;
   onSelect: () => void;
   dragging: boolean; isOver: boolean;
   dragProps: Record<string, unknown>;
 }
 
-function ModCard({ m, i, rs, playing, sel, showWorklet, onSelect, dragging, isOver, dragProps }: ModCardProps) {
+function ModCard({ m, i, rs, playing, sel, showWorklet, bpm, onSelect, dragging, isOver, dragProps }: ModCardProps) {
   const v = rs.mod[m.id];
   const on = Boolean(v?.enabled) && !rs.masterBypass;
   const grLive = useGainReduction(rs.graph, m.id, on && m.hasMeter, playing);
@@ -148,14 +148,14 @@ function ModCard({ m, i, rs, playing, sel, showWorklet, onSelect, dragging, isOv
       <div className="lr-mc-p">{sum ? <b>{sum}</b> : <span className="zz">neutral</span>}</div>
       {m.hasMeter && <div className="lr-gr"><i style={{ width: (on ? lrClamp(gr / 6, 0, 1) * 100 : 0) + '%' }} /></div>}
       <span className="lr-act">
-        <CardActivity id={m.id} on={on} accent={m.accent} rateHz={m.id === 'tremolo' ? Number(v['rateHz']) : undefined} />
+        <CardActivity on={on} accent={m.accent} bpm={bpm} />
       </span>
     </div>
   );
 }
 
 // ── Detached pitch device (buffer lane) shown after the chain ──────────
-function PitchCard({ rs, sel, onSelect }: { rs: RackState; sel: boolean; onSelect: () => void }) {
+function PitchCard({ rs, sel, bpm, onSelect }: { rs: RackState; sel: boolean; bpm?: number | undefined; onSelect: () => void }) {
   const m = PITCH_MODULE;
   const v = rs.mod['pitch'];
   if (!v) return null;
@@ -184,16 +184,18 @@ function PitchCard({ rs, sel, onSelect }: { rs: RackState; sel: boolean; onSelec
         {sum ? <b>{sum} · net {netRate.toFixed(2)}×</b> : <span className="zz">buffer lane · not an insert</span>}
       </div>
       <span className="lr-act">
-        <CardActivity id="pitch" on={on} accent="var(--violet)" />
+        <CardActivity on={on} accent="var(--violet)" bpm={bpm} />
       </span>
     </div>
   );
 }
 
 // ── Rack tab ───────────────────────────────────────────────────────────
-export function RackTabV2({ rs, playing, meters, readOnly, presets, onRecallPreset, onSavePreset, onExport, onImport }: {
+export function RackTabV2({ rs, playing, meters, bpm, readOnly, presets, onRecallPreset, onSavePreset, onExport, onImport }: {
   rs: RackState; playing: boolean;
   meters: LiveMeters;
+  /** Track tempo — drives the per-card beat LEDs. */
+  bpm?: number | undefined;
   /** Capability-gated (guest / no rack-control grant): grid renders inert. */
   readOnly: boolean;
   presets: RackPreset[];
@@ -227,6 +229,7 @@ export function RackTabV2({ rs, playing, meters, readOnly, presets, onRecallPres
             rs={rs}
             playing={playing}
             sel={sel === m.id}
+            bpm={bpm}
             showWorklet
             onSelect={() => pick(m.id)}
             dragging={dnd.drag === m.id}
@@ -234,7 +237,7 @@ export function RackTabV2({ rs, playing, meters, readOnly, presets, onRecallPres
             dragProps={dnd.dragProps(m.id)}
           />
         ))}
-        <PitchCard rs={rs} sel={sel === 'pitch'} onSelect={() => pick('pitch')} />
+        <PitchCard rs={rs} sel={sel === 'pitch'} bpm={bpm} onSelect={() => pick('pitch')} />
       </div>
       {selM && (
         <DeviceBayV2

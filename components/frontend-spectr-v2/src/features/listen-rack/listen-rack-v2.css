@@ -90,10 +90,11 @@
 .rdx .lr-wire .wpulse {fill:none;stroke:var(--accent);stroke-width:2;opacity:.85;stroke-linecap:round;stroke-dasharray:6 90;animation:lrWireDash 1.6s linear infinite}
 @keyframes lrWireDash {to {stroke-dashoffset:-96}}
 @media (prefers-reduced-motion: reduce) {.rdx .lr-wire .wpulse {animation:none;opacity:0}}
-/* Card live-activity readout (bottom-right corner) */
-.rdx .lr-act {position:absolute;right:6px;bottom:4px;opacity:.85;pointer-events:none;line-height:0}
-.rdx .lr-act .lr-act-svg {display:block}
-.rdx .lr-mc-p {padding-right:40px}
+/* Card beat LED (bottom-right corner) — halo circle blurred for the glow */
+.rdx .lr-act {position:absolute;right:4px;bottom:3px;pointer-events:none;line-height:0}
+.rdx .lr-act .lr-act-svg {display:block;overflow:visible}
+.rdx .lr-act .lr-act-halo {filter:blur(3.5px)}
+.rdx .lr-mc-p {padding-right:18px}
 /* Polished-metal card face: one smooth diagonal sheen (no dark troughs — the
    highlight fades gently, never dropping to near-black bands) over a light
    silver base, with bevel edges (bright top lip, soft bottom seat). */
@@ -107,11 +108,10 @@
   background:
     linear-gradient(115deg,rgba(255,255,255,.34) 0%,rgba(255,255,255,.13) 30%,rgba(255,255,255,.22) 50%,rgba(255,255,255,.12) 72%,rgba(255,255,255,.27) 100%),
     linear-gradient(178deg,#454954 0%,#363a44 48%,#2c3038 100%)}
+/* On-state keeps the SAME face color as every other card — only the border
+   and glow say "powered", so the grid reads as one uniform metal surface. */
 .rdx .lr-mc.on {border-color:color-mix(in srgb,var(--mac) 62%,transparent);
-  background:
-    linear-gradient(115deg,rgba(255,255,255,.28) 0%,rgba(255,255,255,.11) 30%,rgba(255,255,255,.18) 50%,rgba(255,255,255,.10) 72%,rgba(255,255,255,.22) 100%),
-    linear-gradient(178deg,color-mix(in srgb,var(--mac) 9%,#3d414b) 0%,color-mix(in srgb,var(--mac) 5%,#31353e) 48%,#282c34 100%);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.34),inset 0 -1px 0 rgba(0,0,0,.35),0 0 14px color-mix(in srgb,var(--mac) 28%,transparent),inset 0 0 14px color-mix(in srgb,var(--mac) 7%,transparent)}
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.34),inset 0 -1px 0 rgba(0,0,0,.35),0 0 14px color-mix(in srgb,var(--mac) 28%,transparent)}
 .rdx .lr-mc.sel {box-shadow:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.45),0 0 0 1.5px var(--mac)}
 .rdx .lr-mc.on.sel {box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 -1px 0 rgba(0,0,0,.45),0 0 0 1.5px var(--mac),0 0 18px color-mix(in srgb,var(--mac) 38%,transparent),inset 0 0 14px color-mix(in srgb,var(--mac) 8%,transparent)}
 .rdx .lr-mc-h {display:flex;align-items:center;gap:8px;min-width:0}
@@ -395,9 +395,10 @@
 .rdx .lr-glass .lr-mc, .rdx .lr-glass .lr-row {background:
   linear-gradient(115deg,rgba(255,255,255,.26) 0%,rgba(255,255,255,.10) 30%,rgba(255,255,255,.17) 50%,rgba(255,255,255,.09) 72%,rgba(255,255,255,.21) 100%),
   linear-gradient(178deg,color-mix(in srgb,#3d414b 90%,transparent),color-mix(in srgb,#31353e 90%,transparent) 48%,color-mix(in srgb,#282c34 92%,transparent))}
+/* Glass on-state: same face as off — border/glow carry the powered signal. */
 .rdx .lr-glass .lr-mc.on, .rdx .lr-glass .lr-row.on {background:
-  linear-gradient(115deg,rgba(255,255,255,.28) 0%,rgba(255,255,255,.11) 30%,rgba(255,255,255,.18) 50%,rgba(255,255,255,.10) 72%,rgba(255,255,255,.22) 100%),
-  linear-gradient(178deg,color-mix(in srgb,var(--mac) 9%,color-mix(in srgb,#3d414b 90%,transparent)),color-mix(in srgb,var(--mac) 5%,color-mix(in srgb,#31353e 90%,transparent)) 48%,color-mix(in srgb,#282c34 92%,transparent))}
+  linear-gradient(115deg,rgba(255,255,255,.26) 0%,rgba(255,255,255,.10) 30%,rgba(255,255,255,.17) 50%,rgba(255,255,255,.09) 72%,rgba(255,255,255,.21) 100%),
+  linear-gradient(178deg,color-mix(in srgb,#3d414b 90%,transparent),color-mix(in srgb,#31353e 90%,transparent) 48%,color-mix(in srgb,#282c34 92%,transparent))}
 .rdx .lr-glass .lr-stage {background:color-mix(in srgb,#070b16 78%,transparent)}
 .rdx .lr-glass .lr-ed {background:color-mix(in srgb,var(--surface-2) 60%,transparent);backdrop-filter:blur(8px)}
 .rdx .lr-glass .lr-sel, .rdx .lr-glass .lr-vt {background:color-mix(in srgb,var(--card-2) 55%,transparent)}

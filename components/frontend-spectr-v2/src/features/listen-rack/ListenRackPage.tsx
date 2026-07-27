@@ -955,6 +955,7 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
                     rs={rs}
                     playing={playing}
                     meters={meters}
+                    bpm={track.bpm}
                     readOnly={rackReadOnly}
                     presets={rackPresetItems}
                     onRecallPreset={onRecallRackPreset}
