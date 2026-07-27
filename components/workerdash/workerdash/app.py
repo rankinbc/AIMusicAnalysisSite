@@ -216,8 +216,8 @@ async function load(){
   :'<span class=mono>idle</span>');
  $('#queues').innerHTML=s.queues.map(q=>`<h2>${q.name} (${q.depth})
   ${q.error?`<span class=dead>${esc(q.error)}</span>`:''}</h2>`+
-  (q.messages.length?'<table><tr><th>#</th><th>actor</th><th>args / context</th>
-   <th></th></tr>'+q.messages.map(m=>{
+  (q.messages.length?`<table><tr><th>#</th><th>actor</th><th>args / context</th>
+   <th></th></tr>`+q.messages.map(m=>{
    const ctx=m.context?` — ${esc(m.context.song)} / ${esc(m.context.label)}`:'';
    const body=m.parse_error?`<span class=dead>${esc(m.parse_error)}</span>
     <span class=mono>${esc(m.raw)}</span>`:
@@ -230,8 +230,8 @@ async function load(){
  const rec=(s.db&&s.db.recent)||[];
  $('#recent').innerHTML=s.db&&s.db.error?
   `<span class=dead>db: ${esc(s.db.error)}</span>`:
-  '<table><tr><th>song</th><th>status</th><th>error</th><th>dispatched</th>
-  <th></th></tr>'+rec.map(j=>`<tr><td>${esc(j.song)} / ${esc(j.label)}</td>
+  `<table><tr><th>song</th><th>status</th><th>error</th><th>dispatched</th>
+  <th></th></tr>`+rec.map(j=>`<tr><td>${esc(j.song)} / ${esc(j.label)}</td>
   <td>${esc(j.status)}</td><td>${esc(j.error_code)}</td>
   <td class=mono>${esc(j.dispatched_at)}</td>
   <td>${j.status==='failed'?`<button onclick="act('/api/jobs/${j.id}/retry')">retry full analysis</button>`:''}</td>
