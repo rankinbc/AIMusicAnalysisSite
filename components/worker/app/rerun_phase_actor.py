@@ -237,6 +237,11 @@ def rerun_phase(
         # re-stamp pipeline_version only (reruns don't regenerate verdicts, so
         # rule/validator/prompt stamps are untouched).
         row.pipeline_version = ANALYSIS_SCHEMA_VERSION
+        # Merge this rerun's measured phase durations over the stored ones
+        # (finalize_result only carries duration_s for phases it re-measured).
+        rerun_durations = merged_safe.get("phase_durations") or {}
+        if rerun_durations:
+            row.phase_durations = {**(row.phase_durations or {}), **rerun_durations}
         report_job_id = getattr(row, "job_id", None)
 
         j = s.get(AnalysisJob, rerun_jid)
