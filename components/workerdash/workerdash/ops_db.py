@@ -48,9 +48,11 @@ def _build_filters(search, status, since, until):
     where = []
     params = []
     if search:
-        where.append("(s.name ILIKE %s OR v.label ILIKE %s)")
+        # Also match job-id prefix so a UUID (or its first chars) pasted from
+        # a log or the Live tab jumps straight to that run.
+        where.append("(s.name ILIKE %s OR v.label ILIKE %s OR j.id::text ILIKE %s)")
         like = f"%{search}%"
-        params.extend([like, like])
+        params.extend([like, like, f"{search}%"])
     if status:
         where.append("j.status = %s")
         params.append(status)

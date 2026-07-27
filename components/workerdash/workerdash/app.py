@@ -314,7 +314,7 @@ PAGE = """<!doctype html>
 </div>
 <div id="opsView" style="display:none">
  <div class="opsFilters">
-  <input id="opsSearch" placeholder="search song/version…" oninput="opsDebouncedSearch()">
+  <input id="opsSearch" placeholder="search song/version/job id…" oninput="opsDebouncedSearch()">
   <select id="opsStatus" onchange="opsLoad(1)">
    <option value="">any status</option>
    <option value="pending">pending</option>
@@ -366,12 +366,13 @@ async function opsLoad(page){
  let s;try{s=await (await fetch('/api/ops?'+q)).json()}catch(e){
   $('#opsTable').innerHTML='<span class=dead>failed to load</span>';return}
  if(!s.ok){$('#opsTable').innerHTML=`<span class=dead>${esc(s.error||'error')}</span>`;return}
- $('#opsTable').innerHTML=s.rows.length?'<table><tr><th>song</th><th>status</th>'+
+ $('#opsTable').innerHTML=s.rows.length?'<table><tr><th>job</th><th>song</th><th>status</th>'+
   '<th>error</th><th>dispatched</th><th>tokens</th><th>cost</th><th></th></tr>'+
   s.rows.map(j=>{
    const label=j.song?`${esc(j.song)} / ${esc(j.label)} v${j.version_number}`:
     `(anon) ${esc(j.file_path)}`;
-   return `<tr><td>${label}</td><td>${esc(j.status)}</td><td>${esc(j.error_code)}</td>`+
+   return `<tr><td class=mono title="${esc(j.id)}">${esc(j.id.slice(0,8))}</td>`+
+    `<td>${label}</td><td>${esc(j.status)}</td><td>${esc(j.error_code)}</td>`+
     `<td class=mono>${esc(j.dispatched_at)}</td>`+
     `<td class=mono>${(j.input_tokens||0)+(j.output_tokens||0)}</td>`+
     `<td class=mono>$${(j.cost_usd||0).toFixed(4)}</td>`+
