@@ -2,14 +2,15 @@ from workerdash import db
 
 
 class FakeCursor:
-    def __init__(self, rows):
+    def __init__(self, rows, update_matches=True):
         self.rows = rows
         self.executed = []
         self.rowcount = 0
+        self.update_matches = update_matches
 
     def execute(self, sql, params=None):
         self.executed.append((" ".join(sql.split()), params))
-        self.rowcount = 1 if "UPDATE" in sql else len(self.rows)
+        self.rowcount = (1 if self.update_matches else 0) if "UPDATE" in sql else len(self.rows)
 
     def fetchall(self):
         return self.rows
@@ -22,8 +23,8 @@ class FakeCursor:
 
 
 class FakeConn:
-    def __init__(self, rows=()):  # rows returned by every query
-        self.cur = FakeCursor(list(rows))
+    def __init__(self, rows=(), update_matches=True):  # rows returned by every query
+        self.cur = FakeCursor(list(rows), update_matches)
         self.committed = False
 
     def cursor(self):
@@ -62,3 +63,13 @@ def test_mark_retry_pending_guards_failed_only():
     sql, _ = conn.cur.executed[0]
     assert "status = 'pending'" in sql
     assert "status = 'failed'" in sql  # WHERE guard
+
+
+def test_mark_cancelled_returns_false_when_no_row_matches():
+    conn = FakeConn(update_matches=False)
+    assert db.mark_cancelled(conn, "j1") is False
+
+
+def test_mark_retry_pending_returns_false_when_job_not_failed():
+    conn = FakeConn(update_matches=False)
+    assert db.mark_retry_pending(conn, "j1") is False
