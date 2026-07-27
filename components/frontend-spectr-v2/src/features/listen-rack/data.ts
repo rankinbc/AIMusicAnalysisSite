@@ -514,6 +514,10 @@ export interface VizState {
   autoReact: boolean;
   autoReactSens: number;
   theme: string[];
+  /** Page-wide scrolling floor grid (LightShow): hue 0-360 + intensity 0-100
+   *  (50 = the classic look; 0 hides the grid). */
+  gridHue: number;
+  gridIntensity: number;
 }
 
 export const DEFAULT_VIZ: VizState = {
@@ -522,4 +526,5 @@ export const DEFAULT_VIZ: VizState = {
   bgAuto: false, specHue: 165, bgHue: 165, laserHue: 165, laserBeams: 13, laserSpeed: 1, laserMove: false,
   laserFlash: true, bgFlash: false, bgFlashHz: 2, bgFlashColor: '#ffffff', laserSync: false, bgSync: false,
   autoReact: false, autoReactSens: 0.55, theme: ['#00e5b0', '#a78bfa', '#fb923c'],
+  gridHue: 168, gridIntensity: 50,
 };

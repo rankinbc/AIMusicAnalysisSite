@@ -4,12 +4,14 @@
  * 35% when paused. Ported from the design handoff (lr-stage.jsx → LightShow). */
 import { useEffect, useRef } from 'react';
 
-export function LightShow({ playing, intensity = 1, show }: {
+export function LightShow({ playing, intensity = 1, show, gridHue = 168, gridIntensity = 50 }: {
   playing: boolean; intensity?: number; show: boolean;
+  /** Floor grid hue (0-360) + intensity (0-100; 50 = classic, 0 = hidden). */
+  gridHue?: number | undefined; gridIntensity?: number | undefined;
 }) {
   const cv = useRef<HTMLCanvasElement | null>(null);
-  const pr = useRef({ playing, intensity });
-  pr.current = { playing, intensity };
+  const pr = useRef({ playing, intensity, gridHue, gridIntensity });
+  pr.current = { playing, intensity, gridHue, gridIntensity };
   useEffect(() => {
     if (!show) return undefined;
     const c = cv.current;
@@ -28,7 +30,7 @@ export function LightShow({ playing, intensity = 1, show }: {
       r: Math.random() * 1.5 + 0.4, s: Math.random() * 0.01 + 0.003, ph: Math.random() * 7,
     }));
     const draw = () => {
-      const { playing: live0, intensity: I } = pr.current;
+      const { playing: live0, intensity: I, gridHue: gh, gridIntensity: gi } = pr.current;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const W = window.innerWidth;
       const H = window.innerHeight;
@@ -44,22 +46,26 @@ export function LightShow({ playing, intensity = 1, show }: {
       hz.addColorStop(1, 'transparent');
       ctx.fillStyle = hz;
       ctx.fillRect(0, 0, W, H);
-      // floor grid
-      const hy = H * 0.66;
-      ctx.strokeStyle = `hsla(168,90%,55%,${0.05 * I * live})`;
-      ctx.lineWidth = 1;
-      for (let i = 0; i < 9; i++) {
-        const p = (t * 0.06 + i / 9) % 1;
-        const y = hy + Math.pow(p, 2.6) * (H - hy);
-        ctx.globalAlpha = p * 0.9;
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
-      for (let i = -7; i <= 7; i++) {
-        ctx.beginPath();
-        ctx.moveTo(W * 0.5 + i * 26, hy);
-        ctx.lineTo(W * 0.5 + i * W * 0.12, H);
-        ctx.stroke();
+      // floor grid — hue + intensity are user settings (Visuals tab); 50 is
+      // the classic 0.05 alpha, scaling linearly up to 2x at 100.
+      const gridA = 0.05 * ((gi ?? 50) / 50) * I * live;
+      if (gridA > 0.001) {
+        const hy = H * 0.66;
+        ctx.strokeStyle = `hsla(${gh ?? 168},90%,55%,${gridA})`;
+        ctx.lineWidth = 1;
+        for (let i = 0; i < 9; i++) {
+          const p = (t * 0.06 + i / 9) % 1;
+          const y = hy + Math.pow(p, 2.6) * (H - hy);
+          ctx.globalAlpha = p * 0.9;
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        for (let i = -7; i <= 7; i++) {
+          ctx.beginPath();
+          ctx.moveTo(W * 0.5 + i * 26, hy);
+          ctx.lineTo(W * 0.5 + i * W * 0.12, H);
+          ctx.stroke();
+        }
       }
       // lasers
       ctx.globalCompositeOperation = 'lighter';
