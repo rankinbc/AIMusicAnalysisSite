@@ -133,6 +133,11 @@ function AppLayout() {
 
   const avatarChar = (user?.email ?? '?').trim().charAt(0).toUpperCase() || '?';
 
+  // Server-side credits_enabled kill switch: when off, everyone is premium and
+  // the billing/usage/meter surfaces are meaningless — hide them. Missing
+  // field (older payload, query still loading) ⇒ treat as enabled.
+  const creditsOn = entitlements?.creditsEnabled !== false;
+
   return (
     <div className={s.shell}>
       <header className={s.topnav}>
@@ -196,14 +201,16 @@ function AppLayout() {
                 >
                   Profile
                 </Link>
-                <Link
-                  to="/usage"
-                  className={s.avatarMenuItem}
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Usage
-                </Link>
-                {entitlements && (
+                {creditsOn && (
+                  <Link
+                    to="/usage"
+                    className={s.avatarMenuItem}
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    Usage
+                  </Link>
+                )}
+                {creditsOn && entitlements && (
                   <div className={s.avatarMenuMeter}>
                     {/* Credits is balance-funded, not unlimited — show the
                         remaining balance instead of the false "Unlimited". */}
@@ -225,6 +232,9 @@ function AppLayout() {
                     )}
                   </div>
                 )}
+                {/* Billing stays reachable even with credits disabled — an
+                    existing Stripe subscriber must always be able to manage or
+                    cancel; the page itself hides the upsell surfaces. */}
                 <Link
                   to="/billing"
                   className={s.avatarMenuItem}

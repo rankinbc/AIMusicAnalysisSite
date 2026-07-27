@@ -27,9 +27,10 @@ public sealed class ResultsReadPathEntitlementFreeTest(WebApplicationFactory<Pro
     private sealed class CountingEntitlementService(
         AppDbContext db,
         IMemoryCache cache,
+        Microsoft.Extensions.Configuration.IConfiguration config,
         ILogger<EntitlementService> logger,
         CallTracker tracker)
-        : EntitlementService(db, cache, logger)
+        : EntitlementService(db, cache, config, logger)
     {
         public override async Task<EntitlementsDto> ForAsync(Guid userId, CancellationToken ct)
         {
@@ -63,6 +64,7 @@ public sealed class ResultsReadPathEntitlementFreeTest(WebApplicationFactory<Pro
                     new CountingEntitlementService(
                         sp.GetRequiredService<AppDbContext>(),
                         sp.GetRequiredService<IMemoryCache>(),
+                        sp.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>(),
                         sp.GetRequiredService<ILogger<EntitlementService>>(),
                         tracker));
                 s.RemoveAll<IJobQueue>();

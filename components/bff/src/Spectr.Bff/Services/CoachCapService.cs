@@ -37,11 +37,26 @@ public sealed class CoachCapService(AppDbContext db, EntitlementService ents)
     // Resolve the current cap state for (user, analysis). Pure read.
     public async Task<CoachCapState> ResolveAsync(Guid userId, Guid analysisId, CancellationToken ct)
     {
+        var flags = await ents.GetFlagsAsync(ct);
+
+        // credits_enabled=false ⇒ credit system off, coach truly unlimited.
+        // The entitlement override forces Tier="pro", which would otherwise
+        // land in the pooled-monthly branch below — the kill switch means
+        // unlimited, not pro's 300-message pool.
+        if (!ents.CreditsEnabled(flags))
+        {
+            return new CoachCapState(
+                Used: 0,
+                Limit: int.MaxValue,
+                CapReached: false,
+                Scope: ScopeUnlimited,
+                ResetsAt: null);
+        }
+
         var ent = await ents.ForAsync(userId, ct);
 
         if (ent.Tier == "pro")
         {
-            var flags = await ents.GetFlagsAsync(ct);
             var period = DateTimeOffset.UtcNow.ToString("yyyy-MM");
             return await ResolveProPoolAsync(db, flags, userId, period, ct);
         }
@@ -59,8 +74,7 @@ public sealed class CoachCapService(AppDbContext db, EntitlementService ents)
         }
 
         // free tier — per-analysis cap.
-        var freeFlags = await ents.GetFlagsAsync(ct);
-        var freeLimit = GetFlag(freeFlags, "coach_free_followups", CoachFreeFollowupsDefault);
+        var freeLimit = GetFlag(flags, "coach_free_followups", CoachFreeFollowupsDefault);
         var conversationId = await db.Conversations.AsNoTracking()
             .Where(c => c.AnalysisId == analysisId && c.UserId == userId)
             .Select(c => (Guid?)c.Id)

@@ -22,6 +22,7 @@ namespace Spectr.Bff.Services;
 public class EntitlementService(
     AppDbContext db,
     IMemoryCache cache,
+    IConfiguration config,
     ILogger<EntitlementService> logger)
 {
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(60);
@@ -61,8 +62,64 @@ public class EntitlementService(
         return dict;
     }
 
+    // credits_enabled — the kill switch for the whole credit system.
+    // Precedence: the `Credits:Enabled` config key (env var / UseSetting —
+    // same knob pattern as RateLimits:Enabled; the test suite pins it "true"
+    // so the DB seed can't flip test semantics), then the live
+    // `credits_enabled` feature-flag row. Missing everywhere ⇒ true (credits
+    // on); anything except an explicit "false" keeps credits on, so a
+    // mistyped value fails toward enforcement. Shared with CoachCapService
+    // (the only other resolver that branches on tier).
+    public static bool CreditsEnabled(IConfiguration config, Dictionary<string, string> flags)
+    {
+        var value = config["Credits:Enabled"];
+        if (string.IsNullOrEmpty(value))
+            flags.TryGetValue("credits_enabled", out value);
+        return value is null
+            || !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Instance overload so CoachCapService (which already injects this
+    // service) shares the config override without injecting IConfiguration.
+    public bool CreditsEnabled(Dictionary<string, string> flags)
+        => CreditsEnabled(config, flags);
+
     private async Task<EntitlementsDto> ComputeAsync(Guid userId, CancellationToken ct)
     {
+        // 0. Credit-system kill switch (credits_enabled=false): everyone is
+        // premium. Tier "pro" makes every downstream gate — dispatch caps,
+        // abuse arms, credit spend, queue routing, worker identifiers,
+        // room-hosting rank — behave as paid, with zero per-site conditionals.
+        // Checked before the per-user queries so the whole aggregate read is
+        // skipped. CreditsEnabled=false in the DTO tells the frontend to hide
+        // billing/tier UI.
+        Dictionary<string, string> flagMap;
+        try
+        {
+            flagMap = await GetFlagsAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to load feature flags — using defaults");
+            flagMap = new Dictionary<string, string>();
+        }
+
+        if (!CreditsEnabled(config, flagMap))
+        {
+            return new EntitlementsDto(
+                AnalysesRemaining: null,
+                CoachRemaining: int.MaxValue,
+                StemsEnabled: true,
+                AlsEnabled: true,
+                FullVerdictsEnabled: true,
+                HistoryDepth: null,
+                Tier: "pro",
+                Coach: new CoachCapsDto(
+                    0, int.MaxValue, false, CoachCapService.ScopeUnlimited, null),
+                AnalysesResetsAt: null,
+                CreditsEnabled: false);
+        }
+
         // 1. Subscription status
         var sub = await db.Subscriptions
             .AsNoTracking()
@@ -94,18 +151,7 @@ public class EntitlementService(
                 && !db.AnalysisJobs.Any(j =>
                     j.ErrorCode == "invalid_file" && j.Id.ToString() == e.Reference), ct);
 
-        // 4. Feature flags
-        Dictionary<string, string> flagMap;
-        try
-        {
-            flagMap = await GetFlagsAsync(ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to load feature flags — using defaults");
-            flagMap = new Dictionary<string, string>();
-        }
-
+        // 4. Feature flags (loaded up top for the kill-switch check)
         var freeCap = GetFlag(flagMap, "free_analyses_per_month", 3);
         var coachFreeCap = GetFlag(flagMap, "coach_free_followups", 3);
         var historyFree = GetFlag(flagMap, "history_depth_free", 10);
