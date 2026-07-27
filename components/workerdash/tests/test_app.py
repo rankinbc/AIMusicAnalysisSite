@@ -172,3 +172,23 @@ def test_ops_list_route_db_down_degrades(client, monkeypatch):
     assert body["ok"] is False
     assert "db down" in body["error"]
     assert body["rows"] == []
+
+
+def test_ops_list_route_bad_page_param_degrades(client):
+    c, r = client
+    res = c.get("/api/ops?page=abc")
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body["ok"] is False
+    assert body["rows"] == []
+    assert body["page"] == 1
+    assert body["page_size"] == 25
+
+
+def test_ops_list_route_bad_page_size_param_degrades(client):
+    c, r = client
+    res = c.get("/api/ops?page_size=abc")
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body["ok"] is False
+    assert body["rows"] == []
