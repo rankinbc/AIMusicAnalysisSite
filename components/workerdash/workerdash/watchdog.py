@@ -66,7 +66,7 @@ def launch_worker_logged(worker_dir: str, log_dir: str) -> str:
         "'--queues','coach','analysis-paid','analysis-free','maintenance'"
     )
     subprocess.run(["powershell", "-NoProfile", "-Command", ps],
-                   capture_output=True, text=True, timeout=30)
+                   capture_output=True, text=True, timeout=120)
     return log
 
 
@@ -82,7 +82,7 @@ Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
   Stop-Process -Force
 """
     subprocess.run(["powershell", "-NoProfile", "-Command", ps],
-                   capture_output=True, text=True, timeout=30)
+                   capture_output=True, text=True, timeout=120)
 
 
 def write_status(path: str, **fields) -> None:
@@ -107,35 +107,46 @@ def run_loop() -> None:  # pragma: no cover — subprocess/IO loop, manual-teste
     print(f"watchdog: probing every {INTERVAL_S}s; worker={worker_dir}; logs={log_dir}",
           flush=True)
     while True:
+        # The supervisor must survive ANY single bad cycle (slow PowerShell,
+        # subprocess TimeoutExpired, transient Redis error) — a watchdog that
+        # dies on one exception is worse than none, because it LOOKS covered.
         try:
-            hb = wire.heartbeat_age_seconds(r)
-        except Exception:
-            hb = None
-        p = worker_ctl.probe()
-        status = worker_ctl.derive_status(p["master"], p["fork"], hb)
-        history.append(status)
-        now = time.time()
-        d = decide(history, restart_times, now)
-        if d.action == "restart" and not halted:
-            print(f"watchdog: worker {status} twice — restarting", flush=True)
-            kill_worker()
-            log = launch_worker_logged(worker_dir, log_dir)
-            restart_times.append(now)
-            history.clear()  # fresh slate for the new worker
-            print(f"watchdog: relaunched; worker log: {log}", flush=True)
-        elif d.action == "halt" and not halted:
-            halted = True
-            print("watchdog: CRASH LOOP — 3 restarts in 10 min; halting restarts. "
-                  f"Check the newest worker log in {log_dir}", flush=True)
-        elif halted and status == "healthy":
-            # Someone fixed it manually — resume guarding.
-            halted = False
-            restart_times.clear()
-            print("watchdog: worker healthy again; resuming supervision", flush=True)
-        write_status(status_file, status=status, action=d.action,
-                     restarts_in_window=len([t for t in restart_times
-                                             if now - t <= CRASH_LOOP_WINDOW_S]),
-                     halted=halted)
+            try:
+                hb = wire.heartbeat_age_seconds(r)
+            except Exception:
+                hb = None
+            p = worker_ctl.probe()
+            status = worker_ctl.derive_status(p["master"], p["fork"], hb)
+            history.append(status)
+            del history[:-2]  # only the last two matter; don't grow forever
+            now = time.time()
+            d = decide(history, restart_times, now)
+            if d.action == "restart" and not halted:
+                print(f"watchdog: worker {status} twice — restarting", flush=True)
+                kill_worker()
+                log = launch_worker_logged(worker_dir, log_dir)
+                restart_times.append(now)
+                history.clear()  # fresh slate for the new worker
+                print(f"watchdog: relaunched; worker log: {log}", flush=True)
+            elif d.action == "halt" and not halted:
+                halted = True
+                print("watchdog: CRASH LOOP — 3 restarts in 10 min; halting restarts. "
+                      f"Check the newest worker log in {log_dir}", flush=True)
+            elif halted and status == "healthy":
+                # Someone fixed it manually — resume guarding.
+                halted = False
+                restart_times.clear()
+                print("watchdog: worker healthy again; resuming supervision", flush=True)
+            write_status(status_file, status=status, action=d.action,
+                         restarts_in_window=len([t for t in restart_times
+                                                 if now - t <= CRASH_LOOP_WINDOW_S]),
+                         halted=halted)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"watchdog: cycle failed ({e!r}) — retrying in {INTERVAL_S}s", flush=True)
+            write_status(status_file, status="probe-error", action="wait",
+                         restarts_in_window=0, halted=halted, error=str(e))
         time.sleep(INTERVAL_S)
 
 
