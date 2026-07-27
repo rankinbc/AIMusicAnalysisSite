@@ -255,7 +255,7 @@ export const PITCH_MODULE: ModuleManifest = {
   params: [
     { key: 'semitones', label: 'Semitones', control: 'knob', min: -12, max: 12, step: 1, unit: 'st', default: 0 },
     { key: 'cents', label: 'Cents', control: 'slider', min: -50, max: 50, step: 1, unit: 'cents', default: 0 },
-    { key: 'tempo', label: 'Tempo', control: 'knob', min: 0.5, max: 2, step: 0.01, unit: 'x', default: 1, hint: 'coupled' },
+    { key: 'tempo', label: 'Tempo', control: 'knob', min: 0.2, max: 5, step: 0.01, unit: 'x', default: 1, hint: 'coupled' },
   ],
 };
 

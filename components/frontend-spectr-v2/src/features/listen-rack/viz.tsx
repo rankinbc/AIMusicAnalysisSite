@@ -373,7 +373,7 @@ function RackStage({ modules }: { modules: ModuleManifest[] }) {
 
 // ── The stage ──────────────────────────────────────────────────────────────
 export function VizStage({
-  playing, stages, setStages, viz, director, height = 300, compact = false, onStageEngine, onDrop, myStatus, activeModules, getFrame,
+  playing, stages, setStages, viz, director, height = 300, compact = false, onStageEngine, onDrop, myStatus, activeModules, getFrame, trackName = 'Aurora', trackSub = 'v3 · Final Mix',
 }: {
   playing: boolean;
   stages: string[];
@@ -389,6 +389,9 @@ export function VizStage({
   /** Real AnalyserNode frame source (Phase 2 Task 3). When supplied, the spectrum
    *  bars + energy come from the live mix; absent ⇒ synthetic (mock demo route). */
   getFrame?: () => AudioFrame | null;
+  /** Track Info stage copy (v2 page passes the real track; fixture defaults). */
+  trackName?: string;
+  trackSub?: string;
 }) {
   const stageRef = useRef<StageCanvasHandle>(null);
   const laserRef = useRef<LaserFanHandle>(null);
@@ -549,9 +552,12 @@ export function VizStage({
       {isInfo && (
         <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', textAlign: 'center' }}>
           <div>
-            <CoverArt hue={168} size="lg" />
-            <div style={{ fontSize: 26, fontWeight: 800, marginTop: 16 }}>Aurora</div>
-            <div className="mono" style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>v3 · Final Mix</div>
+            {/* Scale the cover to the stage — the v2 card stage is 210px tall. */}
+            {height < 300 && !bgMode
+              ? <CoverArt hue={168} size="md" style={{ width: 96, height: 96, margin: '0 auto', borderRadius: 12 }} />
+              : <CoverArt hue={168} size="lg" style={{ margin: '0 auto' }} />}
+            <div style={{ fontSize: height < 300 && !bgMode ? 19 : 26, fontWeight: 800, marginTop: 12 }}>{trackName}</div>
+            <div className="mono" style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{trackSub}</div>
           </div>
         </div>
       )}

@@ -12,7 +12,7 @@ import {
   DEFAULT_ORDER, MODULE_DEFAULTS, type EqBand, type ModuleState, type ParamValue, type RackPatch,
 } from './data';
 import {
-  isInsertEffect, pushCoach, pushEnabled, pushEqBands, pushFullRack, pushParam,
+  isInsertEffect, pushCoach, pushEnabled, pushEqBands, pushFullRack, pushModuleState, pushParam,
   type RackGraphBindings,
 } from './rackBindings';
 
@@ -39,6 +39,8 @@ export interface RackState {
   setEnabled: (id: string, on: boolean) => void;
   setEqBands: (bands: EqBand[]) => void;
   reset: () => void;
+  /** Reset ONE module to its neutral defaults (v2 device-bay reset button). */
+  resetModule: (id: string) => void;
   applyCoach: (apply: RackPatch) => void;
   applyRackMod: (mod: Record<string, ModuleState>) => void;
   activeCount: number;
@@ -95,6 +97,13 @@ export function useRackState(graph?: RackGraphBindings | null): RackState {
     graph?.resetAll();
     setMod(cloneDefaults()); setOrder([...DEFAULT_ORDER]); setMasterBypass(false);
   }, [graph]);
+  const resetModule = useCallback((id: string) => {
+    const defaults = MODULE_DEFAULTS[id];
+    if (!defaults) return;
+    const fresh = JSON.parse(JSON.stringify(defaults)) as ModuleState;
+    if (graph) pushModuleState(graph, id, fresh);
+    setMod((m) => ({ ...m, [id]: fresh }));
+  }, [graph]);
   const applyCoach = useCallback((apply: RackPatch) => {
     if (graph) pushCoach(graph, apply);
     setMod((m) => {
@@ -125,7 +134,7 @@ export function useRackState(graph?: RackGraphBindings | null): RackState {
   return {
     mod, order, setOrder: reorder, masterBypass, setMasterBypass: setMasterBypassBound,
     selected, setSelected, showBind, setShowBind,
-    setParam, setEnabled, setEqBands, reset, applyCoach, applyRackMod, activeCount, presets, savePreset, recallPreset,
+    setParam, setEnabled, setEqBands, reset, resetModule, applyCoach, applyRackMod, activeCount, presets, savePreset, recallPreset,
     graph: graph ?? null,
   };
 }

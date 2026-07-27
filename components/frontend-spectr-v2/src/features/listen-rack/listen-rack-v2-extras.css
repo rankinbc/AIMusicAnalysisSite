@@ -1,0 +1,28 @@
+/* Listen Rack v2 — app-glue styles on top of the auto-scoped listen-rack-v2.css:
+ * keyframes shared with PresencePops + the Story 5.10 desktop-only gate
+ * (ported from the retired listenRack.css so the <1024px notice survives). */
+
+@keyframes presencePop {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+  12%  { opacity: 1; transform: translate(-50%, -54%) scale(1.12); }
+  24%  { transform: translate(-50%, -50%) scale(1); }
+  72%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -120%) scale(0.92); }
+}
+@keyframes ringPulse {
+  0%   { opacity: 0.85; transform: scale(0.7); }
+  100% { opacity: 0; transform: scale(2.3); }
+}
+@keyframes pulseGlow {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px var(--accent); }
+  50% { opacity: 0.55; box-shadow: 0 0 2px var(--accent); }
+}
+
+/* Story 5.10 (UX-DR45): Listen is a desktop tool — below the lg breakpoint the
+ * page content hides and the notice card shows. Playback pause on crossing
+ * below is handled by a matchMedia effect in ListenRackPage. */
+.rdx .lr-desktop-notice { display: none; padding: 18px; }
+@media (max-width: 1023.98px) {
+  .rdx .lr-desktop-only { display: none; }
+  .rdx .lr-desktop-notice { display: block; }
+}
