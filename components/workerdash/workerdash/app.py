@@ -1,7 +1,7 @@
 """Flask app. All external clients injectable; defaults built from env."""
 import os
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify
 
 from . import db as dbmod
 from . import wire

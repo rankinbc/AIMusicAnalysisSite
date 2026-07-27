@@ -56,7 +56,7 @@ def test_cancel_unknown_id_ok_false(client):
 
 def test_front_route(client):
     c, r = client
-    a = wire.enqueue(r, "x", [], "analysis-paid")
+    wire.enqueue(r, "x", [], "analysis-paid")
     b = wire.enqueue(r, "y", [], "analysis-paid")
     res = c.post(f"/api/queue/analysis-paid/{b}/front")
     assert res.get_json()["ok"] is True

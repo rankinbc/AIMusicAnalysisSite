@@ -71,7 +71,8 @@ AIMusicAnalysisSite/
 │   ├── analysis/             (Python audio analysis package — 7-phase pipeline)
 │   ├── shared/               (aimusic-shared: SQLAlchemy ORM models — worker side only; BFF has parallel EF Core entities)
 │   ├── api/                  (LEGACY — FastAPI; still hosts verdict pipeline + Anthropic CLI client until migration completes)
-│   └── frontend-spectr/      (LEGACY — vanilla JSX SPA)
+│   ├── frontend-spectr/      (LEGACY — vanilla JSX SPA)
+│   └── workerdash/           (Standalone local dramatiq worker dashboard — see its README)
 ├── data/
 │   ├── uploads/              (Staged audio uploads — dev local; S3 in prod)
 │   ├── reference_library/    (Curated pro reference tracks by genre)
@@ -256,6 +257,15 @@ AIMusicAnalysisSite/
 ### frontend-spectr (LEGACY — vanilla JSX, kept for reference)
 
 The original vanilla-JSX SPA. The v2 frontend at `components/frontend-spectr-v2/` is the new path. Don't add new features here without flagging — the v2 frontend supersedes it. Some helpers and Anthropic-CLI verdict UI still live here pending migration.
+
+### workerdash (dev ops tool)
+
+**Purpose**: Standalone local web dashboard for the dramatiq worker: queue
+contents with song/version context, worker health (healthy/half-dead/dead),
+cancel / bring-to-front / retry job actions, worker restart per STARTUP.md.
+**Inputs**: Redis (dramatiq wire format), PostgreSQL (read + job-row updates)
+**Outputs**: http://127.0.0.1:5999 (localhost only, no auth)
+**How to run**: `cd components/workerdash && python -m workerdash`
 
 ### frontend (placeholder — TS/Tailwind/shadcn stack — never built)
 

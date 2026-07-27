@@ -44,8 +44,8 @@ def probe() -> dict:
     except Exception:
         return {"master": False, "fork": False}
     return {
-        "master": any("dramatiq" in (l or "") for l in lines),
-        "fork": any("multiprocessing" in (l or "") for l in lines),
+        "master": any("dramatiq" in (line or "") for line in lines),
+        "fork": any("multiprocessing" in (line or "") for line in lines),
     }
 
 
