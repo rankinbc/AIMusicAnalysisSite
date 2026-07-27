@@ -291,6 +291,20 @@
    frosted-glass so the full-screen visualizer behind the page shines through
    (backdrop-filter needs every layer above the fixed stage to be translucent). */
 .rdx .lr-stagecard:has(.lr-vizbg-ghost) {background:transparent;box-shadow:none;border-color:rgba(255,255,255,0.08)}
+/* Background-viz mode: while the ghost placeholder is up, the rack surfaces
+   drop to translucent glass so the FULLSCREEN light show stays visible
+   through the grid (the blur keeps text readable over the moving lights). */
+.rdx .lr-glass:has(.lr-vizbg-ghost) .tabbody {background:color-mix(in srgb,#101216 42%,transparent)}
+.rdx .lr-glass:has(.lr-vizbg-ghost) .lr-mc,
+.rdx .lr-glass:has(.lr-vizbg-ghost) .lr-row,
+.rdx .lr-glass:has(.lr-vizbg-ghost) .lr-mc.on,
+.rdx .lr-glass:has(.lr-vizbg-ghost) .lr-row.on {background:
+  linear-gradient(115deg,rgba(255,255,255,.11) 0%,rgba(255,255,255,.04) 30%,rgba(255,255,255,.07) 50%,rgba(255,255,255,.03) 72%,rgba(255,255,255,.09) 100%),
+  linear-gradient(178deg,color-mix(in srgb,#262a32 52%,transparent),color-mix(in srgb,#1c1f26 52%,transparent) 48%,color-mix(in srgb,#121419 56%,transparent));
+  backdrop-filter:blur(7px)}
+.rdx .lr-glass:has(.lr-vizbg-ghost) .lr-bay {background:
+  linear-gradient(115deg,rgba(255,255,255,.11) 0%,rgba(255,255,255,.04) 30%,rgba(255,255,255,.07) 50%,rgba(255,255,255,.03) 72%,rgba(255,255,255,.09) 100%),
+  linear-gradient(178deg,color-mix(in srgb,#262a32 55%,transparent),color-mix(in srgb,#1c1f26 55%,transparent) 48%,color-mix(in srgb,#121419 58%,transparent))}
 /* Ghost shimmer: slow-spinning blurred rainbow sheen + pulsing edge glow so
    the glass slot feels alive while the viz plays behind the page. */
 @media (prefers-reduced-motion: no-preference) {
