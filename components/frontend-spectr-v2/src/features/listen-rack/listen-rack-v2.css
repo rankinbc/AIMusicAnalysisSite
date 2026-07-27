@@ -313,13 +313,15 @@
 .rdx .lr-grm .gt span {width:100%;background:linear-gradient(180deg,var(--orange),var(--red));transition:height .1s linear}
 .rdx .lr-grm .gl {font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--muted)}
 /* IN/OUT device level meters (device bay) — bottom-up fill, module accent */
-.rdx .lr-iom {display:flex;gap:10px;margin-left:auto;align-items:flex-end}
-.rdx .lr-iom .iob {display:flex;flex-direction:column;align-items:center;gap:3px}
+/* Fixed column widths + tabular digits: the live dB text must NEVER change
+   width, or the flex row re-flows every frame and the bay twitches. */
+.rdx .lr-iom {display:flex;gap:10px;margin-left:auto;align-items:flex-end;flex-shrink:0}
+.rdx .lr-iom .iob {display:flex;flex-direction:column;align-items:center;gap:3px;width:34px}
 .rdx .lr-iom .it {position:relative;width:8px;border-radius:2px;background:rgba(0,0,0,.45);border:1px solid var(--border);overflow:hidden;display:flex;align-items:flex-end}
 .rdx .lr-iom .it span {width:100%;background:linear-gradient(0deg,var(--mac),rgba(255,255,255,.7));transition:height .06s linear;box-shadow:0 0 8px var(--mac)}
 .rdx .lr-iom .it::after {content:'';position:absolute;inset:0;background:repeating-linear-gradient(180deg,transparent 0 3px,rgba(5,8,14,.85) 3px 5px)}
 .rdx .lr-iom .il {font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:.08em}
-.rdx .lr-iom .iv {font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text-2)}
+.rdx .lr-iom .iv {font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text-2);font-variant-numeric:tabular-nums;width:100%;text-align:center;white-space:nowrap}
 .rdx .lr-cnt {font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted)}
 .rdx .lr-cnt b {color:var(--accent);font-weight:700}
 
