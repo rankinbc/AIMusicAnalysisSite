@@ -192,3 +192,25 @@ def test_ops_list_route_bad_page_size_param_degrades(client):
     body = res.get_json()
     assert body["ok"] is False
     assert body["rows"] == []
+
+
+def test_ops_detail_route_returns_payload(client, monkeypatch):
+    import workerdash.app as app_module
+    c, r = client
+    monkeypatch.setattr(app_module, "ops_dbmod", type("M", (), {
+        "job_detail": staticmethod(lambda conn, jid: {"job": {"id": jid}, "totals": {}})
+    }))
+    res = c.get("/api/ops/j1")
+    body = res.get_json()
+    assert body["ok"] is True
+    assert body["job"]["id"] == "j1"
+
+
+def test_ops_detail_route_missing_job_404(client, monkeypatch):
+    import workerdash.app as app_module
+    c, r = client
+    monkeypatch.setattr(app_module, "ops_dbmod",
+                         type("M", (), {"job_detail": staticmethod(lambda conn, jid: None)}))
+    res = c.get("/api/ops/nope")
+    assert res.status_code == 404
+    assert res.get_json()["ok"] is False

@@ -83,6 +83,24 @@ def create_app(redis_client=None, db_connect=None, ctl=None) -> Flask:
                 except Exception:
                     pass
 
+    @app.get("/api/ops/<job_id>")
+    def ops_detail(job_id):
+        conn = None
+        try:
+            conn = connect()
+            detail = ops_dbmod.job_detail(conn, job_id)
+            if detail is None:
+                return jsonify({"ok": False, "error": "not found"}), 404
+            return jsonify({"ok": True, **detail})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)})
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
     @app.get("/api/state")
     def state():
         try:
