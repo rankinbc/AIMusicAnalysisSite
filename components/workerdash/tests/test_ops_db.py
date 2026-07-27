@@ -34,21 +34,22 @@ class FakeConn:
 
 
 def test_list_jobs_maps_rows_and_total():
-    rows = [("j1", "complete", "", "22", "5_bb", 3, "", "a1")]
+    rows = [("j1", "complete", "", "22", "5_bb", 3, "", "a1", "free", "2026-07-27T10:30:00+00:00", "2026-07-27T11:00:00+00:00")]
     conn = FakeConn([[(7,)], rows])  # first query: COUNT, second: page rows
     result = ops_db.list_jobs(conn, page=1, page_size=25)
     assert result["total"] == 7
     assert result["rows"] == [{
         "id": "j1", "status": "complete", "error_code": "",
         "song": "22", "label": "5_bb", "version_number": 3,
-        "file_path": "", "analysis_id": "a1",
+        "file_path": "", "analysis_id": "a1", "tier": "free",
+        "dispatched_at": "2026-07-27T10:30:00+00:00", "completed_at": "2026-07-27T11:00:00+00:00",
     }]
     assert result["page"] == 1
     assert result["page_size"] == 25
 
 
 def test_list_jobs_anonymous_job_uses_file_path():
-    rows = [("j2", "processing", "", "", "", None, "audio/anon/dev1/j2/source.wav", None)]
+    rows = [("j2", "processing", "", "", "", None, "audio/anon/dev1/j2/source.wav", None, "", "2026-07-27T10:00:00+00:00", "")]
     conn = FakeConn([[(1,)], rows])
     result = ops_db.list_jobs(conn)
     assert result["rows"][0]["song"] == ""

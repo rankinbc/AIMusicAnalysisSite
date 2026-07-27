@@ -43,7 +43,8 @@ def list_jobs(conn, search=None, status=None, since=None, until=None,
             f"""
             SELECT j.id::text, j.status, coalesce(j.error_code,''),
                    coalesce(s.name,''), coalesce(v.label,''), v.version_number,
-                   coalesce(j.file_path,''), a.id::text
+                   coalesce(j.file_path,''), a.id::text, coalesce(j.tier,''),
+                   j.dispatched_at::text, coalesce(j.completed_at::text,'')
             {_FROM}{clause}
             ORDER BY j.dispatched_at DESC
             LIMIT %s OFFSET %s
@@ -53,7 +54,8 @@ def list_jobs(conn, search=None, status=None, since=None, until=None,
         rows = [
             {"id": r[0], "status": r[1], "error_code": r[2], "song": r[3],
              "label": r[4], "version_number": r[5], "file_path": r[6],
-             "analysis_id": r[7]}
+             "analysis_id": r[7], "tier": r[8], "dispatched_at": r[9],
+             "completed_at": r[10]}
             for r in cur.fetchall()
         ]
     return {"rows": rows, "total": total, "page": page, "page_size": page_size}
