@@ -88,17 +88,20 @@ def cancel_message(r, queue: str, rid: str) -> bool:
     return removed > 0
 
 
+_FRONT_LUA = """
+local removed = redis.call('LREM', KEYS[1], 0, ARGV[1])
+if removed > 0 then
+  redis.call('LPUSH', KEYS[1], ARGV[1])
+  return 1
+end
+return 0
+"""
+
+
 def bring_to_front(r, queue: str, rid: str) -> bool:
-    # Worker consumes from the head (LPOP); LREM+LPUSH promotes the id.
-    pipe = r.pipeline(transaction=True)
-    pipe.lrem(queue_key(queue), 0, rid)
-    pipe.lpush(queue_key(queue), rid)
-    removed, _ = pipe.execute()
-    if removed == 0:
-        # id wasn't queued — undo the phantom LPUSH we just did
-        r.lrem(queue_key(queue), 0, rid)
-        return False
-    return True
+    # Lua = atomic check-then-move; a plain MULTI cannot conditionally LPUSH,
+    # and LPUSH-then-undo briefly exposes a phantom id to the worker.
+    return bool(r.eval(_FRONT_LUA, 1, queue_key(queue), rid))
 
 
 def heartbeat_age_seconds(r):

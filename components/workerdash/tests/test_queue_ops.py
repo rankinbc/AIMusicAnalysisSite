@@ -44,6 +44,13 @@ def test_bring_to_front_moves_to_head(r):
     assert [x["redis_message_id"] for x in rows] == [c, a, b]
 
 
+def test_bring_to_front_unknown_id_is_noop_false(r):
+    a = enqueue(r, "x", [], "analysis-paid")
+    assert bring_to_front(r, "analysis-paid", "ghost") is False
+    rows = list_queue(r, "analysis-paid")
+    assert [x["redis_message_id"] for x in rows] == [a]  # no phantom entry
+
+
 def test_list_queue_orphan_id_renders_error_row(r):
     r.rpush(queue_key("analysis-paid"), "ghost")
     rows = list_queue(r, "analysis-paid")
