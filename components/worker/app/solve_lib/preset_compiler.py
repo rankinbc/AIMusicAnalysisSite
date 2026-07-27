@@ -7,17 +7,20 @@ not diagnose or invent fixes. Stages (PRPs/identifiers/preset-compiler.md):
                fixes to leftover advice.
   2. TRANSLATE each DspOp -> a rack module write (snake_case -> camelCase); ops
                with no master-rack home (sidechain, multiband) -> leftover advice.
-  3. DEDUP     one module instance: limiter/comp/ms/trim collapse to the
-               highest-(confidence, priority) fix; eq is additive across band
-               slots (same-slot collision -> larger |gainDb| wins).
+  3. MERGE     the weighted formula (solve_lib.weighted_merge — mirrored by the
+               frontend's combineFixes.ts): every fix pulls with weight =
+               priority x confidence. EQ clusters by log-frequency (same-
+               direction sums capped, opposite directions net); comp/ms params
+               weighted-average; trims sum; the limiter keeps the LOWEST
+               ceiling (safety). Nothing merges across frequency regions.
   4. ORDER     populate modules in place; never reorder the canonical chain.
 
 Returns ``{"chain", "leftover_advice", "change_log"}``. Nothing is silently
-dropped — every unmappable move comes back as advice.
+dropped — every unmappable move comes back as advice, every merge is logged.
 """
 # NOTE: the frontend mirrors this op→rack-module mapping in
 # components/frontend-spectr-v2/src/features/listen-rack/fixToRackPatch.ts
-# for per-fix apply. Keep the two mappings in sync.
+# (per-fix apply) and the merge math in .../combineFixes.ts. Keep them in sync.
 from __future__ import annotations
 
 from typing import Any
@@ -30,84 +33,170 @@ from app.solve_lib.rack_schema import (
     EQ_BANDS,
     ORDER,
     PARAM_MAP,
-    nearest_band_slot,
 )
+from app.solve_lib import weighted_merge as W
 
 _Pair = tuple[Verdict, DspOp]
 
 
-def _rank(v: Verdict) -> tuple[float, int]:
-    return (v.confidence, v.priority_score)
-
-
-def _eq_stronger(new_gain: float, cur_gain: float) -> bool:
-    """Does the new EQ move beat the one already in this slot? Larger magnitude
-    wins; on equal magnitude a cut (more negative) beats a boost — a corrective
-    cut is the safer / more intentional move than a boost of the same size."""
-    if abs(new_gain) != abs(cur_gain):
-        return abs(new_gain) > abs(cur_gain)
-    return new_gain < cur_gain
+def _w(v: Verdict) -> float:
+    return W.fix_weight(v.priority_score, v.confidence)
 
 
 def _base_chain() -> dict[str, Any]:
     return {"order": list(ORDER), "modules": {}, "masterBypass": False}
 
 
+def _num(params: dict[str, Any], key: str, fallback: float) -> float:
+    val = params.get(key, fallback)
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return fallback
+
+
 def _build_eq(pairs: list[_Pair], change_log: list[dict[str, Any]]) -> dict[str, Any]:
+    gain_moves: list[W.EqMove] = []
+    hp: list[tuple[float, float, float]] = []
+    lp: list[tuple[float, float, float]] = []
+    hp_src: list[str | None] = []
+    lp_src: list[str | None] = []
+    for v, op in pairs:
+        # Clamp to the audible band before merging — an out-of-range frequency
+        # must not skew a cluster.
+        freq = W.clamp(_num(op.params, "frequency_hz", 1000.0), 20.0, 22000.0)
+        w = _w(v)
+        if op.type == "high_pass":
+            hp.append((freq, _num(op.params, "q", 0.7), w))
+            hp_src.append(v.problem_id)
+        elif op.type == "low_pass":
+            lp.append((freq, _num(op.params, "q", 0.7), w))
+            lp_src.append(v.problem_id)
+        else:
+            gain_moves.append(W.EqMove(
+                kind=EQ_BAND_TYPE[op.type], freq=freq,
+                gain=_num(op.params, "gain_db", 0.0), q=_num(op.params, "q", 1.0),
+                w=w, source=v.problem_id))
+
+    merged = [
+        b for b in (
+            W.merge_filters("highpass", hp, change_log, hp_src),
+            W.merge_filters("lowpass", lp, change_log, lp_src),
+            *W.cluster_gain_moves(gain_moves, change_log),
+        ) if b is not None
+    ]
+    merged = W.cap_bands(merged, change_log)
+
     bands: list[dict[str, Any]] = [
         {"type": "peaking", "freq": EQ_BANDS[i], "gainDb": 0.0, "q": 1.4, "enabled": False}
         for i in range(len(EQ_BANDS))
     ]
-    for v, op in pairs:
-        # Clamp to the audible band before slotting — an out-of-range frequency
-        # must not index a wrong/edge EQ band.
-        freq = max(20.0, min(22000.0, float(op.params["frequency_hz"])))
-        gain = float(op.params.get("gain_db", 0.0))
-        slot = nearest_band_slot(freq)
-        cur = bands[slot]
-        if cur["enabled"] and not _eq_stronger(gain, cur["gainDb"]):
-            change_log.append({
-                "module": "eq",
-                "change": f"slot@{cur['freq']:.0f}Hz kept gainDb {cur['gainDb']}, dropped {gain}",
-                "from_fix": v.problem_id, "why": "same band slot — stronger move wins",
-            })
-            continue
-        bands[slot] = {
-            "type": EQ_BAND_TYPE[op.type], "freq": freq, "gainDb": gain,
-            "q": float(op.params.get("q", 1.0)), "enabled": True,
+    for i, b in enumerate(merged):
+        bands[min(i, len(bands) - 1)] = {
+            "type": b.type, "freq": b.freq, "gainDb": b.gain_db, "q": b.q, "enabled": True,
         }
-        note = f"band@{freq:.0f}Hz {EQ_BAND_TYPE[op.type]} gainDb {gain}"
-        if op.type in ("high_pass", "low_pass"):
+        note = f"band@{b.freq:.0f}Hz {b.type} gainDb {b.gain_db}"
+        if b.type in ("highpass", "lowpass"):
             note += " (eq band has a fixed slope; solver slope_db not applied)"
         change_log.append({"module": "eq", "change": note,
-                           "from_fix": v.problem_id, "why": op.type})
+                           "from_fix": b.sources[0], "why": "weighted merge"})
     return {"enabled": True, "bands": bands}
 
 
-def _build_single(mod: str, pairs: list[_Pair], change_log: list[dict[str, Any]]) -> dict[str, Any]:
-    winner_v, winner_op = max(pairs, key=lambda vp: _rank(vp[0]))
+def _rep(pairs: list[_Pair]) -> Verdict:
+    """Highest-weight member — change-log attribution for a merged module."""
+    return max(pairs, key=lambda vp: _w(vp[0]))[0]
+
+
+def _build_comp(pairs: list[_Pair], change_log: list[dict[str, Any]]) -> dict[str, Any]:
+    def pick(key: str, fallback: float) -> float:
+        return W.wmean([(_num(op.params, key, fallback), _w(v)) for v, op in pairs])
+
     state: dict[str, Any] = {"enabled": True}
-    if mod == "ms":
-        state["width"] = float(winner_op.params["width_pct"]) / 100.0
-        # Bass mono-maker (Phase 4): only when the solver asked for it, so a plain
-        # width op doesn't write a stray monoMakerHz.
-        if "mono_below_hz" in winner_op.params:
-            state["monoMakerHz"] = float(winner_op.params["mono_below_hz"])
-    else:
-        pmap = PARAM_MAP[mod]
-        for k, val in winner_op.params.items():
-            if k in pmap:
-                state[pmap[k]] = val
+    pmap = PARAM_MAP["comp"]
+    defaults = {"threshold_db": 0.0, "ratio": 1.0, "attack_ms": 3.0,
+                "release_ms": 250.0, "knee_db": 30.0, "makeup_gain_db": 0.0}
+    present = {k for _, op in pairs for k in op.params if k in pmap}
+    for k in present:
+        val = pick(k, defaults[k])
+        if k == "ratio":
+            val = min(val, W.COMP_RATIO_CAP)
+        state[pmap[k]] = round(val, 2)
     if len(pairs) > 1:
         change_log.append({
-            "module": mod,
-            "change": f"merged {len(pairs)} {mod} fixes (kept highest-confidence)",
-            "from_fix": winner_v.problem_id, "why": "one module instance per rack",
+            "module": "comp",
+            "change": f"weighted-averaged {len(pairs)} comp settings (ratio cap {W.COMP_RATIO_CAP}:1)",
+            "from_fix": _rep(pairs).problem_id, "why": "one module instance per rack",
         })
     else:
-        change_log.append({"module": mod, "change": f"set {mod}",
-                           "from_fix": winner_v.problem_id, "why": winner_op.type})
+        change_log.append({"module": "comp", "change": "set comp",
+                           "from_fix": _rep(pairs).problem_id, "why": "compressor"})
     return state
+
+
+def _build_limiter(pairs: list[_Pair], change_log: list[dict[str, Any]]) -> dict[str, Any]:
+    # Safety param: the lowest ceiling always wins — never averaged.
+    ceiling = min(_num(op.params, "ceiling_db", -1.0) for _, op in pairs)
+    state: dict[str, Any] = {
+        "enabled": True,
+        "ceilingDb": round(W.clamp(ceiling, -6.0, 0.0), 2),
+        "releaseMs": round(W.wmean([(_num(op.params, "release_ms", 50.0), _w(v)) for v, op in pairs]), 1),
+        "lookaheadMs": round(W.wmean([(_num(op.params, "lookahead_ms", 5.0), _w(v)) for v, op in pairs]), 1),
+    }
+    if len(pairs) > 1:
+        change_log.append({
+            "module": "limiter",
+            "change": f"merged {len(pairs)} limiter fixes — kept lowest ceiling {ceiling}dB (safety)",
+            "from_fix": _rep(pairs).problem_id, "why": "one module instance per rack",
+        })
+    else:
+        change_log.append({"module": "limiter", "change": "set limiter",
+                           "from_fix": _rep(pairs).problem_id, "why": "limiter"})
+    return state
+
+
+def _build_ms(pairs: list[_Pair], change_log: list[dict[str, Any]]) -> dict[str, Any]:
+    width_pct = W.clamp(
+        W.wmean([(_num(op.params, "width_pct", 100.0), _w(v)) for v, op in pairs]),
+        *W.WIDTH_PCT_BOUNDS)
+    state: dict[str, Any] = {"enabled": True, "width": round(width_pct / 100.0, 2)}
+    # Bass mono-maker: only when a solver asked for it; max = most conservative.
+    monos = [_num(op.params, "mono_below_hz", 0.0) for _, op in pairs if "mono_below_hz" in op.params]
+    if monos:
+        state["monoMakerHz"] = max(monos)
+    if len(pairs) > 1:
+        change_log.append({
+            "module": "ms",
+            "change": f"weighted-averaged {len(pairs)} width settings -> {round(width_pct)}%",
+            "from_fix": _rep(pairs).problem_id, "why": "one module instance per rack",
+        })
+    else:
+        change_log.append({"module": "ms", "change": "set ms",
+                           "from_fix": _rep(pairs).problem_id, "why": "stereo_width"})
+    return state
+
+
+def _build_trim(pairs: list[_Pair], change_log: list[dict[str, Any]]) -> dict[str, Any]:
+    summed = sum(_num(op.params, "gain_db", 0.0) for _, op in pairs)
+    gain = W.clamp(summed, -W.MAX_CUMULATIVE_GAIN_DB, W.MAX_CUMULATIVE_GAIN_DB)
+    if len(pairs) > 1:
+        note = f"summed {len(pairs)} trims -> {round(gain, 2)}dB"
+        if gain != summed:
+            note += f" (capped from {round(summed, 2)}dB)"
+        change_log.append({"module": "trim", "change": note,
+                           "from_fix": _rep(pairs).problem_id, "why": "cumulative gain staging"})
+    else:
+        change_log.append({"module": "trim", "change": "set trim",
+                           "from_fix": _rep(pairs).problem_id, "why": "gain"})
+    return {"enabled": True, "gainDb": round(gain, 2)}
+
+
+_MODULE_BUILDERS = {
+    "comp": _build_comp,
+    "limiter": _build_limiter,
+    "ms": _build_ms,
+    "trim": _build_trim,
+}
 
 
 def compile_preset(
@@ -151,8 +240,8 @@ def compile_preset(
     modules: dict[str, Any] = chain["modules"]
     if "eq" in buckets:
         modules["eq"] = _build_eq(buckets["eq"], change_log)
-    for mod in ("comp", "limiter", "ms", "trim"):
+    for mod, build in _MODULE_BUILDERS.items():
         if mod in buckets:
-            modules[mod] = _build_single(mod, buckets[mod], change_log)
+            modules[mod] = build(buckets[mod], change_log)
 
     return {"chain": chain, "leftover_advice": leftover, "change_log": change_log}

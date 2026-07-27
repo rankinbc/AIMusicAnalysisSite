@@ -12,9 +12,13 @@ from aimusic_shared.verdicts.models import DspOp, Evidence, Fix, Verdict
 
 from app.coach_mix import interactions as I
 from app.coach_mix.types import ArbiterResult, JudgmentCall
-from app.solve_lib.rack_schema import DSPTYPE_TO_MODULE, nearest_band_slot
+from app.solve_lib import weighted_merge as W
+from app.solve_lib.rack_schema import DSPTYPE_TO_MODULE, EQ_BAND_TYPE
 from app.verdict_lib import genre_config as G
 from app.verdict_lib.rule_engine import _problem
+
+# Rack band type -> DspOp type (reverse of rack_schema.EQ_BAND_TYPE).
+_BAND_TO_DSPTYPE = {band: op for op, band in EQ_BAND_TYPE.items()}
 
 
 def _single_op(v: Verdict) -> DspOp:
@@ -38,41 +42,50 @@ def _need(verdicts: list[Verdict]) -> list[Verdict]:
 def _combine(verdicts: list[Verdict], change_log: list[dict[str, Any]]
              ) -> tuple[list[Verdict], list[JudgmentCall]]:
     calls: list[JudgmentCall] = []
-    eq_slots: dict[int, Verdict] = {}    # slot -> representative verdict (its op already in slot)
+    eq_pairs: list[tuple[Verdict, DspOp]] = []   # peaking + shelves (gain moves)
     gain_pairs: list[Verdict] = []
-    passthrough: list[Verdict] = []
+    passthrough: list[Verdict] = []              # incl. hp/lp — compiler merges filters
 
     for v in verdicts:
         op = _single_op(v)
         module = DSPTYPE_TO_MODULE.get(op.type)
-        if module == "eq" and op.type == "peaking_eq":
-            slot = nearest_band_slot(float(op.params["frequency_hz"]))
-            if slot not in eq_slots:
-                eq_slots[slot] = v
-                continue
-            cur = eq_slots[slot]
-            cur_g = float(_single_op(cur).params.get("gain_db", 0.0))
-            new_g = float(op.params.get("gain_db", 0.0))
-            if (cur_g >= 0) == (new_g >= 0):  # same direction -> blend
-                merged = I.blend_eq(_single_op(cur), op)
-                eq_slots[slot] = _with_op(cur, merged)
-                change_log.append({"module": "eq", "change": f"blended {cur.problem_id}+{v.problem_id} @slot{slot}",
-                                   "why": "same-direction EQ in one band"})
-            else:                              # opposite -> escalate
-                calls.append(JudgmentCall(
-                    kind="eq_conflict", where=f"eq slot @{int(op.params['frequency_hz'])}Hz",
-                    competing_fix_ids=[cur.problem_id or "", v.problem_id or ""],
-                    context={"cur_gain_db": cur_g, "new_gain_db": new_g},
-                    question="A boost and a cut target the same band — keep which, or net them?"))
-                # default deterministic resolution: keep the stronger move
-                if abs(new_g) > abs(cur_g):
-                    eq_slots[slot] = v
+        if module == "eq" and op.type in ("peaking_eq", "low_shelf", "high_shelf"):
+            eq_pairs.append((v, op))
         elif module == "trim":
             gain_pairs.append(v)
         else:
             passthrough.append(v)
 
-    out: list[Verdict] = list(eq_slots.values()) + passthrough
+    # Weighted log-frequency clustering (solve_lib.weighted_merge — the same
+    # formula the frontend's combineFixes.ts applies to the manual queue):
+    # far-apart moves always coexist; same-region same-direction sums (capped);
+    # opposite directions NET by weight, escalated as a judgment call.
+    merged_eq: list[Verdict] = []
+    if eq_pairs:
+        by_pid = {v.problem_id: v for v, _ in eq_pairs}
+        moves = [
+            W.EqMove(kind=EQ_BAND_TYPE[op.type],
+                     freq=W.clamp(float(op.params["frequency_hz"]), 20.0, 22000.0),
+                     gain=float(op.params.get("gain_db", 0.0)),
+                     q=float(op.params.get("q", 1.0)),
+                     w=W.fix_weight(v.priority_score, v.confidence),
+                     source=v.problem_id)
+            for v, op in eq_pairs
+        ]
+        for band in W.cluster_gain_moves(moves, change_log):
+            rep = by_pid.get(band.rep_source) or eq_pairs[0][0]
+            merged_eq.append(_with_op(rep, DspOp(
+                type=_BAND_TO_DSPTYPE[band.type],
+                params={"frequency_hz": band.freq, "gain_db": band.gain_db, "q": band.q})))
+            if band.mixed:
+                calls.append(JudgmentCall(
+                    kind="eq_conflict", where=f"eq cluster @{int(band.freq)}Hz",
+                    competing_fix_ids=[s or "" for s in band.sources],
+                    context={"gains_db": band.gains, "netted_db": band.gain_db},
+                    question="A boost and a cut target the same region — netted by "
+                             "weight; keep the net, or pick one side?"))
+
+    out: list[Verdict] = merged_eq + passthrough
     if gain_pairs:
         clamped, total = I.clamp_gain_total([_single_op(v) for v in gain_pairs])
         rep = max(gain_pairs, key=lambda v: v.priority_score)

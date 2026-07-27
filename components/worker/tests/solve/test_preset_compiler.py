@@ -48,8 +48,9 @@ def test_four_limiters_collapse_to_one():
         for i, (c, cf) in enumerate(zip(ceilings, confs))
     ]
     out = compile_preset(vs)
-    # one limiter, the highest-confidence one (0.95 -> ceiling -1.5)
-    assert out["chain"]["modules"]["limiter"]["ceilingDb"] == -1.5
+    # one limiter; the ceiling is a SAFETY param — the LOWEST wins, never a
+    # weighted average and never the highest-confidence fix (weighted-merge).
+    assert out["chain"]["modules"]["limiter"]["ceilingDb"] == -2.0
     assert any("limiter" in c["module"] and "4" in c["change"] for c in out["change_log"])
 
 
@@ -90,16 +91,34 @@ def test_empty_input_returns_base_chain():
     assert out["leftover_advice"] == []
 
 
-# ── Phase 1: same-slot EQ collision — equal magnitude, a cut beats a boost ────
+# ── Same-region EQ collision — opposite directions NET by weight ─────────────
 
-def test_eq_equal_magnitude_cut_beats_boost():
+def test_eq_opposite_directions_net_by_weight():
     boost = DspOp(type="peaking_eq", params={"frequency_hz": 300.0, "gain_db": 3.0, "q": 1.0})
     cut = DspOp(type="peaking_eq", params={"frequency_hz": 300.0, "gain_db": -3.0, "q": 1.0})
-    # Boost is authored first (higher confidence -> processed first), then the
-    # equal-magnitude cut. On a tie the corrective cut must win the band slot.
+    # Weighted-merge formula: opposite directions in one region net via
+    # weighted mean (weight = priority x confidence), not winner-take-all.
+    # w(boost)=50*0.9=45, w(cut)=50*0.8=40 -> (3*45 - 3*40)/85 = +0.18.
     out = compile_preset([
         _vfix("frequency_balance.boost.0", boost, conf=0.9),
         _vfix("frequency_balance.cut.0", cut, conf=0.8),
     ])
     enabled = [b for b in out["chain"]["modules"]["eq"]["bands"] if b["enabled"]]
-    assert len(enabled) == 1 and enabled[0]["gainDb"] == -3.0
+    assert len(enabled) == 1
+    assert abs(enabled[0]["gainDb"] - 0.18) < 0.01
+    assert any("netted" in c["change"] for c in out["change_log"])
+
+
+def test_eq_far_apart_regions_always_coexist():
+    # A low-region cut and a high-region boost never compete — both survive.
+    out = compile_preset([
+        _vfix("low_end.rumble.0",
+              DspOp(type="peaking_eq", params={"frequency_hz": 100.0, "gain_db": -4.0, "q": 1.0}),
+              prio=200),
+        _vfix("frequency_balance.air.0",
+              DspOp(type="peaking_eq", params={"frequency_hz": 8000.0, "gain_db": 2.0, "q": 1.0}),
+              prio=20),
+    ])
+    enabled = [b for b in out["chain"]["modules"]["eq"]["bands"] if b["enabled"]]
+    assert len(enabled) == 2
+    assert enabled[0]["gainDb"] == -4.0 and enabled[1]["gainDb"] == 2.0

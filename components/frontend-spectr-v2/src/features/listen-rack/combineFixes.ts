@@ -14,8 +14,8 @@
 //   comp    weighted mean per param; ratio capped at 4:1.
 //   ms      width weighted mean, clamped 50–120%; monoMakerHz = max (safest).
 //   limiter SAFETY param — lowest ceiling wins, never an average.
-// Budgets mirror the worker's coach_mix/interactions.py so the manual queue and
-// the server Coach Mix converge on the same do-no-harm math.
+// MIRROR of the worker's solve_lib/weighted_merge.py (the Coach Mix arbiter +
+// preset compiler run the same math) — change a rule here, change it there too.
 import type { VerdictDspOp } from '../../api/types';
 import { MODULE_DEFAULTS, type EqBand, type ModuleState } from './data';
 
