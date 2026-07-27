@@ -1,0 +1,75 @@
+import fakeredis
+import pytest
+
+from workerdash import wire
+from workerdash.app import create_app
+
+
+class StubConn:  # db failures shouldn't 500 the state endpoint
+    def cursor(self):
+        raise RuntimeError("db down")
+
+
+class Ctl:
+    def probe(self):
+        return {"master": True, "fork": True}
+
+    def derive_status(self, m, f, hb):
+        from workerdash.worker_ctl import derive_status
+        return derive_status(m, f, hb)
+
+    def restart(self, worker_dir):
+        return {"ok": True}
+
+
+@pytest.fixture
+def client():
+    r = fakeredis.FakeRedis()
+    app = create_app(redis_client=r, db_connect=lambda: StubConn(), ctl=Ctl())
+    app.config["TESTING"] = True
+    return app.test_client(), r
+
+
+def test_state_empty_redis_and_dead_db_still_renders(client):
+    c, r = client
+    res = c.get("/api/state")
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body["worker"]["status"] in ("healthy", "half-dead", "dead")
+    assert set(q["name"] for q in body["queues"]) == set(wire.QUEUES)
+    assert "error" in body["db"]  # db section degraded, not fatal
+
+
+def test_cancel_route_removes_message(client):
+    c, r = client
+    rid = wire.enqueue(r, "run_triage", ["a1"], "analysis-paid")
+    res = c.post(f"/api/queue/analysis-paid/{rid}/cancel")
+    assert res.get_json()["ok"] is True
+    assert wire.list_queue(r, "analysis-paid") == []
+
+
+def test_cancel_unknown_id_ok_false(client):
+    c, r = client
+    res = c.post("/api/queue/analysis-paid/nope/cancel")
+    assert res.get_json()["ok"] is False
+
+
+def test_front_route(client):
+    c, r = client
+    a = wire.enqueue(r, "x", [], "analysis-paid")
+    b = wire.enqueue(r, "y", [], "analysis-paid")
+    res = c.post(f"/api/queue/analysis-paid/{b}/front")
+    assert res.get_json()["ok"] is True
+    assert wire.list_queue(r, "analysis-paid")[0]["redis_message_id"] == b
+
+
+def test_bad_queue_name_404(client):
+    c, r = client
+    assert c.post("/api/queue/not-a-queue/x/cancel").status_code == 404
+
+
+def test_index_serves_html(client):
+    c, r = client
+    res = c.get("/")
+    assert res.status_code == 200
+    assert b"workerdash" in res.data
