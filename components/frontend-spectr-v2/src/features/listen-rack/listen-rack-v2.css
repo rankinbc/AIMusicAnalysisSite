@@ -101,11 +101,18 @@
     linear-gradient(115deg,rgba(255,255,255,.15) 0%,rgba(255,255,255,.06) 30%,rgba(255,255,255,.10) 50%,rgba(255,255,255,.05) 72%,rgba(255,255,255,.12) 100%),
     linear-gradient(178deg,#2b2f38 0%,#20242b 48%,#15171d 100%)}
 /* On-state keeps the SAME face color as every other card — only the border
-   and glow say "powered", so the grid reads as one uniform metal surface. */
-.rdx .lr-mc.on {border-color:color-mix(in srgb,var(--mac) 62%,transparent);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.34),inset 0 -1px 0 rgba(0,0,0,.35),0 0 14px color-mix(in srgb,var(--mac) 28%,transparent)}
-.rdx .lr-mc.sel {box-shadow:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.45),0 0 0 1.5px var(--mac)}
-.rdx .lr-mc.on.sel {box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 -1px 0 rgba(0,0,0,.45),0 0 0 1.5px var(--mac),0 0 18px color-mix(in srgb,var(--mac) 38%,transparent),inset 0 0 14px color-mix(in srgb,var(--mac) 8%,transparent)}
+   and glow say "powered". Neon treatment: near-full-strength accent border
+   with a tight hot ring, a mid halo, and a wide soft bloom. */
+.rdx .lr-mc.on {border-color:color-mix(in srgb,var(--mac) 88%,transparent);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.2),inset 0 -1px 0 rgba(0,0,0,.35),
+    0 0 5px color-mix(in srgb,var(--mac) 70%,transparent),
+    0 0 16px color-mix(in srgb,var(--mac) 45%,transparent),
+    0 0 34px color-mix(in srgb,var(--mac) 22%,transparent)}
+.rdx .lr-mc.sel {box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 -1px 0 rgba(0,0,0,.4),0 0 0 1.5px var(--mac)}
+.rdx .lr-mc.on.sel {box-shadow:inset 0 1px 0 rgba(255,255,255,.2),inset 0 -1px 0 rgba(0,0,0,.35),0 0 0 1.5px var(--mac),
+    0 0 6px color-mix(in srgb,var(--mac) 75%,transparent),
+    0 0 20px color-mix(in srgb,var(--mac) 50%,transparent),
+    0 0 40px color-mix(in srgb,var(--mac) 25%,transparent)}
 .rdx .lr-mc-h {display:flex;align-items:flex-start;gap:8px;min-width:0}
 /* right-side stack: device number above the ON/OFF power button */
 .rdx .lr-mc-side {margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0}
