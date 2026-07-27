@@ -2,11 +2,12 @@
 
 Suppression (router.md Stage 1a) already happened in ``evaluate_problems``; the
 LLM refine stage (1b) is out of scope. This module does Stage 2 (route) and
-Stage 4 (merge); fan-out (Stage 3) is a single-solver no-op for the audio_only
-MVP (multi-domain fan-out unlocks with stems).
+Stage 4 (merge); fan-out (Stage 3) is a single-solver no-op per problem; the
+per-TARGET fan-out (master vs each stem) happens in the preset compiler, which
+groups by ``fix.target`` before routing to rack slots.
 
 ``route`` maps ``(category, data_tier)`` -> a solver name (or None when no
-master-rack move applies). ``merge`` runs each routed solver, validates the
+move applies). ``merge`` runs each routed solver, validates the
 resulting Fix, and attaches it to the problem; everything else passes through
 with ``fix=None``.
 """
@@ -31,6 +32,9 @@ ROUTE_TABLE: dict[tuple[str, str], str] = {
     ("mono_compatibility", "audio_only"): "mono_compatibility",
     ("stereo_phase", "audio_only"): "stereo_phase",
     ("clarity", "audio_only"): "clarity",
+    # Stems tier — per-stem moves. Their fixes target a stem, not the master.
+    ("frequency_collision", "stems"): "stem_clash",
+    ("gain_staging", "stems"): "stem_balance",
 }
 
 

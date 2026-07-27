@@ -256,49 +256,91 @@ _MODULE_BUILDERS = {
 }
 
 
-def compile_preset(
-    verdicts: list[Verdict], *, base: dict[str, Any] | None = None
-) -> dict[str, Any]:
-    leftover: list[dict[str, Any]] = []
-    change_log: list[dict[str, Any]] = []
-    buckets: dict[str, list[_Pair]] = {}
-
-    for v in verdicts:
-        fix = v.fix
-        if fix is None:
-            continue
-        target_type = (fix.target or {}).get("type")
-        if target_type not in ("master", "bus"):
-            leftover.append({
-                "problem_id": v.problem_id,
-                "reason": f"target '{target_type}' is a per-element move, not a master rack",
-                "instruction": fix.expected_outcome,
-            })
-            continue
-        if fix.sidechain:
-            leftover.append({
-                "problem_id": v.problem_id,
-                "reason": "per-element sidechain — not expressible as a master rack",
-                "instruction": fix.expected_outcome,
-            })
-            continue
-        for op in fix.dsp_chain:
-            module = DSPTYPE_TO_MODULE.get(op.type)
-            if module is None:
-                leftover.append({
-                    "problem_id": v.problem_id,
-                    "reason": f"{op.type} has no master-rack module",
-                    "instruction": fix.expected_outcome,
-                })
-                continue
-            buckets.setdefault(module, []).append((v, op))
-
-    chain = base if base is not None else _base_chain()
+def _fill_chain(buckets: dict[str, list[_Pair]], chain: dict[str, Any],
+                change_log: list[dict[str, Any]]) -> dict[str, Any]:
+    """Run the module builders over one target's buckets, in place."""
     modules: dict[str, Any] = chain["modules"]
     if "eq" in buckets:
         modules["eq"] = _build_eq(buckets["eq"], change_log)
     for mod, build in _MODULE_BUILDERS.items():
         if mod in buckets:
             modules[mod] = build(buckets[mod], change_log)
+    return chain
 
-    return {"chain": chain, "leftover_advice": leftover, "change_log": change_log}
+
+def compile_preset(
+    verdicts: list[Verdict], *, base: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Compile fixes into a master rack chain, plus one chain per non-master
+    target.
+
+    Fan-out by ``fix.target`` (2026-07-27). Before this, anything not aimed at
+    the master went straight to ``leftover_advice`` with "that's a per-element
+    move" — which is where per-stem instructions went to die, even though the
+    merge math is entirely target-agnostic. Now each target gets its own
+    compiled chain: the master's is loadable in the Listen rack, and the rest
+    are per-stem instruction blocks for the DAW plan (there is nothing to
+    audition them through — the rack plays the mixdown).
+
+    ``leftover_advice`` keeps its real job: moves with no rack module at all
+    (sidechain, multiband), whatever they target.
+    """
+    leftover: list[dict[str, Any]] = []
+    change_log: list[dict[str, Any]] = []
+    # target key -> (target dict, module buckets). "master"/"bus" share the
+    # master rack; every other target gets its own.
+    by_target: dict[str, tuple[dict[str, Any], dict[str, list[_Pair]]]] = {}
+
+    for v in verdicts:
+        fix = v.fix
+        if fix is None:
+            continue
+        target = dict(fix.target or {})
+        target_type = target.get("type")
+        if fix.sidechain:
+            leftover.append({
+                "problem_id": v.problem_id,
+                "reason": "sidechain — routing between two elements, not a rack module",
+                "instruction": fix.expected_outcome,
+                "target": target,
+            })
+            continue
+        key = "master" if target_type in ("master", "bus") else \
+            f"{target_type}:{target.get('name') or '?'}"
+        _, buckets = by_target.setdefault(key, (target, {}))
+        for op in fix.dsp_chain:
+            module = DSPTYPE_TO_MODULE.get(op.type)
+            if module is None:
+                leftover.append({
+                    "problem_id": v.problem_id,
+                    "reason": f"{op.type} has no rack module",
+                    "instruction": fix.expected_outcome,
+                    "target": target,
+                })
+                continue
+            buckets.setdefault(module, []).append((v, op))
+
+    master_target, master_buckets = by_target.pop("master", ({"type": "master", "name": "master"}, {}))
+    chain = base if base is not None else _base_chain()
+    _fill_chain(master_buckets, chain, change_log)
+
+    # Deterministic order so the plan reads the same on every run.
+    targets: list[dict[str, Any]] = []
+    for key in sorted(by_target):
+        target, buckets = by_target[key]
+        if not buckets:
+            continue
+        target_log: list[dict[str, Any]] = []
+        targets.append({
+            "target": target,
+            "chain": _fill_chain(buckets, _base_chain(), target_log),
+            "change_log": target_log,
+        })
+
+    return {
+        "chain": chain,
+        "master_target": master_target,
+        "targets": targets,
+        "leftover_advice": leftover,
+        "change_log": change_log,
+    }

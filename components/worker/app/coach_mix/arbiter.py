@@ -194,11 +194,41 @@ def _guard(verdicts: list[Verdict], change_log: list[dict[str, Any]]
     return out, calls
 
 
+def _target_key(v: Verdict) -> str:
+    """Fixes only ever combine WITHIN one target. A 320 Hz carve on the pad and
+    a 320 Hz carve on the master are the same frequency but different signal
+    paths — clustering them would sum two unrelated moves and attribute the
+    result to whichever verdict happened to win. Master and bus share the
+    master rack; every other target stands alone."""
+    target = v.fix.target or {} if v.fix else {}
+    t = target.get("type")
+    if t in ("master", "bus", None):
+        return "master"
+    return f"{t}:{target.get('name') or '?'}"
+
+
 def run(verdicts: list[Verdict], analysis: dict[str, Any], genre: str | None) -> ArbiterResult:
     change_log: list[dict[str, Any]] = []
     needed = _need(verdicts)
-    combined, calls_c = _combine(needed, change_log)
-    scaffolded, calls_s = _scaffold(combined, analysis, genre, change_log)
+
+    groups: dict[str, list[Verdict]] = {}
+    for v in needed:
+        groups.setdefault(_target_key(v), []).append(v)
+
+    # Combine per target. SCAFFOLD and GUARD stay master-only: scaffolding adds
+    # release-readiness modules (limiter, glue comp) that belong on the master
+    # bus and nowhere else, and the guard budgets are master budgets.
+    combined: list[Verdict] = []
+    calls_c: list[JudgmentCall] = []
+    for key in sorted(groups):
+        merged, calls = _combine(groups[key], change_log)
+        combined.extend(merged)
+        calls_c.extend(calls)
+
+    master = [v for v in combined if _target_key(v) == "master"]
+    others = [v for v in combined if _target_key(v) != "master"]
+    scaffolded, calls_s = _scaffold(master, analysis, genre, change_log)
     guarded, calls_g = _guard(scaffolded, change_log)
-    return ArbiterResult(verdicts=guarded, judgment_calls=[*calls_c, *calls_s, *calls_g],
+    return ArbiterResult(verdicts=[*guarded, *others],
+                         judgment_calls=[*calls_c, *calls_s, *calls_g],
                          change_log=change_log)

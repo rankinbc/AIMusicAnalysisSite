@@ -86,9 +86,11 @@ def generate_fix_rack(analysis_id: str, user_id: str | None = None,
                 "arbiter_notes": result["arbiter_notes"],
                 "degraded": result["degraded"],
                 "leftover_advice": result["leftover_advice"],
+                "targets": result.get("targets") or [],
             },
         ))
 
     enabled = sum(1 for m in chain["modules"].values() if m.get("enabled"))
     logger.info("fix rack: wrote analysis preset for version %s (%d modules, "
-                "%d leftover)", version_id, enabled, len(result["leftover_advice"]))
+                "%d per-target blocks, %d leftover)", version_id, enabled,
+                len(result.get("targets") or []), len(result["leftover_advice"]))

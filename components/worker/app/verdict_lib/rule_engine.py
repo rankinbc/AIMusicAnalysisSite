@@ -1168,30 +1168,55 @@ def stem_clash(a: dict[str, Any]) -> Verdict | None:
     )
 
 
+_BALANCE_WORD = {"too_high": "too loud", "too_low": "too quiet"}
+
+
 @single("stem_balance", tier="S")
 def stem_balance(a: dict[str, Any]) -> Verdict | None:
+    """Worst per-stem level flag. Reads ``balance_flags`` — NOT ``per_stem``,
+    which carries only raw metrics (lufs/rms_db/peak/...) and has no severity
+    or direction on it. The rule read per_stem until 2026-07-27 and therefore
+    never fired at all; the analyzer emits the flags in their own list
+    (phase4_stems.py builds `balance_flags` from `_balance_flags`)."""
     stems = _stems_block(a)
     if stems is None:
         return None
-    worst_role: str | None = None
+    worst: dict[str, Any] | None = None
     worst_sev: Severity | None = None
-    for role, flag in (stems.get("per_stem") or {}).items():
-        sev = _TIER_SEV.get((flag or {}).get("severity_tier") or "")
+    worst_gap = -1.0
+    for flag in stems.get("balance_flags") or []:
+        sev = _TIER_SEV.get(flag.get("severity_tier") or "")
         if sev is None:
             continue
-        if worst_sev is None or sev == "severe":
-            worst_role, worst_sev = role, sev
-    if worst_role is None or worst_sev is None:
+        rng = flag.get("expected_range") or [0.0, 0.0]
+        obs = flag.get("observed")
+        if obs is None:
+            continue
+        # Distance outside the expected window — how wrong, not just that it is.
+        gap = max(float(rng[0]) - float(obs), float(obs) - float(rng[1]), 0.0)
+        hotter = worst_sev is None or (sev == "severe" and worst_sev != "severe")
+        if hotter or (sev == worst_sev and gap > worst_gap):
+            worst, worst_sev, worst_gap = flag, sev, gap
+    if worst is None or worst_sev is None:
         return None
-    direction = ((stems.get("per_stem") or {}).get(worst_role) or {}).get("direction", "off")
+
+    role = str(worst.get("role"))
+    direction = str(worst.get("direction", ""))
+    word = _BALANCE_WORD.get(direction, "off")
+    lo, hi = (worst.get("expected_range") or [0.0, 0.0])[:2]
+    obs = float(worst["observed"])
     return _problem(
         track_id=_track_id(a), slug="stem_balance", severity=worst_sev,
         category="gain_staging", kind="fault", data_tier="stems",
-        headline=f"Stem balance: {worst_role} is {direction}",
-        summary=f"The {worst_role} stem sits {direction} relative to the rest of the mix.",
-        evidence=[Evidence(metric="phase4.stems.per_stem", value=None,
-                           label=f"{worst_role} {direction}", stems=[worst_role])],
-        why_it_matters="A mis-balanced stem skews the whole mix; re-gain it before mastering.",
+        headline=f"Stem balance: {role} is {word} ({obs:.1f} dB RMS)",
+        summary=f"The {role} stem sits at {obs:.1f} dB RMS against an expected "
+                f"{float(lo):.1f} to {float(hi):.1f} for this genre - {word} by "
+                f"{worst_gap:.1f} dB.",
+        evidence=[Evidence(metric=f"phase4.stems.per_stem.{role}.rms_db", value=obs,
+                           expected_range=(float(lo), float(hi)),
+                           label=f"{role} {obs:.1f} dB RMS", stems=[role])],
+        why_it_matters="A mis-balanced stem skews the whole mix; re-gain it at source "
+                       "rather than fighting it on the master.",
     )
 
 

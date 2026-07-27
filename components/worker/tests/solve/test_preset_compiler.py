@@ -77,11 +77,17 @@ def test_sidechain_op_diverts_to_leftover_advice():
     assert out["leftover_advice"][0]["problem_id"] == "low_end.kick_bass.0"
 
 
-def test_stem_target_diverts_to_leftover_advice():
+def test_stem_target_gets_its_own_chain_not_the_master_rack():
     op = DspOp(type="peaking_eq", params={"frequency_hz": 300.0, "gain_db": -3.0, "q": 1.0})
     out = compile_preset([_vfix("low_end.x.0", op, target_type="stem")])
+    # The master is untouched — carving it would dip every element, not the pad.
     assert "eq" not in out["chain"]["modules"]
-    assert len(out["leftover_advice"]) == 1
+    assert out["leftover_advice"] == []
+    assert len(out["targets"]) == 1
+    t = out["targets"][0]
+    assert t["target"]["type"] == "stem"
+    assert any(b["enabled"] and b["gainDb"] == -3.0
+               for b in t["chain"]["modules"]["eq"]["bands"])
 
 
 def test_empty_input_returns_base_chain():
@@ -89,6 +95,7 @@ def test_empty_input_returns_base_chain():
     assert out["chain"]["order"] == R.ORDER
     assert out["chain"]["modules"] == {}
     assert out["leftover_advice"] == []
+    assert out["targets"] == []
 
 
 # ── Same-region EQ collision — opposite directions NET by weight ─────────────
