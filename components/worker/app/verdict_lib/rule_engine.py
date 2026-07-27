@@ -32,7 +32,7 @@ from aimusic_shared.verdicts.models import (
     Severity,
     Verdict,
 )
-from aimusic_shared.verdicts.scoring import compute_priority_score
+from aimusic_shared.verdicts.scoring import compute_priority_breakdown
 from aimusic_shared.verdicts.ulid_helpers import new_verdict_id
 
 from app.verdict_lib import genre_config as G
@@ -99,7 +99,7 @@ def _problem(
     where: dict[str, Any] | None = None,
 ) -> Verdict:
     """Build a Problem record (a Verdict with the IDENTIFY-tier fields populated)."""
-    score = compute_priority_score(severity, category, scope)  # type: ignore[arg-type]
+    breakdown = compute_priority_breakdown(severity, category, scope)  # type: ignore[arg-type]
     return Verdict(
         verdict_id=new_verdict_id(),
         track_id=track_id,
@@ -109,7 +109,11 @@ def _problem(
         severity=severity,
         category=category,  # type: ignore[arg-type]
         confidence=confidence,
-        priority_score=score,
+        priority_score=breakdown.score,
+        priority_base=breakdown.base,
+        priority_category_weight=breakdown.category_weight,
+        priority_scope_multiplier=breakdown.scope_multiplier,
+        scope=breakdown.scope,
         headline=headline,
         summary=summary,
         evidence=evidence,

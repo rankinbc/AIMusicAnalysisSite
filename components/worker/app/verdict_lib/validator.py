@@ -6,6 +6,8 @@ from typing import Any
 
 from aimusic_shared.verdicts.models import Severity, Verdict
 from aimusic_shared.verdicts.scoring import (
+    PriorityBreakdown,
+    compute_priority_breakdown,
     compute_priority_score,
     severity_from_score,
 )
@@ -87,6 +89,18 @@ def _infer_scope(verdict: Verdict) -> str:
     if target.get("type") == "stem":
         return "single_stem"
     return "full_track"
+
+
+def _score_update(bd: PriorityBreakdown) -> dict[str, Any]:
+    """model_copy update stamping the final score AND its breakdown — every
+    verdict that leaves the validator has score ≡ base × catW × scopeM."""
+    return {
+        "priority_score": bd.score,
+        "priority_base": bd.base,
+        "priority_category_weight": bd.category_weight,
+        "priority_scope_multiplier": bd.scope_multiplier,
+        "scope": bd.scope,
+    }
 
 
 def _is_deterministic(verdict: Verdict) -> bool:
@@ -173,10 +187,10 @@ def validate_verdict(verdict: Verdict, analysis: dict[str, Any]) -> ValidationRe
     #     recompute priority_score. LLM findings (specialists + identifiers) still
     #     run the downgrade guard below, since they can over-claim severity.
     if _is_deterministic(verdict):
-        score = compute_priority_score(verdict.severity, verdict.category, scope)  # type: ignore[arg-type]
+        bd = compute_priority_breakdown(verdict.severity, verdict.category, scope)  # type: ignore[arg-type]
         return ValidationResult(
             ok=True,
-            verdict=verdict.model_copy(update={"priority_score": score}),
+            verdict=verdict.model_copy(update=_score_update(bd)),
         )
 
     baseline_score = compute_priority_score("moderate", verdict.category, scope)  # type: ignore[arg-type]
@@ -186,17 +200,17 @@ def validate_verdict(verdict: Verdict, analysis: dict[str, Any]) -> ValidationRe
     }
     if severity_rank[verdict.severity] > severity_rank[baseline_band]:
         new_severity: Severity = baseline_band
-        score = compute_priority_score(new_severity, verdict.category, scope)  # type: ignore[arg-type]
+        bd = compute_priority_breakdown(new_severity, verdict.category, scope)  # type: ignore[arg-type]
         return ValidationResult(
             ok=True,
             verdict=verdict.model_copy(update={
                 "severity": new_severity,
-                "priority_score": score,
+                **_score_update(bd),
             }),
         )
 
-    score = compute_priority_score(verdict.severity, verdict.category, scope)  # type: ignore[arg-type]
+    bd = compute_priority_breakdown(verdict.severity, verdict.category, scope)  # type: ignore[arg-type]
     return ValidationResult(
         ok=True,
-        verdict=verdict.model_copy(update={"priority_score": score}),
+        verdict=verdict.model_copy(update=_score_update(bd)),
     )

@@ -45,6 +45,13 @@ def test_to_row_persists_problem_fields():
     assert row.kind == "fault" and row.source == "rule_engine"
     assert row.data_tier == "audio_only" and row.fixable is True and row.suspected is False
     assert row.where is None and row.refines is None
+    # Results v4: rule-engine producers stamp the priority breakdown at creation,
+    # and the mapper must carry it — score ≡ base × catW × scopeM.
+    assert row.priority_base == 120           # severe
+    assert row.priority_category_weight == 1.5  # clipping
+    assert row.priority_scope_multiplier == 1.0  # full_track (rule default)
+    assert row.scope == "full_track"
+    assert row.priority_score == round(120 * 1.5 * 1.0)
 
 
 # ── fake DB plumbing ────────────────────────────────────────────────────────

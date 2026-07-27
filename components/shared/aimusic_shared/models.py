@@ -393,6 +393,16 @@ class Verdict(Base):
     # "where" is a SQL reserved word — SQLAlchemy quotes it. jsonb, nullable.
     where: Mapped[Optional[Any]] = mapped_column("where", JSONB, nullable=True)
     refines: Mapped[Optional[str]] = mapped_column("refines", String(80), nullable=True)
+    # ── Priority-score breakdown (results v4). Nullable — legacy rows are not
+    #    backfilled; the UI degrades to score-only when null. ────────────────
+    priority_base: Mapped[Optional[int]] = mapped_column("priority_base", Integer, nullable=True)
+    priority_category_weight: Mapped[Optional[float]] = mapped_column(
+        "priority_category_weight", Float, nullable=True
+    )
+    priority_scope_multiplier: Mapped[Optional[float]] = mapped_column(
+        "priority_scope_multiplier", Float, nullable=True
+    )
+    scope: Mapped[Optional[str]] = mapped_column("scope", String(20), nullable=True)
 
 
 class VerdictUserState(Base):

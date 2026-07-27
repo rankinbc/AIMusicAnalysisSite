@@ -1,6 +1,7 @@
 from __future__ import annotations
 import pytest
 from aimusic_shared.verdicts.scoring import (
+    compute_priority_breakdown,
     compute_priority_score,
     severity_from_score,
 )
@@ -57,3 +58,41 @@ def test_unknown_severity_raises():
 def test_unknown_scope_raises():
     with pytest.raises(ValueError):
         compute_priority_score("severe", "clipping", "headphones")  # type: ignore[arg-type]
+
+
+# ── Results v4: breakdown variant (compute_priority_score delegates to it) ──
+
+
+def test_breakdown_critical_clipping_full_track():
+    bd = compute_priority_breakdown("critical", "clipping", "full_track")
+    assert bd.base == 200
+    assert bd.category_weight == 1.5
+    assert bd.scope_multiplier == 1.0
+    assert bd.scope == "full_track"
+    assert bd.score == 300
+
+
+def test_breakdown_moderate_low_end_single_section():
+    bd = compute_priority_breakdown("moderate", "low_end", "single_section")
+    assert (bd.base, bd.category_weight, bd.scope_multiplier) == (70, 1.3, 0.7)
+    assert bd.score == 64  # rounded from 63.7
+
+
+def test_breakdown_unknown_category_weight_is_1():
+    bd = compute_priority_breakdown("minor", "device_chain", "single_stem")
+    assert bd.category_weight == 1.0
+    assert bd.score == 18
+
+
+def test_score_always_equals_breakdown_product():
+    for sev in ("critical", "severe", "moderate", "minor", "win"):
+        for cat in ("clipping", "loudness", "low_end", "anything_else"):
+            for scope in ("full_track", "multi_section", "single_section", "single_stem"):
+                bd = compute_priority_breakdown(sev, cat, scope)  # type: ignore[arg-type]
+                assert bd.score == round(bd.base * bd.category_weight * bd.scope_multiplier)
+                assert bd.score == compute_priority_score(sev, cat, scope)  # type: ignore[arg-type]
+
+
+def test_breakdown_unknown_severity_raises():
+    with pytest.raises(ValueError):
+        compute_priority_breakdown("emergency", "clipping", "full_track")  # type: ignore[arg-type]

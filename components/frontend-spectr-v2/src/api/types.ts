@@ -1362,6 +1362,9 @@ export interface VerdictDto {
   severity: Severity | string;
   category: string;
   confidence: number;
+  /** Raw ranking score — UNBOUNDED, real range ≈ 18–300 (severity base 20–200 ×
+   *  category weight 1.0–1.5 × scope multiplier 0.6–1.0). NOT a 0–100 scale;
+   *  do not clamp for display (move-model's `impact` banding is a separate concept). */
   priorityScore: number;
   impact: string | null;
   chartType: string | null;
@@ -1383,6 +1386,12 @@ export interface VerdictDto {
   suspected: boolean;
   where: ProblemWhere | null;
   refines: string | null;
+  // ── Priority-score breakdown (results v4). Null on legacy rows — render
+  //    score-only when absent. score ≡ round(base × catW × scopeM) on new rows.
+  priorityBase: number | null;
+  priorityCategoryWeight: number | null;
+  priorityScopeMultiplier: number | null;
+  scope: string | null;
   createdAt: string;
   userState: VerdictUserState;
 }
