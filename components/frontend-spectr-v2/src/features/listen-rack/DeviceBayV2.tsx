@@ -4,8 +4,10 @@
 import { useRef, useState } from 'react';
 
 import { Icon } from '../results/Icon';
+import type { EffectId } from '../listen/audio/EffectUnit';
 import type { ModuleManifest, ParamValue } from './data';
 import { fmtVal, type EqBand } from './data';
+import { DynamicsViz } from './DynamicsViz';
 import { EqCurveEditor } from './EqCurveEditor';
 import { ParamControl, PSlider, PToggle, Sw } from './lrControls';
 import { lrClamp } from './lrUtil';
@@ -151,6 +153,14 @@ function LRIo({ io, height = 78 }: { io: DeviceIoState | null; height?: number }
   );
 }
 
+// Dynamics devices get the scrolling in/out/GR display with a draggable
+// threshold (comp/gate) or ceiling (limiter) line. Ranges mirror the manifest.
+const DYN_CFG: Record<string, { key: string; label: string; min: number; max: number }> = {
+  comp: { key: 'thresholdDb', label: 'THRESH', min: -60, max: 0 },
+  gate: { key: 'thresholdDb', label: 'THRESH', min: -80, max: 0 },
+  limiter: { key: 'ceilingDb', label: 'CEILING', min: -12, max: 0 },
+};
+
 // ── The device bay ─────────────────────────────────────────────────────
 export function DeviceBayV2({ m, i, rs, playing, showBind, onClose }: {
   m: ModuleManifest;
@@ -253,6 +263,20 @@ export function DeviceBayV2({ m, i, rs, playing, showBind, onClose }: {
           )
         ) : (
           <>
+            {DYN_CFG[m.id] && (
+              <DynamicsViz
+                graph={rs.graph}
+                id={m.id as EffectId}
+                playing={playing}
+                dim={dim}
+                accent={m.accent}
+                thresholdDb={Number(v[DYN_CFG[m.id].key]) || 0}
+                thresholdMin={DYN_CFG[m.id].min}
+                thresholdMax={DYN_CFG[m.id].max}
+                thresholdLabel={DYN_CFG[m.id].label}
+                onThreshold={(db) => rs.setParam(m.id, DYN_CFG[m.id].key, db)}
+              />
+            )}
             {!!knobs.length && (
               <div className="lr-bay-row">
                 {knobs.map((p) => (
