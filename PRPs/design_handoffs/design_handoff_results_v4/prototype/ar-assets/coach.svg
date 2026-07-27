@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
+<defs>
+<linearGradient id="cb-h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1c2433"></stop><stop offset="0.5" stop-color="#11151d"></stop><stop offset="1" stop-color="#070a12"></stop></linearGradient>
+<linearGradient id="cb-v" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#00f3bd"></stop><stop offset="0.55" stop-color="#00e5b0"></stop><stop offset="1" stop-color="#00e5b0" stop-opacity="0.5"></stop></linearGradient>
+</defs>
+<line x1="40" y1="2" x2="40" y2="10" stroke="#00e5b0" stroke-width="1.6" stroke-linecap="round"></line>
+<circle cx="40" cy="3" r="2.6" fill="#00e5b0"></circle>
+<path d="M14 22 L24 16 L40 14 L56 16 L66 22 L68 32 L66 48 L60 60 L52 68 L40 70 L28 68 L20 60 L14 48 L12 32 Z" fill="url(#cb-h)" stroke="rgba(0,229,176,0.5)" stroke-width="1.4" stroke-linejoin="miter"></path>
+<rect x="4" y="30" width="9" height="20" rx="2.5" fill="#11151d" stroke="rgba(0,229,176,0.55)" stroke-width="1.1"></rect><circle cx="8.5" cy="40" r="2" fill="#00e5b0"></circle>
+<rect x="67" y="30" width="9" height="20" rx="2.5" fill="#11151d" stroke="rgba(0,229,176,0.55)" stroke-width="1.1"></rect><circle cx="71.5" cy="40" r="2" fill="#00f3bd"></circle>
+<path d="M16 30 L26 26 L40 25 L54 26 L64 30 L62 42 L56 46 L40 47 L24 46 L18 42 Z" fill="#0b1714" stroke="url(#cb-v)" stroke-width="1.4" stroke-linejoin="miter"></path>
+<rect x="24" y="31.5" width="3.5" height="9" rx="1" fill="#00e5b0" opacity="0.85"></rect>
+<rect x="30.5" y="29" width="3.5" height="14" rx="1" fill="#00e5b0" opacity="0.95"></rect>
+<rect x="37" y="30.5" width="3.5" height="11" rx="1" fill="#00f3bd"></rect>
+<rect x="43.5" y="32.5" width="3.5" height="7" rx="1" fill="#00e5b0" opacity="0.9"></rect>
+<rect x="50" y="30" width="3.5" height="12" rx="1" fill="#00e5b0" opacity="0.85"></rect>
+<rect x="30" y="54" width="20" height="10" rx="2" fill="#0b1714" stroke="rgba(0,229,176,0.4)" stroke-width="0.9"></rect>
+<line x1="32" y1="56" x2="32" y2="62" stroke="rgba(0,229,176,0.55)" stroke-width="1.1" stroke-linecap="round"></line>
+<line x1="36" y1="56" x2="36" y2="62" stroke="rgba(0,229,176,0.55)" stroke-width="1.1" stroke-linecap="round"></line>
+<line x1="40" y1="56" x2="40" y2="62" stroke="rgba(0,229,176,0.55)" stroke-width="1.1" stroke-linecap="round"></line>
+<line x1="44" y1="56" x2="44" y2="62" stroke="rgba(0,229,176,0.55)" stroke-width="1.1" stroke-linecap="round"></line>
+<line x1="48" y1="56" x2="48" y2="62" stroke="rgba(0,229,176,0.55)" stroke-width="1.1" stroke-linecap="round"></line>
+</svg>
