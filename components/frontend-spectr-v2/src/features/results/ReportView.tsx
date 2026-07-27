@@ -5,7 +5,6 @@ import { toast } from 'sonner';
 import { ApiError } from '../../api/fetcher';
 import { extractApiError } from '../../api/error-utils';
 import {
-  useApplyVerdict,
   useEntitlements,
   useReanalyzeVersion,
   useVerdicts,
@@ -42,12 +41,14 @@ import { DebugTab } from './DebugTab';
 import { unlockIntentToInputKey } from './coach-chat-helpers';
 import { buildMoves, moveToMarkdown, type Move } from './move-model';
 import { ResultsTabs, type ResultsTabKey } from './ResultsTabs';
-import { FindingsTab } from './FindingsTab';
+import { FixBoard } from './FixBoard';
+import { useFixRackGeneration } from './useFixRackGeneration';
 import { faultCount } from './problems-helpers';
 import { SongHeader, type SongHeaderInputs } from './SongHeader';
-import { buildListenFixes, writeListenFixes } from '../listen-rack/listenFixes';
-import './redesign.css';
-import s from './ReportView.module.css';
+import { Icon } from './Icon';
+import { buildListenFixes, readListenFixes, writeListenFixes } from '../listen-rack/listenFixes';
+import './redesign-v3.css';
+import './redesign-v3-tabs.css';
 
 interface ReportViewProps {
   results: JobResultsDto;
@@ -61,7 +62,14 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
   // Story 12.5 review: 'debug' stays a valid deep-link KEY (dev builds), but a
   // prod user hitting ?tab=debug must not land on a blank pane with no tab
   // highlighted — coerce to the default tab outside DEV.
-  const tab = rawTab === 'debug' && !import.meta.env.DEV ? 'coach' : rawTab;
+  // v3: the standalone `findings` tab is dissolved into the Coach-labeled
+  // "Findings" board (id `coach`) — coerce old deep-links. Debug stays dev-only.
+  const tab =
+    rawTab === 'findings'
+      ? 'coach'
+      : rawTab === 'debug' && !import.meta.env.DEV
+        ? 'coach'
+        : rawTab;
   const fj: FinalJson = isFinalJson(results.finalJson) ? results.finalJson : {};
   const phase1 = pickPhaseData<Phase1Data>(fj, 1);
   const phase2 = pickPhaseData<Phase2Data>(fj, 2);
@@ -118,38 +126,28 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
 
   // ── Committed ("Added to Listen") moves — lifted here so both the Coach tab
   // (move toggles) and the sidebar (Fixes for Listen queue) stay in sync. ──
-  const apply = useApplyVerdict(jobId);
   const [committedIds, setCommittedIds] = useState<ReadonlySet<string>>(() => new Set<string>());
   const [committedSeeded, setCommittedSeeded] = useState(false);
+  // The Listen queue is LOCAL (prototype-accurate): seeded from + persisted to
+  // the per-version handoff in localStorage, NEVER the server `applied` flag.
+  // Queueing must not write server state — otherwise a single bulk "Select all"
+  // permanently marks every finding applied (the 78-fixes-queued footgun) and
+  // re-seeds a giant queue on every load.
   useEffect(() => {
-    if (committedSeeded || moves.length === 0) return;
-    const seed = new Set<string>();
-    for (const m of moves) if (m.status === 'committed') seed.add(m.id);
-    setCommittedIds(seed);
+    if (committedSeeded) return;
+    const stored = versionId ? readListenFixes(versionId).map((f) => f.fixId) : [];
+    setCommittedIds(new Set(stored));
     setCommittedSeeded(true);
-  }, [moves, committedSeeded]);
+  }, [committedSeeded, versionId]);
 
-  const toggleCommit = useCallback(
-    (move: Move) => {
-      setCommittedIds((prev) => {
-        const next = new Set(prev);
-        if (next.has(move.id)) {
-          next.delete(move.id);
-        } else {
-          next.add(move.id);
-          if (move.verdictId) {
-            apply.mutate(move.verdictId, {
-              onError: () => {
-                /* local commit still stands; persistence is best-effort */
-              },
-            });
-          }
-        }
-        return next;
-      });
-    },
-    [apply],
-  );
+  const toggleCommit = useCallback((move: Move) => {
+    setCommittedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(move.id)) next.delete(move.id);
+      else next.add(move.id);
+      return next;
+    });
+  }, []);
 
   const navigate = useNavigate();
 
@@ -157,6 +155,9 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
   // useFixRackGeneration instance); ReportView only owns the committed set +
   // the Game Plan export.
   const committed = useMemo(() => moves.filter((m) => committedIds.has(m.id)), [moves, committedIds]);
+  // Coach Mix generation lifted here so the trigger (Coach header) and the
+  // compiled preset row (Send-to-Listen) share one state machine.
+  const fixRack = useFixRackGeneration(jobId);
   const [exportOpen, setExportOpen] = useState(false);
   const downloadGamePlan = useCallback(() => {
     const md = moveToMarkdown(committed, trackName);
@@ -175,9 +176,11 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
   // "Plan" tab. Only fixes whose dsp_chain maps to a rack module are written;
   // prose fixes belong to the DAW game plan. Producer side only.
   useEffect(() => {
-    if (!versionId) return;
+    // Guard on `committedSeeded` so the initial empty state can't clobber the
+    // stored queue before the seed reads it back.
+    if (!versionId || !committedSeeded) return;
     writeListenFixes(versionId, buildListenFixes(moves, (id) => committedIds.has(id)));
-  }, [committedIds, moves, versionId]);
+  }, [committedIds, moves, versionId, committedSeeded]);
 
   // "Analysis complete" teaser modal — shown once per job.
   const seenKey = `analysisModalSeen:${jobId}`;
@@ -252,109 +255,94 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
   }, [onAddInputs]);
 
   return (
-    <div className={`${s.report} rdx`} data-testid="report-view">
-      <header className={s.header}>
-        <Link to="/songs/$songId" params={{ songId }} className={s.backLink}>
-          ← all versions
+    <div className="rdx" data-testid="report-view">
+      <div className="wrap">
+        <Link to="/songs/$songId" params={{ songId }} className="backlink">
+          <Icon name="back" size={14} />
+          all versions
         </Link>
-      </header>
 
-      <div className="layout">
-        <main className="main">
-          <SongHeader
-            songId={songId}
-            versionId={versionId}
-            jobId={jobId}
-            versionLabel={
-              results.versionLabel ??
-              (results.versionNumber != null ? `v${results.versionNumber}` : null)
-            }
-            trackName={trackName}
-            genre={phase2?.genre}
-            durationSeconds={phase1?.duration_seconds}
-            inputs={inputs}
-            findingCount={faultCount(verdicts)}
-            suggestionCount={moves.length}
-            onAddInputs={onAddInputs}
-          />
+        <div className="layout">
+          <main className="main">
+            <div className="hero-row">
+              <div className="hero-left">
+                <SongHeader
+                  songId={songId}
+                  versionId={versionId}
+                  jobId={jobId}
+                  versionLabel={
+                    results.versionLabel ??
+                    (results.versionNumber != null ? `v${results.versionNumber}` : null)
+                  }
+                  trackName={trackName}
+                  genre={phase2?.genre}
+                  durationSeconds={phase1?.duration_seconds}
+                  inputs={inputs}
+                  findingCount={faultCount(verdicts)}
+                  suggestionCount={moves.length}
+                  onAddInputs={onAddInputs}
+                />
+                <SendToListenCard
+                  jobId={jobId}
+                  versionId={versionId}
+                  committedCount={committed.length}
+                  fixRack={fixRack.rack}
+                  onOpenGamePlan={() => setExportOpen(true)}
+                />
+              </div>
 
-          <DegradationBanner
-            fj={fj}
-            jobId={jobId}
-            onRetryDispatched={(newJobId) =>
-              void navigate({
-                to: '/songs/$songId/results/$jobId',
-                params: { songId, jobId: newJobId },
-              })
-            }
-          />
-
-          {/* Wave 2 (FR16/UX-DR17) — LLM-degradation notice, independent of the
-              phase-failure banner above; both may render at once. */}
-          {verdictsData?.degradation && (
-            <LlmDegradationNotice notice={verdictsData.degradation} />
-          )}
-
-          <ResultsTabs
-            current={tab}
-            onChange={onTabChange}
-            findingCount={faultCount(verdicts)}
-            hasProject={hasProject}
-            projectTrackCount={alsProject?.trackCount ?? 0}
-            hasReference={hasReference}
-          />
-
-          <div className={s.tabBody}>
-            {tab === 'coach' && (
               <CoachTab
                 jobId={jobId}
                 analysisId={results.analysisId}
                 trackName={trackName}
-                moves={moves}
                 verdicts={verdicts}
                 measurementsCount={countMeasurements(fj)}
                 inputs={inputs}
-                committedIds={committedIds}
-                onToggleCommit={toggleCommit}
-                onAddInputs={onAddInputs}
+                committed={committed}
+                coachMixReady={fixRack.rack != null}
+                coachMixGenerating={fixRack.phase === 'generating'}
+                onGenerateCoachMix={fixRack.generate}
                 onUnlockAction={onUnlockAction}
                 credits={null}
               />
+            </div>
+
+            <DegradationBanner
+              fj={fj}
+              jobId={jobId}
+              onRetryDispatched={(newJobId) =>
+                void navigate({
+                  to: '/songs/$songId/results/$jobId',
+                  params: { songId, jobId: newJobId },
+                })
+              }
+            />
+
+            {/* Wave 2 (FR16/UX-DR17) — LLM-degradation notice, independent of the
+                phase-failure banner above; both may render at once. */}
+            {verdictsData?.degradation && (
+              <LlmDegradationNotice notice={verdictsData.degradation} />
             )}
-            {tab === 'findings' && (
-              <FindingsTab
-                verdicts={verdicts}
-                onGoToActions={() => onTabChange('coach')}
-                onTrackActivate={() => onTabChange('project')}
-              />
-            )}
-            {tab === 'project' && alsProject && (
-              <ProjectTab project={alsProject} phase8={phase8} phase8Failed={phase8Failed} />
-            )}
-            {/* Story 5.7 (AC3): an .als WAS attached but phase 8 died in its
-                sandbox (timeout/crash/parse error) — say so instead of showing
-                the misleading "unlock with a project upload" CTA. */}
-            {tab === 'project' && !alsProject && phase8Failed && (
-              <div className="card" data-testid="project-skip-note">
-                <p className="label">Project analysis skipped this run</p>
-                <p>
-                  Your Ableton project was attached, but its analysis hit a snag and was
-                  skipped — everything else in this report is unaffected. Re-export the
-                  .als and retry to fill this tab in.
-                </p>
+
+            <ResultsTabs
+              current={tab}
+              onChange={onTabChange}
+              findingCount={faultCount(verdicts)}
+              hasProject={hasProject}
+              projectTrackCount={alsProject?.trackCount ?? 0}
+              hasReference={hasReference}
+            />
+
+            {/* Findings board (the Coach-labeled first tab). */}
+            {tab === 'coach' && (
+              <div className="tabbody fade-up">
+                <FixBoard
+                  verdicts={verdicts}
+                  moves={moves}
+                  committedIds={committedIds}
+                  onToggleCommit={toggleCommit}
+                />
               </div>
-            )}
-            {tab === 'project' && !alsProject && !phase8Failed && (
-              <ProjectUnlock {...(versionId ? { onUploadAls: () => setAlsDialogOpen(true) } : {})} />
-            )}
-            {tab === 'reference' && (
-              <ReferenceTab
-                genre={phase2?.genre}
-                phase6={phase6}
-                phase5={phase5}
-                phase1={phase1}
-                onGoToFindings={() => onTabChange('findings')}
-              />
             )}
             {tab === 'trackinfo' && (
               <TrackInfoTab
@@ -368,20 +356,41 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
                 waveformUrl={results.waveformImageUrl}
               />
             )}
+            {tab === 'project' && alsProject && (
+              <ProjectTab project={alsProject} phase8={phase8} phase8Failed={phase8Failed} />
+            )}
+            {/* Story 5.7 (AC3): an .als WAS attached but phase 8 died in its
+                sandbox (timeout/crash/parse error) — say so instead of showing
+                the misleading "unlock with a project upload" CTA. */}
+            {tab === 'project' && !alsProject && phase8Failed && (
+              <div className="card" data-testid="project-skip-note">
+                <p className="label">Project analysis skipped this run</p>
+                <p>
+                  Your Ableton project was attached, but its analysis hit a snag and was skipped —
+                  everything else in this report is unaffected. Re-export the .als and retry to fill
+                  this tab in.
+                </p>
+              </div>
+            )}
+            {tab === 'project' && !alsProject && !phase8Failed && (
+              <ProjectUnlock {...(versionId ? { onUploadAls: () => setAlsDialogOpen(true) } : {})} />
+            )}
+            {tab === 'reference' && (
+              <div className="tabbody fade-up">
+                <ReferenceTab
+                  genre={phase2?.genre}
+                  phase6={phase6}
+                  phase5={phase5}
+                  phase1={phase1}
+                  onGoToFindings={() => onTabChange('coach')}
+                />
+              </div>
+            )}
             {tab === 'debug' && import.meta.env.DEV && (
               <DebugTab phases={fj.phases} rawJson={results.finalJson} />
             )}
-          </div>
-        </main>
-
-        <aside className="side">
-          <SendToListenCard
-            jobId={jobId}
-            versionId={versionId}
-            committedCount={committed.length}
-            onOpenGamePlan={() => setExportOpen(true)}
-          />
-        </aside>
+          </main>
+        </div>
       </div>
 
       {versionId && (
@@ -415,6 +424,16 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
         <ExportModal
           committed={committed}
           trackName={trackName}
+          versionLabel={
+            results.versionLabel ??
+            (results.versionNumber != null ? `v${results.versionNumber}` : null)
+          }
+          facts={{
+            bpm: phase1?.bpm,
+            key: phase1?.detected_key,
+            lufs: phase1?.lufs,
+            genre: phase2?.genre,
+          }}
           onClose={() => setExportOpen(false)}
           onDownload={() => {
             downloadGamePlan();

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { getAccessToken } from '../../api/fetcher';
@@ -11,10 +11,9 @@ import type {
 } from '../../api/types';
 import { Pill } from '../../ui/Pill';
 import { TranceBot } from './TranceBot';
-import { CoachCapChip } from './CoachCapChip';
+import { Icon } from './Icon';
 import { CoachGateInline } from './CoachGateInline';
 import { EvidenceChips } from './EvidenceChips';
-import { deriveCoachSuggestions } from './coach-suggestion-templates';
 import {
   parseFrame,
   extractErrorCode,
@@ -67,8 +66,13 @@ interface CoachChatProps {
    *  contributes to the grounding scope line ({n} measurements). */
   measurementsCount: number;
   /** Optional actions rendered top-right of the coach card (redesign: the
-   *  Specialist Team + Generate Fix Rack buttons live here). */
+   *  Coach Mix + Specialist Team buttons live here). */
   headerActions?: React.ReactNode;
+  /** Cap-line stats (prototype: "· N specialists ran · M/N suggested"). */
+  specialistsRan?: number;
+  specialistsSuggested?: number;
+  /** Grounded greeting shown when the thread is empty (prototype seeds one). */
+  greeting?: React.ReactNode;
   /** Story 12.5: unlock chips open the REAL upload dialogs (owner: ReportView).
    *  Optional so bare mounts stay valid; without it the chip routes to the
    *  song page copy instead of a stale "coming soon" toast. */
@@ -76,18 +80,19 @@ interface CoachChatProps {
 }
 
 export function CoachChat({
-  trackName,
   analysisId,
-  verdicts,
-  measurementsCount,
   headerActions,
+  specialistsRan = 0,
+  specialistsSuggested = 0,
+  greeting,
   onUnlockAction,
 }: CoachChatProps) {
   const [input, setInput] = useState('');
-  // teach-mode-coach: when on, the next question is sent as mode="teach" so the
-  // coach teaches the relevant craft grounded in this track instead of a direct
-  // Q&A answer.
-  const [teachMode, setTeachMode] = useState(false);
+  // teach-mode-coach: the header mode toggle (Concise · Normal · Teach). "Teach"
+  // sends the next question as mode="teach" so the coach teaches the relevant
+  // craft grounded in this track; Concise/Normal both map to a direct Q&A.
+  const [mode, setMode] = useState<'Concise' | 'Normal' | 'Teach'>('Normal');
+  const teachMode = mode === 'Teach';
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [offlineState, setOfflineState] = useState(false);
@@ -218,20 +223,6 @@ export function CoachChat({
 
     return () => ac.abort();
   }, [analysisId]);
-
-  const suggestions = useMemo(() => deriveCoachSuggestions(verdicts), [verdicts]);
-
-  // Grounding scope inputs — purely derived.
-  const shortid = useMemo(
-    () => analysisId.replace(/-/g, '').slice(0, 8),
-    [analysisId],
-  );
-  const openVerdictCount = useMemo(
-    () =>
-      verdicts.filter((v) => !v.userState?.dismissed && !v.userState?.applied)
-        .length,
-    [verdicts],
-  );
 
   const handleStop = useCallback(() => {
     // Aborting the SSE fetch triggers the BFF's
@@ -467,25 +458,37 @@ export function CoachChat({
   return (
     <div className="coach-wrap">
       <div className="coach-hd">
-        <TranceBot size={50} thinking={streaming} />
+        <TranceBot size={26} thinking={streaming} />
         <div className="ch-b">
           <div className="ch-k">
             <span className="led" />
             <span className="lab">Ask the Coach</span>
+            <span className="ch-modes">
+              {(['Concise', 'Normal', 'Teach'] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  className={`ch-mode${mode === m ? ' on' : ''}`}
+                  onClick={() => setMode(m)}
+                >
+                  {m}
+                </button>
+              ))}
+            </span>
           </div>
-          <div className="ch-name">Ask anything about this mix</div>
-          <div className="ch-sub">
-            I&rsquo;ve seen every metric on <strong>{trackName || 'this track'}</strong>, every
-            specialist verdict, and how it compares to your genre&rsquo;s reference profile.
-          </div>
+          <div className="ch-sub">I know everything about this song.</div>
         </div>
         {headerActions && <div className="coach-actions">{headerActions}</div>}
       </div>
 
       <div className="coach-body">
-        {turns.length > 0 && (
-          <div className="coach-thread">
-            {turns.map((turn, i) => {
+        <div className="coach-thread">
+          {turns.length === 0 && greeting && (
+            <div className="cmsg bot">
+              <div className="bub">{greeting}</div>
+            </div>
+          )}
+          {turns.map((turn, i) => {
               const isAssistant = turn.role === 'assistant';
               const showStreamingPlaceholder =
                 isAssistant && !turn.finalized && streaming && i === turns.length - 1 && !turn.text;
@@ -519,8 +522,7 @@ export function CoachChat({
                 </div>
               );
             })}
-          </div>
-        )}
+        </div>
 
         {offlineState && (
           <section
@@ -548,70 +550,56 @@ export function CoachChat({
             <CoachGateInline />
           </div>
         ) : (
-          <>
-            <div className="coach-chips">
-              {suggestions.map((q) => (
-                <button key={q} type="button" onClick={() => setInput(q)} disabled={offlineState}>
-                  {q}
-                </button>
-              ))}
-            </div>
-
-            <div className="coach-input">
+          <div className="coach-input">
+            <input
+              placeholder={offlineState ? 'Coach is offline' : 'Ask the coach about this mix…'}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !streaming) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+              disabled={offlineState}
+              aria-label="Coach question input"
+            />
+            {streaming ? (
               <button
                 type="button"
-                className="coach-teach"
-                onClick={() => setTeachMode((v) => !v)}
-                aria-pressed={teachMode}
-                aria-label="Teach me mode — learn the craft using your track as the example"
-                title="Teach me: the coach explains the craft using your track's measurements"
-                disabled={offlineState}
+                className="send"
+                onClick={handleStop}
+                aria-label="Stop coach response"
               >
-                🎓 {teachMode ? 'Teaching' : 'Teach'}
+                <span aria-hidden>◼</span>
               </button>
-              <input
-                placeholder={
-                  offlineState
-                    ? 'Coach is offline'
-                    : teachMode
-                      ? 'Ask the coach to teach you something…'
-                      : 'Ask the coach about this mix…'
-                }
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !streaming) {
-                    e.preventDefault();
-                    send();
-                  }
-                }}
-                disabled={offlineState}
-                aria-label="Coach question input"
-              />
-              {streaming ? (
-                <button type="button" className="send" onClick={handleStop} aria-label="Stop coach response">
-                  ◼
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="send"
-                  onClick={send}
-                  disabled={!input.trim() || offlineState}
-                >
-                  Ask →
-                </button>
-              )}
-            </div>
-          </>
+            ) : (
+              <button
+                type="button"
+                className="send"
+                onClick={send}
+                disabled={!input.trim() || offlineState}
+                aria-label="Send question"
+              >
+                <Icon name="send" size={16} />
+              </button>
+            )}
+          </div>
         )}
 
         <div className="coach-cap">
-          <CoachCapChip used={caps?.used ?? 0} limit={caps?.limit ?? 3} />
-        </div>
-        <div className="coach-grounding" aria-label="Coach answers are grounded in this report only.">
-          Answers grounded in analysis <code>#{shortid}</code> · {measurementsCount} measurements ·{' '}
-          {openVerdictCount} verdicts
+          grounded
+          {caps &&
+            (caps.limit >= 100000 ? (
+              <> · unlimited messages today</>
+            ) : (
+              <>
+                {' '}
+                · <span className="v">{caps.used}</span>/{caps.limit} messages today
+              </>
+            ))}{' '}
+          · {specialistsRan} specialists ran ·{' '}
+          {Math.min(specialistsRan, specialistsSuggested)}/{specialistsSuggested} suggested
         </div>
 
         {/* SR-only live regions for stream-state + token mirror. */}

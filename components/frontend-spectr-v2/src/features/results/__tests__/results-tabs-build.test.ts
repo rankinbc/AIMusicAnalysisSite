@@ -9,7 +9,9 @@ const base = { findingCount: 0, hasProject: false, projectTrackCount: 0, hasRefe
 describe('buildResultsTabs', () => {
   it('excludes the Debug tab when not a dev build', () => {
     const ids = buildResultsTabs(base, false).map((t) => t.id);
-    expect(ids).toEqual(['coach', 'findings', 'trackinfo']);
+    // v3: the Coach-labeled "Findings" board (id `coach`) is the first tab; the
+    // standalone `findings` tab was dissolved into it.
+    expect(ids).toEqual(['coach', 'trackinfo']);
   });
 
   it('includes the Debug tab in dev builds', () => {
@@ -22,6 +24,6 @@ describe('buildResultsTabs', () => {
     const ids = buildResultsTabs(
       { ...base, hasProject: true, projectTrackCount: 3, hasReference: true }, false,
     ).map((t) => t.id);
-    expect(ids).toEqual(['coach', 'findings', 'project', 'reference', 'trackinfo']);
+    expect(ids).toEqual(['coach', 'trackinfo', 'project', 'reference']);
   });
 });

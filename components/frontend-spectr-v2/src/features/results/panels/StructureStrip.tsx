@@ -1,31 +1,31 @@
 import type { Phase1Structure } from '../../../api/types';
-import { segmentBands } from '../track-info-helpers';
-import s from '../track-info-panels.module.css';
-
-const SEG_HUES = [172, 280, 32, 210, 320, 140, 250];
+import { tiTime } from '../track-info-helpers';
 
 /** Proportional song-structure strip (intro/build/drop…) from allin1 segments.
+ *  Reproduces the prototype's `.struct-strip`/`.ss-seg` flex markup (phase1.structure.segments).
  *  Renders nothing when structure is unavailable/deferred — degrades cleanly. */
 export function StructureStrip({
   structure,
   durationSec,
+  compact,
 }: {
   structure: Phase1Structure | undefined;
   durationSec: number | undefined;
+  compact?: boolean;
 }) {
-  const bands = segmentBands(structure?.segments, durationSec);
-  if (bands.length === 0) return null;
+  const segments = structure?.segments;
+  if (!segments || segments.length === 0 || !durationSec || durationSec <= 0) return null;
   return (
-    <div className={s.strip} aria-label="Song structure">
-      {bands.map((b, i) => (
-        <span
+    <div className={`struct-strip${compact ? ' compact' : ''}`} title="phase1.structure.segments">
+      {segments.map((sg, i) => (
+        <div
+          className="ss-seg"
           key={i}
-          className={s.seg}
-          style={{ left: `${b.leftPct}%`, width: `${b.widthPct}%`, ['--h' as string]: String(SEG_HUES[i % SEG_HUES.length]) }}
-          title={b.label}
+          style={{ width: `${((sg.end - sg.start) / durationSec) * 100}%` }}
+          title={`${sg.label} · ${tiTime(sg.start)}–${tiTime(sg.end)}`}
         >
-          <span className={s.segLabel}>{b.label}</span>
-        </span>
+          <span>{sg.label}</span>
+        </div>
       ))}
     </div>
   );

@@ -4,10 +4,11 @@ import {
   buildGenreSection,
   buildReferenceSection,
   type GenreGapMetric,
+  type GenreSection,
+  type RefCheck,
   type RefDeltaRow,
   type RefStemDelta,
 } from './reference-model';
-import s from './ReferenceTab.module.css';
 
 interface ReferenceTabProps {
   genre: string | undefined;
@@ -18,6 +19,49 @@ interface ReferenceTabProps {
   onGoToFindings?: () => void;
 }
 
+// ── Icons (stroke 1.7, rounded) — the two the reference tab needs ──────
+function Icon({ name, size = 15 }: { name: 'info' | 'arrow'; size?: number }) {
+  const p = {
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.7,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+  };
+  if (name === 'info') {
+    return (
+      <svg {...p}>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 11v5" />
+        <path d="M12 8h.01" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...p}>
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+function refFmt(v: number, unit: string): string {
+  if (unit === 'BPM') return `${Math.round(v)}`;
+  if (unit === '') return v.toFixed(2);
+  return v.toFixed(1);
+}
+function fmtSigned(v: number): string {
+  return `${v > 0 ? '+' : ''}${v.toFixed(1)}`;
+}
+/** Deterministic genre-tied hue for the identity dot (decorative only). */
+function genreHue(label: string): number {
+  let h = 0;
+  for (let i = 0; i < label.length; i++) h = (h * 31 + label.charCodeAt(i)) % 360;
+  return h;
+}
+
 // Two complementary comparisons shown together, laid out by per-metric data
 // availability (NOT a mode toggle): "Compared to your genre" (phase 6 — the 3
 // placed metrics only) and "Compared to your reference" (phase 5 — plain deltas
@@ -25,251 +69,330 @@ interface ReferenceTabProps {
 export function ReferenceTab({ genre: phase2Genre, phase6, phase5, phase1, onGoToFindings }: ReferenceTabProps) {
   const genreSection = buildGenreSection(phase6, phase5);
   const refSection = buildReferenceSection(phase5, phase1);
-  const genreLabel = (phase6?.genre ?? phase2Genre) ? fmtGenre(phase6?.genre ?? phase2Genre!) : '—';
+  const genreName = (phase6?.genre ?? phase2Genre) ? fmtGenre(phase6?.genre ?? phase2Genre!) : '—';
+  const hasStems = refSection.perStem.length > 0;
+
+  const hue = genreHue(genreName);
+  const dotCol = `hsl(${hue} 65% 58%)`;
 
   return (
-    <div className={s.tab}>
-      <div className={s.identity}>
-        <span className={s.dot} />
-        <div>
-          <div className={s.idName}>
-            {genreLabel} profile
-            <span className={s.idKind}>Comparison targets</span>
+    <div className="tabbody fade-up">
+      {/* ── Target identity bar ── */}
+      <div className="ref-identity">
+        <span className="ref-dot" style={{ background: dotCol, boxShadow: `0 0 12px -2px ${dotCol}` }} />
+        <div className="ref-id-b">
+          <div className="ref-id-name">
+            {genreName}
+            <span className="ref-id-kind">Genre preset</span>
           </div>
-          <div className={s.idSub}>
+          <div className="ref-id-sub">
             {phase6?.profile_source ? (
               <>
                 genre distribution · <b>{phase6.profile_source}</b>
               </>
             ) : (
-              <>how you sit against the {genreLabel} genre, and against your uploaded reference</>
+              <>how you sit against the {genreName} genre</>
+            )}
+            {refSection.attached && (
+              <>
+                {' · '}chasing <b>your uploaded reference</b>
+              </>
             )}
           </div>
         </div>
+        <span className="ref-id-vs">comparison targets</span>
       </div>
 
       {/* ── Compared to your genre (phase 6) ── */}
-      <section className={s.section}>
-        <div className={s.seclabel}>
-          <span className={s.t}>Compared to your genre</span>
-          <span className={s.hint}>phase 6 · how you stack up against pros in this style</span>
-        </div>
-        {genreSection.confident ? (
-          <>
-            <GenreVerdict
-              percentile={genreSection.percentile!}
-              inRange={genreSection.inRange}
-              total={genreSection.total}
-            />
-            <div className={s.gaps}>
-              {genreSection.metrics.map((m) => (
-                <GapRow key={m.key} m={m} onGoToFindings={onGoToFindings} />
-              ))}
-            </div>
-            <div className={s.legend}>
-              <span className={s.lg}>
-                <span className={`${s.ld} ${s.ldYou}`} />you
-              </span>
-              <span className={s.lg}>
-                <span className={`${s.ld} ${s.ldMean}`} />genre mean
-              </span>
-              <span className={s.lg}>
-                <span className={`${s.ld} ${s.ldRange}`} />acceptable range
-              </span>
-              <span className={s.lg}>
-                <span className={s.dia}>◇</span>your reference
-              </span>
-            </div>
-          </>
-        ) : (
-          <div className={s.cant}>
-            <span aria-hidden="true">ⓘ</span>
-            <div>
-              <b>Not enough to place you against the genre yet.</b>
-              <span>
-                {' '}
-                Genre confidence is too low to position this mix on the {genreLabel} distribution —
-                a cleaner master or a longer section improves detection.
-              </span>
-            </div>
-          </div>
-        )}
-      </section>
+      <RefGenreSection section={genreSection} genreName={genreName} onGoToFindings={onGoToFindings} />
 
       {/* ── Compared to your reference (phase 5) — only when attached ── */}
       {refSection.attached && (
-        <section className={s.section}>
-          <div className={s.seclabel}>
-            <span className={s.t}>Compared to your reference</span>
-            <span className={s.hint}>phase 5 · how close you are to the track you&rsquo;re chasing</span>
+        <section className="ref-section" data-kind="ref">
+          <div className="seclabel">
+            <span className="t">Compared to your reference</span>
+            <span className="hint">phase5 · how close you are to the track you&rsquo;re chasing</span>
+            <span className="rule" />
           </div>
-          {refSection.deltas.length > 0 ? (
-            <div className={s.deltaRows}>
-              {refSection.deltas.map((d) => (
-                <DeltaRow key={d.key} d={d} onGoToFindings={onGoToFindings} />
-              ))}
-            </div>
-          ) : (
-            <div className={s.na}>No comparable metrics between your mix and the reference.</div>
-          )}
-          {refSection.checks.length > 0 && (
-            <div className={s.checks}>
-              {refSection.checks.map((c) => (
-                <div className={s.dtile} key={c.key}>
-                  <div className={s.dl}>{c.key.replace(/_/g, ' ')}</div>
-                  <div className={`${s.dv} ${c.tone === 'fail' ? s.warn : ''}`}>{c.message}</div>
-                </div>
-              ))}
-            </div>
-          )}
-          {refSection.perStem.length > 0 && (
-            <>
-              <div className={s.subhd}>
-                Per stem<span className={s.hint}>stems + reference required</span>
-              </div>
-              <div className={s.deltaRows}>
-                {refSection.perStem.map((st, i) => (
-                  <StemDeltaRow key={i} st={st} />
-                ))}
-              </div>
-            </>
-          )}
+          <RefDeltaRows deltas={refSection.deltas} onGoToFindings={onGoToFindings} />
+          <div className="ref-legend">
+            <span className="lg">
+              <span className="d you" />
+              you
+            </span>
+            <span className="lg">
+              <span className="dia">◇</span>reference (center)
+            </span>
+            <span className="lg">bar length = how far off</span>
+          </div>
+          <RefChecks checks={refSection.checks} />
+          {hasStems && <RefStemDeltas perStem={refSection.perStem} />}
         </section>
       )}
     </div>
   );
 }
 
-function GenreVerdict({ percentile, inRange, total }: { percentile: number; inRange: number; total: number }) {
-  const size = 72;
-  const stroke = 7;
-  const rad = (size - stroke) / 2;
-  const circ = 2 * Math.PI * rad;
-  const off = circ * (1 - percentile / 100);
+// ── Genre section shell — honest can't-place vs. real placement ────────
+function RefGenreSection({
+  section,
+  genreName,
+  onGoToFindings,
+}: {
+  section: GenreSection;
+  genreName: string;
+  onGoToFindings?: (() => void) | undefined;
+}) {
+  if (!section.confident) {
+    return (
+      <section className="ref-section">
+        <div className="seclabel">
+          <span className="t">Compared to your genre</span>
+          <span className="hint">phase6 gap analysis</span>
+          <span className="rule" />
+        </div>
+        <div className="ref-cant">
+          <Icon name="info" size={14} />
+          <div>
+            <b>Not enough to place you against the genre yet.</b>
+            <span>
+              Genre confidence is too low to position this mix on the {genreName} distribution — improve
+              detection with a cleaner master or a longer section.
+            </span>
+          </div>
+        </div>
+      </section>
+    );
+  }
   return (
-    <div className={s.verdict}>
-      <div className={s.ring} role="img" aria-label={`${percentile}th percentile versus the genre profile`}>
-        <svg width={size} height={size} aria-hidden>
-          <circle cx={size / 2} cy={size / 2} r={rad} fill="none" stroke="var(--dim, rgba(255,255,255,0.08))" strokeWidth={stroke} />
+    <section className="ref-section" data-kind="genre">
+      <div className="seclabel">
+        <span className="t">Compared to your genre</span>
+        <span className="hint">phase6 gap analysis · how you stack up against pros in this style</span>
+        <span className="rule" />
+      </div>
+      <RefVerdict section={section} />
+      <div className="ref-gaps" style={{ marginTop: 12 }}>
+        {section.metrics.map((m) => (
+          <RefGapRow key={m.key} m={m} onGoToFindings={onGoToFindings} />
+        ))}
+      </div>
+      <div className="ref-legend">
+        <span className="lg">
+          <span className="d you" />
+          you
+        </span>
+        <span className="lg">
+          <span className="d mean" />
+          genre mean
+        </span>
+        <span className="lg">
+          <span className="d range" />
+          acceptable range
+        </span>
+        <span className="lg">
+          <span className="dia">◇</span>your reference
+        </span>
+      </div>
+    </section>
+  );
+}
+
+// ── Genre percentile verdict — phase6.percentile ───────────────────────
+function RefVerdict({ section }: { section: GenreSection }) {
+  const percentile = section.percentile!;
+  const size = 54;
+  const rad = (size - 9) / 2;
+  const c = 2 * Math.PI * rad;
+  const off = c * (1 - percentile / 100);
+  return (
+    <div className="ref-verdict">
+      <div className="rv-ring">
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          <circle cx={size / 2} cy={size / 2} r={rad} fill="none" stroke="var(--dim)" strokeWidth="6" />
           <circle
             cx={size / 2}
             cy={size / 2}
             r={rad}
             fill="none"
-            stroke="var(--cyan, var(--accent))"
-            strokeWidth={stroke}
+            stroke="var(--accent)"
+            strokeWidth="6"
             strokeLinecap="round"
-            strokeDasharray={circ}
+            strokeDasharray={c}
             strokeDashoffset={off}
             transform={`rotate(-90 ${size / 2} ${size / 2})`}
+            style={{ transition: 'stroke-dashoffset .7s ease' }}
           />
         </svg>
-        <span className={s.ringNum}>{percentile}</span>
+        <div className="rv-num">
+          <span className="n">{percentile}</span>
+          <span className="u">th</span>
+        </div>
       </div>
-      <div>
-        <div className={s.vh}>
-          <span className={s.n}>{percentile}</span>th percentile
+      <div className="rv-b">
+        <div className="rv-h">
+          <span className="n">{section.inRange}</span> of {section.total} placed metrics in range
         </div>
-        <div className={s.vtake}>
-          top {100 - percentile}%
-          {total > 0 && (
-            <>
-              {' · '}
-              {inRange} of {total} placed metrics in range
-            </>
-          )}
-        </div>
+        <div className="rv-take">top {100 - percentile}%</div>
       </div>
     </div>
   );
 }
 
-function pos(v: number, min: number, max: number) {
-  return Math.max(0, Math.min(100, ((v - min) / Math.max(0.0001, max - min)) * 100));
-}
-function fmt(v: number, unit: string) {
-  if (unit === 'BPM') return `${Math.round(v)}`;
-  if (unit === '') return v.toFixed(2);
-  return v.toFixed(1);
-}
-function fmtSigned(v: number) {
-  return `${v > 0 ? '+' : ''}${v.toFixed(1)}`;
-}
-
-function GapRow({ m, onGoToFindings }: { m: GenreGapMetric; onGoToFindings?: (() => void) | undefined }) {
+// ── Genre gap row — phase6.gaps.<feature>. When m.ref is present the reference
+//    value is layered on as a ◇ marker + read (bpm / stereo width / correlation). ──
+function RefGapRow({ m, onGoToFindings }: { m: GenreGapMetric; onGoToFindings?: (() => void) | undefined }) {
+  const pos = (v: number) =>
+    Math.max(0, Math.min(100, ((v - m.domMin) / Math.max(0.0001, m.domMax - m.domMin)) * 100));
+  const rLo = pos(m.rangeLo);
+  const rHi = pos(m.rangeHi);
   const u = m.unit ? ` ${m.unit}` : '';
+  const hasRef = m.ref != null;
   return (
-    <div className={`${s.gap} ${m.inRange ? '' : s.out}`} title={m.description}>
-      <div className={s.gapTop}>
-        <span className={s.gapLabel}>{m.label}</span>
-        <span className={`mono ${s.gapPct}`}>{m.pct}th</span>
-      </div>
-      <div className={s.bar} aria-hidden>
-        <span className={s.range} style={{ left: `${pos(m.rangeLo, m.domMin, m.domMax)}%`, width: `${pos(m.rangeHi, m.domMin, m.domMax) - pos(m.rangeLo, m.domMin, m.domMax)}%` }} />
-        <span className={s.meanTick} style={{ left: `${pos(m.mean, m.domMin, m.domMax)}%` }} />
-        {m.ref != null && (
-          <span className={s.refmark} style={{ left: `${pos(m.ref, m.domMin, m.domMax)}%` }} title={`reference ${fmt(m.ref, m.unit)}`}>
+    <div className={`ref-gap${m.inRange ? '' : ' out'}`} title={m.description}>
+      <span className="rg-lab-w">
+        <span className="rg-label">{m.label}</span>
+        <span className="rg-pct">
+          <span className="v">{m.pct}</span>th
+        </span>
+      </span>
+      <div className="rg-bar">
+        <span className="rg-range" style={{ left: `${rLo}%`, width: `${rHi - rLo}%` }} />
+        <span className="rg-meanTick" style={{ left: `${pos(m.mean)}%` }} />
+        {hasRef && (
+          <span
+            className="rg-refmark"
+            style={{ left: `${pos(m.ref!)}%` }}
+            title={`reference ${refFmt(m.ref!, m.unit)}`}
+          >
             ◇
           </span>
         )}
-        <span className={`${s.youdot} ${m.inRange ? '' : s.out}`} style={{ left: `${pos(m.user, m.domMin, m.domMax)}%` }} />
+        <span className={`rg-youdot${m.inRange ? '' : ' out'}`} style={{ left: `${pos(m.user)}%` }} />
       </div>
-      <div className={s.reads}>
-        <span className={`${s.you} ${m.inRange ? '' : s.out}`}>
-          you <b>{fmt(m.user, m.unit)}{u}</b>
+      <span className="rg-reads">
+        <span className={`rg-you${m.inRange ? '' : ' out'}`}>
+          you{' '}
+          <b>
+            {refFmt(m.user, m.unit)}
+            {u}
+          </b>
         </span>
-        <span className={s.mean}>genre {fmt(m.mean, m.unit)}</span>
-        {m.ref != null && <span className={s.refval}>◇ {fmt(m.ref, m.unit)}</span>}
+        <span className="rg-mean">genre {refFmt(m.mean, m.unit)}</span>
+        {hasRef && <span className="rg-refval">◇ {refFmt(m.ref!, m.unit)}</span>}
         {!m.inRange && onGoToFindings && (
-          <button type="button" className={s.find} onClick={onGoToFindings}>
-            fix →
+          <button className="rg-find" onClick={onGoToFindings} title="See in Findings">
+            fix <Icon name="arrow" size={11} />
           </button>
         )}
-      </div>
+      </span>
     </div>
   );
 }
 
-function DeltaBar({ mag, warn }: { mag: number; warn: boolean }) {
+// ── Diverging delta bar — same anatomy as the genre range bar: full-width track,
+//    ◇ reference at center, 'you' dot offset by the signed normalized magnitude. ──
+function DeltaBar({ mag, tone }: { mag: number; tone: 'warn' | 'ok' }) {
   const m = Math.max(-1, Math.min(1, mag || 0));
-  const half = Math.abs(m) * 50;
+  const col = tone === 'warn' ? 'var(--orange)' : 'var(--accent)';
+  const half = Math.abs(m) * 46;
   return (
-    <span className={s.db} title={`${m > 0 ? 'above' : 'below'} reference`}>
-      <span className={s.dbMid} />
-      <span className={`${s.dbFill} ${warn ? s.warn : ''}`} style={{ left: m >= 0 ? '50%' : `${50 - half}%`, width: `${half}%` }} />
-      <span className={`${s.dbYou} ${warn ? s.warn : ''}`} style={{ left: `${50 + m * 50}%` }} />
+    <span className="rg-bar db-bar" title={`${m > 0 ? 'above' : 'below'} reference`}>
+      <span className="db-fill" style={{ left: m >= 0 ? '50%' : `${50 - half}%`, width: `${half}%`, background: col }} />
+      <span className="db-refmark">◇</span>
+      <span
+        className="rg-youdot"
+        style={{ left: `${50 + m * 46}%`, background: col, boxShadow: `0 0 8px -1px ${col}` }}
+      />
     </span>
   );
 }
 
-function DeltaRow({ d, onGoToFindings }: { d: RefDeltaRow; onGoToFindings?: (() => void) | undefined }) {
-  const u = d.unit ? ` ${d.unit}` : '';
+// ── Plain delta rows — phase5.deltas.*, rendered with the SAME row anatomy as the
+//    genre gap rows: label left · bar middle · reads right. ──
+function RefDeltaRows({ deltas, onGoToFindings }: { deltas: RefDeltaRow[]; onGoToFindings?: (() => void) | undefined }) {
+  if (deltas.length === 0) {
+    return <div className="ref-cant" style={{ border: 'none', background: 'none', color: 'var(--muted)', padding: '2px' }}>No comparable metrics between your mix and the reference.</div>;
+  }
   return (
-    <div className={s.rd}>
-      <span className={s.rdLabel}>{d.label}</span>
-      <span className={s.rdYou}>{d.user != null ? <>you <b>{fmt(d.user, d.unit)}{u}</b></> : '—'}</span>
-      <DeltaBar mag={d.mag} warn={d.warn} />
-      <span className={s.rdRef}>{d.ref != null ? <>◇ {fmt(d.ref, d.unit)}</> : '—'}</span>
-      <span className={`${s.rdDelta} ${d.warn ? s.warn : ''}`}>{fmtSigned(d.delta)}</span>
-      {d.warn && onGoToFindings && (
-        <button type="button" className={s.find} onClick={onGoToFindings}>
-          fix →
-        </button>
-      )}
+    <div className="ref-gaps">
+      {deltas.map((d) => {
+        const u = d.unit ? ` ${d.unit}` : '';
+        return (
+          <div className={`ref-gap${d.warn ? ' out' : ''}`} key={d.key} title={d.key}>
+            <span className="rg-lab-w">
+              <span className="rg-label">{d.label}</span>
+              <span className={`rg-pct delta${d.warn ? ' warn' : ''}`}>{fmtSigned(d.delta)}</span>
+            </span>
+            <DeltaBar mag={d.mag} tone={d.warn ? 'warn' : 'ok'} />
+            <span className="rg-reads">
+              <span className={`rg-you${d.warn ? ' out' : ''}`}>
+                you{' '}
+                <b>
+                  {d.user != null ? refFmt(d.user, d.unit) : '—'}
+                  {d.user != null ? u : ''}
+                </b>
+              </span>
+              <span className="rg-refval">◇ {d.ref != null ? refFmt(d.ref, d.unit) : '—'}</span>
+              {d.warn && onGoToFindings && (
+                <button className="rg-find" onClick={onGoToFindings} title="See in Findings">
+                  fix <Icon name="arrow" size={11} />
+                </button>
+              )}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-function StemDeltaRow({ st }: { st: RefStemDelta }) {
+// ── Genre-context checks — phase5.genre_context.checks.* ───────────────
+function RefChecks({ checks }: { checks: RefCheck[] }) {
+  if (checks.length === 0) return null;
   return (
-    <div className={`${s.rd} ${s.stem}`}>
-      <span className={s.rdLabel}>
-        <b className="mono">{st.role}</b> · {st.metric.replace(/_/g, ' ')}
-      </span>
-      <span className={s.rdYou}>{st.user != null ? <>you <b>{st.user.toFixed(1)}</b></> : '—'}</span>
-      <span className={s.rdRef}>{st.ref != null ? <>◇ {st.ref.toFixed(1)}</> : '—'}</span>
-      <span className={`${s.rdDelta} ${st.warn ? s.warn : ''}`}>{st.delta != null ? fmtSigned(st.delta) : '—'}</span>
-      <span className={s.rdInterp}>{st.interpretation}</span>
+    <div className="ref-checks">
+      {checks.map((c) => (
+        <div className="dtile" key={c.key} title={`phase5.genre_context.checks.${c.key}`}>
+          <div className="dl">{c.key.replace(/_/g, ' ')}</div>
+          <div className={`dv ${c.tone || ''}`}>{c.message}</div>
+        </div>
+      ))}
     </div>
+  );
+}
+
+// ── Per-stem reference deltas — phase5.per_stem_reference_deltas[] ──────
+function RefStemDeltas({ perStem }: { perStem: RefStemDelta[] }) {
+  return (
+    <>
+      <div className="ref-subhd">
+        Per stem<span className="hint">phase5.per_stem_reference_deltas · stems + reference required</span>
+      </div>
+      <div className="ref-gaps">
+        {perStem.map((st, i) => {
+          const mag = st.delta != null ? Math.max(-1, Math.min(1, st.delta / 6)) : 0;
+          return (
+            <div className={`ref-gap${st.warn ? ' out' : ''}`} key={i}>
+              <span className="rg-lab-w">
+                <span className="rg-label">
+                  <b className="mono">{st.role}</b> · {st.metric.replace(/_/g, ' ')}
+                </span>
+                <span className={`rg-pct delta${st.warn ? ' warn' : ''}`}>
+                  {st.delta != null ? fmtSigned(st.delta) : '—'}
+                </span>
+              </span>
+              <DeltaBar mag={mag} tone={st.warn ? 'warn' : 'ok'} />
+              <span className="rg-reads">
+                <span className={`rg-you${st.warn ? ' out' : ''}`}>
+                  you <b>{st.user != null ? st.user.toFixed(1) : '—'}</b>
+                </span>
+                <span className="rg-refval">◇ {st.ref != null ? st.ref.toFixed(1) : '—'}</span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </>
   );
 }

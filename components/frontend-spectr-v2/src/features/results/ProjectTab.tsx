@@ -1,4 +1,13 @@
-import type { AlsProjectJson, AlsProjectTrack, Phase8Data, Phase8MidiAnalysis } from '../../api/types';
+import type { CSSProperties } from 'react';
+
+import type {
+  AlsProjectJson,
+  AlsProjectTrack,
+  Phase8Data,
+  Phase8Chord,
+  Phase8MidiAnalysis,
+  Phase8MidiIssue,
+} from '../../api/types';
 
 interface ProjectTabProps {
   project: AlsProjectJson;
@@ -10,274 +19,347 @@ interface ProjectTabProps {
   phase8Failed?: boolean;
 }
 
-const SECTION_HUES = [168, 28, 280, 198, 320, 140, 48];
+// ── prototype palettes (ar-project.jsx / ar-data.jsx) ──────────────────────
+const AR_SECTION_COLORS: Record<string, string> = {
+  Intro: '#8fa5c0',
+  Build: '#ffd166',
+  Breakdown: '#b39df2',
+  Drop: '#5bd0c0',
+  'Drop 2': '#9ce37d',
+  Mid: '#6db4f2',
+  Outro: '#8fa5c0',
+};
+
+const AR_TRK_COLORS = ['#c98a5a', '#c9b45a', '#8fb46a', '#5ab0a4', '#5a94c9', '#9d8fc9', '#c97da8', '#b0b06a'];
+
+const AR_SEV_COLOR: Record<string, string> = {
+  critical: 'var(--sev-critical)',
+  severe: 'var(--sev-severe)',
+  moderate: 'var(--sev-moderate)',
+  minor: 'var(--sev-minor)',
+  win: 'var(--sev-win)',
+};
+const arSevColor = (s: string | undefined): string => AR_SEV_COLOR[s ?? ''] ?? AR_SEV_COLOR.minor;
 
 // The Project tab (.als): health + arrangement up top, then per-track device
-// chains in signal order. Reads the client-parsed .als map + worker phase 8.
+// chains in signal order, MIDI detail, plugins, MIDI health. Reads the
+// client-parsed .als map (device names) + worker phase 8 (health/muted/MIDI).
 export function ProjectTab({ project, phase8, phase8Failed = false }: ProjectTabProps) {
-  const audioCount = project.tracks.filter((t) => t.type === 'audio').length;
-  const midiCount = project.tracks.filter((t) => t.type === 'midi').length;
-  const deviceTotal = phase8?.total_devices ?? project.devices.length;
+  const version = phase8?.ableton_version ?? project.abletonVersion ?? '';
+  const tempo = phase8?.tempo ?? project.tempo ?? '—';
+  const timeSig = phase8?.time_signature ?? project.timeSignature ?? '—';
+  const totalDevices = phase8?.total_devices ?? project.devices.length;
+  const disabledDevices = phase8?.disabled_devices ?? 0;
+  const clutterPct = phase8?.clutter_pct;
+  const sections = phase8?.arrangement?.sections ?? [];
+  const plugins = project.plugins.length > 0 ? project.plugins : (phase8?.plugin_list ?? []);
+  const mutedByName = new Map<string, boolean>((phase8?.tracks ?? []).map((t) => [t.name, t.muted]));
+  const midi = phase8?.midi;
+  const midiAnalysis = phase8?.midi_analysis ?? [];
 
   return (
-    <div className="ti-stack">
-      <p className="tab-intro">
-        <b>From your Ableton project.</b> Read from the uploaded{' '}
-        <span className="mono">.als</span> — device chains, health, and arrangement, independent of
-        the audio analysis.
+    <div className="ti-stack proj fade-up">
+      <p className="tab-intro" style={{ marginBottom: 12 }}>
+        <b>From your Ableton project.</b> Read directly from{' '}
+        <span style={{ fontFamily: "'JetBrains Mono',monospace" }}>{project.source || 'your Ableton project'}</span> —
+        device clutter, MIDI health and arrangement, independent of the audio analysis.
       </p>
 
       {phase8Failed && (
-        <p className="tab-intro" data-testid="project-analysis-skipped">
-          <b>Server project analysis was skipped this run</b> — it hit a snag, so health scoring
-          and MIDI findings below show what the browser could read from the file. Everything else
-          in this report is unaffected; a retry fills this in.
+        <p className="tab-intro" data-testid="project-analysis-skipped" style={{ marginBottom: 12 }}>
+          <b>Server project analysis was skipped this run</b> — it hit a snag, so health scoring and MIDI findings
+          below show what the browser could read from the file. Everything else in this report is unaffected; a retry
+          fills this in.
         </p>
       )}
 
-      <div className="proj-grid">
-        <section className="card">
+      <div className="proj-grid" style={{ marginBottom: 12 }}>
+        <div className="card">
           <div className="card-hd">
             <span className="t">
-              <span className="led" /> Project health
+              <span className="led" />
+              Project health
             </span>
-            {(phase8?.ableton_version ?? project.abletonVersion) && (
-              <span className="meta">{phase8?.ableton_version ?? project.abletonVersion}</span>
-            )}
+            {version && <span className="meta">{version}</span>}
           </div>
           <div className="card-body">
             <div className="proj-health">
               <HealthRing score={phase8?.health_score} />
-              <div className="proj-stats">
-                <ProjStat
-                  label="Tempo"
-                  value={`${phase8?.tempo ?? project.tempo ?? '—'}`}
-                  unit="BPM"
-                />
-                <ProjStat
-                  label="Time sig"
-                  value={phase8?.time_signature ?? project.timeSignature ?? '—'}
-                  unit=""
-                />
-                <ProjStat
-                  label="Devices"
-                  value={`${deviceTotal}`}
-                  unit={phase8?.disabled_devices ? `${phase8.disabled_devices} off` : ''}
-                />
-                {phase8?.clutter_pct != null && (
-                  <ProjStat label="Clutter" value={`${phase8.clutter_pct}%`} unit="" />
+              <div className="pstats">
+                <PStat k="Tempo" v={`${tempo}`} u="BPM" />
+                <PStat k="Time sig" v={`${timeSig}`} />
+                <PStat k="Devices" v={`${totalDevices}`} u={disabledDevices ? `${disabledDevices} off` : ''} />
+                {clutterPct != null && (
+                  <PStat k="Clutter" v={`${clutterPct}%`} warn={clutterPct > 12} />
                 )}
               </div>
             </div>
           </div>
-        </section>
-
-        {phase8?.arrangement?.sections && phase8.arrangement.sections.length > 0 && (
-          <ArrangementCard sections={phase8.arrangement.sections} />
-        )}
+        </div>
+        <div className="card">
+          <div className="card-hd">
+            <span className="t">
+              <span className="led" />
+              Arrangement
+            </span>
+            <span className="meta">from .als markers</span>
+          </div>
+          <div className="card-body">
+            {sections.length > 0 ? (
+              <ArrangementStrip sections={sections} />
+            ) : (
+              <div className="na">No arrangement markers were found in this project.</div>
+            )}
+          </div>
+        </div>
       </div>
 
-      <section className="card">
+      <div className="card" style={{ marginBottom: 12 }}>
         <div className="card-hd">
           <span className="t">
-            <span className="led" /> Tracks
+            <span className="led" />
+            Tracks
           </span>
-          <span className="meta">
-            {project.tracks.length} tracks · device chain order
-          </span>
+          <span className="meta">{project.tracks.length} tracks · device chain order</span>
         </div>
         <div className="card-body">
           {project.tracks.length > 0 ? (
             <div className="tracks-grid">
-              {project.tracks.map((t) => (
-                <TrackChain key={`${t.index}-${t.name}`} track={t} />
+              {project.tracks.map((t, i) => (
+                <TrackBlock
+                  key={`${t.index}-${t.name}`}
+                  track={t}
+                  color={AR_TRK_COLORS[i % AR_TRK_COLORS.length]}
+                  muted={mutedByName.get(t.name) ?? false}
+                />
               ))}
             </div>
           ) : (
             <div className="na">No audio or MIDI tracks were found in this project.</div>
           )}
         </div>
-      </section>
+      </div>
 
-      {phase8?.midi_analysis && phase8.midi_analysis.length > 0 && (
-        <MidiDetailCard tracks={phase8.midi_analysis} />
-      )}
-
-      <div className="proj-grid">
-        <section className="card">
+      {midiAnalysis.length > 0 && (
+        <div className="card" style={{ marginBottom: 12 }}>
           <div className="card-hd">
             <span className="t">
-              <span className="led" /> Mix
+              <span className="led" />
+              MIDI detail — chords &amp; swing
             </span>
-            <span className="meta">
-              {audioCount} audio · {midiCount} MIDI
-            </span>
+            <span className="meta">{midiAnalysis.length} tracks</span>
           </div>
           <div className="card-body">
-            {project.plugins.length > 0 ? (
-              <div className="plugin-chips">
-                {project.plugins.map((p) => (
-                  <span key={p} className="plugin-chip">
-                    {p}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <div className="na">No third-party plugins detected.</div>
-            )}
+            <div className="ma-rows">
+              {midiAnalysis.map((row, i) => (
+                <MidiAnalysisRow key={`${row.track_name ?? 'track'}-${i}`} row={row} />
+              ))}
+            </div>
           </div>
-        </section>
-      </div>
-    </div>
-  );
-}
-
-function HealthRing({ score }: { score: number | undefined }) {
-  const ringSize = 76;
-  const stroke = 7;
-  const r = (ringSize - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const pct = score != null ? Math.max(0, Math.min(100, score)) : 0;
-  const off = c - (pct / 100) * c;
-  return (
-    <div className="rv-ring" role="img" aria-label={`Project health ${score ?? 0} of 100`}>
-      <svg width={ringSize} height={ringSize} style={{ transform: 'rotate(-90deg)' }} aria-hidden>
-        <circle cx={ringSize / 2} cy={ringSize / 2} r={r} stroke="rgba(255,255,255,0.06)" strokeWidth={stroke} fill="none" />
-        <circle
-          cx={ringSize / 2}
-          cy={ringSize / 2}
-          r={r}
-          stroke="var(--cyan)"
-          strokeWidth={stroke}
-          fill="none"
-          strokeDasharray={c}
-          strokeDashoffset={off}
-          strokeLinecap="round"
-        />
-      </svg>
-      <span className="rv-num">{score ?? '—'}</span>
-    </div>
-  );
-}
-
-function ArrangementCard({
-  sections,
-}: {
-  sections: { name: string; duration_bars: number }[];
-}) {
-  const totalBars = sections.reduce((acc, s) => acc + (s.duration_bars || 0), 0);
-  return (
-    <section className="card">
-      <div className="card-hd">
-        <span className="t">
-          <span className="led" /> Arrangement
-        </span>
-        <span className="meta">from .als markers</span>
-      </div>
-      <div className="card-body">
-        <div className="arr-bar">
-          {sections.map((sec, i) => {
-            const w = totalBars > 0 ? (sec.duration_bars / totalBars) * 100 : 100 / sections.length;
-            return (
-              <span
-                key={`${sec.name}-${i}`}
-                className="arr-seg"
-                style={{ width: `${w}%`, ['--hue' as string]: String(SECTION_HUES[i % SECTION_HUES.length]) }}
-                title={`${sec.name} · ${sec.duration_bars} bars`}
-              >
-                {sec.name}
-              </span>
-            );
-          })}
         </div>
-        <div className="mono lm-ends" style={{ marginTop: 10 }}>
-          <span>{sections.length} sections</span>
-          <span>{totalBars} bars</span>
+      )}
+
+      <div className="card" style={{ marginBottom: 12 }}>
+        <div className="card-hd">
+          <span className="t">
+            <span className="led" />
+            Plugins &amp; devices
+          </span>
+          <span className="meta">{plugins.length} unique</span>
+        </div>
+        <div className="card-body">
+          {plugins.length > 0 ? (
+            <div className="plugin-chips">
+              {plugins.map((pl, i) => (
+                <span className="plugin-chip" key={`${pl}-${i}`}>
+                  {pl}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <div className="na">No third-party plugins detected.</div>
+          )}
         </div>
       </div>
-    </section>
-  );
-}
 
-function TrackChain({ track }: { track: AlsProjectTrack }) {
-  return (
-    <div>
-      <div className="trk-head">
-        <span className="trk-name">{track.name}</span>
-        <span className="trk-type">{track.type}</span>
-        <span className="trk-count">{track.devices.length} dev</span>
-      </div>
-      {track.devices.length > 0 ? (
-        <div className="trk-chain">
-          {track.devices.map((d, i) => (
-            <span key={`${d}-${i}`} className="dev-chip">
-              {d}
+      {midi && (
+        <div className="card">
+          <div className="card-hd">
+            <span className="t">
+              <span className="led" />
+              MIDI health
             </span>
-          ))}
-        </div>
-      ) : (
-        <div className="trk-chain">
-          <span className="dev-chip off">no devices</span>
+            <span className="meta">{phase8?.has_humanized_midi ? 'humanized ✓' : 'quantized'}</span>
+          </div>
+          <div className="card-body">
+            <div className="pstats" style={{ marginBottom: 12 }}>
+              <PStat k="Notes" v={(phase8?.midi_note_count ?? midi.total_notes ?? 0).toLocaleString()} />
+              <PStat
+                k="Quant issues"
+                v={`${phase8?.quantization_issues_count ?? 0}`}
+                warn={(phase8?.quantization_issues_count ?? 0) > 0}
+              />
+            </div>
+            {(midi.issues ?? []).map((mi: Phase8MidiIssue, i) => (
+              <div className="midi-issue" key={`${mi.track}-${i}`}>
+                <span className="mi-sev" style={{ background: arSevColor(mi.severity) }} />
+                <div className="mi-b">
+                  <div className="mt">
+                    <span className="mono" style={{ color: 'var(--violet)', fontSize: 11 }}>
+                      {mi.track}
+                    </span>
+                  </div>
+                  <div className="mf">{mi.description}</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function MidiDetailCard({ tracks }: { tracks: Phase8MidiAnalysis[] }) {
-  // Per-track chord progression + groove (chords capped 48/track by the worker).
-  const withDetail = tracks.filter(
-    (t) => (t.chords?.length ?? 0) > 0 || t.swing_ratio != null || t.humanization_score != null,
-  );
-  if (withDetail.length === 0) return null;
+function HealthRing({ score, size = 46 }: { score: number | undefined; size?: number }) {
+  const pct = score != null ? Math.max(0, Math.min(100, score)) : 0;
+  const r = (size - 6) / 2;
+  const c = 2 * Math.PI * r;
+  const off = c * (1 - pct / 100);
+  const col = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--accent)' : 'var(--orange)';
   return (
-    <section className="card">
-      <div className="card-hd">
-        <span className="t">
-          <span className="led" /> MIDI detail — chords &amp; swing
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--dim)" strokeWidth="5" />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke={col}
+          strokeWidth="5"
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={off}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          style={{ transition: 'stroke-dashoffset .6s ease' }}
+        />
+      </svg>
+      <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
+        <span className="mono" style={{ fontSize: 14, fontWeight: 700, color: col, lineHeight: 1 }}>
+          {score ?? '—'}
         </span>
-        <span className="meta">{withDetail.length} tracks</span>
       </div>
-      <div className="card-body">
-        <div className="tracks-grid">
-          {withDetail.map((t, i) => (
-            <div key={`${t.track_name ?? 'track'}-${i}`}>
-              <div className="trk-head">
-                <span className="trk-name">{t.track_name ?? 'Track'}</span>
-                {t.swing_ratio != null && <span className="trk-type">swing {t.swing_ratio.toFixed(2)}</span>}
-                {t.humanization_score != null && (
-                  <span className="trk-count">human {Math.round(t.humanization_score)}</span>
-                )}
-              </div>
-              {t.chords && t.chords.length > 0 ? (
-                <div className="trk-chain">
-                  {t.chords.slice(0, 16).map((c, j) => (
-                    <span key={j} className="dev-chip">
-                      {c.chord_name ?? '?'}
-                    </span>
-                  ))}
-                  {t.chords.length > 16 && <span className="dev-chip off">+{t.chords.length - 16}</span>}
-                </div>
-              ) : (
-                <div className="trk-chain">
-                  <span className="dev-chip off">no chords detected</span>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
+    </div>
   );
 }
 
-function ProjStat({ label, value, unit }: { label: string; value: string; unit: string }) {
+function ArrangementStrip({ sections }: { sections: { name: string; duration_bars: number }[] }) {
+  const total = sections.reduce((s, x) => s + (x.duration_bars || 0), 0);
   return (
-    <div className="proj-stat">
-      <span className="mono psl">{label}</span>
-      <span className="psv">
-        {value}
-        {unit && <small>{unit}</small>}
+    <div>
+      <div style={{ display: 'flex', gap: 1, height: 24, overflow: 'hidden', border: '1px solid rgba(0,0,0,.5)' }}>
+        {sections.map((s, i) => (
+          <div
+            key={`${s.name}-${i}`}
+            title={`${s.name} · ${s.duration_bars} bars`}
+            style={{
+              width: `${total > 0 ? (s.duration_bars / total) * 100 : 100 / sections.length}%`,
+              background: AR_SECTION_COLORS[s.name] || '#4a5568',
+              display: 'flex',
+              alignItems: 'center',
+              minWidth: 0,
+              borderLeft: i > 0 ? '1px solid rgba(0,0,0,.45)' : 'none',
+            }}
+          >
+            <span
+              className="mono"
+              style={{
+                fontSize: 8.5,
+                fontWeight: 700,
+                color: 'rgba(0,0,0,.72)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                padding: '0 4px',
+              }}
+            >
+              {s.name}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div
+        className="mono"
+        style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 9.5, color: 'var(--muted)' }}
+      >
+        <span>{sections.length} sections</span>
+        <span>{total} bars</span>
+      </div>
+    </div>
+  );
+}
+
+function PStat({ k, v, u, warn }: { k: string; v: string; u?: string; warn?: boolean }) {
+  return (
+    <div className="pstat">
+      <span className="k">{k}</span>
+      <span className="v" style={warn ? { color: 'var(--orange)' } : undefined}>
+        <span className="mono">{v}</span>
+        {u && <span className="u">{u}</span>}
+      </span>
+    </div>
+  );
+}
+
+function TrackBlock({ track, color, muted }: { track: AlsProjectTrack; color: string; muted: boolean }) {
+  return (
+    <div className="trk-block" style={{ ['--tc' as string]: color } as CSSProperties}>
+      <div className="trk-head">
+        <span className="trk-swatch" />
+        <span className={`trk-n${muted ? ' muted' : ''}`}>{track.name}</span>
+        {muted && <span className="trk-muted mono">muted</span>}
+        <span className="trk-type mono">{track.type}</span>
+        <span className="trk-count mono">{track.devices.length} dev</span>
+      </div>
+      <div className="trk-chain">
+        {track.devices.length === 0 ? (
+          <span className="dev-chip off">
+            <span className="dc-led" />
+            no devices
+          </span>
+        ) : (
+          track.devices.map((d, j) => (
+            <span className="dev-chip" key={`${d}-${j}`}>
+              <span className="dc-led" />
+              {d}
+            </span>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MidiAnalysisRow({ row }: { row: Phase8MidiAnalysis }) {
+  const stats: string[] = [];
+  if (row.swing_ratio != null) stats.push(`swing ${row.swing_ratio.toFixed(2)}`);
+  if (row.humanization_score != null) stats.push(`human ${Math.round(row.humanization_score * 100)}%`);
+  if (row.note_density_per_bar != null) stats.push(`${row.note_density_per_bar} notes/bar`);
+  const chords = row.chords ?? [];
+  return (
+    <div className="ma-row">
+      <span className="ma-t mono">{row.track_name ?? 'Track'}</span>
+      <span className="ma-stats mono">{stats.join(' · ')}</span>
+      <span className="ma-chords">
+        {chords.length > 0 ? (
+          chords.map((c: Phase8Chord, j) => (
+            <span className="ma-chord" key={j} title={c.time != null ? String(c.time) : undefined}>
+              {c.chord_name ?? '?'}
+            </span>
+          ))
+        ) : (
+          <span className="ma-none">no chords</span>
+        )}
       </span>
     </div>
   );

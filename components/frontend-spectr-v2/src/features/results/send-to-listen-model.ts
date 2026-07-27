@@ -27,7 +27,9 @@ export function presetRows(fixRack: FixRackDto | null, userPresets: RackPresetDt
   if (fixRack) {
     rows.push({
       key: 'coach-mix',
-      name: fixRack.name || 'Coach Mix',
+      // Always brand the generated auto preset as "Coach Mix" — the raw backend
+      // rack name (e.g. "Fix rack — <track>") is an internal label, not UI copy.
+      name: 'Coach Mix',
       auto: true,
       chain: fixRack.chain,
       presetId: fixRack.presetId,

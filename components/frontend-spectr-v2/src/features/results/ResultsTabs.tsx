@@ -1,5 +1,6 @@
 import type { ResultsTabKey } from './results-tab-keys';
 import { buildResultsTabs } from './results-tabs-model';
+import { Icon } from './Icon';
 
 export type { ResultsTabKey } from './results-tab-keys';
 
@@ -45,9 +46,9 @@ export function ResultsTabs({
             onClick={() => onChange(t.id)}
           >
             <span className="ic" aria-hidden>
-              {t.icon}
+              <Icon name={t.icon} size={15} />
             </span>
-            <span>{t.label}</span>
+            {t.label}
             {t.badge != null && <span className="rtab-badge">{t.badge}</span>}
           </button>
         );

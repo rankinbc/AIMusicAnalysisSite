@@ -3,6 +3,11 @@ import type { Phase1LoudnessSeries, Phase1Segment } from '../../api/types';
 // Pure geometry helpers for the new Track Analysis panels — kept out of the
 // components so they fast-refresh and are unit-testable.
 
+/** m:ss from a seconds value (matches the prototype's `tiTime`). */
+export function tiTime(s: number): string {
+  return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+}
+
 export interface TimelinePoint {
   x: number;
   y: number;

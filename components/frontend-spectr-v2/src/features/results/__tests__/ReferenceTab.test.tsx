@@ -28,7 +28,8 @@ describe('ReferenceTab percentile honesty', () => {
       <ReferenceTab genre="trance" phase6={phase6} phase5={undefined} phase1={undefined} />,
     );
     expect(html).toContain('72');
-    expect(html).toContain('th percentile');
+    // Rev3 markup: "72th" ring + "N of M placed metrics in range" + "top 28%" take.
+    expect(html).toContain('placed metrics in range');
     expect(html).toContain('top 28%');
   });
 
