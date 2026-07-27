@@ -4,6 +4,7 @@ import os
 from flask import Flask, jsonify, request
 
 from . import db as dbmod
+from . import ops_db as ops_dbmod
 from . import wire
 from . import worker_ctl as ctlmod
 
@@ -52,6 +53,34 @@ def create_app(redis_client=None, db_connect=None, ctl=None) -> Flask:
                 except Exception:
                     pass
             return {"error": str(e)}, None
+
+    @app.get("/api/ops")
+    def ops_list():
+        args = request.args
+        page = int(args.get("page", 1))
+        page_size = int(args.get("page_size", 25))
+        kwargs = {
+            "search": args.get("search") or None,
+            "status": args.get("status") or None,
+            "since": args.get("since") or None,
+            "until": args.get("until") or None,
+            "page": page,
+            "page_size": page_size,
+        }
+        conn = None
+        try:
+            conn = connect()
+            result = ops_dbmod.list_jobs(conn, **kwargs)
+            return jsonify({"ok": True, **result})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e), "rows": [],
+                             "total": 0, "page": page, "page_size": page_size})
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
     @app.get("/api/state")
     def state():

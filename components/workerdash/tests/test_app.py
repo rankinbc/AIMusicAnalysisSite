@@ -122,3 +122,53 @@ def test_retry_enqueue_failure_reverts_and_returns_error(monkeypatch):
     assert body["ok"] is False
     assert "enqueue failed" in body["error"]
     assert calls["revert"] is True
+
+
+def test_ops_list_route_returns_rows(client, monkeypatch):
+    import workerdash.app as app_module
+    c, r = client
+    monkeypatch.setattr(app_module, "ops_dbmod", type("M", (), {
+        "list_jobs": staticmethod(lambda conn, **kw: {
+            "rows": [{"id": "j1", "status": "complete"}],
+            "total": 1, "page": 1, "page_size": 25,
+        })
+    }))
+    res = c.get("/api/ops")
+    body = res.get_json()
+    assert body["ok"] is True
+    assert body["rows"] == [{"id": "j1", "status": "complete"}]
+    assert body["total"] == 1
+
+
+def test_ops_list_route_passes_query_params(client, monkeypatch):
+    import workerdash.app as app_module
+    c, r = client
+    captured = {}
+
+    def fake_list_jobs(conn, **kw):
+        captured.update(kw)
+        return {"rows": [], "total": 0, "page": 1, "page_size": 25}
+
+    monkeypatch.setattr(app_module, "ops_dbmod",
+                         type("M", (), {"list_jobs": staticmethod(fake_list_jobs)}))
+    c.get("/api/ops?search=eterna&status=failed&page=2&page_size=10")
+    assert captured == {"search": "eterna", "status": "failed", "since": None,
+                         "until": None, "page": 2, "page_size": 10}
+
+
+def test_ops_list_route_db_down_degrades(client, monkeypatch):
+    import workerdash.app as app_module
+    c, r = client
+
+    class Boom:
+        def connect(self):
+            raise RuntimeError("db down")
+
+    monkeypatch.setattr(app_module, "dbmod", type("M", (), {
+        "connect": staticmethod(lambda: (_ for _ in ()).throw(RuntimeError("db down")))
+    }))
+    res = c.get("/api/ops")
+    body = res.get_json()
+    assert body["ok"] is False
+    assert "db down" in body["error"]
+    assert body["rows"] == []
