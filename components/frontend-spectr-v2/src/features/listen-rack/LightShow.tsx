@@ -46,8 +46,11 @@ export function LightShow({ playing, intensity = 1, show, gridHue = 168, gridInt
       hz.addColorStop(1, 'transparent');
       ctx.fillStyle = hz;
       ctx.fillRect(0, 0, W, H);
-      // floor grid — hue + intensity are user settings (Visuals tab); 50 is
-      // the classic 0.05 alpha, scaling linearly up to 2x at 100.
+      // floor grid — the scrolling "ground moving forward" lines. Hue +
+      // intensity are user settings (Visuals tab); 50 = the classic 0.05
+      // alpha, scaling linearly up to 2x at 100; 0 hides the ground.
+      // (The static perspective spokes were REMOVED — they didn't move and
+      // read as diagonal clutter slashing across the page.)
       const gridA = 0.05 * ((gi ?? 50) / 50) * I * live;
       if (gridA > 0.001) {
         const hy = H * 0.66;
@@ -60,12 +63,6 @@ export function LightShow({ playing, intensity = 1, show, gridHue = 168, gridInt
           ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
         }
         ctx.globalAlpha = 1;
-        for (let i = -7; i <= 7; i++) {
-          ctx.beginPath();
-          ctx.moveTo(W * 0.5 + i * 26, hy);
-          ctx.lineTo(W * 0.5 + i * W * 0.12, H);
-          ctx.stroke();
-        }
       }
       // lasers
       ctx.globalCompositeOperation = 'lighter';

@@ -100,6 +100,12 @@ export type IrType = 'room' | 'hall' | 'plate' | 'spring' | 'ambience';
 export interface DjFilterState {
   morph: number; // -1..1, 0 = open
   resonance: number; // 0.1..20
+  wobbleRateHz: number; // 0.1..16 — LFO on the sweep cutoff
+  wobbleDepth: number; // 0..1 (1 = ±2 octaves); 0 = wobble off
+  wobbleShape: string; // 'sine' | 'triangle' | 'square'
+  killLow: boolean; // isolator kills (DJ-mixer EQ kills)
+  killMid: boolean;
+  killHigh: boolean;
   enabled: boolean;
 }
 
@@ -145,7 +151,12 @@ export interface TrimState {
   enabled: boolean;
 }
 
-export const DJFILTER_DEFAULT: DjFilterState = { morph: 0, resonance: 0.7, enabled: false };
+export const DJFILTER_DEFAULT: DjFilterState = {
+  morph: 0, resonance: 0.7,
+  wobbleRateHz: 2, wobbleDepth: 0, wobbleShape: 'sine',
+  killLow: false, killMid: false, killHigh: false,
+  enabled: false,
+};
 
 export const DELAY_DEFAULT: DelayState = {
   sync: true,

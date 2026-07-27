@@ -72,7 +72,7 @@ export const EQ_BANDS_DEFAULT: EqBand[] = EQ_FREQS.map((freq) => ({
 }));
 
 export const MODULE_DEFAULTS: Record<string, ModuleState> = {
-  djfilter: { morph: 0, resonance: 0.7, enabled: false },
+  djfilter: { morph: 0, resonance: 0.7, wobbleRateHz: 2, wobbleDepth: 0, wobbleShape: 'sine', killLow: false, killMid: false, killHigh: false, enabled: false },
   eq: { bands: EQ_BANDS_DEFAULT, enabled: false },
   gate: { thresholdDb: -40, attackMs: 1, holdMs: 10, releaseMs: 100, floorDb: -80, enabled: false },
   comp: { thresholdDb: 0, ratio: 1, attackMs: 3, releaseMs: 250, kneeDb: 30, makeupDb: 0, mix: 1, enabled: false },
@@ -169,12 +169,18 @@ export const RACK_MANIFEST: ModuleManifest[] = [
   },
   // ── creative tier ──
   {
-    id: 'djfilter', label: 'DJ Filter', sub: 'Sweep LP↔HP', tier: 'creative', accent: 'var(--violet)', glyph: '◑', hasMix: false, hasMeter: false,
+    id: 'djfilter', label: 'DJ Tools', sub: 'Sweep · wobble · kills', tier: 'creative', accent: 'var(--violet)', glyph: '◑', hasMix: false, hasMeter: false,
     bind: "setEffectParams('djfilter', patch)",
-    summary: 'Single bipolar sweep: left = LP down, right = HP up, center = open.',
+    summary: 'Bipolar sweep (left = LP down, right = HP up, center = open) + LFO wobble on the cutoff + LOW/MID/HIGH isolator kills.',
     params: [
       { key: 'morph', label: 'Morph', control: 'knobBipolar', min: -1, max: 1, step: 0.01, unit: 'none', default: 0, hint: 'center = open' },
       { key: 'resonance', label: 'Res', control: 'knob', min: 0.1, max: 20, step: 0.1, unit: 'none', default: 0.7 },
+      { key: 'wobbleRateHz', label: 'Wobble', control: 'knob', min: 0.1, max: 16, step: 0.1, unit: 'Hz', default: 2, hint: 'LFO on the sweep cutoff' },
+      { key: 'wobbleDepth', label: 'Depth', control: 'knob', min: 0, max: 1, step: 0.01, unit: 'percent', default: 0, hint: '0 = wobble off · 100% = ±2 octaves' },
+      { key: 'wobbleShape', label: 'Shape', control: 'segmented', options: ['sine', 'triangle', 'square'], default: 'sine' },
+      { key: 'killLow', label: 'Kill Low', control: 'toggle', default: false },
+      { key: 'killMid', label: 'Kill Mid', control: 'toggle', default: false },
+      { key: 'killHigh', label: 'Kill High', control: 'toggle', default: false },
     ],
   },
   {
