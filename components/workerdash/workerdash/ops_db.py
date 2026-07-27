@@ -17,7 +17,7 @@ SELECT c.analysis_id::text, sum(l.input_tokens), sum(l.output_tokens),
        sum(l.cost_usd), count(*)
 FROM llm_calls l
 JOIN conversations c ON c.id::text = l.correlation_id
-WHERE c.analysis_id = ANY(%s)
+WHERE c.analysis_id::text = ANY(%s)
 GROUP BY c.analysis_id
 """
 
