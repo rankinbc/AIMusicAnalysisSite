@@ -164,3 +164,123 @@ def job_analysis_id(conn, job_id):
         )
         row = cur.fetchone()
     return row[0] if row else None
+
+
+_JOB_DETAIL_SQL = """
+SELECT j.id::text, j.status, coalesce(j.error_code,''), coalesce(j.error_message,''),
+       j.current_phase, coalesce(j.tier,''),
+       j.dispatched_at::text, j.started_at::text, j.completed_at::text, j.failed_at::text,
+       coalesce(s.name,''), coalesce(v.label,''), v.version_number,
+       coalesce(v.notes,''), coalesce(v.is_current,false), coalesce(v.stem_analysis_mode,''),
+       a.id::text, a.pipeline_version, a.rule_engine_version, a.validator_version,
+       a.phase_durations, a.degradation_notice, a.routing_plan
+FROM analysis_jobs j
+LEFT JOIN song_versions v ON v.id = j.version_id
+LEFT JOIN songs s ON s.id = v.song_id
+LEFT JOIN analyses a ON a.job_id = j.id
+WHERE j.id::text = %s
+"""
+
+_VERDICTS_SQL = """
+SELECT id, specialist, model, severity, category, headline, summary, created_at::text
+FROM verdicts WHERE analysis_id::text = %s ORDER BY created_at
+"""
+
+_COACH_TRANSCRIPT_SQL = """
+SELECT m.role, m.status, m.content, m.created_at::text,
+       coalesce(l.input_tokens, 0), coalesce(l.output_tokens, 0),
+       coalesce(l.cost_usd, 0)
+FROM coach_messages m
+JOIN conversations c ON c.id = m.conversation_id
+LEFT JOIN llm_calls l ON l.id = m.llm_call_id
+WHERE c.analysis_id::text = %s
+ORDER BY m.created_at
+"""
+
+_LLM_CALLS_DIRECT_SQL = """
+SELECT id, purpose, coalesce(prompt_slug,''), model, input_tokens, output_tokens,
+       cost_usd, outcome, created_at::text
+FROM llm_calls WHERE correlation_id = %s
+"""
+
+_LLM_CALLS_COACH_SQL = """
+SELECT l.id, l.purpose, coalesce(l.prompt_slug,''), l.model, l.input_tokens,
+       l.output_tokens, l.cost_usd, l.outcome, l.created_at::text
+FROM llm_calls l
+JOIN conversations c ON c.id::text = l.correlation_id
+WHERE c.analysis_id::text = %s
+"""
+
+
+def _llm_call_rows(conn, analysis_id):
+    rows = []
+    with conn.cursor() as cur:
+        cur.execute(_LLM_CALLS_DIRECT_SQL, (analysis_id,))
+        rows.extend(cur.fetchall())
+    with conn.cursor() as cur:
+        cur.execute(_LLM_CALLS_COACH_SQL, (analysis_id,))
+        rows.extend(cur.fetchall())
+    rows.sort(key=lambda r: r[8])
+    return [
+        {"id": r[0], "purpose": r[1], "prompt_slug": r[2], "model": r[3],
+         "input_tokens": r[4], "output_tokens": r[5], "cost_usd": float(r[6]),
+         "outcome": r[7], "created_at": r[8]}
+        for r in rows
+    ]
+
+
+def job_detail(conn, job_id):
+    with conn.cursor() as cur:
+        cur.execute(_JOB_DETAIL_SQL, (job_id,))
+        row = cur.fetchone()
+    if row is None:
+        return None
+
+    (jid, status, error_code, error_message, current_phase, tier,
+     dispatched_at, started_at, completed_at, failed_at,
+     song_name, label, version_number, notes, is_current, stem_mode,
+     analysis_id, pipeline_version, rule_engine_version, validator_version,
+     phase_durations, degradation_notice, routing_plan) = row
+
+    verdicts, coach_transcript, llm_calls = [], [], []
+    if analysis_id:
+        with conn.cursor() as cur:
+            cur.execute(_VERDICTS_SQL, (analysis_id,))
+            verdicts = [
+                {"id": r[0], "specialist": r[1], "model": r[2], "severity": r[3],
+                 "category": r[4], "headline": r[5], "summary": r[6], "created_at": r[7]}
+                for r in cur.fetchall()
+            ]
+        with conn.cursor() as cur:
+            cur.execute(_COACH_TRANSCRIPT_SQL, (analysis_id,))
+            coach_transcript = [
+                {"role": r[0], "status": r[1], "content": r[2], "created_at": r[3],
+                 "input_tokens": r[4], "output_tokens": r[5], "cost_usd": float(r[6])}
+                for r in cur.fetchall()
+            ]
+        llm_calls = _llm_call_rows(conn, analysis_id)
+
+    totals = llm_totals_by_analysis(conn, [analysis_id] if analysis_id else [])
+    files = file_slots(conn, job_id) or {}
+
+    return {
+        "job": {"id": jid, "status": status, "error_code": error_code,
+                "error_message": error_message, "current_phase": current_phase,
+                "tier": tier, "dispatched_at": dispatched_at, "started_at": started_at,
+                "completed_at": completed_at, "failed_at": failed_at},
+        "song": {"name": song_name, "label": label, "version_number": version_number,
+                 "notes": notes, "is_current": is_current, "stem_analysis_mode": stem_mode},
+        "analysis": None if not analysis_id else {
+            "id": analysis_id, "pipeline_version": pipeline_version,
+            "rule_engine_version": rule_engine_version,
+            "validator_version": validator_version,
+            "phase_durations": phase_durations,
+            "degradation_notice": degradation_notice,
+            "routing_plan": routing_plan,
+        },
+        "totals": totals.get(analysis_id, ZERO_TOTALS),
+        "llm_calls": llm_calls,
+        "verdicts": verdicts,
+        "coach_transcript": coach_transcript,
+        "files": files,
+    }

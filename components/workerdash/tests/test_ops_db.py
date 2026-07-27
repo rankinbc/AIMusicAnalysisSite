@@ -215,3 +215,71 @@ def test_job_analysis_id_returns_id_or_none():
     assert ops_db.job_analysis_id(conn, "j1") == "a1"
     conn2 = FakeConn([[]])
     assert ops_db.job_analysis_id(conn2, "j1") is None
+
+
+class MultiFakeConn:
+    """Like FakeConn but exposes distinct cursors per call — job_detail
+    issues several independent queries and needs each to return its own
+    canned rows regardless of call order within a single cursor context."""
+    def __init__(self, result_sets):
+        self.result_sets = list(result_sets)
+
+    def cursor(self):
+        rows = self.result_sets.pop(0) if self.result_sets else []
+        return FakeCursor([rows])
+
+
+def test_job_detail_missing_job_returns_none():
+    conn = MultiFakeConn([[]])  # job row query returns nothing
+    assert ops_db.job_detail(conn, "nope") is None
+
+
+def test_job_detail_assembles_full_payload(monkeypatch):
+    job_row = [("j1", "complete", "", "", "phase6", "pro",
+                "2026-07-27T00:00:00Z", "2026-07-27T00:01:00Z",
+                "2026-07-27T00:05:00Z", None,
+                "22", "5_bb", 3, "notes", True, "grouped", "a1",
+                "v3", "r1", "val1", {"phase1": 1.2}, None, None)]
+    verdict_rows = [("vrd_1", "low_end", "opus", "warn", "eq", "Headline", "Summary",
+                      "2026-07-27T00:02:00Z")]
+    coach_rows = [("assistant", "complete", "hi", "2026-07-27T00:03:00Z",
+                   100, 20, 0.001)]
+    direct_call_rows = [("call1", "specialist", "low_end", "opus", 900, 180, 0.05,
+                          "success", "2026-07-27T00:02:00Z")]
+    coach_call_rows = [("call2", "coach", "coach_grounded", "opus", 100, 20, 0.001,
+                         "success", "2026-07-27T00:03:00Z")]
+
+    conn = MultiFakeConn([job_row, verdict_rows, coach_rows,
+                           direct_call_rows, coach_call_rows])
+    monkeypatch.setattr(ops_db, "llm_totals_by_analysis",
+                         lambda c, ids: {"a1": {"input_tokens": 1500, "output_tokens": 300,
+                                                 "cost_usd": 0.07, "call_count": 4}})
+    monkeypatch.setattr(ops_db, "file_slots", lambda c, jid: {"source": {"key": "v1.wav"}})
+
+    detail = ops_db.job_detail(conn, "j1")
+    assert detail["job"]["id"] == "j1"
+    assert detail["song"]["name"] == "22"
+    assert detail["analysis"]["pipeline_version"] == "v3"
+    assert detail["totals"]["input_tokens"] == 1500
+    assert detail["verdicts"][0]["specialist"] == "low_end"
+    assert detail["coach_transcript"][0]["content"] == "hi"
+    assert detail["files"] == {"source": {"key": "v1.wav"}}
+    assert [c["id"] for c in detail["llm_calls"]] == ["call1", "call2"]
+    assert detail["llm_calls"][0]["prompt_slug"] == "low_end"
+
+
+def test_job_detail_no_analysis_yet_zero_totals(monkeypatch):
+    job_row = [("j1", "processing", "", "", "phase2", "free",
+                "2026-07-27T00:00:00Z", "2026-07-27T00:01:00Z", None, None,
+                "22", "5_bb", 3, "", False, "grouped", None,
+                None, None, None, {}, None, None)]
+    conn = MultiFakeConn([job_row])
+    monkeypatch.setattr(ops_db, "llm_totals_by_analysis", lambda c, ids: {})
+    monkeypatch.setattr(ops_db, "file_slots", lambda c, jid: {})
+
+    detail = ops_db.job_detail(conn, "j1")
+    assert detail["analysis"] is None
+    assert detail["totals"] == ops_db.ZERO_TOTALS
+    assert detail["verdicts"] == []
+    assert detail["coach_transcript"] == []
+    assert detail["llm_calls"] == []
