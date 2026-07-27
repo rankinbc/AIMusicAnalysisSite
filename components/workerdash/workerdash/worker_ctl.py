@@ -2,6 +2,7 @@
 NEVER kill only the dramatiq master (orphans the fork) — tree-kill, then
 sweep orphaned forks, then relaunch the canonical Procfile command."""
 import os
+import shutil
 import subprocess
 
 HEARTBEAT_STALE_SECONDS = 60
@@ -58,11 +59,31 @@ def derive_status(master: bool, fork: bool, heartbeat_age) -> str:
     return "half-dead"
 
 
+def _docker_exe() -> str | None:
+    """Resolve the real docker CLI. Bare `docker` on this machine is shadowed
+    by a 0-byte stub in System32 (STARTUP.md problem #1), so prefer the
+    Docker Desktop install path and reject zero-size candidates."""
+    candidates = [
+        r"C:\Program Files\Docker\Docker\resources\bin\docker.exe",
+        shutil.which("docker.exe"),
+        shutil.which("docker"),
+    ]
+    for c in candidates:
+        try:
+            if c and os.path.isfile(c) and os.path.getsize(c) > 0:
+                return c
+        except OSError:
+            continue
+    return None
+
+
 def allin1_container() -> str | None:
     """Best-effort: name of a running structure-detection container, if any.
-    Uses the full docker.exe path — bare `docker` is shadowed on this machine
+    Dynamically resolves docker.exe, filtering out the 0-byte System32 stub
     (see STARTUP.md problem #1)."""
-    exe = r"C:\Program Files\Docker\Docker\resources\bin\docker.exe"
+    exe = _docker_exe()
+    if exe is None:
+        return None
     try:
         out = subprocess.run([exe, "ps", "--format", "{{.Names}}"],
                              capture_output=True, text=True, timeout=10)
