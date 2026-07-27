@@ -14,8 +14,11 @@
  * keep these graph-driven and side-effect-free beyond the graph calls.
  */
 import type { EffectId, EffectMeter } from '../listen/audio/EffectUnit';
+import type { DeviceIoLevels } from '../listen/audio/composer';
 import type { EffectParamMap } from '../listen/useAudioGraph';
 import { DEFAULT_ORDER, type ModuleState, type ParamValue, type RackPatch } from './data';
+
+export type { DeviceIoLevels };
 
 /** The slice of AudioGraphHandle the rack binds to. Satisfied by AudioGraphHandle. */
 export interface RackGraphBindings {
@@ -24,6 +27,10 @@ export interface RackGraphBindings {
   setMasterBypass: (bypassed: boolean) => void;
   resetAll: () => void;
   readEffectMeter: (id: EffectId) => EffectMeter | null;
+  /** Device I/O taps (bay IN/OUT meters). Optional — test fakes and older
+   *  graph handles without metering still satisfy the binding. */
+  tapDeviceIo?: (id: EffectId | null) => void;
+  readDeviceIo?: () => DeviceIoLevels | null;
 }
 
 /** The 13 insert effects (data.ts DEFAULT_ORDER) — `pitch` is intentionally absent. */

@@ -17,12 +17,23 @@ import { chainLinks, isPermutation, type ChainEndpoint } from './dsp/chainLinks'
 import type { EffectId, EffectUnit } from './EffectUnit';
 import { registerWorklets } from './worklets';
 
+/** RMS levels (dBFS) at one unit's input/output — the bay's IN/OUT meters. */
+export interface DeviceIoLevels {
+  inDb: number;
+  outDb: number;
+}
+
 export interface InsertChain {
   chainIn: AudioNode;
   chainOut: AudioNode;
   units: Record<EffectId, EffectUnit<unknown>>;
   getOrder: () => EffectId[];
   reorder: (order: EffectId[]) => void;
+  /** Attach the I/O meter taps to one unit (null detaches). Parallel analyser
+   *  taps — never part of the audio path, safe to move while playing. */
+  setTap: (id: EffectId | null) => void;
+  /** Levels at the tapped unit, or null when nothing is tapped. */
+  readTap: () => DeviceIoLevels | null;
   dispose: () => void;
 }
 
@@ -49,6 +60,33 @@ export function buildInsertChain(ctx: AudioContext): InsertChain {
   const chainOut = ctx.createGain();
   let order: EffectId[] = [...DEFAULT_ORDER];
 
+  // Device I/O metering: two roaming analyser taps on the selected unit's
+  // input/output. wire() severs unit-output edges on reorder, so it re-applies
+  // the tap after relinking (connect() is idempotent per the Web Audio spec).
+  const tapIn = ctx.createAnalyser();
+  const tapOut = ctx.createAnalyser();
+  tapIn.fftSize = 1024;
+  tapOut.fftSize = 1024;
+  const tapBuf = new Float32Array(tapIn.fftSize);
+  let tapped: EffectId | null = null;
+  const applyTap = () => {
+    if (!tapped) return;
+    units[tapped].input.connect(tapIn);
+    units[tapped].output.connect(tapOut);
+  };
+  const clearTap = () => {
+    if (!tapped) return;
+    try { units[tapped].input.disconnect(tapIn); } catch { /* not connected */ }
+    try { units[tapped].output.disconnect(tapOut); } catch { /* severed by wire() */ }
+  };
+  const rmsDb = (an: AnalyserNode): number => {
+    an.getFloatTimeDomainData(tapBuf);
+    let sum = 0;
+    for (let i = 0; i < tapBuf.length; i++) sum += tapBuf[i] * tapBuf[i];
+    const rms = Math.sqrt(sum / tapBuf.length);
+    return rms > 0 ? 20 * Math.log10(rms) : -Infinity;
+  };
+
   // A link's source is a unit's OUTPUT (or chainIn); its dest is a unit's
   // INPUT (or chainOut). 'IN' is never a dest, 'OUT' never a source.
   const sourceNode = (e: ChainEndpoint): AudioNode =>
@@ -66,6 +104,7 @@ export function buildInsertChain(ctx: AudioContext): InsertChain {
     for (const [from, to] of chainLinks(next)) {
       sourceNode(from).connect(destNode(to));
     }
+    applyTap(); // restore the output tap the disconnect sweep severed
   };
 
   wire(order); // initial connect in default order
@@ -110,7 +149,17 @@ export function buildInsertChain(ctx: AudioContext): InsertChain {
         g.linearRampToValueAtTime(1, t1 + DUCK_SECONDS);
       }, DUCK_SECONDS * 1000 + 2);
     },
+    setTap: (id: EffectId | null) => {
+      if (id === tapped) return;
+      clearTap();
+      tapped = id;
+      applyTap();
+    },
+    readTap: () =>
+      tapped ? { inDb: rmsDb(tapIn), outDb: rmsDb(tapOut) } : null,
     dispose: () => {
+      clearTap();
+      tapped = null;
       chainIn.disconnect();
       chainOut.disconnect();
       Object.values(units).forEach((u) => u.dispose());

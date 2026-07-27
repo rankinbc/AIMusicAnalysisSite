@@ -8,6 +8,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import type { EffectId } from '../listen/audio/EffectUnit';
 import {
   DEFAULT_ORDER, MODULE_DEFAULTS, type EqBand, type ModuleState, type ParamValue, type RackPatch,
 } from './data';
@@ -169,6 +170,58 @@ export function useGainReduction(
     return () => cancelAnimationFrame(raf);
   }, [graph, id, enabled, playing, depth]);
   return gr;
+}
+
+// ── live device I/O levels (bay IN/OUT meters) ─────────────────────────────
+// Attaches the graph's roaming analyser taps to `id` and polls RMS dBFS at the
+// unit's input/output per frame. Works whether the module is enabled or not —
+// a bypassed unit still passes signal through its dry lane, which is exactly
+// what the meters should show. Synthetic wobble on the mock (no-graph) route.
+// Detaches the taps on unmount / device switch.
+export interface DeviceIoState {
+  inDb: number;
+  outDb: number;
+}
+
+const IO_FLOOR_DB = -60;
+
+const clampIoDb = (x: number): number =>
+  Number.isFinite(x) ? Math.max(IO_FLOOR_DB, Math.min(6, x)) : IO_FLOOR_DB;
+
+export function useDeviceIo(
+  graph: RackGraphBindings | null | undefined,
+  id: string,
+  active: boolean,
+  playing: boolean,
+): DeviceIoState | null {
+  const [io, setIo] = useState<DeviceIoState | null>(null);
+  useEffect(() => {
+    const real = Boolean(graph?.tapDeviceIo && graph.readDeviceIo) && isInsertEffect(id);
+    if (!active || (!real && graph)) { setIo(null); return undefined; }
+    if (!playing) { setIo({ inDb: IO_FLOOR_DB, outDb: IO_FLOOR_DB }); return undefined; }
+    let raf = 0;
+    const t0 = performance.now();
+    const tick = () => {
+      if (real) {
+        // Re-tap every frame: idempotent when unchanged, and covers the graph
+        // being created lazily (first play) after this hook mounted.
+        graph?.tapDeviceIo?.(id as EffectId);
+        const v = graph?.readDeviceIo?.();
+        setIo(v ? { inDb: clampIoDb(v.inDb), outDb: clampIoDb(v.outDb) } : null);
+      } else {
+        const t = (performance.now() - t0) / 1000;
+        const base = -18 + 5 * Math.sin(t * 2.3);
+        setIo({ inDb: base, outDb: base + 2 * Math.sin(t * 1.7) });
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      graph?.tapDeviceIo?.(null);
+    };
+  }, [graph, id, active, playing]);
+  return io;
 }
 
 // ── drag-reorder for a chain (pointer based) ───────────────────────────────

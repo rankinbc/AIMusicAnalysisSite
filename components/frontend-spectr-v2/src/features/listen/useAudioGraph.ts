@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 
-import { buildInsertChain, type InsertChain } from './audio/composer';
+import { buildInsertChain, type DeviceIoLevels, type InsertChain } from './audio/composer';
 import type { EffectId, EffectMeter } from './audio/EffectUnit';
 import {
   DEFAULT_ORDER,
@@ -91,6 +91,10 @@ export interface AudioGraphHandle {
   reorder: (order: EffectId[]) => void;
   getOrder: () => EffectId[];
   readEffectMeter: (id: EffectId) => EffectMeter | null;
+  // Device I/O metering: roaming analyser taps on one unit's input/output
+  // (the device bay's IN/OUT bars). No-ops until the AudioContext exists.
+  tapDeviceIo: (id: EffectId | null) => void;
+  readDeviceIo: () => DeviceIoLevels | null;
 
   setMasterBypass: (bypassed: boolean) => void;
   getMasterBypass: () => boolean;
@@ -709,6 +713,8 @@ export function useAudioGraph(
     reorder: (order) => nodesRef.current?.chain.reorder(order),
     getOrder: () => nodesRef.current?.chain.getOrder() ?? [...DEFAULT_ORDER],
     readEffectMeter: (id) => nodesRef.current?.chain.units[id]?.readMeter?.() ?? null,
+    tapDeviceIo: (id) => nodesRef.current?.chain.setTap(id),
+    readDeviceIo: () => nodesRef.current?.chain.readTap() ?? null,
     setMasterBypass: (bypassed) => {
       masterBypassRef.current = bypassed;
       applyMasterBypass();

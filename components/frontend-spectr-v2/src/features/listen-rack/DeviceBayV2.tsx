@@ -8,7 +8,7 @@ import type { ModuleManifest, ParamValue } from './data';
 import { fmtVal, type EqBand } from './data';
 import { ParamControl, PSlider, PToggle, Sw } from './lrControls';
 import { lrClamp } from './lrUtil';
-import { useGainReduction, type RackState } from './rackState';
+import { useDeviceIo, useGainReduction, type DeviceIoState, type RackState } from './rackState';
 
 const lrCssVar = (v: string): string =>
   v.startsWith('var(')
@@ -128,6 +128,28 @@ function LRGr({ gr, height = 78 }: { gr: number; height?: number }) {
   );
 }
 
+// ── IN/OUT level meters (signal into / out of the selected device) ─────
+function LRIo({ io, height = 78 }: { io: DeviceIoState | null; height?: number }) {
+  // Meter range −60..+6 dBFS RMS.
+  const t = (db: number) => lrClamp((db + 60) / 66, 0, 1);
+  const fmt = (db: number) => (db <= -60 ? '−∞' : db.toFixed(1));
+  const bar = (label: string, db: number) => (
+    <div className="iob" key={label}>
+      <div className="it" style={{ height }} title={`${label} ${fmt(db)} dBFS (RMS)`}>
+        <span style={{ height: t(db) * 100 + '%' }} />
+      </div>
+      <span className="il">{label}</span>
+      <span className="iv">{fmt(db)}</span>
+    </div>
+  );
+  return (
+    <div className="lr-iom">
+      {bar('IN', io?.inDb ?? -60)}
+      {bar('OUT', io?.outDb ?? -60)}
+    </div>
+  );
+}
+
 // ── The device bay ─────────────────────────────────────────────────────
 export function DeviceBayV2({ m, i, rs, playing, showBind, onClose }: {
   m: ModuleManifest;
@@ -140,6 +162,8 @@ export function DeviceBayV2({ m, i, rs, playing, showBind, onClose }: {
 }) {
   const v = rs.mod[m.id];
   const grLive = useGainReduction(rs.graph, m.id, Boolean(v?.enabled) && m.hasMeter, playing);
+  // IN/OUT taps: insert devices only (the pitch lane has i < 0 and no unit).
+  const io = useDeviceIo(rs.graph, m.id, i >= 0, playing);
   if (!v) return null;
   const on = v.enabled && !rs.masterBypass;
   const dim = !on;
@@ -257,6 +281,7 @@ export function DeviceBayV2({ m, i, rs, playing, showBind, onClose }: {
             )}
           </>
         )}
+        {i >= 0 && <LRIo io={io} height={knob + 26} />}
       </div>
     </div>
   );

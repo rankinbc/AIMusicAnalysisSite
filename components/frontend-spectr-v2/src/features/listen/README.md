@@ -136,6 +136,7 @@ The UI's entire contact with the engine:
 - `setEffectParams(id, patch)` — generic, type-safe driver for ALL 13 modules. `patch` is `Partial<EffectParamMap[id]>`.
 - `reorder(order: EffectId[])` / `getOrder(): EffectId[]` — runtime reorder (click-free).
 - `readEffectMeter(id): EffectMeter | null` — `comp` → `{reductionDb}`, `gate` → `{reductionDb, open}`, `limiter` → `{reductionDb}`; others null.
+- `tapDeviceIo(id | null)` / `readDeviceIo(): {inDb, outDb} | null` — roaming analyser taps on ONE unit's input/output (RMS dBFS) for the device bay's IN/OUT meters. Parallel taps, never in the audio path; survive `reorder()` (the composer re-applies them after rewiring).
 - `readFrame(): AudioFrame` — `{ fftBins, bandAverages, rmsDb, lufsShort, truePeakDb, correlation, scopeL, scopeR }` for visualizers.
 - `setMasterBypass(b)`, `resetAll()`.
 - Pitch: `enterPitchMode(audioUrl, fromSeconds)`, `exitPitchMode()`, `setPitchDetune(semitones, cents)`, `setPitchRate(rate)` (tempo multiplier — offsets detune's speed coupling; net speed = rate × 2^(detune/1200)), `pitchPause/Resume/Seek/CurrentTime/Duration/Playing/Subscribe`.
