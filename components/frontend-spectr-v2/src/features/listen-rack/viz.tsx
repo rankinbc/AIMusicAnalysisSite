@@ -572,10 +572,38 @@ export function VizStage({
     // and portal the stage to <body> as a full-window backdrop behind the page.
     return (
       <>
-        <div style={{ position: 'relative', height, overflow: 'hidden', borderRadius: compact ? 0 : 'var(--radius) var(--radius) 0 0', background: 'var(--bg-2)', display: 'grid', placeItems: 'center', padding: '0 20px' }}>
-          <div style={{ textAlign: 'center' }}>
-            <div className="mono" style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '0.08em', marginBottom: 12 }}>⛶ Visualizer is playing full-screen in the background</div>
-            <button type="button" onClick={() => setBgMode(false)} className="btn sm ghost" style={{ fontSize: 11 }}>⤡ Bring it back</button>
+        <div
+          className="lr-vizbg-ghost"
+          style={{
+            position: 'relative', height, overflow: 'hidden',
+            borderRadius: compact ? 0 : 'var(--radius) var(--radius) 0 0',
+            // Frosted glass over the full-screen stage behind the page — let the
+            // visualizer glow through instead of blanking the slot with bg-2.
+            background: 'linear-gradient(160deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02) 45%, rgba(10,16,28,0.22))',
+            backdropFilter: 'blur(9px) saturate(1.35)',
+            WebkitBackdropFilter: 'blur(9px) saturate(1.35)',
+            border: '1px solid rgba(255,255,255,0.10)',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), inset 0 -1px 0 rgba(0,0,0,0.25)',
+            display: 'grid', placeItems: 'center', padding: '0 20px',
+          }}
+        >
+          {/* top sheen */}
+          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'linear-gradient(180deg, rgba(255,255,255,0.09), transparent 32%)' }} />
+          <div style={{ textAlign: 'center', position: 'relative' }}>
+            <div className="mono" style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.08em', marginBottom: 12, textShadow: '0 1px 8px rgba(0,0,0,0.6)' }}>⛶ Visualizer is playing full-screen in the background</div>
+            <button
+              type="button"
+              onClick={() => setBgMode(false)}
+              className="btn sm"
+              style={{
+                fontSize: 11, color: '#fff', cursor: 'pointer',
+                background: 'rgba(255,255,255,0.10)',
+                backdropFilter: 'blur(6px)',
+                WebkitBackdropFilter: 'blur(6px)',
+                border: '1px solid rgba(255,255,255,0.22)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.25), 0 4px 18px rgba(0,0,0,0.35)',
+              }}
+            >⤡ Bring it back</button>
           </div>
         </div>
         {createPortal(stage, document.body)}
