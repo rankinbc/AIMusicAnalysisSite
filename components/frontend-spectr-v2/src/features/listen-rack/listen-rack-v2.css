@@ -66,11 +66,25 @@
 
 /* ── module grid ── */
 .rdx .lr-grid {display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--lr-cardmin),1fr));gap:7px}
-.rdx .lr-mc {position:relative;padding:var(--lr-pad);border-radius:9px;border:1px solid var(--border);background:linear-gradient(178deg,#2a2e37 0%,#20242c 42%,#191c23 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.06);cursor:pointer;display:flex;flex-direction:column;gap:6px;min-width:0;text-align:left;transition:border-color .12s,background .12s,box-shadow .12s}
-.rdx .lr-mc:hover {border-color:var(--border-3);background:linear-gradient(178deg,#31353f 0%,#252932 42%,#1d2028 100%)}
-.rdx .lr-mc.on {border-color:color-mix(in srgb,var(--mac) 62%,transparent);background:linear-gradient(178deg,color-mix(in srgb,var(--mac) 9%,#2a2e37) 0%,color-mix(in srgb,var(--mac) 5%,#20242c) 42%,#191c23 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 0 14px color-mix(in srgb,var(--mac) 28%,transparent),inset 0 0 14px color-mix(in srgb,var(--mac) 7%,transparent)}
-.rdx .lr-mc.sel {box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 0 0 1.5px var(--mac)}
-.rdx .lr-mc.on.sel {box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 0 0 1.5px var(--mac),0 0 18px color-mix(in srgb,var(--mac) 38%,transparent),inset 0 0 14px color-mix(in srgb,var(--mac) 8%,transparent)}
+/* Machined-metal card face: diagonal specular streaks layered over the silver
+   base, with bevel edges (bright top lip, dark bottom seat). */
+.rdx .lr-mc {position:relative;padding:var(--lr-pad);border-radius:9px;border:1px solid var(--border);
+  background:
+    linear-gradient(115deg,rgba(255,255,255,.10) 0%,rgba(255,255,255,0) 26%,rgba(255,255,255,.05) 43%,rgba(255,255,255,0) 60%,rgba(255,255,255,.08) 100%),
+    linear-gradient(178deg,#31353e 0%,#23272f 42%,#181b22 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.45);
+  cursor:pointer;display:flex;flex-direction:column;gap:6px;min-width:0;text-align:left;transition:border-color .12s,background .12s,box-shadow .12s}
+.rdx .lr-mc:hover {border-color:var(--border-3);
+  background:
+    linear-gradient(115deg,rgba(255,255,255,.14) 0%,rgba(255,255,255,0) 26%,rgba(255,255,255,.07) 43%,rgba(255,255,255,0) 60%,rgba(255,255,255,.10) 100%),
+    linear-gradient(178deg,#3a3e48 0%,#282c35 42%,#1c1f27 100%)}
+.rdx .lr-mc.on {border-color:color-mix(in srgb,var(--mac) 62%,transparent);
+  background:
+    linear-gradient(115deg,rgba(255,255,255,.11) 0%,rgba(255,255,255,0) 26%,rgba(255,255,255,.05) 43%,rgba(255,255,255,0) 60%,rgba(255,255,255,.08) 100%),
+    linear-gradient(178deg,color-mix(in srgb,var(--mac) 9%,#31353e) 0%,color-mix(in srgb,var(--mac) 5%,#23272f) 42%,#181b22 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 -1px 0 rgba(0,0,0,.45),0 0 14px color-mix(in srgb,var(--mac) 28%,transparent),inset 0 0 14px color-mix(in srgb,var(--mac) 7%,transparent)}
+.rdx .lr-mc.sel {box-shadow:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.45),0 0 0 1.5px var(--mac)}
+.rdx .lr-mc.on.sel {box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 -1px 0 rgba(0,0,0,.45),0 0 0 1.5px var(--mac),0 0 18px color-mix(in srgb,var(--mac) 38%,transparent),inset 0 0 14px color-mix(in srgb,var(--mac) 8%,transparent)}
 .rdx .lr-mc-h {display:flex;align-items:center;gap:8px;min-width:0}
 .rdx .lr-mc .ix {font-family:'JetBrains Mono',monospace;font-size:8.5px;color:var(--muted);flex-shrink:0}
 .rdx .lr-mc.on .ix {color:var(--mac)}
@@ -344,18 +358,26 @@
 .rdx .lr-glass .rtab.active {background:color-mix(in srgb,var(--surface) 52%,transparent)}
 .rdx .lr-glass .card, .rdx .lr-glass .lr-sc {background:color-mix(in srgb,var(--surface-2) 55%,transparent);backdrop-filter:blur(9px)}
 .rdx .lr-glass .lr-chain {background:color-mix(in srgb,var(--card-2) 42%,transparent);backdrop-filter:blur(7px)}
-.rdx .lr-glass .lr-bay {background:linear-gradient(178deg,color-mix(in srgb,#2a2e37 88%,transparent),color-mix(in srgb,#20242c 88%,transparent) 45%,color-mix(in srgb,#171a21 90%,transparent));backdrop-filter:blur(8px)}
+.rdx .lr-glass .lr-bay {background:
+  linear-gradient(115deg,rgba(255,255,255,.08) 0%,rgba(255,255,255,0) 24%,rgba(255,255,255,.04) 44%,rgba(255,255,255,0) 62%,rgba(255,255,255,.06) 100%),
+  linear-gradient(178deg,color-mix(in srgb,#2e323b 88%,transparent),color-mix(in srgb,#22262e 88%,transparent) 45%,color-mix(in srgb,#161920 90%,transparent));backdrop-filter:blur(8px)}
 .rdx .lr-glass .lr-node {background:color-mix(in srgb,var(--card) 55%,transparent)}
 .rdx .lr-glass .lr-node.on {background:color-mix(in srgb,var(--mac) 7%,color-mix(in srgb,var(--card) 50%,transparent))}
-.rdx .lr-glass .lr-mc, .rdx .lr-glass .lr-row {background:color-mix(in srgb,#242832 60%,transparent)}
-.rdx .lr-glass .lr-mc.on, .rdx .lr-glass .lr-row.on {background:color-mix(in srgb,var(--mac) 6%,color-mix(in srgb,#242832 56%,transparent))}
+.rdx .lr-glass .lr-mc, .rdx .lr-glass .lr-row {background:
+  linear-gradient(115deg,rgba(255,255,255,.10) 0%,rgba(255,255,255,0) 26%,rgba(255,255,255,.05) 43%,rgba(255,255,255,0) 60%,rgba(255,255,255,.08) 100%),
+  linear-gradient(178deg,color-mix(in srgb,#31353e 86%,transparent),color-mix(in srgb,#23272f 86%,transparent) 42%,color-mix(in srgb,#181b22 88%,transparent))}
+.rdx .lr-glass .lr-mc.on, .rdx .lr-glass .lr-row.on {background:
+  linear-gradient(115deg,rgba(255,255,255,.11) 0%,rgba(255,255,255,0) 26%,rgba(255,255,255,.05) 43%,rgba(255,255,255,0) 60%,rgba(255,255,255,.08) 100%),
+  linear-gradient(178deg,color-mix(in srgb,var(--mac) 9%,color-mix(in srgb,#31353e 86%,transparent)),color-mix(in srgb,var(--mac) 5%,color-mix(in srgb,#23272f 86%,transparent)) 42%,color-mix(in srgb,#181b22 88%,transparent))}
 .rdx .lr-glass .lr-stage {background:color-mix(in srgb,#070b16 78%,transparent)}
 .rdx .lr-glass .lr-ed {background:color-mix(in srgb,var(--surface-2) 60%,transparent);backdrop-filter:blur(8px)}
 .rdx .lr-glass .lr-sel, .rdx .lr-glass .lr-vt {background:color-mix(in srgb,var(--card-2) 55%,transparent)}
 .rdx .lr-glass .lr-bar.stick {background:color-mix(in srgb,var(--surface) 55%,transparent);backdrop-filter:blur(9px)}
 
 /* ── hardware: neon rig look for the open device ── */
-.rdx .lr-bay {position:relative;background:linear-gradient(178deg,#2a2e37 0%,#20242c 45%,#171a21 100%)}
+.rdx .lr-bay {position:relative;background:
+  linear-gradient(115deg,rgba(255,255,255,.08) 0%,rgba(255,255,255,0) 24%,rgba(255,255,255,.04) 44%,rgba(255,255,255,0) 62%,rgba(255,255,255,.06) 100%),
+  linear-gradient(178deg,#2e323b 0%,#22262e 45%,#161920 100%)}
 .rdx .lr-bay.on {box-shadow:inset 0 1px 0 rgba(255,255,255,.08),inset 0 0 22px color-mix(in srgb,var(--mac) 6%,transparent),0 0 22px color-mix(in srgb,var(--mac) 34%,transparent),0 0 46px -6px color-mix(in srgb,var(--mac) 42%,transparent),0 18px 40px -24px rgba(0,0,0,.9)}
 .rdx .lr-bay::before, .rdx .lr-bay::after {content:'';position:absolute;top:11px;bottom:11px;width:5px;border-radius:3px;background:repeating-linear-gradient(180deg,rgba(255,255,255,.09) 0 2px,rgba(255,255,255,.015) 2px 8px)}
 .rdx .lr-bay::before {left:5px}.rdx .lr-bay::after {right:5px}
