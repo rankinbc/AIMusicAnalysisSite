@@ -79,24 +79,36 @@
 .rdx .lr-byp.on .lr-sw {background:var(--orange)}
 
 /* ── module grid ── */
-.rdx .lr-grid {display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--lr-cardmin),1fr));gap:7px}
-/* Machined-metal card face: diagonal specular streaks layered over the silver
-   base, with bevel edges (bright top lip, dark bottom seat). */
+.rdx .lr-grid {position:relative;display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--lr-cardmin),1fr));gap:7px}
+/* Animated signal wire through the chain (ChainWire overlay) */
+.rdx .lr-wire {position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3;overflow:visible}
+.rdx .lr-wire .wglow {fill:none;stroke:var(--accent);stroke-width:6;opacity:.08;stroke-linecap:round}
+.rdx .lr-wire .wbase {fill:none;stroke:var(--accent);stroke-width:2;opacity:.2;stroke-linecap:round}
+.rdx .lr-wire .wpulse {fill:none;stroke:var(--accent);stroke-width:2;opacity:.85;stroke-linecap:round;stroke-dasharray:6 90;animation:lrWireDash 1.6s linear infinite}
+@keyframes lrWireDash {to {stroke-dashoffset:-96}}
+@media (prefers-reduced-motion: reduce) {.rdx .lr-wire .wpulse {animation:none;opacity:0}}
+/* Card live-activity readout (bottom-right corner) */
+.rdx .lr-act {position:absolute;right:6px;bottom:4px;opacity:.85;pointer-events:none;line-height:0}
+.rdx .lr-act .lr-act-svg {display:block}
+.rdx .lr-mc-p {padding-right:40px}
+/* Polished-metal card face: one smooth diagonal sheen (no dark troughs — the
+   highlight fades gently, never dropping to near-black bands) over a light
+   silver base, with bevel edges (bright top lip, soft bottom seat). */
 .rdx .lr-mc {position:relative;padding:var(--lr-pad);border-radius:9px;border:1px solid var(--border);
   background:
-    linear-gradient(115deg,rgba(255,255,255,.22) 0%,rgba(255,255,255,.02) 24%,rgba(255,255,255,.12) 42%,rgba(255,255,255,.02) 60%,rgba(255,255,255,.17) 100%),
-    linear-gradient(178deg,#363a44 0%,#24282f 42%,#171a20 100%);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.28),inset 0 -1px 0 rgba(0,0,0,.5);
+    linear-gradient(115deg,rgba(255,255,255,.26) 0%,rgba(255,255,255,.10) 30%,rgba(255,255,255,.17) 50%,rgba(255,255,255,.09) 72%,rgba(255,255,255,.21) 100%),
+    linear-gradient(178deg,#3d414b 0%,#31353e 48%,#282c34 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.32),inset 0 -1px 0 rgba(0,0,0,.35);
   cursor:pointer;display:flex;flex-direction:column;gap:6px;min-width:0;text-align:left;transition:border-color .12s,background .12s,box-shadow .12s}
 .rdx .lr-mc:hover {border-color:var(--border-3);
   background:
-    linear-gradient(115deg,rgba(255,255,255,.30) 0%,rgba(255,255,255,.03) 24%,rgba(255,255,255,.16) 42%,rgba(255,255,255,.03) 60%,rgba(255,255,255,.22) 100%),
-    linear-gradient(178deg,#3e424d 0%,#292d36 42%,#1b1e25 100%)}
+    linear-gradient(115deg,rgba(255,255,255,.34) 0%,rgba(255,255,255,.13) 30%,rgba(255,255,255,.22) 50%,rgba(255,255,255,.12) 72%,rgba(255,255,255,.27) 100%),
+    linear-gradient(178deg,#454954 0%,#363a44 48%,#2c3038 100%)}
 .rdx .lr-mc.on {border-color:color-mix(in srgb,var(--mac) 62%,transparent);
   background:
-    linear-gradient(115deg,rgba(255,255,255,.24) 0%,rgba(255,255,255,.02) 24%,rgba(255,255,255,.13) 42%,rgba(255,255,255,.02) 60%,rgba(255,255,255,.18) 100%),
-    linear-gradient(178deg,color-mix(in srgb,var(--mac) 9%,#363a44) 0%,color-mix(in srgb,var(--mac) 5%,#24282f) 42%,#171a20 100%);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.30),inset 0 -1px 0 rgba(0,0,0,.5),0 0 14px color-mix(in srgb,var(--mac) 28%,transparent),inset 0 0 14px color-mix(in srgb,var(--mac) 7%,transparent)}
+    linear-gradient(115deg,rgba(255,255,255,.28) 0%,rgba(255,255,255,.11) 30%,rgba(255,255,255,.18) 50%,rgba(255,255,255,.10) 72%,rgba(255,255,255,.22) 100%),
+    linear-gradient(178deg,color-mix(in srgb,var(--mac) 9%,#3d414b) 0%,color-mix(in srgb,var(--mac) 5%,#31353e) 48%,#282c34 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.34),inset 0 -1px 0 rgba(0,0,0,.35),0 0 14px color-mix(in srgb,var(--mac) 28%,transparent),inset 0 0 14px color-mix(in srgb,var(--mac) 7%,transparent)}
 .rdx .lr-mc.sel {box-shadow:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.45),0 0 0 1.5px var(--mac)}
 .rdx .lr-mc.on.sel {box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 -1px 0 rgba(0,0,0,.45),0 0 0 1.5px var(--mac),0 0 18px color-mix(in srgb,var(--mac) 38%,transparent),inset 0 0 14px color-mix(in srgb,var(--mac) 8%,transparent)}
 .rdx .lr-mc-h {display:flex;align-items:center;gap:8px;min-width:0}
@@ -378,11 +390,11 @@
 .rdx .lr-glass .lr-node {background:color-mix(in srgb,var(--card) 55%,transparent)}
 .rdx .lr-glass .lr-node.on {background:color-mix(in srgb,var(--mac) 7%,color-mix(in srgb,var(--card) 50%,transparent))}
 .rdx .lr-glass .lr-mc, .rdx .lr-glass .lr-row {background:
-  linear-gradient(115deg,rgba(255,255,255,.22) 0%,rgba(255,255,255,.02) 24%,rgba(255,255,255,.12) 42%,rgba(255,255,255,.02) 60%,rgba(255,255,255,.17) 100%),
-  linear-gradient(178deg,color-mix(in srgb,#363a44 88%,transparent),color-mix(in srgb,#24282f 88%,transparent) 42%,color-mix(in srgb,#171a20 90%,transparent))}
+  linear-gradient(115deg,rgba(255,255,255,.26) 0%,rgba(255,255,255,.10) 30%,rgba(255,255,255,.17) 50%,rgba(255,255,255,.09) 72%,rgba(255,255,255,.21) 100%),
+  linear-gradient(178deg,color-mix(in srgb,#3d414b 90%,transparent),color-mix(in srgb,#31353e 90%,transparent) 48%,color-mix(in srgb,#282c34 92%,transparent))}
 .rdx .lr-glass .lr-mc.on, .rdx .lr-glass .lr-row.on {background:
-  linear-gradient(115deg,rgba(255,255,255,.24) 0%,rgba(255,255,255,.02) 24%,rgba(255,255,255,.13) 42%,rgba(255,255,255,.02) 60%,rgba(255,255,255,.18) 100%),
-  linear-gradient(178deg,color-mix(in srgb,var(--mac) 9%,color-mix(in srgb,#363a44 88%,transparent)),color-mix(in srgb,var(--mac) 5%,color-mix(in srgb,#24282f 88%,transparent)) 42%,color-mix(in srgb,#171a20 90%,transparent))}
+  linear-gradient(115deg,rgba(255,255,255,.28) 0%,rgba(255,255,255,.11) 30%,rgba(255,255,255,.18) 50%,rgba(255,255,255,.10) 72%,rgba(255,255,255,.22) 100%),
+  linear-gradient(178deg,color-mix(in srgb,var(--mac) 9%,color-mix(in srgb,#3d414b 90%,transparent)),color-mix(in srgb,var(--mac) 5%,color-mix(in srgb,#31353e 90%,transparent)) 48%,color-mix(in srgb,#282c34 92%,transparent))}
 .rdx .lr-glass .lr-stage {background:color-mix(in srgb,#070b16 78%,transparent)}
 .rdx .lr-glass .lr-ed {background:color-mix(in srgb,var(--surface-2) 60%,transparent);backdrop-filter:blur(8px)}
 .rdx .lr-glass .lr-sel, .rdx .lr-glass .lr-vt {background:color-mix(in srgb,var(--card-2) 55%,transparent)}

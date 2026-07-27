@@ -4,6 +4,8 @@
 import { useMemo, useState } from 'react';
 
 import { Icon } from '../results/Icon';
+import { CardActivity } from './CardActivity';
+import { ChainWire } from './ChainWire';
 import { DeviceBayV2 } from './DeviceBayV2';
 import { MANIFEST_BY_ID, PITCH_MODULE, type ModuleManifest } from './data';
 import { Sw } from './lrControls';
@@ -131,6 +133,7 @@ function ModCard({ m, i, rs, playing, sel, showWorklet, onSelect, dragging, isOv
       style={{ ['--mac' as string]: m.accent }}
       onClick={onSelect}
       title={m.label + ' — drag to reorder the chain'}
+      data-cid={m.id}
       {...dragProps}
     >
       <div className="lr-mc-h">
@@ -144,6 +147,9 @@ function ModCard({ m, i, rs, playing, sel, showWorklet, onSelect, dragging, isOv
       </div>
       <div className="lr-mc-p">{sum ? <b>{sum}</b> : <span className="zz">neutral</span>}</div>
       {m.hasMeter && <div className="lr-gr"><i style={{ width: (on ? lrClamp(gr / 6, 0, 1) * 100 : 0) + '%' }} /></div>}
+      <span className="lr-act">
+        <CardActivity id={m.id} on={on} accent={m.accent} rateHz={m.id === 'tremolo' ? Number(v['rateHz']) : undefined} />
+      </span>
     </div>
   );
 }
@@ -177,6 +183,9 @@ function PitchCard({ rs, sel, onSelect }: { rs: RackState; sel: boolean; onSelec
       <div className="lr-mc-p">
         {sum ? <b>{sum} · net {netRate.toFixed(2)}×</b> : <span className="zz">buffer lane · not an insert</span>}
       </div>
+      <span className="lr-act">
+        <CardActivity id="pitch" on={on} accent="var(--violet)" />
+      </span>
     </div>
   );
 }
@@ -202,10 +211,14 @@ export function RackTabV2({ rs, playing, meters, readOnly, presets, onRecallPres
   const selM = sel ? (sel === 'pitch' ? PITCH_MODULE : MANIFEST_BY_ID[sel]) : null;
   const pick = (id: string) => rs.setSelected(sel === id ? null : id);
   const dnd = useChainDrag(rs.order, rs.setOrder);
+  // Signal wire connects only powered, in-chain cards, in chain order.
+  const [gridEl, setGridEl] = useState<HTMLElement | null>(null);
+  const chain = rs.masterBypass ? [] : rs.order.filter((id) => rs.mod[id]?.enabled);
 
   const body = (
     <>
-      <div className="lr-grid" {...dnd.endProps}>
+      <div className="lr-grid" ref={setGridEl} {...dnd.endProps}>
+        <ChainWire grid={gridEl} chain={chain} />
         {list.map((m, i) => (
           <ModCard
             key={m.id}
