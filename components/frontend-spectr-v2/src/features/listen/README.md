@@ -139,7 +139,8 @@ The UI's entire contact with the engine:
 - `tapDeviceIo(id | null)` / `readDeviceIo(): {inDb, outDb} | null` — roaming analyser taps on ONE unit's input/output (RMS dBFS) for the device bay's IN/OUT meters. Parallel taps, never in the audio path; survive `reorder()` (the composer re-applies them after rewiring).
 - `readFrame(): AudioFrame` — `{ fftBins, bandAverages, rmsDb, lufsShort, truePeakDb, correlation, scopeL, scopeR }` for visualizers.
 - `setMasterBypass(b)`, `resetAll()`.
-- Pitch: `enterPitchMode(audioUrl, fromSeconds)`, `exitPitchMode()`, `setPitchDetune(semitones, cents)`, `setPitchRate(rate)` (tempo multiplier — offsets detune's speed coupling; net speed = rate × 2^(detune/1200)), `pitchPause/Resume/Seek/CurrentTime/Duration/Playing/Subscribe`.
+- Pitch (CURRENT): `setPitchShift(semitones, cents, playbackRate)` + `setPitchShiftEnabled(on)` — a constant-tempo shifter (`pitch-shift` AudioWorklet, two-tap crossfading delay line) in a dry/wet lane at the END of the master path (`masterOut → lane → destination`, after the analysers). Pitch and tempo are INDEPENDENT: the page sets `audio.playbackRate` for tempo and passes it here, and the lane divides it back out of its ratio.
+- Pitch (LEGACY, unused by the rack): `enterPitchMode(audioUrl, fromSeconds)`, `exitPitchMode()`, `setPitchDetune()`, `setPitchRate()`, `pitchPause/Resume/Seek/CurrentTime/Duration/Playing/Subscribe` — the AudioBufferSourceNode.detune lane, which couples pitch to speed. Slated for removal.
 - Legacy (back-compat, prefer `setEffectParams`): `setEqBand`, `setEqEnabled`, `setCompressor`, `setSaturation`, `setWidth` — the last three are exact aliases of `setEffectParams`.
 
 ## 5. State + param flow

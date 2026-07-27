@@ -406,9 +406,9 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     }
   }, [saveRackPresetMut]);
 
-  // ── Pitch lane: separate buffer lane (NOT an insert). ──
-  const pitchModeRef = useRef(false);
-  const [pitchActive, setPitchActive] = useState(false);
+  // ── Pitch lane: a constant-tempo worklet shifter at the end of the master
+  // path (NOT an insert). No buffer decode, no source swap — the media element
+  // keeps driving playback, so position/duration bookkeeping is untouched. ──
   const pitchEnabled = realAudio && !!rs.mod['pitch']?.enabled;
   const pitchSemitones = Number(rs.mod['pitch']?.['semitones']) || 0;
   const pitchCents = Number(rs.mod['pitch']?.['cents']) || 0;
@@ -420,7 +420,6 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     const mq = window.matchMedia('(max-width: 1023.98px)');
     const pauseAll = () => {
       if (!mq.matches) return;
-      if (pitchModeRef.current && graph.pitchPlaying()) graph.pitchPause();
       const a = audioRef.current;
       if (a && !a.paused) a.pause();
       setPlaying(false);
@@ -527,72 +526,16 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     };
   }, [audioUrl, versionId]);
 
-  // Apply detune + tempo to the live BufferSource. Tempo lets the user cancel
-  // detune's speed coupling (e.g. +5 st ≈ ×1.335 speed → tempo 0.75 ≈ original
-  // speed at the shifted pitch).
+  // Pitch and tempo are INDEPENDENT: tempo is the media element's playbackRate,
+  // and the worklet lane divides that back out of its shift ratio, so the
+  // semitones you dial are what you hear at any speed (and vice versa).
   useEffect(() => {
-    if (!pitchActive) return;
-    graph.setPitchDetune(pitchSemitones, pitchCents);
-    graph.setPitchRate(pitchTempo);
-  }, [pitchSemitones, pitchCents, pitchTempo, pitchActive, graph]);
-
-  // Enter/exit the pitch buffer lane on the rack's pitch toggle.
-  useEffect(() => {
-    let cancelled = false;
+    if (!realAudio) return;
     const a = audioRef.current;
-    if (!realAudio || !a || !audioUrl) return undefined;
-    if (pitchEnabled && !pitchModeRef.current) {
-      const wasPlaying = !a.paused;
-      const startedAt = a.currentTime;
-      a.pause();
-      setPlaying(false);
-      try {
-        graph.ensureContext();
-      } catch (err) {
-        toast.error(`Audio engine failed: ${err instanceof Error ? err.message : String(err)}`);
-        rs.setEnabled('pitch', false);
-        return undefined;
-      }
-      graph
-        .enterPitchMode(audioUrl, startedAt)
-        .then(() => {
-          if (cancelled) return;
-          pitchModeRef.current = true;
-          setPitchActive(true);
-          const bufDur = graph.pitchDuration();
-          if (bufDur > 0) setDuration(bufDur);
-          setPosition(startedAt);
-          if (wasPlaying) { graph.pitchResume(); setPlaying(true); }
-        })
-        .catch((err: unknown) => {
-          if (cancelled) return;
-          toast.error(`Pitch decode failed: ${err instanceof Error ? err.message : String(err)}`);
-          rs.setEnabled('pitch', false);
-        });
-    } else if (!pitchEnabled && pitchModeRef.current) {
-      const wasPlaying = graph.pitchPlaying();
-      const pos = graph.exitPitchMode();
-      pitchModeRef.current = false;
-      setPitchActive(false);
-      a.currentTime = pos;
-      setPosition(pos);
-      if (wasPlaying) {
-        a.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
-      }
-    }
-    return () => { cancelled = true; };
-    // semitones/cents are intentionally excluded — the detune effect owns those.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pitchEnabled, audioUrl, realAudio, graph]);
-
-  // Position tick in pitch mode (the BufferSource emits no timeupdate).
-  useEffect(() => {
-    if (!pitchActive) return undefined;
-    let raf = 0;
-    const tick = () => { setPosition(graph.pitchCurrentTime()); raf = requestAnimationFrame(tick); };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [pitchActive, graph]);
+    if (a) a.playbackRate = pitchEnabled ? pitchTempo : 1;
+    graph.setPitchShift(pitchSemitones, pitchCents, pitchEnabled ? pitchTempo : 1);
+    graph.setPitchShiftEnabled(pitchEnabled);
+  }, [pitchSemitones, pitchCents, pitchTempo, pitchEnabled, realAudio, graph]);
 
   // Room mode: kick the auto program on so the page reads as a show.
   useEffect(() => {
@@ -646,24 +589,6 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     if (!realAudio) { setPlaying((p) => !p); return; }
     const a = audioRef.current;
     if (!a) return;
-    if (pitchModeRef.current) {
-      if (graph.pitchPlaying()) {
-        graph.pitchPause();
-        setPlaying(false);
-        emitTransport('pause', posRef.current);
-      } else {
-        try {
-          graph.ensureContext();
-        } catch (err) {
-          toast.error(`Audio engine failed: ${err instanceof Error ? err.message : String(err)}`);
-          return;
-        }
-        graph.pitchResume();
-        setPlaying(true);
-        emitTransport('play', posRef.current);
-      }
-      return;
-    }
     if (!a.paused) { a.pause(); setPlaying(false); emitTransport('pause', a.currentTime); return; }
     let played: Promise<void>;
     try {
@@ -678,17 +603,16 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
         toast.error(`Playback failed: ${err instanceof Error ? err.message : String(err)}`);
         setPlaying(false);
       });
-  }, [realAudio, graph, startPlayback, emitTransport]);
+  }, [realAudio, startPlayback, emitTransport]);
 
   const seek = useCallback((t: number) => {
     if (!realAudio) { setPosition(t); return; }
-    if (pitchModeRef.current) { graph.pitchSeek(t); setPosition(t); emitTransport('seek', t); return; }
     const a = audioRef.current;
     if (!a) return;
     a.currentTime = t;
     setPosition(t);
     emitTransport('seek', t);
-  }, [realAudio, graph, emitTransport]);
+  }, [realAudio, emitTransport]);
 
   const cap = resolveCapabilities(mode, identity, roomControl, access);
   const rackReadOnly = cap.rackReadOnly;
@@ -705,16 +629,11 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
       Date.now(),
     );
     if (action.seekTo != null) {
-      if (pitchModeRef.current) {
-        graph.pitchSeek(action.seekTo);
-      } else {
-        const a = audioRef.current;
-        if (a) a.currentTime = action.seekTo;
-      }
+      const a = audioRef.current;
+      if (a) a.currentTime = action.seekTo;
       setPosition(action.seekTo);
     }
     if (action.pause) {
-      if (pitchModeRef.current && graph.pitchPlaying()) graph.pitchPause();
       const a = audioRef.current;
       if (a && !a.paused) a.pause();
       setPlaying(false);

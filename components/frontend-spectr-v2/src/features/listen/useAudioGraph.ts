@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 
 import { buildInsertChain, type DeviceIoLevels, type InsertChain } from './audio/composer';
+import { createPitchLane, type PitchLane } from './audio/pitchLane';
 import type { EffectId, EffectMeter } from './audio/EffectUnit';
 import {
   DEFAULT_ORDER,
@@ -100,7 +101,16 @@ export interface AudioGraphHandle {
   getMasterBypass: () => boolean;
   resetAll: () => void;
 
-  // Pitch mode — tempo-safe pitch shift via AudioBufferSourceNode.detune.
+  // ── Pitch lane (CURRENT) — constant-tempo shift in an AudioWorklet at the
+  // end of the master path. Pitch and tempo are independent: pass the media
+  // element's playbackRate and the lane divides it back out.
+  setPitchShift: (semitones: number, cents: number, playbackRate: number) => void;
+  setPitchShiftEnabled: (on: boolean) => void;
+
+  // ── LEGACY buffer lane (no longer used by the rack; kept for the transport
+  // API surface). Pitch here rides AudioBufferSourceNode.detune, which COUPLES
+  // pitch and tempo — that coupling is exactly why the worklet lane above
+  // replaced it. Slated for removal.
   // Streaming MediaElementSource can't detune, so the first time pitch is
   // enabled we fetch + decode the whole file into an AudioBuffer (cached).
   // The chain entry then swaps from MediaElementSource → AudioBufferSource.
@@ -172,6 +182,7 @@ interface Nodes {
   ctx: AudioContext;
   source: MediaElementAudioSourceNode;
   chain: InsertChain;
+  pitch: PitchLane;
   masterIn: GainNode;
   masterDry: GainNode;
   masterProcessed: GainNode;
@@ -273,12 +284,18 @@ export function useAudioGraph(
     analyserMain.connect(scopeSplitter);
     scopeSplitter.connect(analyserL, 0);
     scopeSplitter.connect(analyserR, 1);
-    masterOut.connect(ctx.destination);
+    // Pitch lane sits LAST (after the meters, before the speakers): a
+    // constant-tempo shifter, dry until the rack's pitch device is enabled.
+    const pitch = createPitchLane(ctx);
+    masterOut.connect(pitch.input);
+    pitch.output.connect(ctx.destination);
+    void chain.ready.then(() => pitch.materialize());
 
     return {
       ctx,
       source,
       chain,
+      pitch,
       masterIn,
       masterDry,
       masterProcessed,
@@ -470,6 +487,7 @@ export function useAudioGraph(
         /* already disconnected */
       }
       nodes.chain.dispose();
+      nodes.pitch.dispose();
       void nodes.ctx.close();
       nodesRef.current = null;
     }
@@ -715,6 +733,9 @@ export function useAudioGraph(
     readEffectMeter: (id) => nodesRef.current?.chain.units[id]?.readMeter?.() ?? null,
     tapDeviceIo: (id) => nodesRef.current?.chain.setTap(id),
     readDeviceIo: () => nodesRef.current?.chain.readTap() ?? null,
+    setPitchShift: (semitones, cents, playbackRate) =>
+      nodesRef.current?.pitch.setShift(semitones, cents, playbackRate),
+    setPitchShiftEnabled: (on) => nodesRef.current?.pitch.setEnabled(on),
     setMasterBypass: (bypassed) => {
       masterBypassRef.current = bypassed;
       applyMasterBypass();

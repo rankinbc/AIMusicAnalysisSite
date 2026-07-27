@@ -169,15 +169,12 @@ function PitchCard({ rs, sel, bpm, onSelect }: { rs: RackState; sel: boolean; bp
   if (!v) return null;
   const on = v.enabled && !rs.masterBypass;
   const sum = paramSummary(m, v);
-  // Net playback speed = tempo × 2^(detune/1200); 1.00× means the Tempo knob
-  // fully offsets the pitch shift's speed change.
-  const netRate = (Number(v.tempo) || 1) * Math.pow(2, ((Number(v.semitones) || 0) * 100 + (Number(v.cents) || 0)) / 1200);
   return (
     <div
       className={'lr-mc lane' + (on ? ' on' : '') + (sel ? ' sel' : '')}
       style={{ ['--mac' as string]: 'var(--violet)' }}
       onClick={onSelect}
-      title="Pitch & tempo — separate buffer lane, not an insert. Net speed = tempo × 2^(st/12); dial Tempo until it reads 1.00× to keep the original speed at the new pitch."
+      title="Pitch & tempo — a master-path lane, not an insert. The two are independent: semitones never change the speed, Tempo never changes the key."
     >
       <div className="lr-mc-h">
         <span className={'lr-glyph' + (on ? '' : ' off')}>{m.glyph}</span>
@@ -198,7 +195,7 @@ function PitchCard({ rs, sel, bpm, onSelect }: { rs: RackState; sel: boolean; bp
         </span>
       </div>
       <div className="lr-mc-p">
-        {sum ? <b>{sum} · net {netRate.toFixed(2)}×</b> : <span className="zz">buffer lane · not an insert</span>}
+        {sum ? <b>{sum}</b> : <span className="zz">master lane · not an insert</span>}
       </div>
       <span className="lr-act">
         <CardActivity on={on} accent="var(--violet)" bpm={bpm} />

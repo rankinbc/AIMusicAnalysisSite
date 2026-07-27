@@ -29,6 +29,9 @@ export interface InsertChain {
   units: Record<EffectId, EffectUnit<unknown>>;
   getOrder: () => EffectId[];
   reorder: (order: EffectId[]) => void;
+  /** Resolves once the worklet processor modules have registered (or failed —
+   *  it never rejects). The pitch lane waits on this to materialize. */
+  ready: Promise<void>;
   /** Attach the I/O meter taps to one unit (null detaches). Parallel analyser
    *  taps — never part of the audio path, safe to move while playing. */
   setTap: (id: EffectId | null) => void;
@@ -112,7 +115,7 @@ export function buildInsertChain(ctx: AudioContext): InsertChain {
   // Worklet boot: register the processor modules, then swap each worklet unit's
   // placeholder for its real AudioWorkletNode. Fire-and-forget; on failure the
   // units stay passthrough placeholders (graceful degradation).
-  void registerWorklets(ctx)
+  const ready = registerWorklets(ctx)
     .then(() => {
       (Object.keys(units) as EffectId[]).forEach((id) => units[id].materialize?.());
     })
@@ -122,6 +125,7 @@ export function buildInsertChain(ctx: AudioContext): InsertChain {
     chainIn,
     chainOut,
     units,
+    ready,
     getOrder: () => [...order],
     reorder: (next: EffectId[]) => {
       // No-op fast path: same order means nothing to rewire — skip the duck.

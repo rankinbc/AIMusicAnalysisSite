@@ -255,13 +255,13 @@ export const RACK_MANIFEST: ModuleManifest[] = [
 ];
 
 export const PITCH_MODULE: ModuleManifest = {
-  id: 'pitch', label: 'Pitch', sub: 'Shift · tempo-coupled', tier: 'transport', accent: 'var(--violet)', glyph: '♯', hasMix: false, hasMeter: false,
-  bind: 'enterPitchMode() · setPitchDetune(st, cents) · setPitchRate(x)',
-  summary: 'Separate buffer lane — NOT an insert. Pitch shifts speed too; the Tempo knob compensates (net = tempo × 2^(st/12)).',
+  id: 'pitch', label: 'Pitch', sub: 'Shift · independent tempo', tier: 'transport', accent: 'var(--violet)', glyph: '♯', hasMix: false, hasMeter: false,
+  bind: 'setPitchShift(st, cents, rate) · setPitchShiftEnabled(on)',
+  summary: 'Master-path lane — NOT an insert. Pitch and tempo are independent: shifting the key never changes the speed, and the Tempo knob never changes the key.',
   params: [
-    { key: 'semitones', label: 'Semitones', control: 'knob', min: -12, max: 12, step: 1, unit: 'st', default: 0 },
+    { key: 'semitones', label: 'Semitones', control: 'knob', min: -12, max: 12, step: 1, unit: 'st', default: 0, hint: 'speed stays put' },
     { key: 'cents', label: 'Cents', control: 'slider', min: -50, max: 50, step: 1, unit: 'cents', default: 0 },
-    { key: 'tempo', label: 'Tempo', control: 'knob', min: 0.2, max: 5, step: 0.01, unit: 'x', default: 1, hint: 'compensates pitch' },
+    { key: 'tempo', label: 'Tempo', control: 'knob', min: 0.5, max: 2, step: 0.01, unit: 'x', default: 1, hint: 'key stays put' },
   ],
 };
 
