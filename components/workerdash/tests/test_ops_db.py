@@ -78,9 +78,28 @@ def test_list_jobs_date_range_filter():
     ops_db.list_jobs(conn, since="2026-07-01", until="2026-07-27")
     count_sql, count_params = conn.cur.executed[0]
     assert "j.dispatched_at >= %s" in count_sql
-    assert "j.dispatched_at <= %s" in count_sql
+    assert "j.dispatched_at < (%s::date + interval '1 day')" in count_sql
     assert "2026-07-01" in count_params
     assert "2026-07-27" in count_params
+
+
+def test_list_jobs_until_filter_includes_whole_day():
+    # A bare date like "2026-07-27" must not be treated as midnight-only —
+    # the until clause should widen to the day's exclusive end so same-day
+    # since=until filters return rows dispatched any time that day.
+    conn = FakeConn([[(0,)], []])
+    ops_db.list_jobs(conn, until="2026-07-27")
+    count_sql, count_params = conn.cur.executed[0]
+    assert "j.dispatched_at <= %s" not in count_sql
+    assert "interval '1 day'" in count_sql
+    assert "2026-07-27" in count_params
+
+
+def test_list_jobs_order_by_has_id_tiebreaker():
+    conn = FakeConn([[(0,)], []])
+    ops_db.list_jobs(conn)
+    page_sql, _ = conn.cur.executed[1]
+    assert "ORDER BY j.dispatched_at DESC, j.id DESC" in page_sql
 
 
 def test_list_jobs_pagination_uses_offset():
@@ -135,6 +154,24 @@ def test_list_jobs_row_with_no_analysis_gets_zero_totals(monkeypatch):
     result = ops_db.list_jobs(conn)
     assert result["rows"][0]["input_tokens"] == 0
     assert result["rows"][0]["cost_usd"] == 0.0
+
+
+def test_job_detail_zero_totals_not_shared_reference(monkeypatch):
+    # job_detail's "totals" must be an independent copy of ZERO_TOTALS, not
+    # the module-level dict itself, or a caller mutating it corrupts the
+    # shared constant for every subsequent request.
+    job_row = [("j1", "processing", "", "", "phase2", "free",
+                "2026-07-27T00:00:00Z", "2026-07-27T00:01:00Z", None, None,
+                "22", "5_bb", 3, "", False, "grouped", None,
+                None, None, None, {}, None, None, None, "")]
+    conn = MultiFakeConn([job_row])
+    monkeypatch.setattr(ops_db, "llm_totals_by_analysis", lambda c, ids: {})
+    monkeypatch.setattr(ops_db, "file_slots", lambda c, jid: {})
+
+    detail = ops_db.job_detail(conn, "j1")
+    assert detail["totals"] is not ops_db.ZERO_TOTALS
+    detail["totals"]["input_tokens"] = 999999
+    assert ops_db.ZERO_TOTALS["input_tokens"] == 0
 
 
 def test_file_slots_full_version_row():
@@ -198,6 +235,17 @@ def test_file_slots_purged_applies_to_all_version_files():
     assert slots["waveform_peaks"]["purged"] is False
 
 
+def test_file_slots_non_dict_stem_paths_does_not_raise():
+    # stem_paths is a JSONB column — a non-dict value (e.g. a stray list or
+    # string) must be tolerated, not raise AttributeError from .items().
+    row = ("v1.wav", "ref.wav", "proj.als", ["not", "a", "dict"], None,
+           "wf.webp", "spec.webp", "peaks.json", None)
+    conn = FakeConn([[row]])
+    slots = ops_db.file_slots(conn, "j1")
+    assert slots["source"]["key"] == "v1.wav"
+    assert not any(k.startswith("stem:") for k in slots)
+
+
 def test_file_slots_anonymous_job_no_version():
     # job.file_path used when version_id is null (story 6.3 anon jobs)
     conn = FakeConn([[(None, None, None, None, None, None, None, None, "anon/j1/source.wav")]])
@@ -239,7 +287,8 @@ def test_job_detail_assembles_full_payload(monkeypatch):
                 "2026-07-27T00:00:00Z", "2026-07-27T00:01:00Z",
                 "2026-07-27T00:05:00Z", None,
                 "22", "5_bb", 3, "notes", True, "grouped", "a1",
-                "v3", "r1", "val1", {"phase1": 1.2}, None, None)]
+                "v3", "r1", "val1", {"phase1": 1.2}, None, None,
+                {"report": "full"}, "")]
     verdict_rows = [("vrd_1", "low_end", "opus", "warn", "eq", "Headline", "Summary",
                       "2026-07-27T00:02:00Z")]
     coach_rows = [("assistant", "complete", "hi", "2026-07-27T00:03:00Z",
@@ -260,6 +309,8 @@ def test_job_detail_assembles_full_payload(monkeypatch):
     assert detail["job"]["id"] == "j1"
     assert detail["song"]["name"] == "22"
     assert detail["analysis"]["pipeline_version"] == "v3"
+    assert detail["analysis"]["final_json"] == {"report": "full"}
+    assert detail["job"]["file_path"] == ""
     assert detail["totals"]["input_tokens"] == 1500
     assert detail["verdicts"][0]["specialist"] == "low_end"
     assert detail["coach_transcript"][0]["content"] == "hi"
@@ -272,7 +323,7 @@ def test_job_detail_no_analysis_yet_zero_totals(monkeypatch):
     job_row = [("j1", "processing", "", "", "phase2", "free",
                 "2026-07-27T00:00:00Z", "2026-07-27T00:01:00Z", None, None,
                 "22", "5_bb", 3, "", False, "grouped", None,
-                None, None, None, {}, None, None)]
+                None, None, None, {}, None, None, None, "")]
     conn = MultiFakeConn([job_row])
     monkeypatch.setattr(ops_db, "llm_totals_by_analysis", lambda c, ids: {})
     monkeypatch.setattr(ops_db, "file_slots", lambda c, jid: {})

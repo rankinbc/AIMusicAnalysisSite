@@ -338,8 +338,8 @@ async function act(url){const r=await fetch(url,{method:'POST'});
  const j=await r.json();toast(j.ok?'ok':('failed: '+(j.error||'')));load()}
 function restartWorker(){if(confirm('Tree-kill and relaunch the worker?'))
  act('/api/worker/restart')}
-function esc(s){return String(s??'').replace(/[&<>"]/g,
- c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function esc(s){return String(s??'').replace(/[&<>"']/g,
+ c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 let opsPage=1,opsSearchTimer=null;
 function showTab(t){
  $('#tabLive').classList.toggle('active',t==='live');
@@ -367,14 +367,15 @@ async function opsLoad(page){
   $('#opsTable').innerHTML='<span class=dead>failed to load</span>';return}
  if(!s.ok){$('#opsTable').innerHTML=`<span class=dead>${esc(s.error||'error')}</span>`;return}
  $('#opsTable').innerHTML=s.rows.length?'<table><tr><th>song</th><th>status</th>'+
-  '<th>error</th><th>tokens</th><th>cost</th><th></th></tr>'+
+  '<th>error</th><th>dispatched</th><th>tokens</th><th>cost</th><th></th></tr>'+
   s.rows.map(j=>{
    const label=j.song?`${esc(j.song)} / ${esc(j.label)} v${j.version_number}`:
     `(anon) ${esc(j.file_path)}`;
    return `<tr><td>${label}</td><td>${esc(j.status)}</td><td>${esc(j.error_code)}</td>`+
+    `<td class=mono>${esc(j.dispatched_at)}</td>`+
     `<td class=mono>${(j.input_tokens||0)+(j.output_tokens||0)}</td>`+
     `<td class=mono>$${(j.cost_usd||0).toFixed(4)}</td>`+
-    `<td><button onclick="openJob('${j.id}')">view</button></td></tr>`}).join('')+
+    `<td><button onclick="openJob('${esc(j.id)}')">view</button></td></tr>`}).join('')+
   '</table>':'<span class=mono>no runs match</span>';
  const totalPages=Math.max(1,Math.ceil(s.total/s.page_size));
  $('#opsPager').innerHTML=`<span class=mono>page ${s.page}/${totalPages} (${s.total} total)</span> `+
@@ -383,9 +384,10 @@ async function opsLoad(page){
 }
 function fmtCost(n){return '$'+(n||0).toFixed(4)}
 function fileLink(jobId,slot,entry){
- if(!entry||!entry.key)return `<span class=mono>${esc(entry?entry.label:slot)}: n/a</span>`;
+ if(!entry)return `<span class=mono>${esc(slot)}: n/a</span>`;
  if(entry.purged)return `<span class=mono>${esc(entry.label)}: purged</span>`;
- const url=`/api/ops/${jobId}/file/${encodeURIComponent(slot)}`;
+ if(!entry.key)return `<span class=mono>${esc(entry.label)}: n/a</span>`;
+ const url=`/api/ops/${encodeURIComponent(jobId)}/file/${encodeURIComponent(slot)}`;
  if(slot==='waveform_image'||slot==='spectrogram_image')
   return `<div>${esc(entry.label)}<br><img src="${url}" style="max-width:100%"></div>`;
  if(slot==='source'||slot==='reference'||slot.startsWith('stem:'))
@@ -396,7 +398,7 @@ async function openJob(jobId){
  showTab('ops');
  history.pushState({},'', '?job='+encodeURIComponent(jobId));
  $('#opsDetail').innerHTML='<span class=mono>loading…</span>';
- let s;try{s=await (await fetch('/api/ops/'+jobId)).json()}catch(e){
+ let s;try{s=await (await fetch('/api/ops/'+encodeURIComponent(jobId))).json()}catch(e){
   $('#opsDetail').innerHTML='<span class=dead>failed to load</span>';return}
  if(!s.ok){$('#opsDetail').innerHTML=`<span class=dead>${esc(s.error||'error')}</span>`;return}
  const t=s.totals||{};
@@ -408,9 +410,18 @@ async function openJob(jobId){
   `<td>${esc(v.headline)}</td><td class=mono>${esc(v.created_at)}</td></tr>`).join('');
  const coach=(s.coach_transcript||[]).map(m=>`<div><b>${esc(m.role)}</b> `+
   `<span class=mono>${fmtCost(m.cost_usd)}</span><br>${esc(m.content)}</div>`).join('');
+ const songLabel=s.song.name?`${esc(s.song.name)} / ${esc(s.song.label)} v${s.song.version_number}`:
+  `(anon) ${esc(s.job.file_path)}`;
+ const timing=['dispatched','started','completed','failed'].map(k=>{
+  const v=s.job[k+'_at'];return v?`${k}: ${esc(v)}`:null}).filter(Boolean).join(' · ');
+ const errLine=s.job.error_message?
+  `<p class=dead>${esc(s.job.error_message)}</p>`:'';
+ const reportJson=(s.analysis&&s.analysis.final_json)||null;
  $('#opsDetail').innerHTML=`
   <h2>Run ${esc(jobId)} <button onclick="closeJob()">close</button></h2>
-  <p>${esc(s.song.name)} / ${esc(s.song.label)} v${s.song.version_number} — ${esc(s.job.status)}</p>
+  <p>${songLabel} — ${esc(s.job.status)}</p>
+  ${timing?`<p class=mono>${timing}</p>`:''}
+  ${errLine}
   <h3>Token cost</h3>
   <p class=mono>total: ${(t.input_tokens||0)+(t.output_tokens||0)} tokens, ${fmtCost(t.cost_usd)}</p>
   <table><tr><th>purpose</th><th>prompt</th><th>model</th><th>in</th><th>out</th><th>cost</th><th>outcome</th></tr>${calls}</table>
@@ -418,8 +429,8 @@ async function openJob(jobId){
   <h3>Coach transcript</h3>${coach||'<span class=mono>none</span>'}
   <h3>Files</h3>${files}
   <h3>Report JSON</h3>
-  <p><a href="/api/ops/${jobId}/json" download>download raw JSON</a></p>
-  <pre class=mono style="max-height:400px;overflow:auto">${esc(JSON.stringify(s.analysis,null,2))}</pre>`;
+  <p><a href="/api/ops/${encodeURIComponent(jobId)}/json" download>download raw JSON</a></p>
+  <pre class=mono style="max-height:400px;overflow:auto">${esc(JSON.stringify(reportJson,null,2))}</pre>`;
 }
 function closeJob(){
  $('#opsDetail').innerHTML='';

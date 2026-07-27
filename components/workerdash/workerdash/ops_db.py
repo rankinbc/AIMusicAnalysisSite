@@ -58,7 +58,10 @@ def _build_filters(search, status, since, until):
         where.append("j.dispatched_at >= %s")
         params.append(since)
     if until:
-        where.append("j.dispatched_at <= %s")
+        # `until` arrives as a bare YYYY-MM-DD date from an <input type=date>;
+        # Postgres treats that as midnight, so a plain `<=` would silently
+        # exclude the entire selected day. Widen to the day's exclusive end.
+        where.append("j.dispatched_at < (%s::date + interval '1 day')")
         params.append(until)
     clause = (" WHERE " + " AND ".join(where)) if where else ""
     return clause, params
@@ -87,7 +90,7 @@ def list_jobs(conn, search=None, status=None, since=None, until=None,
                    coalesce(j.file_path,''), a.id::text, coalesce(j.tier,''),
                    j.dispatched_at::text, coalesce(j.completed_at::text,'')
             {_FROM}{clause}
-            ORDER BY j.dispatched_at DESC
+            ORDER BY j.dispatched_at DESC, j.id DESC
             LIMIT %s OFFSET %s
             """,
             tuple(params) + (page_size, offset),
@@ -103,7 +106,7 @@ def list_jobs(conn, search=None, status=None, since=None, until=None,
     analysis_ids = [r["analysis_id"] for r in rows if r["analysis_id"]]
     totals = llm_totals_by_analysis(conn, analysis_ids)
     for r in rows:
-        t = totals.get(r["analysis_id"], ZERO_TOTALS)
+        t = totals.get(r["analysis_id"], dict(ZERO_TOTALS))
         r["input_tokens"] = t["input_tokens"]
         r["output_tokens"] = t["output_tokens"]
         r["cost_usd"] = t["cost_usd"]
@@ -146,12 +149,13 @@ def file_slots(conn, job_id):
         "spectrogram_image": _slot(spec_image, "Spectrogram image"),
         "waveform_peaks": _slot(peaks, "Waveform peaks (JSON)", download=True),
     }
-    for role, entry in (stem_paths or {}).items():
-        if isinstance(entry, list):
-            for i, key in enumerate(entry):
-                slots[f"stem:{role}:{i}"] = _slot(None if purged else key, f"Stem: {role} ({i})", purged=purged)
-        else:
-            slots[f"stem:{role}"] = _slot(None if purged else entry, f"Stem: {role}", purged=purged)
+    if isinstance(stem_paths, dict):
+        for role, entry in stem_paths.items():
+            if isinstance(entry, list):
+                for i, key in enumerate(entry):
+                    slots[f"stem:{role}:{i}"] = _slot(None if purged else key, f"Stem: {role} ({i})", purged=purged)
+            else:
+                slots[f"stem:{role}"] = _slot(None if purged else entry, f"Stem: {role}", purged=purged)
     return slots
 
 
@@ -173,7 +177,8 @@ SELECT j.id::text, j.status, coalesce(j.error_code,''), coalesce(j.error_message
        coalesce(s.name,''), coalesce(v.label,''), v.version_number,
        coalesce(v.notes,''), coalesce(v.is_current,false), coalesce(v.stem_analysis_mode,''),
        a.id::text, a.pipeline_version, a.rule_engine_version, a.validator_version,
-       a.phase_durations, a.degradation_notice, a.routing_plan
+       a.phase_durations, a.degradation_notice, a.routing_plan, a.final_json,
+       coalesce(j.file_path,'')
 FROM analysis_jobs j
 LEFT JOIN song_versions v ON v.id = j.version_id
 LEFT JOIN songs s ON s.id = v.song_id
@@ -240,7 +245,8 @@ def job_detail(conn, job_id):
      dispatched_at, started_at, completed_at, failed_at,
      song_name, label, version_number, notes, is_current, stem_mode,
      analysis_id, pipeline_version, rule_engine_version, validator_version,
-     phase_durations, degradation_notice, routing_plan) = row
+     phase_durations, degradation_notice, routing_plan, final_json,
+     job_file_path) = row
 
     verdicts, coach_transcript, llm_calls = [], [], []
     if analysis_id:
@@ -267,7 +273,8 @@ def job_detail(conn, job_id):
         "job": {"id": jid, "status": status, "error_code": error_code,
                 "error_message": error_message, "current_phase": current_phase,
                 "tier": tier, "dispatched_at": dispatched_at, "started_at": started_at,
-                "completed_at": completed_at, "failed_at": failed_at},
+                "completed_at": completed_at, "failed_at": failed_at,
+                "file_path": job_file_path},
         "song": {"name": song_name, "label": label, "version_number": version_number,
                  "notes": notes, "is_current": is_current, "stem_analysis_mode": stem_mode},
         "analysis": None if not analysis_id else {
@@ -277,8 +284,9 @@ def job_detail(conn, job_id):
             "phase_durations": phase_durations,
             "degradation_notice": degradation_notice,
             "routing_plan": routing_plan,
+            "final_json": final_json,
         },
-        "totals": totals.get(analysis_id, ZERO_TOTALS),
+        "totals": totals.get(analysis_id, dict(ZERO_TOTALS)),
         "llm_calls": llm_calls,
         "verdicts": verdicts,
         "coach_transcript": coach_transcript,
