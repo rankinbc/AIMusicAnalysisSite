@@ -87,3 +87,17 @@ def mark_retry_pending(conn, job_id):
         updated = cur.rowcount > 0
     conn.commit()
     return updated
+
+
+def revert_retry(conn, job_id):
+    """Best-effort undo of mark_retry_pending when the enqueue step failed."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            UPDATE analysis_jobs
+            SET status = 'failed', error_code = 'retry_enqueue_failed',
+                failed_at = now()
+            WHERE id::text = %s AND status = 'pending'
+        """, (job_id,))
+        updated = cur.rowcount > 0
+    conn.commit()
+    return updated

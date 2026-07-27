@@ -73,3 +73,20 @@ def test_mark_cancelled_returns_false_when_no_row_matches():
 def test_mark_retry_pending_returns_false_when_job_not_failed():
     conn = FakeConn(update_matches=False)
     assert db.mark_retry_pending(conn, "j1") is False
+
+
+def test_revert_retry_sets_failed_and_guards_on_pending():
+    conn = FakeConn()
+    assert db.revert_retry(conn, "j1") is True
+    sql, params = conn.cur.executed[0]
+    assert "UPDATE analysis_jobs" in sql
+    assert "retry_enqueue_failed" in sql
+    assert "status = 'failed'" in sql
+    assert "status = 'pending'" in sql  # WHERE guard
+    assert params == ("j1",)
+    assert conn.committed
+
+
+def test_revert_retry_returns_false_when_no_row_matches():
+    conn = FakeConn(update_matches=False)
+    assert db.revert_retry(conn, "j1") is False

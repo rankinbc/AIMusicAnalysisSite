@@ -25,6 +25,7 @@ def create_app(redis_client=None, db_connect=None, ctl=None) -> Flask:
 
     def db_section():
         """Postgres context; degrades to {'error': ...} instead of failing."""
+        conn = None
         try:
             conn = connect()
             return {
@@ -32,6 +33,11 @@ def create_app(redis_client=None, db_connect=None, ctl=None) -> Flask:
                 "recent": dbmod.recent_jobs(conn),
             }, conn
         except Exception as e:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
             return {"error": str(e)}, None
 
     @app.get("/api/state")
@@ -90,8 +96,10 @@ def create_app(redis_client=None, db_connect=None, ctl=None) -> Flask:
             if ok and row and row.get("actor_name") == "analyze_audio_job" and row.get("args"):
                 try:
                     conn = connect()
-                    dbmod.mark_cancelled(conn, row["args"][0])
-                    conn.close()
+                    try:
+                        dbmod.mark_cancelled(conn, row["args"][0])
+                    finally:
+                        conn.close()
                 except Exception:
                     pass  # queue removal succeeded; DB mark is best-effort
             return jsonify({"ok": ok})
@@ -109,21 +117,36 @@ def create_app(redis_client=None, db_connect=None, ctl=None) -> Flask:
 
     @app.post("/api/jobs/<job_id>/retry")
     def retry(job_id):
+        conn = None
         try:
             conn = connect()
             if not dbmod.mark_retry_pending(conn, job_id):
-                conn.close()
                 return jsonify({"ok": False, "error": "job is not in failed state"})
-            conn.close()
-            rid = wire.enqueue(r, "analyze_audio_job", [job_id], "analysis-paid")
+            try:
+                rid = wire.enqueue(r, "analyze_audio_job", [job_id], "analysis-paid")
+            except Exception as e:
+                try:
+                    dbmod.revert_retry(conn, job_id)
+                except Exception:
+                    pass
+                return jsonify({"ok": False, "error": f"enqueue failed: {e}"})
             return jsonify({"ok": True, "redis_message_id": rid})
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)})
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
     @app.post("/api/worker/restart")
     def restart():
-        return jsonify(ctl.restart(
-            os.environ.get("WORKER_DIR", WORKER_DIR_DEFAULT)))
+        try:
+            return jsonify(ctl.restart(
+                os.environ.get("WORKER_DIR", WORKER_DIR_DEFAULT)))
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)})
 
     @app.get("/")
     def index():

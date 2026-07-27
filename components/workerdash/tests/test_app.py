@@ -73,3 +73,36 @@ def test_index_serves_html(client):
     res = c.get("/")
     assert res.status_code == 200
     assert b"workerdash" in res.data
+
+
+def test_retry_enqueue_failure_reverts_and_returns_error(monkeypatch):
+    import workerdash.app as app_module
+
+    class FakeConn:
+        def close(self):
+            pass
+
+    calls = {"revert": False}
+    monkeypatch.setattr(app_module.dbmod, "mark_retry_pending", lambda conn, jid: True)
+
+    def fake_revert(conn, jid):
+        calls["revert"] = True
+        return True
+
+    monkeypatch.setattr(app_module.dbmod, "revert_retry", fake_revert)
+
+    def fake_enqueue(r, actor, args, queue):
+        raise RuntimeError("redis down")
+
+    monkeypatch.setattr(app_module.wire, "enqueue", fake_enqueue)
+
+    rc = fakeredis.FakeRedis()
+    app = app_module.create_app(redis_client=rc, db_connect=lambda: FakeConn(), ctl=Ctl())
+    app.config["TESTING"] = True
+    c = app.test_client()
+
+    res = c.post("/api/jobs/j1/retry")
+    body = res.get_json()
+    assert body["ok"] is False
+    assert "enqueue failed" in body["error"]
+    assert calls["revert"] is True
