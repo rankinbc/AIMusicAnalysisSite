@@ -284,3 +284,14 @@ def job_detail(conn, job_id):
         "coach_transcript": coach_transcript,
         "files": files,
     }
+
+
+def analysis_final_json(conn, job_id):
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT a.final_json FROM analysis_jobs j "
+            "JOIN analyses a ON a.job_id = j.id WHERE j.id::text = %s",
+            (job_id,),
+        )
+        row = cur.fetchone()
+    return row[0] if row else None

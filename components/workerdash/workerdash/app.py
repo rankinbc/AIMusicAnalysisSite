@@ -1,9 +1,10 @@
 """Flask app. All external clients injectable; defaults built from env."""
 import os
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_file, after_this_request
 
 from . import db as dbmod
+from . import files as files_mod
 from . import ops_db as ops_dbmod
 from . import wire
 from . import worker_ctl as ctlmod
@@ -100,6 +101,66 @@ def create_app(redis_client=None, db_connect=None, ctl=None) -> Flask:
                     conn.close()
                 except Exception:
                     pass
+
+    @app.get("/api/ops/<job_id>/file/<path:slot>")
+    def ops_file(job_id, slot):
+        conn = None
+        try:
+            conn = connect()
+            slots = ops_dbmod.file_slots(conn, job_id) or {}
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 404
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+        entry = slots.get(slot)
+        if entry is None:
+            return jsonify({"ok": False, "error": "unknown file slot"}), 404
+        if entry.get("purged"):
+            return jsonify({"ok": False, "error": "source audio purged"}), 404
+        if not entry.get("key"):
+            return jsonify({"ok": False, "error": "file not available for this run"}), 404
+
+        try:
+            local_path, fetched = files_mod.resolve(entry["key"])
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 404
+        if local_path is None:
+            return jsonify({"ok": False, "error": "file not found"}), 404
+
+        if fetched is not None:
+            @after_this_request
+            def _cleanup(response):
+                files_mod.cleanup(fetched)
+                return response
+
+        return send_file(local_path, mimetype=files_mod.content_type_for(local_path),
+                          as_attachment=bool(entry.get("download")),
+                          download_name=local_path.name)
+
+    @app.get("/api/ops/<job_id>/json")
+    def ops_json(job_id):
+        conn = None
+        try:
+            conn = connect()
+            report = ops_dbmod.analysis_final_json(conn, job_id)
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 404
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+        if report is None:
+            return jsonify({"ok": False, "error": "no analysis for this job"}), 404
+        resp = jsonify(report)
+        resp.headers["Content-Disposition"] = f'attachment; filename="{job_id}-report.json"'
+        return resp
 
     @app.get("/api/state")
     def state():

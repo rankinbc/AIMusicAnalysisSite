@@ -214,3 +214,82 @@ def test_ops_detail_route_missing_job_404(client, monkeypatch):
     res = c.get("/api/ops/nope")
     assert res.status_code == 404
     assert res.get_json()["ok"] is False
+
+
+def test_ops_file_route_streams_existing_file(client, monkeypatch, tmp_path):
+    import workerdash.app as app_module
+    c, r = client
+    audio = tmp_path / "song.wav"
+    audio.write_bytes(b"RIFF....")
+    monkeypatch.setattr(app_module, "ops_dbmod", type("M", (), {
+        "file_slots": staticmethod(lambda conn, jid: {
+            "source": {"key": "song.wav", "label": "Source audio",
+                       "purged": False, "download": False}
+        })
+    }))
+    monkeypatch.setattr(app_module, "files_mod", type("M", (), {
+        "resolve": staticmethod(lambda key: (audio, None)),
+        "cleanup": staticmethod(lambda t: None),
+        "content_type_for": staticmethod(lambda p: "audio/wav"),
+    }))
+    res = c.get("/api/ops/j1/file/source")
+    assert res.status_code == 200
+    assert res.mimetype == "audio/wav"
+
+
+def test_ops_file_route_unknown_slot_404(client, monkeypatch):
+    import workerdash.app as app_module
+    c, r = client
+    monkeypatch.setattr(app_module, "ops_dbmod",
+                         type("M", (), {"file_slots": staticmethod(lambda conn, jid: {})}))
+    res = c.get("/api/ops/j1/file/nope")
+    assert res.status_code == 404
+
+
+def test_ops_file_route_purged_slot_404(client, monkeypatch):
+    import workerdash.app as app_module
+    c, r = client
+    monkeypatch.setattr(app_module, "ops_dbmod", type("M", (), {
+        "file_slots": staticmethod(lambda conn, jid: {
+            "source": {"key": None, "label": "Source audio", "purged": True, "download": False}
+        })
+    }))
+    res = c.get("/api/ops/j1/file/source")
+    assert res.status_code == 404
+    assert "purged" in res.get_json()["error"]
+
+
+def test_ops_file_route_unresolvable_key_404(client, monkeypatch):
+    import workerdash.app as app_module
+    c, r = client
+    monkeypatch.setattr(app_module, "ops_dbmod", type("M", (), {
+        "file_slots": staticmethod(lambda conn, jid: {
+            "source": {"key": "gone.wav", "label": "Source audio",
+                       "purged": False, "download": False}
+        })
+    }))
+    monkeypatch.setattr(app_module, "files_mod",
+                         type("M", (), {"resolve": staticmethod(lambda key: (None, None))}))
+    res = c.get("/api/ops/j1/file/source")
+    assert res.status_code == 404
+
+
+def test_ops_json_route_returns_final_json(client, monkeypatch):
+    import workerdash.app as app_module
+    c, r = client
+    monkeypatch.setattr(app_module, "ops_dbmod", type("M", (), {
+        "analysis_final_json": staticmethod(lambda conn, jid: {"phase1": {"lufs": -14}})
+    }))
+    res = c.get("/api/ops/j1/json")
+    assert res.status_code == 200
+    assert res.get_json() == {"phase1": {"lufs": -14}}
+    assert "attachment" in res.headers["Content-Disposition"]
+
+
+def test_ops_json_route_no_analysis_404(client, monkeypatch):
+    import workerdash.app as app_module
+    c, r = client
+    monkeypatch.setattr(app_module, "ops_dbmod",
+                         type("M", (), {"analysis_final_json": staticmethod(lambda conn, jid: None)}))
+    res = c.get("/api/ops/j1/json")
+    assert res.status_code == 404
