@@ -9,6 +9,31 @@ import { MANIFEST_BY_ID, PITCH_MODULE, type ModuleManifest } from './data';
 import { Sw } from './lrControls';
 import { lrClamp, paramSummary } from './lrUtil';
 import { useGainReduction, type RackPreset, type RackState } from './rackState';
+import type { LiveMeters } from './useLiveMeters';
+
+// ── Toolbar LCD — live output meters as a digital display module ───────
+function MeterLcd({ meters }: { meters: LiveMeters }) {
+  const seg = (label: string, val: string, warn: boolean) => (
+    <span className="seg" key={label} {...(warn ? { 'data-warn': '' } : {})}>
+      <span className="l">{label}</span>
+      <span className="v">{val}</span>
+    </span>
+  );
+  return (
+    <div className="lr-lcd" title="Live output meters — output level, short-term loudness, true peak, L/R correlation, gain reduction. CLIP latches red for 2s when the true peak hits 0 dBTP.">
+      <div className="win">
+        {seg('OUT', meters.out <= -60 ? '−∞' : meters.out.toFixed(1), meters.out > -6)}
+        {seg('LUFS-S', meters.lufs.toFixed(1), meters.lufs > -10.5)}
+        {seg('TP', meters.tp.toFixed(1), meters.tp > -0.3)}
+        {seg('CORR', meters.corr.toFixed(2), false)}
+        {seg('GR', '−' + meters.gr.toFixed(1), meters.gr > 2.5)}
+        <span className={'lcd-clip' + (meters.clip ? ' on' : '')} title="Clip indicator — output true peak hit 0 dBTP">
+          <span className="led" />CLIP
+        </span>
+      </div>
+    </div>
+  );
+}
 
 // ── shared HTML5 drag-to-reorder plumbing (cards ARE the chain) ────────
 function useChainDrag(order: string[], setOrder: (next: string[]) => void) {
@@ -42,8 +67,9 @@ function useChainDrag(order: string[], setOrder: (next: string[]) => void) {
 }
 
 // ── Toolbar ────────────────────────────────────────────────────────────
-function Toolbar({ rs, sticky, presets, onRecallPreset, onSavePreset, onExport, onImport }: {
+function Toolbar({ rs, sticky, meters, presets, onRecallPreset, onSavePreset, onExport, onImport }: {
   rs: RackState; sticky: boolean;
+  meters: LiveMeters;
   presets: RackPreset[];
   onRecallPreset: (id: string) => void;
   onSavePreset: () => void;
@@ -74,6 +100,7 @@ function Toolbar({ rs, sticky, presets, onRecallPreset, onSavePreset, onExport, 
         <button type="button" className="btn sm ghost" onClick={onImport} title="Import a chain preset (JSON)">↥</button>
       )}
       <div className="rgt">
+        <MeterLcd meters={meters} />
         <label className={'lr-byp' + (rs.masterBypass ? ' on' : '')} title="Bypass the whole insert chain">
           BYPASS<Sw on={rs.masterBypass} onChange={rs.setMasterBypass} />
         </label>
@@ -155,8 +182,9 @@ function PitchCard({ rs, sel, onSelect }: { rs: RackState; sel: boolean; onSelec
 }
 
 // ── Rack tab ───────────────────────────────────────────────────────────
-export function RackTabV2({ rs, playing, readOnly, presets, onRecallPreset, onSavePreset, onExport, onImport }: {
+export function RackTabV2({ rs, playing, meters, readOnly, presets, onRecallPreset, onSavePreset, onExport, onImport }: {
   rs: RackState; playing: boolean;
+  meters: LiveMeters;
   /** Capability-gated (guest / no rack-control grant): grid renders inert. */
   readOnly: boolean;
   presets: RackPreset[];
@@ -213,6 +241,7 @@ export function RackTabV2({ rs, playing, readOnly, presets, onRecallPreset, onSa
       <Toolbar
         rs={rs}
         sticky
+        meters={meters}
         presets={presets}
         onRecallPreset={onRecallPreset}
         onSavePreset={onSavePreset}

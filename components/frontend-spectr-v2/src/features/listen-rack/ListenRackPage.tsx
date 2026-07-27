@@ -61,7 +61,9 @@ const noopHandler = () => undefined;
 
 // Design-handoff tweak defaults, frozen (the Tweaks panel was scaffold).
 const STAGE_HEIGHT = 210;
-const SHOW_STAGE_METERS = true;
+// Meters moved into the rack toolbar's LCD module (MeterLcd in RackTabV2) —
+// the stage overlay chips stay off so the numbers live in one place.
+const SHOW_STAGE_METERS = false;
 const SHOW_NOTE_PINS = true;
 
 // Exported for the 12.4 chip render test (all-modes assertion). Slim v2 header:
@@ -952,6 +954,7 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
                   <RackTabV2
                     rs={rs}
                     playing={playing}
+                    meters={meters}
                     readOnly={rackReadOnly}
                     presets={rackPresetItems}
                     onRecallPreset={onRecallRackPreset}

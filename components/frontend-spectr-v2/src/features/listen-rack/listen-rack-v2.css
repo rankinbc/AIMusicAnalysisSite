@@ -34,6 +34,20 @@
 .rdx .lr-mchip.warn b {color:var(--orange)}
 .rdx .lr-mchip.sec {color:var(--violet);border-color:rgba(167,139,250,.3)}
 .rdx .lr-mchip.sec b {color:var(--violet)}
+/* Toolbar meter LCD — light-grey metal mini-plate around a dark digital
+   display window; values glow LCD-green, warn segments amber. */
+.rdx .lr-lcd {padding:3px;border-radius:8px;background:linear-gradient(178deg,#b3b9c3 0%,#8d939e 55%,#767c87 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.6),inset 0 -1px 0 rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.45)}
+.rdx .lr-lcd .win {position:relative;display:flex;gap:13px;align-items:baseline;padding:4px 12px;border-radius:6px;background:#060a0d;box-shadow:inset 0 2px 7px rgba(0,0,0,.9);overflow:hidden}
+.rdx .lr-lcd .win::after {content:'';position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(180deg,transparent 0 2px,rgba(255,255,255,.03) 2px 3px),linear-gradient(180deg,rgba(255,255,255,.05),transparent 45%)}
+.rdx .lr-lcd .seg {display:inline-flex;align-items:baseline;gap:5px;font-family:'JetBrains Mono',monospace}
+.rdx .lr-lcd .seg .l {font-size:7.5px;letter-spacing:.12em;color:#3d6e64}
+.rdx .lr-lcd .seg .v {font-size:12px;font-weight:700;color:#4de8c2;text-shadow:0 0 7px rgba(77,232,194,.55);font-variant-numeric:tabular-nums;min-width:5ch;text-align:right}
+.rdx .lr-lcd .seg[data-warn] .v {color:#ffb454;text-shadow:0 0 7px rgba(255,180,84,.6)}
+.rdx .lr-lcd .lcd-clip {display:inline-flex;align-items:center;gap:4px;font-family:'JetBrains Mono',monospace;font-size:7.5px;letter-spacing:.12em;color:#4a3336}
+.rdx .lr-lcd .lcd-clip .led {width:7px;height:7px;border-radius:50%;background:#341114;border:1px solid rgba(255,90,90,.25);box-shadow:inset 0 1px 1px rgba(0,0,0,.6)}
+.rdx .lr-lcd .lcd-clip.on {color:#ff5d5d}
+.rdx .lr-lcd .lcd-clip.on .led {background:#ff4646;border-color:#ff8a8a;box-shadow:0 0 9px rgba(255,70,70,.9),0 0 18px rgba(255,70,70,.45);animation:lcdClip .5s steps(2,jump-none) infinite}
+@keyframes lcdClip {0% {opacity:1} 100% {opacity:.55}}
 .rdx .lr-tp {display:flex;align-items:center;gap:12px;padding:8px 12px;border-top:1px solid var(--border)}
 .rdx .lr-wave {flex:1;position:relative;height:30px;display:flex;align-items:flex-end;gap:1.5px;cursor:pointer;padding-top:9px}
 .rdx .lr-wave i {flex:1;border-radius:.5px;background:var(--dim);min-height:2px}
@@ -70,19 +84,19 @@
    base, with bevel edges (bright top lip, dark bottom seat). */
 .rdx .lr-mc {position:relative;padding:var(--lr-pad);border-radius:9px;border:1px solid var(--border);
   background:
-    linear-gradient(115deg,rgba(255,255,255,.10) 0%,rgba(255,255,255,0) 26%,rgba(255,255,255,.05) 43%,rgba(255,255,255,0) 60%,rgba(255,255,255,.08) 100%),
-    linear-gradient(178deg,#31353e 0%,#23272f 42%,#181b22 100%);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.45);
+    linear-gradient(115deg,rgba(255,255,255,.22) 0%,rgba(255,255,255,.02) 24%,rgba(255,255,255,.12) 42%,rgba(255,255,255,.02) 60%,rgba(255,255,255,.17) 100%),
+    linear-gradient(178deg,#363a44 0%,#24282f 42%,#171a20 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.28),inset 0 -1px 0 rgba(0,0,0,.5);
   cursor:pointer;display:flex;flex-direction:column;gap:6px;min-width:0;text-align:left;transition:border-color .12s,background .12s,box-shadow .12s}
 .rdx .lr-mc:hover {border-color:var(--border-3);
   background:
-    linear-gradient(115deg,rgba(255,255,255,.14) 0%,rgba(255,255,255,0) 26%,rgba(255,255,255,.07) 43%,rgba(255,255,255,0) 60%,rgba(255,255,255,.10) 100%),
-    linear-gradient(178deg,#3a3e48 0%,#282c35 42%,#1c1f27 100%)}
+    linear-gradient(115deg,rgba(255,255,255,.30) 0%,rgba(255,255,255,.03) 24%,rgba(255,255,255,.16) 42%,rgba(255,255,255,.03) 60%,rgba(255,255,255,.22) 100%),
+    linear-gradient(178deg,#3e424d 0%,#292d36 42%,#1b1e25 100%)}
 .rdx .lr-mc.on {border-color:color-mix(in srgb,var(--mac) 62%,transparent);
   background:
-    linear-gradient(115deg,rgba(255,255,255,.11) 0%,rgba(255,255,255,0) 26%,rgba(255,255,255,.05) 43%,rgba(255,255,255,0) 60%,rgba(255,255,255,.08) 100%),
-    linear-gradient(178deg,color-mix(in srgb,var(--mac) 9%,#31353e) 0%,color-mix(in srgb,var(--mac) 5%,#23272f) 42%,#181b22 100%);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 -1px 0 rgba(0,0,0,.45),0 0 14px color-mix(in srgb,var(--mac) 28%,transparent),inset 0 0 14px color-mix(in srgb,var(--mac) 7%,transparent)}
+    linear-gradient(115deg,rgba(255,255,255,.24) 0%,rgba(255,255,255,.02) 24%,rgba(255,255,255,.13) 42%,rgba(255,255,255,.02) 60%,rgba(255,255,255,.18) 100%),
+    linear-gradient(178deg,color-mix(in srgb,var(--mac) 9%,#363a44) 0%,color-mix(in srgb,var(--mac) 5%,#24282f) 42%,#171a20 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.30),inset 0 -1px 0 rgba(0,0,0,.5),0 0 14px color-mix(in srgb,var(--mac) 28%,transparent),inset 0 0 14px color-mix(in srgb,var(--mac) 7%,transparent)}
 .rdx .lr-mc.sel {box-shadow:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.45),0 0 0 1.5px var(--mac)}
 .rdx .lr-mc.on.sel {box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 -1px 0 rgba(0,0,0,.45),0 0 0 1.5px var(--mac),0 0 18px color-mix(in srgb,var(--mac) 38%,transparent),inset 0 0 14px color-mix(in srgb,var(--mac) 8%,transparent)}
 .rdx .lr-mc-h {display:flex;align-items:center;gap:8px;min-width:0}
@@ -354,7 +368,7 @@
 /* ── light show background + glass panels ── */
 .rdx .lr-bgfx {position:fixed;inset:0;width:100vw;height:100vh;z-index:0;pointer-events:none}
 .rdx .wrap {position:relative;z-index:1}
-.rdx .lr-glass .tabbody {background:color-mix(in srgb,var(--surface) 74%,transparent);backdrop-filter:blur(9px)}
+.rdx .lr-glass .tabbody {background:color-mix(in srgb,#17191f 84%,transparent);backdrop-filter:blur(9px)}
 .rdx .lr-glass .rtab.active {background:color-mix(in srgb,var(--surface) 52%,transparent)}
 .rdx .lr-glass .card, .rdx .lr-glass .lr-sc {background:color-mix(in srgb,var(--surface-2) 55%,transparent);backdrop-filter:blur(9px)}
 .rdx .lr-glass .lr-chain {background:color-mix(in srgb,var(--card-2) 42%,transparent);backdrop-filter:blur(7px)}
@@ -364,11 +378,11 @@
 .rdx .lr-glass .lr-node {background:color-mix(in srgb,var(--card) 55%,transparent)}
 .rdx .lr-glass .lr-node.on {background:color-mix(in srgb,var(--mac) 7%,color-mix(in srgb,var(--card) 50%,transparent))}
 .rdx .lr-glass .lr-mc, .rdx .lr-glass .lr-row {background:
-  linear-gradient(115deg,rgba(255,255,255,.10) 0%,rgba(255,255,255,0) 26%,rgba(255,255,255,.05) 43%,rgba(255,255,255,0) 60%,rgba(255,255,255,.08) 100%),
-  linear-gradient(178deg,color-mix(in srgb,#31353e 86%,transparent),color-mix(in srgb,#23272f 86%,transparent) 42%,color-mix(in srgb,#181b22 88%,transparent))}
+  linear-gradient(115deg,rgba(255,255,255,.22) 0%,rgba(255,255,255,.02) 24%,rgba(255,255,255,.12) 42%,rgba(255,255,255,.02) 60%,rgba(255,255,255,.17) 100%),
+  linear-gradient(178deg,color-mix(in srgb,#363a44 88%,transparent),color-mix(in srgb,#24282f 88%,transparent) 42%,color-mix(in srgb,#171a20 90%,transparent))}
 .rdx .lr-glass .lr-mc.on, .rdx .lr-glass .lr-row.on {background:
-  linear-gradient(115deg,rgba(255,255,255,.11) 0%,rgba(255,255,255,0) 26%,rgba(255,255,255,.05) 43%,rgba(255,255,255,0) 60%,rgba(255,255,255,.08) 100%),
-  linear-gradient(178deg,color-mix(in srgb,var(--mac) 9%,color-mix(in srgb,#31353e 86%,transparent)),color-mix(in srgb,var(--mac) 5%,color-mix(in srgb,#23272f 86%,transparent)) 42%,color-mix(in srgb,#181b22 88%,transparent))}
+  linear-gradient(115deg,rgba(255,255,255,.24) 0%,rgba(255,255,255,.02) 24%,rgba(255,255,255,.13) 42%,rgba(255,255,255,.02) 60%,rgba(255,255,255,.18) 100%),
+  linear-gradient(178deg,color-mix(in srgb,var(--mac) 9%,color-mix(in srgb,#363a44 88%,transparent)),color-mix(in srgb,var(--mac) 5%,color-mix(in srgb,#24282f 88%,transparent)) 42%,color-mix(in srgb,#171a20 90%,transparent))}
 .rdx .lr-glass .lr-stage {background:color-mix(in srgb,#070b16 78%,transparent)}
 .rdx .lr-glass .lr-ed {background:color-mix(in srgb,var(--surface-2) 60%,transparent);backdrop-filter:blur(8px)}
 .rdx .lr-glass .lr-sel, .rdx .lr-glass .lr-vt {background:color-mix(in srgb,var(--card-2) 55%,transparent)}
