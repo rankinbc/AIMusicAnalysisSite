@@ -11,6 +11,9 @@ probe), running jobs with phase, all four queues decoded with song/version
 context, last-20 job history. Actions: cancel queued message (also marks the
 analysis_jobs row failed/cancelled_by_operator), bring-to-front, retry failed
 job, restart worker (STARTUP.md tree-kill + relaunch; Windows only).
+Retry always dispatches a full analyze_audio_job — for jobs that were
+per-phase re-run vehicles this runs a complete new analysis, not just the
+phase.
 
 Env: REDIS_URL, DATABASE_URL, WORKERDASH_PORT (5999), WORKER_DIR.
 Localhost-only, no auth — dev tool. Tests: `pytest`.

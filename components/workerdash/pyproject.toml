@@ -5,7 +5,7 @@ requires-python = ">=3.11"
 dependencies = ["flask>=3", "redis>=5", "psycopg2-binary>=2.9"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "fakeredis>=2"]
+dev = ["pytest>=8", "fakeredis[lua]>=2"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

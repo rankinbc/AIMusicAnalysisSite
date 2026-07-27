@@ -75,6 +75,22 @@ def test_index_serves_html(client):
     assert b"workerdash" in res.data
 
 
+def test_cross_origin_post_rejected(client):
+    c, r = client
+    rid = wire.enqueue(r, "run_triage", ["a1"], "analysis-paid")
+    res = c.post(f"/api/queue/analysis-paid/{rid}/cancel",
+                 headers={"Origin": "http://evil.example"})
+    assert res.status_code == 403
+    assert res.get_json()["ok"] is False
+
+
+def test_cross_origin_host_rejected(client):
+    c, r = client
+    res = c.get("/api/state", headers={"Host": "evil.example"})
+    assert res.status_code == 403
+    assert res.get_json()["ok"] is False
+
+
 def test_retry_enqueue_failure_reverts_and_returns_error(monkeypatch):
     import workerdash.app as app_module
 

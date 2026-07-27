@@ -1,7 +1,7 @@
 """Flask app. All external clients injectable; defaults built from env."""
 import os
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 
 from . import db as dbmod
 from . import wire
@@ -22,6 +22,19 @@ def create_app(redis_client=None, db_connect=None, ctl=None) -> Flask:
     r = redis_client or _default_redis()
     connect = db_connect or dbmod.connect
     ctl = ctl or ctlmod
+
+    @app.before_request
+    def _reject_cross_origin():
+        # Localhost bind != CSRF-safe: a hostile page can still fire no-cors
+        # POSTs at 127.0.0.1. Host+Origin allowlist closes that.
+        host = (request.host or "").split(":")[0]
+        if host not in ("127.0.0.1", "localhost"):
+            return jsonify({"ok": False, "error": "forbidden host"}), 403
+        origin = request.headers.get("Origin")
+        if origin:
+            o = origin.split("//")[-1].split(":")[0]
+            if o not in ("127.0.0.1", "localhost"):
+                return jsonify({"ok": False, "error": "forbidden origin"}), 403
 
     def db_section():
         """Postgres context; degrades to {'error': ...} instead of failing."""
@@ -221,7 +234,7 @@ async function load(){
   <th></th></tr>'+rec.map(j=>`<tr><td>${esc(j.song)} / ${esc(j.label)}</td>
   <td>${esc(j.status)}</td><td>${esc(j.error_code)}</td>
   <td class=mono>${esc(j.dispatched_at)}</td>
-  <td>${j.status==='failed'?`<button onclick="act('/api/jobs/${j.id}/retry')">retry</button>`:''}</td>
+  <td>${j.status==='failed'?`<button onclick="act('/api/jobs/${j.id}/retry')">retry full analysis</button>`:''}</td>
   </tr>`).join('')+'</table>';
 }
 load();setInterval(load,2000);
