@@ -43,6 +43,7 @@ def test_list_jobs_maps_rows_and_total():
         "song": "22", "label": "5_bb", "version_number": 3,
         "file_path": "", "analysis_id": "a1", "tier": "free",
         "dispatched_at": "2026-07-27T10:30:00+00:00", "completed_at": "2026-07-27T11:00:00+00:00",
+        "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0,
     }]
     assert result["page"] == 1
     assert result["page_size"] == 25
@@ -88,3 +89,49 @@ def test_list_jobs_pagination_uses_offset():
     page_sql, page_params = conn.cur.executed[1]
     assert "LIMIT %s OFFSET %s" in page_sql
     assert page_params[-2:] == (10, 20)
+
+
+def test_llm_totals_merges_direct_and_coach_calls():
+    # first query: direct correlation_id = analysis_id rows
+    direct_rows = [("a1", 1000, 200, 0.05, 3)]
+    # second query: via conversations (coach)
+    coach_rows = [("a1", 500, 100, 0.02, 1)]
+    conn = FakeConn([direct_rows, coach_rows])
+    totals = ops_db.llm_totals_by_analysis(conn, ["a1"])
+    assert totals["a1"] == {
+        "input_tokens": 1500, "output_tokens": 300,
+        "cost_usd": 0.07, "call_count": 4,
+    }
+
+
+def test_llm_totals_empty_ids_no_query():
+    conn = FakeConn([])
+    assert ops_db.llm_totals_by_analysis(conn, []) == {}
+    assert conn.cur.executed == []
+
+
+def test_llm_totals_analysis_with_no_calls_absent_from_result():
+    conn = FakeConn([[], []])
+    totals = ops_db.llm_totals_by_analysis(conn, ["a1"])
+    assert totals == {}
+
+
+def test_list_jobs_includes_token_totals(monkeypatch):
+    rows = [("j1", "complete", "", "22", "5_bb", 3, "", "a1", "", "2026-07-27T10:30:00+00:00", "")]
+    conn = FakeConn([[(1,)], rows])
+    monkeypatch.setattr(ops_db, "llm_totals_by_analysis",
+                         lambda c, ids: {"a1": {"input_tokens": 500, "output_tokens": 100,
+                                                 "cost_usd": 0.02, "call_count": 2}})
+    result = ops_db.list_jobs(conn)
+    assert result["rows"][0]["input_tokens"] == 500
+    assert result["rows"][0]["output_tokens"] == 100
+    assert result["rows"][0]["cost_usd"] == 0.02
+
+
+def test_list_jobs_row_with_no_analysis_gets_zero_totals(monkeypatch):
+    rows = [("j2", "processing", "", "", "", None, "audio/anon/x.wav", None, "", "2026-07-27T10:00:00+00:00", "")]
+    conn = FakeConn([[(1,)], rows])
+    monkeypatch.setattr(ops_db, "llm_totals_by_analysis", lambda c, ids: {})
+    result = ops_db.list_jobs(conn)
+    assert result["rows"][0]["input_tokens"] == 0
+    assert result["rows"][0]["cost_usd"] == 0.0

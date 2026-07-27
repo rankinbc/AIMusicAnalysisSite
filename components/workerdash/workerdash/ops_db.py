@@ -3,6 +3,47 @@ token/cost rollup. Kept separate from db.py, which stays scoped to the
 live queue/job-mutation queries workerdash already had."""
 
 
+ZERO_TOTALS = {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0, "call_count": 0}
+
+_DIRECT_LLM_SQL = """
+SELECT correlation_id, sum(input_tokens), sum(output_tokens), sum(cost_usd), count(*)
+FROM llm_calls
+WHERE correlation_id = ANY(%s)
+GROUP BY correlation_id
+"""
+
+_COACH_LLM_SQL = """
+SELECT c.analysis_id::text, sum(l.input_tokens), sum(l.output_tokens),
+       sum(l.cost_usd), count(*)
+FROM llm_calls l
+JOIN conversations c ON c.id::text = l.correlation_id
+WHERE c.analysis_id = ANY(%s)
+GROUP BY c.analysis_id
+"""
+
+
+def _merge_totals(into, rows):
+    for analysis_id, in_tok, out_tok, cost, count in rows:
+        acc = into.setdefault(analysis_id, dict(ZERO_TOTALS))
+        acc["input_tokens"] += in_tok or 0
+        acc["output_tokens"] += out_tok or 0
+        acc["cost_usd"] = round(acc["cost_usd"] + float(cost or 0), 6)
+        acc["call_count"] += count or 0
+
+
+def llm_totals_by_analysis(conn, analysis_ids):
+    ids = [a for a in analysis_ids if a]
+    if not ids:
+        return {}
+    totals = {}
+    with conn.cursor() as cur:
+        cur.execute(_DIRECT_LLM_SQL, (ids,))
+        _merge_totals(totals, cur.fetchall())
+        cur.execute(_COACH_LLM_SQL, (ids,))
+        _merge_totals(totals, cur.fetchall())
+    return totals
+
+
 def _build_filters(search, status, since, until):
     where = []
     params = []
@@ -58,4 +99,13 @@ def list_jobs(conn, search=None, status=None, since=None, until=None,
              "completed_at": r[10]}
             for r in cur.fetchall()
         ]
+
+    analysis_ids = [r["analysis_id"] for r in rows if r["analysis_id"]]
+    totals = llm_totals_by_analysis(conn, analysis_ids)
+    for r in rows:
+        t = totals.get(r["analysis_id"], ZERO_TOTALS)
+        r["input_tokens"] = t["input_tokens"]
+        r["output_tokens"] = t["output_tokens"]
+        r["cost_usd"] = t["cost_usd"]
+
     return {"rows": rows, "total": total, "page": page, "page_size": page_size}
