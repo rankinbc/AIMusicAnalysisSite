@@ -80,8 +80,11 @@
 
 /* ── module grid ── */
 .rdx .lr-grid {position:relative;display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--lr-cardmin),1fr));gap:7px}
-/* Animated signal wire through the chain (ChainWire overlay) */
-.rdx .lr-wire {position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3;overflow:visible}
+/* Animated signal wire through the chain (ChainWire overlay). z-index 0 +
+   cards at z-index 1: the wire lives in the grid gutters and ducks UNDER any
+   module it has to pass — never drawn across a card face. */
+.rdx .lr-wire {position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:visible}
+.rdx .lr-grid .lr-mc {z-index:1}
 .rdx .lr-wire .wglow {fill:none;stroke:var(--accent);stroke-width:6;opacity:.08;stroke-linecap:round}
 .rdx .lr-wire .wbase {fill:none;stroke:var(--accent);stroke-width:2;opacity:.2;stroke-linecap:round}
 .rdx .lr-wire .wpulse {fill:none;stroke:var(--accent);stroke-width:2;opacity:.85;stroke-linecap:round;stroke-dasharray:6 90;animation:lrWireDash 1.6s linear infinite}
