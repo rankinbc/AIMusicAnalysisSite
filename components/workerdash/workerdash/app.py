@@ -292,13 +292,43 @@ PAGE = """<!doctype html>
  background:#232733;padding:.5rem .9rem;border-radius:6px;display:none}
  .mono{font-family:ui-monospace,monospace;font-size:.78rem;color:#9aa3b2}
  #restart{border-color:#a04747}
+ .tabs{margin-bottom:1rem}.tabbtn{background:#1a1d24;color:#9aa3b2;border:1px solid #2a2e38;
+ border-radius:4px 4px 0 0;padding:.4rem 1rem;cursor:pointer;margin-right:.2rem}
+ .tabbtn.active{background:#232733;color:#e6e6e6;border-bottom-color:#232733}
+ .opsFilters{display:flex;gap:.5rem;margin-bottom:.7rem}
+ .opsFilters input,.opsFilters select{background:#1a1d24;color:#e6e6e6;
+ border:1px solid #2a2e38;border-radius:4px;padding:.3rem .5rem}
+ .pagebtn{margin-right:.3rem}
 </style>
 <h1>workerdash — <span id="wstatus" class="unknown">…</span>
  <span id="whb" class="mono"></span>
  <button id="restart" onclick="restartWorker()">restart worker</button></h1>
+<div class="tabs">
+ <button id="tabLive" class="tabbtn active" onclick="showTab('live')">Live</button>
+ <button id="tabOps" class="tabbtn" onclick="showTab('ops')">Operations</button>
+</div>
+<div id="liveView">
 <div id="running"></div>
 <div id="queues"></div>
 <h2>Recent jobs</h2><div id="recent"></div>
+</div>
+<div id="opsView" style="display:none">
+ <div class="opsFilters">
+  <input id="opsSearch" placeholder="search song/version…" oninput="opsDebouncedSearch()">
+  <select id="opsStatus" onchange="opsLoad(1)">
+   <option value="">any status</option>
+   <option value="pending">pending</option>
+   <option value="processing">processing</option>
+   <option value="complete">complete</option>
+   <option value="failed">failed</option>
+  </select>
+  <input id="opsSince" type="date" onchange="opsLoad(1)">
+  <input id="opsUntil" type="date" onchange="opsLoad(1)">
+ </div>
+ <div id="opsTable"></div>
+ <div id="opsPager"></div>
+ <div id="opsDetail"></div>
+</div>
 <div id="toast"></div>
 <script>
 const $=q=>document.querySelector(q);
@@ -310,6 +340,47 @@ function restartWorker(){if(confirm('Tree-kill and relaunch the worker?'))
  act('/api/worker/restart')}
 function esc(s){return String(s??'').replace(/[&<>"]/g,
  c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+let opsPage=1,opsSearchTimer=null;
+function showTab(t){
+ $('#tabLive').classList.toggle('active',t==='live');
+ $('#tabOps').classList.toggle('active',t==='ops');
+ $('#liveView').style.display=t==='live'?'':'none';
+ $('#opsView').style.display=t==='ops'?'':'none';
+ if(t==='ops')opsLoad(1);
+}
+function opsDebouncedSearch(){
+ clearTimeout(opsSearchTimer);
+ opsSearchTimer=setTimeout(()=>opsLoad(1),300);
+}
+async function opsLoad(page){
+ opsPage=page;
+ const q=new URLSearchParams({page,page_size:25});
+ const search=$('#opsSearch').value.trim();
+ const status=$('#opsStatus').value;
+ const since=$('#opsSince').value;
+ const until=$('#opsUntil').value;
+ if(search)q.set('search',search);
+ if(status)q.set('status',status);
+ if(since)q.set('since',since);
+ if(until)q.set('until',until);
+ let s;try{s=await (await fetch('/api/ops?'+q)).json()}catch(e){
+  $('#opsTable').innerHTML='<span class=dead>failed to load</span>';return}
+ if(!s.ok){$('#opsTable').innerHTML=`<span class=dead>${esc(s.error||'error')}</span>`;return}
+ $('#opsTable').innerHTML=s.rows.length?'<table><tr><th>song</th><th>status</th>'+
+  '<th>error</th><th>tokens</th><th>cost</th><th></th></tr>'+
+  s.rows.map(j=>{
+   const label=j.song?`${esc(j.song)} / ${esc(j.label)} v${j.version_number}`:
+    `(anon) ${esc(j.file_path)}`;
+   return `<tr><td>${label}</td><td>${esc(j.status)}</td><td>${esc(j.error_code)}</td>`+
+    `<td class=mono>${(j.input_tokens||0)+(j.output_tokens||0)}</td>`+
+    `<td class=mono>$${(j.cost_usd||0).toFixed(4)}</td>`+
+    `<td><button onclick="openJob('${j.id}')">view</button></td></tr>`}).join('')+
+  '</table>':'<span class=mono>no runs match</span>';
+ const totalPages=Math.max(1,Math.ceil(s.total/s.page_size));
+ $('#opsPager').innerHTML=`<span class=mono>page ${s.page}/${totalPages} (${s.total} total)</span> `+
+  `<button class=pagebtn ${s.page<=1?'disabled':''} onclick="opsLoad(${s.page-1})">prev</button>`+
+  `<button class=pagebtn ${s.page>=totalPages?'disabled':''} onclick="opsLoad(${s.page+1})">next</button>`;
+}
 async function load(){
  let s;try{s=await (await fetch('/api/state')).json()}catch(e){
   $('#wstatus').textContent='dashboard error';return}
