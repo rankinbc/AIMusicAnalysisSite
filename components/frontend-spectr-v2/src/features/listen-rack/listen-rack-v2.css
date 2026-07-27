@@ -208,7 +208,7 @@
 /* ── the one open device ── */
 .rdx .lr-devwrap {display:block}
 .rdx .lr-bay {margin-top:9px;border-radius:11px;border:1px solid var(--border);background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(0,0,0,.16));box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
-.rdx .lr-bay.on {border-color:color-mix(in srgb,var(--mac) 34%,transparent)}
+.rdx .lr-bay.on {border-color:color-mix(in srgb,var(--mac) 62%,transparent)}
 .rdx .lr-bay-h {display:flex;align-items:center;gap:8px;padding:8px 11px;border-bottom:1px solid var(--border)}
 .rdx .lr-bay-h .wk {font-family:'JetBrains Mono',monospace;font-size:7.5px;letter-spacing:.08em;color:var(--violet);border:1px solid rgba(167,139,250,.34);border-radius:4px;padding:1px 4px}
 .rdx .lr-bay-h .lr-mc-t {flex:1;min-width:0}
@@ -340,11 +340,11 @@
 /* ── light show background + glass panels ── */
 .rdx .lr-bgfx {position:fixed;inset:0;width:100vw;height:100vh;z-index:0;pointer-events:none}
 .rdx .wrap {position:relative;z-index:1}
-.rdx .lr-glass .tabbody {background:color-mix(in srgb,var(--surface) 52%,transparent);backdrop-filter:blur(9px)}
+.rdx .lr-glass .tabbody {background:color-mix(in srgb,var(--surface) 74%,transparent);backdrop-filter:blur(9px)}
 .rdx .lr-glass .rtab.active {background:color-mix(in srgb,var(--surface) 52%,transparent)}
 .rdx .lr-glass .card, .rdx .lr-glass .lr-sc {background:color-mix(in srgb,var(--surface-2) 55%,transparent);backdrop-filter:blur(9px)}
 .rdx .lr-glass .lr-chain {background:color-mix(in srgb,var(--card-2) 42%,transparent);backdrop-filter:blur(7px)}
-.rdx .lr-glass .lr-bay {background:linear-gradient(180deg,color-mix(in srgb,#1e2433 66%,transparent),color-mix(in srgb,#141926 66%,transparent));backdrop-filter:blur(8px)}
+.rdx .lr-glass .lr-bay {background:linear-gradient(178deg,color-mix(in srgb,#2a2e37 88%,transparent),color-mix(in srgb,#20242c 88%,transparent) 45%,color-mix(in srgb,#171a21 90%,transparent));backdrop-filter:blur(8px)}
 .rdx .lr-glass .lr-node {background:color-mix(in srgb,var(--card) 55%,transparent)}
 .rdx .lr-glass .lr-node.on {background:color-mix(in srgb,var(--mac) 7%,color-mix(in srgb,var(--card) 50%,transparent))}
 .rdx .lr-glass .lr-mc, .rdx .lr-glass .lr-row {background:color-mix(in srgb,#242832 60%,transparent)}
@@ -355,8 +355,8 @@
 .rdx .lr-glass .lr-bar.stick {background:color-mix(in srgb,var(--surface) 55%,transparent);backdrop-filter:blur(9px)}
 
 /* ── hardware: neon rig look for the open device ── */
-.rdx .lr-bay {position:relative;background:linear-gradient(180deg,#1c2231,#121722)}
-.rdx .lr-bay.on {box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 0 34px -6px color-mix(in srgb,var(--mac) 28%,transparent),0 18px 40px -24px rgba(0,0,0,.9)}
+.rdx .lr-bay {position:relative;background:linear-gradient(178deg,#2a2e37 0%,#20242c 45%,#171a21 100%)}
+.rdx .lr-bay.on {box-shadow:inset 0 1px 0 rgba(255,255,255,.08),inset 0 0 22px color-mix(in srgb,var(--mac) 6%,transparent),0 0 22px color-mix(in srgb,var(--mac) 34%,transparent),0 0 46px -6px color-mix(in srgb,var(--mac) 42%,transparent),0 18px 40px -24px rgba(0,0,0,.9)}
 .rdx .lr-bay::before, .rdx .lr-bay::after {content:'';position:absolute;top:11px;bottom:11px;width:5px;border-radius:3px;background:repeating-linear-gradient(180deg,rgba(255,255,255,.09) 0 2px,rgba(255,255,255,.015) 2px 8px)}
 .rdx .lr-bay::before {left:5px}.rdx .lr-bay::after {right:5px}
 .rdx .lr-bay-h {background:linear-gradient(180deg,rgba(255,255,255,.04),transparent)}

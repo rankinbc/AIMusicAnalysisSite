@@ -933,18 +933,21 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
             )}
           </StageCardV2>
 
-          <div className="rtabs" style={{ marginTop: 12 }}>
-            {LR_TABS.map(([id, label, icon]) => (
-              <button type="button" key={id} className={'rtab' + (tab === id ? ' active' : '')} onClick={() => setTab(id)}>
-                <span className="ic"><Icon name={icon} size={14} /></span>{label}
-                {id === 'rack' && <span className="rtab-badge">{activeCount}</span>}
-                {id === 'coach' && coachCount > 0 && <span className="rtab-badge">{coachCount}</span>}
-              </button>
-            ))}
-          </div>
-          <div className="tabbody">
-            <div className="lr-layout" style={{ marginTop: 0 }}>
-              <div style={{ minWidth: 0 }}>
+          {/* Sidebar (Notes · Chat · Room) lives OUTSIDE the tabbody so it reads
+              as its own box beside the rack panel, not a column inside it. The
+              rtabs strip stays stacked with the tabbody in the left column. */}
+          <div className="lr-layout">
+            <div style={{ minWidth: 0 }}>
+              <div className="rtabs">
+                {LR_TABS.map(([id, label, icon]) => (
+                  <button type="button" key={id} className={'rtab' + (tab === id ? ' active' : '')} onClick={() => setTab(id)}>
+                    <span className="ic"><Icon name={icon} size={14} /></span>{label}
+                    {id === 'rack' && <span className="rtab-badge">{activeCount}</span>}
+                    {id === 'coach' && coachCount > 0 && <span className="rtab-badge">{coachCount}</span>}
+                  </button>
+                ))}
+              </div>
+              <div className="tabbody">
                 {tab === 'rack' && (
                   <RackTabV2
                     rs={rs}
@@ -971,23 +974,23 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
                   <CoachTabV2 rs={rs} real={realAudio} versionId={versionId ?? null} reportRef={reportRef} />
                 )}
               </div>
-              <SessionSidebarV2
-                notes={track.notes}
-                activeNote={activeNote}
-                onNote={onNote}
-                feed={roomLive ? feedShown : null}
-                chatLive={roomLive ? { send: roomLive.sendChat, position: () => posRef.current } : null}
-                myHandle={identity.actor.handle ?? 'you'}
-                roster={roomLive ? roomLive.state.roster : null}
-                statusByActor={roomLive ? roomLive.state.statusByActor : null}
-                meKey={roomLive ? meActorKey : null}
-                myStatus={myStatus}
-                onReact={reactHandler}
-                canGrant={cap.canGrantControl}
-                roomControl={roomControl}
-                onGrant={grantControl}
-              />
             </div>
+            <SessionSidebarV2
+              notes={track.notes}
+              activeNote={activeNote}
+              onNote={onNote}
+              feed={roomLive ? feedShown : null}
+              chatLive={roomLive ? { send: roomLive.sendChat, position: () => posRef.current } : null}
+              myHandle={identity.actor.handle ?? 'you'}
+              roster={roomLive ? roomLive.state.roster : null}
+              statusByActor={roomLive ? roomLive.state.statusByActor : null}
+              meKey={roomLive ? meActorKey : null}
+              myStatus={myStatus}
+              onReact={reactHandler}
+              canGrant={cap.canGrantControl}
+              roomControl={roomControl}
+              onGrant={grantControl}
+            />
           </div>
         </div>
 
