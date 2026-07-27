@@ -5,7 +5,6 @@ import { useMemo, useState } from 'react';
 
 import { Icon } from '../results/Icon';
 import { CardActivity } from './CardActivity';
-import { ChainWire } from './ChainWire';
 import { DeviceBayV2 } from './DeviceBayV2';
 import { MANIFEST_BY_ID, PITCH_MODULE, type ModuleManifest } from './data';
 import { Sw } from './lrControls';
@@ -137,13 +136,22 @@ function ModCard({ m, i, rs, playing, sel, showWorklet, bpm, onSelect, dragging,
       {...dragProps}
     >
       <div className="lr-mc-h">
-        <span className="ix">{String(i + 1).padStart(2, '0')}</span>
         <span className={'lr-glyph' + (on ? '' : ' off')}>{m.glyph}</span>
         <span className="lr-mc-t">
           <span className="lr-mc-n">{m.label}</span>
           <span className="lr-mc-s">{m.sub}{m.worklet && showWorklet ? ' · worklet' : ''}</span>
         </span>
-        <Sw on={v.enabled} onChange={(nv) => rs.setEnabled(m.id, nv)} title={m.label + ' on/off'} />
+        <span className="lr-mc-side">
+          <span className="ix">{String(i + 1).padStart(2, '0')}</span>
+          <button
+            type="button"
+            className={'lr-pwr' + (v.enabled ? ' on' : '')}
+            title={m.label + ' on/off'}
+            onClick={(e) => { e.stopPropagation(); rs.setEnabled(m.id, !v.enabled); }}
+          >
+            {v.enabled ? 'ON' : 'OFF'}
+          </button>
+        </span>
       </div>
       <div className="lr-mc-p">{sum ? <b>{sum}</b> : <span className="zz">neutral</span>}</div>
       {m.hasMeter && <div className="lr-gr"><i style={{ width: (on ? lrClamp(gr / 6, 0, 1) * 100 : 0) + '%' }} /></div>}
@@ -172,13 +180,22 @@ function PitchCard({ rs, sel, bpm, onSelect }: { rs: RackState; sel: boolean; bp
       title="Pitch & tempo — separate buffer lane, not an insert. Net speed = tempo × 2^(st/12); dial Tempo until it reads 1.00× to keep the original speed at the new pitch."
     >
       <div className="lr-mc-h">
-        <span className="ix">LN</span>
         <span className={'lr-glyph' + (on ? '' : ' off')}>{m.glyph}</span>
         <span className="lr-mc-t">
           <span className="lr-mc-n">{m.label}</span>
           <span className="lr-mc-s">{m.sub}</span>
         </span>
-        <Sw on={v.enabled} onChange={(nv) => rs.setEnabled('pitch', nv)} title="Pitch on/off" />
+        <span className="lr-mc-side">
+          <span className="ix">LN</span>
+          <button
+            type="button"
+            className={'lr-pwr' + (v.enabled ? ' on' : '')}
+            title="Pitch on/off"
+            onClick={(e) => { e.stopPropagation(); rs.setEnabled('pitch', !v.enabled); }}
+          >
+            {v.enabled ? 'ON' : 'OFF'}
+          </button>
+        </span>
       </div>
       <div className="lr-mc-p">
         {sum ? <b>{sum} · net {netRate.toFixed(2)}×</b> : <span className="zz">buffer lane · not an insert</span>}
@@ -213,14 +230,10 @@ export function RackTabV2({ rs, playing, meters, bpm, readOnly, presets, onRecal
   const selM = sel ? (sel === 'pitch' ? PITCH_MODULE : MANIFEST_BY_ID[sel]) : null;
   const pick = (id: string) => rs.setSelected(sel === id ? null : id);
   const dnd = useChainDrag(rs.order, rs.setOrder);
-  // Signal wire connects only powered, in-chain cards, in chain order.
-  const [gridEl, setGridEl] = useState<HTMLElement | null>(null);
-  const chain = rs.masterBypass ? [] : rs.order.filter((id) => rs.mod[id]?.enabled);
 
   const body = (
     <>
-      <div className="lr-grid" ref={setGridEl} {...dnd.endProps}>
-        <ChainWire grid={gridEl} chain={chain} />
+      <div className="lr-grid" {...dnd.endProps}>
         {list.map((m, i) => (
           <ModCard
             key={m.id}

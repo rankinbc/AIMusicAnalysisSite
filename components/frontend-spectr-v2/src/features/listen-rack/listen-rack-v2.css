@@ -80,16 +80,6 @@
 
 /* ── module grid ── */
 .rdx .lr-grid {position:relative;display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--lr-cardmin),1fr));gap:7px}
-/* Animated signal wire through the chain (ChainWire overlay). z-index 0 +
-   cards at z-index 1: the wire lives in the grid gutters and ducks UNDER any
-   module it has to pass — never drawn across a card face. */
-.rdx .lr-wire {position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:visible}
-.rdx .lr-grid .lr-mc {z-index:1}
-.rdx .lr-wire .wglow {fill:none;stroke:var(--accent);stroke-width:6;opacity:.08;stroke-linecap:round}
-.rdx .lr-wire .wbase {fill:none;stroke:var(--accent);stroke-width:2;opacity:.2;stroke-linecap:round}
-.rdx .lr-wire .wpulse {fill:none;stroke:var(--accent);stroke-width:2;opacity:.85;stroke-linecap:round;stroke-dasharray:6 90;animation:lrWireDash 1.6s linear infinite}
-@keyframes lrWireDash {to {stroke-dashoffset:-96}}
-@media (prefers-reduced-motion: reduce) {.rdx .lr-wire .wpulse {animation:none;opacity:0}}
 /* Card beat LED (bottom-right corner) — halo circle blurred for the glow */
 .rdx .lr-act {position:absolute;right:4px;bottom:3px;pointer-events:none;line-height:0}
 .rdx .lr-act .lr-act-svg {display:block;overflow:visible}
@@ -114,7 +104,13 @@
   box-shadow:inset 0 1px 0 rgba(255,255,255,.34),inset 0 -1px 0 rgba(0,0,0,.35),0 0 14px color-mix(in srgb,var(--mac) 28%,transparent)}
 .rdx .lr-mc.sel {box-shadow:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.45),0 0 0 1.5px var(--mac)}
 .rdx .lr-mc.on.sel {box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 -1px 0 rgba(0,0,0,.45),0 0 0 1.5px var(--mac),0 0 18px color-mix(in srgb,var(--mac) 38%,transparent),inset 0 0 14px color-mix(in srgb,var(--mac) 8%,transparent)}
-.rdx .lr-mc-h {display:flex;align-items:center;gap:8px;min-width:0}
+.rdx .lr-mc-h {display:flex;align-items:flex-start;gap:8px;min-width:0}
+/* right-side stack: device number above the ON/OFF power button */
+.rdx .lr-mc-side {margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0}
+.rdx .lr-pwr {font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:800;letter-spacing:.1em;padding:3px 8px;border-radius:6px;border:1px solid var(--border-2);background:rgba(0,0,0,.35);color:var(--muted);cursor:pointer;box-shadow:inset 0 1px 2px rgba(0,0,0,.5);transition:background .12s,color .12s,box-shadow .12s,border-color .12s}
+.rdx .lr-pwr:hover {color:var(--text-2);border-color:var(--border-3)}
+.rdx .lr-pwr.on {color:#0a0f14;background:var(--mac);border-color:color-mix(in srgb,var(--mac) 70%,#fff);box-shadow:0 0 10px var(--mac),0 0 24px color-mix(in srgb,var(--mac) 45%,transparent),inset 0 1px 0 rgba(255,255,255,.45)}
+.rdx .lr-pwr.on:hover {filter:brightness(1.08);color:#0a0f14}
 .rdx .lr-mc .ix {font-family:'JetBrains Mono',monospace;font-size:8.5px;color:var(--muted);flex-shrink:0}
 .rdx .lr-mc.on .ix {color:var(--mac)}
 .rdx .lr-mc {cursor:grab}
