@@ -4,7 +4,8 @@ from aimusic_shared.verdicts.models import Verdict
 
 
 class JudgmentCall(TypedDict):
-    kind: str                 # "eq_conflict" | "glue_offer" | "loudness_conflict" | "heavy_clamp"
+    kind: str                 # "eq_conflict" | "trim_conflict" | "glue_offer"
+                              # | "loudness_conflict" | "heavy_clamp"
     where: str                # human label, e.g. "eq slot @300Hz"
     competing_fix_ids: list[str]   # problem_ids involved
     context: dict[str, Any]   # measured numbers the LLM needs

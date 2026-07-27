@@ -87,12 +87,22 @@ def _combine(verdicts: list[Verdict], change_log: list[dict[str, Any]]
 
     out: list[Verdict] = merged_eq + passthrough
     if gain_pairs:
-        clamped, total = I.clamp_gain_total([_single_op(v) for v in gain_pairs])
-        rep = max(gain_pairs, key=lambda v: v.priority_score)
-        out.append(_with_op(rep, clamped[0]))
-        if len(gain_pairs) > 1:
-            change_log.append({"module": "trim", "change": f"summed {len(gain_pairs)} trims -> {total}dB",
-                               "why": "cumulative gain staging"})
+        # Constraint semantics, not accumulation — see weighted_merge.merge_trims.
+        trim = W.merge_trims(
+            [(float(_single_op(v).params.get("gain_db", 0.0)),
+              W.fix_weight(v.priority_score, v.confidence), v.problem_id)
+             for v in gain_pairs],
+            change_log)
+        if trim is not None:
+            rep = max(gain_pairs, key=lambda v: v.priority_score)
+            out.append(_with_op(rep, DspOp(type="gain", params={"gain_db": trim.gain_db})))
+            if trim.mixed:
+                calls.append(JudgmentCall(
+                    kind="trim_conflict", where="master trim",
+                    competing_fix_ids=[s or "" for s in trim.sources],
+                    context={"gains_db": trim.gains, "netted_db": trim.gain_db},
+                    question="One fix wants the master louder and another wants it quieter — "
+                             "netted by weight; keep the net, or pick one side?"))
     return out, calls
 
 

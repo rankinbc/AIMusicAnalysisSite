@@ -55,6 +55,7 @@ import { StemsTab } from './StemsTab';
 import { NotesTab } from './NotesTab';
 import { ImprovementPlanTab } from './ImprovementPlanTab';
 import { ActionsBar } from './ActionsBar';
+import { MergedChainPanel } from './MergedChainPanel';
 import { SuggestionRows } from './SuggestionRows';
 import { useComments } from '../listen/useComments';
 import { Icon } from './Icon';
@@ -514,6 +515,8 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
                   onGenerateCoachMix={fixRack.generate}
                   onLogPlan={logPlan}
                 />
+                {/* The answer before the working — what the queue compiles to. */}
+                <MergedChainPanel committed={committed} />
                 <FixBoard
                   mode="actions"
                   verdicts={verdicts}

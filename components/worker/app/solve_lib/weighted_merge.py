@@ -12,7 +12,7 @@ they genuinely overlap.
           mean; Q widens to span the cluster. High/low-pass cutoffs merge
           among themselves. Past the rack's 8 bands, highest total weight
           wins; losers are logged, never silently dropped.
-  trim    gains sum, clamped +/-24 dB.
+  trim    a CONSTRAINT, not an accumulation — see ``merge_trims``.
   comp    weighted mean per param; ratio capped at 4:1.
   ms      width weighted mean, clamped 50-120%; mono_below_hz = max.
   limiter SAFETY param — lowest ceiling wins, never an average.
@@ -164,6 +164,60 @@ def merge_filters(kind: str, entries: list[tuple[float, float, float]],
     return MergedBand(type=kind, freq=round(freq, 1), gain_db=0.0, q=round(q, 2),
                       weight=sum(w for _, _, w in entries), sources=sources,
                       gains=[0.0] * len(entries))
+
+
+@dataclass
+class MergedTrim:
+    """Result of ``merge_trims``. ``mixed`` is True when cuts and boosts were both
+    asked for — a genuine disagreement, not a merge, so callers escalate it."""
+    gain_db: float
+    mixed: bool
+    gains: list[float]
+    sources: list[str | None]
+
+
+def merge_trims(entries: list[tuple[float, float, str | None]],
+                log: list[dict[str, Any]]) -> MergedTrim | None:
+    """Merge master-trim moves. ``entries`` are (gain_db, weight, source).
+
+    The master trim is ONE constraint — "put the output at the right level" —
+    not a stack of independent gain-staging steps. Three records that each
+    observe the same too-hot master (loudness over target, true peak over the
+    ceiling, clipping) each ask for a cut of roughly the same size; summing them
+    triple-corrects and lands the track 8 dB under where anyone wanted it. So
+    within one direction the BINDING requirement wins — the deepest cut, the
+    largest boost — exactly like the limiter's lowest-ceiling-wins rule.
+
+    Cuts against boosts is a real contradiction rather than an overlap: those
+    net by weight and set ``mixed`` so the arbiter can put the question to the
+    producer instead of quietly splitting the difference.
+    """
+    if not entries:
+        return None
+    gains = [g for g, _, _ in entries]
+    sources = [s for _, _, s in entries]
+    cuts = [g for g in gains if g < 0]
+    boosts = [g for g in gains if g > 0]
+    mixed = bool(cuts and boosts)
+    if mixed:
+        gain = wmean([(g, w) for g, w, _ in entries])
+        log.append({
+            "module": "trim",
+            "change": f"netted {' vs '.join(_fmt_db(g) for g in gains)} -> {_fmt_db(gain)}",
+            "why": "trims disagree on direction — weights arbitrated",
+        })
+    else:
+        # Binding requirement, not a sum. min() for cuts, max() for boosts.
+        gain = min(gains) if cuts else max(gains)
+        if len(entries) > 1:
+            log.append({
+                "module": "trim",
+                "change": f"{len(entries)} trims agree on direction "
+                          f"({', '.join(_fmt_db(g) for g in gains)}) -> kept binding {_fmt_db(gain)}",
+                "why": "master level is one constraint — the deepest requirement satisfies the rest",
+            })
+    gain = clamp(gain, -MAX_CUMULATIVE_GAIN_DB, MAX_CUMULATIVE_GAIN_DB)
+    return MergedTrim(gain_db=round(gain, 2), mixed=mixed, gains=gains, sources=sources)
 
 
 def cap_bands(bands: list[MergedBand], log: list[dict[str, Any]]) -> list[MergedBand]:

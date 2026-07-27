@@ -46,7 +46,12 @@ def blend_eq(a: DspOp, b: DspOp) -> DspOp:
 
 
 def clamp_gain_total(ops: list[DspOp]) -> tuple[list[DspOp], float]:
-    """Collapse N trim/gain ops into one, clamped to the cumulative-gain budget."""
+    """Collapse N trim/gain ops into one, clamped to the cumulative-gain budget.
+
+    LEGACY (2026-07-27): summing was wrong — several records observing one
+    too-hot master each ask for the same cut, so the sum triple-corrects. The
+    live path is ``solve_lib.weighted_merge.merge_trims`` (binding requirement
+    within a direction). Kept for its cap test only."""
     total = sum(float(o.params.get("gain_db", 0.0)) for o in ops)
     total = _clamp(total, -MAX_CUMULATIVE_GAIN_DB, MAX_CUMULATIVE_GAIN_DB)
     return [DspOp(type="gain", params={"gain_db": round(total, 2)})], round(total, 2)

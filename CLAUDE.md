@@ -305,7 +305,8 @@ The original vanilla-JSX SPA. The v2 frontend at `components/frontend-spectr-v2/
 cd components/bff && dotnet build && dotnet test
 
 # v2 frontend — all four gates
-cd components/frontend-spectr-v2 && npx tsc --noEmit
+cd components/frontend-spectr-v2 && npx tsc -b   # NOT --noEmit: the root tsconfig is a
+                                                #  solution file ("files": []), so --noEmit checks nothing
 cd components/frontend-spectr-v2 && npm run lint    # --max-warnings 0
 cd components/frontend-spectr-v2 && npm run build
 cd components/frontend-spectr-v2 && npx vitest run
@@ -382,7 +383,7 @@ curl -f http://localhost:5000/healthz && echo "BFF OK"
 - Custom `fetcher.ts` for HTTP — single instance, owns 401-retry-with-refresh. Don't introduce axios.
 - All file upload via XHR (`useFileUpload` hook). Job progress via SSE / TanStack Query polling.
 - No inline styles unless dynamic (color-from-grade, etc).
-- All four gates must pass before committing: `tsc --noEmit`, `npm run lint --max-warnings 0`, `npm run build`, `npx vitest run`.
+- All four gates must pass before committing: `tsc -b` (NOT `--noEmit`), `npm run lint --max-warnings 0`, `npm run build`, `npx vitest run`.
 
 **Windows dev note**
 - allin1/all-in-one-fix structure detection (Phase 1) requires Docker on Windows. Run `docker compose -f docker/docker-compose.yml up -d` before starting the worker.

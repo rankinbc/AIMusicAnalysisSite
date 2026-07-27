@@ -75,10 +75,28 @@ describe('combineFixes — EQ clustering', () => {
 });
 
 describe('combineFixes — modules', () => {
-  it('trims sum and clamp to ±24 dB', () => {
-    const g = (db: number): VerdictDspOp => ({ type: 'gain', params: { gain_db: db } });
-    expect(combineFixes([fix([g(-3)]), fix([g(-4)])]).mod.trim.gainDb).toBe(-7);
-    expect(combineFixes([fix([g(-20)]), fix([g(-20)])]).mod.trim.gainDb).toBe(-24);
+  const g = (db: number): VerdictDspOp => ({ type: 'gain', params: { gain_db: db } });
+
+  it('same-direction trims keep the binding move, not the sum', () => {
+    // Three fixes observing ONE too-hot master. Summing lands at -8.2 dB;
+    // the binding requirement is -3.7 and it satisfies the other two.
+    const { mod, changeLog } = combineFixes([fix([g(-2.5)], 108), fix([g(-3.7)], 180), fix([g(-2)], 81)]);
+    expect(mod.trim.gainDb).toBe(-3.7);
+    expect(changeLog.some((l) => l.includes('binding'))).toBe(true);
+  });
+
+  it('a lone trim passes through unchanged', () => {
+    expect(combineFixes([fix([g(-3.1)])]).mod.trim.gainDb).toBe(-3.1);
+  });
+
+  it('opposing trims net by weight and are flagged', () => {
+    const { mod, changeLog } = combineFixes([fix([g(-4)], 180), fix([g(2)], 45)]);
+    expect(mod.trim.gainDb).toBeCloseTo(-2.8, 2);
+    expect(changeLog.some((l) => l.includes('disagree on direction'))).toBe(true);
+  });
+
+  it('clamps to the ±24 dB cumulative budget', () => {
+    expect(combineFixes([fix([g(-30)]), fix([g(-20)])]).mod.trim.gainDb).toBe(-24);
   });
 
   it('limiter keeps the LOWEST ceiling (safety, never averaged)', () => {

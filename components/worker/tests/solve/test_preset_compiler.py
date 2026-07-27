@@ -122,3 +122,36 @@ def test_eq_far_apart_regions_always_coexist():
     enabled = [b for b in out["chain"]["modules"]["eq"]["bands"] if b["enabled"]]
     assert len(enabled) == 2
     assert enabled[0]["gainDb"] == -4.0 and enabled[1]["gainDb"] == 2.0
+
+
+# ── trim: a constraint, not an accumulation (2026-07-27) ─────────────────────
+
+def _trim(pid, gain_db, *, prio=50):
+    return _vfix(pid, DspOp(type="gain", params={"gain_db": gain_db}), prio=prio)
+
+
+def test_same_direction_trims_keep_the_binding_move_not_the_sum():
+    # Three records observing ONE too-hot master each ask for roughly the same
+    # cut. Summing them would land the track at -8.2 dB; the binding cut is -3.7.
+    out = compile_preset([
+        _trim("loudness.loudness_vs_target.0", -2.5, prio=120),
+        _trim("clipping.true_peak_overshoot.0", -3.7, prio=200),
+        _trim("clipping.clipping_count.0", -2.0, prio=90),
+    ])
+    assert out["chain"]["modules"]["trim"]["gainDb"] == -3.7
+    assert any("binding" in c["change"] for c in out["change_log"])
+
+
+def test_opposing_trims_net_by_weight():
+    out = compile_preset([
+        _trim("loudness.too_loud.0", -4.0, prio=200),
+        _trim("loudness.too_quiet.0", 2.0, prio=50),
+    ])
+    # weights 200*.9 vs 50*.9 -> (-4*180 + 2*45)/225 = -2.8
+    assert abs(out["chain"]["modules"]["trim"]["gainDb"] - (-2.8)) < 0.01
+    assert any("disagree on direction" in c["why"] for c in out["change_log"])
+
+
+def test_single_trim_passes_through_unchanged():
+    out = compile_preset([_trim("loudness.loudness_vs_target.0", -3.1)])
+    assert out["chain"]["modules"]["trim"]["gainDb"] == -3.1

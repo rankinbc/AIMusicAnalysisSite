@@ -11,8 +11,10 @@ not diagnose or invent fixes. Stages (PRPs/identifiers/preset-compiler.md):
                frontend's combineFixes.ts): every fix pulls with weight =
                priority x confidence. EQ clusters by log-frequency (same-
                direction sums capped, opposite directions net); comp/ms params
-               weighted-average; trims sum; the limiter keeps the LOWEST
-               ceiling (safety). Nothing merges across frequency regions.
+               weighted-average; same-direction trims keep the BINDING move
+               (the master level is one constraint, not a stack of steps); the
+               limiter keeps the LOWEST ceiling (safety). Nothing merges across
+               frequency regions.
   4. ORDER     populate modules in place; never reorder the canonical chain.
 
 Returns ``{"chain", "leftover_advice", "change_log"}``. Nothing is silently
@@ -177,18 +179,15 @@ def _build_ms(pairs: list[_Pair], change_log: list[dict[str, Any]]) -> dict[str,
 
 
 def _build_trim(pairs: list[_Pair], change_log: list[dict[str, Any]]) -> dict[str, Any]:
-    summed = sum(_num(op.params, "gain_db", 0.0) for _, op in pairs)
-    gain = W.clamp(summed, -W.MAX_CUMULATIVE_GAIN_DB, W.MAX_CUMULATIVE_GAIN_DB)
-    if len(pairs) > 1:
-        note = f"summed {len(pairs)} trims -> {round(gain, 2)}dB"
-        if gain != summed:
-            note += f" (capped from {round(summed, 2)}dB)"
-        change_log.append({"module": "trim", "change": note,
-                           "from_fix": _rep(pairs).problem_id, "why": "cumulative gain staging"})
-    else:
+    merged = W.merge_trims(
+        [(_num(op.params, "gain_db", 0.0), _w(v), v.problem_id) for v, op in pairs],
+        change_log)
+    if merged is None:
+        return {"enabled": True, "gainDb": 0.0}
+    if len(pairs) == 1:
         change_log.append({"module": "trim", "change": "set trim",
                            "from_fix": _rep(pairs).problem_id, "why": "gain"})
-    return {"enabled": True, "gainDb": round(gain, 2)}
+    return {"enabled": True, "gainDb": merged.gain_db}
 
 
 _MODULE_BUILDERS = {

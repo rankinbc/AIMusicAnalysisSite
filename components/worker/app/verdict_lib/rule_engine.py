@@ -860,20 +860,28 @@ def over_widened(a: dict[str, Any]) -> Verdict | None:
 # C7 no_drop_payoff deferred (needs the section-RMS lift).
 
 
-@composite("loudness_war", suppresses=["over_compression", "true_peak_overshoot"])
-def loudness_war(a: dict[str, Any], fired: dict[str, Verdict]) -> Verdict | None:
-    """C1 — crushed dynamics AND peaks against the ceiling: over-limiting, not a
-    genre choice. Genre-aware (rule-bindings C1): a techno crest of 5 / LRA 3 is
-    inherent, so thresholds defer to the genre's warn_below / static_floor."""
+def _over_limited(a: dict[str, Any]) -> bool:
+    """C1's gate, factored out so `hot_master` can stand down for it. Genre-aware
+    (rule-bindings C1): a techno crest of 5 / LRA 3 is inherent, so thresholds
+    defer to the genre's warn_below / static_floor."""
     p1 = _phase(a, "phase1")
     cf, lra, tp = p1.get("crest_factor"), p1.get("loudness_range_lu"), p1.get("true_peak_db")
     if cf is None or lra is None or tp is None:
-        return None
+        return False
     g = _genre(a)
     crest_warn = G.ppath(g, "dynamics.crest_db.warn_below", 6.0)
     lra_floor = G.ppath(g, "dynamics.lra_lu.static_floor", 4.0)
-    if not (cf < crest_warn and lra < lra_floor and tp > -0.3):
+    return bool(cf < crest_warn and lra < lra_floor and tp > -0.3)
+
+
+@composite("loudness_war", suppresses=["over_compression", "true_peak_overshoot"])
+def loudness_war(a: dict[str, Any], fired: dict[str, Verdict]) -> Verdict | None:
+    """C1 — crushed dynamics AND peaks against the ceiling: over-limiting, not a
+    genre choice."""
+    if not _over_limited(a):
         return None
+    p1 = _phase(a, "phase1")
+    cf, lra, tp = p1["crest_factor"], p1["loudness_range_lu"], p1["true_peak_db"]
     return _problem(
         track_id=_track_id(a), slug="loudness_war", severity="severe", confidence=0.95,
         category="dynamics", kind="fault", suspected=False,
@@ -890,6 +898,65 @@ def loudness_war(a: dict[str, Any], fired: dict[str, Verdict]) -> Verdict | None
         ],
         why_it_matters="Three corroborating metrics mean over-limiting - fix the master "
                        "chain, not one knob.",
+    )
+
+
+@composite("hot_master", suppresses=["true_peak_overshoot", "clipping_count",
+                                     "loudness_vs_target"])
+def hot_master(a: dict[str, Any], fired: dict[str, Verdict]) -> Verdict | None:
+    """C8 — the master is pushed well past its loudness target AND the peaks show
+    it (over the true-peak ceiling and/or hard clipping). Those are not three
+    independent faults, they are three symptoms of one decision: the output
+    fader is too hot. Absorbing them is what stops the producer seeing "too
+    loud" / "true peak over" / "clipping" as a to-do list of three.
+
+    Stands down for `loudness_war`: when the dynamics are ALSO crushed, the
+    sharper diagnosis is over-limiting, not level. Composites cannot see each
+    other's results, so the gate is shared via `_over_limited`.
+    """
+    if _over_limited(a):
+        return None
+    p1 = _phase(a, "phase1")
+    lufs, tp = p1.get("lufs"), p1.get("true_peak_db")
+    if lufs is None:
+        return None
+    g, ctx = _genre(a), G.master_context()
+    target = G.ppath(g, f"loudness.{ctx}.lufs_target") or G.ppath(g, "loudness.streaming.lufs_target", -14.0)
+    tol = G.ppath(g, "loudness.streaming.lufs_tolerance", 1.5)
+    delta = lufs - target
+    # Mirror loudness_vs_target's own firing floor so the composite never claims
+    # "too loud" over a child that would not itself have fired.
+    if delta <= max(tol, 3.0):
+        return None
+    ceiling = G.ppath(g, f"loudness.{ctx}.true_peak_dbtp_max", -1.0)
+    over_peak = tp is not None and tp > ceiling
+    clipped = int(p1.get("clipped_sample_count", 0)) if p1.get("clipping_detected") else 0
+    if not over_peak and clipped < 1:
+        return None  # loud but clean — that is a level note, not a hot master
+
+    sev: Severity = "severe" if (delta > 6 or clipped > 1000 or (tp is not None and tp > 0.0)) \
+        else "moderate"
+    ev = [Evidence(metric="phase1.lufs", value=float(lufs),
+                   expected_range=(target - 3, target + 3), label=f"{lufs:.1f} LUFS")]
+    if over_peak and tp is not None:
+        ev.append(Evidence(metric="phase1.true_peak_db", value=float(tp),
+                           expected_range=(-6.0, ceiling), label=f"{tp:+.2f} dBTP"))
+    if clipped:
+        ev.append(Evidence(metric="phase1.clipped_sample_count", value=float(clipped),
+                           label=f"{clipped} samples"))
+    symptom = " and ".join(
+        s for s in (f"peaks {tp:+.2f} dBTP over the {ceiling:.1f} ceiling" if over_peak and tp is not None else "",
+                    f"{clipped} clipped samples" if clipped else "") if s)
+    return _problem(
+        track_id=_track_id(a), slug="hot_master", severity=sev, confidence=0.95,
+        category="clipping", kind="fault", suspected=False,
+        headline=f"Master pushed too hot ({lufs:.1f} LUFS, peaks over)",
+        summary=f"Integrated loudness is {delta:.1f} LU above the {target:.0f} {ctx} target for "
+                f"{G.resolve_genre(g)}, and {symptom}. One cause: the master is too hot.",
+        evidence=ev,
+        why_it_matters="Streaming turns it back down anyway, so the only thing the extra level "
+                       "buys is the distortion. Pull the master down first - the peak and "
+                       "clipping symptoms go with it.",
     )
 
 

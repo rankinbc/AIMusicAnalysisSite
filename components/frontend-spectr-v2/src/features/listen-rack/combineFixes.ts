@@ -10,7 +10,9 @@
 //           High/low-pass cutoffs merge among themselves the same way. Past the
 //           rack's 8 bands, highest total weight wins; losers are logged, never
 //           silently dropped.
-//   trim    gains sum, clamped ±24 dB (cumulative gain-staging budget).
+//   trim    a CONSTRAINT, not an accumulation: same-direction moves keep the
+//           BINDING one (deepest cut / largest boost), opposing ones net by
+//           weight. Clamped ±24 dB. See mergeTrims.
 //   comp    weighted mean per param; ratio capped at 4:1.
 //   ms      width weighted mean, clamped 50–120%; monoMakerHz = max (safest).
 //   limiter SAFETY param — lowest ceiling wins, never an average.
@@ -120,6 +122,34 @@ function mergeFilters(kind: 'highpass' | 'lowpass', entries: { freq: number; q: 
   };
 }
 
+/** Merge master-trim moves and return the rack's gainDb.
+ *
+ *  The master trim is ONE constraint — "put the output at the right level" —
+ *  not a stack of independent gain-staging steps. Several fixes observing the
+ *  same too-hot master (over target, true peak over, clipping) each ask for a
+ *  cut of roughly the same size; summing them triple-corrects. So within one
+ *  direction the BINDING requirement wins, exactly like the limiter's
+ *  lowest-ceiling-wins rule. Cuts against boosts is a real contradiction, so
+ *  those net by weight and say so in the log. */
+function mergeTrims(trims: WeightedVal[], log: string[]): number {
+  const gains = trims.map((t) => t.v);
+  const hasCut = gains.some((g) => g < 0);
+  const hasBoost = gains.some((g) => g > 0);
+  let gain: number;
+  if (hasCut && hasBoost) {
+    gain = wmean(trims);
+    log.push(`trim: ${gains.map(fmtDb).join(' vs ')} disagree on direction → netted by weight to ${fmtDb(gain)}`);
+  } else {
+    gain = hasCut ? Math.min(...gains) : Math.max(...gains);
+    if (trims.length > 1) {
+      log.push(`trim: ${trims.length} moves agree on direction (${gains.map(fmtDb).join(', ')}) `
+        + `→ kept the binding ${fmtDb(gain)} (master level is one constraint, not a sum)`);
+    }
+  }
+  gain = clamp(gain, -MAX_CUMULATIVE_GAIN_DB, MAX_CUMULATIVE_GAIN_DB);
+  return Math.round(gain * 100) / 100;
+}
+
 // ── main ───────────────────────────────────────────────────────────────────
 const num = (v: unknown, fallback: number): number =>
   typeof v === 'number' && Number.isFinite(v) ? v : fallback;
@@ -206,13 +236,7 @@ export function combineFixes(
   }
 
   if (trims.length > 0) {
-    const summed = trims.reduce((s, t) => s + t.v, 0);
-    const gainDb = clamp(summed, -MAX_CUMULATIVE_GAIN_DB, MAX_CUMULATIVE_GAIN_DB);
-    if (trims.length > 1) {
-      log.push(`trim: summed ${trims.length} gain moves → ${fmtDb(gainDb)}`
-        + (gainDb !== summed ? ` (capped from ${fmtDb(summed)})` : ''));
-    }
-    base.trim = { ...base.trim, enabled: true, gainDb: Math.round(gainDb * 100) / 100 };
+    base.trim = { ...base.trim, enabled: true, gainDb: mergeTrims(trims, log) };
   }
 
   if (comps.length > 0) {
