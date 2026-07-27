@@ -18,6 +18,11 @@ export interface ListenFix {
    *  multiband, per-stem). Rendered as a disabled row — never silently
    *  dropped. Absent (old persisted rows) = applyable. */
   notApplicable?: boolean;
+  /** Priority/impact 0–100 + confidence 0–1 — the merge weights for the
+   *  weighted combiner (combineFixes). Absent on old persisted rows →
+   *  fixWeight falls back to a neutral middle. */
+  impact?: number | undefined;
+  confidence?: number | undefined;
 }
 
 /** Minimal shape the builder needs — `Move` satisfies it structurally. */
@@ -29,6 +34,8 @@ export interface FixSource {
   sev: string;
   specialist: string | null;
   ops: VerdictDspOp[];
+  impact?: number | undefined;
+  confidence?: number | undefined;
 }
 
 const fixesKey = (versionId: string) => `listenFixes:${versionId}`;
@@ -52,6 +59,8 @@ export function buildListenFixes(
       specialist: s.specialist,
       ops: s.ops,
       notApplicable: !isApplyable(s.ops),
+      impact: s.impact,
+      confidence: s.confidence,
     }));
 }
 

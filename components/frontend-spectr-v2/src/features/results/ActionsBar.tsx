@@ -2,7 +2,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { toast } from 'sonner';
 
 import { useSaveRackPreset } from '../listen-rack/useRackPresets';
-import { composeRack } from '../listen-rack/fixToRackPatch';
+import { combineFixes, fixWeight } from '../listen-rack/combineFixes';
 import { RACK_MANIFEST } from '../listen-rack/data';
 import { Icon } from './Icon';
 import type { Move } from './move-model';
@@ -47,8 +47,11 @@ export function ActionsBar({
   const createPreset = () => {
     if (!versionId || masterMoves.length === 0) return;
     // Compile the queued MASTER-scope chains into one rack chain (device-scoped
-    // moves belong to the DAW plan — recorded product decision).
-    const modules = composeRack(masterMoves.map((m) => m.ops));
+    // moves belong to the DAW plan — recorded product decision). Weighted merge:
+    // every queued fix contributes, weight = impact × confidence.
+    const { mod: modules } = combineFixes(
+      masterMoves.map((m) => ({ ops: m.ops, weight: fixWeight(m) })),
+    );
     const chain = { order: RACK_MANIFEST.map((m) => m.id), modules, masterBypass: false };
     savePreset.mutate(
       { name: `Fixes — ${trackName}`.slice(0, 60), chain },

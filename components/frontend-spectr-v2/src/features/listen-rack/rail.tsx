@@ -715,7 +715,7 @@ export function PlanPanel({ rs, versionId }: { rs: RackState; versionId?: string
     () => (versionId ? readListenFixes(versionId) : []),
     [versionId],
   );
-  const { isApplied, toggle } = useFixOverlay({
+  const { isApplied, toggle, mergeNotes } = useFixOverlay({
     versionId: versionId ?? '',
     fixes,
     applyRackMod: rs.applyRackMod,
@@ -776,6 +776,18 @@ export function PlanPanel({ rs, versionId }: { rs: RackState; versionId?: string
           </label>
         );
       })}
+      {mergeNotes.length > 0 && (
+        <div data-testid="plan-merge-notes" style={{ padding: '10px 12px', borderRadius: 9, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.12em', color: 'var(--muted)', fontWeight: 700, marginBottom: 6 }}>
+            HOW YOUR FIXES COMBINED
+          </div>
+          {mergeNotes.map((n, i) => (
+            <div key={i} className="mono" style={{ fontSize: 9.5, color: 'var(--muted)', lineHeight: 1.5 }}>
+              · {n}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
