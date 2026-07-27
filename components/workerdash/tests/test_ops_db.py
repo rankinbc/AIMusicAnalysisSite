@@ -165,6 +165,39 @@ def test_file_slots_purged_source_marked_not_fetched():
     assert slots["source"]["purged"] is True
 
 
+def test_file_slots_purged_applies_to_all_version_files():
+    # When raw_audio_purged_at is set, all version-level files (source, reference, als, stems)
+    # are marked purged=True, key=None. Analysis-level artifacts are unaffected.
+    row = ("v1.wav", "ref.wav", "proj.als",
+           {"drums": "stems/drums.wav", "bass": ["stems/bass_l.wav", "stems/bass_r.wav"]},
+           "2026-07-01T00:00:00Z",  # raw_audio_purged_at
+           "wf.webp", "spec.webp", "peaks.json", None)
+    conn = FakeConn([[row]])
+    slots = ops_db.file_slots(conn, "j1")
+
+    # All version-level files should be purged
+    assert slots["source"]["purged"] is True
+    assert slots["source"]["key"] is None
+    assert slots["reference"]["purged"] is True
+    assert slots["reference"]["key"] is None
+    assert slots["als"]["purged"] is True
+    assert slots["als"]["key"] is None
+    assert slots["stem:drums"]["purged"] is True
+    assert slots["stem:drums"]["key"] is None
+    assert slots["stem:bass:0"]["purged"] is True
+    assert slots["stem:bass:0"]["key"] is None
+    assert slots["stem:bass:1"]["purged"] is True
+    assert slots["stem:bass:1"]["key"] is None
+
+    # Analysis-level artifacts keep their keys unaffected by purge
+    assert slots["waveform_image"]["key"] == "wf.webp"
+    assert slots["waveform_image"]["purged"] is False
+    assert slots["spectrogram_image"]["key"] == "spec.webp"
+    assert slots["spectrogram_image"]["purged"] is False
+    assert slots["waveform_peaks"]["key"] == "peaks.json"
+    assert slots["waveform_peaks"]["purged"] is False
+
+
 def test_file_slots_anonymous_job_no_version():
     # job.file_path used when version_id is null (story 6.3 anon jobs)
     conn = FakeConn([[(None, None, None, None, None, None, None, None, "anon/j1/source.wav")]])

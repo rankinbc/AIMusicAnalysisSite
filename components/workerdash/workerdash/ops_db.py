@@ -140,8 +140,8 @@ def file_slots(conn, job_id):
     source_key = v_file if v_file else job_file
     slots = {
         "source": _slot(None if purged else source_key, "Source audio", purged=purged),
-        "reference": _slot(v_ref, "Reference track"),
-        "als": _slot(v_als, "Ableton project", download=True),
+        "reference": _slot(None if purged else v_ref, "Reference track", purged=purged),
+        "als": _slot(None if purged else v_als, "Ableton project", download=True, purged=purged),
         "waveform_image": _slot(wf_image, "Waveform image"),
         "spectrogram_image": _slot(spec_image, "Spectrogram image"),
         "waveform_peaks": _slot(peaks, "Waveform peaks (JSON)", download=True),
@@ -149,9 +149,9 @@ def file_slots(conn, job_id):
     for role, entry in (stem_paths or {}).items():
         if isinstance(entry, list):
             for i, key in enumerate(entry):
-                slots[f"stem:{role}:{i}"] = _slot(key, f"Stem: {role} ({i})")
+                slots[f"stem:{role}:{i}"] = _slot(None if purged else key, f"Stem: {role} ({i})", purged=purged)
         else:
-            slots[f"stem:{role}"] = _slot(entry, f"Stem: {role}")
+            slots[f"stem:{role}"] = _slot(None if purged else entry, f"Stem: {role}", purged=purged)
     return slots
 
 
