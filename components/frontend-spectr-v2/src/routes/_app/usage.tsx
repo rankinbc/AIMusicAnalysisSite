@@ -3,6 +3,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
 import { fetcher } from '../../api/fetcher';
+import { useEntitlements } from '../../api/hooks';
 import type { CreditsResponse } from '../../api/types';
 import { BuyCreditsCard } from '../../features/billing/BuyCreditsCard';
 import { CreditLedgerTable } from '../../features/billing/CreditLedgerTable';
@@ -20,6 +21,11 @@ export const Route = createFileRoute('/_app/usage')({
 });
 
 function UsagePage() {
+  // credits_enabled kill switch — the nav link is hidden when credits are
+  // off, but the route stays reachable by URL; render an honest note instead
+  // of meters/ledger/buy-credits that no longer mean anything.
+  const { data: entitlements } = useEntitlements();
+  const creditsOn = entitlements?.creditsEnabled !== false;
   const query = useInfiniteQuery({
     queryKey: ['billing', 'credits'],
     queryFn: ({ pageParam }) => {
@@ -46,6 +52,24 @@ function UsagePage() {
     // re-fetch the same value but we trust the first.
     return { entries: allEntries, balance: pages[0].balance };
   }, [query.data]);
+
+  if (!creditsOn) {
+    return (
+      <main className={s.shell}>
+        <header className={s.header}>
+          <span className="label">Usage</span>
+          <h1 className={s.title}>Full access</h1>
+        </header>
+        <section className={`card ${s.ledgerCard}`}>
+          <h2 className={s.cardTitle}>Everything is included right now</h2>
+          <p className={s.empty}>
+            Paid plans are switched off — every account has unlimited analyses
+            and the full coach, so there are no meters or credits to track.
+          </p>
+        </section>
+      </main>
+    );
+  }
 
   if (query.isLoading) {
     return (

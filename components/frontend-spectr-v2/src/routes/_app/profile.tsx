@@ -39,7 +39,11 @@ function ProfilePage() {
   // pro); AuthedUser.tier can't say 'credits'. null while loading/failed —
   // render nothing rather than guessing "Free".
   const { data: ent } = useEntitlements();
-  const tier: Tier | null = ent?.tier ?? null;
+  // credits_enabled kill switch — with plans off, everyone is forced "pro"
+  // server-side; the tier chip would be noise, so suppress it, and the
+  // Account plan card renders the "Full access" copy instead.
+  const creditsOn = ent?.creditsEnabled !== false;
+  const tier: Tier | null = creditsOn ? (ent?.tier ?? null) : null;
   const [tab, setTab] = useState<TabId>('overview');
 
   const songList = useMemo(() => songs ?? [], [songs]);
@@ -112,7 +116,7 @@ function ProfilePage() {
       <TabStrip current={tab} onChange={setTab} stats={stats} activityCount={activity.length} />
 
       {tab === 'overview' && (
-        <OverviewTab songs={songList} activity={activity} tier={tier} />
+        <OverviewTab songs={songList} activity={activity} tier={tier} creditsOn={creditsOn} />
       )}
       {tab === 'activity' && <ActivityTab activity={activity} />}
       {tab === 'settings' && (
@@ -219,9 +223,10 @@ interface OverviewProps {
   songs: SongDto[];
   activity: ActivityItemDto[];
   tier: Tier | null;
+  creditsOn: boolean;
 }
 
-function OverviewTab({ songs, activity, tier }: OverviewProps) {
+function OverviewTab({ songs, activity, tier, creditsOn }: OverviewProps) {
   const recent = useMemo(() => {
     return [...songs]
       .filter((song) => song.archivedAt == null)
@@ -252,7 +257,7 @@ function OverviewTab({ songs, activity, tier }: OverviewProps) {
       <div className={s.column}>
         <div className="card card-body">
           <SectionTitle>Account</SectionTitle>
-          <PlanCard tier={tier} />
+          <PlanCard tier={tier} creditsOn={creditsOn} />
         </div>
 
         <div className="card card-body">
@@ -274,8 +279,8 @@ function OverviewTab({ songs, activity, tier }: OverviewProps) {
 
 // E8.6 — the Account card renders the REAL tier's copy (plan-copy.ts owns the
 // per-tier wording + destination); unknown tier says so instead of "Free plan".
-function PlanCard({ tier }: { tier: Tier | null }) {
-  const copy = planCardCopy(tier);
+function PlanCard({ tier, creditsOn }: { tier: Tier | null; creditsOn: boolean }) {
+  const copy = planCardCopy(tier, creditsOn);
   return (
     <div className={s.planCard}>
       {copy.name && <div className={s.planName}>{copy.name}</div>}

@@ -6,8 +6,10 @@ genre-relative targets from ``genre_config``, and returns a ``Fix`` whose
 never rejects them). A solver returns ``None`` when no master-rack move applies
 (e.g. a too-quiet master, or an unknown slug) — the router leaves it unsolved.
 
-MVP roster = the master-rack winners (audio_only). Stems/MIDI moves and the
-"un-squash" of over-compression are leftover-advice, not rack moves.
+Roster: the master-rack winners (audio_only) plus the per-stem moves
+(data_tier "stems"), whose fixes target ONE stem rather than the master — the
+compiler fans those out into their own instruction block. The "un-squash" of
+over-compression is still leftover advice, not a rack move.
 """
 from __future__ import annotations
 
@@ -30,10 +32,11 @@ def _p1(a: dict[str, Any]) -> dict[str, Any]:
     return a.get("phase1") or {}
 
 
-def _fix(v: Verdict, ops: list[DspOp], outcome: str, *, target_type: str = "master") -> Fix:
+def _fix(v: Verdict, ops: list[DspOp], outcome: str, *,
+         target_type: str = "master", target_name: str = "master") -> Fix:
     return Fix(
         fix_id=f"fix.{v.problem_id or v.verdict_id}",
-        target={"type": target_type, "name": "master"},
+        target={"type": target_type, "name": target_name},
         dsp_chain=ops,
         expected_outcome=outcome,
     )
@@ -153,6 +156,103 @@ def solve_clarity(v: Verdict, a: dict[str, Any], genre: str | None) -> Fix | Non
                          "full separation needs stem-level work.")
 
 
+# ── stems -> per-stem moves (data_tier "stems") ──────────────────────────────
+# These are the first solvers that DON'T target the master. Their fixes carry
+# target {"type": "stem", "name": <role>}, which the preset compiler fans out
+# into a per-stem instruction block instead of a master-rack write.
+
+_BAND_CENTRE_HZ: dict[str, float] = {
+    "sub": 40.0, "sub_bass": 40.0, "bass": 110.0, "low_mid": 320.0,
+    "mid": 1000.0, "high_mid": 3500.0, "upper_mid": 3500.0,
+    "presence": 8000.0, "air": 14000.0,
+}
+
+# Who keeps the band when two stems collide, and who gets carved to make room.
+# Higher wins. Standard practice: the foundation and the focal element hold
+# their range; supporting texture moves out of the way. Genre-agnostic for now
+# — this belongs in genre-profiles.json (trance wants kick/bass over vocals,
+# pop wants the reverse) and is the obvious next refinement.
+_ROLE_PRIORITY: dict[str, int] = {
+    "vocals": 100, "kick": 95, "bass": 90, "snare": 80, "lead": 70,
+    "drums": 60, "hats": 50, "pad": 30, "other": 25, "fx": 20,
+}
+
+
+def _carve_depth_db(overlap: float) -> float:
+    """Overlap severity (0-1) -> carve depth. Conservative: a clash is a
+    reason to make room, not to gut the stem."""
+    return -_clamp(1.5 + overlap * 3.0, 1.5, 4.5)
+
+
+def solve_stem_clash(v: Verdict, a: dict[str, Any], genre: str | None) -> Fix | None:
+    """Carve the lower-priority stem in the contested band. The fix targets that
+    ONE stem — carving the master here would dip both sides and the element you
+    wanted to keep loses too."""
+    if _slug(v) != "stem_clash":
+        return None
+    stems = (a.get("phase4") or {}).get("stems") or {}
+    rows = [r for r in (stems.get("clash_matrix") or [])
+            if r.get("severity_tier") in ("warning", "critical")]
+    if not rows:
+        return None
+    worst = max(rows, key=lambda r: (r.get("severity_tier") == "critical",
+                                     float(r.get("overlap_severity") or 0.0)))
+    a_name, b_name = str(worst.get("stem_a")), str(worst.get("stem_b"))
+    a_role = str(worst.get("role_a") or a_name)
+    b_role = str(worst.get("role_b") or b_name)
+    # Lower priority gets carved; ties go to the alphabetically-later name so
+    # the choice is deterministic rather than dict-order dependent.
+    pa = _ROLE_PRIORITY.get(a_role, 40)
+    pb = _ROLE_PRIORITY.get(b_role, 40)
+    carve, keep = ((a_name, b_name) if (pa, a_name) < (pb, b_name) else (b_name, a_name))
+
+    band = str(worst.get("band") or "")
+    freq = _BAND_CENTRE_HZ.get(band)
+    if freq is None:
+        return None  # unknown band — don't invent a frequency
+    gain = _carve_depth_db(float(worst.get("overlap_severity") or 0.0))
+    op = DspOp(type="peaking_eq", params={"frequency_hz": freq, "gain_db": gain, "q": 1.4})
+    return _fix(
+        v, [op],
+        f"Carve {gain:.1f} dB at {freq:.0f} Hz on {carve} to make room for {keep} in the {band} band.",
+        target_type="stem", target_name=carve,
+    )
+
+
+def solve_stem_balance(v: Verdict, a: dict[str, Any], genre: str | None) -> Fix | None:
+    """Re-gain the flagged stem to the middle of its expected window. Sized from
+    the measurement, not a guess."""
+    if _slug(v) != "stem_balance":
+        return None
+    stems = (a.get("phase4") or {}).get("stems") or {}
+    flags = [f for f in (stems.get("balance_flags") or [])
+             if f.get("severity_tier") in ("warning", "critical")]
+    if not flags:
+        return None
+    worst = max(flags, key=lambda f: abs(float(f.get("observed") or 0.0)
+                                         - _window_mid(f.get("expected_range"))))
+    role = str(worst.get("role"))
+    observed = float(worst.get("observed") or 0.0)
+    gain = _clamp(_window_mid(worst.get("expected_range")) - observed, -12.0, 12.0)
+    if abs(gain) < 0.5:
+        return None  # already close enough — a sub-half-dB move is noise
+    op = DspOp(type="gain", params={"gain_db": round(gain, 2)})
+    direction = "up" if gain > 0 else "down"
+    return _fix(
+        v, [op],
+        f"Bring {role} {direction} {abs(gain):.1f} dB to sit inside its expected range.",
+        target_type="stem", target_name=role,
+    )
+
+
+def _window_mid(rng: Any) -> float:
+    try:
+        lo, hi = float(rng[0]), float(rng[1])
+    except (TypeError, ValueError, IndexError):
+        return 0.0
+    return (lo + hi) / 2.0
+
+
 SOLVERS: dict[str, Callable[[Verdict, dict[str, Any], str | None], "Fix | None"]] = {
     "clipping": solve_clipping,
     "loudness": solve_loudness,
@@ -162,4 +262,6 @@ SOLVERS: dict[str, Callable[[Verdict, dict[str, Any], str | None], "Fix | None"]
     "mono_compatibility": solve_mono_compat,
     "stereo_phase": solve_stereo_phase,
     "clarity": solve_clarity,
+    "stem_clash": solve_stem_clash,
+    "stem_balance": solve_stem_balance,
 }

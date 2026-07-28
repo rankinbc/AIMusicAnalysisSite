@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 
 import { extractApiMessage } from '../../api/error-utils';
 import { ApiError, fetcher } from '../../api/fetcher';
+import { useEntitlements } from '../../api/hooks';
 import type { BillingSummaryResponse } from '../../api/types';
 import { CancelDialog } from '../../features/billing/CancelDialog';
 import { DunningBanner } from '../../features/billing/DunningBanner';
@@ -45,6 +46,12 @@ function BillingPage() {
 function BillingSummary() {
   const qc = useQueryClient();
   const portal = useBillingPortal();
+  // credits_enabled kill switch — when off, everyone already has full access,
+  // so the free-tier upsell card is replaced with an honest note. Existing
+  // Pro subscribers still see their plan card (they must always be able to
+  // manage/cancel a live Stripe subscription).
+  const { data: entitlements } = useEntitlements();
+  const creditsOn = entitlements?.creditsEnabled !== false;
   const { data, isLoading, isError, refetch } = useQuery<BillingSummaryResponse>({
     queryKey: ['billing', 'me'],
     queryFn: () =>
@@ -118,7 +125,7 @@ function BillingSummary() {
         pending={portal.pending}
       />
 
-      {data.tier === 'free' && <FreeCard />}
+      {data.tier === 'free' && (creditsOn ? <FreeCard /> : <CreditsDisabledCard />)}
       {data.tier === 'pro' && !data.cancelAtPeriodEnd && (
         <ActivePlanCard
           summary={data}
@@ -136,6 +143,22 @@ function BillingSummary() {
         />
       )}
     </main>
+  );
+}
+
+function CreditsDisabledCard() {
+  return (
+    <section className={`card ${s.card}`}>
+      <div className={s.cardHead}>
+        <Pill tone="cyan">Full access</Pill>
+        <h2 className={s.cardTitle}>Everything is included right now</h2>
+      </div>
+      <p className={s.body}>
+        Paid plans are switched off — every account has unlimited analyses,
+        the full coach, every specialist, and stems / .als / reference
+        library. Nothing to buy, nothing to manage.
+      </p>
+    </section>
   );
 }
 

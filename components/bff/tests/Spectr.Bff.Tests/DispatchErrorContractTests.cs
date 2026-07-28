@@ -164,8 +164,10 @@ public sealed class DispatchErrorContractTests(WebApplicationFactory<Program> fa
     }
 
     private sealed class ThrowingEntitlementService(
-        AppDbContext db, IMemoryCache cache, ILogger<EntitlementService> logger)
-        : EntitlementService(db, cache, logger)
+        AppDbContext db, IMemoryCache cache,
+        Microsoft.Extensions.Configuration.IConfiguration config,
+        ILogger<EntitlementService> logger)
+        : EntitlementService(db, cache, config, logger)
     {
         public override Task<EntitlementsDto> ForAsync(Guid userId, CancellationToken ct)
             => throw new InvalidOperationException("entitlements backend down (test)");

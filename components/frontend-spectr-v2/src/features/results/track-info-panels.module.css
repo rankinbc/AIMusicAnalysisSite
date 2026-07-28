@@ -1,0 +1,106 @@
+/* structure strip (reused under the waveform and the loudness timeline) */
+.strip {
+  position: relative;
+  height: 20px;
+  margin-top: 6px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--surface-2, rgba(255, 255, 255, 0.03));
+}
+.seg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid var(--bg, rgba(0, 0, 0, 0.4));
+  background: hsl(var(--h) 60% 55% / 0.22);
+  overflow: hidden;
+}
+.segLabel {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: hsl(var(--h) 70% 78%);
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
+/* loudness over time */
+.timelineWrap {
+  display: flex;
+  flex-direction: column;
+}
+.timelineSvg {
+  width: 100%;
+  height: 120px;
+  display: block;
+}
+.tlArea {
+  fill: color-mix(in srgb, var(--cyan, var(--accent)) 12%, transparent);
+  stroke: none;
+}
+.tlLine {
+  fill: none;
+  stroke: var(--cyan, var(--accent));
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.tlRef {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  vector-effect: non-scaling-stroke;
+}
+.tlGrid {
+  stroke: rgba(255, 255, 255, 0.06);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.tlDivider {
+  stroke: rgba(255, 255, 255, 0.12);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* spatial mini-bars (stereo card) */
+.spatial {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.spCell {
+  flex: 1 1 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  background: var(--surface-2, rgba(255, 255, 255, 0.02));
+}
+.spLabel {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.spVal {
+  font-weight: 600;
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+/* translation chips */
+.transChips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.chip {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.14));
+  color: var(--muted);
+}
+.chip b {
+  color: var(--text);
+}

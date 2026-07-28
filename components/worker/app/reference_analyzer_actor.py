@@ -30,6 +30,7 @@ from audio_analysis.phases import phase1_universal
 
 from . import object_store
 from .db_sync import SessionFactory
+from .tasks_dramatiq import LOCAL_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,11 @@ def run_reference_analyzer(reference_id: str) -> None:
     # The BFF writes references under `audio/reference/{id}/source{ext}`.
     # Story 3.2: local-first against the storage root, S3/R2 fetch fallback
     # for presigned-uploaded references (object_store.resolve_local).
-    storage_root = os.environ.get("FILE_STORAGE_ROOT", "/app/storage")
+    # FILE_STORAGE_ROOT is a legacy compose-era override; every other actor
+    # resolves via STORAGE_LOCAL_ROOT (tasks_dramatiq.LOCAL_ROOT), and on a
+    # native Windows run the old "/app/storage" default silently orphaned
+    # every reference (file never found -> analyzed stays false).
+    storage_root = os.environ.get("FILE_STORAGE_ROOT") or LOCAL_ROOT
     try:
         local_path, fetched = object_store.resolve_local(file_path, storage_root)
     except Exception:
@@ -83,7 +88,9 @@ def run_reference_analyzer(reference_id: str) -> None:
     # ── C: run phase 1 ─────────────────────────────────────────────────────
     try:
         # Phase 1 expects a path string + optional progress callback.
-        result = phase1_universal.analyze(local_path)
+        # defer_structure: none of the persisted reference metrics need the
+        # allin1 structure pass — skipping it cuts ~7 min of Docker work.
+        result = phase1_universal.analyze(local_path, defer_structure=True)
     except Exception as exc:
         logger.exception("phase1 failed for reference=%s: %s", reference_id, exc)
         _mark_failed(rid, str(exc))
@@ -91,8 +98,13 @@ def run_reference_analyzer(reference_id: str) -> None:
     finally:
         object_store.cleanup_local(fetched)
 
-    data = result.get("data") if isinstance(result, dict) else None
-    if not isinstance(data, dict):
+    # phase1_universal.analyze returns the metrics dict FLAT (lufs, bpm, …);
+    # the historical {status, data} envelope is long gone. Accept both so a
+    # future re-wrap doesn't silently fail the way the flat shape did here.
+    data = result if isinstance(result, dict) else None
+    if isinstance(data, dict) and isinstance(data.get("data"), dict):
+        data = data["data"]
+    if not isinstance(data, dict) or "lufs" not in data:
         logger.warning("phase1 produced no data for reference=%s", reference_id)
         _mark_failed(rid, "phase1 produced no data")
         return

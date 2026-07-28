@@ -181,9 +181,79 @@ def test_thin_and_bright_silent_without_thin_low_end():
     assert RE.thin_and_bright(a, {}) is None
 
 
+# ── C8 hot_master (loud + peaks/clipping; absorbs the three level symptoms) ──
+
+def _hot():
+    """Loud master with peaks over and hard clipping, dynamics NOT crushed
+    (crest/LRA healthy) so loudness_war stands aside."""
+    return {"track_id": "t", "phase1": {
+        "lufs": -8.0, "true_peak_db": 0.4, "clipping_detected": True,
+        "clipped_sample_count": 2400, "crest_factor": 9.0, "loudness_range_lu": 7.0}}
+
+
+_HOT_CHILDREN = ["true_peak_overshoot", "clipping_count", "loudness_vs_target"]
+
+
+def _run_hot(a):
+    return RE.evaluate_problems(
+        a,
+        singles=[(s, getattr(RE, s)) for s in _HOT_CHILDREN],
+        composites=[("hot_master", _HOT_CHILDREN, RE.hot_master)],
+    )
+
+
+def test_hot_master_absorbs_all_three_level_symptoms():
+    a = _hot()
+    out = _run_hot(a)
+    s = _slugs(out)
+    assert s == {"hot_master"}
+    hm = next(v for v in out if v.problem_id.endswith("hot_master.0"))
+    assert hm.severity == "severe" and hm.confidence == 0.95 and hm.suspected is False
+    assert len(hm.related_verdict_ids) == 3  # audit trail: every child traceable
+    assert validate_verdict(hm, a).ok
+
+
+def test_hot_master_outranks_the_children_it_replaced():
+    a = _hot()
+    hm = RE.hot_master(a, {})
+    children = [v for v in (getattr(RE, s)(a) for s in _HOT_CHILDREN) if v is not None]
+    assert children  # sanity: they really would have fired
+    assert hm.priority_score >= max(c.priority_score for c in children)
+
+
+def test_hot_master_stands_down_for_loudness_war():
+    # Same hot master, but dynamics crushed too -> over-limiting is the sharper
+    # diagnosis and C1 owns it. Two composites must never both describe it.
+    a = _hot()
+    a["phase1"].update({"crest_factor": 3.0, "loudness_range_lu": 2.9})
+    assert RE.hot_master(a, {}) is None
+    assert RE.loudness_war(a, {}) is not None
+
+
+def test_hot_master_silent_when_loud_but_clean():
+    a = _hot()
+    a["phase1"].update({"true_peak_db": -2.0, "clipping_detected": False,
+                        "clipped_sample_count": 0})
+    assert RE.hot_master(a, {}) is None
+    # ...and the level note survives on its own.
+    assert RE.loudness_vs_target(a) is not None
+
+
+def test_hot_master_silent_when_peaks_hot_but_level_on_target():
+    a = _hot()
+    a["phase1"]["lufs"] = -14.0
+    assert RE.hot_master(a, {}) is None
+
+
+def test_hot_master_silent_for_a_quiet_master():
+    a = _hot()
+    a["phase1"]["lufs"] = -22.0
+    assert RE.hot_master(a, {}) is None
+
+
 # ── global registration: all five are wired into the module registry ─────────
 
 def test_all_five_composites_registered():
     registered = {slug for slug, _suppresses, _fn in RE._COMPOSITES}
     assert {"loudness_war", "congested_mix", "phantom_width",
-            "lifeless_at_source", "thin_and_bright"} <= registered
+            "lifeless_at_source", "thin_and_bright", "hot_master"} <= registered

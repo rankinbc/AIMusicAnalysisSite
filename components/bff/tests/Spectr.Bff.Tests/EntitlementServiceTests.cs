@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Spectr.Bff.Services;
@@ -65,7 +66,11 @@ public sealed class EntitlementServiceTests
             db.FeatureFlags.Add(new FeatureFlag { Name = "history_depth_credits", Value = "30" });
             try { await db.SaveChangesAsync(); } catch { /* seeded by migration */ }
         }
-        return new EntitlementService(db, cache, NullLogger<EntitlementService>.Instance);
+        // Host config carries the process-wide Credits:Enabled=true baseline
+        // (TestProcessBaseline) so the DB's credits_enabled='false' seed can't
+        // flip these tier assertions into premium mode.
+        var cfg = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+        return new EntitlementService(db, cache, cfg, NullLogger<EntitlementService>.Instance);
     }
 
     // ── Case (a) free user, 0 used → remaining = 3 ──────────────────────────
@@ -283,7 +288,8 @@ public sealed class EntitlementServiceTests
             using var scope = _factory.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var cache = new MemoryCache(new MemoryCacheOptions());
-            var svc = new EntitlementService(db, cache, NullLogger<EntitlementService>.Instance);
+            var cfg = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+            var svc = new EntitlementService(db, cache, cfg, NullLogger<EntitlementService>.Instance);
 
             // First call — free, 0 used.
             var first = await svc.ForAsync(userId, CancellationToken.None);
@@ -406,6 +412,140 @@ public sealed class EntitlementServiceTests
             var ent = await svc.ForAsync(userId, CancellationToken.None);
             Assert.Equal("free", ent.Tier);
             Assert.False(ent.StemsEnabled);
+        }
+        finally { await CleanupAsync(userId); }
+    }
+
+    // ── credits_enabled kill switch (k) — config "false" ⇒ everyone premium ─
+    // The rest of the suite runs with the process-wide Credits:Enabled=true
+    // baseline (TestProcessBaseline); these cases exercise the switch itself.
+    [SkippableFact]
+    public async Task CreditsDisabled_FreeUserResolvesPremium()
+    {
+        await TestDb.RequireAsync(_factory);
+        var userId = await SeedUserAsync("ent-k");
+        try
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var cfg = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                { ["Credits:Enabled"] = "false" })
+                .Build();
+            var svc = new EntitlementService(
+                db, new MemoryCache(new MemoryCacheOptions()), cfg,
+                NullLogger<EntitlementService>.Instance);
+
+            // A plain free user (no sub, no credits) resolves as premium.
+            var ent = await svc.ForAsync(userId, CancellationToken.None);
+            Assert.Equal("pro", ent.Tier);
+            Assert.Null(ent.AnalysesRemaining);
+            Assert.Null(ent.HistoryDepth);
+            Assert.True(ent.StemsEnabled);
+            Assert.True(ent.AlsEnabled);
+            Assert.True(ent.FullVerdictsEnabled);
+            Assert.False(ent.CreditsEnabled);
+            // Coach is truly unlimited — NOT pro's pooled-monthly cap.
+            Assert.Equal("unlimited", ent.Coach!.Scope);
+            Assert.Equal(int.MaxValue, ent.CoachRemaining);
+            Assert.False(ent.Coach.CapReached);
+        }
+        finally { await CleanupAsync(userId); }
+    }
+
+    // ── kill switch (l) — DB flag path: no config override, row 'false' ─────
+    // Prod flips credits via the feature_flags row alone; prove that path.
+    // Safe to mutate the shared row: every other test reads through the
+    // Credits:Enabled=true config baseline, which wins over the DB value.
+    [SkippableFact]
+    public async Task CreditsDisabled_DbFlagAlone_ResolvesPremium()
+    {
+        await TestDb.RequireAsync(_factory);
+        var userId = await SeedUserAsync("ent-l");
+        string? originalValue = null;
+        var rowExisted = false;
+        try
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var flag = await db.FeatureFlags.FindAsync("credits_enabled");
+            if (flag is not null) { rowExisted = true; originalValue = flag.Value; flag.Value = "false"; }
+            else db.FeatureFlags.Add(new FeatureFlag { Name = "credits_enabled", Value = "false" });
+            await db.SaveChangesAsync();
+
+            var emptyCfg = new ConfigurationBuilder().Build();
+            var svc = new EntitlementService(
+                db, new MemoryCache(new MemoryCacheOptions()), emptyCfg,
+                NullLogger<EntitlementService>.Instance);
+            var ent = await svc.ForAsync(userId, CancellationToken.None);
+            Assert.Equal("pro", ent.Tier);
+            Assert.False(ent.CreditsEnabled);
+        }
+        finally
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var flag = await db.FeatureFlags.FindAsync("credits_enabled");
+            if (flag is not null)
+            {
+                if (rowExisted) flag.Value = originalValue!;
+                else db.FeatureFlags.Remove(flag);
+                await db.SaveChangesAsync();
+            }
+            await CleanupAsync(userId);
+        }
+    }
+
+    // ── kill switch (m) — config "true" beats a DB row of 'false' ───────────
+    // This is the exact mechanism the whole test suite rests on.
+    [SkippableFact]
+    public async Task CreditsEnabled_ConfigTrue_WinsOverDbFalse()
+    {
+        await TestDb.RequireAsync(_factory);
+        var userId = await SeedUserAsync("ent-m");
+        try
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            // Regardless of the row's live value, an explicit config "true"
+            // must keep the credit system on.
+            var cfg = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                { ["Credits:Enabled"] = "true" })
+                .Build();
+            var svc = new EntitlementService(
+                db, new MemoryCache(new MemoryCacheOptions()), cfg,
+                NullLogger<EntitlementService>.Instance);
+            var ent = await svc.ForAsync(userId, CancellationToken.None);
+            Assert.Equal("free", ent.Tier);
+            Assert.True(ent.CreditsEnabled);
+        }
+        finally { await CleanupAsync(userId); }
+    }
+
+    // ── kill switch (n) — CoachCapService returns unlimited, not pro pool ───
+    [SkippableFact]
+    public async Task CreditsDisabled_CoachCapUnlimited()
+    {
+        await TestDb.RequireAsync(_factory);
+        var userId = await SeedUserAsync("ent-n");
+        try
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var cfg = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                { ["Credits:Enabled"] = "false" })
+                .Build();
+            var ents = new EntitlementService(
+                db, new MemoryCache(new MemoryCacheOptions()), cfg,
+                NullLogger<EntitlementService>.Instance);
+            var caps = new CoachCapService(db, ents);
+
+            var state = await caps.ResolveAsync(userId, Guid.NewGuid(), CancellationToken.None);
+            Assert.Equal(CoachCapService.ScopeUnlimited, state.Scope);
+            Assert.Equal(int.MaxValue, state.Limit);
+            Assert.False(state.CapReached);
         }
         finally { await CleanupAsync(userId); }
     }

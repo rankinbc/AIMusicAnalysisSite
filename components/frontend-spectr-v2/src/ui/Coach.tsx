@@ -344,3 +344,65 @@ export function CoachMini({ size = 22, color = '#00e5b0' }: CoachMiniProps) {
     </svg>
   );
 }
+
+interface CoachStaticProps {
+  size?: number;
+}
+
+/** Static full-helmet Coach (v4 handoff `ar-assets/coach.svg`) — for buttons
+ *  and links where the animated `Coach` doesn't fit. No rAF, no motion. */
+export function CoachStatic({ size = 17 }: CoachStaticProps) {
+  const uid = useMemo(() => Math.random().toString(36).slice(2, 8), []);
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 80 80"
+      role="img"
+      aria-label="The Coach"
+      style={{ display: 'block' }}
+    >
+      <defs>
+        <linearGradient id={`cbs-h-${uid}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#1c2433" />
+          <stop offset="0.5" stopColor="#11151d" />
+          <stop offset="1" stopColor="#070a12" />
+        </linearGradient>
+        <linearGradient id={`cbs-v-${uid}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#00f3bd" />
+          <stop offset="0.55" stopColor="#00e5b0" />
+          <stop offset="1" stopColor="#00e5b0" stopOpacity="0.5" />
+        </linearGradient>
+      </defs>
+      <line x1="40" y1="2" x2="40" y2="10" stroke="#00e5b0" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="40" cy="3" r="2.6" fill="#00e5b0" />
+      <path
+        d="M14 22 L24 16 L40 14 L56 16 L66 22 L68 32 L66 48 L60 60 L52 68 L40 70 L28 68 L20 60 L14 48 L12 32 Z"
+        fill={`url(#cbs-h-${uid})`}
+        stroke="rgba(0,229,176,0.5)"
+        strokeWidth="1.4"
+        strokeLinejoin="miter"
+      />
+      <rect x="4" y="30" width="9" height="20" rx="2.5" fill="#11151d" stroke="rgba(0,229,176,0.55)" strokeWidth="1.1" />
+      <circle cx="8.5" cy="40" r="2" fill="#00e5b0" />
+      <rect x="67" y="30" width="9" height="20" rx="2.5" fill="#11151d" stroke="rgba(0,229,176,0.55)" strokeWidth="1.1" />
+      <circle cx="71.5" cy="40" r="2" fill="#00f3bd" />
+      <path
+        d="M16 30 L26 26 L40 25 L54 26 L64 30 L62 42 L56 46 L40 47 L24 46 L18 42 Z"
+        fill="#0b1714"
+        stroke={`url(#cbs-v-${uid})`}
+        strokeWidth="1.4"
+        strokeLinejoin="miter"
+      />
+      <rect x="24" y="31.5" width="3.5" height="9" rx="1" fill="#00e5b0" opacity="0.85" />
+      <rect x="30.5" y="29" width="3.5" height="14" rx="1" fill="#00e5b0" opacity="0.95" />
+      <rect x="37" y="30.5" width="3.5" height="11" rx="1" fill="#00f3bd" />
+      <rect x="43.5" y="32.5" width="3.5" height="7" rx="1" fill="#00e5b0" opacity="0.9" />
+      <rect x="50" y="30" width="3.5" height="12" rx="1" fill="#00e5b0" opacity="0.85" />
+      <rect x="30" y="54" width="20" height="10" rx="2" fill="#0b1714" stroke="rgba(0,229,176,0.4)" strokeWidth="0.9" />
+      {[32, 36, 40, 44, 48].map((x) => (
+        <line key={x} x1={x} y1="56" x2={x} y2="62" stroke="rgba(0,229,176,0.55)" strokeWidth="1.1" strokeLinecap="round" />
+      ))}
+    </svg>
+  );
+}

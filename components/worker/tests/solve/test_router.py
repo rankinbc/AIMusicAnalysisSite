@@ -25,7 +25,13 @@ def test_route_by_category_and_tier():
 
 def test_route_returns_none_for_unmapped_tier_or_category():
     assert Rt.route(_p("robotic_velocity", "humanization", data_tier="project_midi")) is None
-    assert Rt.route(_p("stem_clash", "frequency_collision", data_tier="stems")) is None
+    # A category that exists at audio_only but has no stems-tier solver.
+    assert Rt.route(_p("mud_buildup", "frequency_balance", data_tier="stems")) is None
+
+
+def test_stems_tier_routes_to_the_per_stem_solvers():
+    assert Rt.route(_p("stem_clash", "frequency_collision", data_tier="stems")) == "stem_clash"
+    assert Rt.route(_p("stem_balance", "gain_staging", data_tier="stems")) == "stem_balance"
 
 
 def test_observations_not_routed():

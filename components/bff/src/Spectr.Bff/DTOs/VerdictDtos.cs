@@ -40,6 +40,12 @@ public sealed record VerdictDto(
     bool Suspected,
     JsonElement? Where,
     string? Refines,
+    // Priority-score breakdown (results v4). Null on legacy rows — the UI
+    // degrades to score-only. score ≡ round(base × catW × scopeM) on new rows.
+    int? PriorityBase,
+    double? PriorityCategoryWeight,
+    double? PriorityScopeMultiplier,
+    string? Scope,
     DateTimeOffset CreatedAt,
     VerdictUserStateDto UserState);
 

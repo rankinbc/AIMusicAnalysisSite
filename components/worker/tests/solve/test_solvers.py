@@ -165,3 +165,80 @@ def test_solvers_registry_keys():
         "clipping", "loudness", "frequency_balance", "low_end", "stereo_field",
         "mono_compatibility", "stereo_phase", "clarity",
     } <= set(S.SOLVERS)
+
+
+# ── stems tier — the first solvers that don't target the master ──────────────
+
+def _sp(slug, category):
+    """A stems-tier problem. Evidence points at the stems block, which the
+    fixtures below always populate."""
+    return _problem(
+        track_id="t", slug=slug, severity="severe", category=category,
+        data_tier="stems", headline="h", summary="s", why_it_matters="w",
+        evidence=[Evidence(metric="phase4.stems.status", value=None, label="ok")],
+    )
+
+
+def _stem_analysis(clash=None, balance=None, per_stem=None):
+    return {"track_id": "t", "phase1": {}, "phase4": {"stems": {
+        "status": "ok",
+        "clash_matrix": clash or [],
+        "balance_flags": balance or [],
+        "per_stem": per_stem or {},
+    }}}
+
+
+def test_stem_clash_carves_the_lower_priority_stem():
+    a = _stem_analysis(clash=[{
+        "stem_a": "bass", "stem_b": "pad", "role_a": "bass", "role_b": "pad",
+        "band": "low_mid", "overlap_severity": 0.8, "severity_tier": "critical",
+    }])
+    fix = S.solve_stem_clash(_sp("stem_clash", "frequency_collision"), a, None)
+    assert fix is not None
+    # The pad moves out of the way; the bass keeps its range.
+    assert fix.target == {"type": "stem", "name": "pad"}
+    op = fix.dsp_chain[0]
+    assert op.type == "peaking_eq"
+    assert op.params["frequency_hz"] == 320.0
+    assert -4.5 <= op.params["gain_db"] < 0
+
+
+def test_stem_clash_choice_does_not_depend_on_argument_order():
+    row = {"band": "low_mid", "overlap_severity": 0.5, "severity_tier": "warning"}
+    fwd = S.solve_stem_clash(_sp("stem_clash", "frequency_collision"), _stem_analysis(
+        clash=[{**row, "stem_a": "bass", "stem_b": "pad",
+                "role_a": "bass", "role_b": "pad"}]), None)
+    rev = S.solve_stem_clash(_sp("stem_clash", "frequency_collision"), _stem_analysis(
+        clash=[{**row, "stem_a": "pad", "stem_b": "bass",
+                "role_a": "pad", "role_b": "bass"}]), None)
+    assert fwd is not None and rev is not None
+    assert fwd.target == rev.target == {"type": "stem", "name": "pad"}
+
+
+def test_stem_clash_declines_an_unknown_band():
+    fix = S.solve_stem_clash(_sp("stem_clash", "frequency_collision"), _stem_analysis(
+        clash=[{"stem_a": "a", "stem_b": "b", "band": "wobble",
+                "overlap_severity": 0.9, "severity_tier": "critical"}]), None)
+    assert fix is None  # never invent a frequency
+
+
+def test_stem_balance_regains_to_the_middle_of_the_window():
+    a = _stem_analysis(
+        balance=[{"role": "pad", "metric": "rms_db", "observed": -8.0,
+                  "expected_range": [-20.0, -14.0], "direction": "too_high",
+                  "severity_tier": "warning"}],
+        per_stem={"pad": {"rms_db": -8.0}})
+    fix = S.solve_stem_balance(_sp("stem_balance", "gain_staging"), a, None)
+    assert fix is not None
+    assert fix.target == {"type": "stem", "name": "pad"}
+    # midpoint(-20, -14) = -17; observed -8 -> come down 9 dB.
+    assert fix.dsp_chain[0].params["gain_db"] == -9.0
+
+
+def test_stem_balance_declines_a_move_too_small_to_matter():
+    a = _stem_analysis(
+        balance=[{"role": "pad", "metric": "rms_db", "observed": -17.2,
+                  "expected_range": [-20.0, -14.0], "direction": "too_low",
+                  "severity_tier": "warning"}],
+        per_stem={"pad": {"rms_db": -17.2}})
+    assert S.solve_stem_balance(_sp("stem_balance", "gain_staging"), a, None) is None

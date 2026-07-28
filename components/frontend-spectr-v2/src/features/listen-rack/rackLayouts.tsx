@@ -31,12 +31,19 @@ function ChainCap({ label, right }: { label: string; right?: boolean }) {
 
 function PitchLane({ rs }: { rs: RackState }) {
   const m = PITCH_MODULE, st = rs.mod.pitch, on = st.enabled;
+  // Net playback speed after tempo compensation: detune scales the rate by
+  // 2^(st/12), the Tempo knob multiplies on top. 1.00× = original speed.
+  const netRate = (Number(st.tempo) || 1) * Math.pow(2, ((Number(st.semitones) || 0) * 100 + (Number(st.cents) || 0)) / 1200);
+  const netIsUnity = Math.abs(netRate - 1) < 0.005;
   return (
     <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 14, padding: '10px 14px', borderRadius: 9, background: 'rgba(167,139,250,0.04)', border: '1px solid rgba(167,139,250,0.22)' }}>
       <ModuleIcon glyph={m.glyph} accent={m.accent} on={on} size={24} />
       <div style={{ minWidth: 120 }}>
         <div style={{ fontSize: 12, fontWeight: 700 }}>Pitch <span className="mono" style={{ fontSize: 8.5, color: 'var(--violet)', marginLeft: 4 }}>SEPARATE LANE</span></div>
-        <div className="mono" style={{ fontSize: 8.5, color: 'var(--muted)' }}>not an insert · pitch + tempo coupled</div>
+        <div className="mono" style={{ fontSize: 8.5, color: 'var(--muted)' }}>not an insert · tempo knob offsets pitch speed</div>
+        <div className="mono" title="Actual playback speed: tempo × 2^(semitones/12). Dial Tempo until this reads 1.00× to keep the original speed at the new pitch." style={{ fontSize: 8.5, color: on ? (netIsUnity ? 'var(--green, #4ade80)' : 'var(--violet)') : 'var(--muted)' }}>
+          net speed {netRate.toFixed(2)}×
+        </div>
       </div>
       <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginLeft: 'auto' }}>
         {m.params.map((p) => <ParamControl key={p.key} p={p} value={st[p.key]} accent={m.accent} dim={!on} knobSize={38} onChange={(k, v) => rs.setParam('pitch', k, v)} />)}

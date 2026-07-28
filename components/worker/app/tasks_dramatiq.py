@@ -20,6 +20,7 @@ import logging
 import os
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -282,17 +283,40 @@ def analyze_audio_job(job_id: str) -> None:
         # stem_paths is {role: [key,...]} (or legacy {role: "key"}). Resolve
         # every entry — this also fixes the pre-3.2 inconsistency where stems
         # were passed RAW (CWD-relative) while classify joined LOCAL_ROOT.
+        # Resolution runs on a thread pool: the S3 branch of resolve_local is
+        # a network download per key (up to 100 — previously strictly serial),
+        # while local-disk resolution is a path join and unaffected. IO-bound
+        # threads only — no numeric work here, so the OMP=1 pins stay valid.
+        # A failed resolve raises out of as_completed and fails the whole job,
+        # same as the old serial loop. Temp files are appended to `fetched`
+        # inside the pool thread (before the future resolves) so even fetches
+        # that finish after a sibling failure are cleaned up by the finally.
         resolved_stems: dict | None = None
         if stem_paths:
+            def _resolve_stem(key: str) -> str:
+                local, f = object_store.resolve_local(key, LOCAL_ROOT)
+                if f is not None:
+                    fetched.append(f)  # list.append is atomic under the GIL
+                return local
+
+            flat: list[tuple[object, int, str]] = []
+            for role, entry in stem_paths.items():
+                keys = entry if isinstance(entry, list) else [entry]
+                flat.extend((role, i, str(k)) for i, k in enumerate(keys))
+
+            resolved_by_slot: dict[tuple[object, int], str] = {}
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                futures = {
+                    pool.submit(_resolve_stem, key): (role, i)
+                    for role, i, key in flat
+                }
+                for fut in as_completed(futures):
+                    resolved_by_slot[futures[fut]] = fut.result()
+
             resolved_stems = {}
             for role, entry in stem_paths.items():
                 keys = entry if isinstance(entry, list) else [entry]
-                out: list[str] = []
-                for k in keys:
-                    local, f = object_store.resolve_local(str(k), LOCAL_ROOT)
-                    if f is not None:
-                        fetched.append(f)
-                    out.append(local)
+                out = [resolved_by_slot[(role, i)] for i in range(len(keys))]
                 resolved_stems[role] = out if isinstance(entry, list) else out[0]
 
         logger.info("analyze_audio_job: pipeline begin job=%s file=%s", job_id, file_abs)
@@ -394,7 +418,7 @@ def analyze_audio_job(job_id: str) -> None:
             rule_engine_version=RULE_ENGINE_VERSION,
             validator_version=VALIDATOR_VERSION,
             prompt_set_version=prompt_set_version,
-            phase_durations={},
+            phase_durations=result_dict.get("phase_durations") or {},
             spectrogram_image_path=spectrogram_path,
             waveform_image_path=waveform_path,
             # EF entities set created_at via a C#-side default which doesn't

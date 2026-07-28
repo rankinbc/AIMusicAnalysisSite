@@ -55,7 +55,7 @@
         "pan_estimate": 0.0,
         "peak_db": -7.96,
         "rms_db": -10.97,
-        "spectral_centroid_hz": 116.19,
+        "spectral_centroid_hz": 119.24,
         "stereo_width": 0.0
       },
       "hats": {
@@ -80,7 +80,7 @@
         "pan_estimate": 0.0,
         "peak_db": -5.08,
         "rms_db": -34.37,
-        "spectral_centroid_hz": 7458.69,
+        "spectral_centroid_hz": 14305.26,
         "stereo_width": 0.0
       },
       "kick": {
@@ -105,7 +105,7 @@
         "pan_estimate": -0.0,
         "peak_db": -4.64,
         "rms_db": -24.17,
-        "spectral_centroid_hz": 8376.03,
+        "spectral_centroid_hz": 182.17,
         "stereo_width": 0.0
       },
       "vocals": {
@@ -130,7 +130,7 @@
         "pan_estimate": 0.05,
         "peak_db": -10.46,
         "rms_db": -13.47,
-        "spectral_centroid_hz": 506.82,
+        "spectral_centroid_hz": 501.82,
         "stereo_width": 0.05
       }
     },

@@ -11,7 +11,10 @@ A music producer web app where users register/log in, upload audio files (MP3, F
 
 **v1 stack (legacy — being phased out):**
 - **`api/`** — FastAPI REST API. Still hosts the verdict pipeline + Anthropic API client. Will fold into BFF/worker once dramatiq has the verdict actor pattern stabilized.
-- **`frontend-spectr/`** — vanilla JSX SPA. Used by older flows; v2 frontend is the new path forward.
+
+Both legacy frontends (`frontend-spectr/` vanilla JSX, and the never-built
+`frontend/` TS/Tailwind placeholder) were **deleted 2026-07-28**. The v2
+frontend is the only one. They remain in git history if anything is needed back.
 
 Postgres 16 + Redis 7 are shared. Both stacks talk to the same DB.
 
@@ -71,7 +74,6 @@ AIMusicAnalysisSite/
 │   ├── analysis/             (Python audio analysis package — 7-phase pipeline)
 │   ├── shared/               (aimusic-shared: SQLAlchemy ORM models — worker side only; BFF has parallel EF Core entities)
 │   ├── api/                  (LEGACY — FastAPI; still hosts verdict pipeline + Anthropic CLI client until migration completes)
-│   ├── frontend-spectr/      (LEGACY — vanilla JSX SPA)
 │   └── workerdash/           (Standalone local dramatiq worker dashboard — see its README)
 ├── data/
 │   ├── uploads/              (Staged audio uploads — dev local; S3 in prod)
@@ -254,10 +256,6 @@ AIMusicAnalysisSite/
 - **Install before api and worker**: both `components/api/requirements.txt` and `components/worker/requirements.txt` list `aimusic-shared>=0.1.0`. Run `pip install -e components/shared` first in any fresh environment.
 - **api re-exports `Base` for backward compat**: `components/api/app/db.py` does `from aimusic_shared.models import Base` and re-exports it. Don't duplicate `Base` in api.
 
-### frontend-spectr (LEGACY — vanilla JSX, kept for reference)
-
-The original vanilla-JSX SPA. The v2 frontend at `components/frontend-spectr-v2/` is the new path. Don't add new features here without flagging — the v2 frontend supersedes it. Some helpers and Anthropic-CLI verdict UI still live here pending migration.
-
 ### workerdash (dev ops tool)
 
 **Purpose**: Standalone local web dashboard for the dramatiq worker: queue
@@ -270,43 +268,6 @@ token/cost breakdown via `llm_calls` rollup.
 **Outputs**: http://127.0.0.1:5999 (localhost only, no auth)
 **How to run**: `cd components/workerdash && python -m workerdash`
 
-### frontend (placeholder — TS/Tailwind/shadcn stack — never built)
-
-**Purpose**: React 19 + Vite 8 SPA. Auth screens, upload page (drag-drop, progress bar, optional reference track, optional track name), job progress page (SSE-driven 7-phase display), interactive report page (mix score A-F with color-coded score, BPM+Key+Mono metadata bar, danceability score, coach panel, streaming readiness with technical checks, frequency chart, stereo gauges, stem clash table, reference delta, genre radar, arrangement advisor, Copy Link button). History page, track version history page with Recharts LineChart, public shared report page.
-**Inputs**: none (calls `api` via REST + SSE)
-**Outputs**: none (renders in browser)
-**How to run**: `cd components/frontend && npm run dev` (Vite dev server on port 5173, proxies `/api` to `localhost:8000`)
-
-**Routes added in v1.1:**
-- `/history` — table of all past jobs with status/score/grade (protected)
-- `/tracks` — track version history: Recharts LineChart + version table grouped by track name (protected)
-- `/reports/share/:token` — public unauthenticated shared report view
-
-**Components added in v1.1:**
-- `features/report/CoachPanel.tsx` — coach avatar + numbered fix list
-- `pages/HistoryPage.tsx` — job history table
-- `pages/TrackHistoryPage.tsx` — track version chart + table
-- `pages/SharedReportPage.tsx` — public report via share token
-
-**Components added in v1.2 (verdict pipeline):**
-- `features/verdicts/VerdictsPanel.tsx` — replaces ExpertsPanel on report pages
-- `features/verdicts/SummaryCard.tsx` — top-3 + release-readiness banner
-- `features/verdicts/VerdictCard.tsx`, `EvidenceChips.tsx`, `FixSummary.tsx`,
-  `SeverityBadge.tsx`, `VerdictSkeleton.tsx`, `VerdictList.tsx`
-- `features/verdicts/useVerdictStream.ts` — SSE hook for verdict events
-- `types/verdicts.ts` — hand-mirrored from Pydantic (`components/shared/aimusic_shared/verdicts/models.py`); regenerate via `npm run gen-types` (note: pydantic2ts CLI currently fails on Windows — hand-edit instead)
-
-**StreamingReadiness now accepts** `truePeakDb` and `clippingDetected` props and renders True Peak (<-1.0 dBTP) and No Clipping rows in addition to platform LUFS rows. Platforms: Spotify, Apple Music, YouTube, Tidal, Amazon Music, SoundCloud, Beatport.
-
-**Gotchas:**
-- **Access token in React state ONLY — never localStorage**: localStorage is readable by any injected script (XSS). Refresh token is in httpOnly cookie set server-side — never touched by JS.
-- **Axios dual-interceptor: `isRefreshing` flag + request queue**: concurrent 401s must issue only one `/auth/refresh`. Add `_retry` flag to `AxiosRequestConfig` to prevent infinite loop on refresh failure.
-- **XHR not fetch for upload progress**: Fetch API has no upload progress events. Register `xhr.upload.addEventListener('progress', cb)` before `xhr.open()`. Use `File.slice()` for chunking — never `FileReader.readAsArrayBuffer()` on 200 MB.
-- **EventSource requires specific CORS origin (not `*`)**: `withCredentials: true` on EventSource. The API SSE endpoint must set explicit origin, not wildcard.
-- **Tailwind safelist for dynamic Recharts class names**: grade colors (A=green → F=red), pass/fail badges, and phase animation classes are runtime-computed strings — add to `safelist` in `tailwind.config.ts` or Tailwind purges them.
-- **Silent refresh before protected routes render**: `AuthContext` calls `/auth/refresh` on mount and sets `isLoading=true` until complete. `ProtectedLayout` shows a loader (not redirect) while loading to prevent flash-of-redirect for valid sessions.
-- **SSE hook cleanup is mandatory**: `useJobStream` must call `eventSource.close()` in `useEffect` cleanup — navigating away leaves dangling EventSource otherwise.
-
 ---
 
 ## Validation gates
@@ -318,7 +279,8 @@ token/cost breakdown via `llm_calls` rollup.
 cd components/bff && dotnet build && dotnet test
 
 # v2 frontend — all four gates
-cd components/frontend-spectr-v2 && npx tsc --noEmit
+cd components/frontend-spectr-v2 && npx tsc -b   # NOT --noEmit: the root tsconfig is a
+                                                #  solution file ("files": []), so --noEmit checks nothing
 cd components/frontend-spectr-v2 && npm run lint    # --max-warnings 0
 cd components/frontend-spectr-v2 && npm run build
 cd components/frontend-spectr-v2 && npx vitest run
@@ -376,6 +338,7 @@ curl -f http://localhost:5000/healthz && echo "BFF OK"
 - **Shared error envelope** (story 2.1): `Endpoints/ErrorEnvelope.cs` — call `ErrorEnvelope.Build(status, code, message, details)` from any endpoint group. Don't add per-file copies.
 - **Feature flags are read by BOTH services with a 60s cache (story 2.6 / AR35)**: the `feature_flags` table is the live, no-redeploy knob store. BFF side = `EntitlementService.GetFlagsAsync()` (60s `IMemoryCache`); worker side = `app/feature_flags.py` (60s TTL, fail-open, SQLAlchemy Core `text()` — no shared ORM model). Seed new flags via an idempotent `INSERT … ON CONFLICT DO NOTHING` migration; never hardcode tier numbers in code.
 - **Tier-aware coach caps + two-guard model (story 2.6 / FR15)**: the BFF gates coach message COUNT, the worker LLM gateway gates SPEND (USD) — independently, neither knows the other. COUNT: `CoachCapService` (scoped) resolves per tier — free = per-analysis (`coach_free_followups` flag, counts user `coach_messages` in the conversation); pro = pooled MONTHLY across analyses (`coach_pro_monthly` flag, counts `coach_message` usage_events for the period); credits = unlimited. `CoachConversationEndpoints.PostMessage` writes a `coach_message` usage_event in the SAME `SaveChanges` as the message rows (append-only meter, the pooled-count source of truth). `CoachCapsDto.Scope` ∈ {analysis,month,unlimited} + `ResetsAt` tell the frontend which FR15 chip grammar to render. SPEND: `worker/app/llm/budget.py` resolves each per-tier/global monthly ceiling from feature_flags (`llm_budget_{free,pro,global}_usd`) → env fallback (None-check, so `0` hard-stops a tier).
+- **`credits_enabled` kill switch (added 2026-07-23)**: turns the ENTIRE credit system on/off live. Precedence: `Credits:Enabled` config key (env `Credits__Enabled`) → `credits_enabled` feature-flag row → default ON; only an explicit `"false"` disables. When off, `EntitlementService.ComputeAsync` short-circuits to a premium DTO (`Tier="pro"`, unlimited analyses/coach, all feature bits, `CreditsEnabled=false`) and `CoachCapService.ResolveAsync` returns unlimited — the ONLY two flag-read sites; every downstream gate (dispatch caps, abuse arms, credit spend, `analysis-paid` routing, worker `job.tier`, frontend paywalls) inherits via the DTO with zero per-site conditionals. Frontend hides billing/tier UI off `EntitlementsDto.creditsEnabled` (Billing stays reachable so a live Stripe subscriber can always cancel). **Currently seeded `'false'`** (credits OFF — everyone premium); flip via `UPDATE feature_flags SET value='true' WHERE name='credits_enabled'` (≤60s propagation, no restart). The test suite pins `Credits__Enabled=true` process-wide (`TestProcessBaseline` in TestSupport.cs) so the DB seed can't flip tier-sensitive tests into premium mode — kill-switch tests opt out per-factory via `UseSetting("Credits:Enabled","false")`.
 
 **Python (analysis, worker, legacy api)**
 - Python 3.11+. Format with `ruff format`. Lint with `ruff check`. Type-check with `mypy`.
@@ -394,7 +357,7 @@ curl -f http://localhost:5000/healthz && echo "BFF OK"
 - Custom `fetcher.ts` for HTTP — single instance, owns 401-retry-with-refresh. Don't introduce axios.
 - All file upload via XHR (`useFileUpload` hook). Job progress via SSE / TanStack Query polling.
 - No inline styles unless dynamic (color-from-grade, etc).
-- All four gates must pass before committing: `tsc --noEmit`, `npm run lint --max-warnings 0`, `npm run build`, `npx vitest run`.
+- All four gates must pass before committing: `tsc -b` (NOT `--noEmit`), `npm run lint --max-warnings 0`, `npm run build`, `npx vitest run`.
 
 **Windows dev note**
 - allin1/all-in-one-fix structure detection (Phase 1) requires Docker on Windows. Run `docker compose -f docker/docker-compose.yml up -d` before starting the worker.
@@ -492,11 +455,10 @@ We never run Demucs at request time on user-uploaded references.
 Stale `AWAITING_STEM_MAPPING` jobs (>24h) are auto-failed by an hourly
 beat task that also purges their upload directories.
 
-**Frontend integration is deferred** — the actual frontend in this
-branch (`components/frontend-spectr/`) is vanilla `.jsx` (no
-TypeScript / Tailwind / shadcn / vitest / Playwright). A separate
-follow-up plan will wire the upload + mapping + report UI to the
-backend changes that are now in place.
+**Frontend integration** landed later in `frontend-spectr-v2/` — see the
+bulk-stems section below. (The original note here deferred it because the
+only frontend at the time was the vanilla-JSX `frontend-spectr/`, since
+deleted.)
 
 ### Bulk stem upload + audio-content classification (added 2026-06-16, v2)
 

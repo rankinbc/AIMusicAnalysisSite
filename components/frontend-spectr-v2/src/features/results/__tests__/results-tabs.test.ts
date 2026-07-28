@@ -11,7 +11,8 @@ describe('isResultsTabKey', () => {
   });
 
   it('rejects unknown / non-string values', () => {
-    expect(isResultsTabKey('actions')).toBe(false); // old key, dissolved into coach
+    // v4 revived 'actions' as the fix-first board and added stems/notes/dawplan.
+    expect(isResultsTabKey('actions')).toBe(true);
     expect(isResultsTabKey('analysis')).toBe(false); // old key, folded into debug
     expect(isResultsTabKey('nope')).toBe(false);
     expect(isResultsTabKey('')).toBe(false);

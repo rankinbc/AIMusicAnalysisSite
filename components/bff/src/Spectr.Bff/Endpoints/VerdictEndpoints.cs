@@ -281,6 +281,10 @@ public static class VerdictEndpoints
             Suspected: v.Suspected,
             Where: TryParseJson(v.Where),
             Refines: v.Refines,
+            PriorityBase: v.PriorityBase,
+            PriorityCategoryWeight: v.PriorityCategoryWeight,
+            PriorityScopeMultiplier: v.PriorityScopeMultiplier,
+            Scope: v.Scope,
             CreatedAt: v.CreatedAt,
             UserState: us);
     }

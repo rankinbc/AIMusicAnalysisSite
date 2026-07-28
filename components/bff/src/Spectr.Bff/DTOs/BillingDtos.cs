@@ -115,7 +115,11 @@ public sealed record EntitlementsDto(
     // UTC on the free tier; null when analyses are unlimited (Pro/credits). Both
     // additive — older clients ignore them.
     CoachCapsDto? Coach = null,
-    DateTimeOffset? AnalysesResetsAt = null);
+    DateTimeOffset? AnalysesResetsAt = null,
+    // credits_enabled feature flag mirror. When false the credit system is
+    // switched off — everyone resolves as premium/unlimited — and the frontend
+    // hides billing/tier UI (buy-credits, upgrade CTAs, tier chips, meters).
+    bool CreditsEnabled = true);
 
 // ── Story 2.8 — usage-page honest math ───────────────────────────────
 /// <summary>

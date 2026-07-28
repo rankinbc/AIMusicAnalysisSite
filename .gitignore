@@ -133,3 +133,7 @@ components/bff/tests/data/analysis/
 
 # Isolated worktrees for subagent-driven-development tasks
 .worktrees/
+
+# Worker/dev runtime logs — written by start-spectr.ps1 + the workerdash watchdog
+data/logs/
+components/workerdash/.cache/

@@ -2264,6 +2264,18 @@ namespace Spectr.Data.Migrations
                         .HasColumnType("character varying(120)")
                         .HasColumnName("preset_name");
 
+                    b.Property<int?>("PriorityBase")
+                        .HasColumnType("integer")
+                        .HasColumnName("priority_base");
+
+                    b.Property<double?>("PriorityCategoryWeight")
+                        .HasColumnType("double precision")
+                        .HasColumnName("priority_category_weight");
+
+                    b.Property<double?>("PriorityScopeMultiplier")
+                        .HasColumnType("double precision")
+                        .HasColumnName("priority_scope_multiplier");
+
                     b.Property<int>("PriorityScore")
                         .HasColumnType("integer")
                         .HasColumnName("priority_score");
@@ -2283,6 +2295,11 @@ namespace Spectr.Data.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)")
                         .HasColumnName("refines");
+
+                    b.Property<string>("Scope")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("scope");
 
                     b.Property<string>("Severity")
                         .IsRequired()

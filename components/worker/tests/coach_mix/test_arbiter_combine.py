@@ -33,10 +33,12 @@ def test_combine_escalates_opposite_direction_eq_clash():
     log: list = []
     out, calls = arbiter._combine([boost, cut], log)
     assert any(c["kind"] == "eq_conflict" for c in calls)  # escalated to LLM
-    # On equal-magnitude tie, the earlier (boost) is kept
+    # Weighted-net default: equal magnitude + equal weight cancel to 0 dB —
+    # the fixes genuinely disagree, so the deterministic default is neutral
+    # and the LLM judgment call decides whether to pick a side.
     eqs = [v for v in out if v.fix.dsp_chain[0].type == "peaking_eq"]
     assert len(eqs) == 1
-    assert eqs[0].fix.dsp_chain[0].params["gain_db"] == 3.0
+    assert eqs[0].fix.dsp_chain[0].params["gain_db"] == 0.0
 
 
 def test_combine_keeps_different_slots_additive():
@@ -48,17 +50,18 @@ def test_combine_keeps_different_slots_additive():
     assert len([v for v in out if v.fix.dsp_chain[0].type == "peaking_eq"]) == 2
 
 
-def test_combine_conflict_keeps_stronger_move():
+def test_combine_conflict_nets_by_weight():
     weak_boost = _fix_v("weak_boost", "frequency_balance",
                         DspOp(type="peaking_eq", params={"frequency_hz": 300.0, "gain_db": 2.0, "q": 1.0}))
     strong_cut = _fix_v("strong_cut", "frequency_balance",
                         DspOp(type="peaking_eq", params={"frequency_hz": 300.0, "gain_db": -5.0, "q": 1.0}))
     log: list = []
     out, calls = arbiter._combine([weak_boost, strong_cut], log)
-    # Strong cut (|5.0| > |2.0|) replaces the weaker boost
+    # Equal weights -> weighted mean (2 - 5)/2 = -1.5: the conflict nets
+    # instead of winner-take-all, and the judgment call is still raised.
     eqs = [v for v in out if v.fix.dsp_chain[0].type == "peaking_eq"]
     assert len(eqs) == 1
-    assert eqs[0].fix.dsp_chain[0].params["gain_db"] == -5.0
+    assert eqs[0].fix.dsp_chain[0].params["gain_db"] == -1.5
     assert any(c["kind"] == "eq_conflict" for c in calls)
 
 

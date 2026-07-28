@@ -3,10 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { VerdictDto } from '../../../api/types';
 import {
   buildMoves,
-  groupMoves,
   impactBand,
   isCleanMix,
-  moveToMarkdown,
   ruleFixToMove,
   toMoveSev,
   verdictToMove,
@@ -23,6 +21,10 @@ function makeVerdict(over: Partial<VerdictDto> = {}): VerdictDto {
     category: 'low_end',
     confidence: 0.91,
     priorityScore: 70,
+    priorityBase: null,
+    priorityCategoryWeight: null,
+    priorityScopeMultiplier: null,
+    scope: null,
     impact: null,
     chartType: 'spectrum',
     headline: 'Let the kick breathe',
@@ -184,20 +186,8 @@ describe('isCleanMix', () => {
   });
 });
 
-describe('moveToMarkdown', () => {
-  it('emits a grouped checklist with params nested under committed moves', () => {
-    const { quick } = groupMoves([verdictToMove(makeVerdict({ userState: { applied: true, dismissed: false, feedback: null } }))]);
-    const md = moveToMarkdown(quick, 'Aurora');
-    expect(md).toContain('# Game Plan — Aurora');
-    expect(md).toContain('## ⚡ Quick wins');
-    expect(md).toContain('- [ ] **Sub bass** — Duck the sub');
-    expect(md).toContain('  - sidechain: `attack_ms=8, release_ms=80, depth_db=-6`');
-  });
-
-  it('handles an empty plan', () => {
-    expect(moveToMarkdown([], 'Aurora')).toContain('No moves committed yet');
-  });
-});
+// moveToMarkdown was retired in v4 — the config-driven export generator
+// (export-generator.ts) is the single export path; see its test file.
 
 function fakeVerdict(over: Partial<VerdictDto> = {}): VerdictDto {
   return {

@@ -2,7 +2,7 @@ import { CoverArt } from '../../ui/CoverArt';
 import { hueFromId } from '../../ui/hueFromId';
 import { GenreCorrectChip } from './GenreCorrectChip';
 import { fmtGenre } from './helpers/format';
-import { ResultsPlayer } from './ResultsPlayer';
+import { Icon } from './Icon';
 
 export interface SongHeaderInputs {
   mix: boolean;
@@ -35,9 +35,13 @@ const INPUT_DEFS: { key: keyof SongHeaderInputs; label: string; add: string }[] 
   { key: 'mix', label: 'Primary mix', add: 'mix' },
   { key: 'stems', label: 'Stems', add: 'stems' },
   { key: 'als', label: 'Ableton project', add: '.als' },
-  { key: 'reference', label: 'Reference', add: 'reference' },
+  { key: 'reference', label: 'Reference profile', add: 'reference' },
 ];
 
+// v3 header card (prototype `.rhead` / ResultsHeader): "ANALYZED" kicker, cover,
+// name · version · genre on one row, then the "Analyzed from" input roster. The
+// findings count and inline player are no longer part of this card — the count
+// lives on the Findings tab badge.
 export function SongHeader({
   songId,
   versionId,
@@ -45,10 +49,7 @@ export function SongHeader({
   versionLabel,
   trackName,
   genre,
-  durationSeconds,
   inputs,
-  findingCount,
-  suggestionCount,
   onAddInputs,
 }: SongHeaderProps) {
   const hue = hueFromId(versionId ?? songId);
@@ -56,6 +57,7 @@ export function SongHeader({
 
   return (
     <div className="rhead">
+      <div className="rh-kicker">Analyzed</div>
       <div className="rh-top">
         <CoverArt hue={hue} size="md">
           {versionLabel && <span className="rh-cover-badge">{versionLabel}</span>}
@@ -65,18 +67,18 @@ export function SongHeader({
           <div className="rh-titlerow">
             <span className="rh-name">{trackName}</span>
             {versionLabel && <span className="rh-ver">{versionLabel}</span>}
+            {genreLabel && (
+              <span className="rh-genre">
+                {genreLabel}
+                {jobId && (
+                  <>
+                    {' '}
+                    <GenreCorrectChip jobId={jobId} genre={genre} />
+                  </>
+                )}
+              </span>
+            )}
           </div>
-          {genreLabel && (
-            <div className="rh-genre">
-              {genreLabel}
-              {jobId && (
-                <>
-                  {' '}
-                  <GenreCorrectChip jobId={jobId} genre={genre} />
-                </>
-              )}
-            </div>
-          )}
 
           <div className="rh-chips">
             <span className="rh-chips-label">Analyzed from</span>
@@ -85,54 +87,19 @@ export function SongHeader({
               if (present) {
                 return (
                   <span key={key} className="chip on">
-                    ✓ {label}
+                    <Icon name="check" size={11} />
+                    {label}
                   </span>
                 );
               }
               return (
                 <button key={key} type="button" className="chip add" onClick={() => onAddInputs(key)}>
-                  <span className="pl">+</span> Add {add}
+                  <span className="pl">+</span>Add {add}
                 </button>
               );
             })}
           </div>
         </div>
-
-        <FindingsVital findingCount={findingCount} suggestionCount={suggestionCount} />
-      </div>
-
-      <ResultsPlayer versionId={versionId} durationSeconds={durationSeconds} />
-    </div>
-  );
-}
-
-function FindingsVital({
-  findingCount,
-  suggestionCount,
-}: {
-  findingCount: number;
-  suggestionCount: number;
-}) {
-  if (findingCount === 0) {
-    return (
-      <div className="rh-vital clean">
-        <div className="vtxt">
-          <span className="vn">No issues</span>
-          <span className="vs">clean mix</span>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="rh-vital">
-      <div className="vtxt">
-        <span className="vn">
-          <span className="num">{findingCount}</span> {findingCount === 1 ? 'finding' : 'findings'}
-        </span>
-        <span className="vs">
-          <span className="fx">{suggestionCount}</span>{' '}
-          {suggestionCount === 1 ? 'suggestion' : 'suggestions'}
-        </span>
       </div>
     </div>
   );

@@ -10,6 +10,29 @@ using Xunit;
 namespace Spectr.Bff.Tests;
 
 /// <summary>
+/// Process-wide test baseline, applied before any WebApplicationFactory builds
+/// its configuration (module initializers run at assembly load).
+/// </summary>
+internal static class TestProcessBaseline
+{
+    /// <summary>
+    /// Pin the credit system ON for the whole test process. The dev/CI database
+    /// seeds the `credits_enabled` feature flag to 'false' (credit system
+    /// switched off at launch), which would silently flip every tier-sensitive
+    /// test into premium mode. The `Credits:Enabled` config key takes
+    /// precedence over the DB flag (EntitlementService.CreditsEnabled), and
+    /// env vars feed host config — so this one line restores credit semantics
+    /// for the suite without mutating the shared database. Kill-switch tests
+    /// opt back out per-factory via UseSetting("Credits:Enabled", "false")
+    /// (same pattern as RateLimits:Enabled) or by passing an explicit
+    /// IConfiguration to EntitlementService.
+    /// </summary>
+    [System.Runtime.CompilerServices.ModuleInitializer]
+    internal static void PinCreditsEnabled()
+        => Environment.SetEnvironmentVariable("Credits__Enabled", "true");
+}
+
+/// <summary>
 /// Shared test helpers to avoid duplicating the Postgres-reachability gate and
 /// the register-then-extract-token boilerplate across multiple test classes.
 /// </summary>

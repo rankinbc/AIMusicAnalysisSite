@@ -18,6 +18,8 @@ __all__ = ["solve", "compile_preset", "merge"]
 
 
 def solve(problems: list[Verdict], analysis: dict[str, Any]) -> dict[str, Any]:
-    """problems -> {"chain", "leftover_advice", "change_log"}."""
+    """problems -> {"chain", "master_target", "targets", "leftover_advice",
+    "change_log"}. ``chain`` is the master rack; ``targets`` carries one
+    compiled chain per non-master target (per-stem instruction blocks)."""
     genre = (analysis.get("phase2") or {}).get("genre")
     return compile_preset(merge(problems, analysis, genre))

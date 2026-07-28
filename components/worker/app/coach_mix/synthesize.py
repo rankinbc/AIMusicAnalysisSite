@@ -19,6 +19,10 @@ def synthesize(problems: list[Verdict], analysis: dict[str, Any], *, genre: str 
     compiled = compile_preset(result.verdicts)
     return {
         "chain": compiled["chain"],
+        # Per-stem instruction blocks. Not rack-loadable (the Listen rack plays
+        # the mixdown, so there's nothing to audition them through) — they are
+        # the DAW plan's per-track section.
+        "targets": compiled["targets"],
         "leftover_advice": compiled["leftover_advice"],
         "change_log": [*result.change_log, *compiled["change_log"]],
         "arbiter_notes": notes,

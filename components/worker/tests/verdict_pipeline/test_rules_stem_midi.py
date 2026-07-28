@@ -11,12 +11,29 @@ from app.verdict_lib.validator import validate_verdict
 
 # ── fixtures ────────────────────────────────────────────────────────────────
 
-def _stems(status="ok", clash=None, per_stem=None):
+def _stems(status="ok", clash=None, per_stem=None, balance=None):
+    """Mirrors what phase4_stems.py actually serialises: `per_stem` holds raw
+    METRICS per role, and the level judgements live in their own `balance_flags`
+    list. The old helper invented a per_stem shape carrying severity_tier /
+    direction, which the analyzer has never emitted — so `stem_balance` read a
+    field that was never there and could not fire, and this fixture agreed with
+    it. Keep fixtures shaped like the real payload."""
     return {"track_id": "t", "phase4": {"stems": {
         "status": status,
         "clash_matrix": [] if clash is None else clash,
         "per_stem": per_stem or {},
+        "balance_flags": [] if balance is None else balance,
     }}}
+
+
+def _flag(role, observed, lo, hi, tier="warning"):
+    """A balance_flag plus the per_stem metrics row it was derived from — the
+    evidence path resolves into per_stem, so the two must agree."""
+    direction = "too_high" if observed > hi else "too_low"
+    return ({role: {"rms_db": observed}},
+            [{"role": role, "metric": "rms_db", "observed": observed,
+              "expected_range": [lo, hi], "direction": direction,
+              "severity_tier": tier}])
 
 
 def _midi(**phase8):
@@ -57,20 +74,30 @@ def test_stem_clash_gate_silent():
 # ── S2 stem_balance ─────────────────────────────────────────────────────────
 
 def test_stem_balance_fires_on_flag():
-    a = _stems(per_stem={"bass": {"direction": "loud", "severity_tier": "warning"},
-                         "lead": {"direction": "ok", "severity_tier": "ok"}})
+    ps, bf = _flag("bass", observed=-8.0, lo=-18.0, hi=-12.0)
+    a = _stems(per_stem=ps, balance=bf)
     v = RE.stem_balance(a)
     assert v is not None and v.category == "gain_staging" and v.data_tier == "stems"
     assert v.severity == "moderate"
     assert v.evidence[0].stems == ["bass"]
+    assert "too loud" in v.headline
+    # Evidence points at the real measurement, so the validator can ground it.
+    assert v.evidence[0].metric == "phase4.stems.per_stem.bass.rms_db"
     assert validate_verdict(v, a).ok
 
 
+def test_stem_balance_picks_the_worst_offender():
+    ps_a, bf_a = _flag("bass", observed=-11.0, lo=-18.0, hi=-12.0)   # 1 dB out
+    ps_b, bf_b = _flag("pad", observed=-2.0, lo=-20.0, hi=-14.0)     # 12 dB out
+    v = RE.stem_balance(_stems(per_stem={**ps_a, **ps_b}, balance=bf_a + bf_b))
+    assert v is not None and v.evidence[0].stems == ["pad"]
+
+
 def test_stem_balance_gate_silent():
-    assert RE.stem_balance(_stems(status="absent",
-                                  per_stem={"bass": {"severity_tier": "critical"}})) is None
-    assert RE.stem_balance(_stems(per_stem={"lead": {"severity_tier": "ok"}})) is None
-    assert RE.stem_balance(_stems(per_stem={})) is None
+    ps, bf = _flag("bass", observed=-8.0, lo=-18.0, hi=-12.0)
+    assert RE.stem_balance(_stems(status="absent", per_stem=ps, balance=bf)) is None
+    assert RE.stem_balance(_stems(per_stem=ps, balance=[])) is None
+    assert RE.stem_balance(_stems()) is None
 
 
 # ── P1 robotic_velocity ─────────────────────────────────────────────────────

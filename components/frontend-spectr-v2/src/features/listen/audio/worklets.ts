@@ -1,6 +1,7 @@
 import gateProcessorUrl from './dsp/processors/gate.processor.ts?worker&url';
 import bitcrusherProcessorUrl from './dsp/processors/bitcrusher.processor.ts?worker&url';
 import limiterProcessorUrl from './dsp/processors/limiter.processor.ts?worker&url';
+import pitchShiftProcessorUrl from './dsp/processors/pitchShift.processor.ts?worker&url';
 import { makeDryWet, type EffectId, type EffectMeter, type EffectUnit } from './EffectUnit';
 
 // Vite bundles each processor (transpiled, with its pure-math imports inlined)
@@ -12,6 +13,7 @@ export function registerWorklets(ctx: AudioContext): Promise<void> {
     ctx.audioWorklet.addModule(gateProcessorUrl),
     ctx.audioWorklet.addModule(bitcrusherProcessorUrl),
     ctx.audioWorklet.addModule(limiterProcessorUrl),
+    ctx.audioWorklet.addModule(pitchShiftProcessorUrl),
   ]).then(() => undefined);
 }
 

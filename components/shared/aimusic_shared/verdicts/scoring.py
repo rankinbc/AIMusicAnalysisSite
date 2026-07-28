@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import dataclass
 from typing import Literal
 from aimusic_shared.verdicts.models import Severity
 
@@ -28,9 +29,21 @@ _SCOPE_MULTIPLIER: dict[Scope, float] = {
 }
 
 
-def compute_priority_score(
+@dataclass(frozen=True)
+class PriorityBreakdown:
+    """The score plus the exact factors that produced it — persisted per verdict
+    so the UI can explain the ranking (score ≡ base × category_weight × scope_multiplier)."""
+
+    score: int
+    base: int
+    category_weight: float
+    scope_multiplier: float
+    scope: str
+
+
+def compute_priority_breakdown(
     severity: Severity, category: str, scope: Scope
-) -> int:
+) -> PriorityBreakdown:
     if severity not in _BASE_SEVERITY:
         raise ValueError(f"Unknown severity: {severity!r}")
     if scope not in _SCOPE_MULTIPLIER:
@@ -38,7 +51,19 @@ def compute_priority_score(
     base = _BASE_SEVERITY[severity]
     cat = _CATEGORY_WEIGHT.get(category, 1.0)
     scp = _SCOPE_MULTIPLIER[scope]
-    return round(base * cat * scp)
+    return PriorityBreakdown(
+        score=round(base * cat * scp),
+        base=base,
+        category_weight=cat,
+        scope_multiplier=scp,
+        scope=scope,
+    )
+
+
+def compute_priority_score(
+    severity: Severity, category: str, scope: Scope
+) -> int:
+    return compute_priority_breakdown(severity, category, scope).score
 
 
 def severity_from_score(score: int) -> Severity:

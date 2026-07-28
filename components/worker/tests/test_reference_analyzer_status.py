@@ -46,7 +46,7 @@ def test_phase1_failure_persists_failed_marker_without_raising(monkeypatch):
     ref = _Ref()
     _wire(monkeypatch, ref)
 
-    def _boom(_path):
+    def _boom(_path, **_kw):  # actor passes defer_structure=True
         raise RuntimeError("decode boom")
 
     monkeypatch.setattr(ra.phase1_universal, "analyze", _boom)
@@ -65,8 +65,9 @@ def test_success_sets_analyzed_status(monkeypatch):
     monkeypatch.setattr(
         ra.phase1_universal,
         "analyze",
-        lambda _p: {"data": {"bpm": 138.0, "lufs": -8.0, "rms": -16.0,
-                             "bands": {"bass": -4.0, "air": -12.0}}},
+        # actor passes defer_structure=True; envelope shape still accepted
+        lambda _p, **_kw: {"data": {"bpm": 138.0, "lufs": -8.0, "rms": -16.0,
+                                    "bands": {"bass": -4.0, "air": -12.0}}},
     )
 
     ra.run_reference_analyzer(str(uuid.uuid4()))

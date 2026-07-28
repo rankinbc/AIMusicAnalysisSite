@@ -11,7 +11,17 @@ export interface PlanCardCopy {
   link: { to: '/pricing' | '/billing' | '/usage'; label: string } | null;
 }
 
-export function planCardCopy(tier: Tier | null): PlanCardCopy {
+export function planCardCopy(tier: Tier | null, creditsEnabled = true): PlanCardCopy {
+  // credits_enabled kill switch — plans are off entirely; this is a distinct
+  // state from "entitlements not loaded" (null tier below).
+  if (!creditsEnabled) {
+    return {
+      name: 'Full access',
+      description:
+        'Paid plans are switched off — unlimited analyses, full coach, every specialist.',
+      link: null,
+    };
+  }
   switch (tier) {
     case 'free':
       return {

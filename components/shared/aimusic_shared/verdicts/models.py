@@ -196,6 +196,14 @@ class Verdict(BaseModel):
     where: Optional[dict[str, Any]] = None  # {section_type, start_seconds, end_seconds}
     refines: Optional[str] = None           # parent composite problem_id (set by the refiner)
 
+    # ── Priority-score breakdown (results v4). Nullable so legacy rows and
+    #    fixtures stay valid; producers stamp them alongside priority_score so
+    #    score ≡ base × category_weight × scope_multiplier always holds. ──
+    priority_base: Optional[int] = None
+    priority_category_weight: Optional[float] = None
+    priority_scope_multiplier: Optional[float] = None
+    scope: Optional[str] = None
+
     @field_validator("verdict_id")
     @classmethod
     def _check_verdict_id(cls, v: str) -> str:

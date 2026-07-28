@@ -44,13 +44,23 @@ def analyze(
     stem_paths: dict | None = None,
     stem_mode: str = "grouped",
 ) -> dict:
+    # With stems the spectral pass is a fraction of the phase's wall time —
+    # compress its 0→1 progress into 0→0.3 so the stems loop owns 0.3→1.0
+    # (previously the UI hit 100% before the multi-minute stems pass started).
+    spectral_cb = progress_cb
+    if progress_cb and stem_paths:
+        def spectral_cb(phase: int, name: str, pct: float) -> None:  # type: ignore[misc]
+            progress_cb(phase, name, pct * 0.3)
+
     if USE_DEMUCS:
-        result = _demucs_analyze(wav_path, progress_cb)
+        result = _demucs_analyze(wav_path, spectral_cb)
     else:
-        result = _spectral_analyze(wav_path, progress_cb)
+        result = _spectral_analyze(wav_path, spectral_cb)
 
     if stem_paths:
-        result["stems"] = _analyze_user_stems(stem_paths, stem_mode)
+        result["stems"] = _analyze_user_stems(stem_paths, stem_mode, progress_cb)
+        if progress_cb:
+            progress_cb(4, "Stem Separation & Clash", 1.0)
     return result
 
 
@@ -70,7 +80,11 @@ def _coerce_groups(stem_paths: dict) -> dict:
     return out
 
 
-def _analyze_user_stems(stem_paths: dict, stem_mode: str = "grouped") -> dict:
+def _analyze_user_stems(
+    stem_paths: dict,
+    stem_mode: str = "grouped",
+    progress_cb: Callable | None = None,
+) -> dict:
     """Run the stems module on user-provided stems and serialize for JSON.
 
     grouped (default): stems sharing a role are summed into a role bus, then analyzed
@@ -80,14 +94,21 @@ def _analyze_user_stems(stem_paths: dict, stem_mode: str = "grouped") -> dict:
     from ..stems import analyze_grouped, analyze_per_stem
     from ..stems.analyzer import metrics_to_dict
 
+    # The stems loop owns the 0.3→1.0 window of phase-4 progress (see analyze()).
+    on_progress = None
+    if progress_cb:
+        def on_progress(done: int, total: int) -> None:
+            frac = done / total if total else 1.0
+            progress_cb(4, "Stem Separation & Clash", 0.3 + 0.7 * frac)
+
     groups = _coerce_groups(stem_paths)
     try:
         if stem_mode == "per_stem":
             flat = [(p.stem, role, p) for role, paths in groups.items() for p in paths]
-            ps = analyze_per_stem(flat)
+            ps = analyze_per_stem(flat, on_progress=on_progress)
             return {"status": "ok", "mode": "per_stem", **ps}
 
-        stem_result = analyze_grouped(groups)
+        stem_result = analyze_grouped(groups, on_progress=on_progress)
     except Exception as exc:
         logger.exception("stem analysis failed")
         return {"status": "failed", "error": str(exc)}

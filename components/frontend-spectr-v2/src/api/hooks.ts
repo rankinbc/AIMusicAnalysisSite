@@ -693,10 +693,29 @@ export function useApplyVerdict(jobId: string) {
   });
 }
 
-// Story 12.5 review sweep: useDismissVerdict/useFeedbackVerdict removed with
-// their only consumer (the orphaned VerdictsPanel). The BFF endpoints
-// POST /verdicts/{id}/{dismiss,applied,feedback} REMAIN — re-home the UI when
-// a live surface wants dismiss/feedback again.
+// Results v4: dismiss/feedback re-homed to the Findings/Actions boards
+// (ignore-row + Rate-this-Suggestion), mirroring useApplyVerdict.
+export function useDismissVerdict(jobId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (verdictId: string) =>
+      fetcher<void>({ url: `/verdicts/${verdictId}/dismiss`, method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['verdicts', jobId] }),
+  });
+}
+
+export function useFeedbackVerdict(jobId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { verdictId: string; feedback: 'helpful' | 'wrong' | 'unclear' }) =>
+      fetcher<void>({
+        url: `/verdicts/${input.verdictId}/feedback`,
+        method: 'POST',
+        data: { feedback: input.feedback },
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['verdicts', jobId] }),
+  });
+}
 
 // ── References ──────────────────────────────────────────────────────────────
 export function useReferences() {

@@ -72,7 +72,7 @@ export const EQ_BANDS_DEFAULT: EqBand[] = EQ_FREQS.map((freq) => ({
 }));
 
 export const MODULE_DEFAULTS: Record<string, ModuleState> = {
-  djfilter: { morph: 0, resonance: 0.7, enabled: false },
+  djfilter: { morph: 0, resonance: 0.7, wobbleRateHz: 2, wobbleDepth: 0, wobbleShape: 'sine', killLow: false, killMid: false, killHigh: false, enabled: false },
   eq: { bands: EQ_BANDS_DEFAULT, enabled: false },
   gate: { thresholdDb: -40, attackMs: 1, holdMs: 10, releaseMs: 100, floorDb: -80, enabled: false },
   comp: { thresholdDb: 0, ratio: 1, attackMs: 3, releaseMs: 250, kneeDb: 30, makeupDb: 0, mix: 1, enabled: false },
@@ -169,12 +169,18 @@ export const RACK_MANIFEST: ModuleManifest[] = [
   },
   // ── creative tier ──
   {
-    id: 'djfilter', label: 'DJ Filter', sub: 'Sweep LP↔HP', tier: 'creative', accent: 'var(--violet)', glyph: '◑', hasMix: false, hasMeter: false,
+    id: 'djfilter', label: 'DJ Tools', sub: 'Sweep · wobble · kills', tier: 'creative', accent: 'var(--violet)', glyph: '◑', hasMix: false, hasMeter: false,
     bind: "setEffectParams('djfilter', patch)",
-    summary: 'Single bipolar sweep: left = LP down, right = HP up, center = open.',
+    summary: 'Bipolar sweep (left = LP down, right = HP up, center = open) + LFO wobble on the cutoff + LOW/MID/HIGH isolator kills.',
     params: [
       { key: 'morph', label: 'Morph', control: 'knobBipolar', min: -1, max: 1, step: 0.01, unit: 'none', default: 0, hint: 'center = open' },
       { key: 'resonance', label: 'Res', control: 'knob', min: 0.1, max: 20, step: 0.1, unit: 'none', default: 0.7 },
+      { key: 'wobbleRateHz', label: 'Wobble', control: 'knob', min: 0.1, max: 16, step: 0.1, unit: 'Hz', default: 2, hint: 'LFO on the sweep cutoff' },
+      { key: 'wobbleDepth', label: 'Depth', control: 'knob', min: 0, max: 1, step: 0.01, unit: 'percent', default: 0, hint: '0 = wobble off · 100% = ±2 octaves' },
+      { key: 'wobbleShape', label: 'Shape', control: 'segmented', options: ['sine', 'triangle', 'square'], default: 'sine' },
+      { key: 'killLow', label: 'Kill Low', control: 'toggle', default: false },
+      { key: 'killMid', label: 'Kill Mid', control: 'toggle', default: false },
+      { key: 'killHigh', label: 'Kill High', control: 'toggle', default: false },
     ],
   },
   {
@@ -249,13 +255,13 @@ export const RACK_MANIFEST: ModuleManifest[] = [
 ];
 
 export const PITCH_MODULE: ModuleManifest = {
-  id: 'pitch', label: 'Pitch', sub: 'Shift · tempo-coupled', tier: 'transport', accent: 'var(--violet)', glyph: '♯', hasMix: false, hasMeter: false,
-  bind: 'enterPitchMode() · setPitchDetune(st, cents)',
-  summary: 'Separate buffer lane — NOT an insert. Pitch + tempo are coupled.',
+  id: 'pitch', label: 'Pitch', sub: 'Shift · independent tempo', tier: 'transport', accent: 'var(--violet)', glyph: '♯', hasMix: false, hasMeter: false,
+  bind: 'setPitchShift(st, cents, rate) · setPitchShiftEnabled(on)',
+  summary: 'Master-path lane — NOT an insert. Pitch and tempo are independent: shifting the key never changes the speed, and the Tempo knob never changes the key.',
   params: [
-    { key: 'semitones', label: 'Semitones', control: 'knob', min: -12, max: 12, step: 1, unit: 'st', default: 0 },
+    { key: 'semitones', label: 'Semitones', control: 'knob', min: -12, max: 12, step: 1, unit: 'st', default: 0, hint: 'speed stays put' },
     { key: 'cents', label: 'Cents', control: 'slider', min: -50, max: 50, step: 1, unit: 'cents', default: 0 },
-    { key: 'tempo', label: 'Tempo', control: 'knob', min: 0.5, max: 2, step: 0.01, unit: 'x', default: 1, hint: 'coupled' },
+    { key: 'tempo', label: 'Tempo', control: 'knob', min: 0.5, max: 2, step: 0.01, unit: 'x', default: 1, hint: 'key stays put' },
   ],
 };
 
@@ -514,6 +520,10 @@ export interface VizState {
   autoReact: boolean;
   autoReactSens: number;
   theme: string[];
+  /** Page-wide scrolling floor grid (LightShow): hue 0-360 + intensity 0-100
+   *  (50 = the classic look; 0 hides the grid). */
+  gridHue: number;
+  gridIntensity: number;
 }
 
 export const DEFAULT_VIZ: VizState = {
@@ -522,4 +532,5 @@ export const DEFAULT_VIZ: VizState = {
   bgAuto: false, specHue: 165, bgHue: 165, laserHue: 165, laserBeams: 13, laserSpeed: 1, laserMove: false,
   laserFlash: true, bgFlash: false, bgFlashHz: 2, bgFlashColor: '#ffffff', laserSync: false, bgSync: false,
   autoReact: false, autoReactSens: 0.55, theme: ['#00e5b0', '#a78bfa', '#fb923c'],
+  gridHue: 168, gridIntensity: 50,
 };

@@ -106,4 +106,19 @@ public sealed class Verdict
 
     [Column("refines"), MaxLength(80)]
     public string? Refines { get; set; }                 // parent composite problem_id
+
+    // ── Priority-score breakdown (results v4) ───────────────────────────────
+    // Nullable — legacy rows are not backfilled; the UI degrades to score-only.
+    // Invariant on new rows: priority_score ≡ round(base × catW × scopeM).
+    [Column("priority_base")]
+    public int? PriorityBase { get; set; }               // severity base (20–200)
+
+    [Column("priority_category_weight")]
+    public double? PriorityCategoryWeight { get; set; }  // 1.0–1.5
+
+    [Column("priority_scope_multiplier")]
+    public double? PriorityScopeMultiplier { get; set; } // 0.6–1.0
+
+    [Column("scope"), MaxLength(20)]
+    public string? Scope { get; set; }                   // full_track|multi_section|single_section|single_stem
 }

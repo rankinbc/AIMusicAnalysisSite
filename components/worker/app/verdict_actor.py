@@ -158,6 +158,11 @@ def _persist_verdict(analysis_id: uuid.UUID, v: VerdictModel) -> None:
         suspected=v.suspected,
         where=v.where,
         refines=v.refines,
+        # Priority-score breakdown (results v4) — null on legacy producers.
+        priority_base=v.priority_base,
+        priority_category_weight=v.priority_category_weight,
+        priority_scope_multiplier=v.priority_scope_multiplier,
+        scope=v.scope,
     )
     with SessionFactory.begin() as s:
         s.add(row)

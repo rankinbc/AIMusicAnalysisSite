@@ -95,6 +95,11 @@ export function overlayChain(
  *  EQ bands from all fixes are allocated to sequential slots (slot i for the
  *  i-th band); overflow past the 8 slots stacks onto the last slot.
  *
+ *  NOTE: live multi-fix merging moved to `combineFixes.ts` (weighted,
+ *  order-independent — 2026-07-27). This last-writer-wins overlay remains for
+ *  the neutral-defaults case and single-chain carry-over only; don't reach for
+ *  it to combine several fixes.
+ *
  *  Story 12.4: `base` defaults to neutral MODULE_DEFAULTS (the historical
  *  behavior), but callers applying fixes onto a LIVE rack pass the current
  *  module map so manual knob moves survive. `pitch` is never written — it is
