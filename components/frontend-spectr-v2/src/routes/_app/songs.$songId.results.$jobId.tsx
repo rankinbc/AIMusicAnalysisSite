@@ -104,7 +104,21 @@ function ResultsPage() {
 
   if (isComplete) {
     if (results.data) {
-      return <ReportView results={results.data} songId={songId} tab={activeTab} onTabChange={setTab} />;
+      // key={jobId}: param-only navigation (version switcher, re-analyze,
+      // reports list) keeps this component mounted — without a remount,
+      // ReportView's versionId-seeded local state (Listen queue, checked
+      // notes, plan log) survives the switch AND its persistence effect
+      // writes the previous track's queue into the NEW version's
+      // localStorage. Remounting per job re-seeds everything.
+      return (
+        <ReportView
+          key={jobId}
+          results={results.data}
+          songId={songId}
+          tab={activeTab}
+          onTabChange={setTab}
+        />
+      );
     }
     // Job is done — never fall through to the in-progress storyline (its
     // elapsed clock and "taking longer" hint would misread a finished job).
