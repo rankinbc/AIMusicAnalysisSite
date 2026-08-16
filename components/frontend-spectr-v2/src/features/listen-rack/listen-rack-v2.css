@@ -495,6 +495,10 @@
 .rdx .lr-vzs.dis {opacity:.4}
 .rdx .lr-vzs.dis .v {color:var(--muted);text-shadow:none}
 .rdx .lr-vzs input[type=range], .rdx .lr-hue {-webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:3px;background:var(--dim);outline:none;cursor:pointer}
+/* The outline:none above outranks the app-wide input:focus-visible ring in
+   global.css on specificity, so these sliders have to restore it themselves —
+   same 2px cyan ring, so keyboard focus reads identically to the rest of the app. */
+.rdx .lr-vzs input[type=range]:focus-visible, .rdx .lr-hue:focus-visible {outline:2px solid var(--cyan);outline-offset:2px}
 .rdx .lr-hue {height:7px;border-radius:4px}
 .rdx .lr-vzs input[type=range]::-webkit-slider-thumb, .rdx .lr-hue::-webkit-slider-thumb {-webkit-appearance:none;width:11px;height:11px;border-radius:50%;background:#fff;box-shadow:0 0 0 2px rgba(0,0,0,.45),0 0 8px rgba(0,229,176,.6)}
 .rdx .lr-hue::-webkit-slider-thumb {box-shadow:0 0 0 2px rgba(0,0,0,.55)}
