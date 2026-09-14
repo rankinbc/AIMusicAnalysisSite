@@ -46,7 +46,9 @@ services:
       # IFileStorage is LocalDisk-backed for legacy/auxiliary writes even in
       # prod (the presigned R2 path is primary; an S3-backed IFileStorage is
       # a 10.x follow-up) — persist it, don't let it die with the container.
-      - bff_data:/data
+      # Shared with worker-paid/worker-free (same host path) so anon/legacy
+      # proxy uploads written here are visible to the worker's pipeline.
+      - /opt/spectr/data:/data
     environment:
       ASPNETCORE_ENVIRONMENT: "Production"
       ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=spectr;Username=spectr;Password=${POSTGRES_PASSWORD:?}"
@@ -76,12 +78,15 @@ services:
       # S3StorageOptions doc: "MinIO REQUIRES true; R2 must stay FALSE."
       Storage__S3__ForcePathStyle: "false"
       # Prod boot gates (4.1/4.2): missing billing/email config refuses boot.
-      SPECTR_REQUIRE_STRIPE: "1"
+      # Stripe relaxed to optional for the single-VM demo deploy: compose
+      # must boot without Stripe secrets; the checkout endpoint returns
+      # stripe_not_configured at request time instead (Program.cs:355-377).
+      SPECTR_REQUIRE_STRIPE: "0"
       SPECTR_REQUIRE_EMAIL: "1"
-      Stripe__SecretKey: "${STRIPE_SECRET_KEY:?}"
-      Stripe__WebhookSecret: "${STRIPE_WEBHOOK_SECRET:?}"
-      Stripe__PriceProMonthly: "${STRIPE_PRICE_PRO_MONTHLY:?}"
-      Stripe__PriceProAnnual: "${STRIPE_PRICE_PRO_ANNUAL:?}"
+      Stripe__SecretKey: "${STRIPE_SECRET_KEY:-}"
+      Stripe__WebhookSecret: "${STRIPE_WEBHOOK_SECRET:-}"
+      Stripe__PriceProMonthly: "${STRIPE_PRICE_PRO_MONTHLY:-}"
+      Stripe__PriceProAnnual: "${STRIPE_PRICE_PRO_ANNUAL:-}"
       Resend__ApiKey: "${RESEND_API_KEY:?}"
       Resend__WebhookSecret: "${RESEND_WEBHOOK_SECRET:?}"
       # Required (:?) — the onboarding@resend.dev sandbox sender in prod
@@ -124,9 +129,16 @@ services:
       dramatiq_prom_host: "0.0.0.0"
       dramatiq_prom_port: "9191"
       SENTRY_DSN: "${SENTRY_DSN_WORKER:-}"
-      WORKER_QUEUES: "coach analysis-paid"
+      # LLM spend caps (worker/app/llm/budget.py resolves feature-flag first,
+      # env fallback second; with credits off everyone is tier pro, so pro +
+      # global ceilings are the live guards).
+      LLM_BUDGET_GLOBAL_USD: "${LLM_BUDGET_GLOBAL_USD:-10}"
+      LLM_BUDGET_PRO_USD: "${LLM_BUDGET_PRO_USD:-8}"
+      # Queue reshape (D9) for the single-VM demo: worker-paid keeps coach
+      # only so a chat reply never queues behind a running analysis.
+      WORKER_QUEUES: "coach"
     volumes:
-      - worker_models:/data/models
+      - /opt/spectr/data:/data
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -138,9 +150,12 @@ services:
     logging: *default-logging
     environment:
       <<: *worker-env
-      WORKER_QUEUES: "analysis-free maintenance"
+      # Queue reshape (D9): worker-free now also drains analysis-paid so a
+      # single-VM demo still processes on-demand specialists; trade-off
+      # accepted per brief — they queue behind a running analysis here.
+      WORKER_QUEUES: "analysis-paid analysis-free maintenance"
     volumes:
-      - worker_models:/data/models
+      - /opt/spectr/data:/data
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -233,7 +248,5 @@ volumes:
   caddy_config:
   postgres_data:
   redis_data:
-  worker_models:
-  bff_data:
   prometheus_data:
   grafana_data:
