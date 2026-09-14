@@ -8,7 +8,6 @@ SPECTR is a web app for music producers: upload a mix and an AI coach walks you 
 ![Live listening room](docs/images/listening-room.png)
 ![On-demand AI specialist team](docs/images/specialist-team.png)
 ![Suggested fixes compiled into device chains](docs/images/fix-suggestions.png)
-![Audio-reactive visuals engine](docs/images/visuals-engine.png)
 ![Song library](docs/images/library.png)
 
 Demo video: _coming soon_.
