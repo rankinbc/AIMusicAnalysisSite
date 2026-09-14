@@ -3,6 +3,7 @@
 SPECTR is a web app for music producers: upload a mix and an AI coach walks you through what's wrong with it and how to fix it — grounded in a multi-phase signal-analysis report and deterministic, genre-aware problem detection, backed by on-demand specialist verdicts, with a real-time in-browser DSP rack for hearing each fix against the original before committing to it.
 
 ![Analysis results report](docs/images/results-page.png)
+![AI coach answering from measured data](docs/images/coach-chat.png)
 ![Real-time Listen DSP rack](docs/images/listen-rack.png)
 ![Live listening room](docs/images/listening-room.png)
 ![On-demand AI specialist team](docs/images/specialist-team.png)
