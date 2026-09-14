@@ -23,7 +23,7 @@
 
 | # | Decision | Rationale |
 |---|----------|-----------|
-| D1 | Azure VM `Standard_B2s` (2 vCPU / 4 GB), Ubuntu 24.04, 32 GB Standard SSD, static IP | Idle footprint of the full 9-container stack is ~1.5 GB; one running analysis peaks ~+1.5 GB — fits 4 GB + the 2 GB swap **with observability kept**. Two *simultaneous* analyses lean on swap (acceptable at demo traffic). ~$30/mo; `Standard_B2als_v2` is the fallback if capacity-blocked. After a stable week, buy a 1-yr savings plan/reservation (~35% off → ~$19–21/mo). Disk: audio lives in R2; 32 GB covers images + Postgres + rotated logs. |
+| D1 | Azure VM `Standard_D2als_v7` (2 vCPU / 4 GB, AMD, non-burstable), Ubuntu 24.04, **centralus**, 32 GB Standard SSD, static IP | **Revised 2026-09-14 during execution:** this PAYG subscription has B-series gated — `Standard_B2s` is `NotAvailableForSubscription` in every US region, and the self-serve quota API refuses `Basv2` increases (`QuotaNotAvailableForResource`). D2als_v7 is the cheapest available x86 4 GB size with quota: $59/mo PAYG → **$39/mo on a 1-yr savings plan** (buy after a stable week) → ≈ $46/mo all-in with disk/IP. Same memory envelope as planned (idle stack ~1.5 GB, one analysis peaks ~+1.5 GB, fits 4 GB + 2 GB swap with observability kept), and non-burstable CPU means analyses never throttle on burst credits. Optional: file a free portal support ticket for Basv2 quota (centralus, 2 vCPUs); if granted, resize to `Standard_B2als_v2` (~$18/mo on savings plan) — same disk/IP, ~5 min downtime. ARM `D2pls_v6` rejected (saves ~$8/mo, needs multi-arch CI builds). Disk: audio lives in R2; 32 GB covers images + Postgres + rotated logs. |
 | D2 | Object storage: **Cloudflare R2** (not Azure Blob) | `S3ObjectStore` + worker boto3 are S3-API; R2 free tier (10 GB, zero egress fees) covers a demo. Azure Blob would require writing a new store implementation — no juice. |
 | D3 | **Credits stay OFF** (`credits_enabled` DB seed is already `'false'`) → every visitor/account is tier `pro`: unlimited analyses, unlimited coach, stems/ALS/full verdicts, billing UI hidden | Recruiters hit zero paywalls and see the whole product. Stripe boot-requirement relaxed (`SPECTR_REQUIRE_STRIPE=0`). Flipping billing ON later is Phase 2 (P2-B). |
 | D4 | **Email stays ON** (`SPECTR_REQUIRE_EMAIL=1`, real Resend keys) | Free tier (100/day), and working transactional email + DKIM/SPF is an impressive, cheap detail. With credits off the verify *gate* never blocks anyone, but verification emails still flow. |
@@ -49,7 +49,7 @@
 - Reuse `infra/*` unchanged except the three edits in Task 1. All prod config = env vars in `/opt/spectr/.env`, chmod 600 (AR31). No secrets in git, ever.
 - Images: `ghcr.io/rankinbc/spectr-{bff,worker,web}` pinned by commit SHA, deployed only via `/opt/spectr/deploy.sh` (never `docker compose up` by hand against `:latest`).
 - EF Core migrations apply automatically at BFF boot (`Migrations__ApplyAtBoot=true`, advisory-lock serialized). No manual migration step, no Alembic (frozen legacy).
-- Monthly cost target ≈ **$36–45** infra + capped LLM spend (≤$10) + $12/yr domain. Set an Azure Cost Management budget alert at $60.
+- Monthly cost target ≈ **$46** infra steady-state (D2als_v7 on a 1-yr savings plan; ~$66 during the first pay-as-you-go week) + capped LLM spend (≤$10) + $12/yr domain. Set an Azure Cost Management budget alert at $75.
 - Local machine is Windows: `az` CLI + `ssh`/`scp` from PowerShell. The VM is Ubuntu 24.04.
 - Known landmine (repo `.env.example`, caps warning): `STORAGE_LOCAL_ROOT=/data` is a COMPOSE-ONLY value. It is already correct in compose; never export it on the host.
 
@@ -103,21 +103,21 @@ The one real bug: in `infra/compose.prod.yml` the BFF mounts `bff_data:/data` bu
   ```
 - [ ] **Step 3: Create the VM**
   ```powershell
-  az vm create -g spectr-rg -n spectr-vm `
-    --image Ubuntu2404 --size Standard_B2s `
+  az vm create -g spectr-rg -n spectr-vm -l centralus `
+    --image Ubuntu2404 --size Standard_D2als_v7 `
     --admin-username spectr `
     --ssh-key-values $env:USERPROFILE\.ssh\spectr_azure.pub `
     --public-ip-sku Standard --public-ip-address-allocation static `
     --os-disk-size-gb 32 --storage-sku StandardSSD_LRS
   ```
-  Record the `publicIpAddress` from the output — it is `<VM_IP>` everywhere below. (If `B2s` is capacity-blocked, `Standard_B2als_v2` is the same shape, slightly cheaper.)
+  Record the `publicIpAddress` from the output — it is `<VM_IP>` everywhere below. (`-l centralus` is required because the resource group lives in eastus2 — RG location is metadata only. Fallback order if refused: `Standard_D2als_v6` centralus → `Standard_D2als_v7` westus3. B-series sizes are gated on this subscription — see D1. Before creating a VM on a *different* subscription, check availability first: `az vm list-skus -l <region> --resource-type virtualMachines --query "[?name=='<size>'].restrictions"` — an empty list means usable.)
 - [ ] **Step 4: Open web ports; restrict SSH to your IP**
   ```powershell
   az vm open-port -g spectr-rg -n spectr-vm --port 80,443 --priority 900
   az network nsg rule list -g spectr-rg --nsg-name spectr-vmNSG -o table   # find the SSH rule name (usually 'default-allow-ssh')
   az network nsg rule update -g spectr-rg --nsg-name spectr-vmNSG -n default-allow-ssh --source-address-prefixes "<your-home-ip>/32"
   ```
-- [ ] **Step 5: Budget alert** — Azure Portal → Cost Management → Budgets → create `spectr-monthly`, $60/month, email alert at 80% and 100%. (The CLI for this is subscription-scope JSON gymnastics; portal is 2 minutes.) Also check for free credit first: a Visual Studio / Dev Essentials subscription carries $50–150/mo Azure credit, and a brand-new account gets $200 for 30 days.
+- [ ] **Step 5: Budget alert** — Azure Portal → Cost Management → Budgets → create `spectr-monthly`, $75/month, email alert at 80% and 100%. (The CLI for this is subscription-scope JSON gymnastics; portal is 2 minutes.) Also check for free credit first: a Visual Studio / Dev Essentials subscription carries $50–150/mo Azure credit, and a brand-new account gets $200 for 30 days.
 - [ ] **Step 6: Verify** — `ssh -i $env:USERPROFILE\.ssh\spectr_azure spectr@<VM_IP> 'echo ok'` prints `ok`.
 
 ### Task 3: VM bootstrap
@@ -126,15 +126,17 @@ All commands run **on the VM** over SSH.
 
 - [ ] **Step 1: Docker Engine + compose plugin**
   ```bash
+  cloud-init status --wait   # a fresh Azure VM runs apt in cloud-init; racing it fails with a dpkg lock error
   sudo apt-get update && sudo apt-get install -y ca-certificates curl
   sudo install -m 0755 -d /etc/apt/keyrings
   sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" | sudo tee /etc/apt/sources.list.d/docker.list
   sudo apt-get update && sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-  sudo usermod -aG docker spectr && newgrp docker
-  docker run --rm hello-world
+  sudo usermod -aG docker spectr
+  sudo docker run --rm hello-world
   ```
-- [ ] **Step 2: 2 GB swap** (load-bearing on the 4 GB B2s — absorbs the rare second concurrent analysis; do not skip)
+  Group membership applies from the NEXT login. Don't use `newgrp` — it opens a subshell and hangs scripted SSH. Verify from a fresh session: `ssh ... 'docker ps'` must work without sudo.
+- [ ] **Step 2: 2 GB swap** (load-bearing on the 4 GB VM — absorbs the rare second concurrent analysis; do not skip)
   ```bash
   sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
   echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
@@ -197,6 +199,21 @@ All commands run **on the VM** over SSH.
   ```
 - [ ] **Step 2: Verify** — `docker compose -f /opt/spectr/compose.prod.yml --env-file /opt/spectr/.env config --quiet` on the VM exits 0 with only the `IMAGE_TAG` complaint remaining (that one is supplied by deploy.sh — by design it is never in .env).
 
+### Task 6.5: Make CI green (inserted during execution, 2026-09-14)
+
+Master CI has been red since after 2026-07-23: the `frontend` job fails at the step "Lint — no raw hex in CSS modules (AR39)". The `deploy` job `needs` every gate, so it never builds or pushes images — GHCR only holds 2026-07-23-era images. The pipeline itself is proven (the last green master run built, Trivy-scanned and pushed all three images). Task 7 is dead until this passes.
+
+**Files:**
+- Modify: `components/frontend-spectr-v2/src/**/*.module.css` (raw hex → tokens)
+- Modify (only if no token has the exact value): `components/frontend-spectr-v2/src/styles/tokens.css`
+- Modify: whatever later frontend CI steps surface (CI stops at the first failing step, so steps after the raw-hex lint are unexercised on this commit)
+
+- [ ] **Step 1:** Derive the exact ordered step list from the `frontend:` job in `.github/workflows/ci.yml`. Run every step locally in `components/frontend-spectr-v2`, collecting ALL failures rather than stopping at the first.
+- [ ] **Step 2:** Replace each raw hex in `*.module.css` with an existing `tokens.css` custom property of identical value. If none matches, add a token following that file's naming conventions. Zero visual change; never weaken or allowlist the lint rule.
+- [ ] **Step 3:** Fix any other failing steps minimally, then re-run the full step list until every step passes (`npx tsc -b`, `npm run lint`, the extra lint:* scripts, `npm run build`, `npx vitest run`).
+- [ ] **Step 4:** Commit path-scoped (`git commit -m "..." -- <files>`), because the index may hold unrelated staged changes.
+- [ ] **Step 5 (verified during Task 7):** after the push to master, confirm the Actions run is fully green and that the `deploy` job's "Push images (post-scan)" step succeeded, before running `deploy.sh`.
+
 ### Task 7: Build images (via CI) + first deploy
 
 - [ ] **Step 1:** Push Task 1's commit to `master`. CI runs the full gates, builds `spectr-bff` / `spectr-worker` / `spectr-web`, Trivy-scans, pushes `:sha` + `:latest` to GHCR. The CI deploy-to-VPS step self-skips (VPS_* secrets not set yet — that's Task 9). Record the green run's commit SHA.
@@ -253,9 +270,9 @@ Run in a normal browser + an incognito window against `https://<your-domain>`:
 - [ ] **Stems**: drag-drop several stems → classify proposals appear → confirm → per-stem findings in the report. **Reference**: upload a reference track → reference tab populates.
 - [ ] **Share link**: open a report's share URL in incognito — public page renders.
 - [ ] **Ops story**: `./deploy.sh rollback` on the VM, confirm the site downgrades cleanly, then `./deploy.sh <sha>` back. Screenshot Grafana dashboards for the resume/interview.
-- [ ] **Memory check** after the first few analyses: `free -m` on the VM — swap usage should be near zero at idle and modest during an analysis. If it's constantly deep in swap, resize to `B2ms` (`az vm resize`) — that's the one-command escape hatch.
-- [ ] **Cost check** after 48 h: Azure Cost analysis daily burn ≈ $1.3/day; Anthropic console shows only your test spend.
-- [ ] **After one stable week**: buy a 1-year Azure savings plan / reserved instance for the B2s (~35% off → ~$19–21/mo). And when the resume isn't actively circulating, `az vm deallocate -g spectr-rg -n spectr-vm` parks everything at ~$6–8/mo (disk + IP only); `az vm start` restores it — same IP, same data — in ~3 minutes.
+- [ ] **Memory check** after the first few analyses: `free -m` on the VM — swap usage should be near zero at idle and modest during an analysis. If it's constantly deep in swap, resize to `Standard_D2as_v6` (2 vCPU / 8 GB, same quota family, roughly 2× the cost) with `az vm resize`. That's the one-command escape hatch.
+- [ ] **Cost check** after 48 h: Azure Cost analysis daily burn ≈ $2.2/day on pay-as-you-go; the Anthropic console shows only your test spend.
+- [ ] **After one stable week**: buy a 1-year **Azure Compute Savings Plan** sized to the VM's hourly rate ($59 → ~$39/mo). Prefer it over a reserved instance — it follows the VM through a later resize (e.g. to B2als_v2 if a support ticket ever unlocks B-series), where a reservation is locked to one size family. And when the resume isn't actively circulating, `az vm deallocate -g spectr-rg -n spectr-vm` parks everything at ~$6–8/mo (disk + IP only); `az vm start` restores it — same IP, same data — in ~3 minutes.
 
 ---
 
@@ -270,13 +287,13 @@ Run in a normal browser + an incognito window against `https://<your-domain>`:
 
 | Item | Cost |
 |---|---|
-| VM Standard_B2s (2 vCPU/4 GB), pay-as-you-go | ~$30 (~$19–21 with 1-yr savings plan) |
+| VM Standard_D2als_v7 (2 vCPU/4 GB), centralus | $59 pay-as-you-go → **$39 with 1-yr savings plan** ($35 reserved instance) |
 | 32 GB Standard SSD OS disk | ~$2.50 |
 | Static public IP (Standard) | ~$4 |
 | Egress | ~$0 at demo traffic (audio is served via R2 presigned GETs anyway) |
 | Cloudflare R2, Resend, healthchecks.io, ntfy.sh, GHCR | $0 (free tiers) |
 | Anthropic API | capped ≤ $10 by worker budget + console hard limit |
 | Domain | ~$12/yr |
-| **Total** | **≈ $38–48/mo pay-as-you-go → ≈ $27–35/mo reserved → ~$8/mo deallocated between job searches** |
+| **Total** | **≈ $66/mo for the first (pay-as-you-go) week → ≈ $46/mo steady-state on the savings plan → ~$7/mo deallocated between job searches.** If a portal support ticket ever unlocks B-series: resize to B2als_v2 → ≈ $25/mo on a savings plan. |
 
 Rejected cost levers (documented so they aren't re-litigated): Spot VM (eviction = dead resume link), nightly auto-shutdown (recruiters browse at odd hours), ARM VMs (multi-arch CI builds via QEMU for the numba/llvmlite compile — real effort, modest savings), Container Apps scale-to-zero (managed Postgres + Redis baseline eats the savings), leaving Azure (defeats the resume purpose).
