@@ -65,7 +65,7 @@ The one real bug: in `infra/compose.prod.yml` the BFF mounts `bff_data:/data` bu
 **Interfaces:**
 - Produces: all three app services mount host `/opt/spectr/data` at `/data`; compose boots without Stripe secrets; workers receive `LLM_BUDGET_GLOBAL_USD` / `LLM_BUDGET_PRO_USD`.
 
-- [ ] **Step 1: Edit `infra/compose.prod.yml`** — six changes:
+- [ ] **Step 1: Edit `infra/compose.prod.yml`** — seven changes:
   1. `bff` service `volumes:`: replace `- bff_data:/data` with `- /opt/spectr/data:/data`.
   2. `worker-paid` `volumes:`: replace `- worker_models:/data/models` with `- /opt/spectr/data:/data`.
   3. `worker-free` `volumes:`: same replacement.
