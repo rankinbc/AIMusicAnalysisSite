@@ -8,6 +8,7 @@ export default defineConfig({
     environment: 'node',
     environmentMatchGlobs: [
       ['src/features/listen-rack/**', 'jsdom'],
+      ['src/features/song/**', 'jsdom'],
     ],
   },
 });

@@ -1046,3 +1046,59 @@ export function useCompare(versionA: string | null, versionB: string | null) {
     retry: false,
   });
 }
+
+// ── Version rating (personal score) ─────────────────────────────────────────
+export function useSetPersonalScore(versionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (score: number) =>
+      fetcher<{ score: number }>({
+        url: `/versions/${versionId}/rating`, method: 'PUT', data: { score },
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['songs'] }),
+  });
+}
+
+export function useClearPersonalScore(versionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => fetcher<void>({ url: `/versions/${versionId}/rating`, method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['songs'] }),
+  });
+}
+
+// ── Compare notes ────────────────────────────────────────────────────────────
+export function useCompareNotes(songId: string, a: string | null, b: string | null) {
+  return useQuery({
+    queryKey: ['compare-notes', songId, ...[a, b].filter(Boolean).sort()],
+    queryFn: () =>
+      fetcher<{ body: string }>({
+        url: `/compare/notes`, method: 'GET',
+        params: { versionA: a as string, versionB: b as string },
+      }),
+    enabled: Boolean(a && b),
+  });
+}
+
+export function useSaveCompareNotes(songId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { a: string; b: string; body: string }) =>
+      fetcher<{ body: string }>({
+        url: `/compare/notes`, method: 'PUT',
+        params: { versionA: v.a, versionB: v.b }, data: { body: v.body },
+      }),
+    onSuccess: (_d, v) =>
+      qc.invalidateQueries({ queryKey: ['compare-notes', songId, ...[v.a, v.b].sort()] }),
+  });
+}
+
+export function useDeleteCompareNotes(songId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { a: string; b: string }) =>
+      fetcher<void>({ url: `/compare/notes`, method: 'DELETE', params: { versionA: v.a, versionB: v.b } }),
+    onSuccess: (_d, v) =>
+      qc.invalidateQueries({ queryKey: ['compare-notes', songId, ...[v.a, v.b].sort()] }),
+  });
+}

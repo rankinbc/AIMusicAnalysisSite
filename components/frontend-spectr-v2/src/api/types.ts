@@ -144,6 +144,15 @@ export interface AuthResponse {
   user: AuthedUser;
 }
 
+export interface VersionMetricsDto {
+  score: number | null;
+  lufs: number | null;
+  dynamicRangeLu: number | null;
+  bass: number | null;
+  air: number | null;
+  stereoWidth: number | null;
+}
+
 export interface VersionDto {
   id: string;
   songId: string;
@@ -154,6 +163,8 @@ export interface VersionDto {
   createdAt: string;
   alsFilePath: string | null;
   referencePath: string | null;
+  latestResult?: VersionMetricsDto | null;
+  personalScore?: number | null;
 }
 
 export type VersionFileType = 'mix' | 'als' | 'stem' | 'reference';
