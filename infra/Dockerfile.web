@@ -18,5 +18,8 @@ RUN npm run build
 # 2.8 (alpine 3.20) hit Trivy CRITICALs (openssl CVE-2026-31789, embedded
 # smallstep CVE-2025-44005) — bumped 2026-07-13.
 FROM caddy:2.11
+# Same trivy-gate rationale as the worker image: pull alpine base-package
+# security updates at build so a stale base layer can't fail the deploy scan.
+RUN apk upgrade --no-cache
 COPY infra/Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/dist /srv

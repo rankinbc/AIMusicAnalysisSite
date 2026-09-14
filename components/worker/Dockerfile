@@ -6,7 +6,11 @@
 FROM python:3.11-slim
 
 # libsndfile: soundfile; ffmpeg: librosa/audioread decode fallback.
+# upgrade first: the deploy gate trivy-scans the built image with
+# exit-code=1 on CRITICALs - stale base-layer packages (perl-base CVEs,
+# 2026-09-14) fail the push even when nothing in the repo changed.
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends libsndfile1 ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
