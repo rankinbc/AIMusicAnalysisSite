@@ -13,6 +13,25 @@ WORKER_DIR_DEFAULT = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "..", "..", "worker"))
 
 
+def _read_watchdog_status():
+    """Watchdog heartbeat for the header: parsed status file, or None when no
+    watchdog is running (or its file is stale > 2 probe intervals)."""
+    import json as _json
+    import time as _time
+    from .watchdog import INTERVAL_S, LOG_DIR_DEFAULT
+    path = os.environ.get(
+        "WATCHDOG_STATUS_FILE", os.path.join(LOG_DIR_DEFAULT, "watchdog-status.json"))
+    try:
+        with open(path, encoding="utf-8") as f:
+            s = _json.load(f)
+        if _time.time() - float(s.get("ts", 0)) > INTERVAL_S * 2 + 5:
+            return None  # watchdog stopped writing — treat as not running
+        return {"halted": bool(s.get("halted")), "action": s.get("action"),
+                "restarts_in_window": s.get("restarts_in_window", 0)}
+    except Exception:
+        return None
+
+
 def _default_redis():
     import redis
     return redis.Redis.from_url(
@@ -173,6 +192,7 @@ def create_app(redis_client=None, db_connect=None, ctl=None) -> Flask:
                 worker["allin1_container"] = ctl.allin1_container()
             except AttributeError:
                 worker["allin1_container"] = None  # test stubs may omit it
+            worker["watchdog"] = _read_watchdog_status()
             queues = []
             for q in wire.QUEUES:
                 try:
@@ -302,7 +322,10 @@ PAGE = """<!doctype html>
 </style>
 <h1>workerdash — <span id="wstatus" class="unknown">…</span>
  <span id="whb" class="mono"></span>
+ <span id="wdog" class="mono"></span>
  <button id="restart" onclick="restartWorker()">restart worker</button></h1>
+<div id="wdogBanner" style="display:none;background:#5a1f1f;border:1px solid #a04747;
+ border-radius:6px;padding:.5rem .9rem;margin:.5rem 0"></div>
 <div class="tabs">
  <button id="tabLive" class="tabbtn active" onclick="showTab('live')">Live</button>
  <button id="tabOps" class="tabbtn" onclick="showTab('ops')">Operations</button>
@@ -314,7 +337,7 @@ PAGE = """<!doctype html>
 </div>
 <div id="opsView" style="display:none">
  <div class="opsFilters">
-  <input id="opsSearch" placeholder="search song/version…" oninput="opsDebouncedSearch()">
+  <input id="opsSearch" placeholder="search song/version/job id…" oninput="opsDebouncedSearch()">
   <select id="opsStatus" onchange="opsLoad(1)">
    <option value="">any status</option>
    <option value="pending">pending</option>
@@ -366,12 +389,13 @@ async function opsLoad(page){
  let s;try{s=await (await fetch('/api/ops?'+q)).json()}catch(e){
   $('#opsTable').innerHTML='<span class=dead>failed to load</span>';return}
  if(!s.ok){$('#opsTable').innerHTML=`<span class=dead>${esc(s.error||'error')}</span>`;return}
- $('#opsTable').innerHTML=s.rows.length?'<table><tr><th>song</th><th>status</th>'+
+ $('#opsTable').innerHTML=s.rows.length?'<table><tr><th>job</th><th>song</th><th>status</th>'+
   '<th>error</th><th>dispatched</th><th>tokens</th><th>cost</th><th></th></tr>'+
   s.rows.map(j=>{
    const label=j.song?`${esc(j.song)} / ${esc(j.label)} v${j.version_number}`:
     `(anon) ${esc(j.file_path)}`;
-   return `<tr><td>${label}</td><td>${esc(j.status)}</td><td>${esc(j.error_code)}</td>`+
+   return `<tr><td class=mono title="${esc(j.id)}">${esc(j.id.slice(0,8))}</td>`+
+    `<td>${label}</td><td>${esc(j.status)}</td><td>${esc(j.error_code)}</td>`+
     `<td class=mono>${esc(j.dispatched_at)}</td>`+
     `<td class=mono>${(j.input_tokens||0)+(j.output_tokens||0)}</td>`+
     `<td class=mono>$${(j.cost_usd||0).toFixed(4)}</td>`+
@@ -445,6 +469,13 @@ async function load(){
   $('#wstatus').textContent='dashboard error';return}
  const w=s.worker;$('#wstatus').textContent=w.status;
  $('#wstatus').className=w.status;
+ const wd=w.watchdog;
+ $('#wdog').textContent=wd?(wd.halted?'· watchdog: HALTED':'· watchdog: on'):'· watchdog: off';
+ const wb=$('#wdogBanner');
+ if(wd&&wd.halted){wb.style.display='block';
+  wb.textContent='Worker is CRASH-LOOPING — the watchdog stopped restarting it after '+
+   wd.restarts_in_window+' restarts in 10 minutes. Check the newest worker log in data/logs/.';}
+ else wb.style.display='none';
  $('#whb').textContent=w.heartbeat_age==null?'(no heartbeat ever)':
   `heartbeat ${Math.round(w.heartbeat_age)}s ago · master:${w.master} fork:${w.fork}`;
  const run=(s.db&&s.db.processing)||[];

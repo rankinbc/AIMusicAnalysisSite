@@ -65,6 +65,14 @@ def test_list_jobs_search_filters_by_song_and_label():
     assert any("%eterna%" in str(p) for p in count_params)
 
 
+def test_list_jobs_search_matches_job_id_prefix():
+    conn = FakeConn([[(0,)], []])
+    ops_db.list_jobs(conn, search="bc0e6f98")
+    count_sql, count_params = conn.cur.executed[0]
+    assert "j.id::text ILIKE" in count_sql
+    assert "bc0e6f98%" in count_params  # prefix match, not substring
+
+
 def test_list_jobs_status_filter():
     conn = FakeConn([[(0,)], []])
     ops_db.list_jobs(conn, status="failed")

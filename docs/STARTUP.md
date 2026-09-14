@@ -133,6 +133,29 @@ cd components/frontend-spectr-v2
 npm run dev
 ```
 
+### Worker watchdog (recommended — stops the recurring silent worker deaths)
+
+The worker historically dies silently (OpenMP fork abort after heavy audio
+work, memory pressure from stems analyses) and leaves no logs because its
+console dies with it. The `workerdash` component ships a supervisor:
+
+```powershell
+cd components/workerdash
+python -m workerdash.watchdog     # keep this window open (or schedule at login)
+```
+
+- Probes process pair + dramatiq heartbeat every 30 s; two consecutive
+  dead/half-dead checks → tree-kill (masters + orphaned forks, per the rule
+  above) + relaunch with stdout/stderr redirected to
+  `data/logs/worker-<stamp>.log` — post-crash evidence at last.
+- Crash-loop guard: 3 restarts in 10 min → the watchdog STOPS restarting,
+  writes `halted: true` to `data/logs/watchdog-status.json`, and the
+  workerdash page (127.0.0.1:5999) shows a red crash-loop banner. Fix the
+  cause, and supervision resumes on the next healthy probe.
+- If you run the watchdog, let IT own the worker: don't also start a manual
+  worker window. Before `./scripts/start-spectr.ps1 -StopOnly`, close the
+  watchdog first — otherwise it resurrects the worker you just stopped.
+
 To stop components manually, prefer `./scripts/start-spectr.ps1 -StopOnly`.
 If you must kill the worker by hand, NEVER just kill the process whose cmdline
 contains "dramatiq" — that orphans its fork (problem #3). Tree-kill instead:
