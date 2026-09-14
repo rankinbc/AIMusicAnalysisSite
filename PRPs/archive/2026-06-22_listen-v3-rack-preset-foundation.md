@@ -34,7 +34,7 @@ elsewhere, and viz presets round-trip through the server instead of localStorage
 ## Why
 - **Unblocks the whole V3 model.** Decisions D1.2–D1.5, D2.3 (accept = fork-to-preset), D4.3 (non-owner
   save), D5.2 (Game Plan), and D1.3 (coach/analysis emit full-chain presets) all depend on a real
-  `RackPreset` + a working apply loop. See `_bmad-output/brainstorming/brainstorming-session-2026-06-25-listen-modes-datamodel.md`.
+  `RackPreset` + a working apply loop. See `docs/archive/brainstorming/brainstorming-session-2026-06-25-listen-modes-datamodel.md`.
 - **Closes an existing gap (Δ3 in the reconciliation):** `Verdict.fix.dsp_chain` is currently a flag-only
   "applied" with no engine wiring. The apply loop built here is the same path verdict fixes / coach presets
   will use — build it once, reuse everywhere.
@@ -63,9 +63,9 @@ version"; viz presets persist across devices. Technical: 3 EF Core tables (+ Pyt
 ### Documentation & References
 ```yaml
 # DECISIONS & RECONCILIATION (read first — they define the model + why)
-- file: _bmad-output/brainstorming/brainstorming-session-2026-06-25-listen-modes-datamodel.md
+- file: docs/archive/brainstorming/brainstorming-session-2026-06-25-listen-modes-datamodel.md
   why: Domain 1 decisions D1.2–D1.5 (preset binding, draft, source-first-class, viz scope), D2.3, D4.6 provenance.
-- file: _bmad-output/brainstorming/listen-v3-schema-reconciliation-2026-06-25.md
+- file: docs/archive/brainstorming/listen-v3-schema-reconciliation-2026-06-25.md
   why: Entity verdict table + Δ2 (dsp_chain is the change currency) + Δ3 (apply loop is the gap) + build discipline.
 
 # DESIGN HANDOFF (the chain shape + the binding map the apply loop must hit)

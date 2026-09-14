@@ -58,10 +58,10 @@
 - [ ] **Step 1: Create the prompts directory and copy all 24 files**
 
 ```bash
-mkdir -p "C:/claude-workspace/AIMusicAnalysisSite/components/api/prompts/experts"
+mkdir -p "<repo-root>/components/api/prompts/experts"
 
-$src = "C:/claude-workspace/AbletonAIAnalysis/docs/ai/RecommendationGuide/prompts"
-$dst = "C:/claude-workspace/AIMusicAnalysisSite/components/api/prompts/experts"
+$src = "<AbletonAIAnalysis checkout>/docs/ai/RecommendationGuide/prompts"
+$dst = "<repo-root>/components/api/prompts/experts"
 
 Copy-Item "$src/*.md" "$dst/"
 ```
@@ -69,7 +69,7 @@ Copy-Item "$src/*.md" "$dst/"
 - [ ] **Step 2: Verify all 24 files are present**
 
 ```bash
-ls "C:/claude-workspace/AIMusicAnalysisSite/components/api/prompts/experts" | Measure-Object
+ls "<repo-root>/components/api/prompts/experts" | Measure-Object
 ```
 
 Expected: `Count: 24`

@@ -55,9 +55,9 @@ Technical: 3 tables (+ Python mirror), drain-hook inserts into PRP-3/4 flows, `G
 ## All Needed Context
 ```yaml
 # DECISIONS + RECONCILIATION
-- file: _bmad-output/brainstorming/brainstorming-session-2026-06-25-listen-modes-datamodel.md
+- file: docs/archive/brainstorming/brainstorming-session-2026-06-25-listen-modes-datamodel.md
   why: D5.1 (per-version plan), D5.2 (unified GamePlanItem drain + sources), D5.3 (VersionComparison→DeltaCard), D5.5 (outcome telemetry), X.2 (owner-only).
-- file: _bmad-output/brainstorming/listen-v3-schema-reconciliation-2026-06-25.md
+- file: docs/archive/brainstorming/listen-v3-schema-reconciliation-2026-06-25.md
   why: Δ2 (dsp_chain is the change currency), the GamePlanItem 'source=analysis' seed = prototype PLAN_ITEMS, compare_cache is v↔reference (VersionComparison is the v↔v sibling).
 
 # EXISTING SURFACES TO REUSE / SIBLING

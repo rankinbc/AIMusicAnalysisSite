@@ -262,9 +262,9 @@ No BFF DTO/endpoint change (columns are ops-facing; no UI surface this wave → 
 ```powershell
 # ai-analysis-v2: 3 commits ahead of master, upstream gone, parked/superseded → force delete
 git branch -D ai-analysis-v2
-# analysis-results-ui: fully merged BUT checked out at C:/Users/badmin/projects/spectr-analysis-ui
-git -C C:/Users/badmin/projects/spectr-analysis-ui status --porcelain   # must be EMPTY; if dirty, STOP and report
-git worktree remove C:/Users/badmin/projects/spectr-analysis-ui
+# analysis-results-ui: fully merged BUT checked out at ../spectr-analysis-ui
+git -C ../spectr-analysis-ui status --porcelain   # must be EMPTY; if dirty, STOP and report
+git worktree remove ../spectr-analysis-ui
 git branch -d analysis-results-ui
 git worktree prune
 ```

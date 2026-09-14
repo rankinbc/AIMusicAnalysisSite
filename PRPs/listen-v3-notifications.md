@@ -53,7 +53,7 @@ call sites, `NotificationEndpoints.cs`, frontend hooks. No worker actor.
 ## All Needed Context
 ```yaml
 # DECISIONS
-- file: _bmad-output/brainstorming/brainstorming-session-2026-06-25-listen-modes-datamodel.md
+- file: docs/archive/brainstorming/brainstorming-session-2026-06-25-listen-modes-datamodel.md
   why: D7.1 (unified Notification), D7.2 (in-app only, anon best-effort/none), D7.3 (per-event vs digest), D4.5 (adoption-notify).
 
 # THE SEAM ALREADY DECLARED (implement, don't reshape)

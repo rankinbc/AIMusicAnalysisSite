@@ -52,7 +52,7 @@ interfaces wired into DI, and a rate limiter. Plus a short conventions doc the o
 ## All Needed Context
 ```yaml
 # THE REVIEW (what this PRP resolves)
-- file: _bmad-output/brainstorming/listen-v3-schema-reconciliation-2026-06-25.md
+- file: docs/archive/brainstorming/listen-v3-schema-reconciliation-2026-06-25.md
   why: "Adversarial review" section + per-PRP "Known Gaps" — this PRP owns the cross-cutting ⛔ blockers (PRP-2 G1/G2, PRP-3 G1) + the conventions for PRP-1 G1/G2, PRP-6 G1, PRP-7 G1.
 
 # EXISTING PATTERNS TO BUILD ON

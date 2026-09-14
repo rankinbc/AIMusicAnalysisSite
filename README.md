@@ -1,129 +1,123 @@
-# SPECTR — AI Music Analyzer
+# SPECTR
 
-A music producer web app for uploading audio files (MP3, FLAC, WAV) and receiving a comprehensive multi-phase analysis report. Loudness/LUFS with streaming-platform targets, frequency balance, stereo health, genre detection + scoring, stem separation + clash detection, reference-track comparison, arrangement advice, plus on-demand AI specialist verdicts.
+SPECTR is a web app for music producers: upload a mix and an AI coach walks you through what's wrong with it and how to fix it — grounded in a multi-phase signal-analysis report and deterministic, genre-aware problem detection, backed by on-demand specialist verdicts, with a real-time in-browser DSP rack for hearing each fix against the original before committing to it.
 
-Also includes a **Listen** page with a real-time Web Audio DSP chain — EQ, compressor, saturation, M/S width, pitch — so producers can A/B mix decisions in-browser without leaving the report.
+![Analysis results report](docs/images/results-page.png)
+![Real-time Listen DSP rack](docs/images/listen-rack.png)
+![Live listening room](docs/images/listening-room.png)
+![On-demand AI specialist team](docs/images/specialist-team.png)
+![Suggested fixes compiled into device chains](docs/images/fix-suggestions.png)
+![Audio-reactive visuals engine](docs/images/visuals-engine.png)
+![Song library](docs/images/library.png)
 
----
+Demo video: _coming soon_.
+
+## What it does
+
+- **Multi-phase analysis pipeline** (7 phases; 8 with an Ableton project file). Phase 1 measures integrated LUFS (pyloudnorm), true peak (4× oversampled dBTP), clipping, 7-band frequency balance, stereo width and mono compatibility, key, BPM, and song structure (allin1 model, run in Docker). Later phases add genre auto-detection, genre-specific scoring, stem-level frequency clash detection, reference-track deltas, percentile ranking against a curated reference library, and arrangement analysis (section lengths, energy contrast).
+- **Ableton `.als` project analysis.** Uploading the project file unlocks an eighth phase that parses the device chains — executed in an isolated subprocess with a timeout and memory cap, so a malformed project degrades one phase instead of killing the job.
+- **AI mix coach.** A per-track chat grounded in the report's measured values — the model answers from the data it was handed, not from guesswork — with three reply modes (Concise / Normal / Teach), a per-finding "ask the coach about this" entry point, and replies streamed token-by-token to the UI. Message caps are enforced server-side per tier.
+- **Coach Mix → Fix Rack → your ears.** Findings and coach suggestions queue into a Fix Rack; the Coach Mix arbiter compiles the queued fixes into one DSP chain applied to the Listen rack, so every suggestion is heard A/B against the dry mix before it's committed — or exported as a step-by-step DAW plan.
+- **Deterministic problem engine.** A rule engine turns measured values into typed Problem records using genre-relative thresholds (the same measurement can be fine in techno and a defect in trance). Rules are tiered — single-metric rules plus corroborated multi-metric composites that absorb their children — and never grade data that wasn't provided.
+- **On-demand AI specialists.** A triage pass builds a routing plan over 27 prompt-versioned specialists (loudness, low end, stereo field, gain staging, frequency collisions, stem balance, arrangement, and more). Verdict JSON is schema-validated, and priority scores are recomputed by a deterministic formula — LLM-supplied scores and severities are never trusted as-is.
+- **Bulk stem upload with audio-content classification.** Up to 100 stems per version; roles (drums, bass, vocals, …) are detected from audio content, not filenames, then confirmed by the user. Grouped bus analysis by default, per-stem mode opt-in.
+- **Listen rack.** A Web Audio DSP chain wrapped around the original upload: 8-band EQ, compressor with makeup gain, parallel saturation, M/S width matrix, and pitch — with live FFT spectrum and L/R metering. Fixes carried over from the report can be toggled and A/B'd against the dry signal without leaving the browser.
+- **Listening rooms and audio-reactive visuals.** A version can be shared into a live room — listener roster, chat, reactions, synced transport — and the player carries a music-reactive visual stage (spectrum, laser rig, strobe patterns, an auto-program that reacts to song intensity).
+- **Anonymous instant analysis.** A visitor can analyze one track without an account; registering claims the device's history server-side.
+- **Accounts and operations.** JWT auth with httpOnly refresh cookies, Stripe subscriptions and credit packs behind live feature flags, per-tier LLM budgets, retention sweeps, transactional email, and a worker-health dashboard.
+
+## Architecture
+
+The browser talks only to an ASP.NET Core BFF, which owns auth, uploads, entitlements, and audio streaming. Analysis work is enqueued to Redis and consumed by a Python worker that runs the audio pipeline and LLM calls, writing results to PostgreSQL where the BFF reads them back. There is no HTTP hop between the .NET and Python sides — the BFF writes dramatiq's Redis wire format directly.
+
+```mermaid
+flowchart LR
+  SPA[React 19 SPA] -->|REST + SSE| BFF[ASP.NET Core BFF]
+  BFF -->|EF Core| PG[(PostgreSQL 16)]
+  BFF -->|enqueue, dramatiq wire format| R[(Redis 7)]
+  R -->|4 tier-routed queues| W[Python dramatiq worker]
+  W --> AP[audio_analysis pipeline]
+  W -->|verdicts / coach| LLM[Anthropic API]
+  W -->|SQLAlchemy| PG
+  BFF -->|results + Range audio streaming| SPA
+```
 
 ## Stack
 
-**v2 (primary):**
-
 | Component | Purpose | Tech |
 |---|---|---|
-| `bff/` | Auth, songs/versions, upload, audio streaming, job dispatch, verdict routes | ASP.NET Core .NET 10, EF Core 10, Npgsql, dramatiq job queue (Redis), JWT bearer |
-| `frontend-spectr-v2/` | React 19 SPA — auth, library, results, AI Coach, Listen DSP page | React 19 + Vite 6 + TypeScript strict + TanStack Router + CSS Modules + Radix UI + WaveSurfer + Recharts |
-| `worker/` | dramatiq worker — runs 7-phase analysis + on-demand specialist verdicts | Python 3.11+ / dramatiq / SQLAlchemy 2 sync (psycopg2) / Anthropic CLI |
-| `shared/` | `aimusic-shared` — SQLAlchemy ORM models (worker side) | Python / SQLAlchemy 2 / Pydantic v2 |
-| `analysis/` | `audio_analysis` — installable 7-phase pipeline package | Python / librosa / Demucs / torchopenl3 / pyloudnorm |
+| `components/bff/` | Auth, songs/versions, uploads, audio streaming, job dispatch, verdicts, billing | ASP.NET Core (.NET 10), EF Core 10, Npgsql, StackExchange.Redis |
+| `components/frontend-spectr-v2/` | SPA — library, results, coach, Listen rack | React 19, Vite 6, TypeScript strict, TanStack Router/Query, CSS Modules, Radix UI, WaveSurfer, Recharts |
+| `components/worker/` | Job consumer — analysis pipeline, rule engine, LLM gateway | Python 3.11, dramatiq, SQLAlchemy 2 (sync), Pydantic v2 |
+| `components/analysis/` | Installable audio-analysis package (the pipeline itself) | librosa, pyloudnorm, Demucs, torchopenl3 |
+| `components/shared/` | SQLAlchemy models mirroring the EF Core schema for the worker | Python, SQLAlchemy 2 |
+| `components/workerdash/` | Local ops dashboard — queue contents, worker health, run history | Python, localhost-only |
+| `components/api/` | Frozen v1 (FastAPI) — superseded by the BFF + worker; excluded from CI and deploys, kept until fully harvested | FastAPI, Celery |
 
-**v1 (legacy, still running):**
+PostgreSQL 16 and Redis 7 run in Docker for local dev; `infra/` holds the production compose stack, deploy script with health-checked rollback, and Prometheus/Grafana config.
 
-| Component | Purpose | Tech |
-|---|---|---|
-| `api/` | FastAPI — still owns the verdict pipeline + Anthropic CLI client | FastAPI / asyncpg / Celery (deprecated path) |
-| `frontend-spectr/` | Vanilla JSX SPA | Plain React without TS / Tailwind |
+## Engineering notes
 
-Both stacks share the same PostgreSQL 16 + Redis 7. BFF owns the canonical schema via EF Core migrations; the shared SQLAlchemy ORM in `aimusic_shared/models.py` mirrors those entities for the worker.
+- **The language split is the architecture.** Everything user-facing and transactional (auth, entitlements, uploads, streaming, billing) lives in one .NET service; everything compute-heavy (DSP, ML models, LLM calls) lives in the Python worker. The seam is a job queue, not HTTP: the BFF writes dramatiq's exact Redis wire format (message HASH + id LIST, kept in lockstep inside a MULTI/EXEC transaction), so the worker consumes .NET-enqueued jobs natively.
+- **One schema, two ORMs, drift guarded.** EF Core owns the canonical schema and migrations; a shared SQLAlchemy package mirrors those entities for the worker. Schema-contract tests and golden-snapshot fixtures on the pipeline output catch divergence between the two sides.
+- **Long-running jobs never hold a transaction.** Analysis runs in a three-phase pattern: claim the job and commit, compute with no DB session open (phases can take minutes), then write results in a fresh session. Each phase is individually fault-isolated, so a partial failure produces a degraded report plus a free retry instead of nothing.
+- **Queue topology is a fairness guarantee.** Four named queues (no `default`), tier-routed at dispatch; free-tier jobs can't starve paid ones because production runs separate worker pools per lane — process separation rather than trusting intra-worker priorities. An enforcement test fails the build if any actor or enqueue site targets a nonexistent queue.
+- **LLM output is untrusted input, and LLM input is measured data.** Coach and specialist prompts are grounded in the report's measured values rather than asking the model to imagine the audio; verdicts coming back are Pydantic-validated, re-scored by a deterministic Python formula, and severity-capped. Spend is governed twice, independently — the BFF caps message counts per tier while the worker's gateway enforces dollar budgets from live feature flags.
+- **CI verifies from a clean checkout.** Integration tests run against real Postgres and Redis services with a fail-loud tripwire (an unreachable DB is a failure, never a silent skip), gitleaks scans the full git history on every push, and container images are Trivy-scanned before they are pushed; the deploy script rolls back on a failed health check.
 
----
+## Quickstart
+
+Local development targets Windows (PowerShell) with Docker Desktop, the .NET 10 SDK, Node 22, and Python 3.11:
+
+```powershell
+./scripts/start-spectr.ps1     # stops anything running, starts Postgres+Redis,
+                               # applies migrations, launches BFF + worker + frontend
+```
+
+Frontend: http://localhost:5174 · BFF OpenAPI: http://localhost:5000/openapi/v1.json
+
+[docs/STARTUP.md](docs/STARTUP.md) is the canonical startup guide: manual per-component boot, fresh-machine setup, verification steps, and a catalog of known failure modes with fixes. Production deployment is documented in [docs/runbook.md](docs/runbook.md).
+
+## Validation and testing
+
+Every component has its own gate, and all of them run in CI on every push — the frontend alone has four lint gates that fail on a single warning:
+
+```bash
+cd components/bff && dotnet build && dotnet test        # integration tests hit real Postgres/Redis
+
+cd components/frontend-spectr-v2
+npx vite build && npx tsc -b                            # build generates route types, then strict type-check
+npm run lint && npm run lint:css && npm run lint:prices && npm run lint:focus
+npx vitest run                                          # includes axe-core accessibility smoke tests
+
+pytest -q components/worker/tests/                      # golden fixtures + queue/boundary enforcement tests
+pytest -q components/analysis/tests/                    # heavy models mocked
+pytest -q components/shared/tests/
+ruff check components/worker/ components/shared/ components/analysis/src/
+```
 
 ## Project structure
 
 ```
-AIMusicAnalysisSite/
-├── components/
-│   ├── bff/                  # .NET 10 BFF (primary backend)
-│   ├── frontend-spectr-v2/   # React 19 + TS SPA (primary frontend)
-│   ├── worker/               # dramatiq worker
-│   ├── analysis/             # 7-phase audio analysis package
-│   ├── shared/               # aimusic-shared ORM models
-│   ├── api/                  # FastAPI legacy (verdict pipeline)
-│   └── frontend-spectr/      # vanilla JSX legacy SPA
-├── data/                     # runtime data (gitignored except reference_library)
-├── docker/                   # docker compose: postgres, redis
-├── migrations/               # placeholder — canonical schema is EF Core in bff/src/Spectr.Data
-├── output/                   # per-job analysis artifacts (gitignored; a few reference samples committed)
-└── PRPs/                     # plan-research-prompt docs (slice plans + archive)
+├── components/          # bff, frontend-spectr-v2, worker, analysis, shared, workerdash, api (frozen v1)
+├── docs/                # STARTUP.md, runbook.md, architecture docs, doc index
+├── infra/               # production compose, deploy/backup scripts, monitoring config
+├── docker/              # local dev compose (Postgres, Redis, allin1)
+├── scripts/             # dev orchestration (stack launcher, job recovery)
+├── schemas/             # analysis output data contract + samples
+├── data/                # runtime data (gitignored except reference-library config)
+└── PRPs/                # written implementation plans — see Development workflow
 ```
 
----
+## Development workflow
 
-## Analysis phases
+The project is built AI-assisted with a plan-first process: every feature starts as a written implementation plan (a "PRP") with explicit context, steps, and validation gates that must pass before the work is considered done. Active plans live in `PRPs/`, executed ones are archived with dates in `PRPs/archive/` — the archive doubles as a build history. `CLAUDE.md` carries the standing project rules and per-component gotchas that keep sessions consistent.
 
-1. **Universal mix analysis** — Loudness/LUFS, 7-band frequency balance, stereo, transients, BPM (~30s)
-2. **Genre auto-detection** — Trance / House / Techno / Drum & Bass / Other (~5s)
-3. **Genre-specific scoring** — DNA score, sidechain, supersaw, energy curves (~10s)
-4. **Stem separation + clash detection** — Demucs 4-stem split, frequency masking (~10-20 min CPU)
-5. **Reference track comparison** — Per-feature delta vs. uploaded reference (~60s)
-6. **Genre profile gap analysis** — Percentile ranking vs. curated reference library (~5s)
-7. **Arrangement advisor** — Section length, energy contrast, flow issues (~10s)
+## Status and limitations
 
-After the pipeline runs, the user can click any of 26 specialist tiles on the Results page to run an on-demand AI verdict (Loudness, Low End, Stereo Field, etc.) — wraps the Anthropic `claude` CLI via the worker.
-
----
-
-## How to run (v2 stack)
-
-**Canonical startup guide** (one-command boot, manual boot order, verification, every known startup problem + fix): [docs/STARTUP.md](docs/STARTUP.md)
-
-```powershell
-# One command (stops anything running, starts infra + migrations + all 3 apps):
-./scripts/start-spectr.ps1
-
-# Tear down:
-./scripts/start-spectr.ps1 -StopOnly
-```
-
-Manual per-component boot, fresh-machine installs, and troubleshooting all live in [docs/STARTUP.md](docs/STARTUP.md) — don't improvise commands from memory.
-
-Frontend: http://localhost:5174 · BFF OpenAPI: http://localhost:5000/openapi/v1.json
-
----
-
-## Validation (before committing)
-
-```bash
-# BFF
-cd components/bff && dotnet build && dotnet test
-
-# v2 frontend — 4 gates
-cd components/frontend-spectr-v2
-npx tsc --noEmit
-npm run lint        # --max-warnings 0
-npm run build
-npx vitest run
-
-# Python
-ruff check components/api/ components/analysis/src/ components/worker/ components/shared/
-pytest -q components/analysis/tests/
-pytest -q components/worker/tests/
-pytest -q components/api/tests/        # legacy verdict pipeline
-```
-
----
-
-## Developing with Claude
-
-This project follows the **PRP workflow** (plan-research-prompt). For new features:
-
-```
-/new-feature                              # guided interview
-# or manually:
-edit PRPs/source/INITIAL.md
-/generate-prp                             # → PRPs/<slug>.md
-/execute-prp PRPs/<slug>.md
-```
-
-Archived plans live in `PRPs/archive/`. Each one is a small slice (auth, library, results, verdicts, UI fidelity, Listen DSP, pitch tool, etc.).
-
-Project rules + per-component gotchas live in [`CLAUDE.md`](./CLAUDE.md).
-
----
-
-## Reopening in Claude Code
-
-```
-cd C:\claude-workspace\AIMusicAnalysisSite && claude
-```
+- **v2 (BFF + worker + React SPA) is the product.** The v1 FastAPI stack in `components/api/` is frozen, excluded from CI and deploys, and boundary-enforced by a worker test; it remains only until the last pieces are harvested.
+- **Pre-launch.** The MVP is code-complete and the deploy pipeline exists (images, Trivy scans, SSH deploy with rollback), but the app is not publicly hosted yet. Billing and the credit system are complete but disabled by a live feature flag.
+- **Local dev tooling is Windows-first.** The stack launcher and troubleshooting docs assume PowerShell + Docker Desktop; the production stack itself is Linux compose.
+- **Demucs stem separation is off by default** — the fast spectral-analysis path (seconds) is used instead of the full ML split (10–20 minutes CPU per track); the Demucs path exists behind a flag.
+- **The pitch tool couples pitch and tempo** (Web Audio `detune` scales playback rate). Tempo-independent shifting needs an AudioWorklet phase vocoder and is not built.
+- **Audio streaming auth uses a short-lived JWT query parameter** (HTMLMediaElement cannot send headers). Documented tradeoff; the plan pre-launch is signed, expiring audio URLs.

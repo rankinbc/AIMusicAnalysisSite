@@ -49,7 +49,6 @@ AIMusicAnalysisSite/
 ├── CLAUDE.md
 ├── README.md
 ├── .gitignore
-├── migrations/               (Alembic DB migrations — shared by api + worker)
 ├── schemas/                  (Shared OpenAPI/TypeScript schema files)
 ├── docker/                   (Docker Compose for local dev: PostgreSQL, Redis, allin1)
 ├── docs/                     (Ops docs: STARTUP.md ← canonical startup guide, runbook.md, launch-checklist.md; plus generated project knowledge — index.md is the master doc index)
@@ -89,7 +88,7 @@ AIMusicAnalysisSite/
 - All outputs land in `output/<component>/<YYYY-MM-DD>_<description>/` — never at project root, never overwriting prior runs
 - Never add a new top-level folder without updating this section first
 - Never rename `components/`, `data/`, `output/`, or `PRPs/`
-- `migrations/`, `schemas/`, `docker/`, `docs/`, `infra/`, `scripts/`, and `reference_library/` are declared project-level folders — use each as described in its README
+- `schemas/`, `docker/`, `docs/`, `infra/`, `scripts/`, and `reference_library/` are declared project-level folders — use each as described in its README
 - Startup/restart/troubleshooting knowledge lives ONLY in `docs/STARTUP.md` — never scatter boot instructions across new docs
 - `scripts/` holds local dev orchestration (stack launch/stop, DB reset, etc.) — not application code and not generated artifacts
 
@@ -312,8 +311,6 @@ pytest -q components/api/tests/verdict_pipeline/
 # ── DB migrations ───────────────────────────────────────────────
 # BFF owns the canonical schema via EF Core 10:
 cd components/bff && dotnet ef database update --project src/Spectr.Data --startup-project src/Spectr.Bff
-# Legacy Alembic migrations are frozen for the FastAPI api:
-alembic -c migrations/alembic.ini upgrade head
 
 # ── Integration: BFF + dramatiq + v2 frontend ───────────────────
 # Start the stack per docs/STARTUP.md (canonical):  ./scripts/start-spectr.ps1

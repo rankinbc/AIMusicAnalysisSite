@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- **Working directory for all `npm`/`npx` commands:** `components/frontend-spectr-v2`. `git` commands run from repo root `C:/Users/badmin/projects/AIMusicAnalysisSite`.
+- **Working directory for all `npm`/`npx` commands:** `components/frontend-spectr-v2`. `git` commands run from the repo root.
 - **Four gates must pass before each commit:** `npx tsc --noEmit`, `npm run lint` (eslint `--max-warnings 0`), `npm run build` (vite + `tsc -b`, stricter — catches `exactOptionalPropertyTypes`), `npx vitest run`.
 - **`import type` is mandatory** for type-only imports (`verbatimModuleSyntax`).
 - **`exactOptionalPropertyTypes`:** optional object props must be omitted, not set to `undefined`. Prefer required fields with explicit `null` over `?:` where a value always exists.

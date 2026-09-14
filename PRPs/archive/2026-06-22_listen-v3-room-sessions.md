@@ -64,10 +64,10 @@ synthesize_recap actor, Python mirror, frontend stream + action hooks replacing 
 ### Documentation & References
 ```yaml
 # DECISIONS + CONTRACT
-- file: _bmad-output/brainstorming/brainstorming-session-2026-06-25-listen-modes-datamodel.md
+- file: docs/archive/brainstorming/brainstorming-session-2026-06-25-listen-modes-datamodel.md
   why: D3.1-D3.5 (session, events_json JSON-first, recap auto+opt-in-publish, chat retained, control-grant provenance),
        D4.1-D4.6 (actorRef, contextual roles, D4.3 grantee-save=Suggestion, D4.5 credit, D4.6 provenance), the flagship cross-author case.
-- file: _bmad-output/brainstorming/listen-v3-schema-reconciliation-2026-06-25.md
+- file: docs/archive/brainstorming/listen-v3-schema-reconciliation-2026-06-25.md
   why: Δ3.2 JSON-first (mirror analyses.final_json), Δ5 (Room hosting is billable/gateable via tier+flags), build discipline.
 - file: PRPs/design_handoffs/design_handoff_listen_rack/LISTEN_V3_UI_CONTRACT.md
   why: ActorRef + the Room mode availability comes from AccessDto.roomHostable/roomJoinable.

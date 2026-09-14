@@ -581,7 +581,7 @@ Expected: PASS (2 tests)
 
 - [ ] **Step 5: Run the whole arbiter test set + ruff + mypy**
 
-Run: `cd components/worker && python -m pytest tests/coach_mix/ -q && cd /c/Users/badmin/projects/AIMusicAnalysisSite && python -m ruff check components/worker/app/coach_mix/ && cd components/worker && python -m mypy app/coach_mix/ --ignore-missing-imports`
+Run: `cd components/worker && python -m pytest tests/coach_mix/ -q && cd <repo-root> && python -m ruff check components/worker/app/coach_mix/ && cd components/worker && python -m mypy app/coach_mix/ --ignore-missing-imports`
 Expected: all PASS / clean
 
 - [ ] **Step 6: Commit**
@@ -1318,12 +1318,12 @@ git commit -m "feat(coach-mix): free-tier LLM budget seed + golden chain snapsho
 
 - [ ] **Step 1: Worker**
 
-Run: `cd components/worker && python -m pytest tests/coach_mix/ tests/test_fix_rack_actor.py -q && cd /c/Users/badmin/projects/AIMusicAnalysisSite && python -m ruff check components/worker/app/coach_mix/ components/worker/app/fix_rack_actor.py && cd components/worker && python -m mypy app/coach_mix/ --ignore-missing-imports`
+Run: `cd components/worker && python -m pytest tests/coach_mix/ tests/test_fix_rack_actor.py -q && cd <repo-root> && python -m ruff check components/worker/app/coach_mix/ components/worker/app/fix_rack_actor.py && cd components/worker && python -m mypy app/coach_mix/ --ignore-missing-imports`
 Expected: PASS / clean. (Note: the full `pytest tests/` has pre-existing `db_sync` ordering-pollution failures unrelated to this work — scope to the coach_mix + fix_rack tests.)
 
 - [ ] **Step 2: Shared model**
 
-Run: `cd /c/Users/badmin/projects/AIMusicAnalysisSite && pip install -e components/shared && python -m pytest components/shared/tests/ -q`
+Run: `cd <repo-root> && pip install -e components/shared && python -m pytest components/shared/tests/ -q`
 Expected: PASS.
 
 - [ ] **Step 3: BFF**

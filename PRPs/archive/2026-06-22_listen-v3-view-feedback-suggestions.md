@@ -62,12 +62,12 @@ frontend hooks. No new worker actors (all synchronous CRUD).
 ### Documentation & References
 ```yaml
 # DECISIONS + CONTRACT
-- file: _bmad-output/brainstorming/brainstorming-session-2026-06-25-listen-modes-datamodel.md
+- file: docs/archive/brainstorming/brainstorming-session-2026-06-25-listen-modes-datamodel.md
   why: D2.1 (threaded, version-scoped, status), D2.2/D2.3 (suggestion + fork-to-preset, cherry-pick UI-only),
        D4.3 (unified non-owner path, no library copy), D4.4 (full anon), D4.5 (credit + notify), X.1 (no coach in View).
 - file: PRPs/design_handoffs/design_handoff_listen_rack/LISTEN_V3_UI_CONTRACT.md
   why: CommentDto / SuggestionDto / ActorRef the UI mocks against. NOTE: correct SuggestionDto to carry `chain: Chain` (not `rackPreset`).
-- file: _bmad-output/brainstorming/listen-v3-schema-reconciliation-2026-06-25.md
+- file: docs/archive/brainstorming/listen-v3-schema-reconciliation-2026-06-25.md
   why: Δ2 (chain currency), Δ4 (reuse anon + verdict_user_state patterns — but see modeling note: comment status is a COLUMN, not a per-user overlay).
 
 # DEPENDENCIES (this PRP builds on)

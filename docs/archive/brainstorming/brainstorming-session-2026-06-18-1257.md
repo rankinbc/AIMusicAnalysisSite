@@ -6,7 +6,7 @@ session_goals: 'Transform SPECTR from cool idea to WORKING product - crack the 0
 selected_approach: 'hybrid-problem-solving'
 techniques_used: ['constraint-based-innovation', 'failure-premortem', 'cold-start-playbook']
 ideas_generated: []
-context_file: 'C:/Users/badmin/claude-workspace/projects/AIMusicAnalysisSite/PRPs/product-brief-spectr-room-2026-06-17.md'
+context_file: 'PRPs/product-brief-spectr-room-2026-06-17.md'
 ---
 
 # SPECTR Problem-Solving Session

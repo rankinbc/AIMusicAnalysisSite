@@ -227,10 +227,10 @@ instantly.
 
 ### #7 Every job fails file resolution / uploads "vanish"
 The worker's `storage_root` is wrong. `/data` is valid ONLY inside the compose
-container; a native Windows run must use the absolute repo path. The committed
-`components/worker/.env` pins `STORAGE_LOCAL_ROOT=C:/Users/badmin/projects/AIMusicAnalysisSite/data`
-— **machine-specific**: on a different clone path, update it (or delete the line;
-the built-in default resolves the repo `data/`). Check the worker's boot
+container; a native Windows run must resolve the repo's `data/` directory.
+The built-in default resolves it from the repo checkout automatically; pin it
+only if your layout differs, via `STORAGE_LOCAL_ROOT=<absolute path to your
+clone>/data` in `components/worker/.env`. Check the worker's boot
 `storage_root=` line; it warns if the directory doesn't exist.
 
 ### #8 Worker fork dies silently after audio work (OpenMP abort)

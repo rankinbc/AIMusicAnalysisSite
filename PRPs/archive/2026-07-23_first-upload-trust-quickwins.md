@@ -13,7 +13,7 @@ gate) is **explicitly out of scope for this PRP** — see "Scope note" below.
 
 ## Why
 
-- Grounded in `_bmad-output/brainstorming/brainstorming-session-2026-07-23-1357.md`
+- Grounded in `docs/archive/brainstorming/brainstorming-session-2026-07-23-1357.md`
   (2026-07-23), which mapped the pipeline from code and live-tested two real
   artifacts (a garbled coach reply, a test-tone upload) before generating
   improvement ideas. Every item here traces to a real file:line, not a guess.
@@ -104,7 +104,7 @@ full partial-input version is named there as explicitly deferred, not dropped).
   why: Validation gates (single source, cited not duplicated below), worker/bff/frontend
        stack rules, the `credits_enabled`/feature-flag pattern, per-phase rerun gotcha.
 
-- file: _bmad-output/brainstorming/brainstorming-session-2026-07-23-1357.md
+- file: docs/archive/brainstorming/brainstorming-session-2026-07-23-1357.md
   why: Origin of all 5 items; "Quick-win repair list" + facilitator idea #46; the two
        live-artifact critiques (garbled coach reply, test-tone beep) that motivated
        items 2 and (split-out) 3.

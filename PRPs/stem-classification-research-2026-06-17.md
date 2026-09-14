@@ -49,13 +49,13 @@ Roles feed exactly four things, and only one of them is real "math":
 
 ---
 
-## 2. Real-file diagnosis — `C:\Users\badmin\Music\23_4`
+## 2. Real-file diagnosis — `~/Music/23_4`
 
 31 FLAC files: ~28 instrument/utility tracks + 2 buses + FX returns + the master mix `23_4.flac`, all 510.6 s long.
 
 ### 2.1 Current classifier output vs. reality
 
-Ran `python -m audio_analysis.stems.classify "C:/Users/badmin/Music/23_4"`:
+Ran `python -m audio_analysis.stems.classify "~/Music/23_4"`:
 
 | File (reality) | Detected | Correct? | Note |
 |---|---|---|---|
@@ -166,6 +166,6 @@ No MUSDB18-derived system has a standalone "synth" class. The defensible small r
 
 ## Appendix — commands & evidence
 
-- Classifier run: `python -m audio_analysis.stems.classify "C:/Users/badmin/Music/23_4"` (output in §2.1).
+- Classifier run: `python -m audio_analysis.stems.classify "~/Music/23_4"` (output in §2.1).
 - Numeric proofs (soundfile/numpy): `corr(17-Group,18-ARP)=1.0000`; `corr(Drums bus, Σ drum tracks)=0.77`; `corr(A-Reverb,mix)=−0.01`, `corr(B-Delay,mix)=−0.02`; `corr(Sidechain,Kick)=0.27`; Σ-all-tracks RMS 0.389 vs mix 0.149 = **2.62×**, corr **−0.08**.
 - Key code: `phases/phase4_stems.py` (mix-only spectral active; `USE_DEMUCS=False`), `phases/phase5_reference.py` (mix-only deltas + optional per-stem), `stems/analyzer.py` (`_balance_flags` needs genre_profile, never passed), `stems/types.py` (`StemRole` — no keys/synth), `worker/app/verdict_lib/input_grounding.py` (mix-only is a supported state), `prompts/experts/Stem*.md` (roles = attribution).

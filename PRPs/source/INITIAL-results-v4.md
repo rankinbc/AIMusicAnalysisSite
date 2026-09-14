@@ -77,7 +77,7 @@ User notes · listener comments (name, timestamp-in-track) · emoji totals + a f
 
 - Handoff README: `PRPs/design_handoffs/design_handoff_results_v4/README.md` (and v3's README for the base).
 - Verdict/problem schema: `components/shared/aimusic_shared/verdicts/models.py` (Evidence, Fix, DspOp), `scoring.py`; BFF `DTOs/VerdictDtos.cs`, `Endpoints/VerdictEndpoints.cs`; TS `src/api/types.ts` (VerdictDto ~line 1356).
-- Full readiness assessment (2026-07-26): `C:\Users\badmin\.claude\plans\drifting-roaming-creek.md`.
+- Full readiness assessment (2026-07-26): `~/.claude/plans/drifting-roaming-creek.md`.
 
 ## Other considerations
 

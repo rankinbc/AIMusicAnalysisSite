@@ -1,6 +1,6 @@
 # Architecture: analysis (`audio_analysis` package)
 
-Component root: `C:\Users\badmin\projects\AIMusicAnalysisSite\components\analysis`
+Component root: `components/analysis`
 Source: `components/analysis/src/audio_analysis/` (src layout, hatchling build, installable via `pip install -e components/analysis`).
 
 ## Executive Summary

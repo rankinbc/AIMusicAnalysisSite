@@ -137,3 +137,6 @@ components/bff/tests/data/analysis/
 # Worker/dev runtime logs — written by start-spectr.ps1 + the workerdash watchdog
 data/logs/
 components/workerdash/.cache/
+
+# BMad workflow tool output (generated session artifacts; keepers get archived to docs/archive/)
+_bmad-output/

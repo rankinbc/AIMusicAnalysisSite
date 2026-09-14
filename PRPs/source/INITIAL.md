@@ -2,7 +2,7 @@
   INITIAL.md — feature intake for /generate-prp.
 
   Feature: First-upload trust & accuracy quick-wins bundle
-  Authored: 2026-07-23 from _bmad-output/brainstorming/brainstorming-session-2026-07-23-1357.md
+  Authored: 2026-07-23 from docs/archive/brainstorming/brainstorming-session-2026-07-23-1357.md
   (Quick-win repair list + facilitator idea #46), grounded in two Explore-agent code maps
   from the same session.
 -->
@@ -180,7 +180,7 @@ messaging on the report), item 6 (suspected-flag visual treatment)
 
 ## SHARED DOCUMENTATION
 
-- `_bmad-output/brainstorming/brainstorming-session-2026-07-23-1357.md` — full session:
+- `docs/archive/brainstorming/brainstorming-session-2026-07-23-1357.md` — full session:
   both Explore-agent research maps (file:line level detail on the entire analysis
   pipeline and recommendation-generation path), the live artifact critiques that
   surfaced items 2 and 3 directly, and the full prioritized roadmap this bundle is

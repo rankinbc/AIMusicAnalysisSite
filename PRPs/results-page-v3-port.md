@@ -94,7 +94,7 @@ User-visible behavior after the port:
 
 ### Documentation & References
 ```yaml
-# MUST READ — internal files (all absolute under repo root C:\Users\badmin\projects\AIMusicAnalysisSite)
+# MUST READ — internal files (all under the repo root)
 
 # ── Data contract (authoritative field paths) ──
 - file: schemas/final_json.contract.json
@@ -144,8 +144,8 @@ User-visible behavior after the port:
 - file: components/bff/src/Spectr.Bff/Endpoints/RackPresetEndpoints.cs  # GET/POST/DELETE /versions/{id}/rack/presets ; GET/PUT /draft
 
 # ── Design reference (visual/IA target — recreate, do not port) ──
-- file: C:\Users\badmin\Documents\design_handoff_results_v3\README.md
-- dir:  C:\Users\badmin\Documents\design_handoff_results_v3\prototype\  # ar-app/frame/coach/actions/trackinfo/reference/project/data/ui/debug .jsx
+- file: ~/Documents/design_handoff_results_v3/README.md
+- dir:  ~/Documents/design_handoff_results_v3/prototype/  # ar-app/frame/coach/actions/trackinfo/reference/project/data/ui/debug .jsx
   why: Layout, chip copy, card composition, signal-flow strip, goniometer, mini meters. The prototype is
        React.createElement globals loaded via Object.assign(window,…) with hardwired mock data — recreate
        as real ES modules. It is AHEAD of the target in some places and BEHIND in others (see Risks).

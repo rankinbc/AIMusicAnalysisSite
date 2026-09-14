@@ -63,9 +63,9 @@ a feature-flag seed migration, frontend types + hooks.
 ### Documentation & References
 ```yaml
 # DECISIONS + RECONCILIATION
-- file: _bmad-output/brainstorming/brainstorming-session-2026-06-25-listen-modes-datamodel.md
+- file: docs/archive/brainstorming/brainstorming-session-2026-06-25-listen-modes-datamodel.md
   why: Domain 6 (D6.1 per-version visibility + song defaults, D6.2 gate bundle, D6.3 Invite), X.1 coach-author-only, X.2 Work-private, D4.4 full-anon.
-- file: _bmad-output/brainstorming/listen-v3-schema-reconciliation-2026-06-25.md
+- file: docs/archive/brainstorming/listen-v3-schema-reconciliation-2026-06-25.md
   why: Δ1 (sharing scope migration is additive + riskiest), Δ4 (reuse anon pattern), Δ5 (session policy via tier+flags), build discipline.
 
 # THE EXISTING SHARE SURFACE TO PARALLEL (do NOT modify these — mirror their shape)

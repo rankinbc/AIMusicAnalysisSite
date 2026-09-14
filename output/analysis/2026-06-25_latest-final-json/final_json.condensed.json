@@ -2646,7 +2646,7 @@
       "status": "ok"
     }
   ],
-  "file_path": "C:\\Users\\badmin\\projects\\AIMusicAnalysisSite\\data\\audio\\upload\\bb48dad6-a735-4b0e-af08-b534ab9d15e0\\source.flac",
+  "file_path": "data/audio\\upload\\bb48dad6-a735-4b0e-af08-b534ab9d15e0\\source.flac",
   "top_fixes": [
     "Stereo image is unstable across the track \u00e2\u20ac\u201d automate width changes deliberately rather than letting it drift.",
     "Ensure all sections are divisible by 8 bars for DJ mixing",

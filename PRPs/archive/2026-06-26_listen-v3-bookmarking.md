@@ -43,9 +43,9 @@ extend BookmarkEndpoints + 2 new routes, Python mirror, frontend hooks. No new a
 ## All Needed Context
 ```yaml
 # DECISIONS + RECONCILIATION
-- file: _bmad-output/brainstorming/brainstorming-session-2026-06-25-listen-modes-datamodel.md
+- file: docs/archive/brainstorming/brainstorming-session-2026-06-25-listen-modes-datamodel.md
   why: D5.4 (aggregate count default, identity opt-in, anon anonymous), D4.4 (full anon; anon bookmark needs local fallback).
-- file: _bmad-output/brainstorming/listen-v3-schema-reconciliation-2026-06-25.md
+- file: docs/archive/brainstorming/listen-v3-schema-reconciliation-2026-06-25.md
   why: Bookmark row = EXTEND track_bookmarks; PRP-6 owns the bookmark re-target + 2nd 3-way CHECK; reuse anon pattern (Δ4).
 
 # EXISTING SURFACE TO EXTEND

@@ -1,6 +1,6 @@
 # Build plan — Results page redesign (Actions / Analysis / Files)
 
-> Source: `C:\Users\badmin\Downloads\design_handoff_results_page\` (README + `Results Page.html` hi-fi
+> Source: `~/Downloads/design_handoff_results_page/` (README + `Results Page.html` hi-fi
 > prototype). Implements the **Finding → Move → Game Plan** model. Decisions (2026-06-16): **map the
 > prototype's mint → existing `--cyan` (no new tokens)**; **build all three tabs in one pass**.
 > Supersedes the source-based 7-tab layout in `src/features/results/`.

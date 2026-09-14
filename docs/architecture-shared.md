@@ -1,6 +1,6 @@
 # Architecture: shared (`aimusic-shared` package)
 
-Component root: `C:\Users\badmin\projects\AIMusicAnalysisSite\components\shared`
+Component root: `components/shared`
 Install: `pip install -e components/shared` (setuptools build; package `aimusic_shared`).
 
 ## Purpose
