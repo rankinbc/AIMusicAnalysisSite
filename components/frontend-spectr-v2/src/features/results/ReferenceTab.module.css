@@ -171,7 +171,7 @@
   top: 50%;
   transform: translate(-50%, -50%);
   font-size: 11px;
-  color: var(--violet, #a78bfa);
+  color: var(--violet);
   line-height: 1;
 }
 .youdot {
@@ -185,8 +185,8 @@
   box-shadow: 0 0 8px -1px var(--cyan, var(--accent));
 }
 .youdot.out {
-  background: var(--red, #f43f5e);
-  box-shadow: 0 0 8px -1px var(--red, #f43f5e);
+  background: var(--red);
+  box-shadow: 0 0 8px -1px var(--red);
 }
 .reads {
   display: flex;
@@ -199,16 +199,16 @@
   color: var(--text);
 }
 .you.out {
-  color: var(--red, #f43f5e);
+  color: var(--red);
 }
 .mean {
   color: var(--muted);
 }
 .refval {
-  color: var(--violet, #a78bfa);
+  color: var(--violet);
 }
 .gap.out .gapLabel {
-  color: var(--red, #f43f5e);
+  color: var(--red);
 }
 
 /* diverging delta rows (reference section) */
@@ -234,7 +234,7 @@
   color: var(--muted);
 }
 .rdRef {
-  color: var(--violet, #a78bfa);
+  color: var(--violet);
 }
 .rdDelta {
   font-variant-numeric: tabular-nums;
@@ -242,7 +242,7 @@
   text-align: right;
 }
 .rdDelta.warn {
-  color: var(--orange, #fb923c);
+  color: var(--orange);
 }
 .rdInterp {
   color: var(--muted);
@@ -273,7 +273,7 @@
   background: var(--cyan, var(--accent));
 }
 .dbFill.warn {
-  background: var(--orange, #fb923c);
+  background: var(--orange);
 }
 .dbYou {
   position: absolute;
@@ -285,7 +285,7 @@
   background: var(--cyan, var(--accent));
 }
 .dbYou.warn {
-  background: var(--orange, #fb923c);
+  background: var(--orange);
 }
 
 /* genre-context checks */
@@ -310,7 +310,7 @@
   margin-top: 2px;
 }
 .dv.warn {
-  color: var(--orange, #fb923c);
+  color: var(--orange);
 }
 
 /* fix → link */
@@ -352,8 +352,8 @@
   background: color-mix(in srgb, var(--cyan, var(--accent)) 30%, transparent);
 }
 .dia {
-  color: var(--violet, #a78bfa);
+  color: var(--violet);
 }
 .warn {
-  color: var(--orange, #fb923c);
+  color: var(--orange);
 }
