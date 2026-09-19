@@ -1,0 +1,8 @@
+/* NotesTab-specific overrides layered on top of the shared (auto-scoped,
+   do-not-edit-by-hand) .rdx timeline classes in redesign-v3-tabs.css. The
+   Notes tab has exactly one marker color (there is only ever one lane now),
+   so it's a static rule here rather than an inline style. */
+
+.dot {
+  background: var(--accent);
+}

@@ -8,7 +8,9 @@
 > modes, no guest path. Keep this updated when you change the engine, the
 > handle, or the stem deck.
 >
-> Last updated: 2026-09 (solo fork — rooms/access-modes/guest-path stripped).
+> Last updated: 2026-09 (solo fork — rooms/access-modes/guest-path stripped;
+> the version-scoped comment/bookmark/session/suggestion hooks this folder
+> used to also host were deleted outright, not moved).
 > Status: audio **engine done + frozen**; `features/listen-rack/` is the only
 > Listen page.
 
@@ -33,12 +35,6 @@ visualizer stage (driven by `graph.readFrame()` in a rAF loop), transport, the r
 notes sidebar, the stem deck (`StemDeck`), and the pitch lane. See
 `features/listen-rack/PORTING_NOTES.md` for that page's current real-vs-mock map.
 (The legacy `/listen/$versionId` route is gone.)
-
-This folder also still hosts a few version-scoped hooks kept alive by other
-pages: `useComments` / `comment-tree` / `useBookmarkSignal` / `useRoomSession`
-(the `useSessionHistory` half of it) by the results page's Notes tab, and
-`useSuggestions` by the results page's listener-suggestions list. None of them
-are wired into the listen-rack page anymore.
 
 - **Playback resilience**: `media-retry` (shared `<audio>` retry helper).
 - **Chain currency**: `chainApply.ts` (`applyChainToGraph` / `snapshotChainFromGraph`).
@@ -214,13 +210,16 @@ the only real exercise of the runtime; run it before trusting the engine). Gates
 ## Change log
 
 - **2026-09 (solo fork)** — The listen-rack page is now a private workbench:
-  rooms, access modes (Work/View/Room), and the guest path were removed. Deleted
-  from this folder: `useRoomStream`, `useRoomActions`, `VersionShareDialog`,
-  `useVersionShare`, `useInvites`, `useVersionAccess`, `SuggestionCard`,
-  `suggestion-helpers`, `useBookmarks`, `bookmarks-helpers`, `BookmarksRail`.
-  `useComments` / `comment-tree` / `useBookmarkSignal` / `useRoomSession` /
-  `useSuggestions` remain — they're still imported by the results page (Notes
-  tab, listener suggestions), not by `features/listen-rack/` anymore.
+  rooms, access modes (Work/View/Room), and the guest path were removed. Every
+  version-scoped social/sharing hook this folder ever hosted was deleted
+  outright — none were kept alive for other pages: `useRoomStream`,
+  `useRoomActions`, `VersionShareDialog`, `useVersionShare`, `useInvites`,
+  `useVersionAccess`, `SuggestionCard`, `suggestion-helpers`, `useBookmarks`,
+  `bookmarks-helpers`, `BookmarksRail`, `useComments`, `comment-tree`,
+  `useBookmarkSignal`, `useRoomSession`, `useSuggestions`. This folder now
+  holds only the shared audio engine (`useAudioGraph`, `audio/**`,
+  `StemDeck`/`useStemEngine`/`stemGains`) plus the two audio-only helpers
+  `media-retry` and `chainApply.ts` — see §1/§2 above for who uses each.
 - **2026-07-23** — Doc refreshed: the folder is the shared engine **+ social hook
   layer** (room stream/actions/session, access/share/invites, comments/suggestions,
   bookmarks, media-retry) consumed by `features/listen-rack/` and the public/invite

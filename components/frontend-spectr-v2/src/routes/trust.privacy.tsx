@@ -5,8 +5,9 @@ import { TrustPage } from '../features/trust/TrustPage';
 
 // Story 6.2 (FR41) — privacy DEFAULTS in plain language. This is not a legal
 // privacy policy (that's a launch-checklist item); it states the shipped
-// defaults: private-by-default (7.1), revocable share links (7.3), 72h anon
-// purge (4.5), GDPR export/delete (4.6), self-hosted fonts (1.7).
+// defaults: private by design — no public pages, no profiles, no share links
+// (solo fork) — 72h anon purge (4.5), GDPR export/delete (4.6), self-hosted
+// fonts (1.7).
 export const Route = createFileRoute('/trust/privacy')({
   component: PrivacyDefaultsPage,
 });
@@ -25,9 +26,9 @@ export function PrivacyDefaultsPage() {
       </p>
       <h2>Private by design</h2>
       <p>
-        <strong>Private by design.</strong> Nothing you upload is visible to anyone else. SPECTR
-        has no public pages, no profiles and no share links — your tracks, reports and notes are
-        reachable only from your signed-in account.
+        Nothing you upload is visible to anyone else. SPECTR has no public pages, no profiles
+        and no share links — your tracks, reports and notes are reachable only from your
+        signed-in account.
       </p>
       <h2>Anonymous visitors</h2>
       <ul>

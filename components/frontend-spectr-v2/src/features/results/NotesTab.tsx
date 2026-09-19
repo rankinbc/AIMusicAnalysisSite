@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useCreateNote, useDeleteNote, useNotes } from '../../api/hooks';
 import { Icon } from './Icon';
 import { markerPct, mmss, noteMarkers, type TimelineMarker } from './feedback-timeline-model';
+import s from './NotesTab.module.css';
 
 // Notes tab (v4): the owner's own timestamped version notes, plus a 0:00→end
 // strip showing where they land on the track.
@@ -131,8 +132,8 @@ function NotesTimeline({
               {notes.map((m, i) => (
                 <span
                   key={i}
-                  className="ftl-dot"
-                  style={{ left: `${markerPct(m.t, durationSec)}%`, background: 'var(--accent)' }}
+                  className={`ftl-dot ${s.dot}`}
+                  style={{ left: `${markerPct(m.t, durationSec)}%` }}
                   title={`${m.label} · ${mmss(m.t)}${m.detail ? ` — ${m.detail}` : ''}`}
                 />
               ))}
