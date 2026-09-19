@@ -37,7 +37,7 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
     {
         try
         {
-            using var mux = ConnectionMultiplexer.Connect("localhost:6379,abortConnect=false,connectTimeout=500");
+            using var mux = ConnectionMultiplexer.Connect(TestDb.RedisEndpoint("abortConnect=false,connectTimeout=500"));
             return mux.GetDatabase().Ping() < TimeSpan.FromSeconds(2);
         }
         catch { return false; }
@@ -338,7 +338,7 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
 
         // Live-subscribe path runs the relay loop. We publish from
         // another task after a short delay.
-        using var mux = ConnectionMultiplexer.Connect("localhost:6379");
+        using var mux = ConnectionMultiplexer.Connect(TestDb.RedisEndpoint());
         var channel = new RedisChannel(
             $"coach:{seed.ConversationId}:{seed.MessageId}",
             RedisChannel.PatternMode.Literal);
@@ -452,7 +452,7 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
 
         const int frameCount = 30;
         var seed = await SeedTerminalAssistant("stream-order-lo", status: "pending", content: "");
-        using var mux = ConnectionMultiplexer.Connect("localhost:6379");
+        using var mux = ConnectionMultiplexer.Connect(TestDb.RedisEndpoint());
         var channel = new RedisChannel(
             $"coach:{seed.ConversationId}:{seed.MessageId}", RedisChannel.PatternMode.Literal);
 
@@ -517,7 +517,7 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
                 $"stream-order-hi-{i}", status: "pending", content: ""));
         }
 
-        using var mux = ConnectionMultiplexer.Connect("localhost:6379");
+        using var mux = ConnectionMultiplexer.Connect(TestDb.RedisEndpoint());
         var sub = mux.GetSubscriber();
 
         try
@@ -596,7 +596,7 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
             status: "pending",
             content: "");
 
-        using var mux = ConnectionMultiplexer.Connect("localhost:6379");
+        using var mux = ConnectionMultiplexer.Connect(TestDb.RedisEndpoint());
         var cancelKey = $"coach:cancel:{seed.MessageId}";
 
         // Make sure no stale key from a prior test run.

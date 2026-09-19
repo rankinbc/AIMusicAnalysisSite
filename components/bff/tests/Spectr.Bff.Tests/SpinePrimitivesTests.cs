@@ -20,7 +20,7 @@ public sealed class SpinePrimitivesTests
     {
         try
         {
-            using var m = ConnectionMultiplexer.Connect("localhost:6379,abortConnect=false,connectTimeout=500");
+            using var m = ConnectionMultiplexer.Connect(TestDb.RedisEndpoint("abortConnect=false,connectTimeout=500"));
             return m.GetDatabase().Ping() < TimeSpan.FromSeconds(2);
         }
         catch { return false; }
@@ -123,7 +123,7 @@ public sealed class SpinePrimitivesTests
     {
         TestDb.Require(RedisReachable(), "Redis"); // skip-visible (story 12.7)
 
-        using var mux = ConnectionMultiplexer.Connect("localhost:6379,abortConnect=false");
+        using var mux = ConnectionMultiplexer.Connect(TestDb.RedisEndpoint("abortConnect=false"));
         var rl = new RedisRateLimiter(mux);
         var action = "spine-test-" + Guid.NewGuid().ToString("N");
         var window = TimeSpan.FromSeconds(10);
@@ -141,7 +141,7 @@ public sealed class SpinePrimitivesTests
     {
         TestDb.Require(RedisReachable(), "Redis"); // skip-visible (story 12.7)
 
-        using var mux = ConnectionMultiplexer.Connect("localhost:6379,abortConnect=false");
+        using var mux = ConnectionMultiplexer.Connect(TestDb.RedisEndpoint("abortConnect=false"));
         var rl = new RedisRateLimiter(mux);
         var action = "spine-ip-test-" + Guid.NewGuid().ToString("N");
         var ip = "9.9.9.9";

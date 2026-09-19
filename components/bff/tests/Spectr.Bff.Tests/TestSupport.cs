@@ -112,6 +112,19 @@ public static class TestDb
             return false;
         }
     }
+
+    /// <summary>
+    /// Redis endpoint for tests that open their OWN multiplexer (outside the app
+    /// host). Honors the same `Redis__ConnectionString` env override the BFF
+    /// host reads, so a machine where `localhost` → [::1] is black-holed
+    /// (docs/STARTUP.md problem #2) can run the whole suite on 127.0.0.1.
+    /// </summary>
+    public static string RedisEndpoint(string options = "")
+    {
+        var endpoint = Environment.GetEnvironmentVariable("Redis__ConnectionString");
+        if (string.IsNullOrWhiteSpace(endpoint)) endpoint = "localhost:6379";
+        return string.IsNullOrEmpty(options) ? endpoint : $"{endpoint},{options}";
+    }
 }
 
 public static class TestContract
