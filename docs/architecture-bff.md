@@ -11,12 +11,18 @@ songs/versions/uploads CRUD, media streaming (Range-enabled, local-proxy or pres
 analysis job dispatch onto dramatiq Redis queues (tier-routed paid/free lanes), results and
 verdict retrieval, the coach conversation relay (SSE over Redis pub/sub), Stripe billing
 (checkout, webhook mirror, append-only credit ledger), the anonymous instant-analysis funnel,
-version sharing / rooms (Listen V3), social surfaces (profiles/follow/feed/notifications),
 GDPR export/delete, and an X-Admin-Key operator surface. It never runs analysis itself — the
 Python dramatiq worker does; the BFF writes job rows + Redis messages and reads Postgres results.
 Roughly 198 mapped routes across 36 endpoint files, ~49 service classes, 3 projects + 1 test
 project (~64 test classes). A legacy FastAPI service (`components/api/`) still exists but is
 being phased out; nothing here depends on it.
+
+> Removed on the solo fork (`PRPs/solo-fork-strip-social.md`): version sharing and live listening
+> rooms (`RoomBus`, `AccessService`, `ShareTokenResolver`/`SessionTokenResolver`/`ResourceTokenAuth`,
+> the `/api/v/{token}` and `/api/sessions/{id}` routes), and public profiles/follows/feed/
+> notifications (`HandleSeeder`, `MentionParser`, `TableNotificationSink`/`INotificationSink`,
+> `ShareReportProjection`) — all deleted end to end (routes, services, DTOs, DB tables via the
+> `RemoveSocial` migration).
 
 ## Technology Stack
 
@@ -60,10 +66,10 @@ Conventions inside `Spectr.Bff`:
   in the endpoint file (e.g. `UploadEndpoints.InitRequest`).
 - **Services layer**: `src/Spectr.Bff/Services/` (49 files) — interface-first seams
   (`IFileStorage`, `IJobQueue`, `IMultipartObjectStore`, `IRateLimiter`, `IEmailSender`,
-  `IStripeCheckoutClient`/`SubscriptionClient`/`RefundClient`, `INotificationSink`,
-  `IPresetGenerator`, `ITokenResolver`) with concrete implementations registered in `Program.cs`.
+  `IStripeCheckoutClient`/`SubscriptionClient`/`RefundClient`,
+  `IPresetGenerator`) with concrete implementations registered in `Program.cs`.
   Auth-specific helpers live in `src/Spectr.Bff/Auth/` (JwtTokenService, RefreshTokenService,
-  AuthTokenService, PasswordHasher, AdminAuth, ClaimsPrincipalExtensions, HandleSeeder).
+  AuthTokenService, PasswordHasher, AdminAuth, ClaimsPrincipalExtensions).
 - **Options**: `src/Spectr.Bff/Options/` bound + `ValidateOnStart()` (StripeOptions, ResendOptions,
   WorkerOptions, CoachCapsOptions, AnonOptions, S3StorageOptions, RetentionOptions, LifecycleOptions,
   PricingDisplayOptions).
@@ -71,8 +77,7 @@ Conventions inside `Spectr.Bff`:
 Middleware order (Program.cs): ForwardedHeaders (config-gated, prod-Caddy-only) → unconditional
 exception handler (shared envelope, trace id, never a stack frame) → correlation-id enrichment
 (jobId/analysisId route values pushed into Serilog LogContext + Sentry tag) →
-SerilogRequestLogging → HttpMetrics → CORS → Authentication → Authorization →
-`UseAnonIdentity()` (mints/verifies the `spectr_anon` cookie) → routes.
+SerilogRequestLogging → HttpMetrics → CORS → Authentication → Authorization → routes.
 
 ## Auth Model
 
@@ -90,17 +95,11 @@ SerilogRequestLogging → HttpMetrics → CORS → Authentication → Authorizat
   accepts the access JWT via `?t=` on exactly two path shapes: `/api/versions/{id}/audio` and
   `/api/jobs/{id}/images/{kind}`. Same validation pipeline; deliberately tight carve-out
   (review fix P24 — no substring matching).
-- **Opaque resource tokens (`?token=`)**: version-share and room-session tokens resolve through
-  `Services/ResourceTokenAuth.cs` + `ITokenResolver` implementations (`ShareTokenResolver`,
-  `SessionTokenResolver`) — explicitly NOT the JWT `?t=` hook. Used by `/api/v/{token}` and
-  `/api/sessions/{id}` anon access.
-- **Anon device cookie `spectr_device`**: HMAC-signed device identity minted by
-  `Services/DeviceService.cs` on the first `POST /api/anon/analyses`. Scopes the anon funnel;
-  registration with the cookie present claims the device server-side and re-parents its
-  jobs/analyses/conversations (AuthEndpoints.Register, story 4.5), then clears the cookie.
-- **Durable anon cookie `spectr_anon`**: separate stateless HMAC identity (key `Anon:SigningKey`,
-  must differ from `Jwt:Key` — boot-enforced) minted by `AnonIdentityMiddleware` for
-  unauthenticated visitors; used for anon attribution in feedback/bookmarks/rooms.
+- **Anon device cookie `spectr_device`**: HMAC-signed device identity (key `Anon:SigningKey`,
+  must differ from `Jwt:Key` — boot-enforced) minted by `Services/DeviceService.cs` on the first
+  `POST /api/anon/analyses`. Scopes the anon funnel; registration with the cookie present claims
+  the device server-side and re-parents its jobs/analyses/conversations (AuthEndpoints.Register,
+  story 4.5), then clears the cookie.
 - **Dev login**: `POST /api/auth/dev-login` — Development-environment-only (404 otherwise);
   logs in a pre-registered user by email without a password. Consumed by
   `frontend-spectr-v2/src/auth/AuthContext.tsx`.
@@ -153,7 +152,6 @@ SerilogRequestLogging → HttpMetrics → CORS → Authentication → Authorizat
   arms (actor + IP); either arm over limit denies → 429 `rate_limited`. Fail-OPEN on Redis
   errors everywhere it is used. Global kill switch `RateLimits:Enabled=false` (Development).
   IPv6 is bucketed to /64 (`VersionEndpoints.NormalizeIpForLimiting`).
-- **RoomBus** (`RoomBus.cs`) — Redis WAL + pub/sub engine for room sessions (SSE fan-out).
 - **CoachChatService** (`CoachChatService.cs`) — wraps the `claude` CLI subprocess for the
   legacy coach path; the live path goes through the `coach_reply` worker actor.
 - **Email**: `QueueEmailSender` (renders via `EmailTemplates.cs`, checks suppression, enqueues
@@ -162,10 +160,9 @@ SerilogRequestLogging → HttpMetrics → CORS → Authentication → Authorizat
 - **Background hosted services**: BillingReconciliationService (nightly read-only drift check),
   StaleJobReaper, RetentionSweepScheduler, LifecycleEmailScheduler. Plus `BootMigrator.cs`
   (migrations at boot under advisory lock when `Migrations:ApplyAtBoot=true`).
-- **Other seams**: `AccessService` (version share gate resolution), `HonestMathService` (usage
-  page math), `ReferenceProfileAggregator` (fingerprint-cached reference-set aggregate),
-  `DemoSeeder` (first-run demo report), `MentionParser`, `TableNotificationSink`, `AppUrls`,
-  `UlidGen`, `AnonReportProjection`/`ShareReportProjection` (reduced public projections).
+- **Other seams**: `HonestMathService` (usage page math), `ReferenceProfileAggregator`
+  (fingerprint-cached reference-set aggregate), `DemoSeeder` (first-run demo report), `AppUrls`,
+  `UlidGen`, `AnonReportProjection` (reduced public projection).
 
 ## Job Dispatch and Tier Routing
 
@@ -265,8 +262,8 @@ retention, admin, GDPR, secrets hardening, error-envelope leak checks, deploy to
 
 ## Experience-Relevant Behaviors (what the UI actually feels)
 
-- **Rate limits**: auth endpoints, uploads (10/min), dispatch (10/h/IP), profile reads, follows,
-  feedback, account ops → 429 `rate_limited`; all fail-open on Redis trouble; off in Development.
+- **Rate limits**: auth endpoints, uploads (10/min), dispatch (10/h/IP), account ops → 429
+  `rate_limited`; all fail-open on Redis trouble; off in Development.
 - **Caps surfaced to the UI**: `GET /api/me/entitlements` returns `EntitlementsDto`
   (tier, analysesRemaining/limit/used, resetsAt, stems/als/fullVerdicts flags, historyDepth,
   nested `CoachCapsDto {used, limit, capReached, scope: analysis|month|unlimited, resetsAt}`)
@@ -274,7 +271,7 @@ retention, admin, GDPR, secrets hardening, error-envelope leak checks, deploy to
   with the same numbers in `details`.
 - **202 + poll**: `POST /versions/{id}/analyze`, `/stems/classify`, `/reports/{jobId}/fix-rack`,
   `/reports/{jobId}/verdicts/run/{slug}`, `/reports/{jobId}/phases/{p}/rerun`,
-  `/references/analyze`, room event posts → `202 Accepted`; clients poll `GET /api/jobs/{id}`
+  `/references/analyze` → `202 Accepted`; clients poll `GET /api/jobs/{id}`
   (TanStack Query) — the SSE `GET /jobs/{id}/stream` exists but the v2 UI polls instead.
 - **204-until-ready**: `GET /reports/{jobId}/fix-rack` returns 204 until the worker's
   `generate_fix_rack` preset lands; coach replies arrive as pending assistant rows completed

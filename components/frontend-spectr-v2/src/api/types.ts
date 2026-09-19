@@ -273,9 +273,6 @@ export interface SongReferenceProfile {
   hue: number;
 }
 
-// solo: the wire request still requires a public-visibility flag (backend
-// field removal is a later task) — that literal is built inline in
-// useCreateTag (api/hooks.ts), never exposed here so no component can see it.
 export interface CreateTagRequest {
   name: string;
 }

@@ -322,8 +322,8 @@ public static class AccountEndpoints
                     .SetProperty(d => d.IpHash, "")
                     .SetProperty(d => d.UaHash, ""), ct);
 
-            // The user row: FK-cascades take viz_presets, listening_sessions,
-            // control_grants, notifications, follow_relations, invites.
+            // The user row: FK-cascades take viz_presets, notifications,
+            // reference_sets, session_notes, credit_ledger, usage_events, subscriptions.
             db.Users.Remove(user);
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);

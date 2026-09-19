@@ -28,9 +28,6 @@ public sealed class StaleJobReaperTests(WebApplicationFactory<Program> factory)
     {
         public Task<long?> AgeSecondsAsync(CancellationToken ct = default)
             => Task.FromResult(ageSeconds());
-
-        public Task<long> AnalysisQueueDepthAsync(CancellationToken ct = default)
-            => Task.FromResult(0L);
     }
 
     private StaleJobReaper NewReaper(

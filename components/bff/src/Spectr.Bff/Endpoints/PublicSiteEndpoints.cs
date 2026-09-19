@@ -42,9 +42,9 @@ public static class PublicSiteEndpoints
         app.MapGet("/trust/privacy", (HttpContext c) => Shell(c,
             path: "/trust/privacy",
             title: "Privacy defaults — SPECTR",
-            description: "Private-by-default library, opt-in revocable share links, anonymous analysis data purged after 72 hours, full export and deletion.",
+            description: "Private-by-default library, no public pages or share links, anonymous analysis data purged after 72 hours, full export and deletion.",
             heading: "Privacy defaults",
-            body: "Private by default. Share links are opt-in and revocable. Export or delete everything, any time.")).AllowAnonymous().WithTags("public-site");
+            body: "Private by default. Nothing you upload is visible to anyone else. Export or delete everything, any time.")).AllowAnonymous().WithTags("public-site");
         return app;
     }
 

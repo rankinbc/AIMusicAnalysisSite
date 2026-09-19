@@ -17,12 +17,12 @@ Single-user product — no sharing, no rooms, no profiles; see
 #### frontend-v2 (web)
 - **Tech:** React 19, Vite 6, TS strict, TanStack Router/Query, CSS Modules
 - **Root:** `components/frontend-spectr-v2` · dev :5174
-- **Docs:** [Architecture](./architecture-frontend-v2.md) · [Component Inventory](./component-inventory-frontend-v2.md) (30 routes, 136 components)
+- **Docs:** [Architecture](./architecture-frontend-v2.md) · [Component Inventory](./component-inventory-frontend-v2.md) (26 route files (3 layouts + 23 pages), 136 components)
 
 #### bff (backend)
 - **Tech:** ASP.NET Core .NET 10 minimal APIs, EF Core 10 + Npgsql, Stripe.net 52
 - **Root:** `components/bff` · :5000 · canonical DB schema in `src/Spectr.Data`
-- **Docs:** [Architecture](./architecture-bff.md) · [API Contracts](./api-contracts-bff.md) (22 endpoint files)
+- **Docs:** [Architecture](./architecture-bff.md) · [API Contracts](./api-contracts-bff.md) (23 endpoint files)
 
 #### worker (backend)
 - **Tech:** Python 3.11 dramatiq over Redis; Anthropic CLI/SDK/FAKE transports

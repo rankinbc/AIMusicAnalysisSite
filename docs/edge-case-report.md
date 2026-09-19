@@ -195,7 +195,7 @@
 
 > Overlap noted, not re-derived: AI verdicts with `userState.applied=true` landing after the first `moves` seed never enter `committedIds` (the one-shot seed at `ReportView.tsx:115-123`) — this is the committed-state race already reported as friction **F3**; the silent 500 on `POST /api/verdicts/{id}/applied` is likewise **F3**.
 
-## Journey 6 — Listen rack (+ rooms)
+## Journey 6 — Listen rack
 
 ### E6.1 — Version 404 on `/listen-rack/{id}` falls back to a demo fixture presented as real 🔴 High
 - **Trigger:** deleted/foreign/nonexistent versionId (stale deep link, old bookmark).

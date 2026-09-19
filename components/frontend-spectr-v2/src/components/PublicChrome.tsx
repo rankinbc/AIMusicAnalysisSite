@@ -11,7 +11,7 @@
  *
  * Plain <a> navigation on purpose: funnel pages are entry points where a full
  * page load is fine, and plain anchors keep this component static-render
- * testable without a RouterProvider (the FeedView idiom). */
+ * testable without a RouterProvider. */
 import { useOptionalAuth } from '../auth/AuthContext';
 import s from './PublicChrome.module.css';
 

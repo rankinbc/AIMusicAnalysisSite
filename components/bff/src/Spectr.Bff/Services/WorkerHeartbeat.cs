@@ -19,13 +19,6 @@ public interface IWorkerHeartbeat
     /// only applies the long pending grace).
     /// </summary>
     Task<long?> AgeSecondsAsync(CancellationToken ct = default);
-
-    /// <summary>
-    /// Pending messages across the analysis lanes (paid + free). Lives here so
-    /// the <c>dramatiq:&lt;queue&gt;</c> LIST key format has a single owner —
-    /// both health endpoints read this. Throws on Redis failure.
-    /// </summary>
-    Task<long> AnalysisQueueDepthAsync(CancellationToken ct = default);
 }
 
 internal sealed class WorkerHeartbeat(IConnectionMultiplexer redis) : IWorkerHeartbeat
@@ -45,12 +38,5 @@ internal sealed class WorkerHeartbeat(IConnectionMultiplexer redis) : IWorkerHea
         }
         long nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         return Math.Max(0, (nowMs - (long)top[0].Score) / 1000);
-    }
-
-    public async Task<long> AnalysisQueueDepthAsync(CancellationToken ct = default)
-    {
-        var db = redis.GetDatabase();
-        return await db.ListLengthAsync($"dramatiq:{DramatiqQueues.AnalysisPaid}").WaitAsync(ct)
-            + await db.ListLengthAsync($"dramatiq:{DramatiqQueues.AnalysisFree}").WaitAsync(ct);
     }
 }

@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Routing;
@@ -111,5 +112,33 @@ public sealed class NoSocialSurfaceTests(WebApplicationFactory<Program> factory)
         Assert.Null(typeof(Spectr.Bff.DTOs.TagDto).GetProperty("IsPublic"));
         Assert.Null(typeof(Spectr.Bff.DTOs.CreateTagRequest).GetProperty("IsPublic"));
         Assert.Null(typeof(Spectr.Data.Entities.SongTag).GetProperty("IsPublic"));
+    }
+
+    // The privacy shell legitimately says "no public pages or share links" —
+    // a NEGATIVE claim. These fragments only appear in a POSITIVE claim
+    // (offering/describing a social feature as present), so the fixed copy
+    // never matches while the removed-feature copy it replaced would have.
+    private static readonly Regex SocialCopyPattern = new(
+        "revocable|opt-in share|share links are|publish your|public profile|follower|live room|listening room|invite",
+        RegexOptions.IgnoreCase);
+
+    [SkippableFact]
+    public async Task Public_Site_Shells_Carry_No_Social_Copy()
+    {
+        await TestDb.RequireAsync(factory);
+        var client = factory.CreateClient();
+        string[] paths =
+        [
+            "/", "/pricing", "/analyze",
+            "/trust/no-training", "/trust/privacy", "/trust/results-forever",
+        ];
+
+        foreach (var path in paths)
+        {
+            var resp = await client.GetAsync(path);
+            Assert.Equal(200, (int)resp.StatusCode);
+            var body = await resp.Content.ReadAsStringAsync();
+            Assert.False(SocialCopyPattern.IsMatch(body), $"{path} carries social copy:\n{body}");
+        }
     }
 }

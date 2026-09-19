@@ -84,7 +84,7 @@ to the live file. Slugs = the specialist catalog; versions must match
 ## Production deploy & rollback (story 10.1)
 
 Topology (AR29): single VPS, `infra/compose.prod.yml` — caddy (auto-TLS,
-SPA/funnel statics, `/api` + crawler-`/r/*` proxy), bff, worker-paid (W1:
+SPA/funnel statics, `/api` + crawler-UA proxy), bff, worker-paid (W1:
 coach + analysis-paid), worker-free (W2: analysis-free + maintenance),
 postgres:16, redis:7 (AOF on — the queue IS durable state). Only caddy
 publishes ports; the BFF has no direct ingress (which is what makes
