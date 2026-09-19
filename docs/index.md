@@ -49,7 +49,7 @@ Legacy (not separately documented): `components/api` (FastAPI v1), `components/f
 - [Data Models](./data-models.md) — shared Postgres schema (33 tables; EF canonical, SQLAlchemy mirror)
 - [API Contracts — BFF](./api-contracts-bff.md)
 - [Component Inventory — frontend-v2](./component-inventory-frontend-v2.md)
-- [User Journeys](./user-journeys.md) — 8 journeys, waiting-state inventory, 10 observed friction candidates (**primary input for the UX-friction audit**)
+- [User Journeys](./user-journeys.md) — 7 journeys, waiting-state inventory, 10 observed friction candidates (**primary input for the UX-friction audit**)
 - [UX Friction Report](./ux-friction-report.md) — 2026-07-22 audit: 15 ranked findings (all 10 candidates verified + 5 new, root causes pinned), top-5 fix-first list; screenshots in `output/ux-audit/2026-07-22_friction-audit/`
 - [Development Guide](./development-guide.md) — daily loop + validation gates
 - [Deployment Guide](./deployment-guide.md) — prod orientation layer

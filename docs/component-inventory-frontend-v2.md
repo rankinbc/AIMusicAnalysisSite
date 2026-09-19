@@ -4,7 +4,7 @@ Companion to `docs/architecture-frontend-v2.md`. All paths relative to
 `components/frontend-spectr-v2/src/`. Test files (`__tests__/`, `*.test.*`) and CSS modules are
 excluded. "Reusable" = designed for use across features; unmarked entries are feature-specific.
 
-## Route pages (`routes/`) — 30 files (3 layouts + 27 pages)
+## Route pages (`routes/`) — 26 files (3 layouts + 23 pages)
 
 | Component | File | Purpose |
 | --- | --- | --- |
@@ -16,11 +16,10 @@ excluded. "Reusable" = designed for use across features; unmarked entries are fe
 | PricingPage | `routes/pricing.tsx` | `/pricing` — plans from `/api/billing/plans`, Stripe checkout redirect |
 | Trust hub + pledges | `routes/trust.index.tsx`, `trust.no-training.tsx`, `trust.privacy.tsx`, `trust.results-forever.tsx` | `/trust/*` versioned trust/pledge pages |
 | LibraryPage | `routes/_app/library.tsx` | `/library` — Songs / References segmented sections |
-| SongDetailPage | `routes/_app/songs.$songId.tsx` | Song hero, version list, compare/share/edit dialogs; `<Outlet/>` when results child active |
+| SongDetailPage | `routes/_app/songs.$songId.tsx` | Song hero, version list, compare/edit dialogs; `<Outlet/>` when results child active |
 | ResultsPage | `routes/_app/songs.$songId.results.$jobId.tsx` | Job poll → progress storyline / fail+retry / ReportView (`?tab=` deep link) |
-| ListenRackVersionRoute | `routes/_app/listen-rack.$versionId.tsx` | Canonical Listen page; builds track model from analysis; `?fixPreset=` carry-over |
+| ListenRackVersionRoute | `routes/_app/listen-rack.$versionId.tsx` | Canonical Listen page (owner-only); builds track model from analysis; `?fixPreset=` carry-over |
 | ReportsPage | `routes/_app/reports.tsx` | All-reports filterable table |
-| FeedPage | `routes/_app/feed.tsx` | Followed-users activity feed (accumulating pages) |
 | ProfilePage | `routes/_app/profile.tsx` | Own profile + settings tabs incl. DangerZone |
 | UsagePage | `routes/_app/usage.tsx` | Credits balance, ledger, BuyCreditsCard, UsageSummary |
 | BillingPage | `routes/_app/billing.tsx` | Self-service billing (free / pro / cancel-pending states) |
@@ -29,9 +28,6 @@ excluded. "Reusable" = designed for use across features; unmarked entries are fe
 | LoginPage / RegisterPage | `routes/_public/login.tsx`, `register.tsx` | Auth forms (`?next=` support) |
 | ForgotPassword / ResetPassword / VerifyEmail | `routes/_public/forgot-password.tsx`, `reset-password.tsx`, `verify-email.tsx` | Account-flow containers over AuthFlowViews |
 | BillingCancelledPage | `routes/_public/billing.cancelled.tsx` | Stripe checkout-cancelled landing |
-| PublicProfileRoute | `routes/_public/u.$handle.tsx` | `/u/{handle}` public profile |
-| VersionViewPage | `routes/_public/v.$token.tsx` | `/v/{token}` anon version-share reviewer surface |
-| SharedReviewerPage | `routes/_public/r.$token.tsx` | `/r/{token}` shared-analysis review: audio + timestamped comments |
 
 ## Feature components (`features/`)
 
@@ -49,8 +45,6 @@ excluded. "Reusable" = designed for use across features; unmarked entries are fe
 | CoachChat | `features/results/CoachChat.tsx` | SSE chat: token stream, caps, refusals, offline state, aria-live |
 | CoachCapChip | `features/results/CoachCapChip.tsx` | `{used} of {limit} follow-ups` caps chip |
 | CoachGateInline | `features/results/CoachGateInline.tsx` | Cap-reached input replacement (upgrade paths) |
-| CoachMixModal | `features/results/CoachMixModal.tsx` | Full-width compiled Fix Rack modal |
-| FixRackPanel | `features/results/FixRackPanel.tsx` | Sidebar fix-rack lifecycle panel (idle/generating/error/timeout/ready) |
 | SpecialistTeamModal | `features/results/SpecialistTeamModal.tsx` | Specialist roster: run/running/found per slug, credits |
 | AnalysisCompleteModal | `features/results/AnalysisCompleteModal.tsx` | Post-analysis teaser/conversion modal (running + complete states) |
 | DegradationBanner | `features/results/DegradationBanner.tsx` | Degraded-run (rule-engine-only) notice |
@@ -63,43 +57,43 @@ excluded. "Reusable" = designed for use across features; unmarked entries are fe
 | FilesTab | `features/results/FilesTab.tsx` | Version files list + authorized downloads |
 | DebugTab | `features/results/DebugTab.tsx` | DEV-only raw pipeline I/O per phase |
 | ResultsPlayer | `features/results/ResultsPlayer.tsx` | Bar-waveform scrubber transport for the report |
-| MoveCard | `features/results/MoveCard.tsx` | Recommended-fix card with commit-to-Listen toggle |
-| FixModal | `features/results/FixModal.tsx` | Fix detail modal |
-| RackModules | `features/results/RackModules.tsx` | dsp_chain ops rendered as rack-module glyphs |
-| RackSidebar | `features/results/RackSidebar.tsx` | Report sidebar hosting rack/fix panels |
 | TrackChip | `features/results/TrackChip.tsx` | `.als` track-name chip (with highlight wiring) |
 | EvidenceChips | `features/results/EvidenceChips.tsx` | Verdict evidence value chips |
 | ExportModal | `features/results/ExportModal.tsx` | Game-plan checklist export preview |
 | TranceBot / MiniBot | `features/results/TranceBot.tsx` | Back-compat aliases for `ui/Coach` mascot |
 
-### listen — DSP engine + share/room primitives (5 components; 13 hooks; `audio/` subsystem)
+### listen — DSP engine (1 component; hooks; `audio/` subsystem)
+
+Room/share/reviewer primitives (`BookmarksRail`, `AnonReviewerSurface`, `ProducerCta`,
+`SuggestionCard`, and the `useRoomSession`/`useRoomStream`/`useRoomActions`/`useComments`/
+`useBookmarks`/`useBookmarkSignal`/`useSuggestions`/`useInvites`/`useVersionAccess`/
+`useVersionShare`/`useAnonFeedback` hooks) were removed on the solo fork — see
+`PRPs/solo-fork-strip-social.md`.
 
 | Component | File | Purpose |
 | --- | --- | --- |
 | StemDeck | `features/listen/StemDeck.tsx` | Per-stem playback deck (mute/solo/gain) |
-| BookmarksRail | `features/listen/BookmarksRail.tsx` | Timestamp bookmarks rail |
-| AnonReviewerSurface | `features/listen/AnonReviewerSurface.tsx` | Pure pieces for the `/v/{token}` anon reviewer page |
-| ProducerCta | `features/listen/ProducerCta.tsx` | Register CTA on share pages (attribution + `next`) |
-| SuggestionCard | `features/listen/SuggestionCard.tsx` | Reviewer rack-suggestion card |
 
 Hooks/engine (not components): `useAudioGraph` (Web Audio DSP graph — the engine),
-`useStemEngine`, `useRoomSession`/`useRoomStream`/`useRoomActions` (rooms + SSE), `useComments`,
-`useBookmarks`/`useBookmarkSignal`, `useSuggestions`, `useInvites`, `useVersionAccess`,
-`useVersionShare`, `useAnonFeedback`; `audio/` = composer, EffectUnit, state, worklets,
-13 effect modules (`audio/effects/`), pure DSP math (`audio/dsp/`), 3 AudioWorklet processors.
+`useStemEngine`; `audio/` = composer, EffectUnit, state, worklets, 13 effect modules
+(`audio/effects/`), pure DSP math (`audio/dsp/`), 3 AudioWorklet processors.
 
-### listen-rack — the Listen page (8 components; state/hooks: `rackState`, `rackBindings`, `useRackPresets`, `useVizPresetsServer`, `useFixOverlay`, `useRoomOrchestration` (+mock), `roomStateReducer`, `fixToRackPatch`, `listenFixes`, `trackFromAnalysis`, `capabilities`, `access`, `identity`, `sessionEvents`, `suggest-draft`, `chain`, `data`, `helpers`)
+### listen-rack — the Listen page
+
+Live-room orchestration (`useRoomOrchestration`, `useMockRoomOrchestration`, `roomStateReducer`,
+`roomUiState`, `transportSync`), fork-to-suggest (`SuggestModeChip`, `suggest-draft`), and the
+role/capability seam (`access`, `capabilities`, `identity`) were removed on the solo fork — the
+rack has no read-only/guest mode any more, it is always owner-editable. `rail.tsx` (the old
+Coach/Plan/People/Chat/Stats/Notes right rail) was replaced by `NotesSidebar.tsx` (notes only).
+See `PRPs/solo-fork-strip-social.md`.
 
 | Component | File | Purpose |
 | --- | --- | --- |
-| ListenRackPage | `features/listen-rack/ListenRackPage.tsx` | Page orchestrator: engine binding, transport, presets, rooms, fixes |
+| ListenRackPage | `features/listen-rack/ListenRackPage.tsx` | Page orchestrator: engine binding, transport, presets, fixes |
 | rackCore renderers | `features/listen-rack/rackCore.tsx` | Manifest-driven rack module renderers |
 | rackLayouts | `features/listen-rack/rackLayouts.tsx` | Rack layout arrangements |
 | ui (control primitives) | `features/listen-rack/ui.tsx` | Draggable knobs/faders/toggles/meters (neon language) |
-| transport | `features/listen-rack/transport.tsx` | Scrubber + transport controls |
 | viz (VizStage + stages) | `features/listen-rack/viz.tsx` | Visualizer stages + AUTO director (one rAF) |
-| rail | `features/listen-rack/rail.tsx` | Right panel tabs: Coach/Plan/People/Chat/Stats/Notes + meters |
-| SuggestModeChip | `features/listen-rack/SuggestModeChip.tsx` | Fork-to-suggest mode chip (A/B, submit/discard) |
 
 ### billing (7 components; hooks: `useBillingPortal`, `useUpgradeCheckout`; helpers: `format-price`, `stripe-url`)
 
@@ -136,16 +130,12 @@ Hooks/engine (not components): `useAudioGraph` (Web Audio DSP graph — the engi
 | WorkerHealthBanner | `features/health/WorkerHealthBanner.tsx` | Worker-offline banner body (+ queue depth) |
 | AppWorkerHealthNotice | `features/health/AppWorkerHealthNotice.tsx` | Shell mount; renders only on definitive offline |
 | DevHealthDot | `features/health/DevHealthDot.tsx` | DEV-only aggregated-health dot (polls `/health/full`) |
-| FeedView | `features/feed/FeedView.tsx` | Pure feed rendering (items, suggestions, empty states); hook `useFeed` |
-| NotificationCenter / NotificationBell | `features/notifications/NotificationCenter.tsx` | Bell + inbox popover; hook `useNotifications` (30 s unread poll) |
-| MentionSuggestList | `features/mentions/MentionSuggestList.tsx` | @mention autocomplete list; hook `useMentionAutocomplete` |
-| PublicProfileView | `features/profiles/PublicProfileView.tsx` | Public profile rendering; hook `useFollow` |
 | DangerZone | `features/account/DangerZone.tsx` | Export + delete-account (password + typed DELETE) |
 | AuthFlowViews | `features/auth/AuthFlowViews.tsx` | Pure verify/forgot/reset view states |
 | TrustPage | `features/trust/TrustPage.tsx` | Trust hub content |
 | AlsPreviewPanel | `features/upload/AlsPreviewPanel.tsx` | Client-side `.als` parse preview (tracks) in upload dialogs; helpers `alsPreview`, `stemMatch`, presigned upload helpers |
 
-## Shared components (`components/`) — 20 (all reusable across features)
+## Shared components (`components/`) — 19 (all reusable across features)
 
 | Component | File | Purpose |
 | --- | --- | --- |
@@ -158,7 +148,6 @@ Hooks/engine (not components): `useAudioGraph` (Web Audio DSP graph — the engi
 | SongEditDialog | `components/SongEditDialog.tsx` | Edit song metadata/visual |
 | SongFields | `components/SongFields.tsx` | Shared song form fields (+`song-fields-helpers`) |
 | CompareDialog | `components/CompareDialog.tsx` | Version-vs-version delta compare |
-| SharePublishDialog | `components/SharePublishDialog.tsx` | Publish/manage share links + visibility |
 | ConfirmDialog | `components/ConfirmDialog.tsx` | Generic confirm modal (reusable primitive) |
 | BlurLock | `components/BlurLock.tsx` | Universal gating surface: blur + inert + single CTA (reusable primitive) |
 | UpgradeSheet | `components/UpgradeSheet.tsx` | Cap-hit upgrade modal (PRO vs CREDITS) |
@@ -208,11 +197,11 @@ Hooks/engine (not components): `useAudioGraph` (Web Audio DSP graph — the engi
 
 | Category | Count |
 | --- | --- |
-| Route files (`routes/`) | 30 (3 layouts, 26 pages, 1 dev-only page) |
-| Feature components (`features/`, .tsx) | 74 across 17 folders (results 32, listen-rack 8, billing 7, listen 5, references 5, anon-analyze 3, health 3, landing 2, one each: library, feed, notifications, mentions, profiles, account, auth, trust, upload) |
-| Shared components (`components/`) | 20 |
+| Route files (`routes/`) | 26 (3 layouts, 23 pages incl. 1 dev-only) |
+| Feature folders (`features/`) | 14: account, anon-analyze, auth, billing, health, landing, library, listen, listen-rack, references, results, song, trust, upload. `feed`, `mentions`, `notifications`, `profiles` were removed on the solo fork (`PRPs/solo-fork-strip-social.md`); `song` is new since this table was generated. |
+| Shared components (`components/`) | 19 |
 | UI primitives (`ui/`) | 10 |
 | Shell/entry (`main.tsx`, `auth/AuthContext.tsx`) | 2 |
-| Total .tsx components (non-test) | 136 |
-| Supporting .ts modules (hooks/helpers/engine, non-test) | ~134 (incl. `api/hooks.ts` with ~80 query/mutation hooks and the `features/listen/audio/` DSP subsystem) |
 | Dev-only surfaces | 4 (+ router devtools) |
+
+> Per-folder and total `.tsx`/`.ts` component counts above (feature-component total, supporting-module total) are **not re-verified in this pass** — this table has drifted beyond the social strip alone (e.g. a new `features/song/` folder and additional `listen-rack` components exist that are not itemized above, per the "do not add new rows" scoping of this edit) and needs a full non-social inventory refresh to be trustworthy again.

@@ -230,6 +230,9 @@
 - **Trigger:** any `PUT /rack/draft`, `POST /rack/presets`, `/viz/presets` save fails (dead 401, version deleted, 500).
 - **Currently:** `useUpsertRackDraft`/`useSaveRackPreset` have no `onError` (`useRackPresets.ts:97-104,125-130`); call sites add none (`ListenRackPage.tsx:537-543,560-566,592-595` — import toasts only success/parse). The user believes drafts/presets are saving.
 
+> Superseded 2026-09-19 — this surface was removed on the solo fork (PRPs/solo-fork-strip-social.md).
+> Applies to every finding from here through E7.7 (live rooms, then sharing/reviewer/notifications).
+
 ### E6.8 — "Start live room" refusal is silent 🔴 High
 - **Trigger:** `POST /versions/{id}/sessions` → 403 `room_not_hostable`.
 - **Currently:** `startRoom` is `() => startMut.mutate()` with no `onError` (`useRoomOrchestration.ts:177`; `useRoomSession.ts:39-45`); `isStartingRoom` is returned but never consumed; the fetcher has no global error toast. The button appears to do nothing. (The button rendering at all pre-access-resolve is the known MOCK_ACCESS gap from the journeys doc — referenced, not re-derived.)
@@ -261,6 +264,8 @@
 - **Currently:** `PeoplePanel` lists hard-coded `ROOM_LISTENERS`; real participants never appear; "+ DJ"/"+ Vis" grants target fixture actors (sent with `userId: null` — `rail.tsx:349-418`, `useRoomOrchestration.ts:130-137`); "↗ Invite" has no handler (`rail.tsx:360`). `ChatPanel.send()` appends locally under the hard-coded handle 'maek' and never calls `roomLive.sendChat` (zero call sites); fixture `SEED_CHAT` renders into real rooms (`rail.tsx:421-474`). The core Room loop — see, grant, chat with real participants — silently does not function.
 
 ## Journey 7 — Sharing & social
+
+> Superseded 2026-09-19 — this surface was removed on the solo fork (PRPs/solo-fork-strip-social.md).
 
 ### E7.1 — The entire version-share/invite owner flow has no UI; invite links dead-end 🔴 High
 - **Trigger:** owner wants to mint/rotate/revoke a `/v/{token}` link or invite a reviewer.

@@ -67,12 +67,13 @@ Entry points: library "+ New song", song detail "+ Add version", shell "+ Upload
 ## Journey 4 — Library → song → versions
 
 - **Library** (`/library`): Songs/References tabs; header "Your library — 24
-  songs · 43 versions"; sort (recent/name/versions), grid/list toggle, privacy
-  filter pills (All/Private/Shared/Public/Archived), "+ New song".
-- Song cards are dense: privacy chip, current version, inline play button,
-  song link, genre chip, per-version mini-list, "Analysis Results" button.
+  songs · 43 versions"; sort (recent/name/versions), grid/list toggle, filter
+  pills (All/Archived), "+ New song". Every song is private to its owner —
+  there is no visibility/sharing state (solo fork, `PRPs/solo-fork-strip-social.md`).
+- Song cards are dense: current version, inline play button, song link, genre
+  chip, per-version mini-list, "Analysis Results" button.
 - **Song detail** (`/songs/{id}`): header (genre, grade, current version) +
-  Edit/Archive/Publish/Add-version; ProgressTimeline (grade-over-versions
+  Edit/Archive/Add-version; ProgressTimeline (grade-over-versions
   chart); version list where each row has up to 6 actions (Listen, Report or
   Make current, Edit label, Reanalyze, Reference, Delete); Compare rail
   ("v1 → current", "Last two", "Pick two…").
@@ -114,30 +115,19 @@ those inputs exist) / **Debug** (dev builds).
 `/listen-rack/{versionId}` (canonical; per-version "▶ Listen" everywhere).
 
 - Layout: NOW PLAYING header (title, genre chip, "Private workbench" note),
-  **WORK / VIEW / ROOM** mode switch, "View Report →" back-link; center stage
-  (waveform/visuals, full-screen toggle); tool tabs **RACK / VISUALS / STEMS**;
-  right rail **Coach / Plan / Stats / Notes** + "Ask about your mix…" box.
+  "View Report →" back-link; center stage (waveform/visuals, full-screen
+  toggle); tool tabs **RACK / VISUALS / STEMS**; right rail **Coach / Plan /
+  Stats / Notes** + "Ask about your mix…" box. The rack is always editable —
+  there is no read-only/room-guest mode (solo fork removed live listening
+  rooms and the WORK/VIEW/ROOM mode switch, `PRPs/solo-fork-strip-social.md`).
 - The Plan tab receives fixes queued on the results page ("Fixes applied: N —
   reset" chip); rack modules apply the DSP chain live (Web Audio graph).
-- Room/View modes: live listening sessions (SSE) with reactions/chat/transport;
-  share flows mint `/v/{token}` (anon viewer) and `/r/{token}` (reviewer)
-  pages.
 - Desktop-first: below 1024 px the page shows a "Desktop tool" notice and
   pauses playback.
 - Observed: genre chip here also reads "other" for a song labeled Trance
   (same genre-resolution seam as Journey 5).
 
-## Journey 7 — Sharing & social
-
-- Song "★ Publish" → public song; share dialogs mint version links:
-  `/v/{token}` anonymous view (feedback affordances; anon suggest UI
-  deliberately absent until a real UI exists), `/r/{token}` reviewer surface.
-- Public profile `/u/{handle}`; Feed (`/feed`) and notifications (bell, unread
-  badge) carry social activity. Fork-to-suggest exists in rooms (reviewer
-  proposes a rack chain; known gaps: no diff view, draft dies on nav,
-  MOCK_ACCESS fallback can render controls that 403 — `useRoomOrchestration.ts`).
-
-## Journey 8 — Account, plan & caps
+## Journey 7 — Account, plan & caps
 
 - `/billing`: current plan card (walkthrough account: Pro Annual, active) with
   Switch cadence / Manage payment / Cancel. Cadence toggle POSTs directly —
