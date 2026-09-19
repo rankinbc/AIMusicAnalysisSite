@@ -1,5 +1,5 @@
 import type { VersionDto } from '../../api/types';
-import { scoredAsc, trendSummary } from './song-helpers';
+import { displayScore, scoredAsc, trendSummary } from './song-helpers';
 import styles from './SongConsole.module.css';
 
 interface ScoreTrendCardProps {
@@ -42,7 +42,7 @@ export function ScoreTrendCard({ versions, onPointClick }: ScoreTrendCardProps) 
       const y = yOf(v.latestResult!.score!);
       return {
         n: v.versionNumber,
-        score: v.latestResult!.score!,
+        score: displayScore(v.latestResult!.score),
         leftPct: lp.toFixed(2),
         top: y.toFixed(1),
         scoreTop: (y - 21).toFixed(1),

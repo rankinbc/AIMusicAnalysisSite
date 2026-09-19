@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import type { VersionDto } from '../../api/types';
 import type { VStatus } from './song-helpers';
-import { versionStatus } from './song-helpers';
+import { displayScore, versionStatus } from './song-helpers';
 import styles from './SongConsole.module.css';
 
 const SLOT_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as const;
@@ -84,7 +84,7 @@ export function VersionRow({
   const showReport = isAnalyzed && canReport;
   const showRetry = isFailed;
 
-  const score = version.latestResult?.score ?? null;
+  const score = displayScore(version.latestResult?.score);
   const hasScore = score != null;
   const isCurrent = version.isCurrent;
   const isHighlight = highlight === version.id;

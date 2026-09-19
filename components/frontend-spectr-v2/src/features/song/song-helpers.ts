@@ -17,10 +17,17 @@ export const METRICS: {
 
 type MetricDef = (typeof METRICS)[number];
 
+/** The BFF sends scores as floats (0–100); the app shows whole numbers. */
+export function displayScore(score: number | null | undefined): number | null {
+  return score == null || Number.isNaN(score) ? null : Math.round(score);
+}
+
 export function metricDelta(a: number | null, b: number | null, m: MetricDef) {
   const fmt = (x: number | null) => (x == null ? '—' : x.toFixed(m.dec) + m.unit);
   if (a == null || b == null) return { aStr: fmt(a), bStr: fmt(b), deltaStr: '—', tone: 'neutral' as Tone };
-  const diff = a - b;
+  // Diff the values AS PRINTED, so "5 → 5" can never sit next to "+1".
+  const shown = (x: number) => Number(x.toFixed(m.dec));
+  const diff = shown(a) - shown(b);
   const eps = m.dec ? 0.05 : 0.5;
   if (Math.abs(diff) < eps) return { aStr: fmt(a), bStr: fmt(b), deltaStr: '±0', tone: 'neutral' as Tone };
   const deltaStr = (diff > 0 ? '+' : '') + diff.toFixed(m.dec);
@@ -75,8 +82,9 @@ export function scoredAsc(versions: VersionDto[]): VersionDto[] {
 export function trendSummary(versions: VersionDto[]): string {
   const sc = scoredAsc(versions);
   if (sc.length < 2) return '';
-  const first = sc[0].latestResult!.score!;
-  const last = sc[sc.length - 1].latestResult!.score!;
+  const first = displayScore(sc[0].latestResult!.score)!;
+  const last = displayScore(sc[sc.length - 1].latestResult!.score)!;
   const d = last - first;
-  return `${d >= 0 ? '+' : ''}${d} pts · v${sc[0].versionNumber}→v${sc[sc.length - 1].versionNumber}`;
+  const dStr = d === 0 ? '±0' : `${d > 0 ? '+' : ''}${d}`;
+  return `${dStr} pts · v${sc[0].versionNumber}→v${sc[sc.length - 1].versionNumber}`;
 }

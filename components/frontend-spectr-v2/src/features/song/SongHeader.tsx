@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { SongDto, SongVisual } from '../../api/types';
 import { CoverArt } from '../../ui/CoverArt';
+import { displayScore } from './song-helpers';
 import styles from './SongConsole.module.css';
 
 interface SongHeaderProps {
@@ -26,7 +27,7 @@ export function SongHeader({ song, visual, hue, onEdit, onAddVersion, onArchive 
   const versions = song.versions ?? [];
   const cur = versions.find(v => v.isCurrent) ?? versions[0] ?? null;
   const hasScore = cur?.latestResult?.score != null;
-  const scoreStr = hasScore ? String(cur!.latestResult!.score) : '';
+  const scoreStr = hasScore ? String(displayScore(cur!.latestResult!.score)) : '';
   const versionCountStr = `${versions.length} version${versions.length === 1 ? '' : 's'}`;
   const savedStr = fmtSaved(song.updatedAt);
 
