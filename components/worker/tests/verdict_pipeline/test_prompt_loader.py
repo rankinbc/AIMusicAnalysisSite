@@ -4,6 +4,7 @@ import pytest
 from app.verdict_lib.prompt_loader import (
     SLUG_TO_FILENAME,
     SPECIALIST_SLUGS,
+    load_coach_concise_style,
     load_coach_grounded,
     load_coach_grounded_model,
     load_prompt,
@@ -96,6 +97,39 @@ def test_load_coach_grounded_model_no_pin_returns_none(tmp_path: Path, monkeypat
         "app.verdict_lib.prompt_loader.COACH_PROMPTS_DIR", fake_dir,
     )
     assert load_coach_grounded_model() is None
+
+
+# ── concise-mode style overlay (adhoc2, 2026-09-19) ────────────────────────
+
+def test_load_coach_concise_style_real_file(tmp_path: Path, monkeypatch):
+    fake_dir = tmp_path / "coach"
+    fake_dir.mkdir()
+    (fake_dir / "ConciseStyle.md").write_text(
+        "---\nversion: 9.9.9\n---\n\n35-word overlay body here",
+    )
+    monkeypatch.setattr(
+        "app.verdict_lib.prompt_loader.COACH_PROMPTS_DIR", fake_dir,
+    )
+    version, body = load_coach_concise_style()
+    assert version == "9.9.9"
+    assert "35-word overlay body here" in body
+
+
+def test_load_coach_concise_style_missing_file_raises(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(
+        "app.verdict_lib.prompt_loader.COACH_PROMPTS_DIR", tmp_path,
+    )
+    with pytest.raises(FileNotFoundError):
+        load_coach_concise_style()
+
+
+def test_live_coach_concise_style_loads():
+    """The on-disk ConciseStyle.md must parse and state the 35-word rule —
+    guards against a frontmatter/content typo slipping into production."""
+    version, body = load_coach_concise_style()
+    assert version == "1.0.0"
+    assert "35 word" in body or "35-word" in body or "~35 words" in body
+    assert "<<<EVIDENCE>>>" in body
 
 
 def test_live_coach_prompt_loads():

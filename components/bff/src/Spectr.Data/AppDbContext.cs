@@ -133,7 +133,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         // DB default of 'qa' so existing rows backfill to a CHECK-valid value
         // (an empty-string default would violate the CHECK on create).
         builder.Entity<CoachMessage>().ToTable(t => t.HasCheckConstraint(
-            "ck_coach_messages_mode", "\"mode\" IN ('qa','teach')"));
+            "ck_coach_messages_mode", "\"mode\" IN ('qa','teach','concise')"));
         builder.Entity<CoachMessage>().Property(m => m.Mode).HasDefaultValue("qa");
 
         // Notifications inbox (story 11.6): recipient-scoped list ordered by

@@ -515,7 +515,7 @@ class CoachMessage(Base):
             name="ck_coach_messages_status",
         ),
         CheckConstraint(
-            "mode IN ('qa','teach')", name="ck_coach_messages_mode",
+            "mode IN ('qa','teach','concise')", name="ck_coach_messages_mode",
         ),
         Index(
             "ix_coach_messages_conversation_created_at",
@@ -539,8 +539,10 @@ class CoachMessage(Base):
     status: Mapped[str] = mapped_column(
         "status", String(16), nullable=False, default="complete",
     )
-    # teach-mode flag stamped on the user row by the BFF (story: teach-mode-coach).
-    # Read by the coach_reply actor to pick the TeachCoach prompt + inject units.
+    # teach-mode flag stamped on the user row by the BFF (story: teach-mode-coach;
+    # extended adhoc-concise with a third value). Read by the coach_reply actor
+    # to pick the TeachCoach prompt / concise style overlay + inject units.
+    # "qa" | "teach" | "concise"
     mode: Mapped[str] = mapped_column(
         "mode", String(20), nullable=False, default="qa", server_default="qa",
     )

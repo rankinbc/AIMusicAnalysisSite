@@ -15,9 +15,10 @@ export interface ChatTurn {
   /** Set true once the assistant turn has received its terminal frame
    *  (done / refusal / error / aborted-with-partial-text). */
   finalized?: boolean;
-  /** teach-mode-coach: "teach" turns are badged in the transcript. Set
-   *  optimistically at send time; survives reload via CoachMessageDto.mode. */
-  mode?: 'qa' | 'teach';
+  /** teach-mode-coach (+ adhoc-concise): "teach" turns are badged in the
+   *  transcript ("concise" gets no badge). Set optimistically at send time;
+   *  survives reload via CoachMessageDto.mode. */
+  mode?: 'qa' | 'teach' | 'concise';
 }
 
 export interface UnlockAction {

@@ -63,6 +63,7 @@ from .llm.gateway import LlmBudgetExceeded, LlmError
 from .verdict_lib.flatten_analysis import flatten
 from .verdict_lib.json_extraction import extract_json_object
 from .verdict_lib.prompt_loader import (
+    load_coach_concise_style,
     load_coach_grounded,
     load_coach_grounded_model,
     load_coach_teach,
@@ -497,6 +498,31 @@ def coach_reply(
                 return
             model_pin = load_coach_teach_model()
             prompt_slug = "coach_teach"
+        elif mode == "concise":
+            # adhoc-concise: a STYLE OVERLAY on the grounded prompt, not a
+            # forked prompt like teach — the grounding/refusal/hedge/
+            # two-section contract stays single-source in CoachGrounded.md;
+            # ConciseStyle.md's body is appended, and its version rides
+            # alongside the grounded version so a change to either prompt
+            # shows up in the stamped prompt_version.
+            try:
+                version, system_body = load_coach_grounded()
+            except FileNotFoundError:
+                logger.exception("coach_reply: coach prompt file missing")
+                publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
+                _mark_error(mid, user_message_id=uid_msg)
+                return
+            try:
+                c_version, overlay = load_coach_concise_style()
+            except FileNotFoundError:
+                logger.exception("coach_reply: concise style prompt file missing")
+                publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
+                _mark_error(mid, user_message_id=uid_msg)
+                return
+            system_body = f"{system_body}\n\n{overlay}"
+            version = f"{version}+c{c_version}"
+            model_pin = load_coach_grounded_model()
+            prompt_slug = "coach_concise"
         else:
             try:
                 version, system_body = load_coach_grounded()

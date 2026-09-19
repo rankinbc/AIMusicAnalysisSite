@@ -622,4 +622,108 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
             await CleanupUser(factory, userId);
         }
     }
+
+    // ── adhoc-concise: Concise is a real third wire mode ─────────────────────
+
+    [SkippableFact]
+    public async Task Post_Message_With_Concise_Mode_Persists_And_Returns_Concise()
+    {
+        // (a) mode:"concise" must survive the round trip: both the user row
+        // and the pending assistant row persist mode="concise", and the GET
+        // conversation view reports "concise" for both. Pre-fix this fails
+        // two ways: the endpoint coerces anything but "teach" to "qa", and
+        // (before the migration) the DB CHECK constraint would reject the
+        // value outright.
+        await TestDb.RequireAsync(_factory);
+
+        var (factory, _) = BuildWithFakeQueue();
+        var (client, userId, analysisId) = await SeedAuthedUserAndAnalysis(factory, "coach-concise");
+
+        try
+        {
+            var resp = await client.PostAsJsonAsync(
+                $"/api/coach/{analysisId}/messages",
+                new CreateCoachMessageRequest("Give me the one thing to fix", "concise"));
+            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+            using (var scope = factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var conv = await db.Conversations.SingleAsync(c => c.UserId == userId);
+                var msgs = await db.CoachMessages.Where(m => m.ConversationId == conv.Id).ToListAsync();
+                Assert.Equal(2, msgs.Count);
+                Assert.All(msgs, m => Assert.Equal("concise", m.Mode));
+            }
+
+            var getResp = await client.GetAsync($"/api/coach/{analysisId}/conversation");
+            Assert.Equal(HttpStatusCode.OK, getResp.StatusCode);
+            var body = await getResp.Content.ReadFromJsonAsync<CoachConversationDto>();
+            Assert.NotNull(body);
+            Assert.Equal(2, body!.Messages.Count);
+            Assert.All(body.Messages, m => Assert.Equal("concise", m.Mode));
+        }
+        finally
+        {
+            await CleanupUser(factory, userId);
+        }
+    }
+
+    [SkippableFact]
+    public async Task Post_Message_With_Unknown_Mode_Coerces_To_Qa()
+    {
+        // (b) an unrecognized mode string still coerces to "qa" — only
+        // "teach" and "concise" are honored.
+        await TestDb.RequireAsync(_factory);
+
+        var (factory, _) = BuildWithFakeQueue();
+        var (client, userId, analysisId) = await SeedAuthedUserAndAnalysis(factory, "coach-loudmode");
+
+        try
+        {
+            var resp = await client.PostAsJsonAsync(
+                $"/api/coach/{analysisId}/messages",
+                new CreateCoachMessageRequest("anything", "loud"));
+            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var conv = await db.Conversations.SingleAsync(c => c.UserId == userId);
+            var msgs = await db.CoachMessages.Where(m => m.ConversationId == conv.Id).ToListAsync();
+            Assert.Equal(2, msgs.Count);
+            Assert.All(msgs, m => Assert.Equal("qa", m.Mode));
+        }
+        finally
+        {
+            await CleanupUser(factory, userId);
+        }
+    }
+
+    [SkippableFact]
+    public async Task Post_Message_With_Omitted_Mode_Defaults_To_Qa()
+    {
+        // (c) an omitted mode field keeps every existing caller working.
+        await TestDb.RequireAsync(_factory);
+
+        var (factory, _) = BuildWithFakeQueue();
+        var (client, userId, analysisId) = await SeedAuthedUserAndAnalysis(factory, "coach-omitmode");
+
+        try
+        {
+            var resp = await client.PostAsJsonAsync(
+                $"/api/coach/{analysisId}/messages",
+                new CreateCoachMessageRequest("anything"));
+            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var conv = await db.Conversations.SingleAsync(c => c.UserId == userId);
+            var msgs = await db.CoachMessages.Where(m => m.ConversationId == conv.Id).ToListAsync();
+            Assert.Equal(2, msgs.Count);
+            Assert.All(msgs, m => Assert.Equal("qa", m.Mode));
+        }
+        finally
+        {
+            await CleanupUser(factory, userId);
+        }
+    }
 }

@@ -38,6 +38,7 @@ COACH_PROMPTS_DIR = Path(os.environ.get("COACH_PROMPTS_DIR") or _DEFAULT_COACH_D
 
 COACH_GROUNDED_FILENAME = "CoachGrounded"
 COACH_TEACH_FILENAME = "TeachCoach"
+COACH_CONCISE_STYLE_FILENAME = "ConciseStyle"
 
 
 SLUG_TO_FILENAME: dict[str, str] = {
@@ -317,6 +318,25 @@ def load_coach_teach_model() -> str | None:
     if not path.exists():
         return None
     return parse_model_frontmatter(path.read_text(encoding="utf-8"))
+
+
+def load_coach_concise_style() -> tuple[str, str]:
+    """Returns ``(version, body)`` for the concise-mode style overlay.
+
+    Concise is a STYLE OVERLAY on the grounded prompt, not a forked prompt:
+    the caller appends this body to ``load_coach_grounded()``'s body so the
+    grounding/refusal/hedge/two-section contract stays single-source in
+    ``CoachGrounded.md``. Reads the live ``ConciseStyle.md`` under
+    ``COACH_PROMPTS_DIR`` (same sibling folder + frontmatter convention as
+    the other coach prompts; no pin-table lookup). Raises
+    :class:`FileNotFoundError` if missing — the ``coach_reply`` actor
+    catches it and writes an ``error`` status, same as a missing grounded
+    file, so the user sees a real message instead of a stuck spinner.
+    """
+    path = COACH_PROMPTS_DIR / f"{COACH_CONCISE_STYLE_FILENAME}.md"
+    if not path.exists():
+        raise FileNotFoundError(f"coach concise style file not found: {path}")
+    return parse_version_frontmatter(path.read_text(encoding="utf-8"))
 
 
 # ── Coach-mix arbiter prompt ────────────────────────────────────────────────

@@ -138,11 +138,12 @@ public static class CoachConversationEndpoints
             db, analysisId, userId, ct);
 
         var now = DateTimeOffset.UtcNow;
-        // teach-mode-coach: stamp the requested mode on the rows. Unknown/absent
-        // → "qa" so existing callers (no Mode field) keep working. Carried on
-        // both rows so the actor reads it off the user row and the assistant row
-        // can be badged as a teach answer when rendered.
-        var mode = body.Mode == "teach" ? "teach" : "qa";
+        // teach-mode-coach + adhoc-concise: stamp the requested mode on the
+        // rows. Unknown/absent → "qa" so existing callers (no Mode field)
+        // keep working. Carried on both rows so the actor reads it off the
+        // user row and the assistant row can be badged as a teach answer
+        // when rendered (concise gets no badge).
+        var mode = body.Mode is "teach" or "concise" ? body.Mode : "qa";
         var userRow = new CoachMessage
         {
             Id = Guid.NewGuid(),

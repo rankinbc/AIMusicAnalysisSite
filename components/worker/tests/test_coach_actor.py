@@ -1094,6 +1094,101 @@ def test_teach_mode_still_drops_unresolvable_track_chip(sqlite_db, monkeypatch):
         assert row.evidence == [{"label": "low-mid", "path": "phase1.bands.low_mid"}]
 
 
+# ── Concise mode (adhoc-concise, 2026-09-19) ────────────────────────────────
+# Concise is a STYLE OVERLAY on the grounded prompt, not a forked prompt like
+# teach — CoachGrounded.md's body is reused verbatim and ConciseStyle.md's
+# body is appended to it.
+
+
+def _seed_concise_pair(s, conversation_id, user_question):
+    """(user mode=concise complete, assistant mode=concise pending) pair."""
+    from aimusic_shared.models import CoachMessage  # noqa: PLC0415
+    now = datetime.now(tz=timezone.utc)
+    uid = uuid.uuid4()
+    aid = uuid.uuid4()
+    s.add(CoachMessage(
+        id=uid, conversation_id=conversation_id, role="user",
+        status="complete", content=user_question, mode="concise", completed_at=now,
+    ))
+    s.add(CoachMessage(
+        id=aid, conversation_id=conversation_id, role="assistant",
+        status="pending", content="", mode="concise",
+    ))
+    return uid, aid
+
+
+def test_concise_mode_calls_gateway_with_concise_slug_and_overlaid_system(
+    sqlite_db, monkeypatch,
+):
+    """mode=concise → the gateway is told prompt_slug=coach_concise, a
+    prompt_version ending +c1.0.0, and a system prompt that contains BOTH
+    the grounded body and the concise overlay verbatim (style overlay, not
+    a forked prompt)."""
+    from app import coach_actor  # noqa: PLC0415
+    from app.verdict_lib.prompt_loader import (  # noqa: PLC0415
+        load_coach_concise_style, load_coach_grounded,
+    )
+
+    with sqlite_db.SessionFactory.begin() as s:
+        analysis_id = _seed_analysis(s)
+        cid = _seed_conversation(s, analysis_id)
+        uid, aid = _seed_concise_pair(s, cid, "why is my LUFS so low?")
+
+    reply_text = json.dumps({
+        "kind": "answer",
+        "body": "Bring your limiter up; LUFS sits at -11.2.",
+        "evidence": [{"label": "LUFS -11.2", "path": "phase1.lufs_integrated"}],
+        "refusal_reason": None,
+    })
+    calls = _stub_gateway(monkeypatch, text=reply_text)
+
+    coach_actor.coach_reply.fn(str(cid), str(uid), str(aid))
+
+    assert len(calls) == 1
+    assert calls[0]["prompt_slug"] == "coach_concise"
+    assert calls[0]["prompt_version"].endswith("+c1.0.0")
+
+    grounded_version, grounded_body = load_coach_grounded()
+    _, overlay_body = load_coach_concise_style()
+    assert calls[0]["prompt_version"].startswith(grounded_version)
+    assert grounded_body in calls[0]["system"]
+    assert overlay_body in calls[0]["system"]
+
+    with sqlite_db.SessionFactory() as s:
+        row = _fetch_message(s, aid)
+        assert row.status == "complete"
+
+
+def test_qa_mode_system_is_byte_identical_to_grounded_no_overlay_leak(
+    sqlite_db, monkeypatch,
+):
+    """mode=qa (the default — omitted/unrecognized modes coerce to this at
+    the BFF) → system is byte-identical to load_coach_grounded()[1] (no
+    concise overlay leaks in) and the gateway is told slug coach_grounded."""
+    from app import coach_actor  # noqa: PLC0415
+    from app.verdict_lib.prompt_loader import load_coach_grounded  # noqa: PLC0415
+
+    with sqlite_db.SessionFactory.begin() as s:
+        analysis_id = _seed_analysis(s)
+        cid = _seed_conversation(s, analysis_id)
+        uid, aid = _seed_pair(s, cid, "why is my LUFS so low?")
+
+    reply_text = json.dumps({
+        "kind": "answer",
+        "body": "Your LUFS sits at -11.2.",
+        "evidence": [{"label": "LUFS -11.2", "path": "phase1.lufs_integrated"}],
+        "refusal_reason": None,
+    })
+    calls = _stub_gateway(monkeypatch, text=reply_text)
+
+    coach_actor.coach_reply.fn(str(cid), str(uid), str(aid))
+
+    assert len(calls) == 1
+    assert calls[0]["prompt_slug"] == "coach_grounded"
+    _, grounded_body = load_coach_grounded()
+    assert calls[0]["system"] == grounded_body
+
+
 def test_phase_a_failure_publishes_error_frame(
     sqlite_db, monkeypatch, _stub_redis,
 ):

@@ -32,7 +32,7 @@ public sealed class CoachMessage
     // teach-mode flag (story: teach-mode-coach). Stamped on the user row at POST;
     // read by the coach_reply actor to pick the TeachCoach prompt + inject units.
     [Column("mode"), MaxLength(20)]
-    public string Mode { get; set; } = "qa";            // "qa" | "teach"
+    public string Mode { get; set; } = "qa";            // "qa" | "teach" | "concise"
 
     [Column("content")]
     public string Content { get; set; } = "";

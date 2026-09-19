@@ -1316,10 +1316,12 @@ export interface CoachMessageDto {
   createdAt: string;
   /** ISO-8601 UTC; null while status === 'pending'. */
   completedAt: string | null;
-  /** teach-mode-coach: "qa" (direct answer) | "teach" (lesson grounded in the
-   *  track). Lets the UI badge teach answers durably across reloads. Optional —
-   *  older payloads omit it (treat as "qa"). */
-  mode?: 'qa' | 'teach';
+  /** teach-mode-coach (+ adhoc-concise): "qa" (direct answer) | "teach"
+   *  (lesson grounded in the track) | "concise" (terse style overlay on the
+   *  grounded prompt). Lets the UI badge teach answers durably across
+   *  reloads ("concise" gets no badge). Optional — older payloads omit it
+   *  (treat as "qa"). */
+  mode?: 'qa' | 'teach' | 'concise';
 }
 
 /** Story 1.9 / UX-DR16 — per-analysis follow-up cap state. `capReached` is
@@ -1354,9 +1356,10 @@ export interface CoachConversationDto {
 
 export interface CreateCoachMessageRequest {
   content: string;
-  /** teach-mode-coach: omit or "qa" for a direct answer; "teach" for a lesson
-   *  grounded in the track. */
-  mode?: 'qa' | 'teach';
+  /** teach-mode-coach (+ adhoc-concise): omit or "qa" for a direct answer;
+   *  "teach" for a lesson grounded in the track; "concise" for a terse
+   *  style overlay on the same grounded prompt. */
+  mode?: 'qa' | 'teach' | 'concise';
 }
 
 export interface CreateCoachMessageResponse {

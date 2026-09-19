@@ -103,11 +103,13 @@ export function CoachChat({
     inputRef.current?.focus();
     inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [askSeed]);
-  // teach-mode-coach: the header mode toggle (Concise · Normal · Teach). "Teach"
-  // sends the next question as mode="teach" so the coach teaches the relevant
-  // craft grounded in this track; Concise/Normal both map to a direct Q&A.
+  // teach-mode-coach + adhoc-concise: the header mode toggle (Concise ·
+  // Normal · Teach) derives the wire mode sent on the next question —
+  // Teach → 'teach' (lesson grounded in this track), Concise → 'concise'
+  // (terse style overlay on the grounded prompt), Normal → 'qa'.
   const [mode, setMode] = useState<CoachMode>('Normal');
-  const teachMode = mode === 'Teach';
+  const wireMode: 'qa' | 'teach' | 'concise' =
+    mode === 'Teach' ? 'teach' : mode === 'Concise' ? 'concise' : 'qa';
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [offlineState, setOfflineState] = useState(false);
@@ -359,7 +361,7 @@ export function CoachChat({
     const sendAnalysisId = analysisId;
     // Snapshot the toggle at send time so a mid-flight toggle can't relabel
     // the in-flight turn. Both bubbles carry it so the assistant answer badges.
-    const turnMode: 'qa' | 'teach' = teachMode ? 'teach' : 'qa';
+    const turnMode: 'qa' | 'teach' | 'concise' = wireMode;
     sendingRef.current = true;
     setInput('');
     setTurns((t) => [
@@ -538,7 +540,7 @@ export function CoachChat({
         ariaLiveTimerRef.current = null;
       }
     }
-  }, [analysisId, caps, flushAriaLive, input, offlineState, scheduleAriaLive, streaming, teachMode]);
+  }, [analysisId, caps, flushAriaLive, input, offlineState, scheduleAriaLive, streaming, wireMode]);
 
   // adhoc task (2026-09-19) — built ONCE per render; only the thread's
   // className changes based on `expanded`. There is exactly one live copy
