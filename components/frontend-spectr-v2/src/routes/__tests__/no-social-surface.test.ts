@@ -44,7 +44,7 @@ const ALLOWED_ROUTE_FILES = [
   'trust.results-forever.tsx',
 ].sort();
 
-describe.skip('solo guard — route surface', () => {
+describe('solo guard — route surface', () => {
   it('has exactly the single-user route files', () => {
     expect(ROUTE_FILES).toEqual(ALLOWED_ROUTE_FILES);
   });
@@ -75,9 +75,14 @@ const BANNED: Array<[label: string, re: RegExp]> = [
   ['share routes', /['"`]\/(r|v|invite)\/\$/],
   ['visibility model', /SongVisibility|VIS_META|Listed \+ discoverable/],
   ['handle UI', /normalizeHandleInput|Handle is already taken/],
+  // The BFF still requires `isPublic` in the create-tag body until the backend
+  // strip removes it, so ONE shim remains: `isPublic: false` inside useCreateTag
+  // (src/api/hooks.ts). This pattern deliberately does not match that shim; the
+  // backend task tightens it to a bare /isPublic/ when the shim is deleted.
+  ['public tags', /data-public|>pub<|isPublicTag|\.isPublic\b/],
 ];
 
-describe.skip('solo guard — banned phrases in shipped source', () => {
+describe('solo guard — banned phrases in shipped source', () => {
   const files = Object.entries(SOURCES).filter(
     ([path]) => !path.includes('__tests__') && !/\.test\.tsx?$/.test(path)
       && !path.endsWith('routeTree.gen.ts'),
@@ -90,5 +95,15 @@ describe.skip('solo guard — banned phrases in shipped source', () => {
   it.each(BANNED)('no %s', (_label, re) => {
     const hits = files.filter(([, text]) => re.test(text)).map(([path]) => path);
     expect(hits).toEqual([]);
+  });
+
+  it('public-tag pattern catches the historical markup but spares the create-tag shim', () => {
+    const publicTags = BANNED.find(([label]) => label === 'public tags');
+    if (!publicTags) throw new Error('missing case');
+    const re = publicTags[1];
+    expect(re.test('<span data-public={t.isPublic}>')).toBe(true);
+    expect(re.test('<span className={s.tagScope}>pub</span>')).toBe(true);
+    expect(re.test('const [isPublicTag, setIsPublicTag] = useState(false);')).toBe(true);
+    expect(re.test("body: JSON.stringify({ name: body.name, isPublic: false })")).toBe(false);
   });
 });
