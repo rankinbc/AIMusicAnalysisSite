@@ -252,11 +252,11 @@ public static class VersionEndpoints
     // Streams the original uploaded audio. Accepts auth via Authorization header
     // OR ?t=<jwt> query param (HTMLMediaElement / <audio> cannot set headers).
     // Range requests are supported so the browser can seek without re-downloading.
+    // Owner-only (solo fork): 404 for anyone else — existence must not leak.
     private static async Task<IResult> StreamAudio(
         Guid versionId,
         ClaimsPrincipal currentUser,
         AppDbContext db,
-        AccessService access,
         IFileStorage storage,
         IMultipartObjectStore objectStore,
         HttpResponse response,
@@ -269,18 +269,7 @@ public static class VersionEndpoints
             where v.Id == versionId && s.UserId == userId
             select v
         ).FirstOrDefaultAsync(ct);
-        if (row is null)
-        {
-            // Listen V3: non-owner viewers (invited / link / public per
-            // AccessService) stream the same audio — the room's "clients play
-            // the file locally" model depends on it. Owner fast-path above
-            // skips the access resolution.
-            var acc = await access.ResolveAsync(versionId, userId, viaValidToken: false, ct);
-            if (!acc.CanView) return Results.NotFound();
-            row = await db.SongVersions.AsNoTracking()
-                .FirstOrDefaultAsync(v => v.Id == versionId, ct);
-            if (row is null) return Results.NotFound();
-        }
+        if (row is null) return Results.NotFound();
 
         // Story 3.3: local-first proxy, else 302 to a short-lived presigned GET.
         return await MediaDelivery.ServeAsync(

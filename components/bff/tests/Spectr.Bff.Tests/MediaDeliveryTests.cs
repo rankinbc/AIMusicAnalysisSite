@@ -99,6 +99,31 @@ public sealed class MediaDeliveryTests(WebApplicationFactory<Program> factory)
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
     }
 
+    // Solo fork (task 9): audio streaming is strictly owner-scoped — a second,
+    // unrelated user must never see user A's audio, not even a 403 (existence
+    // must not leak). Covers both JWT forms StreamAudio accepts: the
+    // Authorization header and the ?t= query param (the whitelisted /audio
+    // path HTMLMediaElement/EventSource use since they can't set headers).
+    [SkippableFact]
+    public async Task Audio_Is_NotFound_For_A_Different_User()
+    {
+        await TestDb.RequireAsync(_factory);
+
+        var (client, _, f) = NewClient();
+        var (_, versionId) = await SeedVersionAsync(f, client, $"audio/u/{Guid.NewGuid()}/source.wav");
+
+        var (_, tokenB) = await TestAuth.RegisterAsync(f.CreateClient());
+
+        var bearerClient = f.CreateClient();
+        bearerClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenB);
+        var bearerResp = await bearerClient.GetAsync($"/api/versions/{versionId}/audio");
+        Assert.Equal(HttpStatusCode.NotFound, bearerResp.StatusCode);
+
+        var queryClient = f.CreateClient();
+        var queryResp = await queryClient.GetAsync($"/api/versions/{versionId}/audio?t={tokenB}");
+        Assert.Equal(HttpStatusCode.NotFound, queryResp.StatusCode);
+    }
+
     [SkippableFact]
     public async Task Als_Download_Redirect_Carries_Download_Name()
     {
@@ -120,40 +145,6 @@ public sealed class MediaDeliveryTests(WebApplicationFactory<Program> factory)
         Assert.Contains(alsKey, resp.Headers.Location!.ToString());
         // The reason PresignGetUrl takes a name: Content-Disposition override.
         Assert.Equal("project.als", store.PresignedGets.Single().DownloadName);
-    }
-
-    [SkippableFact]
-    public async Task Share_Audio_Redirects_For_S3_Object()
-    {
-        await TestDb.RequireAsync(_factory);
-
-        var (client, _, f) = NewClient();
-        var key = $"audio/u/{Guid.NewGuid()}/source.flac";
-        var (userId, versionId) = await SeedVersionAsync(f, client, key);
-
-        var shareToken = $"sh{Guid.NewGuid():N}";
-        using (var scope = f.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var v = await db.SongVersions.AsNoTracking().SingleAsync(x => x.Id == versionId);
-            db.Analyses.Add(new Analysis
-            {
-                Id = Guid.NewGuid(),
-                JobId = Guid.NewGuid(),
-                UserId = userId,
-                VersionId = versionId,
-                SongId = v.SongId,
-                FinalJson = "{}",
-                ShareToken = shareToken,
-                CreatedAt = DateTimeOffset.UtcNow,
-            });
-            await db.SaveChangesAsync();
-        }
-
-        var anon = f.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
-        var resp = await anon.GetAsync($"/api/share/{shareToken}/audio");
-        Assert.Equal(HttpStatusCode.Redirect, resp.StatusCode);
-        Assert.Contains(key, resp.Headers.Location!.ToString());
     }
 
     [SkippableFact]

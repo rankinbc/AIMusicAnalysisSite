@@ -9,9 +9,7 @@ namespace Spectr.Bff.Services;
 
 // Story 4.5 (AR24) — the stateful anonymous DEVICE identity: a durable
 // `devices` row referenced by the signed httpOnly `spectr_device` cookie.
-// Distinct from the stateless `spectr_anon` reviewer identity (AnonIdentity)
-// — same HMAC cookie scheme and the same Anon:SigningKey, different job:
-// this one owns analyses and gets CLAIMED into an account (AR25).
+// Owns analyses and gets CLAIMED into an account (AR25).
 //
 // Cookie value: "{deviceId}.{hex(HMAC_SHA256(deviceId))}". ip_hash/ua_hash
 // are SHA-256 digests peppered with the signing key — raw IP/UA never
@@ -102,7 +100,7 @@ public sealed class DeviceService(
     /// (never gating — mobile/CGNAT churn makes ip matching too brittle).</summary>
     public string PepperForTelemetry(string value) => Pepper(value);
 
-    // Same scheme as AnonIdentity (constant-time verify).
+    // Constant-time verify (HMAC signature check).
     internal static string Sign(string deviceId, string key)
         => $"{deviceId}.{Convert.ToHexString(Hmac(deviceId, key))}";
 

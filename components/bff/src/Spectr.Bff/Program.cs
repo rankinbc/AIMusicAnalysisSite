@@ -269,26 +269,12 @@ builder.Services.AddScoped<EntitlementService>();
 builder.Services.AddScoped<CoachCapService>();
 
 // ── Listen V3 · PRP-0 spine primitives ──────────────────────────────────────
-// Durable signed anon identity, opaque-resource-token auth, cross-slice no-op
-// sinks, and a Redis rate limiter. No DB — cookie + Redis + interfaces only.
-// Anon:SigningKey is separate from Jwt:Key and must be stable across restarts.
-builder.Services.AddOptions<AnonOptions>()
-    .Bind(builder.Configuration.GetSection(AnonOptions.SectionName))
-    .Validate(o => !string.IsNullOrWhiteSpace(o.SigningKey),
-        "Anon:SigningKey must be set (separate from Jwt:Key)")
-    .ValidateOnStart();
-builder.Services.AddScoped<AnonIdentity>();
-builder.Services.AddScoped<ResourceTokenAuth>();
+// Redis rate limiter. No DB — Redis + interface only.
 builder.Services.AddSingleton<IRateLimiter, RedisRateLimiter>();
 
 // Listen V3 (PRP-1) — no-op generator seam for source=coach/analysis presets
 // (real impl is PRP-8; mirrors the PRP-0 sink convention).
 builder.Services.AddScoped<IPresetGenerator, NoOpPresetGenerator>();
-
-// Listen V3 (PRP-2) — version-scoped sharing: access resolver + the opaque
-// share-token resolver (plugs into ResourceTokenAuth's ITokenResolver set).
-builder.Services.AddScoped<AccessService>();
-builder.Services.AddScoped<ITokenResolver, ShareTokenResolver>();
 
 // Story 2.8 — usage-page honest-math (90-day credit spend vs Pro-equivalent).
 builder.Services.AddScoped<HonestMathService>();
@@ -540,14 +526,7 @@ app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// PRP-0 — resolve/issue the durable anon identity AFTER authentication (so the
-// principal is known) and BEFORE routing (so endpoints can read it).
-app.UseAnonIdentity();
-
 // ── Routes ─────────────────────────────────────────────────────────────────────
-// Story 7.2 — root-level (non-/api) crawler OG shell for /r/{token}; nginx
-// routes bot user-agents here, humans get the SPA.
-app.MapOgShareEndpoints();
 // Story 6.1 — crawler meta shells for / and /pricing (Caddy @site_bots split).
 app.MapPublicSiteEndpoints();
 
@@ -565,7 +544,6 @@ api.MapVerdictEndpoints();
 api.MapFixRackEndpoints();
 api.MapReportPhaseEndpoints();
 api.MapReferenceEndpoints();
-api.MapShareEndpoints();
 api.MapProfileEndpoints();   // story 11.8 — /api/u/{handle} public profile
 api.MapFollowEndpoints();    // story 11.9 — /api/u/{handle}/follow
 api.MapFeedEndpoints();      // story 11.10 — /api/me/feed
@@ -574,8 +552,6 @@ api.MapCoachEndpoints();
 api.MapCoachConversationEndpoints();
 api.MapCompareEndpoints();
 api.MapRackPresetEndpoints();
-api.MapVersionShareEndpoints();
-api.MapVersionViewEndpoints();
 api.MapBillingEndpoints();
 api.MapHealthEndpoints();
 api.MapAccountEndpoints();       // story 4.6 — /api/me/export + /api/me/delete

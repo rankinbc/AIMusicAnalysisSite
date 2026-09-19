@@ -327,10 +327,6 @@ public static class AccountEndpoints
                     .SetProperty(d => d.ClaimedByUserId, (Guid?)null)
                     .SetProperty(d => d.IpHash, "")
                     .SetProperty(d => d.UaHash, ""), ct);
-            // PII scrub the FK graph can't do: the user's email inside OTHERS'
-            // invite rows (survives the SetNull cascade otherwise).
-            await db.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE invites SET invited_email = NULL WHERE invited_email = {user.Email}", ct);
 
             // The user row: FK-cascades take viz_presets, listening_sessions,
             // control_grants, notifications, follow_relations, invites.
