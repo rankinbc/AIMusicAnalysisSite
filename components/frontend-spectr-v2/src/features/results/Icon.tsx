@@ -42,6 +42,7 @@ export type IconName =
   | 'cassette'
   | 'wrench'
   | 'zoom'
+  | 'expand'
   | 'info'
   | 'wave'
   | 'collision'
@@ -224,6 +225,16 @@ const PATHS: Record<IconName, ReactElement> = {
       <circle cx="11" cy="11" r="7" />
       <path d="M21 21l-4.3-4.3" />
       <path d="M11 8v6M8 11h6" />
+    </>
+  ),
+  // adhoc (coach-chat expand-to-modal, 2026-09-19) — "maximize" corner
+  // brackets, used by CoachChat's expand-to-dialog control.
+  expand: (
+    <>
+      <path d="M8 3H4v4" />
+      <path d="M16 3h4v4" />
+      <path d="M8 21H4v-4" />
+      <path d="M16 21h4v-4" />
     </>
   ),
   info: (

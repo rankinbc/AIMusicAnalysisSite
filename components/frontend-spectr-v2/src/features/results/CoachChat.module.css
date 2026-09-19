@@ -324,6 +324,80 @@
   align-items: center;
 }
 
+/* adhoc task (2026-09-19): expand the coach chat into a modal. The header
+   (coach-hd) never moves — only the body (thread/input/cap line) swaps
+   between rendering inline and rendering inside CoachChatDialog. See
+   CoachChat.tsx's `chatBody` + CoachChatDialog.module.css. */
+.expandBtn {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px solid var(--border-2);
+  background: var(--card-2);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.expandBtn:hover {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--card-hover);
+}
+.expandBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--cyan-dim);
+}
+
+/* Inline placeholder shown in the card's own page position while expanded
+   — keeps the layout from jumping when the body moves into the dialog. */
+.collapsedNotice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--border-2);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: var(--surface);
+}
+.collapsedNoticeText {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+/* Dialog-only body layout: same coach-body content, but the thread grows
+   to fill the modal height instead of the inline card's fixed max-height,
+   and the whole column is capped to a comfortable reading width. */
+.dialogBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+}
+.dialogInner {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+.dialogThread {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 4px;
+}
+
 /* Story 1.9 / Task 5.2 — CoachGateInline visual rhythm. Mirrors the
    offline card structure so the input-replacement transitions don't jar
    the layout. */

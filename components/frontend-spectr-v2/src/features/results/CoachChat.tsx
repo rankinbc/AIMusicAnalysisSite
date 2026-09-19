@@ -12,6 +12,7 @@ import type {
 import { Pill } from '../../ui/Pill';
 import { TranceBot } from './TranceBot';
 import { Icon } from './Icon';
+import { CoachChatDialog } from './CoachChatDialog';
 import { CoachGateInline } from './CoachGateInline';
 import { EvidenceChips } from './EvidenceChips';
 import {
@@ -117,6 +118,14 @@ export function CoachChat({
   // Code-review P3 — synchronous double-send guard. `streaming` state is
   // batched; rapid Enter+click could slip through the React-state check.
   const sendingRef = useRef<boolean>(false);
+
+  // adhoc task (2026-09-19): expand the coach chat into a modal. `expanded`
+  // swaps the body (thread + input + cap line) between rendering inline and
+  // rendering inside CoachChatDialog — the header (coach-hd) never moves.
+  // See the `chatBody` build + return JSX below.
+  const [expanded, setExpanded] = useState(false);
+  const expandButtonRef = useRef<HTMLButtonElement | null>(null);
+  const threadRef = useRef<HTMLDivElement | null>(null);
 
   // Throttle aria-live updates to ARIA_LIVE_THROTTLE_MS. Tokens still land
   // in the visible transcript immediately via setTurns; the live-region
@@ -236,6 +245,51 @@ export function CoachChat({
 
     return () => ac.abort();
   }, [analysisId]);
+
+  // adhoc task (2026-09-19) — auto-scroll the thread to the latest message
+  // on every turn change (send / stream token) AND whenever the dialog
+  // opens (brief req 4 "on open ... the thread is scrolled to the latest
+  // message"). `threadRef` is attached to whichever thread element is
+  // currently mounted — inline or inside the dialog, never both.
+  useEffect(() => {
+    const el = threadRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [turns, expanded]);
+
+  // adhoc task (2026-09-19) — focus management (brief req 3: "on open,
+  // focus the message input; on close, focus returns to the expand
+  // button"). CoachChatDialog disables Radix's own default auto-focus
+  // (`onOpenAutoFocus`/`onCloseAutoFocus` both `preventDefault`d) so it
+  // never fights this. The open case still needs a `requestAnimationFrame`
+  // hop: Radix's FocusScope does its own mount-time focus handling on the
+  // next frame even with the default prevented, and a plain `useEffect`
+  // (same commit, prior frame) loses that race — the rAF guarantees this
+  // runs after. The close case doesn't race anything (the expand button
+  // never unmounts), so it focuses synchronously in the effect.
+  // `wasExpandedRef` distinguishes "closed after a real open" from the
+  // initial mount (expanded starts false) so page load never steals focus.
+  const wasExpandedRef = useRef(false);
+  useEffect(() => {
+    if (expanded) {
+      wasExpandedRef.current = true;
+      const raf = requestAnimationFrame(() => inputRef.current?.focus());
+      return () => cancelAnimationFrame(raf);
+    }
+    if (wasExpandedRef.current) {
+      wasExpandedRef.current = false;
+      expandButtonRef.current?.focus();
+    }
+    return undefined;
+  }, [expanded]);
+
+  // Wired to the dialog's onOpenChange(false) (covers Esc + overlay click +
+  // the dialog's own Collapse button) and directly to the inline
+  // placeholder's Collapse button. Focus-return itself happens in the
+  // effect above, once the dialog has actually unmounted.
+  const handleCollapse = useCallback(() => {
+    setExpanded(false);
+  }, []);
 
   const handleStop = useCallback(() => {
     // Aborting the SSE fetch triggers the BFF's
@@ -468,73 +522,54 @@ export function CoachChat({
     }
   }, [analysisId, caps, flushAriaLive, input, offlineState, scheduleAriaLive, streaming, teachMode]);
 
-  return (
-    <div className="coach-wrap">
-      <div className="coach-hd">
-        <TranceBot size={26} thinking={streaming} />
-        <div className="ch-b">
-          <div className="ch-k">
-            <span className="led" />
-            <span className="lab">Ask the Coach</span>
-            <span className="ch-modes">
-              {(['Concise', 'Normal', 'Teach'] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  className={`ch-mode${mode === m ? ' on' : ''}`}
-                  onClick={() => setMode(m)}
-                >
-                  {m}
-                </button>
-              ))}
-            </span>
-          </div>
-          <div className="ch-sub">I know everything about this song.</div>
-        </div>
-        {headerActions && <div className="coach-actions">{headerActions}</div>}
-      </div>
-
-      <div className="coach-body">
-        <div className="coach-thread">
+  // adhoc task (2026-09-19) — built ONCE per render; only the outer wrapper
+  // and the thread classNames change based on `expanded` (dialog vs. the
+  // inline card's fixed-height thread). There is exactly one live copy of
+  // the thread/input/cap-line/aria-live regions — this JSX mounts either
+  // inline or inside CoachChatDialog, never both (brief req 6).
+  const chatBody = (
+    <div className={expanded ? s.dialogBody : 'coach-body'}>
+      <div className={expanded ? s.dialogInner : undefined}>
+        <div className={expanded ? s.dialogThread : 'coach-thread'} ref={threadRef}>
           {turns.length === 0 && greeting && (
             <div className="cmsg bot">
               <div className="bub">{greeting}</div>
             </div>
           )}
           {turns.map((turn, i) => {
-              const isAssistant = turn.role === 'assistant';
-              const showStreamingPlaceholder =
-                isAssistant && !turn.finalized && streaming && i === turns.length - 1 && !turn.text;
-              const unlock = turn.refused ? resolveUnlockAction(turn.refusalReason) : null;
-              return (
-                <div key={i} className={`cmsg ${isAssistant ? 'bot' : 'user'}`}>
-                  <span className="cm-role">{isAssistant ? 'Coach' : 'You'}</span>
-                  {isAssistant && turn.mode === 'teach' && (
-                    <span className="cm-teach-badge">
-                      <Pill tone="violet">Teach</Pill>
-                    </span>
+            const isAssistant = turn.role === 'assistant';
+            const showStreamingPlaceholder =
+              isAssistant && !turn.finalized && streaming && i === turns.length - 1 && !turn.text;
+            const unlock = turn.refused ? resolveUnlockAction(turn.refusalReason) : null;
+            return (
+              <div key={i} className={`cmsg ${isAssistant ? 'bot' : 'user'}`}>
+                <span className="cm-role">{isAssistant ? 'Coach' : 'You'}</span>
+                {isAssistant && turn.mode === 'teach' && (
+                  <span className="cm-teach-badge">
+                    <Pill tone="violet">Teach</Pill>
+                  </span>
+                )}
+                <div className="bub">
+                  {turn.text || (showStreamingPlaceholder ? '…' : '')}
+                  {isAssistant && turn.finalized && turn.evidence && turn.evidence.length > 0 && (
+                    <EvidenceChips evidence={turn.evidence} />
                   )}
-                  <div className="bub">
-                    {turn.text || (showStreamingPlaceholder ? '…' : '')}
-                    {isAssistant && turn.finalized && turn.evidence && turn.evidence.length > 0 && (
-                      <EvidenceChips evidence={turn.evidence} />
-                    )}
-                    {isAssistant && turn.finalized && turn.refused && unlock && (
-                      <div className={s.unlockRow}>
-                        <button
-                          type="button"
-                          className={s.unlockBtn}
-                          onClick={() => handleUnlock(unlock.intent)}
-                          aria-label={`Unlock: ${unlock.label}`}
-                        >
-                          <Pill tone="violet">{unlock.label}</Pill>
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  {isAssistant && turn.finalized && turn.refused && unlock && (
+                    <div className={s.unlockRow}>
+                      <button
+                        type="button"
+                        className={s.unlockBtn}
+                        onClick={() => handleUnlock(unlock.intent)}
+                        aria-label={`Unlock: ${unlock.label}`}
+                      >
+                        <Pill tone="violet">{unlock.label}</Pill>
+                      </button>
+                    </div>
+                  )}
                 </div>
-              );
-            })}
+              </div>
+            );
+          })}
         </div>
 
         {offlineState && (
@@ -615,15 +650,75 @@ export function CoachChat({
           · {specialistsRan} specialists ran ·{' '}
           {Math.min(specialistsRan, specialistsSuggested)}/{specialistsSuggested} suggested
         </div>
-
-        {/* SR-only live regions for stream-state + token mirror. */}
-        <span className="sr-only" aria-live="polite">
-          {streamStatus}
-        </span>
-        <span className="sr-only" aria-live="polite" aria-atomic="false" aria-relevant="additions">
-          {ariaLiveText}
-        </span>
       </div>
+
+      {/* SR-only live regions for stream-state + token mirror. */}
+      <span className="sr-only" aria-live="polite">
+        {streamStatus}
+      </span>
+      <span className="sr-only" aria-live="polite" aria-atomic="false" aria-relevant="additions">
+        {ariaLiveText}
+      </span>
+    </div>
+  );
+
+  return (
+    <div className="coach-wrap">
+      <div className="coach-hd">
+        <TranceBot size={26} thinking={streaming} />
+        <div className="ch-b">
+          <div className="ch-k">
+            <span className="led" />
+            <span className="lab">Ask the Coach</span>
+            <span className="ch-modes">
+              {(['Concise', 'Normal', 'Teach'] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  className={`ch-mode${mode === m ? ' on' : ''}`}
+                  onClick={() => setMode(m)}
+                >
+                  {m}
+                </button>
+              ))}
+            </span>
+          </div>
+          <div className="ch-sub">I know everything about this song.</div>
+        </div>
+        {headerActions && <div className="coach-actions">{headerActions}</div>}
+        <button
+          type="button"
+          ref={expandButtonRef}
+          className={s.expandBtn}
+          onClick={() => setExpanded(true)}
+          aria-label="Expand coach chat"
+          title="Expand"
+        >
+          <Icon name="expand" size={15} />
+        </button>
+      </div>
+
+      {expanded ? (
+        <div className={s.collapsedNotice}>
+          <p className={s.collapsedNoticeText}>Coach is open in the expanded view.</p>
+          <button type="button" className="btn ghost sm" onClick={handleCollapse}>
+            Collapse
+          </button>
+        </div>
+      ) : (
+        chatBody
+      )}
+
+      {expanded && (
+        <CoachChatDialog
+          open={expanded}
+          onOpenChange={(next) => {
+            if (!next) handleCollapse();
+          }}
+        >
+          {chatBody}
+        </CoachChatDialog>
+      )}
     </div>
   );
 }

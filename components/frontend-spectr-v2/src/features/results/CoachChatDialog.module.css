@@ -1,0 +1,63 @@
+/* Ask-the-Coach expanded view (adhoc task, 2026-09-19: expand the coach
+   chat into a modal). Sizing + z-index mirror this folder's other
+   full-size modal (AnalysisCompleteModal.module.css) so it reads as the
+   same class of surface rather than a smaller utility dialog. */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 12, 0.72);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+}
+
+.content {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(980px, 94vw);
+  height: 88vh;
+  max-height: 88vh;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.collapseBtn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px solid var(--border-2);
+  background: var(--card-2);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.collapseBtn:hover {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--card-hover);
+}
+.collapseBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--cyan-dim);
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
