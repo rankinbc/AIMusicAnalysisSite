@@ -71,7 +71,6 @@ export interface PaletteCommand {
 export const NAV_COMMANDS: PaletteCommand[] = [
   { id: 'nav-library', label: 'Library', kind: 'nav', to: '/library' },
   { id: 'nav-reports', label: 'Reports', kind: 'nav', to: '/reports' },
-  { id: 'nav-feed', label: 'Feed', kind: 'nav', to: '/feed' },
   { id: 'nav-usage', label: 'Usage', kind: 'nav', to: '/usage' },
   { id: 'nav-billing', label: 'Billing', kind: 'nav', to: '/billing' },
   { id: 'nav-profile', label: 'Profile', kind: 'nav', to: '/profile' },

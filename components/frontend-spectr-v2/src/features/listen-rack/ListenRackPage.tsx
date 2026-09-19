@@ -40,7 +40,7 @@ import { lrTime } from './lrUtil';
 import { pushFullRack } from './rackBindings';
 import { RackTabV2 } from './RackTabV2';
 import { useRackState, type RackPreset } from './rackState';
-import type { ReportRef, StatsSource } from './rail';
+import type { ReportRef, StatsSource } from './types';
 import { actorKey } from './roomStateReducer';
 import { roomHeaderState } from './roomUiState';
 import { SessionSidebarV2 } from './SessionSidebarV2';

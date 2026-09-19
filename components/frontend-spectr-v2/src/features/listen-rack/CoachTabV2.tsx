@@ -14,7 +14,7 @@ import { Coach } from '../../ui/Coach';
 import { Icon } from '../results/Icon';
 import { COACH_SUGGESTIONS, PLAN_ITEMS } from './data';
 import { readListenFixes, type ListenFix } from './listenFixes';
-import type { ReportRef } from './rail';
+import type { ReportRef } from './types';
 import type { RackState } from './rackState';
 import { useFixOverlay } from './useFixOverlay';
 

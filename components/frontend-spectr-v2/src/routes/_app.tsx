@@ -19,7 +19,6 @@ import { UnifiedUploadDialog } from '../components/UnifiedUploadDialog';
 import { AppDunningNotice } from '../features/billing/AppDunningNotice';
 import { AppWorkerHealthNotice } from '../features/health/AppWorkerHealthNotice';
 import { DevHealthDot } from '../features/health/DevHealthDot';
-import { NotificationBell } from '../features/notifications/NotificationCenter';
 import { BrandMark } from '../ui/BrandMark';
 import { UsageMeter } from '../components/UsageMeter';
 import { VerifyEmailBanner } from '../components/VerifyEmailBanner';
@@ -159,10 +158,6 @@ function AppLayout() {
           <Link to="/library" className={s.navTab} data-active={isLibraryActive}>
             Library
           </Link>
-          {/* Story 11.10 — followed-users activity feed. */}
-          <Link to="/feed" className={s.navTab} data-active={pathname === '/feed'}>
-            Feed
-          </Link>
         </nav>
 
         <div className={s.navRight}>
@@ -172,8 +167,6 @@ function AppLayout() {
           {/* Story 12.2 — dev-only aggregated-health dot. The conditional
               render keeps the /health/full query unmounted in prod builds. */}
           {import.meta.env.DEV && <DevHealthDot />}
-          {/* Story 11.7 — live bell (was a decorative placeholder). */}
-          <NotificationBell className={s.navIconBtn} />
           <Link to="/library" className="btn primary sm">
             + Upload
           </Link>

@@ -35,8 +35,7 @@ right rail, the stem deck (`StemDeck`), and the pitch lane. See
 (The legacy `/listen/$versionId` route is gone.)
 
 Beyond the engine, this folder also hosts the **social / sharing hook layer**,
-consumed by the listen-rack page AND the public + invite routes
-(`_public/v.$token`, `_public/r.$token`, `_app/invite.$token`):
+consumed by the listen-rack page:
 
 - **Room realtime**: `useRoomStream` (fetch-SSE reader for `GET /sessions/{id}/stream`),
   `useRoomActions` (the POST senders: react/chat/status/transport/visuals/rack/grant/revoke),
@@ -44,8 +43,7 @@ consumed by the listen-rack page AND the public + invite routes
   `features/listen-rack/useRoomOrchestration`.
 - **Access / share / invites**: `useVersionAccess`, `useVersionShare`, `useInvites`,
   `VersionShareDialog`.
-- **Feedback**: `useComments`, `useSuggestions`, `SuggestionCard`, `comment-tree`,
-  plus the anon share surface (`useAnonFeedback`, `AnonReviewerSurface`, `ProducerCta`).
+- **Feedback**: `useComments`, `useSuggestions`, `SuggestionCard`, `comment-tree`.
 - **Bookmarks**: `useBookmarks`, `useBookmarkSignal`, `BookmarksRail`.
 - **Playback resilience**: `media-retry` (shared `<audio>` retry helper for the
   authed and public players).

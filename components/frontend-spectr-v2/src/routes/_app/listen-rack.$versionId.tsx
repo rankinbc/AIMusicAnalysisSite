@@ -8,7 +8,7 @@ import {
   isFinalJson, type FinalJson, type Phase1Data, type Phase2Data, type Phase7Data,
 } from '../../api/types';
 import { ListenRackPage } from '../../features/listen-rack/ListenRackPage';
-import type { ReportRef, StatsSource } from '../../features/listen-rack/rail';
+import type { ReportRef, StatsSource } from '../../features/listen-rack/types';
 import { buildTrack } from '../../features/listen-rack/trackFromAnalysis';
 import { useMockRoomOrchestration } from '../../features/listen-rack/useMockRoomOrchestration';
 import { useRoomOrchestration } from '../../features/listen-rack/useRoomOrchestration';
