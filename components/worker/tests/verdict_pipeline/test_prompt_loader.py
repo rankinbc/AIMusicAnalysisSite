@@ -103,9 +103,11 @@ def test_live_coach_prompt_loads():
     typo in the frontmatter slipping into production. Story 1.6: bumped to
     v2.0.0 (streamable two-section format with the ``<<<EVIDENCE>>>``
     sentinel between prose body and JSON evidence). Item 6: bumped to
-    v2.1.0 (hedge language for `suspected: true` verdicts)."""
+    v2.1.0 (hedge language for `suspected: true` verdicts). adhoc2
+    (2026-09-19): bumped to v2.2.0 (answer-first, word budget, one
+    evidence entry per cited value)."""
     version, body = load_coach_grounded()
-    assert version == "2.1.0"
+    assert version == "2.2.0"
     assert "AI Mix Coach" in body
     # The v2 sentinel contract must be visible in the prompt body so the
     # model emits it deterministically (and so any prompt edit that
