@@ -15,8 +15,6 @@ namespace Spectr.Bff.Tests;
 public sealed class NoSocialSurfaceTests(WebApplicationFactory<Program> factory)
     : IClassFixture<WebApplicationFactory<Program>>
 {
-    private const string SkipReason = "enabled in the final BFF task of the solo strip";
-
     private static string Norm(RouteEndpoint e)
     {
         var raw = e.RoutePattern.RawText ?? "";
@@ -39,7 +37,7 @@ public sealed class NoSocialSurfaceTests(WebApplicationFactory<Program> factory)
         "/suggestions", "/bookmarks", "/follow",
     ];
 
-    [SkippableFact(Skip = SkipReason)]
+    [SkippableFact]
     public async Task No_Route_Matches_A_Removed_Social_Prefix()
     {
         await TestDb.RequireAsync(factory);
@@ -60,7 +58,7 @@ public sealed class NoSocialSurfaceTests(WebApplicationFactory<Program> factory)
         "/api/health/", "/api/admin/", "/api/dev/",
     ];
 
-    [SkippableFact(Skip = SkipReason)]
+    [SkippableFact]
     public async Task Every_Anonymous_Endpoint_Is_On_The_Allowlist()
     {
         await TestDb.RequireAsync(factory);
@@ -77,7 +75,7 @@ public sealed class NoSocialSurfaceTests(WebApplicationFactory<Program> factory)
         Assert.True(offenders.Count == 0, "Unexpected anonymous endpoints:\n" + string.Join("\n", offenders));
     }
 
-    [SkippableFact(Skip = SkipReason)]
+    [SkippableFact]
     public async Task Worker_Health_Does_Not_Expose_Global_Queue_Depth()
     {
         await TestDb.RequireAsync(factory);
@@ -86,7 +84,7 @@ public sealed class NoSocialSurfaceTests(WebApplicationFactory<Program> factory)
         Assert.True(body.TryGetProperty("healthy", out _));
     }
 
-    [SkippableFact(Skip = SkipReason)]
+    [SkippableFact]
     public async Task Registered_User_Payload_And_Token_Carry_No_Handle()
     {
         await TestDb.RequireAsync(factory);
@@ -107,7 +105,7 @@ public sealed class NoSocialSurfaceTests(WebApplicationFactory<Program> factory)
         Assert.DoesNotContain("\"handle\"", claims, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact(Skip = SkipReason)]
+    [Fact]
     public void Tag_Contracts_Have_No_Public_Flag()
     {
         Assert.Null(typeof(Spectr.Bff.DTOs.TagDto).GetProperty("IsPublic"));
