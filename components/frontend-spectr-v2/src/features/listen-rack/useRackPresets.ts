@@ -115,11 +115,15 @@ export function useDeleteRackPreset(versionId: string) {
   });
 }
 
-/** Get the autosaved draft (undefined when none — the server returns 204). */
+/** Get the autosaved draft — `null` when there is none yet (the server
+ *  answers 204 and `fetcher` resolves `undefined`). TanStack Query rejects
+ *  `undefined` data as an ERROR, which would pause autosave on every first
+ *  visit, so "no draft" is mapped to `null`. */
 export function useRackDraft(versionId: string) {
   return useQuery({
     queryKey: draftKey(versionId),
-    queryFn: () => fetcher<RackDraftDto | undefined>({ url: `/versions/${versionId}/rack/draft`, method: 'GET' }),
+    queryFn: async (): Promise<RackDraftDto | null> =>
+      (await fetcher<RackDraftDto | undefined>({ url: `/versions/${versionId}/rack/draft`, method: 'GET' })) ?? null,
     enabled: Boolean(versionId),
     staleTime: Infinity, // we own writes; no need to refetch in the background
   });
