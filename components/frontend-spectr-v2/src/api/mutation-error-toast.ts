@@ -7,8 +7,8 @@
 // passed to `.mutate(vars, { onError })` — those live on the
 // MutationObserver. An opt-out rule ("fire when the hook has no onError")
 // would double-toast every call-site-handled mutation. Hooks whose call
-// sites already toast (useCreateSuggestion, usePostAnonComment, the
-// src/api/hooks.ts sites…) must therefore never carry `meta.errorToast`.
+// sites already toast (useCreateSuggestion, the src/api/hooks.ts sites…)
+// must therefore never carry `meta.errorToast`.
 import { MutationCache } from '@tanstack/react-query';
 import { toast } from 'sonner';
 

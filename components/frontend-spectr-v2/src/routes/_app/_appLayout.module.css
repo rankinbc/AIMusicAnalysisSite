@@ -88,24 +88,6 @@
 }
 
 
-.navIconBtn {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border-radius: 7px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.02);
-  color: var(--muted);
-  font-family: inherit;
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-}
-.navIconBtn:hover {
-  color: var(--text);
-  border-color: var(--border-2);
-}
-
 .navAvatarWrap {
   position: relative;
 }
