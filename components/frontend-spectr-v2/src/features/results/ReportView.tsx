@@ -9,6 +9,7 @@ import {
   useDismissVerdict,
   useEntitlements,
   useFeedbackVerdict,
+  useNotes,
   useReanalyzeVersion,
   useVerdicts,
   useVersionFiles,
@@ -56,8 +57,6 @@ import { NotesTab } from './NotesTab';
 import { ImprovementPlanTab } from './ImprovementPlanTab';
 import { ActionsBar } from './ActionsBar';
 import { MergedChainPanel } from './MergedChainPanel';
-import { SuggestionRows } from './SuggestionRows';
-import { useComments } from '../listen/useComments';
 import { Icon } from './Icon';
 import { buildListenFixes, readListenFixes, writeListenFixes } from '../listen-rack/listenFixes';
 import './redesign-v3.css';
@@ -126,12 +125,9 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
   // Actions-tab badge: findings with a live fix (dismissed already dropped by
   // buildMoves) — note rows are additive and not double-counted here.
   const actionableCount = useMemo(() => moves.filter((m) => m.verdictId != null).length, [moves]);
-  // Notes/Feedback badge — shares the query cache with NotesTab (same key).
-  const { data: commentsData } = useComments(versionId ?? '');
-  const commentCount = useMemo(
-    () => (commentsData ?? []).filter((c) => c.status !== 'hidden').length,
-    [commentsData],
-  );
+  // Notes badge — shares the query cache with NotesTab (same key).
+  const { data: notesData } = useNotes(versionId ?? '');
+  const noteCount = notesData?.length ?? 0;
 
   // Which inputs the analysis ran on — drives the header chips.
   const { data: filesData } = useVersionFiles(versionId ?? '');
@@ -475,7 +471,7 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
               projectTrackCount={alsProject?.trackCount ?? 0}
               hasReference={hasReference}
               hasStems={hasStems}
-              commentCount={commentCount}
+              noteCount={noteCount}
               actionableCount={actionableCount}
               planLogCount={planLogCount}
             />
@@ -534,7 +530,6 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
                   onMarkApplied={onMarkApplied}
                   onRate={onRate}
                   onShowSpectrum={onShowSpectrum}
-                  extraActionRows={versionId ? <SuggestionRows versionId={versionId} /> : undefined}
                 />
               </div>
             )}

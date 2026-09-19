@@ -11,23 +11,16 @@ import s from './WorkerHealthBanner.module.css';
 interface WorkerHealthBannerProps {
   /** True only when the BFF reports the worker offline. */
   offline: boolean;
-  /** Pending analysis jobs waiting on the dead worker, if any. */
-  queueDepth?: number;
 }
 
-export function WorkerHealthBanner({ offline, queueDepth = 0 }: WorkerHealthBannerProps) {
+export function WorkerHealthBanner({ offline }: WorkerHealthBannerProps) {
   if (!offline) return null;
-
-  const waiting =
-    queueDepth > 0
-      ? ` ${queueDepth} job${queueDepth === 1 ? '' : 's'} waiting.`
-      : '';
 
   return (
     <div className={s.banner} role="status" aria-label="Analysis worker offline">
       <span className={s.dot} aria-hidden="true" />
       <p className={s.message}>
-        Analysis worker offline — new analyses are paused.{waiting} Retrying…
+        Analysis worker offline — new analyses are paused. Retrying…
       </p>
     </div>
   );

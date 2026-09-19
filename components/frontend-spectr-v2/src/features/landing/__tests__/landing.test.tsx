@@ -9,7 +9,7 @@ import { LandingPage } from '../LandingPage';
 import { SampleReportEmbed } from '../SampleReportEmbed';
 import { SAMPLE_REPORT } from '../sample-report';
 
-// Story 6.1 — static renders (the FeedView idiom: plain <a> anchors so no
+// Story 6.1 — static renders (the 6-1 idiom: plain <a> anchors so no
 // RouterProvider is needed; effects don't run, so no fetch fires).
 
 describe('PublicChrome (story 6.1 AC3 — UX-DR6 slim chrome)', () => {
@@ -26,7 +26,7 @@ describe('PublicChrome (story 6.1 AC3 — UX-DR6 slim chrome)', () => {
   });
 
   it('swaps to "Open library" for an authed user (no register dead-end mid-upgrade)', () => {
-    const user: AuthedUser = { id: 'u1', email: 'a@b', handle: 'a', displayName: null, tier: 'free' };
+    const user: AuthedUser = { id: 'u1', email: 'a@b', displayName: null, tier: 'free' };
     const value = { user, accessToken: 't', isLoading: false } as never;
     const html = renderToStaticMarkup(
       <AuthContext.Provider value={value}>

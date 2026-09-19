@@ -24,7 +24,7 @@ export interface BuildTabsOpts {
   hasReference: boolean;
   /** v4 tabs. */
   hasStems: boolean;
-  commentCount: number;
+  noteCount: number;
   actionableCount: number;
   planLogCount: number;
 }
@@ -34,8 +34,8 @@ export interface BuildTabsOpts {
  *
  *  v4 layout: left group = Track Analysis · Project (disabled w/ tooltip when
  *  no .als) · Stems (disabled when no stems) · Reference (hidden when absent) ·
- *  Notes/Feedback · Debug (dev). Right-aligned hot group = Findings (id
- *  `coach`, back-compat) · Actions · Improvement Plan (id `dawplan`). */
+ *  Notes · Debug (dev). Right-aligned hot group = Findings (id `coach`,
+ *  back-compat) · Actions · Improvement Plan (id `dawplan`). */
 export function buildResultsTabs(opts: BuildTabsOpts, isDev: boolean): TabDef[] {
   const {
     findingCount,
@@ -43,7 +43,7 @@ export function buildResultsTabs(opts: BuildTabsOpts, isDev: boolean): TabDef[] 
     projectTrackCount,
     hasReference,
     hasStems,
-    commentCount,
+    noteCount,
     actionableCount,
     planLogCount,
   } = opts;
@@ -71,9 +71,9 @@ export function buildResultsTabs(opts: BuildTabsOpts, isDev: boolean): TabDef[] 
       : []),
     {
       id: 'notes',
-      label: 'Notes / Feedback',
+      label: 'Notes',
       icon: 'message',
-      badge: commentCount > 0 ? commentCount : null,
+      badge: noteCount > 0 ? noteCount : null,
     },
     // Story 12.5: raw pipeline I/O is a developer surface — dev builds only.
     ...(isDev ? [{ id: 'debug' as const, label: 'Debug', icon: 'sliders' as const }] : []),

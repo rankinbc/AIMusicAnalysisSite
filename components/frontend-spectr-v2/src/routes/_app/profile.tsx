@@ -99,7 +99,6 @@ function ProfilePage() {
 
   const email = user?.email ?? '';
   const displayName = user?.displayName?.trim() || emailLocalPart(email) || 'Producer';
-  const handle = user?.handle?.trim() ? `@${user.handle.trim()}` : '';
   const initial = displayName.charAt(0).toUpperCase() || '?';
 
   return (
@@ -107,7 +106,6 @@ function ProfilePage() {
       <Header
         initial={initial}
         displayName={displayName}
-        handle={handle}
         email={email}
         stats={stats}
         tier={tier}
@@ -122,7 +120,6 @@ function ProfilePage() {
       {tab === 'settings' && (
         <SettingsTab
           displayName={displayName}
-          handle={user?.handle ?? null}
           email={email}
           onSignOut={handleSignOut}
         />
@@ -136,13 +133,12 @@ function ProfilePage() {
 interface HeaderProps {
   initial: string;
   displayName: string;
-  handle: string;
   email: string;
   stats: MeStatsDto;
   tier: Tier | null;
 }
 
-function Header({ initial, displayName, handle, email, stats, tier }: HeaderProps) {
+function Header({ initial, displayName, email, stats, tier }: HeaderProps) {
   return (
     <section className={`card ${s.header}`}>
       <div className={s.headerInner}>
@@ -152,7 +148,6 @@ function Header({ initial, displayName, handle, email, stats, tier }: HeaderProp
         <div className={s.headerMain}>
           <div className={s.nameRow}>
             <span className={s.displayName}>{displayName}</span>
-            {handle && <span className={`mono ${s.handle}`}>{handle}</span>}
             {/* E8.6 — real tier chip; no chip while entitlements are pending
                 (never guess "Free"). */}
             {tier && <TierChip tier={tier} />}
@@ -317,18 +312,17 @@ function ActivityTab({ activity }: { activity: ActivityItemDto[] }) {
 
 interface SettingsProps {
   displayName: string;
-  handle: string | null;
   email: string;
   onSignOut: () => void;
 }
 
-function SettingsTab({ displayName, handle, email, onSignOut }: SettingsProps) {
+function SettingsTab({ displayName, email, onSignOut }: SettingsProps) {
   const { updateUser } = useAuth();
   const patchMe = usePatchMe();
   const profile = useMeProfile();
   const patchProfile = usePatchMeProfile();
 
-  const save = async (field: 'displayName' | 'handle', value: string): Promise<string | null> => {
+  const save = async (field: 'displayName', value: string): Promise<string | null> => {
     try {
       const next = await patchMe.mutateAsync({ [field]: value });
       updateUser(next);
@@ -358,15 +352,6 @@ function SettingsTab({ displayName, handle, email, onSignOut }: SettingsProps) {
               value={displayName}
               onSave={(v) => save('displayName', v)}
               maxLength={80}
-            />
-            <EditableSettingRow
-              label="Handle"
-              value={handle ?? ''}
-              placeholder="Not set yet"
-              onSave={(v) => save('handle', v)}
-              maxLength={32}
-              normalize={normalizeHandleInput}
-              hint="3–32 chars, lowercase letters/digits/underscore"
             />
             <SettingRow label="Email" value={email} />
           </div>
@@ -542,15 +527,6 @@ function EditableSettingRow({
       </div>
     </div>
   );
-}
-
-function normalizeHandleInput(raw: string): string {
-  let out = '';
-  for (const c of raw.trim().toLowerCase()) {
-    if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c === '_') out += c;
-    else if (c === '.' || c === '-' || c === '+') out += '_';
-  }
-  return out;
 }
 
 interface ValidationProblem {

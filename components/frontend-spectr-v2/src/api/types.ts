@@ -5,7 +5,6 @@
 export interface AuthedUser {
   id: string;
   email: string;
-  handle: string | null;
   displayName: string | null;
   /** Story 2.1 — derived from subscriptions.status ∈ {active, trialing}.
    *  "free" until the user subscribes; "pro" once a webhook delivers an
@@ -359,8 +358,6 @@ export interface RackPresetDto {
   name: string;
   source: string;
   chain: unknown;
-  createdInSessionId?: string | null;
-  viaGrantId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -391,141 +388,6 @@ export interface VizPresetDto {
 export interface SaveVizPresetRequest {
   name: string;
   viz: unknown;
-}
-
-// ── Listen V3 — version-scoped sharing + access (PRP-2) ──────────────────────
-export interface ShareSettingsDto {
-  versionId: string;
-  visibility: 'private' | 'unlisted' | 'public';
-  shareToken: string | null;
-  showVerdicts: boolean;
-  commentsPolicy: 'off' | 'link' | 'named';
-  suggestionsAllowed: boolean;
-  bookmarkingAllowed: boolean;
-  sessionHostPolicy: 'owner_only' | 'invited';
-  sessionJoinPolicy: 'invited' | 'link' | 'public';
-  enabledAt: string | null;
-}
-
-export interface UpdateShareSettingsRequest {
-  visibility?: 'private' | 'unlisted' | 'public';
-  showVerdicts?: boolean;
-  commentsPolicy?: 'off' | 'link' | 'named';
-  suggestionsAllowed?: boolean;
-  bookmarkingAllowed?: boolean;
-  sessionHostPolicy?: 'owner_only' | 'invited';
-  sessionJoinPolicy?: 'invited' | 'link' | 'public';
-}
-
-export interface RotateTokenResponse {
-  shareToken: string;
-}
-
-export interface GatesDto {
-  canComment: boolean;
-  canSuggest: boolean;
-  canBookmark: boolean;
-}
-
-// The resolution contract the Work/View/Room switcher reads.
-export interface AccessDto {
-  role: 'owner' | 'invited' | 'anon' | 'none';
-  canWork: boolean;
-  canView: boolean;
-  roomHostable: boolean;
-  roomJoinable: boolean;
-  coachAvailable: boolean;
-  gates: GatesDto;
-}
-
-export interface InviteDto {
-  id: string;
-  scope: 'version' | 'session';
-  songVersionId: string | null;
-  role: 'reviewer' | 'listener' | 'host';
-  status: 'pending' | 'accepted' | 'revoked';
-  invitedEmail: string | null;
-  invitedHandle: string | null;
-  token: string;
-  createdAt: string;
-  acceptedAt: string | null;
-}
-
-export interface CreateInviteRequest {
-  role: 'reviewer' | 'listener' | 'host';
-  invitedEmail?: string | null;
-  invitedHandle?: string | null;
-}
-
-export interface VersionViewDto {
-  versionId: string;
-  songName: string;
-  versionNumber: number;
-  visibility: 'private' | 'unlisted' | 'public';
-  showVerdicts: boolean;
-  grade: string | null;
-  score: number | null;
-  gates: GatesDto;
-  // Story 11.11 — owner public identity for the follow-producer CTA
-  // (null when the owner has no handle or is inactive).
-  ownerHandle: string | null;
-  ownerDisplayName: string | null;
-}
-
-// ── Listen V3 — View feedback: comments + suggestions (PRP-3) ────────────────
-export interface ActorRefDto {
-  type: 'user' | 'anon';
-  userId: string | null;
-  handle: string | null;
-  displayName: string | null;
-  hue: number | null;
-}
-
-export type CommentStatus = 'open' | 'resolved' | 'pinned' | 'hidden';
-
-export interface CommentDto {
-  id: string;
-  targetVersionId: string;
-  parentId: string | null;
-  t: number | null;
-  author: ActorRefDto;
-  body: string;
-  status: CommentStatus;
-  suggestionId: string | null;
-  createdAt: string;
-}
-
-export interface PostCommentRequest {
-  parentId?: string | null;
-  t?: number | null;
-  body: string;
-  authorDisplayName?: string | null;
-}
-
-export interface PatchCommentStatusRequest {
-  status: CommentStatus;
-}
-
-export type SuggestionStatus = 'proposed' | 'auditioned' | 'accepted' | 'rejected';
-
-export interface SuggestionDto {
-  id: string;
-  songVersionId: string;
-  fromActor: ActorRefDto;
-  chain: unknown; // the proposed Chain (narrowed via asChain at the feature layer)
-  commentId: string | null;
-  createdInSessionId: string | null;
-  status: SuggestionStatus;
-  createdAt: string;
-}
-
-export interface CreateSuggestionRequest {
-  commentId?: string | null;
-  chain: unknown;
-  fromDisplayName?: string | null;
-  // PRP-4 grantee-save: set during a live Room by the rack controller — the
-  // server stamps session provenance + snapshots the room chain (D4.3).
-  sessionId?: string | null;
 }
 
 export interface ReanalyzeResponse {
@@ -634,13 +496,7 @@ export const STEM_ROLES: readonly StemRole[] = [
 export interface MeProfileDto {
   id: string;
   email: string;
-  handle: string | null;
   displayName: string | null;
-  bio: string | null;
-  avatarHue: number | null;
-  bannerHue: number | null;
-  accent: string | null;
-  publicLink: string | null;
   /** Story 4.4 — analysis-complete email opt-out (true = emails on). */
   notifyAnalysisComplete: boolean;
   /** Story 12.1 — ISO timestamp, null while the email is unverified. */
@@ -649,12 +505,6 @@ export interface MeProfileDto {
 
 export interface PatchMeProfileRequest {
   displayName?: string | null;
-  handle?: string | null;
-  bio?: string | null;
-  avatarHue?: number | null;
-  bannerHue?: number | null;
-  accent?: string | null;
-  publicLink?: string | null;
   /** Story 4.4 — omit = unchanged. */
   notifyAnalysisComplete?: boolean;
 }
@@ -720,43 +570,6 @@ export interface ReferenceSetDto {
 export interface CreateReferenceSetRequest {
   name: string;
   hue?: number | null;
-}
-
-// Bookmarks — saved pointers to share-links, Discover tracks, or (PRP-6) a song
-// VERSION, optionally at a moment (t) + with a note.
-export interface BookmarkDto {
-  id: string;
-  targetShareToken: string | null;
-  targetPublishedTrack: string | null;
-  targetVersionId: string | null;
-  t: number | null;
-  note: string | null;
-  identityVisible: boolean;
-  title: string | null;
-  artist: string | null;
-  createdAt: string;
-}
-
-export interface CreateBookmarkRequest {
-  targetShareToken?: string | null;
-  targetPublishedTrack?: string | null;
-  targetVersionId?: string | null;
-  t?: number | null;
-  note?: string | null;
-  identityVisible?: boolean;
-}
-
-// PRP-6 — anon bookmark via the share link (POST /v/{token}/bookmark).
-export interface AnonBookmarkRequest {
-  t?: number | null;
-  note?: string | null;
-}
-
-// PRP-6 — author signal (D5.4): aggregate count (incl. anon, anonymously) + the
-// subset of named bookmarkers who opted into visibility.
-export interface BookmarkSignalDto {
-  count: number;
-  identified: ActorRefDto[];
 }
 
 export interface CompareSideDto {
@@ -1596,121 +1409,6 @@ export interface CoachStreamErrorPayload {
   message: string;
 }
 
-// ── Listen V3 (PRP-4) — Room sessions ────────────────────────────────────────
-
-export type SessionStatus = 'live' | 'ended';
-export type ControlScope = 'rack' | 'visuals';
-
-export interface RecapMoment {
-  t: number;
-  reactionCount: number;
-  topEmoji: string;
-}
-
-export interface SessionRecap {
-  hottestMoments: RecapMoment[];
-  reactionHistogram: Record<string, number>;
-  peakConcurrency: number;
-  attendance: ActorRefDto[];
-}
-
-export interface SessionDto {
-  id: string;
-  songVersionId: string;
-  hostId: string;
-  status: SessionStatus;
-  startedAt: string;
-  endedAt: string | null;
-  recap: SessionRecap | null;
-}
-
-// id === RackPreset.viaGrantId / Suggestion.viaGrantId on a forked preset (seams §2).
-export interface ControlGrantDto {
-  id: string;
-  sessionId: string;
-  scope: ControlScope;
-  grantee: ActorRefDto;
-  grantedBy: ActorRefDto;
-  revokedAt: string | null;
-}
-
-// The realtime wire union (matches LISTEN_V3_ROOM_UI_SEAMS §1). Every variant
-// carries seq (monotonic) + at (epoch ms); actor is always an ActorRefDto. The
-// SSE `id:` field mirrors `seq` for free resume; t = playhead seconds.
-interface SessionEventBase {
-  seq: number;
-  at: number;
-}
-
-export type SessionEvent =
-  | (SessionEventBase & { type: 'presence'; actor: ActorRefDto; state: 'join' | 'leave' })
-  | (SessionEventBase & { type: 'reaction'; id: string; actor: ActorRefDto; emoji: string; t: number; text?: string | null })
-  | (SessionEventBase & { type: 'status'; actor: ActorRefDto; status: string })
-  | (SessionEventBase & { type: 'chat'; id: string; actor: ActorRefDto; body: string; t: number })
-  | (SessionEventBase & { type: 'grant'; grant: ControlGrantDto })
-  | (SessionEventBase & { type: 'transport'; actor: ActorRefDto; playing: boolean; position: number })
-  | (SessionEventBase & { type: 'visuals'; actor: ActorRefDto; patch: unknown; stages?: string[] | null; director?: string | null })
-  | (SessionEventBase & { type: 'rack'; actor: ActorRefDto; effectId: string; params: Record<string, unknown> })
-  // Transient terminal signal published by the BFF /end handler — publish-only
-  // (no WAL append), so it carries NO seq and no actor. Durability comes from
-  // the DB session status; clients fold it and close their streams.
-  | { type: 'ended'; at: number };
-
-export type ReactionEvent = Extract<SessionEvent, { type: 'reaction' }>;
-
-// The hydrate `sync` frame — the full current room state a late joiner gets
-// before deltas (seams §1 ⭐). The relay drops buffered deltas with seq <= snapshotSeq.
-export interface RoomSnapshot {
-  chain: unknown | null;
-  transport: { playing: boolean; position: number } | null;
-  visuals: { patch: unknown; stages: string[] | null; director: string | null } | null;
-  roster: ActorRefDto[];
-  feed: ReactionEvent[];
-  snapshotSeq: number;
-}
-
-// ── action request bodies ────────────────────────────────────────────────────
-export interface ReactRequest {
-  emoji: string;
-  t?: number | null;
-  text?: string | null;
-}
-export interface ChatRequest {
-  body: string;
-  t?: number | null;
-}
-export interface RoomStatusRequest {
-  emoji: string;
-}
-export interface TransportRequest {
-  playing: boolean;
-  position: number;
-}
-export interface VisualsRequest {
-  patch?: unknown;
-  stages?: string[] | null;
-  director?: string | null;
-}
-export interface RackRequest {
-  effectId: string;
-  params: Record<string, unknown>;
-}
-export interface GranteeRef {
-  userId?: string | null;
-  anonId?: string | null;
-  displayName?: string | null;
-}
-export interface GrantRequest {
-  scope: ControlScope;
-  grantee: GranteeRef;
-}
-export interface RevokeRequest {
-  scope: ControlScope;
-}
-export interface RecapPublishRequest {
-  momentIds: number[];
-}
-
 /** GET /api/health/worker — analysis-worker liveness for the global offline banner.
  *  Mirrors Spectr.Bff.Endpoints.WorkerHealthDto. */
 export interface WorkerHealthResponse {
@@ -1718,8 +1416,6 @@ export interface WorkerHealthResponse {
   healthy: boolean;
   /** Seconds since the most recent worker heartbeat; null if none ever seen. */
   lastHeartbeatAgeSeconds: number | null;
-  /** Pending analysis messages across the paid + free lanes. */
-  queueDepth: number;
 }
 
 /** GET /api/health/full — story 12.2 aggregated health for the dev shell dot.

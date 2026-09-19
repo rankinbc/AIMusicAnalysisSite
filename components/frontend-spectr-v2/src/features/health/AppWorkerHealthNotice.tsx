@@ -19,7 +19,7 @@ export function AppWorkerHealthNotice({ className }: AppWorkerHealthNoticeProps)
 
   return (
     <div className={className}>
-      <WorkerHealthBanner offline queueDepth={data.queueDepth} />
+      <WorkerHealthBanner offline />
     </div>
   );
 }

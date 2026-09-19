@@ -10,8 +10,6 @@ import type { Track, TrackNote, TrackSection } from './data';
 export interface TrackSource {
   /** Song display name (from useSong). */
   name: string;
-  author?: string;
-  handle?: string;
   phase1?: Phase1Data | undefined;
   phase2?: Phase2Data | undefined;
   phase7?: Phase7Data | undefined;
@@ -56,8 +54,6 @@ export function buildTrack(src: TrackSource): Track {
 
   return {
     name: src.name || '—',
-    author: src.author ?? '',
-    handle: src.handle ?? '',
     format: '',
     durationSec: Math.round(p1.duration_seconds ?? 0),
     bpm: Math.round(p1.bpm ?? p2.bpm ?? 0),

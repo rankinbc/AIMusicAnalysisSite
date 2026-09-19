@@ -286,28 +286,6 @@ export function SegBar({ value, options, onChange, accent = 'var(--cyan)', size 
   );
 }
 
-// ── Avatars: listener (gradient + initial), anonymous (bot), coach (robot) ──
-export function BotFace({ size = 26, ring }: { size?: number; ring?: boolean | undefined }) {
-  return (
-    <div style={{ width: size, height: size, borderRadius: size * 0.28, background: 'linear-gradient(135deg, #1b2436, #0e1626)', border: '1px solid var(--border-2)', display: 'grid', placeItems: 'center', flexShrink: 0, boxShadow: ring ? '0 0 0 2px var(--bg), 0 0 14px rgba(180,200,230,0.35)' : 'none' }}>
-      <svg width={size * 0.62} height={size * 0.62} viewBox="0 0 24 24">
-        <rect x="4" y="6.5" width="16" height="12.5" rx="4" fill="none" stroke="var(--muted)" strokeWidth="1.5" />
-        <circle cx="9.5" cy="12.5" r="1.6" fill="var(--text-2)" /><circle cx="14.5" cy="12.5" r="1.6" fill="var(--text-2)" />
-        <line x1="12" y1="2.6" x2="12" y2="6.5" stroke="var(--muted)" strokeWidth="1.5" /><circle cx="12" cy="2.2" r="1.3" fill="var(--muted)" />
-      </svg>
-    </div>
-  );
-}
-
-export function Avatar({ handle = '?', hue = 200, anon, size = 26, ring }: {
-  handle?: string; hue?: number; anon?: boolean | undefined; size?: number; ring?: boolean | undefined;
-}) {
-  if (anon) return <BotFace size={size} ring={ring} />;
-  return (
-    <div style={{ width: size, height: size, borderRadius: '50%', flexShrink: 0, background: `linear-gradient(135deg, oklch(0.72 0.16 ${hue}), oklch(0.5 0.18 ${(hue + 60) % 360}))`, display: 'grid', placeItems: 'center', fontSize: size * 0.4, fontWeight: 800, color: '#06151a', boxShadow: ring ? `0 0 0 2px var(--bg), 0 0 14px oklch(0.7 0.16 ${hue})` : 'none' }}>{handle[0].toUpperCase()}</div>
-  );
-}
-
 // ── Rainbow hue slider (color control for visual effects) ──────────────────
 export function HueSlider({ value, onChange, label }: {
   value: number; onChange: (h: number) => void; label?: string;

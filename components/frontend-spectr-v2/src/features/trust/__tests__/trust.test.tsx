@@ -38,13 +38,11 @@ describe('trust pages (story 6.2 AC1/3/4)', () => {
 
   it('privacy defaults cover the shipped behaviors and disclaim legal-policy status', () => {
     const html = renderToStaticMarkup(<PrivacyDefaultsPage />);
-    expect(html).toContain('Private by default');
-    expect(html).toContain('revocable');
+    expect(html).toContain('Private by design');
+    expect(html).toContain('no public pages, no profiles and no share links');
     expect(html).toContain('after 72');
-    // The 72h purge is scoped to the anonymous ANALYSIS funnel; share-link
-    // feedback persists and the page must say so (review CRITICAL).
+    // The 72h purge is scoped to the anonymous ANALYSIS funnel.
     expect(html).toContain('anonymous analysis');
-    expect(html).toContain('stay with your track until you delete them');
     expect(html).toContain('not a legal privacy policy');
     // Honest third-party disclosure — no "no trackers" overclaim (Sentry/PostHog exist).
     expect(html).toContain('Sentry');

@@ -16,24 +16,19 @@ export function PrivacyDefaultsPage() {
     <TrustPage
       path="/trust/privacy"
       title="Privacy defaults"
-      metaDescription="SPECTR's privacy defaults: private-by-default library, opt-in revocable share links, anonymous analysis data purged after 72 hours, full export and deletion."
+      metaDescription="Your uploads are private: no public pages, no profiles, no share links."
       updated="2026-07-14"
     >
       <p>
         This page states how SPECTR behaves by default, in plain language. It is a summary of
         shipped behavior, not a legal privacy policy.
       </p>
-      <h2>Private by default</h2>
-      <ul>
-        <li>
-          Your library, tracks, and reports are visible only to you. Nothing is public unless you
-          explicitly share it.
-        </li>
-        <li>
-          Share links are opt-in, scoped to what you choose to expose, and revocable — revoking a
-          link kills it immediately for everyone who has it.
-        </li>
-      </ul>
+      <h2>Private by design</h2>
+      <p>
+        <strong>Private by design.</strong> Nothing you upload is visible to anyone else. SPECTR
+        has no public pages, no profiles and no share links — your tracks, reports and notes are
+        reachable only from your signed-in account.
+      </p>
       <h2>Anonymous visitors</h2>
       <ul>
         <li>
@@ -41,15 +36,10 @@ export function PrivacyDefaultsPage() {
           identity, not a profile. That device data — and its analyses — is purged after 72
           hours if it never becomes an account.
         </li>
-        <li>
-          Comments and bookmarks that reviewers leave on a track you shared are different: they
-          are feedback addressed to you, so they stay with your track until you delete them (you
-          moderate and can remove any of them).
-        </li>
       </ul>
       <h2>Your data, your controls</h2>
       <ul>
-        <li>Export everything — reports, comments, account data — from your account settings.</li>
+        <li>Export everything — reports, notes, account data — from your account settings.</li>
         <li>
           Delete your account at any time: one flow removes your audio, reports, and identity
           permanently.

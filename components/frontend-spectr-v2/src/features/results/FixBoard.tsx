@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import type { VerdictDto } from '../../api/types';
 import { Icon } from './Icon';
@@ -50,8 +50,6 @@ interface FixBoardProps {
   onMarkApplied: (v: VerdictDto) => void;
   onRate: (v: VerdictDto, rating: number, notes: string) => void;
   onShowSpectrum?: ((range: [number, number]) => void) | undefined;
-  /** Extra list rows appended in actions mode (reviewer suggestions). */
-  extraActionRows?: ReactNode;
 }
 
 interface Row {
@@ -78,7 +76,6 @@ export function FixBoard({
   onMarkApplied,
   onRate,
   onShowSpectrum,
-  extraActionRows,
 }: FixBoardProps) {
   const findingsMode = mode === 'findings';
   const findings = useMemo(
@@ -313,7 +310,6 @@ export function FixBoard({
               );
             })
           )}
-          {!findingsMode && extraActionRows}
         </div>
       </div>
 

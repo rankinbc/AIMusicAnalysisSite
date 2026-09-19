@@ -21,7 +21,6 @@ function health(overrides?: {
       worker: {
         healthy: overrides?.worker ?? true,
         lastHeartbeatAgeSeconds: 3,
-        queueDepth: 0,
       },
       storage: { mode: 'local', ok: overrides?.storage ?? true },
     },

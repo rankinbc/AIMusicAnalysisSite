@@ -1,6 +1,6 @@
 /* Listen Rack v2 — stage card: the full visualizer stage (VizStage — every
  * stage from the design's stage-select: eq/devices/radial/orbit/bloom/smoke/
- * spectro/lights/room/info, plus laser fan, fireworks, background flash) with
+ * spectro/lights/info, plus laser fan, fireworks, background flash) with
  * the design's overlay meter chips + transport lane (play, waveform scrub,
  * note pins). Real-audio route: the stage + meter chips read the live
  * AnalyserNode frame; mock demo route keeps the synthetic spectrum. */

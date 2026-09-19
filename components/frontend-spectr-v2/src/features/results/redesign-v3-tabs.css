@@ -1188,10 +1188,8 @@
 .rdx .st-grid-cell.hd { height:auto; background:none; font-size:8px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); text-align:center; }
 .rdx .st-grid-cell.clash { border-color:var(--tone); box-shadow:0 0 8px -2px var(--tone); }
 
-/* ═══ v4 — Notes / Feedback tab ═══════════════════════════════════════════ */
+/* ═══ v4 — Notes tab ═══════════════════════════════════════════════════════ */
 .rdx .notes-stack { display:flex; flex-direction:column; gap:14px; margin-top:14px; }
-.rdx .notes-cols { display:grid; grid-template-columns:1fr 1fr; gap:14px; align-items:start; }
-@media (max-width:900px){ .rdx .notes-cols { grid-template-columns:1fr; } }
 .rdx .notes-card { display:flex; flex-direction:column; }
 .rdx .notes-list { display:flex; flex-direction:column; gap:6px; padding:10px 14px; }
 .rdx .note-row { display:flex; align-items:baseline; gap:9px; padding:7px 10px; border:1px solid var(--border); border-radius:8px; background:rgba(255,255,255,.015); font-size:12px; color:var(--text-2); }
@@ -1202,21 +1200,11 @@
 .rdx .note-x:hover { color:var(--sev-critical); background:var(--surface); }
 .rdx .note-composer { display:flex; gap:8px; padding:0 14px 12px; }
 .rdx .note-composer input { flex:1; min-width:0; border:1px solid var(--border-2); border-radius:8px; background:var(--bg); color:var(--text); font:inherit; font-size:12px; padding:7px 10px; }
-.rdx .cmt { padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:rgba(255,255,255,.015); }
-.rdx .cmt.reply { margin:7px 0 0 16px; border-style:dashed; }
-.rdx .cmt-hd { display:flex; align-items:center; gap:8px; margin-bottom:3px; }
-.rdx .cmt-hd .who { font-size:11px; font-weight:600; color:var(--text); }
-.rdx .cmt-hd .t { font-size:9.5px; color:var(--blue); }
-.rdx .cmt-st { font-size:8.5px; text-transform:uppercase; letter-spacing:.08em; }
-.rdx .cmt .body { margin:0; font-size:12px; line-height:1.5; color:var(--text-2); text-wrap:pretty; }
 .rdx .ftl { display:flex; flex-direction:column; gap:8px; padding:12px 14px; }
 .rdx .ftl-lane { display:flex; align-items:center; gap:10px; }
 .rdx .ftl-name { width:76px; flex-shrink:0; font-size:8.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); text-align:right; }
 .rdx .ftl-strip { position:relative; flex:1; height:14px; border-radius:7px; background:rgba(255,255,255,.04); }
-.rdx .ftl-strip.tall { height:30px; }
-.rdx .ftl-density { position:absolute; inset:0; width:100%; height:100%; border-radius:7px; }
 .rdx .ftl-dot { position:absolute; top:50%; width:8px; height:8px; border-radius:50%; transform:translate(-50%,-50%); cursor:help; box-shadow:0 0 6px -1px currentColor; }
-.rdx .ftl-emoji { position:absolute; top:50%; transform:translate(-50%,-50%); font-size:13px; cursor:help; }
 
 /* ═══ v4 — Improvement Plan tab + Actions bar ═════════════════════════════ */
 .rdx .ip-stack { display:flex; flex-direction:column; gap:14px; margin-top:14px; }
@@ -1256,7 +1244,6 @@
 .rdx .ip-moment .h { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .rdx .ab-bar { display:flex; align-items:center; gap:9px; margin-top:14px; padding:9px 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface-2); flex-wrap:wrap; }
 .rdx .ab-note { font-size:9.5px; color:var(--muted); }
-.rdx .fb-row.sug { cursor:default; }
 
 /* v4 — export preview is the generator output verbatim */
 .rdx .gp-doc-pre { margin:0; font-family:'JetBrains Mono',monospace; font-size:10.5px; line-height:1.65; color:var(--text-2); white-space:pre-wrap; word-break:break-word; }

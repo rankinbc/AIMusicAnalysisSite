@@ -2,7 +2,10 @@
 /* Wave-3 Tasks 1+2 — integration: a mutation that opted in via meta.errorToast
  * fires exactly ONE global toast through the app's MutationCache (server copy
  * preferred), and a call-site-handled mutation with NO meta fires ZERO global
- * toasts (the opt-in rule that prevents double-toasting). */
+ * toasts (the opt-in rule that prevents double-toasting). Vehicle hooks are
+ * arbitrary — any mutation wired through the shared `fetcher` demonstrates the
+ * same MutationCache behavior; useDeleteRackPreset (meta.errorToast) and
+ * useCreateNote (no meta, call-site-handled) stand in here. */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -17,8 +20,9 @@ vi.mock('../../../api/fetcher', async (importOriginal) => {
 import { toast } from 'sonner';
 
 import { ApiError, fetcher } from '../../../api/fetcher';
+import { useCreateNote } from '../../../api/hooks';
 import { createMutationCache } from '../../../api/mutation-error-toast';
-import { useCreateSuggestion, useRejectSuggestion } from '../useSuggestions';
+import { useDeleteRackPreset } from '../../listen-rack/useRackPresets';
 
 const fetcherMock = vi.mocked(fetcher);
 const errorSpy = vi.mocked(toast.error);
@@ -38,35 +42,35 @@ describe('meta.errorToast through the global MutationCache', () => {
     errorSpy.mockClear();
   });
 
-  it('reject → 403 → exactly one toast carrying the server message', async () => {
+  it('delete-preset → 403 → exactly one toast carrying the server message', async () => {
     fetcherMock.mockRejectedValueOnce(
-      new ApiError(403, { error: { code: 'forbidden', message: 'Only the owner can reject.' } }),
+      new ApiError(403, { error: { code: 'forbidden', message: 'Only the owner can delete.' } }),
     );
-    const { result } = renderHook(() => useRejectSuggestion('v1'), { wrapper });
-    act(() => result.current.mutate('sg-1'));
+    const { result } = renderHook(() => useDeleteRackPreset('v1'), { wrapper });
+    act(() => result.current.mutate('preset-1'));
     await waitFor(() => expect(result.current.isError).toBe(true));
 
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy).toHaveBeenCalledWith('Only the owner can reject.');
+    expect(errorSpy).toHaveBeenCalledWith('Only the owner can delete.');
   });
 
-  it('reject → network failure → the meta fallback copy', async () => {
+  it('delete-preset → network failure → the meta fallback copy', async () => {
     fetcherMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
-    const { result } = renderHook(() => useRejectSuggestion('v1'), { wrapper });
-    act(() => result.current.mutate('sg-1'));
+    const { result } = renderHook(() => useDeleteRackPreset('v1'), { wrapper });
+    act(() => result.current.mutate('preset-1'));
     await waitFor(() => expect(result.current.isError).toBe(true));
 
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy).toHaveBeenCalledWith('Could not reject the suggestion.');
+    expect(errorSpy).toHaveBeenCalledWith('Could not delete the preset.');
   });
 
-  it('call-site-handled useCreateSuggestion (no meta) fires ZERO global toasts', async () => {
+  it('call-site-handled useCreateNote (no meta) fires ZERO global toasts', async () => {
     fetcherMock.mockRejectedValueOnce(new ApiError(403, { error: 'nope' }));
     const callSiteOnError = vi.fn();
-    const { result } = renderHook(() => useCreateSuggestion('v1'), { wrapper });
+    const { result } = renderHook(() => useCreateNote('v1'), { wrapper });
     act(() =>
       result.current.mutate(
-        { chain: { order: [], modules: {}, masterBypass: false } },
+        { tSeconds: 0, text: 'hi', pinned: false },
         { onError: callSiteOnError },
       ),
     );

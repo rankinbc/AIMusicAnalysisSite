@@ -9,9 +9,7 @@ import type {
   ActivityItemDto,
   AuthResponse,
   AuthedUser,
-  BookmarkDto,
   CompareResponseDto,
-  CreateBookmarkRequest,
   CreateNoteRequest,
   CreateReferenceSetRequest,
   CreateSongRequest,
@@ -140,7 +138,6 @@ export function useMeActivity() {
 
 export interface PatchMeRequest {
   displayName?: string | null;
-  handle?: string | null;
 }
 
 export function usePatchMe() {
@@ -855,32 +852,6 @@ export function useRemoveReferenceFromSet() {
       qc.invalidateQueries({ queryKey: ['reference-sets'] });
       qc.invalidateQueries({ queryKey: ['references'] });
     },
-  });
-}
-
-// ── Bookmarks ───────────────────────────────────────────────────────────────
-export function useBookmarks() {
-  return useQuery<BookmarkDto[]>({
-    queryKey: ['bookmarks'],
-    queryFn: () => fetcher<BookmarkDto[]>({ url: '/me/bookmarks/', method: 'GET' }),
-  });
-}
-
-export function useCreateBookmark() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: CreateBookmarkRequest) =>
-      fetcher<BookmarkDto>({ url: '/me/bookmarks/', method: 'POST', data: body }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['bookmarks'] }),
-  });
-}
-
-export function useDeleteBookmark() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (bookmarkId: string) =>
-      fetcher<void>({ url: `/me/bookmarks/${bookmarkId}`, method: 'DELETE' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['bookmarks'] }),
   });
 }
 

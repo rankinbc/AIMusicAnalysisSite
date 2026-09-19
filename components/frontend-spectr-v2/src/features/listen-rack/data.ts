@@ -304,8 +304,6 @@ export interface TrackSection { t: string; l: string; bars: number }
 export interface TrackNote { id: string; t: number; text: string; pinned: boolean }
 export interface Track {
   name: string;
-  author: string;
-  handle: string;
   format: string;
   durationSec: number;
   bpm: number;
@@ -333,8 +331,6 @@ const SECTIONS: TrackSection[] = [
 
 export const TRACK: Track = {
   name: 'Aurora — Final Mix (v3)',
-  author: 'Mae Karlsson',
-  handle: '@maek',
   format: 'WAV · 48 kHz · 24-bit',
   durationSec: 268,
   bpm: 128,

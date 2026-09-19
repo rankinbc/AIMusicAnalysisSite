@@ -52,17 +52,15 @@ describe('ProgressStorylineView', () => {
     expect(html).toContain('2:05');
   });
 
-  it('worker offline: immediate hint with queue depth, regardless of elapsed', () => {
+  it('worker offline: immediate hint, regardless of elapsed', () => {
     const html = renderToStaticMarkup(
       <ProgressStorylineView
         {...base}
         elapsedMs={10_000}
         workerOffline
-        queueDepth={3}
       />,
     );
     expect(html).toContain('appears to be down');
-    expect(html).toContain('3 jobs queued.');
   });
 
   it('long-elapsed: "taking longer than usual" after 10 min while processing', () => {

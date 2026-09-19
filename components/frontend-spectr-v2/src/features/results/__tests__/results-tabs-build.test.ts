@@ -14,7 +14,7 @@ const base = {
   projectTrackCount: 0,
   hasReference: false,
   hasStems: false,
-  commentCount: 0,
+  noteCount: 0,
   actionableCount: 0,
   planLogCount: 0,
 };
@@ -56,7 +56,7 @@ describe('buildResultsTabs', () => {
 
   it('marks the hot trio and badges Findings/Actions/Plan counts', () => {
     const tabs = buildResultsTabs(
-      { ...base, findingCount: 4, actionableCount: 2, planLogCount: 5, commentCount: 7 },
+      { ...base, findingCount: 4, actionableCount: 2, planLogCount: 5, noteCount: 7 },
       false,
     );
     const hot = tabs.filter((t) => t.hot).map((t) => t.id);

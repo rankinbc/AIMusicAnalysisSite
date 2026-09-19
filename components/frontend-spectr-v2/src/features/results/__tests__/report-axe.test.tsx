@@ -83,7 +83,7 @@ describe('report surface — axe WCAG 2.1 AA smoke (story 5.10 AC2)', () => {
             projectTrackCount={0}
             hasReference={false}
             hasStems={false}
-            commentCount={0}
+            noteCount={0}
             actionableCount={2}
             planLogCount={0}
           />

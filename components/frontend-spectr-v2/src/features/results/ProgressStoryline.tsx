@@ -37,8 +37,6 @@ export interface ProgressStorylineViewProps {
    *  health probe itself errors — an unreachable BFF/Redis must not read as
    *  "everything fine" on the page whose whole job is failure visibility. */
   workerOffline: boolean;
-  /** Jobs waiting on the dead worker; shown with the offline hint. */
-  queueDepth?: number | undefined;
 }
 
 function formatElapsed(ms: number): string {
@@ -58,7 +56,6 @@ export function ProgressStorylineView({
   phasePct,
   elapsedMs,
   workerOffline,
-  queueDepth = 0,
 }: ProgressStorylineViewProps) {
   const pct = Math.max(0, Math.min(1, phasePct));
   const phase = PHASE_ALIASES[currentPhase] ?? currentPhase;
@@ -100,9 +97,6 @@ export function ProgressStorylineView({
     (elapsedMs > SLOW_ELAPSED_MS ||
       (status === 'pending' && elapsedMs > SLOW_PENDING_MS));
 
-  const waiting =
-    queueDepth > 0 ? ` ${queueDepth} job${queueDepth === 1 ? '' : 's'} queued.` : '';
-
   return (
     <div className={s.panel}>
       <div className={s.headerRow}>
@@ -141,7 +135,7 @@ export function ProgressStorylineView({
       {active && workerOffline && (
         <p className={s.hintOffline} role="status">
           The analysis worker appears to be down — this job will resume or fail
-          shortly.{waiting}
+          shortly.
         </p>
       )}
       {!workerOffline && slow && (
@@ -186,7 +180,6 @@ export function ProgressStoryline({ job }: { job: JobStatusDto }) {
       phasePct={job.phasePct}
       elapsedMs={now - Date.parse(startIso)}
       workerOffline={health.data?.healthy === false || health.isError}
-      queueDepth={health.data?.queueDepth}
     />
   );
 }
