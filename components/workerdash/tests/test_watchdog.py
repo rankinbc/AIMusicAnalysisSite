@@ -106,3 +106,13 @@ def test_state_watchdog_none_when_status_stale(tmp_path, monkeypatch):
     app.config["TESTING"] = True
     body = app.test_client().get("/api/state").get_json()
     assert body["worker"]["watchdog"] is None
+
+
+def test_watchdog_relaunches_one_logged_worker_per_pool(tmp_path, monkeypatch):
+    from workerdash import watchdog, worker_ctl
+    calls = []
+    monkeypatch.setattr(watchdog.subprocess, "run",
+                        lambda args, **kw: calls.append(args[-1]))
+    watchdog.launch_worker_logged(str(tmp_path), str(tmp_path / "logs"))
+    assert len(calls) == len(worker_ctl.WORKER_POOLS)
+    assert any("'--queues','coach'" in c and "analysis-paid" not in c for c in calls)

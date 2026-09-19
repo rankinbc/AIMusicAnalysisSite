@@ -66,7 +66,7 @@ Four queues, **no `default`** (enforced by `tests/test_actor_queues.py`: no acto
 
 Tier routing lives in the BFF (`DispatchAnalysisAsync`): pro/credits -> `analysis-paid`, free/anon -> `analysis-free`. The BFF stamps `analysis_jobs.tier` at dispatch so the worker never reads billing tables.
 
-**Dev**: one worker drains all four queues (Procfile line: `--queues coach analysis-paid analysis-free maintenance`).
+**Dev** (`scripts/start-spectr.ps1`): two workers — a coach-only worker (`--queues coach`) and an analysis worker (`--queues analysis-paid analysis-free maintenance`), the same split as `infra/compose.prod.yml`, so a chat reply never waits behind a running analysis (docs/STARTUP.md problem #3b). The Procfile's single all-queues line remains for the compose `worker` service only.
 **Prod** (`docker/docker-compose.prod.yml`): two pools — W1 `worker-paid` consumes `coach analysis-paid`; W2 `worker-free` consumes `analysis-free maintenance`. Process separation is the starvation guarantee (FR34); `--queues` is an unordered set, not a priority list.
 
 ## Execution Patterns

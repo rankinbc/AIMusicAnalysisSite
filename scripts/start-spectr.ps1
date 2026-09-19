@@ -77,9 +77,18 @@ $FrontendDir = Join-Path $RepoRoot 'components/frontend-spectr-v2'
 $PythonExe = if ($env:SPECTR_PYTHON) { $env:SPECTR_PYTHON }
              else { (Get-Command python -ErrorAction SilentlyContinue)?.Source }
 
-# Canonical worker entrypoint (mirrors components/worker/Procfile), pinned to
-# the resolved interpreter above.
-$WorkerCmd = "& `"$PythonExe`" -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues coach analysis-paid analysis-free maintenance"
+# Worker entrypoints, pinned to the resolved interpreter above. Dev mirrors the
+# prod pool split (infra/compose.prod.yml): a coach-ONLY worker plus a batch
+# worker. A worker is one process with one thread and Dramatiq has no
+# cross-queue priority, so with a single all-queues worker every coach reply
+# (~20 s of work) waits behind whatever batch job is running - a 10-minute
+# analyze_audio_job, a multi-minute allin1 structure run, 40-90 s specialists.
+# See docs/STARTUP.md problem #3b.
+$WorkerBase = "& `"$PythonExe`" -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues"
+$WorkerPools = [ordered]@{
+    'SPECTR Worker - coach'    = "$WorkerBase coach"
+    'SPECTR Worker - analysis' = "$WorkerBase analysis-paid analysis-free maintenance"
+}
 
 # ── Pretty output helpers ───────────────────────────────────────────────────
 $script:Errors = @()
@@ -392,7 +401,9 @@ function Start-Apps {
                   'and pip install -e components/shared components/analysis ' +
                   '(or point $env:SPECTR_PYTHON at the prepared venv python.exe)')
         } else {
-            Start-InWindow -Title 'SPECTR Worker' -WorkDir $WorkerDir -Command $WorkerCmd
+            foreach ($title in $WorkerPools.Keys) {
+                Start-InWindow -Title $title -WorkDir $WorkerDir -Command $WorkerPools[$title]
+            }
         }
     } else {
         Fail 'Worker NOT started: no python found (PATH or $env:SPECTR_PYTHON)'

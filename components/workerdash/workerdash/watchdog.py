@@ -51,22 +51,27 @@ def decide(status_history, restart_times, now) -> Decision:
 
 
 def launch_worker_logged(worker_dir: str, log_dir: str) -> str:
-    """Relaunch the worker with output redirected to a dated log file.
-    Returns the log path. Uses Start-Process redirection (the worker keeps
-    running after the watchdog exits)."""
+    """Relaunch the workers — one per pool in ``worker_ctl.WORKER_POOLS`` (coach
+    alone, then batch; STARTUP.md #3b) — each with output redirected to its own
+    dated log file. Returns the batch (last) pool's log path. Uses Start-Process
+    redirection (the workers keep running after the watchdog exits)."""
     Path(log_dir).mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    log = os.path.join(log_dir, f"worker-{stamp}.log")
-    err = os.path.join(log_dir, f"worker-{stamp}.err.log")
-    ps = (
-        f"Start-Process -WindowStyle Hidden -WorkingDirectory '{worker_dir}' "
-        f"-RedirectStandardOutput '{log}' -RedirectStandardError '{err}' "
-        "-FilePath python -ArgumentList '-m','dramatiq','app.dramatiq_app',"
-        "'--processes','1','--threads','1',"
-        "'--queues','coach','analysis-paid','analysis-free','maintenance'"
-    )
-    subprocess.run(["powershell", "-NoProfile", "-Command", ps],
-                   capture_output=True, text=True, timeout=120)
+    log = ""
+    for pool in worker_ctl.WORKER_POOLS:
+        name = pool[0] if len(pool) == 1 else "batch"
+        log = os.path.join(log_dir, f"worker-{name}-{stamp}.log")
+        err = os.path.join(log_dir, f"worker-{name}-{stamp}.err.log")
+        queues = ",".join(f"'{q}'" for q in pool)
+        ps = (
+            f"Start-Process -WindowStyle Hidden -WorkingDirectory '{worker_dir}' "
+            f"-RedirectStandardOutput '{log}' -RedirectStandardError '{err}' "
+            "-FilePath python -ArgumentList '-m','dramatiq','app.dramatiq_app',"
+            "'--processes','1','--threads','1',"
+            f"'--queues',{queues}"
+        )
+        subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                       capture_output=True, text=True, timeout=120)
     return log
 
 

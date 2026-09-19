@@ -45,3 +45,40 @@ def test_docker_exe_rejects_zero_byte_stub(tmp_path, monkeypatch):
     # The zero-byte stub should be rejected
     result = _docker_exe()
     assert result != str(stub), "Zero-byte stub should be rejected"
+
+
+# ── Worker pool split (docs/STARTUP.md problem #3b) ─────────────────────────
+# One worker = one thread and Dramatiq has no cross-queue priority, so an
+# all-queues worker parks every coach reply behind whatever batch job is
+# running. The dashboard's restart must keep the coach-only pool, not
+# silently collapse back to a single all-queues worker.
+
+def test_worker_pools_cover_every_queue_once_and_coach_is_alone():
+    from workerdash import wire, worker_ctl
+    pools = worker_ctl.WORKER_POOLS
+    assert ("coach",) in pools
+    flat = [q for pool in pools for q in pool]
+    assert sorted(flat) == sorted(wire.QUEUES)
+
+
+def test_restart_launches_one_worker_per_pool(tmp_path, monkeypatch):
+    from workerdash import worker_ctl
+    scripts = []
+    monkeypatch.setattr(worker_ctl, "_ps", lambda s: scripts.append(s) or "")
+    assert worker_ctl.restart(str(tmp_path)) == {"ok": True}
+    launches = [s for s in scripts if "--queues" in s]
+    assert len(launches) == len(worker_ctl.WORKER_POOLS)
+    assert any(s.rstrip('"').endswith("--queues coach") for s in launches)
+    assert not any("coach" in s and "analysis-paid" in s for s in launches)
+
+
+def test_probe_flags_a_missing_fork_even_when_another_worker_is_whole(monkeypatch):
+    from workerdash import worker_ctl
+    lines = "\n".join([
+        "python.exe -m dramatiq app.dramatiq_app --queues coach",
+        "python.exe -c from multiprocessing.spawn import spawn_main --multiprocessing-fork",
+        "python.exe -m dramatiq app.dramatiq_app --queues analysis-paid analysis-free maintenance",
+    ])
+    monkeypatch.setattr(worker_ctl, "_ps", lambda s: lines)
+    p = worker_ctl.probe()
+    assert p["master"] is True and p["fork"] is False  # → derive_status: half-dead

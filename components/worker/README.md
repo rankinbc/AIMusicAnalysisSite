@@ -51,9 +51,13 @@ cross-queue precedence within one worker).
 ### Launch commands
 
 ```bash
-# Dev — ONE worker drains all four queues (functionally identical to prod):
+# Dev — TWO workers, two terminals (scripts/start-spectr.ps1 does this). A
+# single all-queues worker parks every coach reply behind the running batch
+# job for minutes — docs/STARTUP.md problem #3b.
+python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues coach
 python -m dramatiq app.dramatiq_app --processes 1 --threads 1 \
-    --queues coach analysis-paid analysis-free maintenance   # = the Procfile
+    --queues analysis-paid analysis-free maintenance
+# (The Procfile's single all-queues line is kept for the compose `worker` service.)
 
 # Prod — two pools (W1 paid + coach, W2 free + maintenance):
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up

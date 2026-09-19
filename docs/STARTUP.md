@@ -19,7 +19,7 @@ Related docs (do not duplicate their content here):
 | Postgres 16 | Docker container | 5432 | `docker/docker-compose.yml` service `postgres` |
 | Redis 7 | Docker container (dramatiq broker) | 6379 | `docker/docker-compose.yml` service `redis` |
 | BFF | .NET 10 minimal API | 5000 | `components/bff/src/Spectr.Bff` — `dotnet run` |
-| Worker | Python dramatiq consumer | none | `components/worker` — Procfile command below |
+| Workers (×2) | Python dramatiq consumers: a **coach-only** worker + an **analysis** (batch) worker — see problem #3b | none | `components/worker` — commands in section 4 |
 | Frontend v2 | Vite dev server (React 19) | 5174 | `components/frontend-spectr-v2` — `npm run dev` |
 | allin1 | One-shot `docker run` per track (structure detection) | none | image `allin1:latest` (built from `docker/allin1`) |
 | MinIO (optional) | S3-compatible storage, off by default | 9000/9001 | compose service `minio` |
@@ -124,9 +124,13 @@ dotnet ef database update --project src/Spectr.Data --startup-project src/Spectr
 cd components/bff/src/Spectr.Bff
 $env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run
 
-# 4. Worker — the FULL Procfile form is canonical (short forms drop the queue set)
+# 4. Workers — TWO terminals, same split as prod (problem #3b). Always pass the
+#    full flags; short forms drop the queue set.
 cd components/worker
-python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues coach analysis-paid analysis-free maintenance
+python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues coach
+#    ...and in a second terminal:
+cd components/worker
+python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues analysis-paid analysis-free maintenance
 
 # 5. Frontend (:5174)
 cd components/frontend-spectr-v2
@@ -185,9 +189,12 @@ Do all of these before declaring success — several failure modes look "up":
    `GET /api/health/full` (DB, Redis, storage, worker heartbeat).
    In the BFF boot log, eyeball `S3 configured: {bool}` and the resolved
    `Storage:LocalRoot` (must point at the repo's `data/`, not `components/data/`).
-3. **Worker**: in its window, find the single `Boot config:` line — check
-   redis host:port, the four queues, and `storage_root=` (must be the repo
-   `data/` path — NEVER `/data` on a native run, problem #7).
+3. **Workers**: there are TWO windows (`SPECTR Worker - coach` and
+   `SPECTR Worker - analysis`). In each, find the single `Boot config:` line —
+   check redis host:port, the queues (`coach` alone in one; `analysis-paid`,
+   `analysis-free`, `maintenance` in the other), and `storage_root=` (must be
+   the repo `data/` path — NEVER `/data` on a native run, problem #7). Process
+   check: 2 dramatiq masters + 2 `--multiprocessing-fork` children.
 4. **Worker is CONSUMING, not just alive**: a fresh heartbeat does not prove
    consumption (problem #3). If jobs are queued, confirm the queue is draining:
 
@@ -197,7 +204,8 @@ Do all of these before declaring success — several failure modes look "up":
    ```
 
    Numbers should trend to 0 within seconds. `GET /api/health/worker` reports
-   heartbeat age + queue depth but can be fooled by a half-dead worker.
+   heartbeat age only, and ANY live worker keeps it fresh — it can be fooled by
+   a half-dead worker, and by one pool being down while the other is up.
 5. **End-to-end**: upload a track; a healthy worker takes an ~8-min track
    through all phases in ~75 s (structure detection continues in background).
 6. Frontend shell shows the DevHealthDot (dev builds) — red means a probe failed.
@@ -260,6 +268,29 @@ stuck at "pending 0%" forever; fix-rack GET returns 204 forever; health endpoint
 says healthy. **Fix**: `./scripts/start-spectr.ps1` (its stop phase tree-kills
 masters and sweeps orphans), or the manual tree-kill in section 4. The restarted
 worker recovers the unacked backlog automatically.
+
+### #3b Coach reply hangs for minutes / "glitches out" while an analysis is running
+A worker is ONE process with ONE thread (`--processes 1 --threads 1` — Demucs
+and the pipeline are memory-heavy), and Dramatiq has no cross-queue priority
+(`--queues` is an unordered set; equal-priority messages run in arbitrary
+order). With a single all-queues worker, a `coach_reply` — ~20 s of real work —
+waits behind whatever batch job holds the thread: a ~10-minute
+`analyze_audio_job`, a multi-minute allin1 structure run, then triage, 40–90 s
+specialists and the fix rack. Seen 2026-09-19: replies asked during an upload
+sat `pending` for 4–14 minutes, the chat showed an empty "Coach" bubble, and
+the BFF's 30 s SSE idle fallback made the stream look broken. Diagnose: `coach`
+rows in `coach_messages` stuck `pending` with no matching `purpose='coach'` row
+in `llm_calls`, while `dramatiq:coach.msgs` HLEN > 0 and the worker's fork has a
+long-running child (`docker run … allin1`, or the pipeline). **Fix**: run the
+prod pool split locally — a coach-ONLY worker plus an analysis worker. The
+launcher, the workerdash restart button and the watchdog all do this now
+(`WORKER_POOLS` in `components/workerdash/workerdash/worker_ctl.py`). Never
+"simplify" back to one all-queues worker, and don't raise `--threads` instead
+(two analyses would then run at once). To rescue replies already stuck behind a
+busy all-queues worker without killing its job: start the coach-only worker,
+then `RPUSH dramatiq:coach <message_id>` for each id in
+`HKEYS dramatiq:coach.msgs` — `coach_reply` is idempotent (a second delivery
+no-ops on `status != 'pending'`).
 
 ### #4 Uploads stuck at `pending`, empty `final_json` → worker not running
 If a new job sits at `status: pending`, `current_phase: ""`, the worker is down

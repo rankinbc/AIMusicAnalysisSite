@@ -22,12 +22,22 @@ Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
   Stop-Process -Force
 """
 
+# Dev mirrors the prod pool split (infra/compose.prod.yml, STARTUP.md #3b): a
+# coach-ONLY worker plus a batch worker. One worker is one thread and Dramatiq
+# has no cross-queue priority, so a single all-queues worker parks every coach
+# reply (~20 s of work) behind whatever batch job is running (a 10-minute
+# analysis, an allin1 structure run, 40-90 s specialists).
+WORKER_POOLS: tuple[tuple[str, ...], ...] = (
+    ("coach",),
+    ("analysis-paid", "analysis-free", "maintenance"),
+)
+
 _LAUNCH_PS = (
     "Start-Process powershell -WindowStyle Minimized -ArgumentList "
     "'-NoExit','-Command',"
     "\"Set-Location '{worker_dir}'; python -m dramatiq app.dramatiq_app "
     "--processes 1 --threads 1 "
-    "--queues coach analysis-paid analysis-free maintenance\""
+    "--queues {queues}\""
 )
 
 
@@ -43,9 +53,14 @@ def probe() -> dict:
         lines = _ps(_PROBE_PS).splitlines()
     except Exception:
         return {"master": False, "fork": False}
+    # One master + one fork PER pool. Counting (not any()) matters now that
+    # there are two workers: a whole coach worker must not mask a batch worker
+    # whose fork died (half-dead), or a pool that is missing entirely.
+    masters = sum(1 for line in lines if "dramatiq" in (line or ""))
+    forks = sum(1 for line in lines if "multiprocessing" in (line or ""))
     return {
-        "master": any("dramatiq" in (line or "") for line in lines),
-        "fork": any("multiprocessing" in (line or "") for line in lines),
+        "master": masters >= len(WORKER_POOLS),
+        "fork": masters > 0 and forks == masters and forks >= len(WORKER_POOLS),
     }
 
 
@@ -99,7 +114,8 @@ def restart(worker_dir: str) -> dict:
         return {"ok": False, "error": f"worker dir not found: {worker_dir}"}
     try:
         _ps(_KILL_PS)
-        _ps(_LAUNCH_PS.format(worker_dir=worker_dir))
+        for pool in WORKER_POOLS:
+            _ps(_LAUNCH_PS.format(worker_dir=worker_dir, queues=" ".join(pool)))
         return {"ok": True}
     except Exception as e:
         return {"ok": False, "error": str(e)}
