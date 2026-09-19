@@ -50,12 +50,47 @@ public sealed class AuthEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.NotNull(reg);
         Assert.False(string.IsNullOrEmpty(reg!.AccessToken));
         Assert.Equal(email, reg.User.Email);
-        Assert.False(string.IsNullOrEmpty(reg.User.Handle));
 
         // Login with the same credentials returns a fresh token.
         var login = await client.PostAsJsonAsync("/api/auth/login",
             new { email, password });
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+    }
+
+    // Solo fork (task 10) — the handle placeholder that keeps `users.handle`'s
+    // NOT NULL/UNIQUE constraint satisfied until it's dropped (task 14) must
+    // never leak into the API response body or the JWT claim set. Same
+    // base64url-decode technique as NoSocialSurfaceTests.
+    // Registered_User_Payload_And_Token_Carry_No_Handle.
+    [SkippableFact]
+    public async Task Register_Response_And_Jwt_Carry_No_Handle()
+    {
+        await TestDb.RequireAsync(_factory);
+
+        var client = NewClient();
+        // NOTE: the local part deliberately avoids the substring "handle" —
+        // it would otherwise trip the DoesNotContain assertion below on the
+        // echoed email itself, not on a real leak.
+        var email = $"tdd-auth-slice10+{Guid.NewGuid():N}@spectr.test";
+        var password = "correct-horse-battery";
+
+        var resp = await client.PostAsJsonAsync("/api/auth/register", new { email, password });
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var json = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.DoesNotContain("handle", json.GetRawText(), StringComparison.OrdinalIgnoreCase);
+
+        var token = json.GetProperty("accessToken").GetString()!;
+        var payload = token.Split('.')[1].Replace('-', '+').Replace('_', '/');
+        payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
+        var claims = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(payload));
+        Assert.DoesNotContain("\"handle\"", claims, StringComparison.OrdinalIgnoreCase);
+
+        // The placeholder handle is still generated + must still be unique —
+        // a second registration (fresh email) must succeed, not 500 on a
+        // collision or a NOT NULL violation.
+        var email2 = $"tdd-auth-slice10b+{Guid.NewGuid():N}@spectr.test";
+        var resp2 = await client.PostAsJsonAsync("/api/auth/register", new { email = email2, password });
+        Assert.Equal(HttpStatusCode.OK, resp2.StatusCode);
     }
 
     // Wave-2 (E2.4) — duplicate registration returns the typed AR38 envelope.

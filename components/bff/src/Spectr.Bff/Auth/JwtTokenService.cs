@@ -32,8 +32,6 @@ public sealed class JwtTokenService(IConfiguration config)
             // password reset + account deletion).
             new("tver", user.TokenVersion.ToString()),
         };
-        if (!string.IsNullOrEmpty(user.Handle))
-            claims.Add(new Claim("handle", user.Handle));
 
         var token = new JwtSecurityToken(
             issuer: _issuer,

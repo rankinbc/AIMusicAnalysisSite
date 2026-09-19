@@ -62,7 +62,7 @@ public static class AccountEndpoints
             .Where(u => u.Id == userId)
             .Select(u => new
             {
-                u.Id, u.Email, u.Handle, u.DisplayName, u.Bio, u.PublicLink,
+                u.Id, u.Email, u.DisplayName,
                 u.EmailVerifiedAt, u.NotifyAnalysisComplete, u.CreatedAt,
             })
             .FirstOrDefaultAsync(ct);

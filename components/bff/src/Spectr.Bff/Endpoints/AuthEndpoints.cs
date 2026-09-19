@@ -132,7 +132,6 @@ public static class AuthEndpoints
         PasswordHasher hasher,
         JwtTokenService jwt,
         RefreshTokenService refresh,
-        HandleSeeder seeder,
         DemoSeeder demoSeeder,
         AuthTokenService authTokens,
         IEmailSender email,
@@ -175,14 +174,13 @@ public static class AuthEndpoints
         // Wave-2 (E2.4) — typed AR38 envelope so the frontend can key on the code.
         if (existing) return ErrorEnvelope.Build(409, "email_taken", "Email already registered.");
 
-        var handle = await seeder.SeedAsync(normalizedEmail, ct);
         var user = new User
         {
             Id = Guid.NewGuid(),
             Email = normalizedEmail,
             HashedPassword = hasher.Hash(req.Password),
-            Handle = handle,
-            DisplayName = handle,
+            // solo: column dropped by RemoveSocial; placeholder keeps NOT NULL/UNIQUE happy until then
+            Handle = "u" + Guid.NewGuid().ToString("N")[..20],
         };
         // Story 12.1 — dev auto-verify: local dev delivers no email, so the
         // story-4.5 second-analysis verify gate would otherwise be
@@ -286,7 +284,7 @@ public static class AuthEndpoints
 
         var access = jwt.Issue(user);
         return Results.Ok(new AuthResponse(access,
-            new AuthedUser(user.Id, user.Email, user.Handle, user.DisplayName,
+            new AuthedUser(user.Id, user.Email, user.DisplayName,
                 await ResolveTierAsync(db, user.Id, ct))));
     }
 
@@ -331,7 +329,7 @@ public static class AuthEndpoints
 
         var access = jwt.Issue(user);
         return Results.Ok(new AuthResponse(access,
-            new AuthedUser(user.Id, user.Email, user.Handle, user.DisplayName,
+            new AuthedUser(user.Id, user.Email, user.DisplayName,
                 await ResolveTierAsync(db, user.Id, ct))));
     }
 
@@ -383,7 +381,7 @@ public static class AuthEndpoints
 
         var access = jwt.Issue(user);
         return Results.Ok(new AuthResponse(access,
-            new AuthedUser(user.Id, user.Email, user.Handle, user.DisplayName,
+            new AuthedUser(user.Id, user.Email, user.DisplayName,
                 await ResolveTierAsync(db, user.Id, ct))));
     }
 
@@ -428,7 +426,7 @@ public static class AuthEndpoints
 
         var access = jwt.Issue(user);
         return Results.Ok(new AuthResponse(access,
-            new AuthedUser(user.Id, user.Email, user.Handle, user.DisplayName,
+            new AuthedUser(user.Id, user.Email, user.DisplayName,
                 await ResolveTierAsync(db, user.Id, ct))));
     }
 
@@ -468,7 +466,6 @@ public static class AuthEndpoints
             {
                 u.Id,
                 u.Email,
-                u.Handle,
                 u.DisplayName,
                 SubStatus = sub == null ? null : sub.Status,
             }
@@ -477,7 +474,7 @@ public static class AuthEndpoints
 
         var tier = ResolveTier(row.SubStatus);
         return Results.Ok(new AuthedUser(
-            row.Id, row.Email, row.Handle, row.DisplayName, tier));
+            row.Id, row.Email, row.DisplayName, tier));
     }
 
     // Story 2.1 — Stripe subscription status → product tier mapping.
@@ -724,11 +721,8 @@ public static class AuthEndpoints
         return ResolveTier(status);
     }
 
-    // PATCH /api/auth/me — partial update of display_name + handle.
-    // Null fields are left unchanged. Handle is normalized (lowercase + same
-    // [a-z0-9_] sanitization as HandleSeeder) and checked for uniqueness
-    // case-insensitively; the column itself is citext so the equality check
-    // does case folding too.
+    // PATCH /api/auth/me — partial update of display_name.
+    // Null fields are left unchanged.
     private static async Task<IResult> PatchMe(
         PatchMeRequest req,
         ClaimsPrincipal currentUser,
@@ -758,47 +752,11 @@ public static class AuthEndpoints
             }
         }
 
-        if (req.Handle is not null)
-        {
-            var normalized = NormalizeHandle(req.Handle);
-            if (normalized.Length < 3 || normalized.Length > 32)
-            {
-                errors["handle"] = ["Handle must be 3–32 characters of [a-z0-9_]."];
-            }
-            else if (!string.Equals(normalized, user.Handle, StringComparison.OrdinalIgnoreCase))
-            {
-                var taken = await db.Users
-                    .AnyAsync(u => u.Id != userId && u.Handle == normalized, ct);
-                if (taken)
-                {
-                    errors["handle"] = ["Handle is already taken."];
-                }
-                else
-                {
-                    user.Handle = normalized;
-                }
-            }
-        }
-
         if (errors.Count > 0) return Results.ValidationProblem(errors);
 
         await db.SaveChangesAsync(ct);
         return Results.Ok(new AuthedUser(
-            user.Id, user.Email, user.Handle, user.DisplayName,
+            user.Id, user.Email, user.DisplayName,
             await ResolveTierAsync(db, user.Id, ct)));
-    }
-
-    // Mirror of HandleSeeder.Sanitize — keeps PATCH consistent with seed.
-    private static string NormalizeHandle(string raw)
-    {
-        var sb = new System.Text.StringBuilder(raw.Length);
-        foreach (var c in raw.Trim().ToLowerInvariant())
-        {
-            if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_')
-                sb.Append(c);
-            else if (c == '.' || c == '-' || c == '+')
-                sb.Append('_');
-        }
-        return sb.ToString();
     }
 }

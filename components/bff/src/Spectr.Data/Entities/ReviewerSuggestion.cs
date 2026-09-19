@@ -20,7 +20,7 @@ public sealed class ReviewerSuggestion
     [Column("song_version_id")]
     public Guid SongVersionId { get; set; }
 
-    // Proposer (anon-capable ActorRef). anon attribution = signed-cookie anonId
+    // Proposer (anon-capable actor reference). anon attribution = signed-cookie anonId
     // (LISTEN_V3_CONVENTIONS §1), never an ip_hash.
     [Column("from_user_id")]
     public Guid? FromUserId { get; set; }

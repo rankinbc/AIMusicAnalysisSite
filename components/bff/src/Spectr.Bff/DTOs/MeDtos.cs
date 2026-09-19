@@ -28,23 +28,11 @@ public sealed record ActivityItemDto(
 public sealed record MeProfileDto(
     Guid Id,
     string Email,
-    string? Handle,
     string? DisplayName,
-    string? Bio,
-    short? AvatarHue,
-    short? BannerHue,
-    string? Accent,
-    string? PublicLink,
     string Tier,
     bool NotifyAnalysisComplete,   // story 4.4 — completion-email opt-out
     DateTimeOffset? EmailVerifiedAt);  // story 12.1 — null = unverified (drives the verify banner)
 
 public sealed record PatchMeProfileRequest(
     string? DisplayName,
-    string? Handle,
-    string? Bio,
-    short? AvatarHue,
-    short? BannerHue,
-    string? Accent,
-    string? PublicLink,
     bool? NotifyAnalysisComplete = null);  // story 4.4 — null = unchanged

@@ -11,13 +11,12 @@ public sealed record AuthResponse(string AccessToken, AuthedUser User);
 public sealed record AuthedUser(
     Guid Id,
     string Email,
-    string? Handle,
     string? DisplayName,
     string Tier);
 
 // PATCH /api/auth/me. Null = leave unchanged. Empty string for DisplayName
-// is treated as "clear it"; Handle has no clearing path (must always be set).
-public sealed record PatchMeRequest(string? DisplayName, string? Handle);
+// is treated as "clear it".
+public sealed record PatchMeRequest(string? DisplayName);
 
 // Story 4.3 — verification + reset flows (tokens are the emailed raw values).
 public sealed record VerifyEmailRequest(string? Token);

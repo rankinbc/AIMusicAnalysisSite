@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace Spectr.Data.Entities;
 
 // Listen V3 (PRP-4, D3.5/D4.6) — the provenance backbone: the host delegates
-// rack OR visuals control to a participant (grantee, anon-capable ActorRef).
+// rack OR visuals control to a participant (grantee, anon-capable actor reference).
 // This is the FK target for rack_presets.via_grant_id + suggestions.via_grant_id,
 // so it is the EXCEPTION to JSON-first durability — written to Postgres
 // immediately (low frequency; must be durable NOW because a preset saved live
@@ -30,7 +30,7 @@ public sealed class ControlGrant
     [Column("scope"), MaxLength(8)]
     public required string Scope { get; set; }
 
-    // Grantee ActorRef (anon-capable): a user id OR a (display_name, anon_id) pair.
+    // Grantee identity (anon-capable): a user id OR a (display_name, anon_id) pair.
     [Column("grantee_user_id")]
     public Guid? GranteeUserId { get; set; }
 

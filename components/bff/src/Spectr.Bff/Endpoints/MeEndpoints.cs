@@ -40,8 +40,7 @@ public static class MeEndpoints
             where x.Id == userId
             select new
             {
-                x.Id, x.Email, x.Handle, x.DisplayName, x.Bio,
-                x.AvatarHue, x.BannerHue, x.Accent, x.PublicLink,
+                x.Id, x.Email, x.DisplayName,
                 x.NotifyAnalysisComplete, x.EmailVerifiedAt,
                 SubStatus = sub == null ? null : sub.Status,
             }
@@ -49,14 +48,12 @@ public static class MeEndpoints
         if (row is null) return Results.Unauthorized();
         var tier = AuthEndpoints.ResolveTier(row.SubStatus);
         return Results.Ok(new MeProfileDto(
-            row.Id, row.Email, row.Handle, row.DisplayName, row.Bio,
-            row.AvatarHue, row.BannerHue, row.Accent, row.PublicLink, tier,
+            row.Id, row.Email, row.DisplayName, tier,
             row.NotifyAnalysisComplete, row.EmailVerifiedAt));
     }
 
-    // PATCH /api/me/profile — full profile patch (display_name+handle also
-    // accepted on /auth/me; this endpoint additionally handles bio, hues,
-    // accent, public_link).
+    // PATCH /api/me/profile — full profile patch (display_name also accepted
+    // on /auth/me; this endpoint additionally handles the notification toggle).
     private static async Task<IResult> PatchProfile(
         PatchMeProfileRequest req,
         ClaimsPrincipal currentUser,
@@ -77,44 +74,6 @@ public static class MeEndpoints
             else user.DisplayName = t;
         }
 
-        if (req.Handle is not null)
-        {
-            var normalized = NormalizeHandle(req.Handle);
-            if (normalized.Length < 3 || normalized.Length > 32)
-                errors["handle"] = ["3–32 chars of [a-z0-9_]."];
-            else if (!string.Equals(normalized, user.Handle, StringComparison.OrdinalIgnoreCase))
-            {
-                var taken = await db.Users
-                    .AnyAsync(u => u.Id != userId && u.Handle == normalized, ct);
-                if (taken) errors["handle"] = ["Handle taken."];
-                else user.Handle = normalized;
-            }
-        }
-
-        if (req.Bio is not null)
-        {
-            var t = req.Bio.Trim();
-            if (t.Length > 500) errors["bio"] = ["Max 500 chars."];
-            else user.Bio = t.Length == 0 ? null : t;
-        }
-
-        if (req.AvatarHue is not null) user.AvatarHue = ClampHue(req.AvatarHue.Value);
-        if (req.BannerHue is not null) user.BannerHue = ClampHue(req.BannerHue.Value);
-
-        if (req.Accent is not null)
-        {
-            var t = req.Accent.Trim().ToLowerInvariant();
-            if (t.Length > 16) errors["accent"] = ["Max 16 chars."];
-            else user.Accent = t.Length == 0 ? null : t;
-        }
-
-        if (req.PublicLink is not null)
-        {
-            var t = req.PublicLink.Trim();
-            if (t.Length > 200) errors["publicLink"] = ["Max 200 chars."];
-            else user.PublicLink = t.Length == 0 ? null : t;
-        }
-
         // Story 4.4 — completion-email opt-out toggle (null = unchanged).
         if (req.NotifyAnalysisComplete is { } notify)
             user.NotifyAnalysisComplete = notify;
@@ -128,8 +87,7 @@ public static class MeEndpoints
                 .Select(s => (string?)s.Status)
                 .FirstOrDefaultAsync(ct));
         return Results.Ok(new MeProfileDto(
-            user.Id, user.Email, user.Handle, user.DisplayName, user.Bio,
-            user.AvatarHue, user.BannerHue, user.Accent, user.PublicLink, tierAfter,
+            user.Id, user.Email, user.DisplayName, tierAfter,
             user.NotifyAnalysisComplete, user.EmailVerifiedAt));
     }
 
@@ -216,25 +174,6 @@ public static class MeEndpoints
         return Results.Ok(merged);
     }
 
-    // Mirror of HandleSeeder.Sanitize — kept local to avoid coupling profile
-    // patches to that service. Same rules: lower-cased, `[a-z0-9_]` only,
-    // collapsed underscores.
-    private static string NormalizeHandle(string raw)
-    {
-        var s = raw.Trim().ToLowerInvariant();
-        var buf = new System.Text.StringBuilder(s.Length);
-        foreach (var ch in s)
-        {
-            if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_')
-                buf.Append(ch);
-            else if (ch == ' ' || ch == '-' || ch == '.')
-                buf.Append('_');
-        }
-        // collapse repeated underscores
-        var collapsed = System.Text.RegularExpressions.Regex.Replace(buf.ToString(), "_+", "_");
-        return collapsed.Trim('_');
-    }
-
     // GET /api/me/entitlements — caller's current entitlement snapshot.
     // Story 2.4 / AR12. No entitlement check on results read paths (AR15).
     private static async Task<IResult> GetEntitlements(
@@ -274,7 +213,4 @@ public static class MeEndpoints
                 "Usage comparison temporarily unavailable.");
         }
     }
-
-    private static short ClampHue(short hue) =>
-        (short)Math.Max(0, Math.Min(360, (int)hue));
 }
