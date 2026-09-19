@@ -33,6 +33,13 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
+    // Every wait in this class polls a CONDITION every 50 ms and exits the
+    // moment it holds (~0.2 s locally), so the ceiling only matters on a
+    // contended CI runner. At 2 s (40 polls) Client_Disconnect_Sets_Cancel_Key
+    // failed the first `solo` build with "cancel key was never SET" while the
+    // disconnect path was fine. 15 s still bounds a genuinely broken path.
+    private const int MaxPolls = 300;
+
     private bool RedisReachable()
     {
         try
@@ -356,7 +363,7 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
             // attaches rather than burning a fixed-time Task.Delay.
             var sub = mux.GetSubscriber();
             var attached = false;
-            for (var i = 0; i < 40 && !attached; i++)
+            for (var i = 0; i < MaxPolls && !attached; i++)
             {
                 var receivers = await sub.PublishAsync(channel,
                     "{\"type\":\"token\",\"text\":\"hi \"}");
@@ -416,7 +423,7 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
     private static async Task<bool> PublishUntilSubscriberAttached(
         ISubscriber sub, RedisChannel channel, string primerPayload)
     {
-        for (var i = 0; i < 40; i++)
+        for (var i = 0; i < MaxPolls; i++)
         {
             var receivers = await sub.PublishAsync(channel, primerPayload);
             if (receivers >= 1) return true;
@@ -616,7 +623,7 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
             // the relay loop where the finally will fire).
             var sub = mux.GetSubscriber();
             var attached = false;
-            for (var i = 0; i < 40 && !attached; i++)
+            for (var i = 0; i < MaxPolls && !attached; i++)
             {
                 var receivers = await sub.PublishAsync(
                     new RedisChannel(
@@ -639,7 +646,7 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
             var db = mux.GetDatabase();
             var found = false;
             long ttlSec = 0;
-            for (var i = 0; i < 40 && !found; i++)
+            for (var i = 0; i < MaxPolls && !found; i++)
             {
                 if (await db.KeyExistsAsync(cancelKey))
                 {
