@@ -15,7 +15,7 @@ vi.mock('../../../api/fetcher', async (importOriginal) => {
 });
 
 import { fetcher } from '../../../api/fetcher';
-import { chainFromSnapshot } from '../../listen-rack/suggest-draft';
+import type { Chain } from '../../listen-rack/chain';
 import { useCreateSuggestion } from '../useSuggestions';
 
 const fetcherMock = vi.mocked(fetcher);
@@ -28,16 +28,20 @@ function wrapper({ children }: { children: ReactNode }) {
 describe('useCreateSuggestion (story 11.12 submit payload)', () => {
   it('POSTs the draft chain to /versions/{id}/suggestions in the wire shape', async () => {
     fetcherMock.mockResolvedValueOnce({ id: 'sg-new' });
-    const snap = {
+    // Wire shape a page-side draft snapshot would produce via chainFromSnapshot
+    // (order/mod/masterBypass -> order/modules/masterBypass) — built inline here
+    // since suggest-draft.ts (the Listen rack's fork-to-suggest module) was
+    // retired with the private-workbench cutover.
+    const chain: Chain = {
       order: ['eq', 'trim'],
-      mod: {
+      modules: {
         eq: { enabled: true, bands: [] },
         trim: { enabled: true, gainDb: -1.5 },
       },
       masterBypass: false,
     };
     const { result } = renderHook(() => useCreateSuggestion('v1'), { wrapper });
-    act(() => { result.current.mutate({ chain: chainFromSnapshot(snap) }); });
+    act(() => { result.current.mutate({ chain }); });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(fetcherMock).toHaveBeenCalledWith({

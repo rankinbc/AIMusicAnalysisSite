@@ -205,13 +205,11 @@ function PitchCard({ rs, sel, bpm, onSelect }: { rs: RackState; sel: boolean; bp
 }
 
 // ── Rack tab ───────────────────────────────────────────────────────────
-export function RackTabV2({ rs, playing, meters, bpm, readOnly, presets, onRecallPreset, onSavePreset, onExport, onImport }: {
+export function RackTabV2({ rs, playing, meters, bpm, presets, onRecallPreset, onSavePreset, onExport, onImport }: {
   rs: RackState; playing: boolean;
   meters: LiveMeters;
   /** Track tempo — drives the per-card beat LEDs. */
   bpm?: number | undefined;
-  /** Capability-gated (guest / no rack-control grant): grid renders inert. */
-  readOnly: boolean;
   presets: RackPreset[];
   onRecallPreset: (id: string) => void;
   onSavePreset: () => void;
@@ -274,17 +272,7 @@ export function RackTabV2({ rs, playing, meters, bpm, readOnly, presets, onRecal
         onExport={onExport}
         onImport={onImport}
       />
-      {readOnly ? (
-        <div style={{ position: 'relative' }}>
-          <div style={{ pointerEvents: 'none', opacity: 0.9 }}>{body}</div>
-          <div
-            className="mono"
-            style={{ position: 'absolute', top: 10, right: 12, zIndex: 2, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--violet)', padding: '4px 9px', borderRadius: 7, background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.4)' }}
-          >
-            READ-ONLY
-          </div>
-        </div>
-      ) : body}
+      {body}
     </>
   );
 }

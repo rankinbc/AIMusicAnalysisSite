@@ -1,16 +1,16 @@
-# Listen — Shared Audio Engine + Social Hooks
+# Listen — Shared Audio Engine
 
 > **Living document.** `features/listen/` is the **shared real-time Web Audio
 > engine** — the `useAudioGraph` handle, the modular `EffectUnit` graph (`audio/**`),
-> and the stem deck (`StemDeck` / `useStemEngine` / `stemGains`) — **plus the
-> social/sharing hook layer** (rooms, access, invites, comments, bookmarks; see §2)
-> consumed by the listen-rack page and the public routes. The Listen PAGE itself
-> lives in **`features/listen-rack/`** (route `/listen-rack/$versionId`). Keep this
-> updated when you change the engine, the handle, the stem deck, or the hooks.
+> and the stem deck (`StemDeck` / `useStemEngine` / `stemGains`) — consumed by
+> the listen-rack page. The Listen PAGE itself lives in **`features/listen-rack/`**
+> (route `/listen-rack/$versionId`), a private workbench: no rooms, no access
+> modes, no guest path. Keep this updated when you change the engine, the
+> handle, or the stem deck.
 >
-> Last updated: 2026-07-23. Status: audio **engine done + frozen**;
-> `features/listen-rack/` is the only Listen page; the room hooks are being wired
-> into its live UI by `PRPs/listen-rack-room-completion.md`.
+> Last updated: 2026-09 (solo fork — rooms/access-modes/guest-path stripped).
+> Status: audio **engine done + frozen**; `features/listen-rack/` is the only
+> Listen page.
 
 ---
 
@@ -30,23 +30,17 @@ The canonical Listen page is **`features/listen-rack/`** (route
 creates the graph (`const graph = useAudioGraph(audioRef)`), and composes the header,
 visualizer stage (driven by `graph.readFrame()` in a rAF loop), transport, the rack
 (`InlineRack` bound to the engine via `features/listen-rack/rackBindings.ts`), the
-right rail, the stem deck (`StemDeck`), and the pitch lane. See
+notes sidebar, the stem deck (`StemDeck`), and the pitch lane. See
 `features/listen-rack/PORTING_NOTES.md` for that page's current real-vs-mock map.
 (The legacy `/listen/$versionId` route is gone.)
 
-Beyond the engine, this folder also hosts the **social / sharing hook layer**,
-consumed by the listen-rack page:
+This folder also still hosts a few version-scoped hooks kept alive by other
+pages: `useComments` / `comment-tree` / `useBookmarkSignal` / `useRoomSession`
+(the `useSessionHistory` half of it) by the results page's Notes tab, and
+`useSuggestions` by the results page's listener-suggestions list. None of them
+are wired into the listen-rack page anymore.
 
-- **Room realtime**: `useRoomStream` (fetch-SSE reader for `GET /sessions/{id}/stream`),
-  `useRoomActions` (the POST senders: react/chat/status/transport/visuals/rack/grant/revoke),
-  `useRoomSession` (session history / start / end / recap) — composed by
-  `features/listen-rack/useRoomOrchestration`.
-- **Access / share / invites**: `useVersionAccess`, `useVersionShare`, `useInvites`,
-  `VersionShareDialog`.
-- **Feedback**: `useComments`, `useSuggestions`, `SuggestionCard`, `comment-tree`.
-- **Bookmarks**: `useBookmarks`, `useBookmarkSignal`, `BookmarksRail`.
-- **Playback resilience**: `media-retry` (shared `<audio>` retry helper for the
-  authed and public players).
+- **Playback resilience**: `media-retry` (shared `<audio>` retry helper).
 - **Chain currency**: `chainApply.ts` (`applyChainToGraph` / `snapshotChainFromGraph`).
 
 ## 3. Audio engine architecture (`features/listen/`)
@@ -219,6 +213,14 @@ the only real exercise of the runtime; run it before trusting the engine). Gates
 
 ## Change log
 
+- **2026-09 (solo fork)** — The listen-rack page is now a private workbench:
+  rooms, access modes (Work/View/Room), and the guest path were removed. Deleted
+  from this folder: `useRoomStream`, `useRoomActions`, `VersionShareDialog`,
+  `useVersionShare`, `useInvites`, `useVersionAccess`, `SuggestionCard`,
+  `suggestion-helpers`, `useBookmarks`, `bookmarks-helpers`, `BookmarksRail`.
+  `useComments` / `comment-tree` / `useBookmarkSignal` / `useRoomSession` /
+  `useSuggestions` remain — they're still imported by the results page (Notes
+  tab, listener suggestions), not by `features/listen-rack/` anymore.
 - **2026-07-23** — Doc refreshed: the folder is the shared engine **+ social hook
   layer** (room stream/actions/session, access/share/invites, comments/suggestions,
   bookmarks, media-retry) consumed by `features/listen-rack/` and the public/invite

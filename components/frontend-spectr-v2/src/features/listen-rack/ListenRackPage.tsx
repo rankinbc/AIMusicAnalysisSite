@@ -1,12 +1,13 @@
 /* SPECTR · Listen — Rack v2 (results-density redesign, ported page container)
  *
  * Analysis-Results design language at high density: slim header row, calibrated
- * spectrum stage + transport, Rack / Visuals / Coach tabs, session sidebar
- * (Notes · Chat · Room), page-wide light-show atmosphere. Ported from the
- * design handoff (PRPs/design_handoffs/design_handoff_listen_rack_v2) onto the
- * REAL seams: audio graph, rack state, server presets/draft, 12.4 fix
- * carry-over, live room SSE. The Stem Deck and fork-to-suggest surfaces were
- * retired with this redesign (2026-07-24) — their modules remain in the repo.
+ * spectrum stage + transport, Rack / Visuals / Coach tabs, notes sidebar,
+ * page-wide light-show atmosphere. Ported from the design handoff
+ * (PRPs/design_handoffs/design_handoff_listen_rack_v2) onto the REAL seams:
+ * audio graph, rack state, server presets/draft, 12.4 fix carry-over. The Stem
+ * Deck surface was retired with this redesign (2026-07-24) — its modules
+ * remain in the repo. This is a private workbench: no rooms, no access modes,
+ * no guest path.
  *
  * The playback clock and meters are real on the versioned route; the demo
  * route (no versionId) keeps the mock rAF clock + simulated meters.
@@ -18,46 +19,34 @@ import { toast } from 'sonner';
 import { fetcher, getAccessToken } from '../../api/fetcher';
 import { createMediaRetry } from '../listen/media-retry';
 import { useAudioGraph } from '../listen/useAudioGraph';
-import { VersionShareDialog } from '../listen/VersionShareDialog';
 import { CoverArt } from '../../ui/CoverArt';
 import { Icon } from '../results/Icon';
 import '../results/redesign-v3.css';
 import './listen-rack-v2.css';
 import './listen-rack-v2-extras.css';
-import { MODE_SURFACE_MATRIX, type AccessDto, type ActorRef, type ModeId } from './access';
-import { resolveCapabilities } from './capabilities';
 import { CoachTabV2 } from './CoachTabV2';
 import {
-  COACH_SUGGESTIONS, DEFAULT_VIZ, DIRECTORS, MANIFEST_BY_ID, REACTION_EMOJI, ROOM_LISTENERS, TRACK,
-  type Director, type ModuleManifest, type ModuleState, type PresencePopItem,
-  type ReactionFeedItem, type Track, type VizState,
+  COACH_SUGGESTIONS, DEFAULT_VIZ, DIRECTORS, MANIFEST_BY_ID, TRACK,
+  type Director, type ModuleManifest, type ModuleState, type Track, type VizState,
 } from './data';
 import { overlayChain } from './fixToRackPatch';
-import { type Identity, type RoomControl } from './identity';
 import { LightShow } from './LightShow';
 import { clearFixOverlay, readListenFixes } from './listenFixes';
 import { lrTime } from './lrUtil';
+import { NotesSidebar } from './NotesSidebar';
 import { pushFullRack } from './rackBindings';
 import { RackTabV2 } from './RackTabV2';
 import { useRackState, type RackPreset } from './rackState';
 import type { ReportRef, StatsSource } from './types';
-import { actorKey } from './roomStateReducer';
-import { roomHeaderState } from './roomUiState';
-import { SessionSidebarV2 } from './SessionSidebarV2';
 import { StageCardV2 } from './StageCardV2';
 import { useLiveMeters, type LiveMeters } from './useLiveMeters';
-import { planTransportEmit, planTransportFollow } from './transportSync';
 import type { Chain } from './chain';
-import type { RoomLiveSeam } from './useRoomOrchestration';
 import {
   asChain, buildExportEnvelope, parseImportEnvelope, resolveDraftRestore, useRackDraft,
   useRackDraftAutosave, useRackPreset, useRackPresets, useSaveRackPreset,
 } from './useRackPresets';
 import { isInsertEffect } from './rackBindings';
 import { VisualsTabV2 } from './VisualsTabV2';
-
-// Locked-transport stand-in (guests following the host).
-const noopHandler = () => undefined;
 
 // Design-handoff tweak defaults, frozen (the Tweaks panel was scaffold).
 const STAGE_HEIGHT = 210;
@@ -66,14 +55,13 @@ const STAGE_HEIGHT = 210;
 const SHOW_STAGE_METERS = false;
 const SHOW_NOTE_PINS = true;
 
-// Exported for the 12.4 chip render test (all-modes assertion). Slim v2 header:
-// 38px cover · title · one mono stat line · Invite + View report.
-export function TrackHeader({ track, mode, modes, onModeChange, fixesApplied, onResetFixes, reportRef, onShare, meters, playing = false, activeModules = null, bypassed = false }: {
-  track: Track; mode: ModeId; modes: ModeId[]; identity: Identity; onModeChange?: (m: ModeId) => void;
-  /** Story 12.4: carried-fix chip — renders in EVERY mode. null = no carry. */
+// Exported for the 12.4 chip render test. Slim v2 header:
+// 38px cover · title · one mono stat line · View report.
+export function TrackHeader({ track, fixesApplied, onResetFixes, reportRef, meters, playing = false, activeModules = null, bypassed = false }: {
+  track: Track;
+  /** Story 12.4: carried-fix chip. null = no carry. */
   fixesApplied?: number | null; onResetFixes?: () => void;
   reportRef?: ReportRef | null;
-  onShare?: () => void;
   /** Live output meters for the stat line (LUFS / dBTP). */
   meters?: LiveMeters;
   playing?: boolean;
@@ -81,8 +69,6 @@ export function TrackHeader({ track, mode, modes, onModeChange, fixesApplied, on
   bypassed?: boolean;
 }) {
   const t = track;
-  const showSwitcher = onModeChange && modes.length > 1;
-  const surface = MODE_SURFACE_MATRIX[mode];
   return (
     <div className="lr-head">
       <span className="cov"><CoverArt hue={168} size="sm" style={{ width: 38, height: 38, borderRadius: 9 }} /></span>
@@ -125,26 +111,6 @@ export function TrackHeader({ track, mode, modes, onModeChange, fixesApplied, on
         </span>
       </span>
       <span className="sp" />
-      {showSwitcher && (
-        <span style={{ display: 'inline-flex', gap: 4 }}>
-          {modes.map((id) => (
-            <button
-              type="button"
-              key={id}
-              className={'btn sm' + (id === mode ? ' primary' : ' ghost')}
-              style={id === mode && surface.accent ? { background: surface.accent, borderColor: 'transparent' } : undefined}
-              onClick={() => onModeChange(id)}
-            >
-              {MODE_SURFACE_MATRIX[id].label}
-            </button>
-          ))}
-        </span>
-      )}
-      {onShare && (
-        <button type="button" className="btn sm ghost" title="Share this session" onClick={onShare}>
-          <Icon name="users" size={13} />Invite
-        </button>
-      )}
       {reportRef && (
         <Link
           to="/songs/$songId/results/$jobId"
@@ -158,39 +124,11 @@ export function TrackHeader({ track, mode, modes, onModeChange, fixesApplied, on
   );
 }
 
-function Pop({ p }: { p: PresencePopItem }) {
-  return (
-    <div style={{ position: 'absolute', left: `${p.x}%`, top: `${p.y}%`, animation: 'presencePop 2.7s cubic-bezier(.2,.8,.2,1) forwards' }}>
-      <div style={{ position: 'relative', display: 'grid', placeItems: 'center' }}>
-        <span style={{ position: 'absolute', width: 40, height: 40, borderRadius: '50%', border: `2px solid ${p.ring}`, animation: 'ringPulse 1.1s ease-out forwards' }} />
-        <span style={{ width: 34, height: 34, borderRadius: '50%', display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 700, color: '#06151a', background: `oklch(0.74 0.15 ${p.hue})` }}>
-          {p.anon ? '?' : (p.handle[0] ?? '?').toUpperCase()}
-        </span>
-        <span style={{ position: 'absolute', bottom: -8, right: -10, fontSize: 18, filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.6))' }}>{p.emoji}</span>
-      </div>
-      <div className="mono" style={{ textAlign: 'center', marginTop: 5, fontSize: 9, color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.7)', whiteSpace: 'nowrap' }}>
-        {p.anon ? 'anon' : '@' + p.handle}
-      </div>
-    </div>
-  );
-}
-
 export interface ListenRackPageProps {
-  mode: ModeId;
-  modes: ModeId[];
-  identity: Identity;
-  access: AccessDto;
-  roomControl: RoomControl;
-  onModeChange?: (m: ModeId) => void;
-  onGrant?: (scope: 'rack' | 'visuals', actor: ActorRef | null) => void;
   /** When set, the page plays the real uploaded audio for this version;
    *  omitted = mock rAF transport clock (demo route). */
   versionId?: string;
   track?: Track;
-  /** Story 11.5 — live SSE room seam. */
-  roomLive?: RoomLiveSeam | null;
-  onStartRoom?: (() => void) | undefined;
-  isStartingRoom?: boolean;
   /** Story 12.4 — the fix-rack carry-over preset id (?fixPreset=). */
   fixPreset?: string;
   reportRef?: ReportRef | null;
@@ -204,7 +142,7 @@ const LR_TABS = [
   ['coach', 'Coach', 'robot'],
 ] as const;
 
-export function ListenRackPage({ mode, modes, identity, access, roomControl, onModeChange, onGrant, versionId, track: trackProp, roomLive, onStartRoom, isStartingRoom = false, fixPreset, reportRef = null }: ListenRackPageProps) {
+export function ListenRackPage({ versionId, track: trackProp, fixPreset, reportRef = null }: ListenRackPageProps) {
   const track = trackProp ?? TRACK;
   // ── Real-audio seam ──
   const realAudio = versionId != null;
@@ -233,10 +171,6 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
   const [stages, setStages] = useState<string[]>(['eq']);
   const toggleStage = useCallback((id: string) => setStages((s) => (s.includes(id) ? (s.length > 1 ? s.filter((x) => x !== id) : s) : [...s, id])), []);
   const [activeNote, setActiveNote] = useState<string | null>(null);
-  const [pops, setPops] = useState<PresencePopItem[]>([]);
-  const [feed, setFeed] = useState<ReactionFeedItem[]>([]);
-  const [myStatus, setMyStatus] = useState('🎧');
-  const [shareOpen, setShareOpen] = useState(false);
 
   const rs = useRackState(realAudio ? graph : null);
   const rsRef = useRef(rs);
@@ -260,9 +194,7 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
   }), [rackPresetDtos]);
 
   // ── Story 12.4: fix-rack carry-over (?fixPreset=) ──────────────────────────
-  const carryAllowedNow = Boolean(
-    fixPreset && realAudio && !resolveCapabilities(mode, identity, roomControl, access).rackReadOnly,
-  );
+  const carryAllowedNow = Boolean(fixPreset && realAudio);
   const carryArmedRef = useRef<boolean | null>(null);
   if (carryArmedRef.current === null) carryArmedRef.current = carryAllowedNow;
   const carryArmed = Boolean(fixPreset) && carryArmedRef.current === true;
@@ -364,9 +296,9 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     if (realAudio) {
       saveRackPresetMut.mutate({ name: `Preset ${serverRackPresets.length + 1}`, chain: currentChain });
     } else {
-      rs.savePreset(roomControl.rackHolder?.handle || 'you');
+      rs.savePreset('you');
     }
-  }, [realAudio, saveRackPresetMut, serverRackPresets.length, currentChain, rs, roomControl.rackHolder]);
+  }, [realAudio, saveRackPresetMut, serverRackPresets.length, currentChain, rs]);
   const onRecallRackPreset = useCallback((id: string) => {
     if (realAudio) {
       const dto = rackPresetDtos?.find((x) => x.id === id);
@@ -430,37 +362,6 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
   }, [graph]);
 
   const posRef = useRef(position); posRef.current = position;
-  const modeRef = useRef(mode); modeRef.current = mode;
-  const playingRef = useRef(playing); playingRef.current = playing;
-  const roomLiveRef = useRef(roomLive); roomLiveRef.current = roomLive;
-  const isHostRef = useRef(identity.isHost); isHostRef.current = identity.isHost;
-  const meActorKey = useMemo(() => actorKey(identity.actor), [identity.actor]);
-  const [needsGesture, setNeedsGesture] = useState(false);
-
-  // ── E6.11 host transport emit ──
-  const seekEmitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingSeekRef = useRef<number | null>(null);
-  const emitTransport = useCallback((kind: 'play' | 'pause' | 'seek', pos: number) => {
-    const rl = roomLiveRef.current;
-    if (!rl || !isHostRef.current) return;
-    const plan = planTransportEmit(kind);
-    if (plan.immediate) {
-      void rl.sendTransport(kind === 'play', pos);
-      return;
-    }
-    pendingSeekRef.current = pos;
-    if (seekEmitTimerRef.current !== null) return;
-    seekEmitTimerRef.current = setTimeout(() => {
-      seekEmitTimerRef.current = null;
-      const latest = pendingSeekRef.current;
-      pendingSeekRef.current = null;
-      const live = roomLiveRef.current;
-      if (live && latest !== null) void live.sendTransport(playingRef.current, latest);
-    }, plan.delayMs);
-  }, []);
-  useEffect(() => () => {
-    if (seekEmitTimerRef.current !== null) clearTimeout(seekEmitTimerRef.current);
-  }, []);
 
   const chooseDirector = useCallback((id: string) => {
     setDirector(id);
@@ -537,45 +438,6 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     graph.setPitchShiftEnabled(pitchEnabled);
   }, [pitchSemitones, pitchCents, pitchTempo, pitchEnabled, realAudio, graph]);
 
-  // Room mode: kick the auto program on so the page reads as a show.
-  useEffect(() => {
-    if (mode === 'room' && director === 'off') chooseDirector('club');
-  }, [mode, director, chooseDirector]);
-
-  // Drop moment (fireworks): in room mode the listeners cheer on the stage.
-  const handleDrop = useCallback(() => {
-    if (modeRef.current !== 'room') return;
-    ROOM_LISTENERS.filter(() => Math.random() < 0.75).forEach((u, i) => setTimeout(() => spawnPresenceRef.current(u, '🔥'), i * 130));
-  }, []);
-  const spawnPresence = useCallback((listener: { handle: string; hue: number; anon?: boolean | undefined }, emoji: string) => {
-    const id = Math.random().toString(36).slice(2);
-    const x = 8 + Math.random() * 80;
-    const y = 20 + Math.random() * 44;
-    setPops((p) => [...p, { id, handle: listener.handle, hue: listener.hue, anon: listener.anon, emoji, x, y, ring: `oklch(0.72 0.16 ${listener.hue || 168})` }]);
-    setTimeout(() => setPops((p) => p.filter((q) => q.id !== id)), 2700);
-  }, []);
-  const spawnPresenceRef = useRef(spawnPresence);
-  spawnPresenceRef.current = spawnPresence;
-  const spawnReaction = useCallback((emoji: string, handle: string) => {
-    const u = ROOM_LISTENERS.find((x) => x.handle === handle) ?? ROOM_LISTENERS[0];
-    if (!u) return;
-    spawnPresence(u, emoji);
-    setFeed((fd) => [{ id: Math.random().toString(36).slice(2), emoji, handle: u.handle, text: '', t: Math.floor(posRef.current), you: u.you }, ...fd].slice(0, 14));
-  }, [spawnPresence]);
-
-  // Ambient MOCK reactions — demo only; live sessions stream via SSE.
-  useEffect(() => {
-    if (!playing || mode !== 'room' || roomLive) return undefined;
-    const iv = setInterval(() => {
-      if (Math.random() < 0.6) {
-        const u = ROOM_LISTENERS[1 + Math.floor(Math.random() * (ROOM_LISTENERS.length - 1))];
-        const e = REACTION_EMOJI[Math.floor(Math.random() * REACTION_EMOJI.length)];
-        if (u && e) spawnReaction(e, u.handle);
-      }
-    }, 2800);
-    return () => clearInterval(iv);
-  }, [playing, mode, spawnReaction, roomLive]);
-
   // Shared play internals — ensureContext + full-rack sync on every play.
   const startPlayback = useCallback((): Promise<void> => {
     const a = audioRef.current;
@@ -589,7 +451,7 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     if (!realAudio) { setPlaying((p) => !p); return; }
     const a = audioRef.current;
     if (!a) return;
-    if (!a.paused) { a.pause(); setPlaying(false); emitTransport('pause', a.currentTime); return; }
+    if (!a.paused) { a.pause(); setPlaying(false); return; }
     let played: Promise<void>;
     try {
       played = startPlayback();
@@ -597,13 +459,11 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
       toast.error(`Audio engine failed: ${err instanceof Error ? err.message : String(err)}`);
       return;
     }
-    played
-      .then(() => emitTransport('play', a.currentTime))
-      .catch((err: unknown) => {
-        toast.error(`Playback failed: ${err instanceof Error ? err.message : String(err)}`);
-        setPlaying(false);
-      });
-  }, [realAudio, startPlayback, emitTransport]);
+    played.catch((err: unknown) => {
+      toast.error(`Playback failed: ${err instanceof Error ? err.message : String(err)}`);
+      setPlaying(false);
+    });
+  }, [realAudio, startPlayback]);
 
   const seek = useCallback((t: number) => {
     if (!realAudio) { setPosition(t); return; }
@@ -611,87 +471,7 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     if (!a) return;
     a.currentTime = t;
     setPosition(t);
-    emitTransport('seek', t);
-  }, [realAudio, emitTransport]);
-
-  const cap = resolveCapabilities(mode, identity, roomControl, access);
-  const rackReadOnly = cap.rackReadOnly;
-  const transportLocked = Boolean(roomLive) && cap.transportFollowsHost && !roomLive?.state.ended;
-
-  // ── E6.11 listener follow ──
-  const transportEvent = roomLive?.state.transport ?? null;
-  useEffect(() => {
-    if (!realAudio || !transportEvent || !transportLocked) return;
-    const action = planTransportFollow(
-      { playing: playingRef.current, position: posRef.current },
-      transportEvent,
-      meActorKey,
-      Date.now(),
-    );
-    if (action.seekTo != null) {
-      const a = audioRef.current;
-      if (a) a.currentTime = action.seekTo;
-      setPosition(action.seekTo);
-    }
-    if (action.pause) {
-      const a = audioRef.current;
-      if (a && !a.paused) a.pause();
-      setPlaying(false);
-    }
-    if (action.play) {
-      try {
-        startPlayback()
-          .then(() => setNeedsGesture(false))
-          .catch(() => setNeedsGesture(true));
-      } catch {
-        setNeedsGesture(true);
-      }
-    }
-  }, [transportEvent, transportLocked, realAudio, graph, startPlayback, meActorKey]);
-  useEffect(() => {
-    if (!transportLocked) setNeedsGesture(false);
-  }, [transportLocked]);
-
-  const joinPlayback = useCallback(() => {
-    try {
-      startPlayback()
-        .then(() => setNeedsGesture(false))
-        .catch((err: unknown) => {
-          toast.error(`Playback failed: ${err instanceof Error ? err.message : String(err)}`);
-        });
-    } catch (err) {
-      toast.error(`Audio engine failed: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }, [startPlayback]);
-
-  const grantControl = useCallback((scope: 'rack' | 'visuals', actor: ActorRef | null) => {
-    onGrant?.(scope, actor);
-    const who = actor ? `@${actor.handle ?? actor.displayName ?? 'someone'}` : 'the host';
-    toast.success(`${who} can now control the ${scope === 'rack' ? 'rack' : 'visuals'}`);
-  }, [onGrant]);
-
-  // Live seam: reactions/status POST to the room; E6.13 pop only on accept.
-  const feedShown = roomLive ? roomLive.state.feed : feed;
-  const reactHandler = (e: string) => {
-    if (roomLive) {
-      const prevStatus = myStatus;
-      setMyStatus(e);
-      const live = roomLive;
-      void Promise.allSettled([live.sendReact(e, posRef.current), live.sendStatus(e)]).then(
-        ([reactRes, statusRes]) => {
-          if (reactRes.status === 'fulfilled') {
-            spawnPresence({ handle: identity.actor.handle ?? 'you', hue: identity.actor.hue ?? 168, anon: identity.actor.type === 'anon' }, e);
-          } else {
-            toast.error("Reaction didn't send.", { id: 'room-send' });
-          }
-          if (statusRes.status === 'rejected') setMyStatus(prevStatus);
-        },
-      );
-    } else {
-      setMyStatus(e);
-      spawnReaction(e, 'maek');
-    }
-  };
+  }, [realAudio]);
 
   // Live meters for the stage chips + header stat line. `getFrame` is memoized
   // so the meter interval + stage rAF don't resubscribe every render.
@@ -734,8 +514,8 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
     : COACH_SUGGESTIONS.length;
   const onNote = useCallback((n: { id: string; t: number }) => {
     setActiveNote(n.id);
-    if (!transportLocked) seek(n.t);
-  }, [seek, transportLocked]);
+    seek(n.t);
+  }, [seek]);
 
   return (
     <div className="rdx lr-shell" data-testid="listen-rack-page">
@@ -745,7 +525,7 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
           through background effects. */}
       <div className="wrap lr-glass" data-density="dense" style={{ position: 'relative', zIndex: 2 }}>
         {/* Story 5.10: everything hides with the grid <1024 — the notice card
-            must never leave live-room controls operable underneath it. */}
+            takes its place instead. */}
         <div className="lr-desktop-only">
           {reportRef && (
             <Link to="/songs/$songId" params={{ songId: reportRef.songId }} className="backlink">
@@ -753,74 +533,18 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
             </Link>
           )}
           <TrackHeader
-            track={track} mode={mode} modes={modes} identity={identity}
+            track={track}
             fixesApplied={fixesApplied} onResetFixes={onResetCarriedFixes}
             reportRef={reportRef} meters={meters} playing={playing}
             activeModules={activeCount} bypassed={rs.masterBypass}
-            {...(identity.isOwner && realAudio && versionId ? { onShare: () => setShareOpen(true) } : {})}
-            {...(onModeChange ? { onModeChange } : {})}
           />
-
-          {mode === 'room' && (roomLive || onStartRoom) && (
-            <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '10px 0 2px', fontSize: 10.5 }}>
-              {roomLive ? (() => {
-                const hs = roomHeaderState(roomLive.streamStatus, roomLive.state.ended);
-                if (hs === 'ended') {
-                  return (
-                    <span data-testid="room-ended-banner" style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ color: 'var(--muted)', fontWeight: 700, letterSpacing: '0.12em' }}>THIS ROOM HAS ENDED</span>
-                      {identity.isHost && roomLive.recapPublished && (
-                        <span style={{ color: 'var(--cyan)' }}>Recap published to comments</span>
-                      )}
-                      {onModeChange && (
-                        <button type="button" className="btn sm ghost" style={{ fontSize: 10 }}
-                          onClick={() => onModeChange(identity.isOwner ? 'work' : 'view')}>
-                          Back to {identity.isOwner ? 'Work' : 'View'}
-                        </button>
-                      )}
-                    </span>
-                  );
-                }
-                const dotColor = hs === 'live' ? 'var(--orange)' : hs === 'reconnecting' ? 'var(--yellow)' : 'var(--muted)';
-                return (
-                  <>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--orange)', fontWeight: 700, letterSpacing: '0.12em' }}>
-                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: dotColor, boxShadow: hs === 'live' ? '0 0 8px var(--orange)' : 'none' }} />
-                      LIVE ROOM · {roomLive.state.roster.length} listening
-                      {hs === 'reconnecting' && <span style={{ color: 'var(--yellow)', fontWeight: 400, letterSpacing: 'normal' }}> · reconnecting…</span>}
-                      {hs === 'lost' && <span style={{ color: 'var(--red)', fontWeight: 400, letterSpacing: 'normal' }}> · connection lost</span>}
-                    </span>
-                    {hs === 'forbidden' && (
-                      <span style={{ color: 'var(--muted)' }}>You no longer have access to this room.</span>
-                    )}
-                    {hs === 'lost' && (
-                      <button type="button" className="btn sm ghost" style={{ fontSize: 10 }} onClick={roomLive.retryStream}>Retry</button>
-                    )}
-                    {transportLocked && (
-                      <span className="pill" style={{ fontSize: 8.5, letterSpacing: '0.1em' }}>FOLLOWING HOST</span>
-                    )}
-                    {identity.isHost && (
-                      <button type="button" className="btn sm ghost" style={{ fontSize: 10 }}
-                        disabled={roomLive.isEnding} onClick={roomLive.endRoom}>
-                        {roomLive.isEnding ? 'Ending…' : 'End room + publish recap'}
-                      </button>
-                    )}
-                  </>
-                );
-              })() : (
-                <button type="button" className="btn sm primary" style={{ fontSize: 10.5 }} onClick={onStartRoom} disabled={isStartingRoom}>
-                  {isStartingRoom ? '◉ Starting…' : '◉ Start live room'}
-                </button>
-              )}
-            </div>
-          )}
 
           <StageCardV2
             playing={playing}
-            onPlay={transportLocked ? noopHandler : togglePlay}
+            onPlay={togglePlay}
             position={position}
             duration={duration}
-            onSeek={transportLocked ? noopHandler : seek}
+            onSeek={seek}
             mod={rs.mod}
             order={rs.order}
             bypass={rs.masterBypass}
@@ -839,27 +563,14 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
             stages={stages}
             setStages={setStages}
             director={directorObj}
-            myStatus={myStatus}
             activeModules={activeModuleManifests}
-            onDrop={handleDrop}
             trackName={track.name}
             trackSub={track.grade ? `grade ${track.grade}` : 'Listen session'}
-          >
-            <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden', zIndex: 8 }}>
-              {pops.map((p) => <Pop key={p.id} p={p} />)}
-            </div>
-            {needsGesture && transportLocked && (
-              <div style={{ position: 'absolute', inset: 0, zIndex: 9, display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,0.45)' }}>
-                <button type="button" className="btn primary" data-testid="tap-to-join-playback" onClick={joinPlayback}>
-                  ▶ Tap to join playback
-                </button>
-              </div>
-            )}
-          </StageCardV2>
+          />
 
-          {/* Sidebar (Notes · Chat · Room) lives OUTSIDE the tabbody so it reads
-              as its own box beside the rack panel, not a column inside it. The
-              rtabs strip stays stacked with the tabbody in the left column. */}
+          {/* Sidebar lives OUTSIDE the tabbody so it reads as its own box beside
+              the rack panel, not a column inside it. The rtabs strip stays
+              stacked with the tabbody in the left column. */}
           <div className="lr-layout">
             <div style={{ minWidth: 0 }}>
               <div className="rtabs">
@@ -878,7 +589,6 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
                     playing={playing}
                     meters={meters}
                     bpm={track.bpm}
-                    readOnly={rackReadOnly}
                     presets={rackPresetItems}
                     onRecallPreset={onRecallRackPreset}
                     onSavePreset={onSaveRackPreset}
@@ -901,22 +611,7 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
                 )}
               </div>
             </div>
-            <SessionSidebarV2
-              notes={track.notes}
-              activeNote={activeNote}
-              onNote={onNote}
-              feed={roomLive ? feedShown : null}
-              chatLive={roomLive ? { send: roomLive.sendChat, position: () => posRef.current } : null}
-              myHandle={identity.actor.handle ?? 'you'}
-              roster={roomLive ? roomLive.state.roster : null}
-              statusByActor={roomLive ? roomLive.state.statusByActor : null}
-              meKey={roomLive ? meActorKey : null}
-              myStatus={myStatus}
-              onReact={reactHandler}
-              canGrant={cap.canGrantControl}
-              roomControl={roomControl}
-              onGrant={grantControl}
-            />
+            <NotesSidebar notes={track.notes} activeNote={activeNote} onNote={onNote} />
           </div>
         </div>
 
@@ -931,11 +626,6 @@ export function ListenRackPage({ mode, modes, identity, access, roomControl, onM
       </div>
 
       <input ref={importInputRef} type="file" accept="application/json,.json" onChange={onImportFile} style={{ display: 'none' }} />
-
-      {identity.isOwner && realAudio && versionId && (
-        <VersionShareDialog open={shareOpen} onOpenChange={setShareOpen}
-          versionId={versionId} songName={track.name} />
-      )}
 
       {audioUrl && (
         <audio ref={audioRef} src={audioUrl} preload="auto" crossOrigin="anonymous" />

@@ -57,7 +57,7 @@ export function TransportV2({ playing, onPlay, position, duration, onSeek, notes
 }
 
 // ── Stage card: overlay chips + full visualizer stage + transport ──────
-export function StageCardV2({ playing, onPlay, position, duration, onSeek, mod, order, bypass, meters, stageHeight, showMeters, notes, activeNote, onNote, showNotes, section, bpm, keyLabel, getFrame, viz, stages, setStages, director, myStatus, activeModules, onDrop, trackName, trackSub, children }: {
+export function StageCardV2({ playing, onPlay, position, duration, onSeek, mod, order, bypass, meters, stageHeight, showMeters, notes, activeNote, onNote, showNotes, section, bpm, keyLabel, getFrame, viz, stages, setStages, director, activeModules, trackName, trackSub }: {
   playing: boolean; onPlay: () => void; position: number; duration: number;
   onSeek: (t: number) => void;
   mod: Record<string, ModuleState>; order: string[]; bypass: boolean;
@@ -69,13 +69,9 @@ export function StageCardV2({ playing, onPlay, position, duration, onSeek, mod, 
   stages: string[];
   setStages: (v: string[]) => void;
   director: Director | undefined;
-  myStatus: string;
   activeModules: ModuleManifest[];
-  onDrop?: (() => void) | undefined;
   trackName: string;
   trackSub: string;
-  /** Extra overlays (presence pops, tap-to-join) layered over the stage. */
-  children?: React.ReactNode;
 }) {
   const active = order.filter((id) => mod[id]?.enabled).length;
   return (
@@ -88,11 +84,9 @@ export function StageCardV2({ playing, onPlay, position, duration, onSeek, mod, 
         director={director}
         height={stageHeight}
         compact
-        myStatus={myStatus}
         activeModules={activeModules}
         trackName={trackName}
         trackSub={trackSub}
-        {...(onDrop ? { onDrop } : {})}
         {...(getFrame ? { getFrame } : {})}
       />
       <div className="lr-ovl" style={{ right: 54 }}>
@@ -108,7 +102,6 @@ export function StageCardV2({ playing, onPlay, position, duration, onSeek, mod, 
         <span className="sp" />
         <span className="lr-mchip">Chain <b>{bypass ? 'bypassed' : active + ' on'}</b></span>
       </div>
-      {children}
       <TransportV2
         playing={playing}
         onPlay={onPlay}

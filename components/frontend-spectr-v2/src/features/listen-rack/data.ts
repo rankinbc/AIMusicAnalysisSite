@@ -7,7 +7,7 @@
  *
  * SWAP BOUNDARY (see PORTING_NOTES.md):
  *   KEEP    → MODULE_DEFAULTS, DEFAULT_ORDER, RACK_MANIFEST, PITCH_MODULE, fmtVal
- *   REPLACE → TRACK, COACH_SUGGESTIONS, ROOM_*, PLAN_ITEMS (mock fixtures)
+ *   REPLACE → TRACK, COACH_SUGGESTIONS, PLAN_ITEMS (mock fixtures)
  *   CONFIG  → STAGES, DIRECTORS, LASER_*, BG_COLORS (tunable)
  */
 
@@ -373,43 +373,6 @@ export const COACH_SUGGESTIONS: CoachSuggestion[] = [
   { id: 'c3', sev: 'warning', persona: 'FREQUENCY', color: 'var(--cyan)', title: 'Air band 14% below median', move: 'EQ high-shelf +2 dB @ 12 kHz', apply: { eq: { enabled: true } } },
 ];
 
-export interface RoomListener {
-  handle: string;
-  hue: number;
-  you?: boolean | undefined;
-  anon?: boolean | undefined;
-  state: string;
-}
-
-export const ROOM_LISTENERS: RoomListener[] = [
-  { handle: 'maek', hue: 168, you: true, state: '🎧' },
-  { handle: 'forge', hue: 18, state: '🔥' },
-  { handle: 'vela', hue: 220, state: '🤯' },
-  { handle: 'river', hue: 195, state: '👀' },
-  { handle: 'kestrel', hue: 38, state: '😴' },
-  { handle: 'listener-7', hue: 264, anon: true, state: '👍' },
-  { handle: 'listener-3', hue: 200, anon: true, state: '👎' },
-];
-
-export interface RoomReaction { id: string; handle: string; emoji: string; t: number; text: string }
-export const ROOM_REACTIONS: RoomReaction[] = [
-  { id: 'r1', handle: 'forge', emoji: '🔥', t: 64, text: 'that drop' },
-  { id: 'r2', handle: 'vela', emoji: '✨', t: 70, text: 'lead is gorgeous' },
-  { id: 'r3', handle: 'river', emoji: '👀', t: 132, text: 'breakdown!' },
-];
-
-const REACTIONS_POSITIVE = ['👍', '🔥', '🤯', '😲', '🙌', '💜'];
-const REACTIONS_NEUTRAL = ['👀', '🤔', '😐'];
-const REACTIONS_NEGATIVE = ['👎', '😴', '🥱', '😬'];
-
-export interface ReactionGroup { id: string; label: string; sign: string; tone: string; emojis: string[] }
-export const REACTION_GROUPS: ReactionGroup[] = [
-  { id: 'positive', label: 'POSITIVE', sign: '+', tone: 'var(--green)', emojis: REACTIONS_POSITIVE },
-  { id: 'neutral', label: 'NEUTRAL', sign: '~', tone: 'var(--muted)', emojis: REACTIONS_NEUTRAL },
-  { id: 'negative', label: 'NEGATIVE', sign: '−', tone: 'var(--red)', emojis: REACTIONS_NEGATIVE },
-];
-export const REACTION_EMOJI = [...REACTIONS_POSITIVE, ...REACTIONS_NEUTRAL, ...REACTIONS_NEGATIVE];
-
 // ════════════════════════════════════════════════════════════════════════
 // CONFIG — visualizer stages + auto-director programs (tune freely)
 // ════════════════════════════════════════════════════════════════════════
@@ -423,7 +386,6 @@ export const STAGES: StageDef[] = [
   { id: 'smoke', label: 'Smoke', glyph: '☁' },
   { id: 'spectro', label: 'Spectrogram', glyph: '▤' },
   { id: 'lights', label: 'Light Grid', glyph: '▦' },
-  { id: 'room', label: 'Listeners', glyph: '☻' },
   { id: 'info', label: 'Track Info', glyph: 'ⓘ' },
 ];
 
@@ -483,13 +445,6 @@ export const PLAN_ITEMS: PlanItem[] = [
 ];
 
 export const BG_COLORS = ['#00e5b0', '#34d399', '#22d3ee', '#60a5fa', '#818cf8', '#a78bfa', '#f472b6', '#f43f5e', '#fb923c', '#fbbf24'];
-
-// ── Live collaboration shapes (mock-driven; replace with real-time stream) ──
-// `kind` is additive (live rooms tag chat vs reaction explicitly instead of
-// matching on the '💬' emoji); demo fixtures omit it and stay valid.
-export interface ReactionFeedItem { id: string; emoji: string; handle: string; text: string; t: number; you?: boolean | undefined; kind?: 'react' | 'chat' | undefined }
-export interface PresencePopItem { id: string; handle: string; hue: number; anon?: boolean | undefined; emoji: string; x: number; y: number; ring: string }
-export interface AnnouncementMsg { id: string; text: string; title?: string | undefined }
 
 // ── Visualizer state bag (owned by the page; written by viz controls) ──────
 export interface VizState {

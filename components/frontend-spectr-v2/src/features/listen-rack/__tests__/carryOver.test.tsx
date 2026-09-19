@@ -14,8 +14,6 @@ import { overlayChain } from '../fixToRackPatch';
 import { TrackHeader } from '../ListenRackPage';
 import { TRACK } from '../data';
 import type { ModuleState } from '../data';
-import type { ModeId } from '../access';
-import type { Identity } from '../identity';
 
 function fakeGraph(): RackGraphBindings & { params: Array<[string, unknown]> } {
   const params: Array<[string, unknown]> = [];
@@ -56,30 +54,20 @@ describe('carry-over → rack state through the graph handle (AC6)', () => {
   });
 });
 
-describe('Fixes-applied chip renders in every mode (AC3)', () => {
+describe('Fixes-applied chip renders (AC3)', () => {
   afterEach(cleanup); // no RTL auto-cleanup in this suite — renders accumulate otherwise
-  const identity: Identity = { isOwner: true } as Identity;
-  const modes: ModeId[] = ['view', 'room', 'work'];
 
-  for (const mode of modes) {
-    it(`renders the chip + reset in ${mode} mode`, () => {
-      const onReset = vi.fn();
-      render(
-        <TrackHeader track={TRACK} mode={mode} modes={modes} identity={identity}
-          fixesApplied={4} onResetFixes={onReset} />,
-      );
-      const chip = screen.getByTestId('fixes-applied-chip');
-      expect(chip.textContent).toContain('Fixes applied: 4');
-      act(() => { (screen.getByText('reset') as HTMLButtonElement).click(); });
-      expect(onReset).toHaveBeenCalled();
-    });
-  }
+  it('renders the chip + reset', () => {
+    const onReset = vi.fn();
+    render(<TrackHeader track={TRACK} fixesApplied={4} onResetFixes={onReset} />);
+    const chip = screen.getByTestId('fixes-applied-chip');
+    expect(chip.textContent).toContain('Fixes applied: 4');
+    act(() => { (screen.getByText('reset') as HTMLButtonElement).click(); });
+    expect(onReset).toHaveBeenCalled();
+  });
 
   it('renders no chip when nothing is applied', () => {
-    render(
-      <TrackHeader track={TRACK} mode="work" modes={modes} identity={identity}
-        fixesApplied={null} />,
-    );
+    render(<TrackHeader track={TRACK} fixesApplied={null} />);
     expect(screen.queryByTestId('fixes-applied-chip')).toBeNull();
   });
 });

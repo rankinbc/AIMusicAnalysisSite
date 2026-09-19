@@ -362,16 +362,11 @@
 .rdx .lr-nr .tm {font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--accent);flex-shrink:0;width:38px}
 .rdx .lr-nr .tx {flex:1;min-width:0;font-size:11.5px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rdx .lr-nr.on {border-color:rgba(0,229,176,.4)}
-.rdx .lr-people {display:flex;flex-wrap:wrap;gap:6px}
-.rdx .lr-pchip {display:inline-flex;align-items:center;gap:7px;padding:5px 9px 5px 5px;border-radius:20px;border:1px solid var(--border);background:var(--card);font-size:11.5px;color:var(--text-2)}
-.rdx .lr-pav {width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:#06151a}
-.rdx .lr-pchip .st {font-size:12px}
 .rdx .lr-cols {display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
 .rdx .lr-coach2 {display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
 @media (max-width:1000px) {.rdx .lr-coach2 {grid-template-columns:1fr}}
 @media (max-width:1240px) {.rdx .lr-coach2 .lr-move {display:none}}
 
-/* ── sidebar session card: notes · chat · room ── */
 .rdx .lr-mtabs {display:flex;gap:2px;padding:6px 6px 0;border-bottom:1px solid var(--border)}
 .rdx .lr-mtabs button {flex:1;display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 4px;border-radius:6px 6px 0 0;font-size:11px;font-weight:600;color:var(--muted)}
 .rdx .lr-mtabs button:hover {color:var(--text-2)}
@@ -384,22 +379,6 @@
 .rdx .lr-snote .tm {font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--accent);flex-shrink:0}
 .rdx .lr-snote .tx {flex:1;min-width:0;font-size:11px;color:var(--text-2);line-height:1.4;text-wrap:pretty}
 .rdx .lr-snote .pin {color:var(--violet);font-size:7px;flex-shrink:0}
-.rdx .lr-msg {display:flex;gap:7px;padding:3px 4px}
-.rdx .lr-msg .bb {min-width:0;display:block}
-.rdx .lr-msg .h {display:block;font-family:'JetBrains Mono',monospace;font-size:8.5px;color:var(--muted)}
-.rdx .lr-msg .x {display:block;font-size:11.5px;color:var(--text-2);line-height:1.4;text-wrap:pretty}
-.rdx .lr-cin {display:flex;gap:5px;margin-top:4px}
-.rdx .lr-cin input {flex:1;min-width:0;font-size:11.5px;color:var(--text);background:var(--card-2);border:1px solid var(--border-2);border-radius:7px;padding:6px 8px}
-.rdx .lr-cin input::placeholder {color:var(--muted)}
-.rdx .lr-cin button {width:28px;border-radius:7px;display:grid;place-items:center;color:var(--muted);border:1px solid var(--border-2);background:var(--card-2)}
-.rdx .lr-cin button:hover {color:var(--accent)}
-.rdx .lr-react {display:flex;flex-direction:column;gap:4px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border)}
-.rdx .lr-react .rg {display:flex;align-items:center;gap:3px}
-.rdx .lr-react .gl {font-family:'JetBrains Mono',monospace;font-size:11px;width:12px;text-align:center}
-.rdx .lr-react button {width:24px;height:22px;border-radius:6px;font-size:13px;line-height:1}
-.rdx .lr-react button:hover {background:var(--card-hover)}
-.rdx .lr-react button.on {background:rgba(0,229,176,.1);box-shadow:inset 0 0 0 1px rgba(0,229,176,.4)}
-.rdx .lr-side .lr-pchip {padding:3px 7px 3px 3px;font-size:11px}
 
 /* ── light show background + glass panels ── */
 /* The light show sits ABOVE the fullscreen viz stage (a body-portaled fixed

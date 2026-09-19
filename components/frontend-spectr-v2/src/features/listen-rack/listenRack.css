@@ -74,19 +74,6 @@
   .lr-head-actions { flex-direction: row; align-items: center; justify-content: space-between; width: 100%; }
 }
 
-/* ── Presence pops + ring pulse (Room reactions on the stage) ──────────────── */
-@keyframes presencePop {
-  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
-  12%  { opacity: 1; transform: translate(-50%, -54%) scale(1.12); }
-  24%  { transform: translate(-50%, -50%) scale(1); }
-  72%  { opacity: 1; }
-  100% { opacity: 0; transform: translate(-50%, -120%) scale(0.92); }
-}
-@keyframes ringPulse {
-  0%   { opacity: 0.85; transform: scale(0.7); }
-  100% { opacity: 0; transform: scale(2.3); }
-}
-
 /* ── Coach "Applied" announcement — streamed text + background flash ───────── */
 .lr-coach-toast {
   position: absolute;

@@ -13,11 +13,9 @@ import { createPortal } from 'react-dom';
 import { CoverArt } from '../../ui/CoverArt';
 import type { AudioFrame } from '../listen/useAudioGraph';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
-import {
-  ROOM_LISTENERS, type Director, type EqBand, type ModuleManifest, type VizState,
-} from './data';
+import { type Director, type EqBand, type ModuleManifest, type VizState } from './data';
 import { cssVar, freqToX, hslToHex, LASER_COLORS, safeFlashHz } from './helpers';
-import { Avatar, ModuleIcon } from './ui';
+import { ModuleIcon } from './ui';
 
 export interface VizFrame { t: number; spectrum: number[]; energy: number; pulse: number; beat: boolean; flash: number }
 interface FlashPoint { x: number; y: number; life: number; born: number }
@@ -311,23 +309,6 @@ function drawSmoke(ctx: CanvasRenderingContext2D, W: number, H: number, frame: V
   ctx.globalCompositeOperation = 'source-over';
 }
 
-// Listeners stage — every listener + their live status as a visual
-function ListenersStage({ myStatus }: { myStatus: string }) {
-  return (
-    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexWrap: 'wrap', alignContent: 'center', justifyContent: 'center', gap: '24px 34px', padding: 40, zIndex: 2 }}>
-      {ROOM_LISTENERS.map((u) => (
-        <div key={u.handle} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9 }}>
-          <div style={{ position: 'relative' }}>
-            <Avatar handle={u.handle} hue={u.hue} anon={u.anon} size={56} ring />
-            <span style={{ position: 'absolute', bottom: -6, right: -10, fontSize: 26, filter: 'drop-shadow(0 2px 5px rgba(0,0,0,0.7))' }}>{u.you ? myStatus : u.state}</span>
-          </div>
-          <span className="mono" style={{ fontSize: 11, color: u.you ? 'var(--cyan)' : 'var(--text-2)' }}>{u.anon ? 'anon' : '@' + u.handle}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // EQ axis measurements (frequency + dB) overlaid on the spectrum
 function EqAxes() {
   const F: [number, string][] = [[60, '60'], [120, '120'], [250, '250'], [500, '500'], [1000, '1k'], [2000, '2k'], [5000, '5k'], [10000, '10k']];
@@ -373,7 +354,7 @@ function RackStage({ modules }: { modules: ModuleManifest[] }) {
 
 // ── The stage ──────────────────────────────────────────────────────────────
 export function VizStage({
-  playing, stages, setStages, viz, director, height = 300, compact = false, onStageEngine, onDrop, myStatus, activeModules, getFrame, trackName = 'Aurora', trackSub = 'v3 · Final Mix',
+  playing, stages, setStages, viz, director, height = 300, compact = false, onStageEngine, activeModules, getFrame, trackName = 'Aurora', trackSub = 'v3 · Final Mix',
 }: {
   playing: boolean;
   stages: string[];
@@ -383,8 +364,6 @@ export function VizStage({
   height?: number;
   compact?: boolean;
   onStageEngine?: React.Ref<HTMLDivElement>;
-  onDrop?: () => void;
-  myStatus: string;
   activeModules: ModuleManifest[];
   /** Real AnalyserNode frame source (Phase 2 Task 3). When supplied, the spectrum
    *  bars + energy come from the live mix; absent ⇒ synthetic (mock demo route). */
@@ -414,7 +393,6 @@ export function VizStage({
   const flashPtsRef = useRef<FlashPoint[]>([]), lastBurst = useRef(0), autoReactLast = useRef(0);
   const accentHex = useMemo(() => cssVar(viz.barColor || 'var(--cyan)'), [viz.barColor]);
   const stageRef2 = useRef(stages); stageRef2.current = stages;
-  const onDropRef = useRef(onDrop); onDropRef.current = onDrop;
   const getFrameRef = useRef(getFrame); getFrameRef.current = getFrame;
   // Photosensitivity: freeze full-field flashes under prefers-reduced-motion.
   const reduceMotion = useReducedMotion();
@@ -454,7 +432,6 @@ export function VizStage({
         // (subtle) pulse and the presence callback.
         if (!reduceMotionRef.current) { fireRef.current?.launch(); f.flash = 1; }
         f.pulse = 1;
-        if (onDropRef.current) onDropRef.current();
       }
       if (beat) f.pulse = 1; f.pulse *= 0.86; f.flash *= 0.8;
       const n = f.spectrum.length;
@@ -515,7 +492,6 @@ export function VizStage({
   }, [playing, accentHex, viz.laserOn, viz.laserEffect, viz.laserIntensity, viz.laserMono, viz.laserColor, viz.laserBeams, viz.laserSpeed, viz.laserMove, viz.laserFlash, viz.laserPattern, viz.dropFx, viz.autoColor, viz.laserSync, viz.bgSync, viz.autoReact, viz.autoReactSens, director]);
 
   const isInfo = stages.includes('info');
-  const isRoom = stages.includes('room');
   const isDevices = stages.includes('devices');
 
   const stageStyle: React.CSSProperties = bgMode
@@ -546,7 +522,6 @@ export function VizStage({
       <div ref={bgLayerRef} className={'viz-bg' + (viz.bgAuto ? ' lr-bg-cycle' : '')} style={{ position: 'absolute', inset: 0, background: `radial-gradient(ellipse 95% 85% at 50% 100%, ${cssVar(viz.bg || 'var(--cyan)')}1f, transparent 62%), transparent` }} />
       {viz.bgFlash && playing && !reduceMotion && <div className="lr-bg-flash" style={{ background: viz.bgFlashColor, animationDuration: (1 / safeFlashHz(viz.bgFlashHz)) + 's' }} />}
       {!isInfo && <StageCanvas ref={stageRef} accent={accentHex} />}
-      {isRoom && <ListenersStage myStatus={myStatus} />}
       {isDevices && <RackStage modules={activeModules} />}
       {stages.includes('eq') && <EqAxes />}
       {isInfo && (
