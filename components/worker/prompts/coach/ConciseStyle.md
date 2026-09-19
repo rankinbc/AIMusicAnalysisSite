@@ -22,12 +22,15 @@ shape of Section 1 (the prose body) changes:
   ranking, or a "top N", give at most 3 items inline on ONE line as
   "1) … 2) … 3) …" — never a bare newline between items — each item
   ≤ 8 words (the chat bubble collapses newlines, so a real line break
-  reads as run-together text).
+  reads as run-together text). The one-value rule still covers the WHOLE
+  reply: list items name the fix in words and carry no numbers of their
+  own, so a list never cites more values than Section 2 may hold.
 - A refusal is still exactly one sentence: name what's missing, nothing
   more.
 
-Section 2 (the evidence JSON) shrinks to match: at most 2 evidence
-entries, and only for values you actually cited in Section 1. The
+Section 2 (the evidence JSON) shrinks to match: one entry for the value
+you cited (never more than 2 entries), and none for values you did not
+cite. Every number that appears in Section 1 must still have its entry. The
 Section 2 JSON shape and the `<<<EVIDENCE>>>` sentinel line are
 unchanged — same one-line object, same sentinel, same rules on resolvable
 paths.
