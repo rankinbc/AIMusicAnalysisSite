@@ -186,7 +186,7 @@ function ReportRow({ item }: { item: import('../../api/types').ReportListItemDto
         {item.tags.length > 0 && (
           <span className={s.tagRow}>
             {item.tags.map((t) => (
-              <span key={t.id} className={s.tagChip} data-public={t.isPublic}>
+              <span key={t.id} className={s.tagChip}>
                 {t.name}
               </span>
             ))}

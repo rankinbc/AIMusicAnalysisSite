@@ -71,8 +71,8 @@ describe('matchesFilter', () => {
 describe('songMatchesTags (union)', () => {
   const tagged = song({
     tags: [
-      { id: 'a', name: 'festival', isPublic: true },
-      { id: 'b', name: 'wip', isPublic: false },
+      { id: 'a', name: 'festival' },
+      { id: 'b', name: 'wip' },
     ],
   });
   it('matches all when nothing is selected', () => {
@@ -87,15 +87,15 @@ describe('songMatchesTags (union)', () => {
 });
 
 describe('aggregateTags', () => {
-  it('counts tags across non-archived songs, flags public, sorts by count', () => {
+  it('counts tags across non-archived songs, sorts by count', () => {
     const songs = [
-      song({ tags: [{ id: '1', name: 'house', isPublic: false }] }),
-      song({ tags: [{ id: '2', name: 'house', isPublic: true }] }),
-      song({ archivedAt: iso(1), tags: [{ id: '3', name: 'house', isPublic: true }] }), // skipped
-      song({ tags: [{ id: '4', name: 'demo', isPublic: false }] }),
+      song({ tags: [{ id: '1', name: 'house' }] }),
+      song({ tags: [{ id: '2', name: 'house' }] }),
+      song({ archivedAt: iso(1), tags: [{ id: '3', name: 'house' }] }), // skipped
+      song({ tags: [{ id: '4', name: 'demo' }] }),
     ];
     const agg = aggregateTags(songs);
-    expect(agg[0]).toEqual({ name: 'house', isPublic: true, count: 2 });
+    expect(agg[0]).toEqual({ name: 'house', count: 2 });
     expect(agg.find((t) => t.name === 'demo')?.count).toBe(1);
     expect(agg.some((t) => t.count === 3)).toBe(false); // archived not counted
   });
@@ -104,7 +104,7 @@ describe('aggregateTags', () => {
 describe('pillCounts', () => {
   const songs = [
     song({}),
-    song({ tags: [{ id: 't', name: 'fav', isPublic: false }] }),
+    song({ tags: [{ id: 't', name: 'fav' }] }),
     song({}),
     song({ archivedAt: iso(2) }),
   ];

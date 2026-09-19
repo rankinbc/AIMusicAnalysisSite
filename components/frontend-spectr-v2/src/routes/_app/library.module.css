@@ -221,9 +221,6 @@
   background: var(--cyan-dim);
   color: var(--cyan);
 }
-.tagChip[data-public='true'] {
-  color: var(--cyan);
-}
 .tagChip .tcCount {
   opacity: 0.55;
   font-feature-settings: 'tnum' on;
@@ -454,10 +451,6 @@
 button.cardTag {
   cursor: pointer;
   transition: background 0.14s, border-color 0.14s, color 0.14s;
-}
-.cardTag[data-public='true'] {
-  border-color: rgba(0, 229, 176, 0.34);
-  color: var(--cyan);
 }
 button.cardTag:hover {
   border-color: var(--border-2);

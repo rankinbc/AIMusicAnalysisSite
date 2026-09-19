@@ -896,7 +896,12 @@ export function useCreateTag(songId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: CreateTagRequest) =>
-      fetcher<TagDto>({ url: `/songs/${songId}/tags`, method: 'POST', data: body }),
+      fetcher<TagDto>({
+        url: `/songs/${songId}/tags`,
+        method: 'POST',
+        // solo: tags are always private; the BFF field is removed in the backend strip
+        data: { name: body.name, isPublic: false },
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['songs'] });
       qc.invalidateQueries({ queryKey: ['songs', songId] });

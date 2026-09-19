@@ -20,7 +20,6 @@ export function SongEditDialog({ open, onOpenChange, song }: Props) {
   const { data: sets } = useReferenceSets();
   const [value, setValue] = useState<SongFieldsValue>(() => songFieldsFromSong(song, sets ?? []));
   const [tagInput, setTagInput] = useState('');
-  const [isPublicTag, setIsPublicTag] = useState(false);
 
   const patch = usePatchSong(song.id);
   const createTag = useCreateTag(song.id);
@@ -53,7 +52,7 @@ export function SongEditDialog({ open, onOpenChange, song }: Props) {
     const n = tagInput.trim();
     if (!n) return;
     try {
-      await createTag.mutateAsync({ name: n, isPublic: isPublicTag });
+      await createTag.mutateAsync({ name: n });
       setTagInput('');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not add tag');
@@ -90,21 +89,12 @@ export function SongEditDialog({ open, onOpenChange, song }: Props) {
                   placeholder="Type a tag and press Enter"
                   className={f.input}
                 />
-                <label className={s.publicToggle}>
-                  <input
-                    type="checkbox"
-                    checked={isPublicTag}
-                    onChange={(e) => setIsPublicTag(e.target.checked)}
-                  />
-                  public
-                </label>
               </div>
               {song.tags.length > 0 && (
                 <div className={s.tagList}>
                   {song.tags.map((t) => (
-                    <span key={t.id} className={s.tagPill} data-public={t.isPublic}>
+                    <span key={t.id} className={s.tagPill}>
                       {t.name}
-                      {t.isPublic && <span className={s.tagScope}>pub</span>}
                       <button
                         type="button"
                         className={s.tagRemove}

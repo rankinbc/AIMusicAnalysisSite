@@ -155,11 +155,6 @@
   color: var(--text-2);
 }
 
-.tagChip[data-public='true'] {
-  border-color: var(--cyan);
-  color: var(--cyan);
-}
-
 .viewLink {
   display: inline-block;
   font-size: 12px;

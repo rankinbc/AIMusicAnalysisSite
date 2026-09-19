@@ -36,7 +36,7 @@ import {
   songMatchesTags,
   sortSongs,
   type SortKey,
-  type VisFilterKey,
+  type LibraryFilterKey,
 } from './library-helpers';
 
 // Handlers the section supplies to every card/row.
@@ -338,7 +338,6 @@ function SongCard({
                 key={t.id}
                 type="button"
                 className={s.cardTag}
-                data-public={t.isPublic}
                 data-on={selectedTags.has(t.name)}
                 title={`Filter by #${t.name}`}
                 onClick={(e) => {
@@ -502,7 +501,7 @@ export function SongsLibrarySection() {
   const [newSongOpen, setNewSongOpen] = useState(false);
   const [uploadSongId, setUploadSongId] = useState<string | undefined>(undefined);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [filter, setFilter] = useState<VisFilterKey>('all');
+  const [filter, setFilter] = useState<LibraryFilterKey>('all');
   const [sort, setSort] = useState<SortKey>('recent');
   const [view, setView] = useState<ViewMode>('grid');
   const [selectedTags, setSelectedTags] = useState<Set<string>>(() => new Set());
@@ -645,7 +644,6 @@ export function SongsLibrarySection() {
                 type="button"
                 className={s.tagChip}
                 data-on={selectedTags.has(t.name)}
-                data-public={t.isPublic}
                 onClick={() => toggleTag(t.name)}
               >
                 #{t.name}
@@ -742,7 +740,7 @@ function LibraryEmptyState({
   isFirstRun,
   onNewSong,
 }: {
-  filter: VisFilterKey;
+  filter: LibraryFilterKey;
   emptyForTags: boolean;
   isFirstRun: boolean;
   onNewSong: () => void;

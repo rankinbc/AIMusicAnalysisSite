@@ -14,16 +14,16 @@ export function latestVersion(song: SongDto): VersionDto | undefined {
   return song.versions.reduce((best, v) => (v.versionNumber > best.versionNumber ? v : best));
 }
 
-export type VisFilterKey = 'all' | 'archived';
+export type LibraryFilterKey = 'all' | 'archived';
 
 /** Filter pills. */
-export const FILTERS: { key: VisFilterKey; label: string }[] = [
+export const FILTERS: { key: LibraryFilterKey; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'archived', label: 'Archived' },
 ];
 
 /** `all` excludes archived; `archived` shows only archived. */
-export function matchesFilter(song: SongDto, key: VisFilterKey): boolean {
+export function matchesFilter(song: SongDto, key: LibraryFilterKey): boolean {
   if (key === 'archived') return song.archivedAt != null;
   return song.archivedAt == null;
 }
@@ -37,7 +37,6 @@ export function songMatchesTags(song: SongDto, selected: ReadonlySet<string>): b
 
 export interface TagAgg {
   name: string;
-  isPublic: boolean;
   count: number;
 }
 
@@ -48,9 +47,8 @@ export function aggregateTags(songs: SongDto[]): TagAgg[] {
   for (const song of songs) {
     if (song.archivedAt != null) continue;
     for (const t of song.tags) {
-      const cur = map.get(t.name) ?? { name: t.name, isPublic: false, count: 0 };
+      const cur = map.get(t.name) ?? { name: t.name, count: 0 };
       cur.count += 1;
-      cur.isPublic = cur.isPublic || t.isPublic;
       map.set(t.name, cur);
     }
   }
@@ -62,8 +60,8 @@ export function aggregateTags(songs: SongDto[]): TagAgg[] {
 export function pillCounts(
   songs: SongDto[],
   selectedTags: ReadonlySet<string>,
-): Record<VisFilterKey, number> {
-  const out = { all: 0, archived: 0 } as Record<VisFilterKey, number>;
+): Record<LibraryFilterKey, number> {
+  const out = { all: 0, archived: 0 } as Record<LibraryFilterKey, number>;
   for (const f of FILTERS) {
     out[f.key] = songs.filter(
       (s) => matchesFilter(s, f.key) && songMatchesTags(s, selectedTags),

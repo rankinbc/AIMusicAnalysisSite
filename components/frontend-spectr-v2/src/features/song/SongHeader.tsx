@@ -70,7 +70,6 @@ export function SongHeader({ song, visual, hue, onEdit, onAddVersion, onArchive 
               <span style={{ color: 'var(--muted)' }}>/100</span>
             </span>
           )}
-          <span className="pill" style={{ color: 'var(--muted)', borderColor: 'rgba(148, 163, 184, 0.34)', background: 'rgba(148, 163, 184, 0.12)' }}>◐ private</span>
           {song.updatedAt && (
             <span className="pill" style={{ color: 'var(--muted)' }}>◷ {savedStr} saved</span>
           )}
@@ -80,11 +79,8 @@ export function SongHeader({ song, visual, hue, onEdit, onAddVersion, onArchive 
         {song.tags && song.tags.length > 0 && (
           <div className={styles.headerTags}>
             {song.tags.map(tag => (
-              <span key={tag.id} className="pill" style={{ color: 'var(--text-2)', gap: '4px' }}>
+              <span key={tag.id} className="pill" style={{ color: 'var(--text-2)' }}>
                 #{tag.name}
-                {tag.isPublic && (
-                  <span className={`mono ${styles.tagPubBadge}`}>pub</span>
-                )}
               </span>
             ))}
           </div>

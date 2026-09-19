@@ -251,14 +251,14 @@ describe('SongsLibrarySection — filters + counts', () => {
 describe('SongsLibrarySection — tag refine row', () => {
   function dataset(): SongDto[] {
     return [
-      song({ id: '1', name: 'Festy', tags: [{ id: 'a', name: 'festival', isPublic: true }] }),
-      song({ id: '2', name: 'Demoy', tags: [{ id: 'b', name: 'demo', isPublic: false }] }),
+      song({ id: '1', name: 'Festy', tags: [{ id: 'a', name: 'festival' }] }),
+      song({ id: '2', name: 'Demoy', tags: [{ id: 'b', name: 'demo' }] }),
       song({
         id: '3',
         name: 'Both',
         tags: [
-          { id: 'c', name: 'festival', isPublic: true },
-          { id: 'd', name: 'demo', isPublic: false },
+          { id: 'c', name: 'festival' },
+          { id: 'd', name: 'demo' },
         ],
       }),
     ];
