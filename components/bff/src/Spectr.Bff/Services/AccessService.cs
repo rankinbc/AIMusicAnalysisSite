@@ -41,34 +41,6 @@ public sealed class AccessService(
         return dto;
     }
 
-    /// <summary>
-    /// Live session authority (PRP-4) — host_id + active control_grants. NOT
-    /// cached: grant/revoke changes must take effect on the very next action, so
-    /// transport/rack/visuals gating always reads fresh. Cheap (one session
-    /// projection + the active-grant set, which is tiny — ≤2 rows by the
-    /// partial-unique index).
-    /// </summary>
-    public async Task<SessionRoleDto> ResolveSessionRoleAsync(
-        Guid sessionId, Guid? userId, string? anonId, CancellationToken ct)
-    {
-        var hostId = await db.ListeningSessions.AsNoTracking()
-            .Where(s => s.Id == sessionId)
-            .Select(s => (Guid?)s.HostId)
-            .FirstOrDefaultAsync(ct);
-        var isHost = hostId is Guid h && userId is Guid u && h == u;
-
-        var grants = await db.ControlGrants.AsNoTracking()
-            .Where(g => g.SessionId == sessionId && g.RevokedAt == null)
-            .Select(g => new { g.Scope, g.GranteeUserId, g.GranteeAnonId })
-            .ToListAsync(ct);
-
-        bool Holds(string scope) => isHost || grants.Any(g => g.Scope == scope
-            && ((userId is Guid gu && g.GranteeUserId == gu)
-                || (anonId is not null && g.GranteeAnonId == anonId)));
-
-        return new SessionRoleDto(isHost, Holds("rack"), Holds("visuals"));
-    }
-
     /// <summary>Bump the version's cache generation — call after any owner
     /// settings/invite write so stale (version, actor) entries are orphaned.</summary>
     public void Invalidate(Guid versionId)

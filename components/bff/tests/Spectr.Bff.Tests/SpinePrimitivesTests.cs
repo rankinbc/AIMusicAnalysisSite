@@ -8,8 +8,8 @@ using Xunit;
 namespace Spectr.Bff.Tests;
 
 /// <summary>
-/// PRP-0 spine primitives: ActorRef, AnonIdentity (signed cookie), the no-op
-/// sinks, ResourceTokenAuth, and the Redis rate limiter. Pure/unit where possible;
+/// PRP-0 spine primitives: ActorRef, AnonIdentity (signed cookie),
+/// ResourceTokenAuth, and the Redis rate limiter. Pure/unit where possible;
 /// Redis + full-boot tests skip gracefully when the dependency isn't reachable.
 /// </summary>
 public sealed class SpinePrimitivesTests
@@ -72,20 +72,6 @@ public sealed class SpinePrimitivesTests
         Assert.Equal(ActorType.Anon, a.Type);
         Assert.Equal("anon-123", a.AnonId);
         Assert.Null(a.DisplayName);
-    }
-
-    // ── No-op sinks ──────────────────────────────────────────────────────────────
-    [SkippableFact]
-    public async Task NoOp_sinks_complete_without_side_effects()
-    {
-        INotificationSink notif = new NoOpNotificationSink();
-        IGamePlanSink plan = new NoOpGamePlanSink();
-
-        await notif.NotifyAsync(ActorRef.Anon("a"), "comment_created",
-            new Dictionary<string, object?> { ["x"] = 1 });
-        await notif.NotifyDigestAsync(ActorRef.Anon("a"), "bookmark_digest", Guid.NewGuid());
-        await plan.InsertDrainItemAsync(Guid.NewGuid(), "suggestion", "preset", "r1");
-        // Reaching here without throwing IS the assertion (no-op seam).
     }
 
     // ── ResourceTokenAuth ────────────────────────────────────────────────────────

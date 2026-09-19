@@ -279,9 +279,6 @@ builder.Services.AddOptions<AnonOptions>()
     .ValidateOnStart();
 builder.Services.AddScoped<AnonIdentity>();
 builder.Services.AddScoped<ResourceTokenAuth>();
-// Story 11.6: the real table-backed sink (was NoOpNotificationSink).
-builder.Services.AddScoped<INotificationSink, TableNotificationSink>();
-builder.Services.AddScoped<IGamePlanSink, NoOpGamePlanSink>();
 builder.Services.AddSingleton<IRateLimiter, RedisRateLimiter>();
 
 // Listen V3 (PRP-1) — no-op generator seam for source=coach/analysis presets
@@ -292,12 +289,6 @@ builder.Services.AddScoped<IPresetGenerator, NoOpPresetGenerator>();
 // share-token resolver (plugs into ResourceTokenAuth's ITokenResolver set).
 builder.Services.AddScoped<AccessService>();
 builder.Services.AddScoped<ITokenResolver, ShareTokenResolver>();
-
-// Listen V3 (PRP-4) — Room sessions: the Redis WAL + pub/sub engine (stateless
-// over the singleton multiplexer) + the session-invite token resolver (sibling
-// of ShareTokenResolver, plugs into ResourceTokenAuth's set).
-builder.Services.AddSingleton<RoomBus>();
-builder.Services.AddScoped<ITokenResolver, SessionTokenResolver>();
 
 // Story 2.8 — usage-page honest-math (90-day credit spend vs Pro-equivalent).
 builder.Services.AddScoped<HonestMathService>();
@@ -575,8 +566,6 @@ api.MapFixRackEndpoints();
 api.MapReportPhaseEndpoints();
 api.MapReferenceEndpoints();
 api.MapShareEndpoints();
-api.MapBookmarkEndpoints();
-api.MapNotificationEndpoints();
 api.MapProfileEndpoints();   // story 11.8 — /api/u/{handle} public profile
 api.MapFollowEndpoints();    // story 11.9 — /api/u/{handle}/follow
 api.MapFeedEndpoints();      // story 11.10 — /api/me/feed
@@ -587,8 +576,6 @@ api.MapCompareEndpoints();
 api.MapRackPresetEndpoints();
 api.MapVersionShareEndpoints();
 api.MapVersionViewEndpoints();
-api.MapFeedbackEndpoints();
-api.MapRoomEndpoints();
 api.MapBillingEndpoints();
 api.MapHealthEndpoints();
 api.MapAccountEndpoints();       // story 4.6 — /api/me/export + /api/me/delete
