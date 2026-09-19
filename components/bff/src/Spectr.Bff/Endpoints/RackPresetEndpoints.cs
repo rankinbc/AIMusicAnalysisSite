@@ -225,5 +225,5 @@ public static class RackPresetEndpoints
 
     private static RackPresetDto ToDto(RackPreset p) => new(
         p.Id, p.SongVersionId, p.Name, p.Source, Parse(p.ChainJson),
-        p.CreatedInSessionId, p.ViaGrantId, p.CreatedAt, p.UpdatedAt);
+        p.CreatedAt, p.UpdatedAt);
 }

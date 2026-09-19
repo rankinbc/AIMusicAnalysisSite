@@ -74,7 +74,7 @@ public static class ReportsEndpoints
 
         if (tagList.Count > 0)
         {
-            // Each tag in tagList must exist on the song (owned by anyone visible to the user)
+            // Each tag in tagList must exist on the song, owned by the caller.
             foreach (var tagName in tagList)
             {
                 var t = tagName; // capture for EF query
@@ -82,7 +82,7 @@ public static class ReportsEndpoints
                     db.SongTags.Any(st =>
                         st.SongId == x.Song.Id &&
                         EF.Functions.ILike(st.Name, t) &&
-                        (st.UserId == userId || st.IsPublic)));
+                        st.UserId == userId));
             }
         }
 
@@ -108,11 +108,11 @@ public static class ReportsEndpoints
         // Batch-load tags for the songs in this page
         var songIds = rows.Select(r => r.Song.Id).Distinct().ToList();
         var allTags = await db.SongTags.AsNoTracking()
-            .Where(t => songIds.Contains(t.SongId) && (t.UserId == userId || t.IsPublic))
+            .Where(t => songIds.Contains(t.SongId) && t.UserId == userId)
             .ToListAsync(ct);
         var tagsBySong = allTags
             .GroupBy(t => t.SongId)
-            .ToDictionary(g => g.Key, g => g.Select(t => new TagDto(t.Id, t.Name, t.IsPublic)).ToList());
+            .ToDictionary(g => g.Key, g => g.Select(t => new TagDto(t.Id, t.Name)).ToList());
 
         var items = rows.Select(r =>
         {

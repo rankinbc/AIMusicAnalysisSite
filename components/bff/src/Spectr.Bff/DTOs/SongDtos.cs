@@ -1,6 +1,6 @@
 namespace Spectr.Bff.DTOs;
 
-public sealed record TagDto(Guid Id, string Name, bool IsPublic);
+public sealed record TagDto(Guid Id, string Name);
 
 public sealed record SongDto(
     Guid Id,
@@ -12,7 +12,6 @@ public sealed record SongDto(
     IReadOnlyList<VersionDto> Versions,
     AnalysisSummaryDto? LatestResult,
     IReadOnlyList<TagDto> Tags,
-    string Visibility,
     string? Description,
     string? VisualTemplate,
     string? VisualPrimary,
@@ -33,7 +32,6 @@ public sealed record CreateSongRequest(
 public sealed record PatchSongRequest(
     string? Name,
     string? GenreHint,
-    string? Visibility = null,
     string? Description = null,
     string? VisualTemplate = null,
     string? VisualPrimary = null,
@@ -41,7 +39,7 @@ public sealed record PatchSongRequest(
     string? ReferenceProfileKind = null,
     string? ReferenceProfileId = null);
 
-public sealed record CreateTagRequest(string Name, bool IsPublic);
+public sealed record CreateTagRequest(string Name);
 
 public sealed record AnalysisSummaryDto(
     Guid Id,

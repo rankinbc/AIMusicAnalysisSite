@@ -870,8 +870,7 @@ export function useCreateTag(songId: string) {
       fetcher<TagDto>({
         url: `/songs/${songId}/tags`,
         method: 'POST',
-        // solo: tags are always private; the BFF field is removed in the backend strip
-        data: { name: body.name, isPublic: false },
+        data: { name: body.name },
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['songs'] });

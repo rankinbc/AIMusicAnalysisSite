@@ -14,8 +14,6 @@ public sealed record RackPresetDto(
     string Name,
     string Source,
     JsonElement Chain,
-    Guid? CreatedInSessionId,
-    Guid? ViaGrantId,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 

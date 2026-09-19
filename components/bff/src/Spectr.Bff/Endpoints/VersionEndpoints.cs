@@ -1217,7 +1217,7 @@ public static class VersionEndpoints
                             $"user:{userId}", ip, "analysis_dispatch", perIp, TimeSpan.FromHours(1), ct);
                         if (!verdict.Allowed)
                             return (Guid.Empty, ErrorEnvelope.Build(429, "rate_limited",
-                                "Too many analyses from this network — slow down or upgrade."));
+                                "Too many analyses — slow down or upgrade."));
                     }
                 }
                 catch (OperationCanceledException) { throw; }

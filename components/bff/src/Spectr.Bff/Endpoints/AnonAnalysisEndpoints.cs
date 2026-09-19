@@ -97,7 +97,7 @@ public static class AnonAnalysisEndpoints
                     $"device:{device.Id}", ip, "analysis_dispatch", perIp, TimeSpan.FromHours(1), ct);
                 if (!hourly.Allowed)
                     return ErrorEnvelope.Build(429, "rate_limited",
-                        "Too many analyses from this network — create an account for more.");
+                        "Too many analyses — create an account for more.");
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception) { /* fail-open — throttling layer only (10.6 policy) */ }

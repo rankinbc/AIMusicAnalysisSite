@@ -75,11 +75,9 @@ const BANNED: Array<[label: string, re: RegExp]> = [
   ['share routes', /['"`]\/(r|v|invite)\/\$/],
   ['visibility model', /SongVisibility|VIS_META|Listed \+ discoverable/],
   ['handle UI', /normalizeHandleInput|Handle is already taken/],
-  // The BFF still requires `isPublic` in the create-tag body until the backend
-  // strip removes it, so ONE shim remains: `isPublic: false` inside useCreateTag
-  // (src/api/hooks.ts). This pattern deliberately does not match that shim; the
-  // backend task tightens it to a bare /isPublic/ when the shim is deleted.
-  ['public tags', /data-public|>pub<|isPublicTag|\.isPublic\b/],
+  // Public tags were removed end-to-end (frontend shim + backend field) — any
+  // leftover isPublic reference is now banned outright.
+  ['public tags', /data-public|>pub<|isPublic/],
 ];
 
 describe('solo guard — banned phrases in shipped source', () => {
@@ -97,13 +95,13 @@ describe('solo guard — banned phrases in shipped source', () => {
     expect(hits).toEqual([]);
   });
 
-  it('public-tag pattern catches the historical markup but spares the create-tag shim', () => {
+  it('public-tag pattern catches the historical markup and the old create-tag shim', () => {
     const publicTags = BANNED.find(([label]) => label === 'public tags');
     if (!publicTags) throw new Error('missing case');
     const re = publicTags[1];
     expect(re.test('<span data-public={t.isPublic}>')).toBe(true);
     expect(re.test('<span className={s.tagScope}>pub</span>')).toBe(true);
     expect(re.test('const [isPublicTag, setIsPublicTag] = useState(false);')).toBe(true);
-    expect(re.test("body: JSON.stringify({ name: body.name, isPublic: false })")).toBe(false);
+    expect(re.test("body: JSON.stringify({ name: body.name, isPublic: false })")).toBe(true);
   });
 });

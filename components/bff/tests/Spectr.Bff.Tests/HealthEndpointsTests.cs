@@ -42,7 +42,6 @@ public sealed class HealthEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.True(worker.GetProperty("healthy").ValueKind
             is JsonValueKind.True or JsonValueKind.False);
         _ = worker.GetProperty("lastHeartbeatAgeSeconds"); // present (may be null)
-        Assert.Equal(JsonValueKind.Number, worker.GetProperty("queueDepth").ValueKind);
 
         // Storage: no Storage:S3 config in tests → local mode; ok is a bool
         // (its value depends on the host CWD, which is not this test's concern).
@@ -61,5 +60,16 @@ public sealed class HealthEndpointsTests(WebApplicationFactory<Program> factory)
         var client = _factory.CreateClient();
         var resp = await client.GetAsync("/api/health/full");
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
+    // Solo fork — queueDepth exposed site-wide load to any anonymous caller.
+    // Queue depth stays available to operators via /metrics + workerdash.
+    [SkippableFact]
+    public async Task Worker_Health_Has_No_Queue_Depth()
+    {
+        await TestDb.RequireAsync(_factory);
+        var body = await _factory.CreateClient().GetFromJsonAsync<JsonElement>("/api/health/worker");
+        Assert.False(body.TryGetProperty("queueDepth", out _));
+        Assert.True(body.TryGetProperty("healthy", out _));
     }
 }

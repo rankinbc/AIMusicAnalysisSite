@@ -484,9 +484,12 @@ app.UseExceptionHandler(new ExceptionHandlerOptions
     },
 });
 
-// OpenAPI doc is mapped unconditionally — orval codegen needs to fetch it from
-// whatever environment is running (dev + CI). Lock down before public exposure.
-app.MapOpenApi();
+// OpenAPI doc is Development-only — orval codegen fetches it from a dev/CI
+// run; a solo-fork prod deploy has no public API consumer to serve it to.
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
 
 // Story 10.3 — correlation enrichment (NFR30): any request that names a job
 // or analysis id carries that id on every log line + Sentry event, so one id

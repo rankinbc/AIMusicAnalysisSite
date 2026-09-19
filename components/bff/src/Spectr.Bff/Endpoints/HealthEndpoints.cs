@@ -72,14 +72,12 @@ public static class HealthEndpoints
 
         bool workerHealthy = false;
         long? heartbeatAge = null;
-        long queueDepth = 0;
         try
         {
             using var cts = new CancellationTokenSource(timeout);
             heartbeatAge = await heartbeat.AgeSecondsAsync(cts.Token);
             workerHealthy = heartbeatAge is long age
                 && age < opts.Value.HeartbeatStaleSeconds;
-            queueDepth = await heartbeat.AnalysisQueueDepthAsync(cts.Token);
         }
         catch { }
 
@@ -111,7 +109,7 @@ public static class HealthEndpoints
             new FullHealthChecks(
                 postgresOk,
                 redisOk,
-                new WorkerHealthDto(workerHealthy, heartbeatAge, queueDepth),
+                new WorkerHealthDto(workerHealthy, heartbeatAge),
                 new StorageHealthDto(storageMode, storageOk))));
     }
 
@@ -127,28 +125,24 @@ public static class HealthEndpoints
         // when nothing can drain the queue (the P0 this story exists to fix).
         bool healthy = false;
         long? ageSeconds = null;
-        long queueDepth = 0;
         try
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
             ageSeconds = await heartbeat.AgeSecondsAsync(cts.Token);
             healthy = ageSeconds is long age
                 && age < opts.Value.HeartbeatStaleSeconds;
-            queueDepth = await heartbeat.AnalysisQueueDepthAsync(cts.Token);
         }
         catch { /* Redis unreachable ⇒ worker effectively unavailable. */ }
 
-        return Results.Ok(new WorkerHealthDto(healthy, ageSeconds, queueDepth));
+        return Results.Ok(new WorkerHealthDto(healthy, ageSeconds));
     }
 }
 
 /// <param name="Healthy">A worker heartbeat fresher than the stale threshold exists.</param>
 /// <param name="LastHeartbeatAgeSeconds">Seconds since the most recent heartbeat; null if no worker has ever registered.</param>
-/// <param name="QueueDepth">Pending messages across analysis-paid + analysis-free.</param>
 public sealed record WorkerHealthDto(
     bool Healthy,
-    long? LastHeartbeatAgeSeconds,
-    long QueueDepth);
+    long? LastHeartbeatAgeSeconds);
 
 /// <param name="Status">"ok" when postgres AND redis pass; otherwise "degraded". Worker/storage never change it.</param>
 public sealed record FullHealthDto(string Status, FullHealthChecks Checks);

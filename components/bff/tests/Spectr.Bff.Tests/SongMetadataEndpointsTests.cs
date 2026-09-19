@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Spectr.Bff.DTOs;
+using Spectr.Data;
+using Spectr.Data.Entities;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -9,7 +11,9 @@ using Xunit;
 
 namespace Spectr.Bff.Tests;
 
-// Library-redesign — New Song metadata + per-song visibility + hard delete.
+// Library-redesign — New Song metadata + hard delete. Song-level visibility
+// (solo fork) and the tag public flag (solo fork) were both retired from the
+// API surface; the entity columns stay until the DB task drops them.
 // Postgres-gated (mirrors VersionShareEndpointsTests): skips when no DB.
 public sealed class SongMetadataEndpointsTests(WebApplicationFactory<Program> factory)
     : IClassFixture<WebApplicationFactory<Program>>
@@ -17,7 +21,7 @@ public sealed class SongMetadataEndpointsTests(WebApplicationFactory<Program> fa
     private readonly WebApplicationFactory<Program> _factory = factory;
 
     [SkippableFact]
-    public async Task Create_And_Get_RoundTripsMetadata_AndDefaultsVisibilityPrivate()
+    public async Task Create_And_Get_RoundTripsMetadata()
     {
         await TestDb.RequireAsync(_factory);
         var (client, _) = await NewAuthedClient();
@@ -34,20 +38,17 @@ public sealed class SongMetadataEndpointsTests(WebApplicationFactory<Program> fa
             referenceProfileId = "trance",
         });
 
-        // Visibility is NOT settable on create — always 'private'.
-        Assert.Equal("private", created!.Visibility);
-        Assert.Equal("notes to self", created.Description);
+        Assert.Equal("notes to self", created!.Description);
         Assert.Equal("aurora", created.VisualTemplate);
         Assert.Equal("oklch(0.72 0.19 352)", created.VisualPrimary);
         Assert.Equal("oklch(0.55 0.12 240)", created.VisualSecondary);
         Assert.Equal("preset", created.ReferenceProfileKind);
         Assert.Equal("trance", created.ReferenceProfileId);
 
-        // GET returns the same metadata + visibility.
+        // GET returns the same metadata.
         var fetched = await client.GetFromJsonAsync<SongDto>($"/api/songs/{created.Id}");
         Assert.NotNull(fetched);
-        Assert.Equal("private", fetched!.Visibility);
-        Assert.Equal("notes to self", fetched.Description);
+        Assert.Equal("notes to self", fetched!.Description);
         Assert.Equal("aurora", fetched.VisualTemplate);
         Assert.Equal("preset", fetched.ReferenceProfileKind);
         Assert.Equal("trance", fetched.ReferenceProfileId);
@@ -74,42 +75,18 @@ public sealed class SongMetadataEndpointsTests(WebApplicationFactory<Program> fa
     }
 
     [SkippableFact]
-    public async Task Patch_UpdatesVisibility_AndPersists()
+    public async Task Patch_UpdatesDescription_AndPersists()
     {
         await TestDb.RequireAsync(_factory);
         var (client, _) = await NewAuthedClient();
-        var song = await CreateSong(client, new { name = $"Vis {Guid.NewGuid():N}" });
-        Assert.Equal("private", song!.Visibility);
+        var song = await CreateSong(client, new { name = $"Desc {Guid.NewGuid():N}" });
 
-        var patch = await client.PatchAsJsonAsync($"/api/songs/{song.Id}",
-            new { visibility = "shared", description = "shared with the band" });
+        var patch = await client.PatchAsJsonAsync($"/api/songs/{song!.Id}",
+            new { description = "shared with the band" });
         Assert.Equal(HttpStatusCode.NoContent, patch.StatusCode);
 
         var fetched = await client.GetFromJsonAsync<SongDto>($"/api/songs/{song.Id}");
-        Assert.Equal("shared", fetched!.Visibility);
-        Assert.Equal("shared with the band", fetched.Description);
-
-        // public is also accepted.
-        var toPublic = await client.PatchAsJsonAsync($"/api/songs/{song.Id}", new { visibility = "public" });
-        Assert.Equal(HttpStatusCode.NoContent, toPublic.StatusCode);
-        var again = await client.GetFromJsonAsync<SongDto>($"/api/songs/{song.Id}");
-        Assert.Equal("public", again!.Visibility);
-    }
-
-    [SkippableFact]
-    public async Task Patch_RejectsInvalidVisibility_WithBadRequest()
-    {
-        await TestDb.RequireAsync(_factory);
-        var (client, _) = await NewAuthedClient();
-        var song = await CreateSong(client, new { name = $"Bad {Guid.NewGuid():N}" });
-
-        var patch = await client.PatchAsJsonAsync($"/api/songs/{song!.Id}",
-            new { visibility = "banana" });
-        Assert.Equal(HttpStatusCode.BadRequest, patch.StatusCode);
-
-        // The value must NOT have been persisted.
-        var fetched = await client.GetFromJsonAsync<SongDto>($"/api/songs/{song.Id}");
-        Assert.Equal("private", fetched!.Visibility);
+        Assert.Equal("shared with the band", fetched!.Description);
     }
 
     [SkippableFact]
@@ -122,7 +99,7 @@ public sealed class SongMetadataEndpointsTests(WebApplicationFactory<Program> fa
 
         // Add a tag so we exercise the child-row cleanup.
         var tagResp = await owner.PostAsJsonAsync($"/api/songs/{song.Id}/tags",
-            new { name = "wip", isPublic = false });
+            new { name = "wip" });
         Assert.Equal(HttpStatusCode.Created, tagResp.StatusCode);
 
         // Another user cannot hard-delete it.
@@ -155,6 +132,73 @@ public sealed class SongMetadataEndpointsTests(WebApplicationFactory<Program> fa
         var fetched = await owner.GetFromJsonAsync<SongDto>($"/api/songs/{song.Id}");
         Assert.NotNull(fetched);
         Assert.NotNull(fetched!.ArchivedAt);
+    }
+
+    // Solo fork discovery — tags carried a per-tag "public" flag with a
+    // cross-user read path (ReportsEndpoints.cs used to OR in `st.IsPublic`).
+    // Wire contracts must never re-admit it.
+    [Fact]
+    public void TagDto_And_CreateTagRequest_Have_No_IsPublic_Property()
+    {
+        Assert.Null(typeof(TagDto).GetProperty("IsPublic"));
+        Assert.Null(typeof(CreateTagRequest).GetProperty("IsPublic"));
+    }
+
+    // Behavioural counterpart: even if a legacy is_public=true tag row exists
+    // on the caller's OWN song (a shape only reachable via direct data
+    // manipulation now that every write path is owner-scoped), GET
+    // /api/reports must never surface a tag belonging to another user — not
+    // in the unfiltered Tags list, and not as a match for the ?tags= filter.
+    [SkippableFact]
+    public async Task Reports_List_Never_Returns_Another_Users_Tag_On_Callers_Own_Song()
+    {
+        await TestDb.RequireAsync(_factory);
+
+        var client = _factory.CreateClient();
+        var (ownerId, ownerToken) = await TestAuth.RegisterAsync(client);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerToken);
+
+        var otherClient = _factory.CreateClient();
+        var (otherUserId, _) = await TestAuth.RegisterAsync(otherClient);
+
+        var songId = Guid.NewGuid();
+        var versionId = Guid.NewGuid();
+        var jobId = Guid.NewGuid();
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Songs.Add(new Song { Id = songId, UserId = ownerId, Name = $"Leak {Guid.NewGuid():N}" });
+            db.SongVersions.Add(new SongVersion
+            {
+                Id = versionId, SongId = songId, VersionNumber = 1,
+                Label = "v1", IsCurrent = true, FilePath = "x.wav",
+            });
+            db.AnalysisJobs.Add(new AnalysisJob
+            {
+                Id = jobId, UserId = ownerId, VersionId = versionId, Status = "complete",
+            });
+            // Owner's own tag — must still be visible.
+            db.SongTags.Add(new SongTag { SongId = songId, UserId = ownerId, Name = "mine", IsPublic = false });
+            // A tag row belonging to ANOTHER user on the CALLER's own song,
+            // with the legacy is_public flag set — exactly the shape the
+            // retired `st.UserId == userId || st.IsPublic` predicate leaked.
+            db.SongTags.Add(new SongTag { SongId = songId, UserId = otherUserId, Name = "leaked", IsPublic = true });
+            await db.SaveChangesAsync();
+        }
+
+        var listResp = await client.GetAsync("/api/reports/");
+        listResp.EnsureSuccessStatusCode();
+        var list = await listResp.Content.ReadFromJsonAsync<ReportListResponse>();
+        var item = Assert.Single(list!.Items, i => i.JobId == jobId);
+        Assert.Contains(item.Tags, t => t.Name == "mine");
+        Assert.DoesNotContain(item.Tags, t => t.Name == "leaked");
+
+        // The tag-name filter must not treat the other user's tag as a match either.
+        var filteredResp = await client.GetAsync("/api/reports/?tags=leaked");
+        filteredResp.EnsureSuccessStatusCode();
+        var filtered = await filteredResp.Content.ReadFromJsonAsync<ReportListResponse>();
+        Assert.Empty(filtered!.Items);
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

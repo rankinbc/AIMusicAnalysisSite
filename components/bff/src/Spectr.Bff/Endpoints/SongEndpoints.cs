@@ -68,7 +68,7 @@ public static class SongEndpoints
             .ToListAsync(ct);
         var tagsBySong = allTags
             .GroupBy(t => t.SongId)
-            .ToDictionary(g => g.Key, g => g.Select(t => new TagDto(t.Id, t.Name, t.IsPublic)).ToList());
+            .ToDictionary(g => g.Key, g => g.Select(t => new TagDto(t.Id, t.Name)).ToList());
 
         var dto = songs.Select(s => BuildSongDto(
             s,
@@ -97,7 +97,6 @@ public static class SongEndpoints
             UserId = userId,
             Name = req.Name.Trim(),
             GenreHint = string.IsNullOrWhiteSpace(req.GenreHint) ? null : req.GenreHint.Trim(),
-            // Visibility is NOT settable on create — always defaults to 'private'.
             Description = Clean(req.Description),
             VisualTemplate = Clean(req.VisualTemplate),
             VisualPrimary = Clean(req.VisualPrimary),
@@ -166,7 +165,7 @@ public static class SongEndpoints
             versions.Select(v => ToVersionDto(
                 v, metricsByVersion.GetValueOrDefault(v.Id), ratingByVersion.GetValueOrDefault(v.Id))).ToList(),
             latest is null ? null : ToSummaryDto(latest),
-            tags.Select(t => new TagDto(t.Id, t.Name, t.IsPublic)).ToList()));
+            tags.Select(t => new TagDto(t.Id, t.Name)).ToList()));
     }
 
     private static async Task<IResult> Patch(
@@ -181,14 +180,6 @@ public static class SongEndpoints
         var song = await db.Songs.FirstOrDefaultAsync(s => s.Id == songId && s.UserId == userId, ct);
         if (song is null) return Results.NotFound();
 
-        if (req.Visibility is not null)
-        {
-            if (!AllowedVisibilities.Contains(req.Visibility))
-                return ErrorEnvelope.Build(400, "invalid_visibility",
-                    "Visibility must be one of: private, shared, public.",
-                    new { allowed = AllowedVisibilities });
-            song.Visibility = req.Visibility;
-        }
         if (req.Name is not null)
         {
             var trimmed = req.Name.Trim();
@@ -360,7 +351,7 @@ public static class SongEndpoints
         if (tagCount >= 20)
             return Results.UnprocessableEntity(new { error = "Maximum 20 tags per song." });
 
-        var tag = new SongTag { SongId = songId, UserId = userId, Name = name, IsPublic = req.IsPublic };
+        var tag = new SongTag { SongId = songId, UserId = userId, Name = name };
         db.SongTags.Add(tag);
         try
         {
@@ -372,7 +363,7 @@ public static class SongEndpoints
         }
 
         return Results.Created($"/api/songs/{songId}/tags/{tag.Id}",
-            new TagDto(tag.Id, tag.Name, tag.IsPublic));
+            new TagDto(tag.Id, tag.Name));
     }
 
     private static async Task<IResult> RemoveTag(
@@ -393,7 +384,6 @@ public static class SongEndpoints
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
-    private static readonly string[] AllowedVisibilities = { "private", "shared", "public" };
 
     // Trim + collapse blanks to null for the optional TEXT metadata columns.
     private static string? Clean(string? s) =>
@@ -406,7 +396,7 @@ public static class SongEndpoints
         IReadOnlyList<TagDto> tags) =>
         new(s.Id, s.Name, s.GenreHint, s.CreatedAt, s.UpdatedAt, s.ArchivedAt,
             versions, latest, tags,
-            s.Visibility, s.Description, s.VisualTemplate, s.VisualPrimary,
+            s.Description, s.VisualTemplate, s.VisualPrimary,
             s.VisualSecondary, s.ReferenceProfileKind, s.ReferenceProfileId);
 
     // Pulls every stored stem blob key out of a version's JSONB columns.
