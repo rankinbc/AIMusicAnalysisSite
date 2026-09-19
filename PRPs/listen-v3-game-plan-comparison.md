@@ -11,6 +11,15 @@ description: |
 
 ---
 
+> ARCHIVED 2026-09-19 — removed on the solo fork (PRPs/solo-fork-strip-social.md): the
+> `source=reviewer` (accepted reviewer suggestion, PRP-3/`FeedbackEndpoints`) and
+> `source=recap` (Room recap publish, PRP-4/`RoomEndpoints`) drains described below no longer
+> exist — `FeedbackEndpoints`, `RoomEndpoints`, and `IGamePlanSink`'s only two callers are deleted.
+> The GamePlan feature itself (`game_plans`/`game_plan_items`/`version_comparisons`, owner-only)
+> stays and is unaffected; only its `coach`/`analysis`/`adopted_preset` drain sources are live now.
+
+---
+
 > **Seam reconciliation (2026-06-26 — READ BEFORE BUILDING):** this PRP is NOT-STARTED, but the upstream `IGamePlanSink` seam already SHIPPED with a different (minimal) shape than the pseudo-code below assumes. Build against the **as-built seam**, not the older inline sketches:
 > - **As-built seam** (`Services/IGamePlanSink.cs`): `Task InsertDrainItemAsync(Guid songVersionId, string source, string refType, string refId, CancellationToken ct = default)` — **minimal**. No `title` / `detail` / `target_change` are passed in. The real PRP-5 sink must **enrich** the item itself: resolve `refType`+`refId` → the chain/title/detail at insert time.
 > - **Real call-site values** (currently feeding the no-op sink):

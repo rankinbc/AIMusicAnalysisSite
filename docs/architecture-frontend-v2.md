@@ -6,18 +6,19 @@ relative to `components/frontend-spectr-v2/` unless prefixed with `/`. Grounded 
 
 ## Executive Summary
 
-`frontend-spectr-v2` is the primary web client of SPECTR, an AI music-analysis SaaS for music
+`frontend-spectr-v2` is the primary web client of SPECTR, an AI music-analysis app for music
 producers. Users upload a mix (optionally with up to 100 stems, an Ableton `.als` project, and a
 reference track), receive a graded 7/8-phase analysis report with AI coach chat, on-demand AI
 specialist verdicts and a deterministic "Fix Rack", and can audition their track through a
 real-time Web Audio DSP rack ("Listen"). The app also carries the commercial surface (pricing,
-Stripe billing, credits, entitlement gating), a social layer (public profiles, follows, activity
-feed, shared-version reviewer pages, listening rooms), and an anonymous instant-analysis funnel
-at `/analyze` that converts to registration by "claiming" the device-scoped report.
+Stripe billing, credits, entitlement gating) and an anonymous instant-analysis funnel at
+`/analyze` that converts to registration by "claiming" the device-scoped report. It is a
+single-user product — no sharing, no public pages, no profiles, no rooms (see
+`PRPs/solo-fork-strip-social.md`).
 
 It is a Vite-built React 19 SPA that talks exclusively to the .NET BFF (`components/bff`) over
-`/api/*` (Vite dev proxy to `localhost:5000`), with SSE for streaming (coach replies, listening
-rooms) and XHR for upload progress.
+`/api/*` (Vite dev proxy to `localhost:5000`), with SSE for streaming (coach replies) and XHR for
+upload progress.
 
 ## Technology Stack
 
@@ -49,17 +50,17 @@ rooms) and XHR for upload progress.
   authenticated shell (topnav, banners, keyboard shortcuts) whose `beforeLoad` redirects
   anonymous users to `/login` — but short-circuits while `auth.isLoading` (silent-refresh boot)
   to avoid a flash-of-redirect. `_public.tsx` is the narrow-column anonymous layout (login,
-  register, share pages). Funnel pages (`/`, `/analyze`, `/pricing`, `/trust/*`) sit outside both
+  register). Funnel pages (`/`, `/analyze`, `/pricing`, `/trust/*`) sit outside both
   layouts and render their own `PublicChrome`. `src/main.tsx` bridges `AuthContext` into router
   context (`RouterBridge`) and calls `router.invalidate()` when auth resolves so cached
   `beforeLoad` guards re-run.
 - **Feature folders.** `src/features/<feature>/` owns components + hooks + pure helpers per
-  domain (17 folders: account, anon-analyze, auth, billing, feed, health, landing, library,
-  listen, listen-rack, mentions, notifications, profiles, references, results, trust, upload).
-  Cross-feature dialogs/widgets live in `src/components/`; visual primitives in `src/ui/`.
+  domain (14 folders: account, anon-analyze, auth, billing, health, landing, library, listen,
+  listen-rack, references, results, song, trust, upload). Cross-feature dialogs/widgets live in
+  `src/components/`; visual primitives in `src/ui/`.
 - **Pure/container split.** Presentational pieces are exported as provider-free functions
-  (e.g. `ProgressStorylineView`, `AuthFlowViews`, `FeedView`, `AnonReviewerSurface`) so vitest
-  can assert states via `renderToStaticMarkup` without a DOM; route containers own the hooks.
+  (e.g. `ProgressStorylineView`, `AuthFlowViews`) so vitest can assert states via
+  `renderToStaticMarkup` without a DOM; route containers own the hooks.
 - **Auth model** (`src/auth/AuthContext.tsx` + `src/api/fetcher.ts`):
   - Access token lives in **module state only** (`fetcher.ts` `accessToken`); never localStorage.
   - Refresh token is an httpOnly cookie; `refreshSession()` is the **single-flight** refresh for
@@ -85,16 +86,12 @@ rooms) and XHR for upload progress.
 | `_public/login.tsx`, `register.tsx` | `/login`, `/register` | Auth forms (login supports `?next=`) | public |
 | `_public/forgot-password.tsx`, `reset-password.tsx`, `verify-email.tsx` | | `features/auth/AuthFlowViews` containers | public |
 | `_public/billing.cancelled.tsx` | `/billing/cancelled` | Stripe checkout-cancelled landing | public |
-| `_public/u.$handle.tsx` | `/u/{handle}` | `features/profiles/PublicProfileView` — public profile, follow button | public |
-| `_public/v.$token.tsx` | `/v/{token}` | Anonymous version-share reviewer surface (`features/listen/AnonReviewerSurface`); token is the grant | public |
-| `_public/r.$token.tsx` | `/r/{token}` | Shared-analysis review page: native `<audio>` vs `/api/share/{token}/audio` + timestamped comments | public |
 | `_app.tsx` | — | Authed shell: topnav, `AppDunningNotice`, `AppWorkerHealthNotice`, `VerifyEmailBanner`, global shortcuts (⌘K palette, ⌘U upload, `?` sheet), account menu with `UsageMeter` | auth |
 | `_app/library.tsx` | `/library` | Songs / References segmented library (`SongsLibrarySection`, `ReferenceLibrarySection`) | auth |
-| `_app/songs.$songId.tsx` | `/songs/{id}` | Song detail: cover hero, `ProgressTimeline`, version list, `CompareDialog`, share/edit/upload dialogs; returns `<Outlet/>` when the results child route is active (`useChildMatches`) | auth |
+| `_app/songs.$songId.tsx` | `/songs/{id}` | Song detail: cover hero, `ProgressTimeline`, version list, `CompareDialog`, edit/upload dialogs; returns `<Outlet/>` when the results child route is active (`useChildMatches`) | auth |
 | `_app/songs.$songId.results.$jobId.tsx` | `/songs/{id}/results/{jobId}` | Results page: job poll → `ProgressStoryline` / fail + free retry / `ReportView` tabs (`?tab=` deep link) | auth |
-| `_app/listen-rack.$versionId.tsx` | `/listen-rack/{versionId}` | `ListenRackPage` (canonical Listen page) with real audio + analysis-fed track model; `?fixPreset=<uuid>` carry-over; room SSE default on (`VITE_ROOM_LIVE_SSE=0` for mock) | auth |
+| `_app/listen-rack.$versionId.tsx` | `/listen-rack/{versionId}` | `ListenRackPage` (canonical Listen page, owner-only) with real audio + analysis-fed track model; `?fixPreset=<uuid>` carry-over | auth |
 | `_app/reports.tsx` | `/reports` | All-reports table (filterable, `useReports`) | auth |
-| `_app/feed.tsx` | `/feed` | Followed-users activity feed (accumulating pages) | auth |
 | `_app/profile.tsx` | `/profile` | Own profile + settings incl. `DangerZone` (export / delete account) | auth |
 | `_app/usage.tsx` | `/usage` | Credits balance, ledger, `BuyCreditsCard`, `UsageSummary`, `HonestMathBanner` | auth |
 | `_app/billing.tsx` | `/billing` | Self-service billing: free / pro-active / cancel-pending states, `DunningBanner` | auth |
@@ -108,8 +105,7 @@ The Debug results tab is likewise dev-build-only (`buildResultsTabs(..., import.
 
 - **TanStack Query owns all server state.** Defaults: `staleTime: 30_000`,
   `refetchOnWindowFocus: false` (`src/main.tsx`). ~80 hooks in `src/api/hooks.ts` (one file,
-  sectioned by resource); feature-local hooks (feed, notifications, listen room, rack presets)
-  live in their feature folders.
+  sectioned by resource); feature-local hooks (rack presets, etc.) live in their feature folders.
 - **Polling is interval-function based** (poll only while there is something to wait for):
 
 | Hook | Interval | Stops when / cap |
@@ -122,7 +118,6 @@ The Debug results tab is likewise dev-build-only (`buildResultsTabs(..., import.
 | `useStemProposals` (`hooks.ts:338`) | 1.5 s | `classified === true` or zero staged stems |
 | `useWorkerHealth` (`hooks.ts:463`) | 30 s healthy / 10 s offline | never (global banner; anonymous endpoint) |
 | `useFullHealth` (`hooks.ts:478`) | 30 s | dev-only mount (`DevHealthDot`) |
-| `useNotifications` unread-count | 30 s | never (bell badge; SSE deferred) |
 | `billing.success` page | 5 s via `/auth/me` | tier flips to pro, or 60 s budget exhausted |
 
 - **Client/UI state is local.** `useState`/`useRef` per component; no Redux/Zustand. The only
@@ -140,8 +135,8 @@ The Debug results tab is likewise dev-build-only (`buildResultsTabs(..., import.
   returns `undefined` for 204.
 - **`src/api/hooks.ts`** (969 lines) — sections: auth/me → entitlements/plans → songs → versions
   (patch/reanalyze/free-retry/stems stage-classify-poll-confirm/als/notes) → worker health →
-  jobs/results → verdicts/specialists/fix-rack → references + reference sets → bookmarks →
-  shares + share comments → tags → reports → compare.
+  jobs/results → verdicts/specialists/fix-rack → references + reference sets → tags → reports →
+  compare.
 - **`src/api/types.ts`** (1633 lines) — DTO mirror of the BFF (`FinalJson`, phase data shapes,
   `VerdictDto`, `FixRackDto`, entitlements, coach conversation types...). Regenerated/extended via
   orval config; hand-edited where the OpenAPI is loose.
@@ -151,8 +146,6 @@ The Debug results tab is likewise dev-build-only (`buildResultsTabs(..., import.
   - Coach chat (`features/results/CoachChat.tsx`): two-phase — POST
     `/api/coach/{analysisId}/messages` then GET `.../messages/{id}/stream`; frames `token`,
     `done` (with evidence), `refusal`, `error` (`coach-stream-frames.ts`).
-  - Listening rooms (`features/listen/useRoomStream.ts`): `/api/sessions/{id}/stream`, first
-    frame is a full `sync` snapshot, then `SessionEvent` deltas; anon listeners pass `?token=`.
 - **Uploads are XHR** for progress events: `hooks/useFileUpload.ts` (generic),
   `hooks/useStemStaging.ts` (bulk stems), `features/anon-analyze/useAnonAnalysis.ts` (anon).
   Mix/stem/als/reference uploads are **presigned-first** (browser PUTs direct to R2/MinIO, then a
@@ -184,8 +177,8 @@ The Debug results tab is likewise dev-build-only (`buildResultsTabs(..., import.
 - Entry: `src/routes/_app/songs.$songId.results.$jobId.tsx`; job polled at 2 s.
 - While pending/processing: `features/results/ProgressStoryline.tsx` — named phase rows
   (done/current/todo), phase `%`, ticking elapsed clock, escalating hints: "still queued" after
-  2 min pending, "taking longer than usual" after 10 min total, and a worker-offline hint (with
-  queue depth) driven by the shared `useWorkerHealth` poll.
+  2 min pending, "taking longer than usual" after 10 min total, and a worker-offline hint
+  driven by the shared `useWorkerHealth` poll (worker availability only — no queue-depth number).
 - Failed: error panel + one **free retry** button (server-owned eligibility; 409 codes
   `retry_already_used` / `retry_not_eligible` hide it) → navigates to the new job id.
 - Complete: `ReportView` (506 lines) renders `SongHeader` (add-input chips) + `ResultsTabs`:
@@ -219,10 +212,9 @@ The Debug results tab is likewise dev-build-only (`buildResultsTabs(..., import.
   `AudioBufferSourceNode.detune` — pitch and tempo are coupled (no phase vocoder yet). Stem deck
   (`useStemEngine` + `StemDeck`) plays per-stem audio.
 - Server-backed rack/viz presets (`useRackPresets`, `useVizPresetsServer`), fix carry-over
-  overlay (`useFixOverlay` + `fixToRackPatch`), fork-to-suggest + suggestion audition, bookmarks
-  rail, comments, and live rooms (`useRoomOrchestration` composing session lifecycle + SSE stream
-  + reducer; mock fallback via `VITE_ROOM_LIVE_SSE=0`). Right rail tabs: Coach · Plan · People ·
-  Chat · Stats · Notes (`rail.tsx`); visualizer stages with an AUTO director (`viz.tsx`).
+  overlay (`useFixOverlay` + `fixToRackPatch`). Rack is always editable — there is no read-only
+  or room-guest mode. Right rail: notes-only (`NotesSidebar.tsx`); visualizer stages with an AUTO
+  director (`viz.tsx`).
 
 ### 5. Anonymous funnel `/analyze` (+ landing resume)
 - Entry: `features/anon-analyze/AnalyzePage.tsx`. State machine `idle → uploading → processing →
@@ -243,7 +235,7 @@ The Debug results tab is likewise dev-build-only (`buildResultsTabs(..., import.
   accents (`--cyan` #00e5b0 brand, violet/orange/red/green...), text tiers, radii, a 4-px spacing
   scale, severity colors (+ alias namespaces `--sev-warning` vs streaming `--sev-warn` — near-
   identical names, intentionally distinct), grade letter colors A–F, tier colors
-  (free/pro/credits), paywall overlay, and per-song visibility (`[data-vis]`) variables.
+  (free/pro/credits), and paywall overlay variables.
 - **`src/styles/global.css`** — reset + global utility primitives opted into by className from
   any component: `.card` (+ `.card-hd`, `.card-body`), `.pill[.tone]`, `.dot[.tone]`,
   `.btn[.primary/.ghost/.sm]`, `.label`, `.mono`, `.sr-only`, animation helpers (`.fade-up`,
@@ -275,7 +267,8 @@ The Debug results tab is likewise dev-build-only (`buildResultsTabs(..., import.
 ## Experience-relevant behaviors (latency / waiting / caps the UI surfaces)
 
 - **Job progress**: 2 s status poll; phase storyline with elapsed clock; "still queued" hint at
-  2 min pending; "taking longer than usual" at 10 min; worker-offline hint with queue depth.
+  2 min pending; "taking longer than usual" at 10 min; worker-offline hint (availability only —
+  no queue-depth number).
 - **Deferred arrangement score**: report polls itself at 8 s while Phase 7 says `pending`
   (background allin1 structure detection — minutes on CPU) and fills in live.
 - **Verdict generation**: specialists run on demand; roster shows optimistic "running" per slug;

@@ -5,7 +5,6 @@ SPECTR is a web app for music producers: upload a mix and an AI coach walks you 
 ![Analysis results report](docs/images/results-page.png)
 ![AI coach answering from measured data](docs/images/coach-chat.png)
 ![Real-time Listen DSP rack](docs/images/listen-rack.png)
-![Live listening room](docs/images/listening-room.png)
 ![On-demand AI specialist team](docs/images/specialist-team.png)
 ![Suggested fixes compiled into device chains](docs/images/fix-suggestions.png)
 ![Song library](docs/images/library.png)
@@ -22,7 +21,7 @@ Demo video: _coming soon_.
 - **On-demand AI specialists.** A triage pass builds a routing plan over 27 prompt-versioned specialists (loudness, low end, stereo field, gain staging, frequency collisions, stem balance, arrangement, and more). Verdict JSON is schema-validated, and priority scores are recomputed by a deterministic formula — LLM-supplied scores and severities are never trusted as-is.
 - **Bulk stem upload with audio-content classification.** Up to 100 stems per version; roles (drums, bass, vocals, …) are detected from audio content, not filenames, then confirmed by the user. Grouped bus analysis by default, per-stem mode opt-in.
 - **Listen rack.** A Web Audio DSP chain wrapped around the original upload: 8-band EQ, compressor with makeup gain, parallel saturation, M/S width matrix, and pitch — with live FFT spectrum and L/R metering. Fixes carried over from the report can be toggled and A/B'd against the dry signal without leaving the browser.
-- **Listening rooms and audio-reactive visuals.** A version can be shared into a live room — listener roster, chat, reactions, synced transport — and the player carries a music-reactive visual stage (spectrum, laser rig, strobe patterns, an auto-program that reacts to song intensity).
+- **Audio-reactive visuals.** The Listen rack's player carries a music-reactive visual stage (spectrum, laser rig, strobe patterns, an auto-program that reacts to song intensity).
 - **Anonymous instant analysis.** A visitor can analyze one track without an account; registering claims the device's history server-side.
 - **Accounts and operations.** JWT auth with httpOnly refresh cookies, Stripe subscriptions and credit packs behind live feature flags, per-tier LLM budgets, retention sweeps, transactional email, and a worker-health dashboard.
 

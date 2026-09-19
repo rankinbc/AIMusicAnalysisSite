@@ -379,6 +379,8 @@ Visitors land, understand the product, run one instant analysis with zero fields
 
 ### Epic 7: Share Pages & the Viral Loop
 
+> ARCHIVED 2026-09-19 — removed on the solo fork (PRPs/solo-fork-strip-social.md).
+
 Report owners share a public link that unfurls beautifully in Discord, shows a curated read-only report in 5 seconds on a phone, can be revoked anytime, and converts strangers into the free analyzer with attribution.
 **FRs covered:** FR21, FR22, FR23, FR24
 
@@ -1039,6 +1041,8 @@ So that conversion leaks are findable from day one.
 
 ## Epic 7: Share Pages & the Viral Loop
 
+> ARCHIVED 2026-09-19 — removed on the solo fork (PRPs/solo-fork-strip-social.md).
+
 Report owners share a public link that unfurls beautifully in Discord, shows a curated read-only report in 5 seconds on a phone, can be revoked anytime, and converts strangers into the free analyzer with attribution.
 
 ### Story 7.1: Share Link & Read-Only Public Report
@@ -1274,6 +1278,8 @@ So that 3 a.m. incidents have a script (NFR31).
 3. **Given** production error responses (NFR9), **When** errors occur, **Then** no stack traces or internals leak (test asserts the envelope).
 
 ## Epic 11: SPECTR Social — Collaboration, Feedback & Discovery
+
+> ARCHIVED 2026-09-19 — removed on the solo fork (PRPs/solo-fork-strip-social.md).
 
 Surface the already-built Listen-V3 social backend (version sharing, live rooms, threaded timestamped feedback, reviewer rack-suggestions, bookmarks, anon identity) as real, shippable user-facing experiences, then close the two greenfield gaps — in-app notifications and public profiles/follow/discovery — so SPECTR moves from "analyze alone" to "share a version, collect timestamped feedback and rack-fix suggestions (logged-in or anonymous), co-listen live in a room, get notified, and follow other producers." The backend is ~90% done (PRP-0..6 slice); the bulk of this epic is **wiring built hooks to new components**, one **mock→SSE swap**, and one **greenfield social-graph** slice. This is a net-new epic alongside Epics 1–10 (no renumbering). Story lineage: 11.1–11.4 operationalize PRP-3; 11.5 PRP-4; 11.3/11.4 PRP-6; 11.6/11.7 PRP-7 (`PRPs/listen-v3-notifications.md`).
 

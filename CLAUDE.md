@@ -2,6 +2,8 @@
 
 A music producer web app where users register/log in, upload audio files (MP3, FLAC, WAV), and receive a comprehensive 7-phase analysis report plus on-demand AI specialist verdicts. Users can also "listen" to their track through a real-time Web Audio DSP chain (EQ, compressor, saturation, M/S width, pitch).
 
+Single-user tool: there is no sharing, no profiles, no rooms — see `PRPs/solo-fork-strip-social.md`. `solo` is the main development + deploy branch; `master` is the frozen archive of the social build.
+
 **v2 stack (current — primary):**
 - **`bff/`** — ASP.NET Core .NET 10 minimal-API BFF (EF Core 10, Npgsql, PyJWT-style JWT bearer, IFileStorage, dramatiq job queue dispatcher)
 - **`frontend-spectr-v2/`** — React 19 + Vite 6 + TypeScript strict + TanStack Router + TanStack Query + CSS Modules + Radix UI + WaveSurfer + Recharts + Sonner. CSS Modules + `tokens.css`. No Tailwind, no shadcn.

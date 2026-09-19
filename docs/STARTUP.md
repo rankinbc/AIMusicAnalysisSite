@@ -179,7 +179,9 @@ Do all of these before declaring success — several failure modes look "up":
 
 1. **Frontend**: `curl -f http://localhost:5174` (or open it).
 2. **BFF**: `curl -f http://localhost:5000/healthz` (liveness) and
-   `http://localhost:5000/openapi/v1.json`. Dev-only aggregate:
+   `http://localhost:5000/openapi/v1.json` (Development only — `MapOpenApi()`
+   is gated behind `IsDevelopment()`; this local-dev check is fine, but the
+   route 404s outside Development, including in prod). Dev-only aggregate:
    `GET /api/health/full` (DB, Redis, storage, worker heartbeat).
    In the BFF boot log, eyeball `S3 configured: {bool}` and the resolved
    `Storage:LocalRoot` (must point at the repo's `data/`, not `components/data/`).
@@ -219,6 +221,35 @@ Nothing clears them — not `wsl --shutdown`, not killing WSLService, not bounci
 WinNAT. **Only a reboot fixes it.** Docker is ALSO down in this state, so IPv4
 workarounds are pointless (Postgres/Redis are gone too). Recovery: reboot →
 start Docker Desktop → `./scripts/start-spectr.ps1`.
+
+### #2b Live `wslrelay.exe` on `[::1]:5432`/`[::1]:6379` while Docker is healthy — IPv4 fix (no reboot)
+A different variant of #2: here Docker Desktop IS healthy and the containers
+ARE up, but a live `wslrelay.exe` process is still listening on `[::1]:5432`
+and `[::1]:6379` from an earlier session. `localhost` resolves to `::1` first
+on this machine, so connections land on the relay, get accepted, and are
+never answered. Symptoms: the BFF test suite mass-skips/fails at host
+startup, and the Python worker test suite HANGS in `psycopg2` (an indefinite
+hang, not an error). IPv4 (`127.0.0.1`) works fine throughout. **Fix without a
+reboot** — point every consumer at `127.0.0.1` explicitly:
+- BFF / `dotnet ef` / `dotnet test`: env `ConnectionStrings__Postgres="Host=127.0.0.1;..."` and `Redis__ConnectionString=127.0.0.1:6379`. The BFF test helper `TestDb.RedisEndpoint()` honors `Redis__ConnectionString`.
+- Worker: set `REDIS_URL` / `DATABASE_URL` in `components/worker/.env` to `127.0.0.1`.
+- pytest: `DATABASE_URL=postgresql+psycopg2://u:p@127.0.0.1/test` and `REDIS_URL=redis://127.0.0.1:6379/0`.
+A reboot also clears the stray relay (like #2), but isn't required once
+everything points at IPv4.
+
+### #2c Running the stack from a git worktree
+A fresh `git worktree` checkout has none of the git-ignored files the main
+checkout carries: `.env`, `components/worker/.env`, `docker/.env` (compose
+needs `JWT_KEY` from it — see #14). Copy them over from the main checkout
+first. The worktree's own `data/` directory is empty (uploads/models live in
+the main checkout's `data/`) — export `Storage__LocalRoot=<main checkout
+path>/data` before launching the BFF (the BFF reads NO `.env`, per section 7 —
+env var only) and set `STORAGE_LOCAL_ROOT` in the worktree's
+`components/worker/.env` to the same path. Editable Python installs
+(`pip install -e components/shared`, `pip install -e components/analysis`)
+bind to the checkout they were run from — reinstall them from inside the
+worktree before running its worker, or it will import the main checkout's
+package instead.
 
 ### #3 Half-dead worker: heartbeat fresh, queue not draining
 The dramatiq worker is TWO processes: a master (`python -m dramatiq …`) and a

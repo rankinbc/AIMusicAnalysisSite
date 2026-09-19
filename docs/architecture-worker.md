@@ -10,7 +10,6 @@ The worker is the asynchronous compute half of SPECTR. The .NET BFF never runs a
 - **AI verdicts** — `run_triage` produces a specialist routing plan; `run_specialist` runs one on-demand specialist prompt against a completed analysis and persists validated `verdicts` rows (fail-marker row on failure, never a silent gap).
 - **Coach** — `coach_reply` generates one grounded, evidence-cited coach chat turn, streamed token-by-token over Redis pub/sub to the BFF's SSE endpoint.
 - **Fix rack** — `generate_fix_rack` re-runs the Problem engine, synthesizes a DSP rack chain (`coach_mix.synthesize`, arbiter + optional LLM, fail-open) and saves it as a system `RackPreset(source='analysis')`.
-- **Rooms** — `synthesize_recap` is the sole finalizer of a live listening Room: flushes the Redis event WAL into `listening_sessions.events_json` and derives `recap_json`.
 - **Maintenance** — `sweep_retention` (nightly raw-audio purge), `send_email` (Resend retry arm), `delete_account_data` (async half of account deletion).
 
 All DB writes go to the same Postgres the BFF owns (schema is EF-Core-canonical; the worker uses the mirrored SQLAlchemy models in `components/shared/aimusic_shared/models.py` — see `docs/data-models.md`).
@@ -30,14 +29,14 @@ From `components/worker/requirements.txt` (lockfile `requirements.lock.txt`):
 | Object storage | `boto3 >= 1.34` | S3/R2/MinIO fetch shim (`app/object_store.py`), local-first |
 | Email | `httpx >= 0.27` | `send_email` actor calls the Resend HTTP API |
 | Observability | `prometheus-client >= 0.20`, `sentry-sdk >= 2.19` | `app/obs.py`; both optional-by-config |
-| Redis client | `redis >= 5.0` | Coach stream publisher, recap actor WAL reads |
+| Redis client | `redis >= 5.0` | Coach stream publisher |
 | Tests | `pytest >= 8`, `pytest-asyncio >= 0.23` | `components/worker/tests/` |
 
 Runtime: Python 3.11+, `--processes 1 --threads 1` always (Demucs memory + per-loop LLM client constraints; see Procfile comment).
 
 ## Actor Inventory
 
-13 actors, all registered by import side effect in `app/dramatiq_app.py`. Dispatch from the BFF is by `actor_name` (wire contract: `components/bff/src/Spectr.Bff/Services/IJobQueue.cs`).
+12 actors, all registered by import side effect in `app/dramatiq_app.py`. Dispatch from the BFF is by `actor_name` (wire contract: `components/bff/src/Spectr.Bff/Services/IJobQueue.cs`).
 
 | Actor | File | Queue | Retries / time limit | Purpose | Rough duration |
 |---|---|---|---|---|---|
@@ -49,7 +48,6 @@ Runtime: Python 3.11+, `--processes 1 --threads 1` always (Demucs memory + per-l
 | `rerun_phase` | `app/rerun_phase_actor.py` | analysis-paid | 1 / 10 min | Re-run ONE phase (2–8), merge into the existing `analyses.final_json` in place | ~5–60 s |
 | `detect_structure_job` | `app/structure_actor.py` | analysis-paid | 1 / (ALLIN1_TIMEOUT+300) s, default 35 min | Deferred allin1 structure detection; folds sections into Phase 1/7 of the SAME analysis row | ~6–7 min CPU (Docker allin1) |
 | `generate_fix_rack` | `app/fix_rack_actor.py` | analysis-paid | 1 | Problem engine + `coach_mix.synthesize` -> `rack_presets` row (`source='analysis'`) | seconds (LLM arbiter optional) |
-| `synthesize_recap` | `app/recap_actor.py` | analysis-paid | 1 | Sole Room finalizer: CAS `listening_sessions` live->ended, flush Redis WAL, compute recap | < 5 s |
 | `coach_reply` | `app/coach_actor.py` | **coach** | 1 / 3 min | Grounded streaming coach turn; updates the pending `coach_messages` assistant row | first tokens in seconds; full turn ~10–45 s |
 | `sweep_retention` | `app/retention_actor.py` | **maintenance** | 0 (nightly re-run IS the retry) | Purge raw audio past retention (free 30 d / lapsed 90 d / anon 72 h); stamps `raw_audio_purged_at`; FAIL-CLOSED on billing-query errors | minutes |
 | `send_email` | `app/send_email_actor.py` | **maintenance** | 3 (backoff) | Resend HTTP send; no API key -> stub log; 5xx/429 raise (retry), 4xx swallow; send-time suppression recheck | < 5 s |
@@ -75,7 +73,7 @@ Tier routing lives in the BFF (`DispatchAnalysisAsync`): pro/credits -> `analysi
 
 - **Sync SQLAlchemy sessions** — `app/db_sync.py`: coerces `DATABASE_URL` `+asyncpg` -> `+psycopg2`, `create_engine(pool_pre_ping=True)`, `sessionmaker(expire_on_commit=False)`. Actors use `with SessionFactory.begin() as s:` short transactions. The async pattern from the legacy FastAPI api does not work here.
 - **3-phase transaction pattern** (`analyze_audio_job`, mirrored by `rerun_phase`, `detect_structure_job`, `classify_stems`): (A) short tx — load job, flip to `processing`, capture paths; (B) run the pipeline with NO transaction held (progress updates are their own short standalone transactions via `progress_cb`); (C) fresh tx — insert `analyses`, flip job to `complete`. Prevents a long CPU phase from holding a Postgres connection.
-- **Redelivery / idempotency guards** — every actor is safe under dramatiq redelivery: `analyze_audio_job` no-ops on `complete` or `failed+worker_unavailable` jobs (story 3.5); `run_triage` bails if `routing_plan` or `degradation_notice` already set; the Problem engine keys on any existing `verdicts.source == 'rule_engine'` row; `coach_reply` only touches assistant rows still in `status='pending'`; `synthesize_recap` wins via a CAS `UPDATE ... WHERE status='live'`; `sweep_retention` keys on `raw_audio_purged_at`; `delete_account_data` re-runs cleanly against an already-purged id.
+- **Redelivery / idempotency guards** — every actor is safe under dramatiq redelivery: `analyze_audio_job` no-ops on `complete` or `failed+worker_unavailable` jobs (story 3.5); `run_triage` bails if `routing_plan` or `degradation_notice` already set; the Problem engine keys on any existing `verdicts.source == 'rule_engine'` row; `coach_reply` only touches assistant rows still in `status='pending'`; `sweep_retention` keys on `raw_audio_purged_at`; `delete_account_data` re-runs cleanly against an already-purged id.
 - **Typed failure + credit reversal** — a spoofed/broken upload fails fast with `error_code='invalid_file'` (`app/source_validation.py`, magic-byte + duration check at the trust boundary, before attachments are fetched). No retry; the BFF's `GET /api/jobs/{id}` hook observes the code and reverses the credit spend (AR16).
 - **Partial-failure tolerance** — post-persist stages (image render, JSON artifact, durable R2 upload, Problem engine, LLM identifiers, run trace, structure enqueue) are each individually try/except'd: a failure logs a warning and never undoes a completed analysis.
 - **Fail-marker verdicts** — `run_specialist` never leaves a silent hole: any failure in load/prompt/LLM/validate/persist writes a sentinel Verdict (`headline='Specialist failed'`, severity minor) so the frontend tile renders a failure state. Exception: `LlmBudgetExceeded` writes the degradation notice + rule-engine verdicts instead (the banner is the UX, not a per-tile failure).

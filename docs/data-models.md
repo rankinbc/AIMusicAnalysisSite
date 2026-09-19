@@ -2,9 +2,9 @@
 
 One document for the whole shared database (deviation from per-part naming is intentional: both the BFF and the worker read/write the same Postgres 16 instance).
 
-**Canonical source**: the EF Core 10 entities in `components/bff/src/Spectr.Data/Entities/*.cs` + `components/bff/src/Spectr.Data/AppDbContext.cs`. The Python worker uses a hand-maintained SQLAlchemy mirror (`components/shared/aimusic_shared/models.py`) covering the 30 tables the worker touches; cross-language drift is caught by fixture-roundtrip tests. Never define ORM models in the worker directly — extend the EF entity first, migrate, then mirror.
+**Canonical source**: the EF Core 10 entities in `components/bff/src/Spectr.Data/Entities/*.cs` + `components/bff/src/Spectr.Data/AppDbContext.cs`. The Python worker uses a hand-maintained SQLAlchemy mirror (`components/shared/aimusic_shared/models.py`) covering the 22 tables the worker touches; cross-language drift is caught by fixture-roundtrip tests. Never define ORM models in the worker directly — extend the EF entity first, migrate, then mirror.
 
-Snake_case table/column names throughout. 41 tables total.
+Snake_case table/column names throughout. 33 tables total (down from 41 — the `RemoveSocial` migration dropped `listening_sessions`, `control_grants`, `invites`, `share_settings`, `follow_relations`, `suggestions`, `track_comments`, `track_bookmarks`; see `PRPs/solo-fork-strip-social.md`).
 
 ## Entity Catalog
 
@@ -12,7 +12,7 @@ Snake_case table/column names throughout. 41 tables total.
 
 | Table | Entity file | Purpose / key columns |
 |---|---|---|
-| `users` | `User.cs` | Account + public profile. `email` (citext, unique), `hashed_password`, `email_verified_at`, `token_version` (JWT invalidation on reset/ban/delete), `banned_at`/`ban_reason`, profile (`handle` citext unique, `display_name`, `bio`, hues, `ui_prefs` jsonb), `stripe_customer_id` (partial-unique), `notify_analysis_complete` |
+| `users` | `User.cs` | Account. `email` (citext, unique), `hashed_password`, `email_verified_at`, `token_version` (JWT invalidation on reset/ban/delete), `banned_at`/`ban_reason`, `display_name`, `ui_prefs` jsonb, `stripe_customer_id` (partial-unique), `notify_analysis_complete`. `handle`/`bio`/`avatar_hue`/`banner_hue`/`accent`/`public_link` (public-profile fields) dropped by `RemoveSocial` |
 | `refresh_tokens` | `RefreshToken.cs` | Server-side refresh-token records backing the httpOnly cookie flow |
 | `auth_tokens` | `AuthToken.cs` | Single-use email-verification / password-reset tokens; `token_hash` unique, `(user_id, purpose)` index |
 | `devices` | `Device.cs` | Anonymous browser identity (AR24). ULID PK (26 chars), `ip_hash`/`ua_hash` (SHA-256 peppered), `claimed_by_user_id`/`claimed_at`. Unclaimed devices + their rows purge after 72 h |
@@ -22,7 +22,7 @@ Snake_case table/column names throughout. 41 tables total.
 
 | Table | Entity file | Purpose / key columns |
 |---|---|---|
-| `songs` | `Song.cs` | A track container per user. `user_id`, `name` (unique per user), `genre_hint`, visual card fields (`visual_template`, oklch colors), reference profile pointer (`reference_profile_kind`/`_id`), `visibility` (private/shared/public, default private), `archived_at` |
+| `songs` | `Song.cs` | A track container per user. `user_id`, `name` (unique per user), `genre_hint`, visual card fields (`visual_template`, oklch colors), reference profile pointer (`reference_profile_kind`/`_id`), `archived_at`. `visibility` dropped by `RemoveSocial` — every song is private to its owner |
 | `song_versions` | `SongVersion.cs` | One uploaded mix iteration. `song_id`, `version_number` (unique per song), `file_path` (storage key), `reference_path`, `als_file_path`, `als_project_json` (jsonb, client-parsed project map), `stem_paths_raw` (jsonb staging list), `stem_paths` (jsonb `{role: [keys]}`), `stem_analysis_mode` (grouped/per_stem), `is_current` (partial unique index: one current per song — raw SQL), `raw_audio_purged_at` (retention marker) |
 | `song_tags` | `SongTag.cs` | User-defined tags; unique `(song_id, user_id, name)`, cascade with song |
 
@@ -31,7 +31,7 @@ Snake_case table/column names throughout. 41 tables total.
 | Table | Entity file | Purpose / key columns |
 |---|---|---|
 | `analysis_jobs` | `AnalysisJob.cs` | Transient job state the UI polls. `user_id` XOR `device_id` (DB CHECK `ck_analysis_jobs_owner_xor`), `version_id` (nullable), `file_path` (anon song-less jobs only), `status` (pending/processing/complete/failed/awaiting_stem_mapping), `current_phase` + `phase_pct` (live progress), `reference_id`, `error_message`, `error_code` (typed, e.g. `invalid_file`, `worker_unavailable`), `tier` (stamped at dispatch), `retry_of_job_id` (partial-unique — one free retry per origin, story 5.7), dispatch/start/complete/fail timestamps |
-| `analyses` | `Analysis.cs` | One row per completed analysis (unique `job_id`). Denormalized `user_id` XOR `device_id`, `version_id`, `song_id`, `song_name`; `final_json` (jsonb — the whole report), `phase_durations` (jsonb), image keys (`spectrogram_image_path`, `waveform_image_path`, `waveform_peaks_path`), `stem_metrics` (jsonb), `routing_plan` (jsonb), `degradation_notice` (jsonb), sharing (`share_token` unique, `share_show_verdicts`, `share_enabled_at`) |
+| `analyses` | `Analysis.cs` | One row per completed analysis (unique `job_id`). Denormalized `user_id` XOR `device_id`, `version_id`, `song_id`, `song_name`; `final_json` (jsonb — the whole report), `phase_durations` (jsonb), image keys (`spectrogram_image_path`, `waveform_image_path`, `waveform_peaks_path`), `stem_metrics` (jsonb), `routing_plan` (jsonb), `degradation_notice` (jsonb). `share_token`/`share_show_verdicts`/`share_enabled_at` dropped by `RemoveSocial` |
 | `verdicts` | `Verdict.cs` | One finding per row (LLM specialist OR rule engine). ULID string PK (`vrd_...`). `analysis_id` (indexed, + `(analysis_id, specialist)`), `specialist`, `prompt_version` (`slug@semver`), `model`, `severity` (critical/severe/moderate/minor/win), `category`, `confidence`, `priority_score` (server-computed), `impact`, `headline`/`summary`/`body`/`metric_line`/`why_it_matters`, `evidence` (jsonb), `fix` (jsonb — Apply Preset wire format), `sources` (jsonb). **8 IDENTIFY Problem columns**: `problem_id`, `kind` (fault/observation/integrity), `source` (rule_engine/llm_identifier), `data_tier` (audio_only/stems/project_midi), `fixable`, `suspected`, `where` (jsonb section span; SQL reserved word, quoted), `refines` (parent composite problem_id) |
 | `verdict_user_state` | `VerdictUserState.cs` | Per-user dismiss/applied/feedback overlay; composite PK `(verdict_id, user_id)` |
 | `prompt_versions` | `PromptVersion.cs` | Operator prompt-version pinning registry |
@@ -44,33 +44,24 @@ Snake_case table/column names throughout. 41 tables total.
 | `conversations` | `Conversation.cs` | One per `(analysis_id, user_id)` (unique) — or `device_id` for anon (XOR CHECK). Get-or-created on first coach POST |
 | `coach_messages` | `CoachMessage.cs` | One row per turn. `conversation_id` (+`created_at` index), `role` (user/assistant CHECK), `status` (pending/complete/refused/error CHECK), `mode` (qa/teach, default qa), `content`, `evidence` (jsonb citation chips), `refusal_reason` (e.g. `coach_offline`), `llm_call_id` (ULID link to metering row), `completed_at` |
 
-### Listen / rack / rooms
+### Listen / rack
 
 | Table | Entity file | Purpose / key columns |
 |---|---|---|
-| `rack_presets` | `RackPreset.cs` | Named full-chain DSP rack snapshot, VERSION-scoped (no user_id — owner derives via version->song->user). `source` CHECK (user/coach/analysis), `chain_json` (jsonb), `coach_meta` (jsonb — fix-rack rationale from `generate_fix_rack`), provenance FKs `created_in_session_id`, `via_grant_id`, `from_suggestion_id` (all SetNull) |
+| `rack_presets` | `RackPreset.cs` | Named full-chain DSP rack snapshot, VERSION-scoped (no user_id — owner derives via version->song->user). `source` CHECK (user/coach/analysis), `chain_json` (jsonb), `coach_meta` (jsonb — fix-rack rationale from `generate_fix_rack`). Provenance FKs `created_in_session_id`/`via_grant_id`/`from_suggestion_id` dropped by `RemoveSocial` |
 | `rack_drafts` | `RackDraft.cs` | One autosaved draft per version (unique `song_version_id`) |
 | `viz_presets` | `VizPreset.cs` | User-scoped visualizer presets |
 | `session_notes` | `SessionNote.cs` | Timestamped listening notes per `(version_id, user_id)` |
-| `listening_sessions` | `ListeningSession.cs` | A live Room. `song_version_id`, `host_id`, `status` (live/ended CHECK), `events_json` (jsonb — Redis WAL flushed once at finalize), `recap_json` (jsonb — derived projection), `recap_published_at` (feed publish signal; partial index with host) |
-| `control_grants` | `ControlGrant.cs` | Rack/visuals control handoff provenance. `session_id`, `scope` CHECK (rack/visuals), `grantee_user_id`, `granted_by`; one ACTIVE holder per `(session, scope)` via raw-SQL partial unique index |
 
-### Sharing & feedback
+`listening_sessions` (live Room) and `control_grants` (rack/visuals control handoff) were dropped by `RemoveSocial` — there is no live-room feature any more (see `PRPs/solo-fork-strip-social.md`).
 
-| Table | Entity file | Purpose / key columns |
-|---|---|---|
-| `share_settings` | `ShareSetting.cs` | 1:1 with a version (PK `song_version_id`). `visibility` (private/unlisted/public), `share_token` (plain unique — NULLs distinct), `comments_policy`, `session_host_policy`, `session_join_policy` (all CHECKed) |
-| `invites` | `Invite.cs` | Tokened invites. `scope` (version/session), `role` (reviewer/listener/host), `status` (pending/accepted/revoked), `token` unique, `invited_user_id` SetNull |
-| `track_comments` | `TrackComment.cs` | Polymorphic comments: exactly one of `target_share_token` / `target_published_track` / `target_version_id` (3-way CHECK). Threaded via `parent_id` (NoAction self-FK; soft-delete `deleted_at`), `suggestion_id` link, `status` CHECK (open/resolved/pinned/hidden) |
-| `track_bookmarks` | `TrackBookmark.cs` (in TrackComment.cs) | Same 3-way polymorphic target CHECK; per-user bookmarks |
-| `suggestions` | `ReviewerSuggestion.cs` | Reviewer rack suggestions (PRP-3). `song_version_id`, `from_user_id`, `status` CHECK (proposed/auditioned/accepted/rejected), circular nullable FK pair with `track_comments` (`comment_id` <-> `suggestion_id`, both SetNull), `created_in_session_id` |
+### Notifications
 
-### Social & notifications
+`share_settings`, `invites`, `track_comments`, `track_bookmarks`, `suggestions`, and `follow_relations` were all dropped by `RemoveSocial` — sharing, invites, reviewer comments/suggestions, bookmarks and follows no longer exist.
 
 | Table | Entity file | Purpose / key columns |
 |---|---|---|
-| `notifications` | `Notification.cs` | Inbox. Two row shapes: EVENT rows (`digest_key` NULL, one per occurrence) and DIGEST rows (rolling per `(recipient, digestType, version, day)`, `count` increments; partial unique on `digest_key` via raw SQL). `recipient_user_id` (+`updated_at` index), `payload` jsonb, `read_at` |
-| `follow_relations` | `FollowRelation.cs` | Follow graph. Unique `(follower_id, followee_id)`, followee index for fan-in, CHECK no self-follow |
+| `notifications` | `Notification.cs` | **Not an in-app inbox** — the lifecycle-email send ledger (`LifecycleEmailScheduler`, `RetentionSweepScheduler`, dunning), no read API. Two row shapes: EVENT rows (`digest_key` NULL, one per occurrence) and DIGEST rows (rolling per `(recipient, digestType, version, day)`, `count` increments; partial unique on `digest_key` via raw SQL). `recipient_user_id` (+`updated_at` index), `payload` jsonb, `read_at` |
 
 ### References & compare
 
@@ -102,8 +93,7 @@ users 1--n songs 1--n song_versions 1--n analysis_jobs --1 analyses 1--n verdict
                                                               |          \-- n verdict_user_state (per user)
                                                               |-- 1..n conversations (unique per analysis+user) 1--n coach_messages
                                                               |-- routing_plan / degradation_notice (embedded jsonb, no table)
-song_versions 1--n rack_presets / rack_drafts(1) / share_settings(1) / invites / suggestions / listening_sessions / session_notes / compare_cache
-listening_sessions 1--n control_grants ; rack_presets --> (created_in_session_id, via_grant_id, from_suggestion_id) provenance
+song_versions 1--n rack_presets / rack_drafts(1) / session_notes / compare_cache
 reference_tracks n--n reference_sets (via reference_set_members) ; analysis_jobs.reference_id -> reference_tracks
 ```
 
@@ -119,13 +109,12 @@ Denormalization: `analyses` carries `user_id`/`song_id`/`song_name` so list page
 - **`verdicts.evidence`** — `[{metric, value, expected_range, label}, ...]`; `verdicts.fix` — `{fix_id, target, section, dsp_chain, steps[], sidechain, expected_outcome, ableton_hint}`; `verdicts.where` — `{section_type, start_seconds, end_seconds}`.
 - **`song_versions.stem_paths_raw`** — staged list `[{path, original_filename, detected_role?, confidence?, evidence?}, ...]` (classifier writes the last three). **`stem_paths`** — confirmed `{role: [keys]}` (legacy `{role: "key"}` still accepted by the pipeline coercion).
 - **`rack_presets.chain_json`** — full rack chain (module order + params + masterBypass), superset of `fix.dsp_chain`; **`coach_meta`** — `{change_log, arbiter_notes, degraded, leftover_advice}`.
-- **`listening_sessions.events_json`** — the flushed Redis WAL (`room:{id}:log`, Guid "N" key format) — durable event archive; **`recap_json`** — `{hottest_moments, histogram, peak_concurrency, attendance}` derived by `synthesize_recap`.
 - Others: `users.ui_prefs`, `song_versions.als_project_json`, `analyses.phase_durations`/`stem_metrics`, `reference_tracks.band_levels`/`tags`, `notifications.payload`.
 
 ## Migration Strategy
 
 - **EF Core migrations are canonical** — `components/bff/src/Spectr.Data/Migrations/` (45 migrations from `20260517074718_Initial` through `20260715140356_AddRackPresetCoachMeta`). Apply with `dotnet ef database update --project src/Spectr.Data --startup-project src/Spectr.Bff`.
-- **Manual raw-SQL steps are a standing pattern**: EF Core cannot fluently express Postgres partial indexes / some CHECKs, so migrations append `migrationBuilder.Sql(...)` in `Up()`/`Down()` after scaffolding. Instances: the `song_versions.is_current` partial unique index (the original gotcha — without it a song can have two current versions), `users.stripe_customer_id` unique-where-non-null, `credit_ledger.idempotency_key` partial unique, `notifications.digest_key` partial unique, `control_grants` one-active-holder per (session, scope), the `ck_*_owner_xor` device CHECKs, and `analysis_jobs.retry_of_job_id` (this one EF can express via `.HasFilter`). See `bff/README.md`.
+- **Manual raw-SQL steps are a standing pattern**: EF Core cannot fluently express Postgres partial indexes / some CHECKs, so migrations append `migrationBuilder.Sql(...)` in `Up()`/`Down()` after scaffolding. Instances: the `song_versions.is_current` partial unique index (the original gotcha — without it a song can have two current versions), `users.stripe_customer_id` unique-where-non-null, `credit_ledger.idempotency_key` partial unique, `notifications.digest_key` partial unique, the `ck_*_owner_xor` device CHECKs, and `analysis_jobs.retry_of_job_id` (this one EF can express via `.HasFilter`). See `bff/README.md`.
 - **Cross-language insert safety**: `AppDbContext.OnModelCreating` sets DB-side defaults (`now()` on `*_at`, token-count/cost defaults on `llm_calls`, `visibility`, IDENTIFY-column defaults on `verdicts`) precisely because the C#-side `= DateTimeOffset.UtcNow` initializers do not fire when the Python worker inserts via SQLAlchemy. The worker still sets `created_at` explicitly where it matters. Postgres extensions: `pgcrypto`, `citext`.
 - **Boot-time migrations in prod** — `Spectr.Bff/Program.cs`: when `Migrations:ApplyAtBoot=true` (set by the prod compose), `BootMigrator.ApplyAsync` runs migrations under a Postgres advisory lock at container start; a failure crashes the container by design (serving against a half-migrated schema is worse than a restart loop). Dev keeps the CLI/launcher flow.
 - **Legacy Alembic is frozen** — the frozen v1 FastAPI tables keep their historical Alembic revisions under `components/api/alembic/versions/`; no new Alembic revisions. The worker never migrates anything.
