@@ -1,0 +1,64 @@
+/* "Coach is responding" cues (CoachResponding.tsx).
+   Selectors carry an element part (`.typing > span`, `span.caret`) so they
+   out-rank the results page's scoped reset (`.rdx * { margin:0; padding:0 }`,
+   specificity 0,1,0) instead of tying with it and losing on source order. */
+.typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 1.45em;
+  vertical-align: middle;
+}
+.typing > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.3;
+  animation: coachDot 1.2s ease-in-out infinite;
+}
+.typing > span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.typing > span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes coachDot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+span.caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  border-radius: 1px;
+  background: var(--accent);
+  animation: coachCaret 1s steps(1) infinite;
+}
+@keyframes coachCaret {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Motion-sensitive users still get the cue, just without movement. */
+@media (prefers-reduced-motion: reduce) {
+  .typing > span,
+  span.caret {
+    animation: none;
+  }
+  .typing > span {
+    opacity: 0.7;
+  }
+}

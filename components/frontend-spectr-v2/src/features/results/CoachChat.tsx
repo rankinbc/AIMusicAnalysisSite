@@ -13,6 +13,7 @@ import { Pill } from '../../ui/Pill';
 import { Icon } from './Icon';
 import { CoachChatDialog } from './CoachChatDialog';
 import { CoachChatHeader, type CoachMode } from './CoachChatHeader';
+import { StreamCaret, TypingDots } from './CoachResponding';
 import { CoachGateInline } from './CoachGateInline';
 import { EvidenceChips } from './EvidenceChips';
 import {
@@ -578,8 +579,8 @@ export function CoachChat({
         )}
         {turns.map((turn, i) => {
           const isAssistant = turn.role === 'assistant';
-          const showStreamingPlaceholder =
-            isAssistant && !turn.finalized && streaming && i === turns.length - 1 && !turn.text;
+          // The reply in flight: dots until the first token, then a caret.
+          const isLive = isAssistant && !turn.finalized && streaming && i === turns.length - 1;
           const unlock = turn.refused ? resolveUnlockAction(turn.refusalReason) : null;
           return (
             <div key={i} className={`cmsg ${isAssistant ? 'bot' : 'user'}`}>
@@ -590,7 +591,8 @@ export function CoachChat({
                 </span>
               )}
               <div className="bub">
-                {turn.text || (showStreamingPlaceholder ? '…' : '')}
+                {turn.text}
+                {isLive && (turn.text ? <StreamCaret /> : <TypingDots />)}
                 {isAssistant && turn.finalized && turn.evidence && turn.evidence.length > 0 && (
                   <EvidenceChips evidence={turn.evidence} />
                 )}
