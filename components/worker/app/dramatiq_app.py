@@ -60,7 +60,6 @@ from . import reference_analyzer_actor  # noqa: E402,F401
 from . import coach_actor  # noqa: E402,F401
 from . import rerun_phase_actor  # noqa: E402,F401
 from . import structure_actor  # noqa: E402,F401
-from . import recap_actor  # noqa: E402,F401
 from . import fix_rack_actor  # noqa: E402,F401
 from . import retention_actor  # noqa: E402,F401  (story 3.4 — sweep_retention)
 from . import send_email_actor  # noqa: E402,F401  (story 4.2 — send_email)

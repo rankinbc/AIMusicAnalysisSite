@@ -18,7 +18,6 @@ import app.dramatiq_app  # noqa: E402,F401
 from app.coach_actor import coach_reply  # noqa: E402
 from app.reference_analyzer_actor import run_reference_analyzer  # noqa: E402
 from app.rerun_phase_actor import rerun_phase  # noqa: E402
-from app.recap_actor import synthesize_recap  # noqa: E402
 from app.account_deletion_actor import delete_account_data  # noqa: E402
 from app.retention_actor import sweep_retention  # noqa: E402
 from app.send_email_actor import send_email  # noqa: E402
@@ -35,7 +34,6 @@ EXPECTED_QUEUES = {
     "run_reference_analyzer": "analysis-paid",
     "rerun_phase": "analysis-paid",
     "detect_structure_job": "analysis-paid",
-    "synthesize_recap": "analysis-paid",
     "coach_reply": "coach",
     "sweep_retention": "maintenance",  # story 3.4 (AR22)
     "send_email": "maintenance",       # story 4.2 (AR27)
@@ -52,13 +50,19 @@ def test_actor_queue_assignments():
         "run_reference_analyzer": run_reference_analyzer.queue_name,
         "rerun_phase": rerun_phase.queue_name,
         "detect_structure_job": detect_structure_job.queue_name,
-        "synthesize_recap": synthesize_recap.queue_name,
         "coach_reply": coach_reply.queue_name,
         "sweep_retention": sweep_retention.queue_name,
         "send_email": send_email.queue_name,
         "delete_account_data": delete_account_data.queue_name,
     }
     assert actual == EXPECTED_QUEUES
+
+
+def test_no_room_recap_actor_is_registered():
+    import dramatiq
+    from app import dramatiq_app  # noqa: F401  (imports register every actor)
+
+    assert "synthesize_recap" not in dramatiq.get_broker().actors
 
 
 def test_analyze_audio_job_is_sole_declarer_of_analysis_free():

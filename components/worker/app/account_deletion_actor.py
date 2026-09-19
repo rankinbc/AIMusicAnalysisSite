@@ -81,16 +81,10 @@ def _collect_storage_keys(s, uid) -> list[str]:
             and not (k in seen or seen.add(k))]
 
 
-# Deepest-first. Version-scoped FK cascades (song_tags, rack_*, share_settings,
-# invites, suggestions, comments/bookmarks-on-own-tracks, listening_sessions)
-# fire from the song_versions/songs deletes at the end. Tables absent from
-# this list are either FK-cascaded off users (already gone) or retained.
+# Deepest-first. Version-scoped FK cascades (song_tags, rack_*) fire from the
+# song_versions/songs deletes at the end. Tables absent from this list are
+# either FK-cascaded off users (already gone) or retained.
 _DELETE_STATEMENTS: tuple[str, ...] = (
-    # Review-hardening: track_comments.parent_id is FK NO ACTION — another
-    # user's REPLY to this user's comment would abort the authored-comment
-    # delete (and with it the whole tx). Detach replies first.
-    "UPDATE track_comments SET parent_id = NULL WHERE parent_id IN "
-    "(SELECT id FROM track_comments WHERE author_user_id = :uid)",
     # coach chats
     "DELETE FROM coach_messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = :uid)",
     "DELETE FROM conversations WHERE user_id = :uid",
@@ -104,9 +98,6 @@ _DELETE_STATEMENTS: tuple[str, ...] = (
     "DELETE FROM version_user_ratings WHERE user_id = :uid",
     "DELETE FROM version_compare_notes WHERE user_id = :uid",
     "DELETE FROM session_notes WHERE user_id = :uid",
-    # authored social content on OTHERS' tracks (own-track rows cascade below)
-    "DELETE FROM track_comments WHERE author_user_id = :uid",
-    "DELETE FROM track_bookmarks WHERE user_id = :uid",
     # reference library
     "DELETE FROM reference_set_members WHERE set_id IN (SELECT id FROM reference_sets WHERE user_id = :uid)",
     "DELETE FROM reference_sets WHERE user_id = :uid",

@@ -71,7 +71,7 @@ def test_phase_c_clears_stale_failure_state_on_successful_rerun(sqlite_db):
 
     # Seed: a previously-failed job carrying stale error_message + failed_at.
     with sqlite_db.SessionFactory.begin() as s:
-        s.add(User(id=user_id, email="rerun@spectr.test", hashed_password="x", handle="r"))
+        s.add(User(id=user_id, email="rerun@spectr.test", hashed_password="x"))
         s.add(AnalysisJob(
             id=job_id,
             user_id=user_id,
@@ -113,7 +113,7 @@ def test_phase_c_does_not_set_failure_fields_on_clean_first_run(sqlite_db):
     job_id = uuid.uuid4()
 
     with sqlite_db.SessionFactory.begin() as s:
-        s.add(User(id=user_id, email="clean@spectr.test", hashed_password="x", handle="c"))
+        s.add(User(id=user_id, email="clean@spectr.test", hashed_password="x"))
         s.add(AnalysisJob(
             id=job_id,
             user_id=user_id,
