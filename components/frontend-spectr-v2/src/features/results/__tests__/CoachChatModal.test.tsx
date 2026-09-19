@@ -1,9 +1,7 @@
 // @vitest-environment jsdom
-// Ad-hoc task (2026-09-19): "Ask the Coach" expand-to-modal — see
-// .superpowers/sdd/solo-fork-strip-social-plan/adhoc-coach-modal-brief.md.
-// Fix round 1 (2026-09-19): the header (mode toggle + headerActions) now
-// travels with `expanded` too, same as the body, and the inline placeholder
-// lost its own Collapse button — see adhoc-coach-modal-report.md.
+// "Ask the Coach" expand-to-modal (2026-09-19): ONE CoachChat state; the
+// header (mode toggle + headerActions) and the body both travel with
+// `expanded`, and the inline placeholder has no Collapse button of its own.
 //
 // Renders the REAL CoachChat + CoachChatDialog (no Radix mocking) so the
 // interactive assertions — dialog role, Esc-to-close, focus return — are

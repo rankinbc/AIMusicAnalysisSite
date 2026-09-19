@@ -13,8 +13,8 @@ verdict retrieval, the coach conversation relay (SSE over Redis pub/sub), Stripe
 (checkout, webhook mirror, append-only credit ledger), the anonymous instant-analysis funnel,
 GDPR export/delete, and an X-Admin-Key operator surface. It never runs analysis itself — the
 Python dramatiq worker does; the BFF writes job rows + Redis messages and reads Postgres results.
-Roughly 198 mapped routes across 36 endpoint files, ~49 service classes, 3 projects + 1 test
-project (~64 test classes). A legacy FastAPI service (`components/api/`) still exists but is
+Roughly 140 mapped routes across 23 endpoint files, ~35 service classes, 3 projects + 1 test
+project (~56 test classes). A legacy FastAPI service (`components/api/`) still exists but is
 being phased out; nothing here depends on it.
 
 > Removed on the solo fork (`PRPs/solo-fork-strip-social.md`): version sharing and live listening
@@ -57,14 +57,14 @@ Three projects plus tests:
 
 Conventions inside `Spectr.Bff`:
 
-- **Endpoint groups**: one static class per resource in `Endpoints/*Endpoints.cs` (36 files),
+- **Endpoint groups**: one static class per resource in `Endpoints/*Endpoints.cs` (23 files),
   each exposing `Map<X>Endpoints(this IEndpointRouteBuilder)` that creates a `MapGroup` and
   registers handlers as private static methods. All groups except crawler shells/webhooks mount
   under the `/api` group created in `Program.cs`.
 - **DTOs**: sealed C# records in `src/Spectr.Bff/DTOs/*.cs` (e.g. `JobDtos.cs`, `BillingDtos.cs`,
   `VersionDtos.cs`, `CoachConversationDtos.cs`). Some endpoint-local request records live inline
   in the endpoint file (e.g. `UploadEndpoints.InitRequest`).
-- **Services layer**: `src/Spectr.Bff/Services/` (49 files) — interface-first seams
+- **Services layer**: `src/Spectr.Bff/Services/` (35 files) — interface-first seams
   (`IFileStorage`, `IJobQueue`, `IMultipartObjectStore`, `IRateLimiter`, `IEmailSender`,
   `IStripeCheckoutClient`/`SubscriptionClient`/`RefundClient`,
   `IPresetGenerator`) with concrete implementations registered in `Program.cs`.
@@ -250,7 +250,7 @@ older validation branches — the envelope is the convention for machine-actiona
 
 ## Testing
 
-`components/bff/tests/Spectr.Bff.Tests/` — single xunit project, 68 .cs files: ~64 test classes
+`components/bff/tests/Spectr.Bff.Tests/` — single xunit project, 61 .cs files: ~56 test classes
 plus shared support (`TestSupport.cs`, `TestEnv.cs`, `StripeTestUtilities.cs`) and
 `Fixtures/StripeEvents/*.json`. Style: `WebApplicationFactory<Program>` integration tests against
 a real Postgres (skippable via `Xunit.SkippableFact` when the DB is absent; `CiDbCanaryTests`

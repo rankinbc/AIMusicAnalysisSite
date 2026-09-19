@@ -117,7 +117,7 @@ public static class HealthEndpoints
         IWorkerHeartbeat heartbeat,
         IOptions<WorkerOptions> opts)
     {
-        // Story 12.2: heartbeat + queue-depth reads live in IWorkerHeartbeat
+        // Story 12.2: the heartbeat read lives in IWorkerHeartbeat
         // (shared with the StaleJobReaper) so the key rules never drift.
         // Review fix: a Redis outage degrades to healthy=false instead of a
         // 500 — the storyline's "worker appears to be down" hint keys on this
