@@ -45,7 +45,8 @@
 
 ## Global Constraints
 
-- No feature removed beyond D6. Coach chat, specialists, verdicts, Fix Rack, stems stage/classify/confirm, Listen rack DSP, anon funnel, email verification, share links must all work on the live site.
+- No feature removed beyond D6. Coach chat, specialists, verdicts, Fix Rack, stems stage/classify/confirm, Listen rack DSP, anon funnel, email verification must all work on the live site.
+- Public surface is single-user — see `PRPs/solo-fork-strip-social.md`.
 - Reuse `infra/*` unchanged except the three edits in Task 1. All prod config = env vars in `/opt/spectr/.env`, chmod 600 (AR31). No secrets in git, ever.
 - Images: `ghcr.io/rankinbc/spectr-{bff,worker,web}` pinned by commit SHA, deployed only via `/opt/spectr/deploy.sh` (never `docker compose up` by hand against `:latest`).
 - EF Core migrations apply automatically at BFF boot (`Migrations__ApplyAtBoot=true`, advisory-lock serialized). No manual migration step, no Alembic (frozen legacy).
@@ -212,11 +213,11 @@ Master CI has been red since after 2026-07-23: the `frontend` job fails at the s
 - [ ] **Step 2:** Replace each raw hex in `*.module.css` with an existing `tokens.css` custom property of identical value. If none matches, add a token following that file's naming conventions. Zero visual change; never weaken or allowlist the lint rule.
 - [ ] **Step 3:** Fix any other failing steps minimally, then re-run the full step list until every step passes (`npx tsc -b`, `npm run lint`, the extra lint:* scripts, `npm run build`, `npx vitest run`).
 - [ ] **Step 4:** Commit path-scoped (`git commit -m "..." -- <files>`), because the index may hold unrelated staged changes.
-- [ ] **Step 5 (verified during Task 7):** after the push to master, confirm the Actions run is fully green and that the `deploy` job's "Push images (post-scan)" step succeeded, before running `deploy.sh`.
+- [ ] **Step 5 (verified during Task 7):** after the push to solo, confirm the Actions run is fully green and that the `deploy` job's "Push images (post-scan)" step succeeded, before running `deploy.sh`.
 
 ### Task 7: Build images (via CI) + first deploy
 
-- [ ] **Step 1:** Push Task 1's commit to `master`. CI runs the full gates, builds `spectr-bff` / `spectr-worker` / `spectr-web`, Trivy-scans, pushes `:sha` + `:latest` to GHCR. The CI deploy-to-VPS step self-skips (VPS_* secrets not set yet — that's Task 9). Record the green run's commit SHA.
+- [ ] **Step 1:** Push Task 1's commit to `solo`. CI runs the full gates, builds `spectr-bff` / `spectr-worker` / `spectr-web`, Trivy-scans, pushes `:sha` + `:latest` to GHCR. The CI deploy-to-VPS step self-skips (VPS_* secrets not set yet — that's Task 9). Record the green run's commit SHA.
 - [ ] **Step 2: First deploy** (on the VM):
   ```bash
   cd /opt/spectr && ./deploy.sh <commit-sha>
@@ -256,7 +257,7 @@ Master CI has been red since after 2026-07-23: the `frontend` job fails at the s
 ### Task 9: Wire CI auto-deploy
 
 - [ ] **Step 1:** GitHub repo → Settings → Secrets and variables → Actions: add `VPS_HOST=<VM_IP>`, `VPS_USER=spectr`, `VPS_SSH_KEY=<contents of ~/.ssh/spectr_azure (private key)>`. (Optional: `VITE_SENTRY_DSN`, `VITE_POSTHOG_KEY` — baked into the web bundle at build.)
-- [ ] **Step 2: Verify** — push any trivial commit to master; the CI deploy job now scp's infra + runs `deploy.sh <sha>` and the site updates. From here on, **merge to master == deploy** (which is why the repo's destructive-migration rule requires a fresh backup before merging one).
+- [ ] **Step 2: Verify** — push any trivial commit to solo; the CI deploy job now scp's infra + runs `deploy.sh <sha>` and the site updates. From here on, **merge to solo == deploy** (which is why the repo's destructive-migration rule requires a fresh backup before merging one).
 
 ### Task 10: Full live validation (the "impressive demo" pass)
 
@@ -268,7 +269,6 @@ Run in a normal browser + an incognito window against `https://<your-domain>`:
 - [ ] **The chatbot**: AI Coach tab → send a message → streamed reply arrives (worker `coach_reply` via Anthropic SDK). Run one on-demand specialist from the roster → verdict card appears; Fix Rack populates.
 - [ ] **Listen rack**: playback works (Range-streamed audio), EQ/comp/width tools audibly change the signal, meters move.
 - [ ] **Stems**: drag-drop several stems → classify proposals appear → confirm → per-stem findings in the report. **Reference**: upload a reference track → reference tab populates.
-- [ ] **Share link**: open a report's share URL in incognito — public page renders.
 - [ ] **Ops story**: `./deploy.sh rollback` on the VM, confirm the site downgrades cleanly, then `./deploy.sh <sha>` back. Screenshot Grafana dashboards for the resume/interview.
 - [ ] **Memory check** after the first few analyses: `free -m` on the VM — swap usage should be near zero at idle and modest during an analysis. If it's constantly deep in swap, resize to `Standard_D2as_v6` (2 vCPU / 8 GB, same quota family, roughly 2× the cost) with `az vm resize`. That's the one-command escape hatch.
 - [ ] **Cost check** after 48 h: Azure Cost analysis daily burn ≈ $2.2/day on pay-as-you-go; the Anthropic console shows only your test spend.

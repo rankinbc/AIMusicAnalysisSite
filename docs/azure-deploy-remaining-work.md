@@ -2,7 +2,7 @@
 
 _Status as of 2026-09-14. Full technical plan: `PRPs/azure-deploy-spectr.md`. Work branch: `infra/azure-deploy`._
 
-**Goal:** the full SPECTR product (analysis, AI Coach chat, specialists, stems, Listen rack, anonymous try-it flow, email, dashboards, backups, CI/CD) live at a real domain on one Azure VM, for ~$46/mo steady-state.
+**Goal:** the full SPECTR product (analysis, AI Coach chat, specialists, stems, Listen rack, anonymous try-it flow, email, dashboards, backups, CI/CD) live at a real domain on one Azure VM, for ~$46/mo steady-state. Public surface is single-user — see `PRPs/solo-fork-strip-social.md`.
 
 ---
 
@@ -35,7 +35,7 @@ _Status as of 2026-09-14. Full technical plan: `PRPs/azure-deploy-spectr.md`. Wo
 | D2 | How should GitHub Actions reach the VM to auto-deploy? GitHub's runners use thousands of changing IPs, so the SSH lockdown blocks them | **Option A:** CI logs into Azure (OIDC, no stored password), opens SSH for its own IP only during the deploy, then closes it. Best security, strong resume detail. **Option B:** open SSH to the internet (key-only + fail2ban) — simplest. **Option C:** skip auto-deploy; deploy manually over SSH |
 | D3 | Domain name | **spectrmix.com** |
 | D4 | Add allin1 structure detection (Phase 7 arrangement grade)? | **Not for launch.** Reports show "not assessed" for that one section; ~1 day of work to add later |
-| D5 | OK to merge `infra/azure-deploy` into `master` and push? | Required for CI to build images — confirm when Task 6.5 is green |
+| D5 | OK to merge `infra/azure-deploy` into `solo` and push? | Required for CI to build images — confirm when Task 6.5 is green |
 
 ---
 
@@ -66,10 +66,10 @@ Listed in order; each line notes what it waits on.
 | Commit plan updates | Commit the pending `PRPs/azure-deploy-spectr.md` edits | Task 6.5 finishing (avoid clashing commits) |
 | Task 5 — DNS | A record `<domain>` → `<vm-public-ip>`; `www` CNAME → apex; **Cloudflare proxy OFF** (grey cloud) | Domain purchase (you can add these two records yourself in 1 minute) |
 | Task 6 — Server secrets file | Create `/opt/spectr/.env` (chmod 600) with generated keys + your secrets | Section 3 items |
-| Task 7 — First deploy | Merge to master → CI builds + scans + pushes images → run `deploy.sh <sha>` on the VM → verify `https://<domain>/healthz` and that workers are processing jobs | D5, Tasks 3/5/6/6.5, GitHub token |
+| Task 7 — First deploy | Merge to solo → CI builds + scans + pushes images → run `deploy.sh <sha>` on the VM → verify `https://<domain>/healthz` and that workers are processing jobs | D5, Tasks 3/5/6/6.5, GitHub token |
 | Task 8 — Post-boot setup | Upload demo track, schedule nightly backups + weekly restore test, fire a test backup and a test phone alert, check the Grafana dashboards | Task 7, demo WAV, alert URLs |
-| Task 9 — Auto-deploy | Configure GitHub secrets so every merge to master deploys | D2 |
-| Task 10 — Live validation | Walk the whole product on the real site: anonymous upload → register → full analysis → AI Coach chat → specialist → stems → Listen rack → share link → rollback drill → memory/cost check | Task 8 |
+| Task 9 — Auto-deploy | Configure GitHub secrets so every merge to solo deploys | D2 |
+| Task 10 — Live validation | Walk the whole product on the real site: anonymous upload → register → full analysis → AI Coach chat → specialist → stems → Listen rack → rollback drill → memory/cost check | Task 8 |
 | After 1 stable week | Buy the 1-year Azure Compute Savings Plan (~$59 → ~$39/mo) | Task 10 |
 
 ---

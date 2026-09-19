@@ -182,16 +182,16 @@ jobs:
         run: python -m mypy app/verdict_lib/ --ignore-missing-imports
         working-directory: components/worker
 
-  # ── Story 10.1 (AR30/AC3): master-only — build+push GHCR, trivy-scan the
+  # ── Story 10.1 (AR30/AC3): solo-only — build+push GHCR, trivy-scan the
   # BUILT images (the 4.1 deferral lands here), SSH deploy + /healthz smoke.
   # The SSH step skips gracefully when the VPS secrets aren't configured, so
   # the pipeline is green before a VPS exists.
   deploy:
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/solo' && github.event_name == 'push'
     needs: [secrets, bff, frontend, python]
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    # One deploy at a time, in order — concurrent master merges must not
+    # One deploy at a time, in order — concurrent solo merges must not
     # interleave pulls/state writes on the VPS.
     concurrency:
       group: deploy-production

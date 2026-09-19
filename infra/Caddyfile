@@ -1,8 +1,8 @@
 # Story 10.1 (AR29/D8) — the production edge. Caddy terminates TLS
 # (auto-ACME via {$SPECTR_DOMAIN}), serves the SPA + funnel statics, and
-# proxies /api + crawler /r/* to the BFF. This REPLACES the dev nginx
-# container in prod — the UA-split below is ported from
-# components/frontend-spectr-v2/nginx.conf (story 7.2).
+# proxies /api to the BFF. This REPLACES the dev nginx container in prod —
+# the UA-split below is ported from components/frontend-spectr-v2/nginx.conf
+# (story 7.2).
 
 # www → apex (a bare CNAME visitor must not hit a TLS error).
 www.{$SPECTR_DOMAIN} {
@@ -13,22 +13,12 @@ www.{$SPECTR_DOMAIN} {
 	encode zstd gzip
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 
-	# Crawlers get the BFF's prerendered OG shell so share links unfurl;
-	# humans get the SPA shell (story 7.2 split).
-	@share_bots {
-		path /r/*
-		header_regexp ua User-Agent (?i)(discordbot|slackbot|twitterbot|facebookexternalhit|whatsapp|telegrambot|linkedinbot|googlebot|bingbot|embedly|pinterest|skypeuripreview)
-	}
-	handle @share_bots {
-		reverse_proxy bff:5000
-	}
-
 	# Story 6.1/6.2 — SOCIAL-PREVIEW bots on the public funnel pages get the
 	# BFF meta shell (title/description/OG/canonical); humans fall through to
-	# the SPA. Deliberately NOT googlebot/bingbot (unlike @share_bots): search
-	# engines index body content, and serving them a two-sentence stub while
-	# humans get the real page is thin-content/cloaking — they render the SPA
-	# fine. Extend the path list when new funnel pages ship.
+	# the SPA. Deliberately NOT googlebot/bingbot: search engines index body
+	# content, and serving them a two-sentence stub while humans get the real
+	# page is thin-content/cloaking — they render the SPA fine. Extend the
+	# path list when new funnel pages ship.
 	@site_bots {
 		path / /pricing /pricing/ /analyze /analyze/ /trust/no-training /trust/no-training/ /trust/results-forever /trust/results-forever/ /trust/privacy /trust/privacy/
 		header_regexp ua User-Agent (?i)(discordbot|slackbot|twitterbot|facebookexternalhit|whatsapp|telegrambot|linkedinbot|applebot|redditbot|embedly|pinterest|skypeuripreview)

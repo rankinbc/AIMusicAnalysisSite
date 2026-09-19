@@ -2,7 +2,8 @@
 
 The go/no-go gate document. Every box gets a date + initials when executed
 on the REAL production environment. Nothing ships to paying users with an
-unchecked box in "Blocking".
+unchecked box in "Blocking". Public surface is single-user — see
+`PRPs/solo-fork-strip-social.md`.
 
 ## Blocking gates
 
@@ -13,8 +14,6 @@ unchecked box in "Blocking".
 - [ ] `docker login ghcr.io` with the read-only PAT (pull works)
 - [ ] First `./deploy.sh <sha>` green: in-network `/healthz` verify passed
 - [ ] `https://<domain>/healthz` returns `{"status":"ok"}` (TLS + caddy + BFF)
-- [ ] Share crawler split: `curl -A discordbot https://<domain>/r/<token>`
-      returns the OG shell; a browser gets the SPA
 - [ ] Worker metrics (`worker-paid:9191` is compose-network-internal —
       exec into the container):
       `docker compose -f compose.prod.yml exec worker-paid python -c

@@ -123,6 +123,9 @@ data/analysis/
 # Generated frontend output artifacts
 output/frontend-spectr-v2/
 
+# DB dumps (pg_dump backups) — contain user emails + password hashes, never commit
+output/db-backups/
+
 # Integration-test-generated upload/als staging dirs (per-run GUID folders)
 components/bff/tests/data/audio/
 components/bff/tests/data/analysis/
