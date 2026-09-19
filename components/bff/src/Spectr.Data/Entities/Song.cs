@@ -44,10 +44,6 @@ public sealed class Song
     [Column("reference_profile_id"), MaxLength(64)]
     public string? ReferenceProfileId { get; set; }
 
-    // Per-song visibility. NOT NULL, default 'private'. Values: private, shared, public.
-    [Column("visibility"), MaxLength(16)]
-    public string Visibility { get; set; } = "private";
-
     [Column("archived_at")]
     public DateTimeOffset? ArchivedAt { get; set; }
 

@@ -19,9 +19,6 @@ public sealed class SongTag
     [Column("name"), MaxLength(64)]
     public required string Name { get; set; }
 
-    [Column("is_public")]
-    public bool IsPublic { get; set; }
-
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

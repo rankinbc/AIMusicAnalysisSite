@@ -368,7 +368,6 @@ public static class JobEndpoints
                 a.SongId,
                 a.SongName,
                 a.FinalJson,
-                a.ShareToken,
                 a.SpectrogramImagePath,
                 a.WaveformImagePath,
             })
@@ -412,7 +411,6 @@ public static class JobEndpoints
             row.SongId,
             row.SongName,
             finalJson,
-            row.ShareToken,
             alsProject,
             specUrl,
             waveUrl));

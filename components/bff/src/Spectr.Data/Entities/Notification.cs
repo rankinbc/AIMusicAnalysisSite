@@ -7,8 +7,7 @@ namespace Spectr.Data.Entities;
 /// Story 11.6 — a recorded thing-that-happened for a user's inbox.
 ///
 /// Two row shapes share the table:
-///  - EVENT rows (digest_key NULL): one row per occurrence
-///    (comment_created, suggestion_created, suggestion_accepted, mention).
+///  - EVENT rows (digest_key NULL): one row per occurrence.
 ///  - DIGEST rows (digest_key set): one rolling row per
 ///    (recipient, digestType, version, UTC day) with an incrementing count
 ///    (bookmarks). Uniqueness is enforced by a RAW-SQL partial unique index

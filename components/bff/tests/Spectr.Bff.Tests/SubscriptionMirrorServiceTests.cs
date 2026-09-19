@@ -69,7 +69,6 @@ public sealed class SubscriptionMirrorServiceTests
             Id = Guid.NewGuid(),
             Email = email,
             HashedPassword = "x",
-            Handle = $"u{Guid.NewGuid():N}".Substring(0, 12),
             StripeCustomerId = customerId,
         };
         db.Users.Add(user);

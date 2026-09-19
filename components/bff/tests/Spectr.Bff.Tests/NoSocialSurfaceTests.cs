@@ -110,5 +110,6 @@ public sealed class NoSocialSurfaceTests(WebApplicationFactory<Program> factory)
     {
         Assert.Null(typeof(Spectr.Bff.DTOs.TagDto).GetProperty("IsPublic"));
         Assert.Null(typeof(Spectr.Bff.DTOs.CreateTagRequest).GetProperty("IsPublic"));
+        Assert.Null(typeof(Spectr.Data.Entities.SongTag).GetProperty("IsPublic"));
     }
 }

@@ -70,7 +70,6 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
                 Id = userId,
                 Email = $"webhook+{Guid.NewGuid():N}@spectr.test",
                 HashedPassword = "x",
-                Handle = "webhookuser",
                 StripeCustomerId = customerId,
             });
             await db.SaveChangesAsync();

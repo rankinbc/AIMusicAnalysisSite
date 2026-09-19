@@ -179,11 +179,11 @@ public sealed class SongMetadataEndpointsTests(WebApplicationFactory<Program> fa
                 Id = jobId, UserId = ownerId, VersionId = versionId, Status = "complete",
             });
             // Owner's own tag — must still be visible.
-            db.SongTags.Add(new SongTag { SongId = songId, UserId = ownerId, Name = "mine", IsPublic = false });
-            // A tag row belonging to ANOTHER user on the CALLER's own song,
-            // with the legacy is_public flag set — exactly the shape the
-            // retired `st.UserId == userId || st.IsPublic` predicate leaked.
-            db.SongTags.Add(new SongTag { SongId = songId, UserId = otherUserId, Name = "leaked", IsPublic = true });
+            db.SongTags.Add(new SongTag { SongId = songId, UserId = ownerId, Name = "mine" });
+            // A tag row belonging to ANOTHER user on the CALLER's own song —
+            // exactly the shape the retired `st.UserId == userId || st.IsPublic`
+            // predicate leaked (is_public itself dropped by RemoveSocial).
+            db.SongTags.Add(new SongTag { SongId = songId, UserId = otherUserId, Name = "leaked" });
             await db.SaveChangesAsync();
         }
 

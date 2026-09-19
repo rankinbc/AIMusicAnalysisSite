@@ -22,7 +22,6 @@ public sealed record JobResultsDto(
     Guid? SongId,
     string? SongName,
     JsonElement FinalJson,
-    string? ShareToken,
     // Client-parsed Ableton project map ("project awareness") stored on the
     // version, surfaced for the results Project view. Null when no .als project
     // JSON was uploaded. The worker phase8 parse remains authoritative for analysis.

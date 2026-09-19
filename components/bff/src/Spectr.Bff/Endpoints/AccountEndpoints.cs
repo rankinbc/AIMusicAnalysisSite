@@ -88,7 +88,7 @@ public static class AccountEndpoints
             .Select(a => new
             {
                 a.Id, a.JobId, a.SongId, a.SongName, a.VersionId,
-                a.FinalJson, a.ShareToken, a.CreatedAt,
+                a.FinalJson, a.CreatedAt,
                 a.SpectrogramImagePath, a.WaveformImagePath,
             })
             .ToListAsync(ct);
@@ -117,10 +117,6 @@ public static class AccountEndpoints
             .Where(n => n.UserId == userId).ToListAsync(ct);
         var sessionNotes = await db.SessionNotes.AsNoTracking()
             .Where(n => n.UserId == userId).ToListAsync(ct);
-        var comments = await db.TrackComments.AsNoTracking()
-            .Where(c => c.AuthorUserId == userId).ToListAsync(ct);
-        var bookmarks = await db.TrackBookmarks.AsNoTracking()
-            .Where(b => b.UserId == userId).ToListAsync(ct);
         var billing = new
         {
             subscriptions = await db.Subscriptions.AsNoTracking()
@@ -176,7 +172,7 @@ public static class AccountEndpoints
             {
                 a.Id, a.JobId, a.SongId, a.SongName, a.VersionId,
                 finalJson = TryParse(a.FinalJson),
-                a.ShareToken, a.CreatedAt,
+                a.CreatedAt,
             }),
             verdicts,
             conversations = conversations.Select(c => new
@@ -188,8 +184,6 @@ public static class AccountEndpoints
             ratings,
             compareNotes,
             sessionNotes,
-            comments,
-            bookmarks,
             billing,
             mediaManifest = manifest,
         };

@@ -32,7 +32,6 @@ public sealed class CreditLedgerServiceTests
             Id = Guid.NewGuid(),
             Email = $"{emailPrefix}+{Guid.NewGuid():N}@spectr.test",
             HashedPassword = "x",
-            Handle = $"u{Guid.NewGuid():N}".Substring(0, 12),
         };
         db.Users.Add(user);
         await db.SaveChangesAsync();

@@ -195,13 +195,10 @@ public static class AuthEndpoints
             Id = Guid.NewGuid(),
             Email = normalizedEmail,
             HashedPassword = hasher.Hash(req.Password),
-            // solo: column dropped by RemoveSocial; placeholder keeps NOT NULL/UNIQUE happy until then
-            Handle = "u" + Guid.NewGuid().ToString("N")[..20],
             // Fix round 1 (task 10 review) — RegisterRequest carries no display-name
             // field, so default to the email's local part: a readable name in
             // every client without relying on the frontend's emailLocalPart()
-            // fallback. Free text — no sanitization/uniqueness (that was Handle's
-            // job, retired with the placeholder above).
+            // fallback. Free text — no sanitization/uniqueness required.
             DisplayName = DeriveDisplayNameFromEmail(normalizedEmail),
         };
         // Story 12.1 — dev auto-verify: local dev delivers no email, so the

@@ -94,17 +94,6 @@ public sealed class Analysis
     [Column("degradation_notice", TypeName = "jsonb")]
     public string? DegradationNotice { get; set; }
 
-    // ── Sharing ────────────────────────────────────────────────────────────
-    // Token is null until producer enables sharing. Generated lazily.
-    [Column("share_token"), MaxLength(36)]
-    public string? ShareToken { get; set; }
-
-    [Column("share_show_verdicts")]
-    public bool ShareShowVerdicts { get; set; }
-
-    [Column("share_enabled_at")]
-    public DateTimeOffset? ShareEnabledAt { get; set; }
-
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

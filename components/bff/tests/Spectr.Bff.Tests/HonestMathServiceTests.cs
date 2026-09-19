@@ -31,7 +31,6 @@ public sealed class HonestMathServiceTests
             Id = Guid.NewGuid(),
             Email = $"{prefix}+{Guid.NewGuid():N}@spectr.test",
             HashedPassword = "x",
-            Handle = $"h{Guid.NewGuid():N}".Substring(0, 12),
         };
         db.Users.Add(user);
         await db.SaveChangesAsync();
