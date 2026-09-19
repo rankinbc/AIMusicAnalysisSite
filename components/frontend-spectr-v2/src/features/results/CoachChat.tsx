@@ -10,9 +10,9 @@ import type {
   VerdictDto,
 } from '../../api/types';
 import { Pill } from '../../ui/Pill';
-import { TranceBot } from './TranceBot';
 import { Icon } from './Icon';
 import { CoachChatDialog } from './CoachChatDialog';
+import { CoachChatHeader, type CoachMode } from './CoachChatHeader';
 import { CoachGateInline } from './CoachGateInline';
 import { EvidenceChips } from './EvidenceChips';
 import {
@@ -105,7 +105,7 @@ export function CoachChat({
   // teach-mode-coach: the header mode toggle (Concise · Normal · Teach). "Teach"
   // sends the next question as mode="teach" so the coach teaches the relevant
   // craft grounded in this track; Concise/Normal both map to a direct Q&A.
-  const [mode, setMode] = useState<'Concise' | 'Normal' | 'Teach'>('Normal');
+  const [mode, setMode] = useState<CoachMode>('Normal');
   const teachMode = mode === 'Teach';
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [streaming, setStreaming] = useState(false);
@@ -120,9 +120,12 @@ export function CoachChat({
   const sendingRef = useRef<boolean>(false);
 
   // adhoc task (2026-09-19): expand the coach chat into a modal. `expanded`
-  // swaps the body (thread + input + cap line) between rendering inline and
-  // rendering inside CoachChatDialog — the header (coach-hd) never moves.
-  // See the `chatBody` build + return JSX below.
+  // swaps BOTH the header (mode toggle + headerActions) and the body
+  // (thread + input + cap line) between rendering inline and rendering
+  // inside CoachChatDialog — fix round 1 (2026-09-19): the header used to
+  // stay put, but that left the mode toggle/headerActions unreachable while
+  // the dialog's full-viewport overlay + focus trap were up. See the
+  // `headerNode`/`chatBody` builds + return JSX below.
   const [expanded, setExpanded] = useState(false);
   const expandButtonRef = useRef<HTMLButtonElement | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
@@ -260,15 +263,16 @@ export function CoachChat({
   // adhoc task (2026-09-19) — focus management (brief req 3: "on open,
   // focus the message input; on close, focus returns to the expand
   // button"). CoachChatDialog disables Radix's own default auto-focus
-  // (`onOpenAutoFocus`/`onCloseAutoFocus` both `preventDefault`d) so it
-  // never fights this. The open case still needs a `requestAnimationFrame`
-  // hop: Radix's FocusScope does its own mount-time focus handling on the
-  // next frame even with the default prevented, and a plain `useEffect`
-  // (same commit, prior frame) loses that race — the rAF guarantees this
-  // runs after. The close case doesn't race anything (the expand button
-  // never unmounts), so it focuses synchronously in the effect.
-  // `wasExpandedRef` distinguishes "closed after a real open" from the
-  // initial mount (expanded starts false) so page load never steals focus.
+  // (`onOpenAutoFocus`/`onCloseAutoFocus` both `preventDefault`d), but
+  // Radix's FocusScope still does its own mount-time focus handling one
+  // animation frame later even with the default prevented — a plain
+  // `useEffect` (same commit, prior frame) loses that race on OPEN, so it
+  // hops a frame with `requestAnimationFrame` to run after it. CLOSE
+  // doesn't need the same hop: nothing else claims focus on the way out
+  // (see the header-instance note below), so a synchronous effect wins
+  // outright. `wasExpandedRef` distinguishes "closed after a real open"
+  // from the initial mount (expanded starts false) so page load never
+  // steals focus.
   const wasExpandedRef = useRef(false);
   useEffect(() => {
     if (expanded) {
@@ -283,9 +287,10 @@ export function CoachChat({
     return undefined;
   }, [expanded]);
 
-  // Wired to the dialog's onOpenChange(false) (covers Esc + overlay click +
-  // the dialog's own Collapse button) and directly to the inline
-  // placeholder's Collapse button. Focus-return itself happens in the
+  // Wired to the dialog's onOpenChange(false) (covers Esc + overlay click)
+  // and directly to the header's own trailing Collapse button when it's
+  // rendered inside the dialog (fix round 1 — the inline placeholder no
+  // longer has any button of its own). Focus-return itself happens in the
   // effect above, once the dialog has actually unmounted.
   const handleCollapse = useCallback(() => {
     setExpanded(false);
@@ -662,63 +667,100 @@ export function CoachChat({
     </div>
   );
 
-  return (
-    <div className="coach-wrap">
-      <div className="coach-hd">
-        <TranceBot size={26} thinking={streaming} />
-        <div className="ch-b">
-          <div className="ch-k">
-            <span className="led" />
-            <span className="lab">Ask the Coach</span>
-            <span className="ch-modes">
-              {(['Concise', 'Normal', 'Teach'] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  className={`ch-mode${mode === m ? ' on' : ''}`}
-                  onClick={() => setMode(m)}
-                >
-                  {m}
-                </button>
-              ))}
-            </span>
-          </div>
-          <div className="ch-sub">I know everything about this song.</div>
-        </div>
-        {headerActions && <div className="coach-actions">{headerActions}</div>}
+  // Fix round 1 (2026-09-19) — the mode toggle + headerActions markup is
+  // owned by ONE component (`CoachChatHeader`, no duplicated JSX) and only
+  // one instance of it is ever mounted in the DOM at a time — but it is
+  // instantiated twice here (`inlineHeader`/`dialogHeader`), not shared as
+  // a single element like `chatBody` is. Reason: Radix's `Dialog.Portal`
+  // uses `Presence`, which briefly MOUNTS the closing content for one
+  // frame to check for a CSS exit animation before actually removing it —
+  // even though `open` has already flipped to false. Sharing one element
+  // object (with `expandButtonRef` attached) between the inline slot and
+  // the dialog's children meant that transient Presence-mount re-attached
+  // `expandButtonRef` to the about-to-be-discarded dialog copy and then
+  // nulled it on its way out, clobbering the ref out from under the real,
+  // still-mounted inline button (confirmed by instrumenting the ref
+  // callback — verified this before landing the fix). Each instance's
+  // trailing action is now fixed to what's semantically correct for where
+  // it lives (Expand inline, Collapse in the dialog) rather than branching
+  // on `expanded`, so `expandButtonRef` is only ever attached to the real
+  // inline button. `chatBody` doesn't have this problem (nothing reads
+  // `inputRef`/`threadRef` on close) and stays a single shared instance,
+  // exactly as before.
+  const inlineHeader = (
+    <CoachChatHeader
+      thinking={streaming}
+      mode={mode}
+      onModeChange={setMode}
+      headerActions={headerActions}
+      trailingAction={
         <button
           type="button"
           ref={expandButtonRef}
-          className={s.expandBtn}
+          className={s.headerActionBtn}
           onClick={() => setExpanded(true)}
           aria-label="Expand coach chat"
           title="Expand"
         >
           <Icon name="expand" size={15} />
         </button>
-      </div>
+      }
+    />
+  );
 
+  const dialogHeader = (
+    <CoachChatHeader
+      thinking={streaming}
+      mode={mode}
+      onModeChange={setMode}
+      headerActions={headerActions}
+      trailingAction={
+        <button
+          type="button"
+          className={s.headerActionBtn}
+          onClick={handleCollapse}
+          aria-label="Collapse coach chat"
+          title="Collapse"
+        >
+          <Icon name="x" size={16} />
+        </button>
+      }
+    />
+  );
+
+  return (
+    <div className="coach-wrap">
       {expanded ? (
+        // Static, non-interactive placeholder only (fix round 1) — the
+        // real header (with the mode toggle, headerActions and the
+        // Collapse control) lives inside the dialog while expanded; a
+        // second copy or a second button here would sit behind the
+        // dialog's full-viewport overlay and be unreachable.
         <div className={s.collapsedNotice}>
+          <p className={s.collapsedNoticeTitle}>Ask the Coach</p>
           <p className={s.collapsedNoticeText}>Coach is open in the expanded view.</p>
-          <button type="button" className="btn ghost sm" onClick={handleCollapse}>
-            Collapse
-          </button>
         </div>
       ) : (
-        chatBody
+        <>
+          {inlineHeader}
+          {chatBody}
+        </>
       )}
 
-      {expanded && (
-        <CoachChatDialog
-          open={expanded}
-          onOpenChange={(next) => {
-            if (!next) handleCollapse();
-          }}
-        >
-          {chatBody}
-        </CoachChatDialog>
-      )}
+      {/* Fix round 1 — rendered unconditionally with `open` toggling
+          (matches CommandPalette's usage in routes/_app.tsx). Radix's
+          Presence only mounts `children` into the DOM while `open` is
+          true (plus the brief transient exit-check above), so the header
+          + body never render twice in steady state. */}
+      <CoachChatDialog
+        open={expanded}
+        onOpenChange={(next) => {
+          if (!next) handleCollapse();
+        }}
+      >
+        {dialogHeader}
+        {chatBody}
+      </CoachChatDialog>
     </div>
   );
 }

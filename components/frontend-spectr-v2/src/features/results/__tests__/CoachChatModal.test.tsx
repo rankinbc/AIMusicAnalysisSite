@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 // Ad-hoc task (2026-09-19): "Ask the Coach" expand-to-modal — see
 // .superpowers/sdd/solo-fork-strip-social-plan/adhoc-coach-modal-brief.md.
+// Fix round 1 (2026-09-19): the header (mode toggle + headerActions) now
+// travels with `expanded` too, same as the body, and the inline placeholder
+// lost its own Collapse button — see adhoc-coach-modal-report.md.
 //
 // Renders the REAL CoachChat + CoachChatDialog (no Radix mocking) so the
 // interactive assertions — dialog role, Esc-to-close, focus return — are
@@ -9,6 +12,7 @@
 // NOT remount CoachChat or refetch the conversation — the same message
 // hydrated inline must still be visible inside the dialog, and the
 // conversation GET must fire exactly once across the whole interaction.
+import type { ReactNode } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -46,7 +50,7 @@ function conversationCallCount(fetchMock: ReturnType<typeof vi.fn>) {
   }).length;
 }
 
-async function renderCoachChat() {
+async function renderCoachChat(headerActions?: ReactNode) {
   const fetchMock = vi.fn((input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input.toString();
     if (url.includes('/conversation')) {
@@ -62,6 +66,7 @@ async function renderCoachChat() {
       analysisId="analysis-1"
       verdicts={[]}
       measurementsCount={12}
+      {...(headerActions ? { headerActions } : {})}
     />,
   );
   // Wait for the conversation hydration to land before interacting.
@@ -69,7 +74,16 @@ async function renderCoachChat() {
   return { fetchMock };
 }
 
-describe('CoachChat expand-to-modal (adhoc, 2026-09-19)', () => {
+/** The inline card's own container while the dialog is expanded — the
+ *  static placeholder (title row + quiet line), never the header/body. */
+function getInlinePlaceholder() {
+  const text = screen.getByText('Coach is open in the expanded view.');
+  const container = text.parentElement;
+  if (!container) throw new Error('inline placeholder container not found');
+  return container;
+}
+
+describe('CoachChat expand-to-modal (adhoc, 2026-09-19 / fix round 1)', () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
@@ -119,8 +133,7 @@ describe('CoachChat expand-to-modal (adhoc, 2026-09-19)', () => {
 
   it('the Collapse button closes the dialog, restores the inline thread+input, and returns focus to Expand', async () => {
     await renderCoachChat();
-    const expandBtn = screen.getByRole('button', { name: 'Expand coach chat' });
-    fireEvent.click(expandBtn);
+    fireEvent.click(screen.getByRole('button', { name: 'Expand coach chat' }));
     const dialog = await screen.findByRole('dialog');
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Collapse coach chat' }));
@@ -128,19 +141,74 @@ describe('CoachChat expand-to-modal (adhoc, 2026-09-19)', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(screen.getByLabelText('Coach question input')).toBeTruthy();
     expect(screen.getByText(SEEDED_MESSAGE)).toBeTruthy();
-    await waitFor(() => expect(document.activeElement).toBe(expandBtn));
+    // Fix round 1: the header (and its Expand button) now unmounts while
+    // expanded and remounts fresh on collapse, so the restored button is a
+    // NEW DOM node — assert focus by accessible name, not object identity.
+    await waitFor(() =>
+      expect(document.activeElement?.getAttribute('aria-label')).toBe('Expand coach chat'),
+    );
   });
 
   it('Esc closes the dialog, restores the inline thread+input, and returns focus to Expand', async () => {
     await renderCoachChat();
-    const expandBtn = screen.getByRole('button', { name: 'Expand coach chat' });
-    fireEvent.click(expandBtn);
+    fireEvent.click(screen.getByRole('button', { name: 'Expand coach chat' }));
     await screen.findByRole('dialog');
 
     fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(screen.getByLabelText('Coach question input')).toBeTruthy();
-    await waitFor(() => expect(document.activeElement).toBe(expandBtn));
+    await waitFor(() =>
+      expect(document.activeElement?.getAttribute('aria-label')).toBe('Expand coach chat'),
+    );
+  });
+
+  // ── Fix round 1 — requirement-6 regression coverage ──────────────────
+
+  it('with the dialog open, the mode toggle is reachable inside it and exactly one set exists in the document', async () => {
+    await renderCoachChat();
+    fireEvent.click(screen.getByRole('button', { name: 'Expand coach chat' }));
+    const dialog = await screen.findByRole('dialog');
+
+    // Exactly one "Teach" toggle button in the whole document — not one
+    // inline (unreachable behind the overlay) and one in the dialog.
+    const teachButtons = screen.getAllByRole('button', { name: 'Teach' });
+    expect(teachButtons).toHaveLength(1);
+    const teachButton = within(dialog).getByRole('button', { name: 'Teach' });
+    expect(teachButton).toBe(teachButtons[0]);
+    expect(teachButton.className).not.toMatch(/\bon\b/);
+
+    fireEvent.click(teachButton);
+
+    // Clicking it inside the dialog flips the active-mode signal (the same
+    // `ch-mode${mode === m ? ' on' : ''}` class CoachChat.tsx renders).
+    expect(teachButton.className).toMatch(/\bon\b/);
+    expect(within(dialog).getByRole('button', { name: 'Normal' }).className).not.toMatch(/\bon\b/);
+  });
+
+  it('with the dialog open, headerActions is reachable inside it, exactly once, and fires its onClick', async () => {
+    const onSpecialists = vi.fn();
+    await renderCoachChat(<button type="button" onClick={onSpecialists}>Specialists</button>);
+    fireEvent.click(screen.getByRole('button', { name: 'Expand coach chat' }));
+    const dialog = await screen.findByRole('dialog');
+
+    const specialistButtons = screen.getAllByRole('button', { name: 'Specialists' });
+    expect(specialistButtons).toHaveLength(1);
+    const specialistButton = within(dialog).getByRole('button', { name: 'Specialists' });
+    expect(specialistButton).toBe(specialistButtons[0]);
+
+    fireEvent.click(specialistButton);
+    expect(onSpecialists).toHaveBeenCalledTimes(1);
+  });
+
+  it('with the dialog open, the inline placeholder is static — no buttons at all', async () => {
+    await renderCoachChat();
+    fireEvent.click(screen.getByRole('button', { name: 'Expand coach chat' }));
+    await screen.findByRole('dialog');
+
+    const placeholder = getInlinePlaceholder();
+    expect(within(placeholder).queryAllByRole('button')).toHaveLength(0);
+    expect(within(placeholder).getByText('Ask the Coach')).toBeTruthy();
+    expect(within(placeholder).getByText('Coach is open in the expanded view.')).toBeTruthy();
   });
 });

@@ -29,30 +29,11 @@
   overflow: hidden;
 }
 
-.collapseBtn {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  z-index: 1;
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  border: 1px solid var(--border-2);
-  background: var(--card-2);
-  color: var(--text-2);
-  cursor: pointer;
-}
-.collapseBtn:hover {
-  color: var(--text);
-  border-color: var(--border);
-  background: var(--card-hover);
-}
-.collapseBtn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--cyan-dim);
-}
+/* Fix round 1 (2026-09-19) — the visible Collapse control moved into the
+   coach header (`CoachChatHeader`'s `trailingAction`, styled by
+   `.headerActionBtn` in CoachChat.module.css) so it's part of the single
+   header instance that now travels into this dialog. No dialog-owned close
+   button lives here anymore. */
 
 .body {
   flex: 1;

@@ -324,11 +324,17 @@
   align-items: center;
 }
 
-/* adhoc task (2026-09-19): expand the coach chat into a modal. The header
-   (coach-hd) never moves — only the body (thread/input/cap line) swaps
-   between rendering inline and rendering inside CoachChatDialog. See
-   CoachChat.tsx's `chatBody` + CoachChatDialog.module.css. */
-.expandBtn {
+/* adhoc task (2026-09-19): expand the coach chat into a modal. Fix round 1
+   (2026-09-19) — the header markup itself is owned by ONE component
+   (CoachChatHeader, incl. the mode toggle + headerActions), and only one
+   instance of it is ever mounted in the DOM: inline, or inside
+   CoachChatDialog (see the header-instance note in CoachChat.tsx for why
+   it's instantiated twice rather than shared like the body is).
+   `.headerActionBtn` is the header's trailing control in BOTH instances —
+   the Expand icon inline, the Collapse icon
+   (aria-label="Collapse coach chat") inside the dialog — so one class
+   covers both without a second near-duplicate rule. */
+.headerActionBtn {
   flex-shrink: 0;
   width: 30px;
   height: 30px;
@@ -340,28 +346,35 @@
   color: var(--text-2);
   cursor: pointer;
 }
-.expandBtn:hover {
+.headerActionBtn:hover {
   color: var(--text);
   border-color: var(--border);
   background: var(--card-hover);
 }
-.expandBtn:focus-visible {
+.headerActionBtn:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--cyan-dim);
 }
 
 /* Inline placeholder shown in the card's own page position while expanded
-   — keeps the layout from jumping when the body moves into the dialog. */
+   — keeps the layout from jumping when the header+body move into the
+   dialog. Fix round 1: static/non-interactive only (no button — the real
+   header, with the Collapse control, now lives inside the dialog; a second
+   inline button would sit behind the dialog's overlay and be unusable). */
 .collapsedNotice {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  flex-direction: column;
+  gap: 4px;
   padding: 18px;
   border: 1px solid var(--border-2);
-  border-top: none;
-  border-radius: 0 0 var(--radius) var(--radius);
+  border-radius: var(--radius);
   background: var(--surface);
+}
+.collapsedNoticeTitle {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
 }
 .collapsedNoticeText {
   margin: 0;
