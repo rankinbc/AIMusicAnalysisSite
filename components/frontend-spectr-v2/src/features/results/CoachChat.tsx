@@ -129,6 +129,18 @@ export function CoachChat({
   const [expanded, setExpanded] = useState(false);
   const expandButtonRef = useRef<HTMLButtonElement | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
+  // adhoc2 (2026-09-19) — scoping fix for "modal renders unstyled". Every
+  // coach class is a GLOBAL rule scoped `.rdx .coach-*` (the results-page
+  // root — see ReportView.tsx's `<div className="rdx">`); a bare Radix
+  // `Dialog.Portal` mounts into `document.body`, outside `.rdx`, so none of
+  // those rules matched. `coachWrapRef` lets CoachChatDialog's portal target
+  // the closest `.rdx` ancestor instead (see the `container` prop doc on
+  // CoachChatDialog for why that's safe re: stacking contexts). Read via
+  // `.closest()` at render time, not stored in state: `expanded` can only
+  // flip true from a click handler, which necessarily runs after the DOM
+  // has committed and `coachWrapRef.current` is populated — no extra
+  // render/effect needed just to resolve it.
+  const coachWrapRef = useRef<HTMLDivElement | null>(null);
 
   // Throttle aria-live updates to ARIA_LIVE_THROTTLE_MS. Tokens still land
   // in the visible transcript immediately via setTurns; the live-region
@@ -527,134 +539,156 @@ export function CoachChat({
     }
   }, [analysisId, caps, flushAriaLive, input, offlineState, scheduleAriaLive, streaming, teachMode]);
 
-  // adhoc task (2026-09-19) — built ONCE per render; only the outer wrapper
-  // and the thread classNames change based on `expanded` (dialog vs. the
-  // inline card's fixed-height thread). There is exactly one live copy of
-  // the thread/input/cap-line/aria-live regions — this JSX mounts either
+  // adhoc task (2026-09-19) — built ONCE per render; only the thread's
+  // className changes based on `expanded`. There is exactly one live copy
+  // of the thread/input/cap-line/aria-live regions — this JSX mounts either
   // inline or inside CoachChatDialog, never both (brief req 6).
+  //
+  // adhoc2 fix (2026-09-19): every element below now keeps the SAME
+  // `.rdx .coach-*` global class in both places (`coach-body`,
+  // `coach-thread`, `coach-input`, `coach-cap`, `cmsg`, …) — no restyled
+  // copies. What actually makes the modal *look* styled is
+  // CoachChatDialog's portal now targeting the page's `.rdx` root (see the
+  // `container` prop below); these classes are meaningless outside it. The
+  // ONLY per-view difference left is `.dialogThread`, composed onto
+  // `coach-thread` (not swapped in for it) so the thread fills the dialog's
+  // 88vh box instead of the inline card's `max-height:150px` cap — see
+  // CoachChat.module.css for why it's written as
+  // `:global(.rdx .coach-thread).dialogThread` rather than a bare local
+  // class. The narrow 760px-capped center column from the previous round is
+  // gone (brief req 2: bubbles lay out exactly as inline, just in a
+  // wider/taller box) — dropping it also puts `coach-thread` back as a
+  // DIRECT flex child of `coach-body` in the expanded case, which is what
+  // lets its `flex:1` actually grow to fill the modal's real height
+  // (`coach-body`'s own `flex:1` only has definite space to resolve
+  // against inside the dialog, whose `.content` is a fixed 88vh box — the
+  // inline card's ancestor chain has no such definite height, so this
+  // structural simplification is a no-op there and the inline card's
+  // existing max-height-driven sizing is unaffected).
   const chatBody = (
-    <div className={expanded ? s.dialogBody : 'coach-body'}>
-      <div className={expanded ? s.dialogInner : undefined}>
-        <div className={expanded ? s.dialogThread : 'coach-thread'} ref={threadRef}>
-          {turns.length === 0 && greeting && (
-            <div className="cmsg bot">
-              <div className="bub">{greeting}</div>
-            </div>
-          )}
-          {turns.map((turn, i) => {
-            const isAssistant = turn.role === 'assistant';
-            const showStreamingPlaceholder =
-              isAssistant && !turn.finalized && streaming && i === turns.length - 1 && !turn.text;
-            const unlock = turn.refused ? resolveUnlockAction(turn.refusalReason) : null;
-            return (
-              <div key={i} className={`cmsg ${isAssistant ? 'bot' : 'user'}`}>
-                <span className="cm-role">{isAssistant ? 'Coach' : 'You'}</span>
-                {isAssistant && turn.mode === 'teach' && (
-                  <span className="cm-teach-badge">
-                    <Pill tone="violet">Teach</Pill>
-                  </span>
+    <div className="coach-body">
+      <div
+        className={expanded ? `coach-thread ${s.dialogThread}` : 'coach-thread'}
+        ref={threadRef}
+      >
+        {turns.length === 0 && greeting && (
+          <div className="cmsg bot">
+            <div className="bub">{greeting}</div>
+          </div>
+        )}
+        {turns.map((turn, i) => {
+          const isAssistant = turn.role === 'assistant';
+          const showStreamingPlaceholder =
+            isAssistant && !turn.finalized && streaming && i === turns.length - 1 && !turn.text;
+          const unlock = turn.refused ? resolveUnlockAction(turn.refusalReason) : null;
+          return (
+            <div key={i} className={`cmsg ${isAssistant ? 'bot' : 'user'}`}>
+              <span className="cm-role">{isAssistant ? 'Coach' : 'You'}</span>
+              {isAssistant && turn.mode === 'teach' && (
+                <span className="cm-teach-badge">
+                  <Pill tone="violet">Teach</Pill>
+                </span>
+              )}
+              <div className="bub">
+                {turn.text || (showStreamingPlaceholder ? '…' : '')}
+                {isAssistant && turn.finalized && turn.evidence && turn.evidence.length > 0 && (
+                  <EvidenceChips evidence={turn.evidence} />
                 )}
-                <div className="bub">
-                  {turn.text || (showStreamingPlaceholder ? '…' : '')}
-                  {isAssistant && turn.finalized && turn.evidence && turn.evidence.length > 0 && (
-                    <EvidenceChips evidence={turn.evidence} />
-                  )}
-                  {isAssistant && turn.finalized && turn.refused && unlock && (
-                    <div className={s.unlockRow}>
-                      <button
-                        type="button"
-                        className={s.unlockBtn}
-                        onClick={() => handleUnlock(unlock.intent)}
-                        aria-label={`Unlock: ${unlock.label}`}
-                      >
-                        <Pill tone="violet">{unlock.label}</Pill>
-                      </button>
-                    </div>
-                  )}
-                </div>
+                {isAssistant && turn.finalized && turn.refused && unlock && (
+                  <div className={s.unlockRow}>
+                    <button
+                      type="button"
+                      className={s.unlockBtn}
+                      onClick={() => handleUnlock(unlock.intent)}
+                      aria-label={`Unlock: ${unlock.label}`}
+                    >
+                      <Pill tone="violet">{unlock.label}</Pill>
+                    </button>
+                  </div>
+                )}
               </div>
-            );
-          })}
-        </div>
-
-        {offlineState && (
-          <section
-            className={`card ${s.offlineCard}`}
-            aria-labelledby="coach-offline-heading"
-            style={{ margin: '14px 14px 0' }}
-          >
-            <div className={s.offlineHeader}>
-              <span className="label" id="coach-offline-heading">
-                Coach offline
-              </span>
-              <Pill tone="orange">unavailable</Pill>
             </div>
-            <p className={s.offlineBody}>{COACH_OFFLINE_COPY}</p>
-            <div className={s.offlineActions}>
-              <button type="button" className="btn sm" onClick={handleRetry}>
-                Retry
-              </button>
-            </div>
-          </section>
-        )}
+          );
+        })}
+      </div>
 
-        {caps?.capReached && !streaming ? (
-          <div style={{ padding: '12px 14px 0' }}>
-            <CoachGateInline />
+      {offlineState && (
+        <section
+          className={`card ${s.offlineCard}`}
+          aria-labelledby="coach-offline-heading"
+          style={{ margin: '14px 14px 0' }}
+        >
+          <div className={s.offlineHeader}>
+            <span className="label" id="coach-offline-heading">
+              Coach offline
+            </span>
+            <Pill tone="orange">unavailable</Pill>
           </div>
-        ) : (
-          <div className="coach-input">
-            <input
-              ref={inputRef}
-              placeholder={offlineState ? 'Coach is offline' : 'Ask the coach about this mix…'}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !streaming) {
-                  e.preventDefault();
-                  send();
-                }
-              }}
-              disabled={offlineState}
-              aria-label="Coach question input"
-            />
-            {streaming ? (
-              <button
-                type="button"
-                className="send"
-                onClick={handleStop}
-                aria-label="Stop coach response"
-              >
-                <span aria-hidden>◼</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="send"
-                onClick={send}
-                disabled={!input.trim() || offlineState}
-                aria-label="Send question"
-              >
-                <Icon name="send" size={16} />
-              </button>
-            )}
+          <p className={s.offlineBody}>{COACH_OFFLINE_COPY}</p>
+          <div className={s.offlineActions}>
+            <button type="button" className="btn sm" onClick={handleRetry}>
+              Retry
+            </button>
           </div>
-        )}
+        </section>
+      )}
 
-        <div className="coach-cap">
-          grounded
-          {caps &&
-            (caps.limit >= 100000 ? (
-              <> · unlimited messages today</>
-            ) : (
-              <>
-                {' '}
-                · <span className="v">{caps.used}</span>/{caps.limit} messages today
-              </>
-            ))}{' '}
-          · {specialistsRan} specialists ran ·{' '}
-          {Math.min(specialistsRan, specialistsSuggested)}/{specialistsSuggested} suggested
+      {caps?.capReached && !streaming ? (
+        <div style={{ padding: '12px 14px 0' }}>
+          <CoachGateInline />
         </div>
+      ) : (
+        <div className="coach-input">
+          <input
+            ref={inputRef}
+            placeholder={offlineState ? 'Coach is offline' : 'Ask the coach about this mix…'}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !streaming) {
+                e.preventDefault();
+                send();
+              }
+            }}
+            disabled={offlineState}
+            aria-label="Coach question input"
+          />
+          {streaming ? (
+            <button
+              type="button"
+              className="send"
+              onClick={handleStop}
+              aria-label="Stop coach response"
+            >
+              <span aria-hidden>◼</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="send"
+              onClick={send}
+              disabled={!input.trim() || offlineState}
+              aria-label="Send question"
+            >
+              <Icon name="send" size={16} />
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="coach-cap">
+        grounded
+        {caps &&
+          (caps.limit >= 100000 ? (
+            <> · unlimited messages today</>
+          ) : (
+            <>
+              {' '}
+              · <span className="v">{caps.used}</span>/{caps.limit} messages today
+            </>
+          ))}{' '}
+        · {specialistsRan} specialists ran ·{' '}
+        {Math.min(specialistsRan, specialistsSuggested)}/{specialistsSuggested} suggested
       </div>
 
       {/* SR-only live regions for stream-state + token mirror. */}
@@ -729,7 +763,7 @@ export function CoachChat({
   );
 
   return (
-    <div className="coach-wrap">
+    <div className="coach-wrap" ref={coachWrapRef}>
       {expanded ? (
         // Static, non-interactive placeholder only (fix round 1) — the
         // real header (with the mode toggle, headerActions and the
@@ -757,6 +791,7 @@ export function CoachChat({
         onOpenChange={(next) => {
           if (!next) handleCollapse();
         }}
+        container={coachWrapRef.current?.closest<HTMLElement>('.rdx') ?? null}
       >
         {dialogHeader}
         {chatBody}

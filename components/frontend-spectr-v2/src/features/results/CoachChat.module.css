@@ -382,33 +382,24 @@
   color: var(--text-2);
 }
 
-/* Dialog-only body layout: same coach-body content, but the thread grows
-   to fill the modal height instead of the inline card's fixed max-height,
-   and the whole column is capped to a comfortable reading width. */
-.dialogBody {
-  flex: 1;
+/* adhoc2 (2026-09-19) — expanded-view override ONLY. The inline card caps
+   the thread at max-height:150px (`.rdx .coach-thread` in
+   redesign-v3-tabs.css); the modal instead lets it fill the dialog's own
+   flex column (CoachChatDialog's `.content` is a fixed 88vh box, so
+   `coach-thread`'s existing `flex:1` has real room to grow into once it's
+   not height-capped). This is composed directly onto the SAME global class
+   — `coach-thread dialogThread` in the JSX, never a swapped-in replacement
+   — via `:global(.rdx .coach-thread).dialogThread` rather than a bare local
+   class, so the compiled selector carries 3 classes (specificity 0,3,0) and
+   reliably wins over the 2-class global rule (`.rdx .coach-thread`,
+   0,2,0) regardless of CSS import/bundle order — a tie on equal specificity
+   would otherwise be decided by source order, which is not something to
+   depend on across two separate stylesheets. Every other coach-thread rule
+   (border, background, padding, radius, gap, direction) is intentionally
+   left alone. */
+:global(.rdx .coach-thread).dialogThread {
+  max-height: none;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--surface);
-}
-.dialogInner {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  max-width: 760px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-}
-.dialogThread {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 20px 4px;
 }
 
 /* Story 1.9 / Task 5.2 — CoachGateInline visual rhythm. Mirrors the

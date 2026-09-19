@@ -60,14 +60,20 @@ async function renderCoachChat(headerActions?: ReactNode) {
   });
   vi.stubGlobal('fetch', fetchMock);
 
+  // adhoc2 (2026-09-19) — mirror production nesting: ReportView.tsx wraps
+  // the whole results page (including CoachChat) in `<div className="rdx">`.
+  // Every coach style is a GLOBAL `.rdx .coach-*` rule, so a render that
+  // omits this wrapper can't prove — or disprove — the scoping fix below.
   render(
-    <CoachChat
-      trackName="Night Drive"
-      analysisId="analysis-1"
-      verdicts={[]}
-      measurementsCount={12}
-      {...(headerActions ? { headerActions } : {})}
-    />,
+    <div className="rdx">
+      <CoachChat
+        trackName="Night Drive"
+        analysisId="analysis-1"
+        verdicts={[]}
+        measurementsCount={12}
+        {...(headerActions ? { headerActions } : {})}
+      />
+    </div>,
   );
   // Wait for the conversation hydration to land before interacting.
   await screen.findByText(SEEDED_MESSAGE);
@@ -210,5 +216,20 @@ describe('CoachChat expand-to-modal (adhoc, 2026-09-19 / fix round 1)', () => {
     expect(within(placeholder).queryAllByRole('button')).toHaveLength(0);
     expect(within(placeholder).getByText('Ask the Coach')).toBeTruthy();
     expect(within(placeholder).getByText('Coach is open in the expanded view.')).toBeTruthy();
+  });
+
+  // ── adhoc2 (2026-09-19) — regression guard for "modal renders unstyled" ──
+  // Every coach-* class is a GLOBAL rule scoped `.rdx .coach-*`
+  // (redesign-v3-tabs.css). CoachChatDialog used a bare `Dialog.Portal`,
+  // which mounts into `document.body` — OUTSIDE `.rdx` — so none of those
+  // rules matched and the expanded dialog rendered as raw unstyled text.
+  // This asserts the dialog's DOM actually lives inside `.rdx` so the fix
+  // can't silently regress back to a body portal.
+  it('renders the dialog content inside the .rdx scope, not a bare document.body portal', async () => {
+    await renderCoachChat();
+    fireEvent.click(screen.getByRole('button', { name: 'Expand coach chat' }));
+    const dialog = await screen.findByRole('dialog');
+
+    expect(dialog.closest('.rdx')).not.toBeNull();
   });
 });
