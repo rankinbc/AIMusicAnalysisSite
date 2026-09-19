@@ -186,8 +186,11 @@ jobs:
   # BUILT images (the 4.1 deferral lands here), SSH deploy + /healthz smoke.
   # The SSH step skips gracefully when the VPS secrets aren't configured, so
   # the pipeline is green before a VPS exists.
+  # FROZEN 2026-09-19: `master` is the archive of the social build and must never
+  # deploy. The product ships from the `solo` branch (its ci.yml deploys on push
+  # to `solo`). This job is kept, disabled, so the history stays readable.
   deploy:
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    if: false
     needs: [secrets, bff, frontend, python]
     runs-on: ubuntu-latest
     timeout-minutes: 45
