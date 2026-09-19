@@ -48,6 +48,22 @@ public static class AuthEndpoints
         return remote is null || System.Net.IPAddress.IsLoopback(remote);
     }
 
+    // Fix round 1 (task 10 review) — register's default DisplayName. Mirrors
+    // User.DisplayName's [MaxLength(80)] (Spectr.Data/Entities/User.cs); kept
+    // as a literal like the existing 80-char checks in PatchMe/MeEndpoints
+    // rather than reflected at runtime. Free text: NO handle-style
+    // sanitization/uniqueness — an empty local part yields null, never an
+    // invented name.
+    private const int DisplayNameMaxLength = 80;
+
+    private static string? DeriveDisplayNameFromEmail(string email)
+    {
+        var at = email.IndexOf('@');
+        var local = (at > 0 ? email[..at] : email).Trim();
+        if (local.Length == 0) return null;
+        return local.Length > DisplayNameMaxLength ? local[..DisplayNameMaxLength] : local;
+    }
+
     // NFR8: both arms (per-IP + per-actor) must pass; 429 envelope on deny.
     // RateLimits:Enabled=false (appsettings.Development.json) turns the auth
     // limits off for dev + the test suite — hundreds of same-IP registrations
@@ -181,6 +197,12 @@ public static class AuthEndpoints
             HashedPassword = hasher.Hash(req.Password),
             // solo: column dropped by RemoveSocial; placeholder keeps NOT NULL/UNIQUE happy until then
             Handle = "u" + Guid.NewGuid().ToString("N")[..20],
+            // Fix round 1 (task 10 review) — RegisterRequest carries no display-name
+            // field, so default to the email's local part: a readable name in
+            // every client without relying on the frontend's emailLocalPart()
+            // fallback. Free text — no sanitization/uniqueness (that was Handle's
+            // job, retired with the placeholder above).
+            DisplayName = DeriveDisplayNameFromEmail(normalizedEmail),
         };
         // Story 12.1 — dev auto-verify: local dev delivers no email, so the
         // story-4.5 second-analysis verify gate would otherwise be

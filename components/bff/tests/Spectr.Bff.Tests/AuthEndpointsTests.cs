@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Spectr.Bff.DTOs;
 using Spectr.Data;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Xunit;
@@ -91,6 +92,33 @@ public sealed class AuthEndpointsTests(WebApplicationFactory<Program> factory)
         var email2 = $"tdd-auth-slice10b+{Guid.NewGuid():N}@spectr.test";
         var resp2 = await client.PostAsJsonAsync("/api/auth/register", new { email = email2, password });
         Assert.Equal(HttpStatusCode.OK, resp2.StatusCode);
+    }
+
+    // Fix round 1 (task 10 review) — since the handle placeholder is opaque,
+    // DisplayName must default to the email's local part server-side so every
+    // client shows a readable name without relying on the frontend's
+    // emailLocalPart(email) fallback. Local part deliberately avoids the
+    // substring "handle" (see the note in Register_Response_And_Jwt_Carry_No_Handle).
+    [SkippableFact]
+    public async Task Register_Defaults_DisplayName_To_Email_Local_Part()
+    {
+        await TestDb.RequireAsync(_factory);
+
+        var client = NewClient();
+        var localPart = $"solo-name-{Guid.NewGuid():N}";
+        var email = $"{localPart}@spectr.test";
+        var password = "correct-horse-battery";
+
+        var register = await client.PostAsJsonAsync("/api/auth/register", new { email, password });
+        Assert.Equal(HttpStatusCode.OK, register.StatusCode);
+        var reg = await register.Content.ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(reg);
+        Assert.Equal(localPart, reg!.User.DisplayName);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", reg.AccessToken);
+        var me = await client.GetFromJsonAsync<AuthedUser>("/api/auth/me");
+        Assert.NotNull(me);
+        Assert.Equal(localPart, me!.DisplayName);
     }
 
     // Wave-2 (E2.4) — duplicate registration returns the typed AR38 envelope.
