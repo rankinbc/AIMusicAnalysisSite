@@ -35,7 +35,6 @@ function fullResults(): JobResultsDto {
       coach_intro: 'Full coach intro',
       phases: [{ phase: 1, name: 'Universal Mix Analysis', data: { lufs: -9.2 } }],
     },
-    shareToken: null,
   };
 }
 

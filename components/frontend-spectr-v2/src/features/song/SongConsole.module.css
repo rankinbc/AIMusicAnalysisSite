@@ -133,29 +133,10 @@
   background: var(--red-dim);
   color: var(--red);
 }
-.menuItemDisabled {
-  color: var(--dim);
-  cursor: default;
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 9px;
-  padding: 8px 10px;
-  border-radius: 7px;
-  font-size: 13px;
-}
 .menuDivider {
   height: 1px;
   background: var(--border);
   margin: 4px 6px;
-}
-.menuSoonBadge {
-  margin-left: auto;
-  font-size: 8px;
-  color: var(--muted);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 1px 4px;
 }
 .headerPills {
   display: flex;

@@ -13,11 +13,10 @@ import { toast } from 'sonner';
 import {
   useArchiveSong,
   useDeleteSong,
-  usePatchSong,
   useRestoreSong,
   useSongs,
 } from '../../api/hooks';
-import type { SongDto, SongVisibility } from '../../api/types';
+import type { SongDto } from '../../api/types';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { NewSongDialog } from '../../components/NewSongDialog';
 import { SongEditDialog } from '../../components/SongEditDialog';
@@ -36,15 +35,11 @@ import {
   pillCounts,
   songMatchesTags,
   sortSongs,
-  VIS_META,
-  VIS_ORDER,
-  visibilityOf,
   type SortKey,
   type VisFilterKey,
 } from './library-helpers';
 
-// Handlers the section supplies to every card/row. Visibility changes are NOT
-// here — each card owns its own song-scoped `usePatchSong` (rules-of-hooks safe).
+// Handlers the section supplies to every card/row.
 interface SongActions {
   onEdit: (song: SongDto) => void;
   onAddVersion: (song: SongDto) => void;
@@ -54,47 +49,6 @@ interface SongActions {
 }
 
 const stop = (e: MouseEvent) => e.stopPropagation();
-
-/** Song-scoped visibility PATCH + toast. One instance per card/row, so calling
- *  it in a list never violates the rules of hooks. */
-function useVisibilityChange(song: SongDto): (visibility: SongVisibility) => void {
-  const patch = usePatchSong(song.id);
-  return (visibility) => {
-    patch.mutate(
-      { visibility },
-      {
-        onSuccess: () => toast.success(`Set "${song.name}" to ${VIS_META[visibility].label}`),
-        onError: () => toast.error('Could not update visibility'),
-      },
-    );
-  };
-}
-
-// ── Visibility badge ─────────────────────────────────────────────────────────
-function VisBadge({
-  visibility,
-  badge = 'icon',
-}: {
-  visibility: SongVisibility;
-  badge?: 'icon' | 'marker';
-}) {
-  const m = VIS_META[visibility];
-  return (
-    <span
-      className={s.visBadge}
-      data-vis={visibility}
-      data-style={badge}
-      title={`${m.label} — ${m.desc}`}
-    >
-      {badge === 'marker' ? (
-        <span className={s.vmark} />
-      ) : (
-        <span className={s.glyph}>{m.glyph}</span>
-      )}
-      <span className={s.vlabel}>{m.label}</span>
-    </span>
-  );
-}
 
 // ── Version-sequence strip (display-only) ────────────────────────────────────
 // One marker per version, the latest (highest versionNumber) accented; hover
@@ -144,10 +98,10 @@ function MiniWave() {
 }
 
 // ── Kebab menu ───────────────────────────────────────────────────────────────
-// Open · Edit · Visibility ▸ · Add version · — · Archive/Unarchive · Delete.
+// Open · Edit · Add version · — · Archive/Unarchive · Delete.
 // Portaled to <body> with fixed coords from the trigger rect so the card's
-// overflow:hidden can never clip it. Flips up near the viewport bottom; the
-// visibility submenu flips sides near an edge. Closes on outside-click/Esc/scroll.
+// overflow:hidden can never clip it. Flips up near the viewport bottom.
+// Closes on outside-click/Esc/scroll.
 function SongMenu({
   song,
   onOpen,
@@ -155,7 +109,6 @@ function SongMenu({
   onAddVersion,
   onArchive,
   onDelete,
-  onSetVisibility,
 }: {
   song: SongDto;
   onOpen: () => void;
@@ -163,18 +116,11 @@ function SongMenu({
   onAddVersion: () => void;
   onArchive: () => void;
   onDelete: () => void;
-  onSetVisibility: (visibility: SongVisibility) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [subOpen, setSubOpen] = useState(false);
-  const [flip, setFlip] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const trigRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const subTrigRef = useRef<HTMLButtonElement>(null);
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  const vis = visibilityOf(song);
 
   const place = () => {
     const t = trigRef.current;
@@ -199,18 +145,11 @@ function SongMenu({
       const target = e.target as Node;
       if (trigRef.current?.contains(target) || menuRef.current?.contains(target)) return;
       setOpen(false);
-      setSubOpen(false);
     };
     const onEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setOpen(false);
-        setSubOpen(false);
-      }
+      if (e.key === 'Escape') setOpen(false);
     };
-    const onScroll = () => {
-      setOpen(false);
-      setSubOpen(false);
-    };
+    const onScroll = () => setOpen(false);
     window.addEventListener('mousedown', onDoc);
     window.addEventListener('keydown', onEsc);
     window.addEventListener('scroll', onScroll, true);
@@ -223,16 +162,7 @@ function SongMenu({
     };
   }, [open]);
 
-  useEffect(() => {
-    if (subOpen && subTrigRef.current) {
-      setFlip(subTrigRef.current.getBoundingClientRect().left < 210);
-    }
-  }, [subOpen]);
-
-  const close = () => {
-    setOpen(false);
-    setSubOpen(false);
-  };
+  const close = () => setOpen(false);
   const item = (fn: () => void) => (e: MouseEvent) => {
     e.stopPropagation();
     close();
@@ -255,57 +185,6 @@ function SongMenu({
             <button type="button" className={s.menuItem} role="menuitem" onClick={item(onEdit)}>
               <span className={s.miIco}>✎</span> Edit
             </button>
-            <div
-              className={s.submenu}
-              onMouseEnter={() => {
-                clearTimeout(closeTimer.current);
-                setSubOpen(true);
-              }}
-              onMouseLeave={() => {
-                closeTimer.current = setTimeout(() => setSubOpen(false), 160);
-              }}
-            >
-              <button
-                ref={subTrigRef}
-                type="button"
-                className={s.menuItem}
-                role="menuitem"
-                aria-haspopup="menu"
-                aria-expanded={subOpen}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSubOpen((v) => !v);
-                }}
-              >
-                <span className={s.miIco}>{VIS_META[vis].glyph}</span> Visibility
-                <span className={s.miCaret}>▸</span>
-              </button>
-              {subOpen && (
-                <div className={`${s.submenuPanel}${flip ? ` ${s.flip}` : ''}`} role="menu">
-                  {VIS_ORDER.map((key) => {
-                    const m = VIS_META[key];
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        className={s.subItem}
-                        role="menuitemradio"
-                        aria-checked={vis === key}
-                        data-vis={key}
-                        onClick={item(() => onSetVisibility(key))}
-                      >
-                        <span className={s.glyph}>{m.glyph}</span>
-                        <span className={s.siMain}>
-                          <span className={s.siName}>{m.label}</span>
-                          <span className={s.siDesc}>{m.desc}</span>
-                        </span>
-                        {vis === key && <span className={s.siCheck}>✓</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
             <button
               type="button"
               className={s.menuItem}
@@ -363,10 +242,8 @@ function SongCard({
   actions: SongActions;
 }) {
   const navigate = useNavigate();
-  const setVisibility = useVisibilityChange(song);
   const latest = latestVersion(song);
   const vcount = song.versions.length;
-  const vis = visibilityOf(song);
   const hasDesc = Boolean(song.description && song.description.trim().length > 0);
   const tags = song.tags;
 
@@ -388,7 +265,6 @@ function SongCard({
   return (
     <article
       className={s.card}
-      data-vis={vis}
       role="button"
       tabIndex={0}
       onClick={goToSong}
@@ -408,7 +284,6 @@ function SongCard({
         />
         <div className={s.coverOverlay}>
           <div className={s.coverTop}>
-            <VisBadge visibility={vis} badge="icon" />
             <span className={s.vpill}>v{latest ? latest.versionNumber : 0}</span>
           </div>
           <div className={s.coverBottom}>
@@ -447,7 +322,6 @@ function SongCard({
               onAddVersion={() => actions.onAddVersion(song)}
               onArchive={() => actions.onArchive(song)}
               onDelete={() => actions.onDelete(song)}
-              onSetVisibility={setVisibility}
             />
           </div>
         </div>
@@ -514,10 +388,8 @@ function SongCard({
 // ── List row ─────────────────────────────────────────────────────────────────
 function SongRow({ song, actions }: { song: SongDto; actions: SongActions }) {
   const navigate = useNavigate();
-  const setVisibility = useVisibilityChange(song);
   const latest = latestVersion(song);
   const vcount = song.versions.length;
-  const vis = visibilityOf(song);
   const hasDesc = Boolean(song.description && song.description.trim().length > 0);
   const visual = visualFromDto(song.visualTemplate, song.visualPrimary, song.visualSecondary);
   const fallbackHue = hueFromId(song.id);
@@ -540,7 +412,6 @@ function SongRow({ song, actions }: { song: SongDto; actions: SongActions }) {
   return (
     <div
       className={s.row}
-      data-vis={vis}
       role="button"
       tabIndex={0}
       onClick={goToSong}
@@ -569,7 +440,6 @@ function SongRow({ song, actions }: { song: SongDto; actions: SongActions }) {
           >
             {song.name}
           </Link>
-          <VisBadge visibility={vis} badge="marker" />
         </div>
         <span className={`mono ${s.rowSub}`}>
           {vcount} {vcount === 1 ? 'version' : 'versions'}
@@ -617,7 +487,6 @@ function SongRow({ song, actions }: { song: SongDto; actions: SongActions }) {
           onAddVersion={() => actions.onAddVersion(song)}
           onArchive={() => actions.onArchive(song)}
           onDelete={() => actions.onDelete(song)}
-          onSetVisibility={setVisibility}
         />
       </div>
     </div>
@@ -758,12 +627,8 @@ export function SongsLibrarySection() {
             type="button"
             className={s.filterPill}
             data-active={filter === f.key}
-            data-vis={f.vis}
             onClick={() => setFilter(f.key)}
           >
-            {f.key !== 'all' && f.key !== 'archived' && (
-              <span className={s.glyph}>{VIS_META[f.key].glyph}</span>
-            )}
             {f.label}
             <span className={s.filterPillCount}>{counts[f.key]}</span>
           </button>
@@ -882,24 +747,17 @@ function LibraryEmptyState({
   isFirstRun: boolean;
   onNewSong: () => void;
 }) {
-  const vis: SongVisibility = filter === 'all' || filter === 'archived' ? 'shared' : filter;
-  const glyph = emptyForTags
-    ? '#'
-    : filter === 'archived'
-      ? '⌫'
-      : filter === 'all'
-        ? '♪'
-        : VIS_META[filter].glyph;
+  const glyph = emptyForTags ? '#' : filter === 'archived' ? '⌫' : '♪';
   return (
-    <div className={s.empty} data-vis={vis}>
+    <div className={s.empty}>
       <div className={s.emptyGlyph}>{glyph}</div>
       <p className={s.emptyTitle}>{isFirstRun ? 'Your library starts here' : 'Nothing here'}</p>
       <p className={s.emptySub}>
         {isFirstRun
           ? 'Upload a track to get a full mix report — then listen to it through the rack and watch each version build up.'
           : emptyForTags
-            ? 'No songs match these tags in this view. Clear the tag filter or pick a different visibility.'
-            : 'No songs match this filter. Try another, or change a song’s visibility from its ⋮ menu.'}
+            ? 'No songs match these tags in this view. Clear the tag filter to see everything.'
+            : 'No songs match this filter. Try Archived or All from the filters above.'}
       </p>
       {isFirstRun && (
         <button type="button" className={`btn primary ${s.emptyAction}`} onClick={onNewSong}>

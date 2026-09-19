@@ -1,8 +1,6 @@
-/* Library page — cover-led song cards, per-song visibility, display-only
-   version-sequence strip, visibility filter pills + tag-refine row, portaled
-   kebab menu. Ported from the redesign prototype (design_handoff_library).
-   Grades/scores are gone. Visibility theming tokens (--vis/--vis-dim/--vis-bd)
-   resolve from the global [data-vis] blocks in styles/tokens.css. */
+/* Library page — cover-led song cards, display-only version-sequence strip,
+   filter pills + tag-refine row, portaled kebab menu. Ported from the
+   redesign prototype (design_handoff_library). Grades/scores are gone. */
 
 .page {
   max-width: 1360px;
@@ -135,7 +133,7 @@
   box-shadow: inset 0 0 0 1px var(--border);
 }
 
-/* ── Filters — visibility pills ─────────────────────────────────────────── */
+/* ── Filters ───────────────────────────────────────────────────────────── */
 .filters {
   display: flex;
   flex-wrap: wrap;
@@ -164,13 +162,9 @@
   color: var(--text);
 }
 .filterPill[data-active='true'] {
-  background: var(--vis-dim);
-  border-color: var(--vis-bd);
-  color: var(--vis);
-}
-.filterPill .glyph {
-  font-size: 11px;
-  line-height: 1;
+  background: var(--cyan-dim);
+  border-color: rgba(0, 229, 176, 0.36);
+  color: var(--cyan);
 }
 .filterPillCount {
   opacity: 0.85;
@@ -305,7 +299,7 @@
 .coverTop {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px;
 }
 .coverBottom {
@@ -380,61 +374,6 @@
   background: rgba(7, 10, 18, 0.5);
   backdrop-filter: blur(3px);
   white-space: nowrap;
-}
-
-/* ── Visibility badge ───────────────────────────────────────────────────── */
-.visBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 3px 9px 3px 8px;
-  border-radius: 999px;
-  color: var(--vis);
-  border: 1px solid var(--vis-bd);
-  background: rgba(7, 10, 18, 0.5);
-  backdrop-filter: blur(3px);
-  white-space: nowrap;
-}
-.visBadge .glyph {
-  font-size: 11px;
-  line-height: 1;
-}
-.visBadge[data-style='marker'] {
-  padding: 4px;
-  gap: 0;
-  background: transparent;
-  border: none;
-}
-.visBadge[data-style='marker'] .vlabel {
-  display: none;
-}
-
-/* geometric marker — dot (shared) / ring (public) / locked square (private) */
-.vmark {
-  width: 10px;
-  height: 10px;
-  flex-shrink: 0;
-  display: inline-block;
-}
-.visBadge[data-vis='shared'] .vmark {
-  border-radius: 50%;
-  background: var(--vis);
-  box-shadow: 0 0 7px -1px var(--vis);
-}
-.visBadge[data-vis='public'] .vmark {
-  border-radius: 50%;
-  background: transparent;
-  box-shadow: inset 0 0 0 2px var(--vis);
-}
-.visBadge[data-vis='private'] .vmark {
-  border-radius: 3px;
-  background: var(--vis);
-  opacity: 0.85;
 }
 
 /* ── Card body ──────────────────────────────────────────────────────────── */
@@ -726,11 +665,6 @@ button.cardTag:hover {
   text-align: center;
   flex-shrink: 0;
 }
-.menuItem .miCaret {
-  margin-left: auto;
-  color: var(--muted);
-  font-size: 10px;
-}
 .menuItemDanger {
   color: var(--red);
 }
@@ -741,73 +675,6 @@ button.cardTag:hover {
   height: 1px;
   margin: 5px 6px;
   background: var(--border);
-}
-
-/* visibility submenu */
-.submenu {
-  position: relative;
-}
-.submenuPanel {
-  position: absolute;
-  top: -5px;
-  right: calc(100% + 6px);
-  min-width: 184px;
-  background: var(--card-2);
-  border: 1px solid var(--border-2);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5);
-  padding: 5px;
-  animation: ddPop 140ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.submenuPanel.flip {
-  right: auto;
-  left: calc(100% + 6px);
-}
-.subItem {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  text-align: left;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 8px 10px;
-  border-radius: 6px;
-  color: var(--text);
-  transition: background 0.1s;
-}
-.subItem:hover {
-  background: var(--card-hover);
-}
-.subItem .siMain {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-.subItem .siName {
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.subItem .siDesc {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 9px;
-  color: var(--muted);
-  letter-spacing: 0.03em;
-}
-.subItem .siCheck {
-  margin-left: auto;
-  color: var(--vis);
-  font-size: 12px;
-  flex-shrink: 0;
-}
-.subItem .glyph {
-  font-size: 12px;
-  width: 15px;
-  text-align: center;
 }
 
 /* ── List view ──────────────────────────────────────────────────────────── */
@@ -971,9 +838,9 @@ button.cardTag:hover {
   border-radius: 14px;
   display: grid;
   place-items: center;
-  background: var(--vis-dim);
-  border: 1px solid var(--vis-bd);
-  color: var(--vis);
+  background: var(--cyan-dim);
+  border: 1px solid rgba(0, 229, 176, 0.36);
+  color: var(--cyan);
   font-size: 22px;
   margin-bottom: 4px;
 }

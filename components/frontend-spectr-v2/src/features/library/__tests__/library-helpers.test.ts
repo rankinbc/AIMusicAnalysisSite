@@ -8,9 +8,6 @@ import {
   pillCounts,
   songMatchesTags,
   sortSongs,
-  VIS_META,
-  VIS_ORDER,
-  visibilityOf,
 } from '../library-helpers';
 
 const iso = (daysAgo: number) =>
@@ -46,23 +43,6 @@ function song(over: Partial<SongDto> = {}): SongDto {
   };
 }
 
-describe('visibilityOf', () => {
-  it('defaults a missing visibility to private', () => {
-    expect(visibilityOf(song({}))).toBe('private');
-  });
-  it('returns the explicit value when set', () => {
-    expect(visibilityOf(song({ visibility: 'public' }))).toBe('public');
-  });
-});
-
-describe('VIS_META / VIS_ORDER', () => {
-  it('orders private → shared → public with distinct glyphs', () => {
-    expect(VIS_ORDER).toEqual(['private', 'shared', 'public']);
-    expect(VIS_META.private.glyph).not.toBe(VIS_META.shared.glyph);
-    expect(VIS_META.public.label).toBe('Public');
-  });
-});
-
 describe('latestVersion', () => {
   it('returns the highest versionNumber regardless of array order', () => {
     const s = song({ versions: [version(3), version(1), version(2)] });
@@ -85,12 +65,6 @@ describe('matchesFilter', () => {
   it('archived shows only archived', () => {
     expect(matchesFilter(song({ archivedAt: iso(2) }), 'archived')).toBe(true);
     expect(matchesFilter(song({ archivedAt: null }), 'archived')).toBe(false);
-  });
-  it('visibility keys match non-archived songs of that visibility (default private)', () => {
-    expect(matchesFilter(song({ visibility: 'shared' }), 'shared')).toBe(true);
-    expect(matchesFilter(song({}), 'private')).toBe(true); // missing → private
-    expect(matchesFilter(song({ visibility: 'shared' }), 'private')).toBe(false);
-    expect(matchesFilter(song({ visibility: 'public', archivedAt: iso(1) }), 'public')).toBe(false);
   });
 });
 
@@ -129,25 +103,20 @@ describe('aggregateTags', () => {
 
 describe('pillCounts', () => {
   const songs = [
-    song({ visibility: 'private' }),
-    song({ visibility: 'shared', tags: [{ id: 't', name: 'fav', isPublic: false }] }),
-    song({ visibility: 'public' }),
-    song({ visibility: 'public', archivedAt: iso(2) }),
+    song({}),
+    song({ tags: [{ id: 't', name: 'fav', isPublic: false }] }),
+    song({}),
+    song({ archivedAt: iso(2) }),
   ];
   it('recomputes counts with no tag filter', () => {
     const c = pillCounts(songs, new Set());
     expect(c.all).toBe(3); // archived excluded
-    expect(c.private).toBe(1);
-    expect(c.shared).toBe(1);
-    expect(c.public).toBe(1);
     expect(c.archived).toBe(1);
   });
   it('recomputes counts against the active tag filter', () => {
     const c = pillCounts(songs, new Set(['fav']));
-    expect(c.all).toBe(1); // only the shared song carries #fav
-    expect(c.shared).toBe(1);
-    expect(c.private).toBe(0);
-    expect(c.public).toBe(0);
+    expect(c.all).toBe(1); // only the tagged song carries #fav
+    expect(c.archived).toBe(0); // the archived song isn't tagged
   });
 });
 

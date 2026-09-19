@@ -196,11 +196,6 @@ export interface TagDto {
   isPublic: boolean;
 }
 
-/** Song-level visibility. Default `private` everywhere a value is absent.
- *  The owner can set + see it now; non-owner access enforcement is a later
- *  spec ("sharing platform"). */
-export type SongVisibility = 'private' | 'shared' | 'public';
-
 export interface SongDto {
   id: string;
   name: string;
@@ -219,8 +214,6 @@ export interface SongDto {
   visualSecondary?: string | null;
   referenceProfileKind?: ReferenceProfileKind | null;
   referenceProfileId?: string | null;
-  // Per-song visibility; absent → treat as 'private' in every consumer.
-  visibility?: SongVisibility;
 }
 
 export interface CreateSongRequest {
@@ -243,7 +236,6 @@ export interface PatchSongRequest {
   visualSecondary?: string | null;
   referenceProfileKind?: ReferenceProfileKind | null;
   referenceProfileId?: string | null;
-  visibility?: SongVisibility | null;
 }
 
 // ── Song cover-art visual ─────────────────────────────────────────────────────
@@ -791,42 +783,6 @@ export interface CompareResponseDto {
   source: string;
 }
 
-// Share
-export interface CreateShareResponse {
-  shareToken: string;
-  shareShowVerdicts: boolean;
-  shareEnabledAt: string;
-  publicUrl: string;
-}
-
-export interface PatchShareRequest {
-  showVerdicts: boolean;
-}
-
-export interface SharedAnalysisDto {
-  token: string;
-  songName: string | null;
-  producerHandle: string | null;
-  producerDisplayName: string | null;
-  createdAt: string;
-  finalJson: unknown;
-  verdicts: unknown;
-}
-
-export interface ShareCommentDto {
-  id: string;
-  authorDisplayName: string | null;
-  timestampSeconds: number | null;
-  body: string;
-  createdAt: string;
-}
-
-export interface PostShareCommentRequest {
-  body: string;
-  timestampSeconds?: number | null;
-  authorDisplayName?: string | null;
-}
-
 // Coach combined-view (analysis + verdicts + counts). No frontend consumer
 // today — kept as the BFF-contract mirror for GET /api/coach/{jobId} (see the
 // useCoachView tombstone in hooks.ts).
@@ -911,7 +867,6 @@ export interface JobResultsDto {
   songId: string | null;
   songName: string | null;
   finalJson: unknown;
-  shareToken: string | null;
   // Stored client-parsed Ableton project map ("project awareness"), surfaced for
   // the results Project view. Null when no .als project JSON was uploaded.
   alsProject?: AlsProjectJson | null;

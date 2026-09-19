@@ -1,21 +1,17 @@
-/* Story 6.5 (AC4) — inbound attribution capture. Share pages (7.4) stash
- * `spectr_attribution` write-only in localStorage; a share/register link also
- * carries a `?via=` / `?ref=` param. This reads the source ONCE for a
- * signup-class event and drains the stash so a later unrelated signup can't
- * inherit a stale share source. SSR/no-window safe.
+/* Story 6.5 (AC4) — inbound attribution capture. The anon-funnel (`/analyze`)
+ * register card reads this ONCE for a signup-class event: a `?via=` / `?ref=`
+ * URL param, or a `spectr_attribution` stash left in localStorage. Drains the
+ * stash so a later unrelated signup can't inherit a stale source. SSR/no-window
+ * safe.
  *
- * PRIVACY (review): the raw value can be a SHARE TOKEN (resolves to a specific
- * account) or uncontrolled `?ref=` free text (`?ref=jane@x.com`). Neither may
- * reach PostHog. `sanitizeSource` reduces a `share_*` token to the CHANNEL
- * `"share"` (the per-share/viral join stays server-side via the /register
- * `?via=` handler) and slugifies a ref to `[a-z0-9-]` capped at 32 chars,
- * dropping anything that isn't a plausible campaign slug. */
+ * PRIVACY (review): the raw value is uncontrolled `?ref=` free text (e.g.
+ * `?ref=jane@x.com`) and must never reach PostHog verbatim — `sanitizeSource`
+ * slugifies it to `[a-z0-9-]` capped at 32 chars, dropping anything that
+ * isn't a plausible campaign slug. */
 export const ATTRIBUTION_KEY = 'spectr_attribution';
 
 export function sanitizeSource(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  // Share tokens de-anonymize — keep only the channel, never the token.
-  if (raw.startsWith('share_')) return 'share';
   const slug = raw.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 32);
   return slug.length > 0 ? slug : null;
 }

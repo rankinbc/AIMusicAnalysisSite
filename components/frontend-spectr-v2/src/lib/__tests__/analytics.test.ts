@@ -18,7 +18,7 @@ describe('analytics (no VITE_POSTHOG_KEY)', () => {
       capture('landing_viewed');
       capture('analyze_started', { job_id: 'j1' });
       capture('analyze_completed', { job_id: 'j1' });
-      capture('report_claimed', { job_id: 'j1', source: 'share_abc' });
+      capture('report_claimed', { job_id: 'j1', source: 'campaign-abc' });
       capture('pricing_viewed');
       capture('checkout_started', { cadence: 'monthly' });
       capture('resume_shown', { status: 'complete' });

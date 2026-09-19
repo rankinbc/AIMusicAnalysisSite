@@ -12,7 +12,6 @@ import type {
   BookmarkDto,
   CompareResponseDto,
   CreateBookmarkRequest,
-  CreateShareResponse,
   CreateNoteRequest,
   CreateReferenceSetRequest,
   CreateSongRequest,
@@ -29,14 +28,10 @@ import type {
   PatchMeProfileRequest,
   PatchNoteRequest,
   PatchReferenceRequest,
-  PatchShareRequest,
   PatchSongRequest,
   PlansResponse,
-  PostShareCommentRequest,
   ReportListResponse,
   ReportsFilter,
-  ShareCommentDto,
-  SharedAnalysisDto,
   TagDto,
   PatchVersionRequest,
   AlsUploadResponse,
@@ -886,87 +881,6 @@ export function useDeleteBookmark() {
     mutationFn: (bookmarkId: string) =>
       fetcher<void>({ url: `/me/bookmarks/${bookmarkId}`, method: 'DELETE' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['bookmarks'] }),
-  });
-}
-
-// ── Share (owner-side) ──────────────────────────────────────────────────────
-export function useCreateShare(analysisId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () =>
-      fetcher<CreateShareResponse>({
-        url: `/analyses/${analysisId}/share/`,
-        method: 'POST',
-      }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['analyses', analysisId] }),
-  });
-}
-
-export function usePatchShare(analysisId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: PatchShareRequest) =>
-      fetcher<void>({
-        url: `/analyses/${analysisId}/share/`,
-        method: 'PATCH',
-        data: body,
-      }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['analyses', analysisId] }),
-  });
-}
-
-export function useRevokeShare(analysisId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () =>
-      fetcher<void>({ url: `/analyses/${analysisId}/share/`, method: 'DELETE' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['analyses', analysisId] }),
-  });
-}
-
-// Story 7.3 (AR28) — regenerate mints a fresh token; the old link is dead
-// the moment this resolves.
-export function useRegenerateShare(analysisId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () =>
-      fetcher<CreateShareResponse>({
-        url: `/analyses/${analysisId}/share/regenerate`,
-        method: 'POST',
-      }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['analyses', analysisId] }),
-  });
-}
-
-// ── Share (public-side, no auth) ────────────────────────────────────────────
-export function useSharedAnalysis(token: string) {
-  return useQuery<SharedAnalysisDto>({
-    queryKey: ['share', token],
-    queryFn: () => fetcher<SharedAnalysisDto>({ url: `/share/${token}/`, method: 'GET' }),
-    enabled: Boolean(token),
-    retry: false,
-  });
-}
-
-export function useShareComments(token: string) {
-  return useQuery<ShareCommentDto[]>({
-    queryKey: ['share', token, 'comments'],
-    queryFn: () =>
-      fetcher<ShareCommentDto[]>({ url: `/share/${token}/comments`, method: 'GET' }),
-    enabled: Boolean(token),
-  });
-}
-
-export function usePostShareComment(token: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: PostShareCommentRequest) =>
-      fetcher<ShareCommentDto>({
-        url: `/share/${token}/comments`,
-        method: 'POST',
-        data: body,
-      }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['share', token, 'comments'] }),
   });
 }
 

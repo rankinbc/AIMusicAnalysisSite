@@ -76,6 +76,5 @@ describe('VersionRowMenu', () => {
     expect(html).toContain('Reanalyze');
     expect(html).toContain('Open in Listen');
     expect(html).toContain('Delete version');
-    expect(html).toContain('soon');
   });
 });

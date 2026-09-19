@@ -34,10 +34,6 @@ export function VersionRowMenu({
       {hasGamePlan && (
         <button className={styles.menuItem} onClick={onViewGamePlan}>◉ View game plan</button>
       )}
-      <div className={styles.menuItemDisabled}>
-        ◬ Open in Room
-        <span className={`mono ${styles.menuSoonBadge}`}>soon</span>
-      </div>
       <div className={styles.menuDivider} />
       <button className={`${styles.menuItem} ${styles.menuItemDanger}`} onClick={onDelete}>
         🗑 Delete version

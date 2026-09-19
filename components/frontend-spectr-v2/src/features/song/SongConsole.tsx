@@ -20,7 +20,6 @@ import { fetcher } from '../../api/fetcher';
 import type { ReanalyzeResponse, VersionDto as VD } from '../../api/types';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { SongEditDialog } from '../../components/SongEditDialog';
-import { SharePublishDialog } from '../../components/SharePublishDialog';
 import { UnifiedUploadDialog } from '../../components/UnifiedUploadDialog';
 import { showAnalysisDispatchError } from '../../components/verify-email';
 import { ReanalyzeWithReferenceDialog } from '../../features/references/ReanalyzeWithReferenceDialog';
@@ -55,7 +54,6 @@ export function SongConsole({ songId }: SongConsoleProps) {
   // ── Dialog state ─────────────────────────────────────────────────────────
   const [uploadOpen, setUploadOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [publishOpen, setPublishOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [deleteVersionId, setDeleteVersionId] = useState<string | null>(null);
   const [refReanalyzeVersionId, setRefReanalyzeVersionId] = useState<string | null>(null);
@@ -281,13 +279,6 @@ export function SongConsole({ songId }: SongConsoleProps) {
         visual={coverVisual}
         hue={coverHue}
         onEdit={() => setEditOpen(true)}
-        onPublish={() => {
-          if (!song.latestResult) {
-            toast.info("Analyze a version first — there's nothing to share yet.");
-            return;
-          }
-          setPublishOpen(true);
-        }}
         onAddVersion={() => setUploadOpen(true)}
         onArchive={() => setArchiveOpen(true)}
       />
@@ -334,15 +325,6 @@ export function SongConsole({ songId }: SongConsoleProps) {
         onOpenChange={setEditOpen}
         song={song}
       />
-
-      {song.latestResult && (
-        <SharePublishDialog
-          open={publishOpen}
-          onOpenChange={setPublishOpen}
-          analysisId={song.latestResult.id}
-          songName={song.name}
-        />
-      )}
 
       <ConfirmDialog
         open={archiveOpen}

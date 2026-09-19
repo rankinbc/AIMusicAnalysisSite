@@ -11,7 +11,6 @@ import s from '../../../routes/_app/library.module.css';
 
 // ── Module mocks (all referenced vars are `mock`-prefixed per Vitest hoisting) ──
 const mockNavigate = vi.fn();
-const mockPatchMutate = vi.fn();
 const mockDeleteMutateAsync = vi.fn().mockResolvedValue(undefined);
 const mockArchiveMutateAsync = vi.fn().mockResolvedValue(undefined);
 const mockRestoreMutateAsync = vi.fn().mockResolvedValue(undefined);
@@ -29,7 +28,6 @@ vi.mock('@tanstack/react-router', () => ({
 
 vi.mock('../../../api/hooks', () => ({
   useSongs: () => ({ data: mockSongs.data, isLoading: false, error: null }),
-  usePatchSong: () => ({ mutate: mockPatchMutate, mutateAsync: vi.fn(), isPending: false }),
   useArchiveSong: () => ({ mutateAsync: mockArchiveMutateAsync, isPending: false }),
   useRestoreSong: () => ({ mutateAsync: mockRestoreMutateAsync, isPending: false }),
   useDeleteSong: () => ({ mutateAsync: mockDeleteMutateAsync, isPending: false }),
@@ -116,10 +114,6 @@ function cardFor(name: string): HTMLElement {
   return article as HTMLElement;
 }
 
-function articleVisValues(): string[] {
-  return [...document.querySelectorAll('article')].map((a) => a.getAttribute('data-vis') ?? '');
-}
-
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
@@ -131,29 +125,21 @@ beforeEach(() => {
   mockSongs.data = [];
 });
 
-describe('SongsLibrarySection — badges, gating, strip', () => {
-  it('renders a visibility badge per song and no grade/score anywhere', () => {
+describe('SongsLibrarySection — gating, strip', () => {
+  it('renders song cards with no grade/score leaked anywhere', () => {
     mockSongs.data = [
-      song({ id: 'p', name: 'PrivSong', visibility: 'private' }),
-      song({ id: 's', name: 'ShareSong', visibility: 'shared' }),
-      song({ id: 'u', name: 'PubSong', visibility: 'public' }),
+      song({ id: 'p', name: 'SongOne' }),
+      song({ id: 's', name: 'SongTwo' }),
+      song({ id: 'u', name: 'SongThree' }),
     ];
     render(<SongsLibrarySection />);
 
-    expect(articleVisValues().sort()).toEqual(['private', 'public', 'shared']);
-    // Badge labels are present per card.
-    expect(cardFor('PrivSong').textContent).toContain('Private');
-    expect(cardFor('ShareSong').textContent).toContain('Shared');
-    expect(cardFor('PubSong').textContent).toContain('Public');
+    expect(cardFor('SongOne')).toBeTruthy();
+    expect(cardFor('SongTwo')).toBeTruthy();
+    expect(cardFor('SongThree')).toBeTruthy();
     // No grade pill / score text leaked onto the page.
     expect(document.body.textContent).not.toMatch(/\/100/);
     expect(document.body.textContent?.toLowerCase()).not.toContain('grade');
-  });
-
-  it('treats a missing visibility as private', () => {
-    mockSongs.data = [song({ name: 'NoVis' })]; // visibility omitted
-    render(<SongsLibrarySection />);
-    expect(cardFor('NoVis').getAttribute('data-vis')).toBe('private');
   });
 
   it('shows the description peek only when a non-empty description exists', () => {
@@ -226,14 +212,14 @@ describe('SongsLibrarySection — Play + Report', () => {
   });
 });
 
-describe('SongsLibrarySection — visibility filters + counts', () => {
+describe('SongsLibrarySection — filters + counts', () => {
   function dataset(): SongDto[] {
     return [
-      song({ id: '1', name: 'P1', visibility: 'private' }),
-      song({ id: '2', name: 'S1', visibility: 'shared' }),
-      song({ id: '3', name: 'U1', visibility: 'public' }),
-      song({ id: '4', name: 'U2', visibility: 'public' }),
-      song({ id: '5', name: 'Arc', visibility: 'public', archivedAt: iso(3) }),
+      song({ id: '1', name: 'S1' }),
+      song({ id: '2', name: 'S2' }),
+      song({ id: '3', name: 'S3' }),
+      song({ id: '4', name: 'S4' }),
+      song({ id: '5', name: 'Arc', archivedAt: iso(3) }),
     ];
   }
 
@@ -249,16 +235,12 @@ describe('SongsLibrarySection — visibility filters + counts', () => {
     mockSongs.data = dataset();
     render(<SongsLibrarySection />);
     expect(pill('All').textContent).toContain('4'); // archived excluded
-    expect(pill('Private').textContent).toContain('1');
-    expect(pill('Public').textContent).toContain('2');
     expect(pill('Archived').textContent).toContain('1');
   });
 
-  it('clicking a visibility pill filters the grid', () => {
+  it('clicking Archived filters the grid to only archived songs', () => {
     mockSongs.data = dataset();
     render(<SongsLibrarySection />);
-    click(pill('Public'));
-    expect(articleVisValues()).toEqual(['public', 'public']);
     click(pill('Archived'));
     // Only the archived song shows now.
     expect(document.querySelectorAll('article').length).toBe(1);
@@ -327,25 +309,6 @@ describe('SongsLibrarySection — kebab menu', () => {
     const trigger = cardFor(name).querySelector('button[aria-label="Song actions"]');
     click(trigger);
   }
-
-  it('visibility submenu issues a PATCH with the chosen value', () => {
-    mockSongs.data = [song({ id: 'sg', name: 'Target', visibility: 'private' })];
-    render(<SongsLibrarySection />);
-    openMenu('Target');
-
-    const visItem = [...document.querySelectorAll('[role="menuitem"]')].find((b) =>
-      b.textContent?.includes('Visibility'),
-    );
-    click(visItem);
-
-    const sharedRadio = [...document.querySelectorAll('[role="menuitemradio"]')].find((b) =>
-      b.textContent?.includes('Shared'),
-    );
-    click(sharedRadio);
-
-    expect(mockPatchMutate).toHaveBeenCalledTimes(1);
-    expect(mockPatchMutate.mock.calls[0]?.[0]).toEqual({ visibility: 'shared' });
-  });
 
   it('Delete opens a confirm dialog, then calls the hard-delete hook', async () => {
     mockSongs.data = [song({ id: 'del-1', name: 'Doomed', versions: [version(1), version(2)] })];

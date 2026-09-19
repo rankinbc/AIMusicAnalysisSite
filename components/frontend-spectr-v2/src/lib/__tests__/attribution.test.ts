@@ -19,18 +19,18 @@ describe('readAttribution (story 6.5 AC4)', () => {
     expect(readAttribution()).toEqual({});
   });
 
-  it('reduces a share TOKEN to the channel "share" (no de-anonymizing token) and drains once', () => {
-    window.localStorage.setItem(KEY, 'share_abc123');
-    expect(readAttribution()).toEqual({ source: 'share' }); // token dropped
+  it('drains the localStorage stash once and reports its slugified source', () => {
+    window.localStorage.setItem(KEY, 'newsletter');
+    expect(readAttribution()).toEqual({ source: 'newsletter' });
     // Drained — a later unrelated signup must not inherit it.
     expect(readAttribution()).toEqual({});
     expect(window.localStorage.getItem(KEY)).toBeNull();
   });
 
   it('prefers the ?via / ?ref URL param over the stash and still drains the stash', () => {
-    window.localStorage.setItem(KEY, 'share_stale');
-    setSearch('via=share_fresh');
-    expect(readAttribution()).toEqual({ source: 'share' });
+    window.localStorage.setItem(KEY, 'stale-campaign');
+    setSearch('via=fresh-campaign');
+    expect(readAttribution()).toEqual({ source: 'fresh-campaign' });
     expect(window.localStorage.getItem(KEY)).toBeNull(); // drained regardless
 
     setSearch('ref=producthunt');

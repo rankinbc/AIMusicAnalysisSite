@@ -2,26 +2,7 @@
 // component so the filter / count / tag-aggregation / sort logic is trivially
 // unit-testable. Grades/scores intentionally play NO role here.
 
-import type { SongDto, SongVisibility, VersionDto } from '../../api/types';
-
-export interface VisMeta {
-  label: string;
-  glyph: string;
-  desc: string;
-}
-
-export const VIS_META: Record<SongVisibility, VisMeta> = {
-  private: { label: 'Private', glyph: '🔒', desc: 'Only you' },
-  shared: { label: 'Shared', glyph: '🔗', desc: 'Anyone with the link' },
-  public: { label: 'Public', glyph: '🌐', desc: 'Listed + discoverable' },
-};
-
-export const VIS_ORDER: SongVisibility[] = ['private', 'shared', 'public'];
-
-/** A missing `visibility` is treated as 'private' everywhere. */
-export function visibilityOf(song: SongDto): SongVisibility {
-  return song.visibility ?? 'private';
-}
+import type { SongDto, VersionDto } from '../../api/types';
 
 /** The latest version = the one with the highest versionNumber. (A flagged
  *  `isCurrent` version wins ties / out-of-order arrays.) `undefined` when the
@@ -33,24 +14,18 @@ export function latestVersion(song: SongDto): VersionDto | undefined {
   return song.versions.reduce((best, v) => (v.versionNumber > best.versionNumber ? v : best));
 }
 
-export type VisFilterKey = 'all' | 'private' | 'shared' | 'public' | 'archived';
+export type VisFilterKey = 'all' | 'archived';
 
-/** Filter pills. `vis` themes the pill via `data-vis`; for `all`/`archived`
- *  it's a neutral-ish stand-in (no glyph rendered for those two). */
-export const FILTERS: { key: VisFilterKey; label: string; vis: SongVisibility }[] = [
-  { key: 'all', label: 'All', vis: 'shared' },
-  { key: 'private', label: 'Private', vis: 'private' },
-  { key: 'shared', label: 'Shared', vis: 'shared' },
-  { key: 'public', label: 'Public', vis: 'public' },
-  { key: 'archived', label: 'Archived', vis: 'private' },
+/** Filter pills. */
+export const FILTERS: { key: VisFilterKey; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'archived', label: 'Archived' },
 ];
 
-/** `all` excludes archived; `archived` shows only archived; the three
- *  visibility keys match non-archived songs of that visibility. */
+/** `all` excludes archived; `archived` shows only archived. */
 export function matchesFilter(song: SongDto, key: VisFilterKey): boolean {
-  if (key === 'all') return song.archivedAt == null;
   if (key === 'archived') return song.archivedAt != null;
-  return song.archivedAt == null && visibilityOf(song) === key;
+  return song.archivedAt == null;
 }
 
 /** Union match: a song passes when it carries ANY selected tag (or when no
@@ -88,10 +63,7 @@ export function pillCounts(
   songs: SongDto[],
   selectedTags: ReadonlySet<string>,
 ): Record<VisFilterKey, number> {
-  const out = { all: 0, private: 0, shared: 0, public: 0, archived: 0 } as Record<
-    VisFilterKey,
-    number
-  >;
+  const out = { all: 0, archived: 0 } as Record<VisFilterKey, number>;
   for (const f of FILTERS) {
     out[f.key] = songs.filter(
       (s) => matchesFilter(s, f.key) && songMatchesTags(s, selectedTags),

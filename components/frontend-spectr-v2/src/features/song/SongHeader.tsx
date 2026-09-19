@@ -8,7 +8,6 @@ interface SongHeaderProps {
   visual?: SongVisual | null;
   hue?: number;
   onEdit: () => void;
-  onPublish: () => void;
   onAddVersion: () => void;
   onArchive: () => void;
 }
@@ -21,7 +20,7 @@ function fmtSaved(iso: string): string {
   }
 }
 
-export function SongHeader({ song, visual, hue, onEdit, onPublish, onAddVersion, onArchive }: SongHeaderProps) {
+export function SongHeader({ song, visual, hue, onEdit, onAddVersion, onArchive }: SongHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const versions = song.versions ?? [];
@@ -49,7 +48,6 @@ export function SongHeader({ song, visual, hue, onEdit, onPublish, onAddVersion,
           </div>
           <div className={styles.headerActions}>
             <button className="btn ghost sm" onClick={onEdit}>Edit</button>
-            <button className="btn violet sm" onClick={onPublish}>★ Publish</button>
             <button className="btn primary sm" onClick={onAddVersion}>+ Add version</button>
             <div className={styles.headerMenuWrap}>
               <button className="btn ghost sm" onClick={handleMenuToggle} style={{ padding: '5px 8px' }}>⋯</button>
@@ -72,7 +70,7 @@ export function SongHeader({ song, visual, hue, onEdit, onPublish, onAddVersion,
               <span style={{ color: 'var(--muted)' }}>/100</span>
             </span>
           )}
-          <span className="pill" style={{ color: 'var(--vis)', borderColor: 'var(--vis-bd)', background: 'var(--vis-dim)' }}>◐ private</span>
+          <span className="pill" style={{ color: 'var(--muted)', borderColor: 'rgba(148, 163, 184, 0.34)', background: 'rgba(148, 163, 184, 0.12)' }}>◐ private</span>
           {song.updatedAt && (
             <span className="pill" style={{ color: 'var(--muted)' }}>◷ {savedStr} saved</span>
           )}
