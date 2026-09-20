@@ -402,6 +402,16 @@
   min-height: 0;
 }
 
+/* The coach (and the user) write real line breaks and lists; the prototype's
+   `.rdx .cmsg .bub` leaves `white-space: normal`, which folded every reply
+   into one run-on paragraph. That sheet is generated (do not edit by hand), so
+   the override lives here, one class more specific (0,4,0 vs 0,3,0) for the
+   same import-order reason as above. Scoped to the coach thread so no other
+   `.cmsg` surface changes. */
+:global(.rdx .coach-thread .cmsg .bub) {
+  white-space: pre-wrap;
+}
+
 /* Story 1.9 / Task 5.2 — CoachGateInline visual rhythm. Mirrors the
    offline card structure so the input-replacement transitions don't jar
    the layout. */
