@@ -13,7 +13,7 @@
  * route (no versionId) keeps the mock rAF clock + simulated meters.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { Link } from '@tanstack/react-router';
 import { toast } from 'sonner';
 
 import { fetcher, getAccessToken } from '../../api/fetcher';
@@ -27,24 +27,21 @@ import './listen-rack-v2-extras.css';
 import { CoachTabV2 } from './CoachTabV2';
 import {
   COACH_SUGGESTIONS, DEFAULT_VIZ, DIRECTORS, MANIFEST_BY_ID, TRACK,
-  type Director, type ModuleManifest, type ModuleState, type Track, type VizState,
+  type Director, type ModuleManifest, type Track, type VizState,
 } from './data';
-import { overlayChain } from './fixToRackPatch';
 import { LightShow } from './LightShow';
-import { clearFixOverlay, readListenFixes } from './listenFixes';
+import { readListenFixes } from './listenFixes';
 import { lrTime } from './lrUtil';
 import { NotesSidebar } from './NotesSidebar';
 import { pushFullRack } from './rackBindings';
 import { RackTabV2 } from './RackTabV2';
-import { useRackState, type RackPreset } from './rackState';
+import { useRackState } from './rackState';
 import type { ReportRef, StatsSource } from './types';
 import { StageCardV2 } from './StageCardV2';
 import { useLiveMeters, type LiveMeters } from './useLiveMeters';
 import type { Chain } from './chain';
-import {
-  asChain, buildExportEnvelope, parseImportEnvelope, resolveDraftRestore, useRackDraft,
-  useRackDraftAutosave, useRackPreset, useRackPresets, useSaveRackPreset,
-} from './useRackPresets';
+import { useFixCarryOver } from './useFixCarryOver';
+import { useRackPresetActions } from './useRackPresetActions';
 import { isInsertEffect } from './rackBindings';
 import { VisualsTabV2 } from './VisualsTabV2';
 
@@ -181,162 +178,10 @@ export function ListenRackPage({ versionId, track: trackProp, fixPreset, reportR
     () => ({ order: rs.order, modules: rs.mod, masterBypass: rs.masterBypass }),
     [rs.order, rs.mod, rs.masterBypass],
   );
-  const { data: rackPresetDtos } = useRackPresets(realAudio ? (versionId ?? '') : '');
-  const saveRackPresetMut = useSaveRackPreset(versionId ?? '');
-  const serverRackPresets = useMemo<RackPreset[]>(() => (rackPresetDtos ?? []).flatMap((d) => {
-    const chain = asChain(d.chain);
-    if (!chain) return [];
-    return [{
-      id: d.id, name: d.name, by: d.source, order: chain.order,
-      mod: chain.modules as Record<string, ModuleState>,
-      n: Object.values(chain.modules).filter((s) => s?.enabled).length,
-    }];
-  }), [rackPresetDtos]);
-
-  // ── Story 12.4: fix-rack carry-over (?fixPreset=) ──────────────────────────
-  const carryAllowedNow = Boolean(fixPreset && realAudio);
-  const carryArmedRef = useRef<boolean | null>(null);
-  if (carryArmedRef.current === null) carryArmedRef.current = carryAllowedNow;
-  const carryArmed = Boolean(fixPreset) && carryArmedRef.current === true;
-  const carriedPresetQuery = useRackPreset(
-    realAudio ? (versionId ?? '') : '', carryArmed ? fixPreset : undefined);
-  const [fixesApplied, setFixesApplied] = useState<number | null>(null);
-  const [carryPhase, setCarryPhase] = useState<'none' | 'pending' | 'applied' | 'failed'>(
-    carryArmed ? 'pending' : 'none');
-  const appliedPresetRef = useRef<string | null>(null); // one-shot per preset id
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!fixPreset || appliedPresetRef.current === fixPreset) return;
-    carryArmedRef.current = carryAllowedNow;
-    if (carryArmedRef.current) setCarryPhase('pending');
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-arm keys on the param only
-  }, [fixPreset]);
-
-  // Autosaved draft: restore once when it resolves, then debounced autosave.
-  const draftQuery = useRackDraft(realAudio ? (versionId ?? '') : '');
-  const {
-    isError: draftIsError, isFetched: draftIsFetched, data: draftData,
-    refetch: refetchDraft,
-  } = draftQuery;
-  const [draftRestored, setDraftRestored] = useState(false);
-  useEffect(() => {
-    const decision = resolveDraftRestore({
-      draftRestored, realAudio, carryPhase,
-      isError: draftIsError, isFetched: draftIsFetched,
-    });
-    if (decision === 'wait') return;
-    if (decision === 'pause') {
-      toast.error("Couldn't load your saved rack draft — autosave is paused.", {
-        id: 'rack-draft-load',
-        action: { label: 'Retry', onClick: () => { void refetchDraft(); } },
-      });
-      return;
-    }
-    if (decision === 'restore') {
-      const chain = draftData ? asChain(draftData.chain) : null;
-      if (chain) {
-        rsRef.current.recallPreset({
-          id: 'draft', name: 'draft', by: 'you', order: chain.order,
-          mod: chain.modules as Record<string, ModuleState>, n: 0,
-        });
-        rsRef.current.setMasterBypass(chain.masterBypass);
-      }
-    }
-    setDraftRestored(true);
-  }, [draftRestored, realAudio, carryPhase, draftIsError, draftIsFetched, draftData, refetchDraft]);
-  useRackDraftAutosave(versionId ?? '', currentChain, realAudio && draftRestored);
-
-  // Apply the carried chain ONCE per preset id when it resolves.
-  useEffect(() => {
-    if (!carryArmed || !fixPreset || appliedPresetRef.current === fixPreset) return;
-    if (carriedPresetQuery.isError) {
-      appliedPresetRef.current = fixPreset;
-      setCarryPhase('failed');
-      toast.error('Could not load the carried fix rack — your saved draft is untouched.');
-      return;
-    }
-    const dto = carriedPresetQuery.data;
-    if (!dto) return; // still loading
-    const chain = asChain(dto.chain);
-    const applied = chain
-      ? Object.entries(chain.modules).filter(([id, m]) => id !== 'pitch' && m?.enabled).length
-      : 0;
-    appliedPresetRef.current = fixPreset;
-    if (!chain || applied === 0) {
-      setCarryPhase('failed');
-      toast.error('The carried fix rack could not be applied.');
-      return;
-    }
-    rsRef.current.applyRackMod(overlayChain(rsRef.current.mod, chain.modules));
-    rsRef.current.setMasterBypass(chain.masterBypass);
-    setFixesApplied(applied);
-    setCarryPhase('applied');
-  }, [carryArmed, fixPreset, carriedPresetQuery.isError, carriedPresetQuery.data]);
-
-  const onResetCarriedFixes = useCallback(() => {
-    rsRef.current.reset();
-    if (versionId) clearFixOverlay(versionId);
-    setFixesApplied(null);
-    setCarryPhase('none');
-    void navigate({
-      to: '/listen-rack/$versionId',
-      params: { versionId: versionId ?? '' },
-      search: (prev: Record<string, unknown>) => {
-        const rest = { ...prev };
-        delete rest['fixPreset'];
-        return rest;
-      },
-      replace: true,
-    });
-  }, [versionId, navigate]);
-
-  // Unified preset handlers — server on the real route, in-memory on mock.
-  const onSaveRackPreset = useCallback(() => {
-    if (realAudio) {
-      saveRackPresetMut.mutate({ name: `Preset ${serverRackPresets.length + 1}`, chain: currentChain });
-    } else {
-      rs.savePreset('you');
-    }
-  }, [realAudio, saveRackPresetMut, serverRackPresets.length, currentChain, rs]);
-  const onRecallRackPreset = useCallback((id: string) => {
-    if (realAudio) {
-      const dto = rackPresetDtos?.find((x) => x.id === id);
-      const chain = dto ? asChain(dto.chain) : null;
-      if (!dto || !chain) return;
-      rs.recallPreset({
-        id: dto.id, name: dto.name, by: dto.source, order: chain.order,
-        mod: chain.modules as Record<string, ModuleState>, n: 0,
-      });
-      rs.setMasterBypass(chain.masterBypass);
-    } else {
-      const p = rs.presets.find((x) => x.id === id);
-      if (p) rs.recallPreset(p);
-    }
-  }, [realAudio, rackPresetDtos, rs]);
-  const rackPresetItems = realAudio ? serverRackPresets : rs.presets;
-
-  // JSON export/import — the portability path (real route only).
-  const importInputRef = useRef<HTMLInputElement | null>(null);
-  const onExportPreset = useCallback(() => {
-    const envelope = buildExportEnvelope(`Preset ${rackPresetItems.length + 1}`, currentChain);
-    const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'rack-preset.json'; a.click();
-    URL.revokeObjectURL(url);
-  }, [rackPresetItems.length, currentChain]);
-  const onImportFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    try {
-      const { name, chain } = parseImportEnvelope(await file.text());
-      saveRackPresetMut.mutate({ name, chain }, { onSuccess: () => toast.success(`Imported "${name}".`) });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Import failed.');
-    }
-  }, [saveRackPresetMut]);
+  const { fixesApplied, onResetCarriedFixes } = useFixCarryOver({
+    versionId, fixPreset, realAudio, rsRef, currentChain,
+  });
+  const presetActions = useRackPresetActions({ versionId, realAudio, rs, currentChain });
 
   // ── Pitch lane: a constant-tempo worklet shifter at the end of the master
   // path (NOT an insert). No buffer decode, no source swap — the media element
@@ -589,11 +434,11 @@ export function ListenRackPage({ versionId, track: trackProp, fixPreset, reportR
                     playing={playing}
                     meters={meters}
                     bpm={track.bpm}
-                    presets={rackPresetItems}
-                    onRecallPreset={onRecallRackPreset}
-                    onSavePreset={onSaveRackPreset}
-                    onExport={realAudio ? onExportPreset : undefined}
-                    onImport={realAudio ? () => importInputRef.current?.click() : undefined}
+                    presets={presetActions.items}
+                    onRecallPreset={presetActions.onRecall}
+                    onSavePreset={presetActions.onSave}
+                    onExport={presetActions.onExport}
+                    onImport={presetActions.onImport}
                   />
                 )}
                 {tab === 'visuals' && (
@@ -625,7 +470,7 @@ export function ListenRackPage({ versionId, track: trackProp, fixPreset, reportR
         </div>
       </div>
 
-      <input ref={importInputRef} type="file" accept="application/json,.json" onChange={onImportFile} style={{ display: 'none' }} />
+      <input ref={presetActions.importRef} type="file" accept="application/json,.json" onChange={(e) => { void presetActions.onImportFile(e); }} style={{ display: 'none' }} />
 
       {audioUrl && (
         <audio ref={audioRef} src={audioUrl} preload="auto" crossOrigin="anonymous" />
