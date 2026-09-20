@@ -70,9 +70,13 @@ export function useListenFindings({ versionId, latestJobId, rs }: {
   const appliedSet = useMemo<ReadonlySet<string>>(() => new Set(appliedIds), [appliedIds]);
   const overlay = useMemo<FixOverlayHandle>(() => ({ isApplied, toggle }), [isApplied, toggle]);
 
+  // `refetch()` ignores `enabled`, so with no job it would request
+  // `/reports//verdicts/`. Refs keep `retry`'s identity stable.
   const refetchRef = useRef(query.refetch);
   refetchRef.current = query.refetch;
-  const retry = useCallback(() => { void refetchRef.current(); }, []);
+  const jobIdRef = useRef(jobId);
+  jobIdRef.current = jobId;
+  const retry = useCallback(() => { if (jobIdRef.current) void refetchRef.current(); }, []);
 
   const status: ListenFindingsStatus = !jobId
     ? 'no-analysis'

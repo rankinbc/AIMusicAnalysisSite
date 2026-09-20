@@ -24,7 +24,10 @@ const VERDICT: VerdictDto = {
   impact: null, chartType: null, headline: 'Sub is masking the kick',
   summary: null, body: null, metricLine: null, whyItMatters: null, presetName: null,
   evidence: null,
-  fix: { dsp_chain: [{ type: 'eq', params: { freq: 45, gain_db: -3, q: 1 } }] },
+  // A REAL op from fixToRackPatch's vocabulary. `{type:'eq'}` is not in it: the
+  // fix would be notApplicable and every toggle would take useFixOverlay's
+  // "nothing checked" branch — the test would pass with the wiring broken.
+  fix: { dsp_chain: [{ type: 'peaking_eq', params: { frequency_hz: 45, gain_db: -3, q: 1 } }] },
   sources: null, problemId: 'p1', kind: 'fault', source: 'rule_engine',
   dataTier: 'audio_only', fixable: true, suspected: false, where: null, refines: null,
   priorityBase: null, priorityCategoryWeight: null, priorityScopeMultiplier: null,
@@ -80,12 +83,30 @@ describe('useListenFindings', () => {
 
     act(() => result.current.overlay.toggle('v1'));
     expect(rs.applyRackMod).toHaveBeenCalledTimes(1);
+    // The write is the fix's real patch — an EQ cut at 45 Hz — not a no-op.
+    const applied = vi.mocked(rs.applyRackMod).mock.calls[0][0] as {
+      eq: { enabled: boolean; bands: { freq: number; gainDb: number }[] };
+    };
+    expect(applied.eq.enabled).toBe(true);
+    expect(applied.eq.bands[0]).toMatchObject({ freq: 45, gainDb: -3 });
     await waitFor(() => expect(result.current.overlay.isApplied('v1')).toBe(true));
     expect(result.current.appliedIds.has('v1')).toBe(true);
 
     act(() => result.current.overlay.toggle('v1'));
     expect(rs.applyRackMod).toHaveBeenCalledTimes(2);
+    // Un-applying restores the baseline captured at the first apply (`rs.mod`).
+    expect(vi.mocked(rs.applyRackMod).mock.calls[1][0]).toEqual({});
     await waitFor(() => expect(result.current.overlay.isApplied('v1')).toBe(false));
+  });
+
+  it('retry is inert when the version has no analysis (refetch() ignores `enabled`)', async () => {
+    const { result } = renderHook(
+      () => useListenFindings({ versionId: 'ver-1', latestJobId: null, rs: fakeRs() }),
+      { wrapper },
+    );
+    expect(result.current.status).toBe('no-analysis');
+    await act(async () => { result.current.retry(); });
+    expect(fetcherMock).not.toHaveBeenCalled();
   });
 
   it('surfaces a failed load and can retry it', async () => {
