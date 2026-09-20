@@ -23,6 +23,10 @@ import { boardListenFixes } from './findings-helpers';
 export interface FixOverlayHandle {
   isApplied: (fixId: string) => boolean;
   toggle: (fixId: string) => void;
+  /** F1 — can this id be resolved into ops at all? The Coach tab's rows come
+   *  from a localStorage queue that can outlive the analysis behind them, and
+   *  toggling one the overlay cannot resolve used to reset the whole rack. */
+  canToggle: (fixId: string) => boolean;
 }
 
 export type ListenFindingsStatus = 'no-analysis' | 'loading' | 'error' | 'ready';
@@ -63,12 +67,13 @@ export function useListenFindings({ versionId, latestJobId, rs }: {
   modRef.current = rs.mod;
   const getLiveMod = useCallback(() => modRef.current, []);
 
-  const { appliedIds, isApplied, toggle } = useFixOverlay({
+  const { appliedIds, isApplied, toggle, canToggle } = useFixOverlay({
     versionId, fixes, applyRackMod: rs.applyRackMod, getLiveMod,
   });
 
   const appliedSet = useMemo<ReadonlySet<string>>(() => new Set(appliedIds), [appliedIds]);
-  const overlay = useMemo<FixOverlayHandle>(() => ({ isApplied, toggle }), [isApplied, toggle]);
+  const overlay = useMemo<FixOverlayHandle>(
+    () => ({ isApplied, toggle, canToggle }), [isApplied, toggle, canToggle]);
 
   // `refetch()` ignores `enabled`, so with no job it would request
   // `/reports//verdicts/`. Refs keep `retry`'s identity stable.

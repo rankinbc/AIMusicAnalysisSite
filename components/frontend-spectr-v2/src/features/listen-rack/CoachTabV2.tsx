@@ -41,7 +41,7 @@ function RealFixes({ versionId, overlay, carryPhase }: {
   versionId: string; overlay: FixOverlayHandle; carryPhase: CarryPhase;
 }) {
   const fixes: ListenFix[] = useMemo(() => readListenFixes(versionId), [versionId]);
-  const { isApplied, toggle } = overlay;
+  const { isApplied, toggle, canToggle } = overlay;
   // Spec D8: this tab shares the stage board's overlay, so the carried-preset
   // lock must hold here too — same gate, same reason copy.
   const gate = applyGate(carryPhase);
@@ -62,8 +62,13 @@ function RealFixes({ versionId, overlay, carryPhase }: {
       )}
       {fixes.map((f) => {
         const na = f.notApplicable === true;
-        const locked = na || !gate.enabled;
-        const on = !na && isApplied(f.fixId);
+        // F1: these rows come from THIS version's localStorage queue, the
+        // overlay's map from the CURRENT analysis's moves — two id spaces. A
+        // row the overlay can't resolve is stale, not appliable: show it as
+        // such rather than handing a dead id to toggle().
+        const stale = !na && !canToggle(f.fixId);
+        const locked = na || stale || !gate.enabled;
+        const on = !na && !stale && isApplied(f.fixId);
         const c = SEV_COLOR[f.sev] ?? 'var(--cyan)';
         const modules = [...new Set(f.ops.map((o) => o.type))].join(' · ');
         return (
@@ -80,7 +85,11 @@ function RealFixes({ versionId, overlay, carryPhase }: {
             </span>
             <span className="bb">
               <span className="t">{f.title}</span>
-              <span className="s">{na ? 'not applicable in the rack — take it back to your DAW' : modules}</span>
+              <span className="s">
+                {na ? 'not applicable in the rack — take it back to your DAW'
+                  : stale ? "from an earlier analysis — add it again from this version's report"
+                    : modules}
+              </span>
             </span>
             {on
               ? <span className="ck"><Icon name="check" size={13} /></span>

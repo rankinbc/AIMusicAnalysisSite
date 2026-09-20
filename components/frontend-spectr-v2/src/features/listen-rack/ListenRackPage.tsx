@@ -366,9 +366,10 @@ export function ListenRackPage({ versionId, track: trackProp, fixPreset, reportR
   }, [track, position, duration]);
 
   const activeCount = rs.order.filter((id) => rs.mod[id]?.enabled).length;
-  const coachCount = realAudio
-    ? (versionId ? readListenFixes(versionId).length : 0)
-    : COACH_SUGGESTIONS.length;
+  // localStorage read — memoized so it doesn't run on every single render.
+  const queuedFixCount = useMemo(
+    () => (versionId ? readListenFixes(versionId).length : 0), [versionId]);
+  const coachCount = realAudio ? queuedFixCount : COACH_SUGGESTIONS.length;
   const onNote = useCallback((n: { id: string; t: number }) => {
     setActiveNote(n.id);
     seek(n.t);

@@ -38,7 +38,7 @@ function findings(patch: Partial<ListenFindings> = {}): ListenFindings {
     verdicts: [VERDICT],
     moves: buildMoves({ verdicts: [VERDICT] }),
     appliedIds: new Set<string>(),
-    overlay: { isApplied: () => false, toggle: vi.fn() },
+    overlay: { isApplied: () => false, toggle: vi.fn(), canToggle: () => true },
     retry: vi.fn(),
     ...patch,
   };
@@ -77,7 +77,7 @@ function renderStage(props: Partial<React.ComponentProps<typeof FindingsStage>> 
 describe('FindingsStage', () => {
   it('lists the playing version findings and applies one onto the rack', async () => {
     const toggle = vi.fn();
-    renderStage({ findings: findings({ overlay: { isApplied: () => false, toggle } }) });
+    renderStage({ findings: findings({ overlay: { isApplied: () => false, toggle, canToggle: () => true } }) });
 
     expect(await screen.findByText('Sub is masking the kick')).toBeTruthy();
     fireEvent.click(screen.getByText('Apply live'));
@@ -106,7 +106,7 @@ describe('FindingsStage', () => {
     renderStage({
       carryPhase: 'applied',
       onClearPreset,
-      findings: findings({ overlay: { isApplied: () => false, toggle } }),
+      findings: findings({ overlay: { isApplied: () => false, toggle, canToggle: () => true } }),
     });
 
     expect(await screen.findByText(/A fix preset is loaded/i)).toBeTruthy();

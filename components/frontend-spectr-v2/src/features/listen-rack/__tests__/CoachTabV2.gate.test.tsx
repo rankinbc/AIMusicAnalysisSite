@@ -16,7 +16,7 @@ const FIX: ListenFix = {
   ops: [{ type: 'peaking_eq', params: { frequency_hz: 45, gain_db: -3, q: 1 } }],
 };
 
-function renderTab(carryPhase: CarryPhase) {
+function renderTab(carryPhase: CarryPhase, canToggle: (id: string) => boolean = () => true) {
   const toggle = vi.fn();
   render(
     <CoachTabV2
@@ -24,7 +24,7 @@ function renderTab(carryPhase: CarryPhase) {
       real
       versionId="ver-1"
       reportRef={null}
-      fixOverlay={{ isApplied: () => false, toggle }}
+      fixOverlay={{ isApplied: () => false, toggle, canToggle }}
       carryPhase={carryPhase}
     />,
   );
@@ -55,6 +55,18 @@ describe('CoachTabV2 — carried-preset lock (D8)', () => {
       expect(screen.getByTestId('coach-fix-gate').textContent ?? '').not.toBe('');
     },
   );
+
+  // F1: the rows come from THIS version's localStorage queue, the overlay's map
+  // from the CURRENT analysis's moves. A queue row the overlay cannot resolve
+  // must never reach toggle() — that path rebuilt the rack from nothing.
+  it('a queued fix the overlay cannot resolve is disabled and never toggles', () => {
+    const { toggle, button } = renderTab('none', () => false);
+    expect(button.disabled).toBe(true);
+    expect(button.textContent).toContain(
+      "from an earlier analysis — add it again from this version's report");
+    fireEvent.click(button);
+    expect(toggle).not.toHaveBeenCalled();
+  });
 
   it('a FAILED carry leaves toggling live (nothing was applied to the rack)', () => {
     const { toggle, button } = renderTab('failed');

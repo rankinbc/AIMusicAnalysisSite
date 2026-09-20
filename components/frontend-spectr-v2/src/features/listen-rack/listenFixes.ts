@@ -4,6 +4,7 @@
 // (those whose dsp_chain maps to a rack module) are written; prose fixes belong
 // to the DAW game plan, not the rack.
 import type { VerdictDspOp } from '../../api/types';
+import type { ModuleState } from './data';
 import { isApplyable } from './fixToRackPatch';
 
 export interface ListenFix {
@@ -40,6 +41,7 @@ export interface FixSource {
 
 const fixesKey = (versionId: string) => `listenFixes:${versionId}`;
 const appliedKey = (versionId: string) => `listenApplied:${versionId}`;
+const baselineKey = (versionId: string) => `listenBaseline:${versionId}`;
 
 export function buildListenFixes(
   sources: FixSource[],
@@ -91,6 +93,7 @@ export const FIX_OVERLAY_CLEAR_EVENT = 'spectr:fix-overlay-clear';
 
 export function clearFixOverlay(versionId: string): void {
   writeAppliedIds(versionId, []);
+  clearBaseline(versionId);
   try {
     window.dispatchEvent(new CustomEvent(FIX_OVERLAY_CLEAR_EVENT, { detail: { versionId } }));
   } catch {
@@ -112,6 +115,41 @@ export function readAppliedIds(versionId: string): string[] {
 export function writeAppliedIds(versionId: string, ids: string[]): void {
   try {
     localStorage.setItem(appliedKey(versionId), JSON.stringify(ids));
+  } catch {
+    /* non-fatal */
+  }
+}
+
+// ── The fix-free baseline (F2) ──────────────────────────────────────────────
+// `appliedIds` alone survives a reload; the rack snapshot taken before the
+// first apply did not, so un-checking the last fix fell through to factory
+// DEFAULTS and autosave then persisted the wiped rack. The baseline is the
+// other half of the applied state and has to persist with it, per version.
+export function readBaseline(versionId: string): Record<string, ModuleState> | null {
+  try {
+    const raw = localStorage.getItem(baselineKey(versionId));
+    if (!raw) return null;
+    const data = JSON.parse(raw) as unknown;
+    // A plain object is the only shape composeRack/combineFixes can spread.
+    return typeof data === 'object' && data !== null && !Array.isArray(data)
+      ? (data as Record<string, ModuleState>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeBaseline(versionId: string, mod: Record<string, ModuleState>): void {
+  try {
+    localStorage.setItem(baselineKey(versionId), JSON.stringify(mod));
+  } catch {
+    /* quota / unavailable — non-fatal */
+  }
+}
+
+export function clearBaseline(versionId: string): void {
+  try {
+    localStorage.removeItem(baselineKey(versionId));
   } catch {
     /* non-fatal */
   }
