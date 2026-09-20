@@ -5,7 +5,7 @@
  * Upload is a plain multipart XHR (progress events); poll/results are plain
  * fetches against /api/anon/* (no auth token, no fetcher 401-refresh dance).
  */
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { parseErrorText } from '../../api/error-utils';
@@ -35,8 +35,11 @@ async function anonGet<T>(url: string): Promise<T | null> {
   return (await res.json()) as T;
 }
 
+const CURRENT_JOB_KEY = ['anon', 'jobs', 'current'] as const;
+
 /** Multipart XHR upload to POST /api/anon/analyses with progress. */
 export function useAnonUpload() {
+  const qc = useQueryClient();
   const [state, setState] = useState<AnonUploadState>({ isUploading: false, progress: 0, error: null });
   const xhrRef = useRef<XMLHttpRequest | null>(null);
 
@@ -51,7 +54,17 @@ export function useAnonUpload() {
       xhr.addEventListener('load', () => {
         if (xhr.status >= 200 && xhr.status < 300) {
           setState({ isUploading: false, progress: 1, error: null });
-          resolve(JSON.parse(xhr.responseText) as { jobId: string });
+          const created = JSON.parse(xhr.responseText) as { jobId: string };
+          // useAnonCurrentJob is staleTime: Infinity and has usually cached "this
+          // device has no job" (404 → null) by now. Without this a visitor who
+          // uploads, clicks away and comes back gets the drop zone while their
+          // analysis runs. Seed the answer (no drop-zone flash), then let the
+          // next mount replace the placeholder with the server's row.
+          qc.setQueryData<ResumeInfo | null>(CURRENT_JOB_KEY, {
+            jobId: created.jobId, status: 'pending', dispatchedAt: new Date().toISOString(), grade: null,
+          });
+          void qc.invalidateQueries({ queryKey: CURRENT_JOB_KEY });
+          resolve(created);
           return;
         }
         // 12-1 contract: prefer the server's message; code drives nothing
@@ -70,7 +83,7 @@ export function useAnonUpload() {
       xhr.open('POST', '/api/anon/analyses');
       xhr.send(form);
     });
-  }, []);
+  }, [qc]);
 
   const cancel = useCallback(() => xhrRef.current?.abort(), []);
   return { ...state, upload, cancel };
@@ -88,7 +101,7 @@ export interface ResumeInfo {
 /** AC5 (6.3) restore + AC1 (6.4) resume card. Fires once on mount. */
 export function useAnonCurrentJob(enabled: boolean) {
   return useQuery({
-    queryKey: ['anon', 'jobs', 'current'],
+    queryKey: CURRENT_JOB_KEY,
     queryFn: () => anonGet<ResumeInfo>('/api/anon/jobs/current'),
     enabled,
     staleTime: Infinity,
