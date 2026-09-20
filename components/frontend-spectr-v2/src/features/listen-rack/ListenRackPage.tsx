@@ -168,6 +168,11 @@ export function ListenRackPage({ versionId, track: trackProp, fixPreset, reportR
   const [stages, setStages] = useState<string[]>(['eq']);
   const toggleStage = useCallback((id: string) => setStages((s) => (s.includes(id) ? (s.length > 1 ? s.filter((x) => x !== id) : s) : [...s, id])), []);
   const [activeNote, setActiveNote] = useState<string | null>(null);
+  // Temporary local wiring for `VizStage`'s now-controlled background mode —
+  // Task 8 replaces this with `useStagePrefs()` (persisted, and paired with
+  // the findings board). Keeps in-session toggling identical to before this
+  // task; only cross-remount persistence is deferred.
+  const [bgViz, setBgViz] = useState(false);
 
   const rs = useRackState(realAudio ? graph : null);
   const rsRef = useRef(rs);
@@ -411,6 +416,10 @@ export function ListenRackPage({ versionId, track: trackProp, fixPreset, reportR
             activeModules={activeModuleManifests}
             trackName={track.name}
             trackSub={track.grade ? `grade ${track.grade}` : 'Listen session'}
+            stageContent="visualizer"
+            onStageContentChange={() => {}}
+            bgViz={bgViz}
+            onBgVizChange={setBgViz}
           />
 
           {/* Sidebar lives OUTSIDE the tabbody so it reads as its own box beside

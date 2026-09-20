@@ -7,13 +7,14 @@
  * `frameRef.current.spectrum`/energy with a real AnalyserNode tap (see
  * PORTING_NOTES.md → StageCanvas).
  */
-import { forwardRef, Fragment, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { forwardRef, Fragment, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
 import { CoverArt } from '../../ui/CoverArt';
 import type { AudioFrame } from '../listen/useAudioGraph';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { type Director, type EqBand, type ModuleManifest, type VizState } from './data';
+import { StagePlacementButton } from './findings/StagePlacementButton';
 import { cssVar, freqToX, hslToHex, LASER_COLORS, safeFlashHz } from './helpers';
 import { ModuleIcon } from './ui';
 
@@ -354,7 +355,7 @@ function RackStage({ modules }: { modules: ModuleManifest[] }) {
 
 // ── The stage ──────────────────────────────────────────────────────────────
 export function VizStage({
-  playing, stages, setStages, viz, director, height = 300, compact = false, onStageEngine, activeModules, getFrame, trackName = 'Aurora', trackSub = 'v3 · Final Mix',
+  playing, stages, setStages, viz, director, height = 300, compact = false, onStageEngine, activeModules, getFrame, trackName = 'Aurora', trackSub = 'v3 · Final Mix', bgMode, onBgModeChange, slot = 'ghost',
 }: {
   playing: boolean;
   stages: string[];
@@ -371,6 +372,16 @@ export function VizStage({
   /** Track Info stage copy (v2 page passes the real track; fixture defaults). */
   trackName?: string;
   trackSub?: string;
+  /** Story "findings in the stage": background mode is owned by the page now,
+   *  so the placement pref can persist and the stage card can put the board in
+   *  the box while the visualizer keeps playing behind the page. */
+  bgMode: boolean;
+  onBgModeChange: (v: boolean) => void;
+  /** What occupies the CARD SLOT while bgMode is on. 'ghost' is the frosted
+   *  "visualizer is playing in the background" placeholder (the visualizer
+   *  view); 'none' means someone else owns the box, so only the portal
+   *  renders. */
+  slot?: 'ghost' | 'none';
 }) {
   const stageRef = useRef<StageCanvasHandle>(null);
   const laserRef = useRef<LaserFanHandle>(null);
@@ -381,13 +392,12 @@ export function VizStage({
   // is lifted above it (`.lr-page` → position:relative; z-index:1), and the global
   // top nav is z-index:50, so the rest of the page stays exactly in place on top
   // while the viz fills the whole window behind it. Esc (or the toggle) exits.
-  const [bgMode, setBgMode] = useState(false);
   useEffect(() => {
     if (!bgMode) return undefined;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setBgMode(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onBgModeChange(false); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [bgMode]);
+  }, [bgMode, onBgModeChange]);
   const frameRef = useRef<VizFrame>({ t: 0, spectrum: new Array(56).fill(0), energy: 0.4, pulse: 0, beat: false, flash: 0 });
   const beatPhase = useRef(0), lastDrop = useRef(0), autoLast = useRef(0);
   const flashPtsRef = useRef<FlashPoint[]>([]), lastBurst = useRef(0), autoReactLast = useRef(0);
@@ -498,25 +508,6 @@ export function VizStage({
     ? { position: 'fixed', inset: 0, width: '100vw', height: '100vh', zIndex: 0, overflow: 'hidden', background: 'var(--bg-2)' }
     : { position: 'relative', height, overflow: 'hidden', borderRadius: compact ? 0 : 'var(--radius) var(--radius) 0 0', background: 'var(--bg-2)' };
 
-  const fsBtn = (
-    <button
-      type="button"
-      onClick={() => setBgMode((v) => !v)}
-      title={bgMode ? 'Exit background mode' : 'Play full-screen in the background'}
-      aria-label={bgMode ? 'Exit background mode' : 'Play full-screen in the background'}
-      className="mono"
-      style={{
-        position: 'absolute', top: 12, right: 12, zIndex: 6,
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        width: 34, height: 34, fontSize: 15, lineHeight: 1, cursor: 'pointer',
-        color: '#fff', background: 'rgba(8,18,22,0.55)', backdropFilter: 'blur(6px)',
-        border: '1px solid rgba(255,255,255,0.18)', borderRadius: 8,
-      }}
-    >
-      {bgMode ? '⤡' : '⛶'}
-    </button>
-  );
-
   const stage = (
     <div ref={onStageEngine} style={stageStyle}>
       <div ref={bgLayerRef} className={'viz-bg' + (viz.bgAuto ? ' lr-bg-cycle' : '')} style={{ position: 'absolute', inset: 0, background: `radial-gradient(ellipse 95% 85% at 50% 100%, ${cssVar(viz.bg || 'var(--cyan)')}1f, transparent 62%), transparent` }} />
@@ -538,11 +529,16 @@ export function VizStage({
       )}
       <LaserFan ref={laserRef} />
       <Fireworks ref={fireRef} />
-      {fsBtn}
+      {slot !== 'none' && <StagePlacementButton bgMode={bgMode} onChange={onBgModeChange} />}
     </div>
   );
 
   if (bgMode) {
+    if (slot === 'none') {
+      // Someone else owns the card slot (the findings board) — just paint the
+      // full-window backdrop behind the page.
+      return createPortal(stage, document.body);
+    }
     // Reserve the card slot so the transport + the rest of the page stay in place,
     // and portal the stage to <body> as a full-window backdrop behind the page.
     return (
@@ -568,7 +564,7 @@ export function VizStage({
             <div className="mono" style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.08em', marginBottom: 12, textShadow: '0 1px 8px rgba(0,0,0,0.6)' }}>⛶ Visualizer is playing full-screen in the background</div>
             <button
               type="button"
-              onClick={() => setBgMode(false)}
+              onClick={() => onBgModeChange(false)}
               className="btn sm"
               style={{
                 fontSize: 11, color: '#fff', cursor: 'pointer',

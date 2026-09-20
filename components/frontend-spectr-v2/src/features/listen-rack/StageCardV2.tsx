@@ -9,6 +9,8 @@ import { useRef } from 'react';
 import type { AudioFrame } from '../listen/useAudioGraph';
 import { Icon } from '../results/Icon';
 import type { Director, ModuleManifest, ModuleState, TrackNote, VizState } from './data';
+import { StagePlacementButton } from './findings/StagePlacementButton';
+import type { StageContent } from './findings/stage-prefs';
 import { lrClamp, lrDrag, lrTime } from './lrUtil';
 import type { LiveMeters } from './useLiveMeters';
 import { VizStage } from './viz';
@@ -57,7 +59,7 @@ export function TransportV2({ playing, onPlay, position, duration, onSeek, notes
 }
 
 // ── Stage card: overlay chips + full visualizer stage + transport ──────
-export function StageCardV2({ playing, onPlay, position, duration, onSeek, mod, order, bypass, meters, stageHeight, showMeters, notes, activeNote, onNote, showNotes, section, bpm, keyLabel, getFrame, viz, stages, setStages, director, activeModules, trackName, trackSub }: {
+export function StageCardV2({ playing, onPlay, position, duration, onSeek, mod, order, bypass, meters, stageHeight, showMeters, notes, activeNote, onNote, showNotes, section, bpm, keyLabel, getFrame, viz, stages, setStages, director, activeModules, trackName, trackSub, stageContent, onStageContentChange, bgViz, onBgVizChange, findings }: {
   playing: boolean; onPlay: () => void; position: number; duration: number;
   onSeek: (t: number) => void;
   mod: Record<string, ModuleState>; order: string[]; bypass: boolean;
@@ -72,24 +74,85 @@ export function StageCardV2({ playing, onPlay, position, duration, onSeek, mod, 
   activeModules: ModuleManifest[];
   trackName: string;
   trackSub: string;
+  /** Spec D6 — what the stage box is showing. */
+  stageContent: StageContent;
+  onStageContentChange: (content: StageContent) => void;
+  /** The visualizer is playing full-screen BEHIND the page. */
+  bgViz: boolean;
+  onBgVizChange: (v: boolean) => void;
+  /** The findings board. Omit it (mock demo route) and the stage is the
+   *  visualizer, exactly as before. */
+  findings?: React.ReactNode | undefined;
 }) {
   const active = order.filter((id) => mod[id]?.enabled).length;
+  const showBoard = findings != null && stageContent === 'findings';
   return (
-    <div className="card lr-stagecard">
-      <VizStage
-        playing={playing}
-        stages={stages}
-        setStages={setStages}
-        viz={viz}
-        director={director}
-        height={stageHeight}
-        compact
-        activeModules={activeModules}
-        trackName={trackName}
-        trackSub={trackSub}
-        {...(getFrame ? { getFrame } : {})}
-      />
+    <div className="card lr-stagecard" data-stage={showBoard ? 'findings' : 'visualizer'}>
+      {showBoard ? (
+        <>
+          <div className="lr-findings-stage">{findings}</div>
+          {/* The visualizer keeps playing behind the whole page; the card slot
+              belongs to the board, so no ghost placeholder. */}
+          {bgViz && (
+            <VizStage
+              playing={playing}
+              stages={stages}
+              setStages={setStages}
+              viz={viz}
+              director={director}
+              height={stageHeight}
+              compact
+              activeModules={activeModules}
+              trackName={trackName}
+              trackSub={trackSub}
+              bgMode
+              onBgModeChange={onBgVizChange}
+              slot="none"
+              {...(getFrame ? { getFrame } : {})}
+            />
+          )}
+          <StagePlacementButton bgMode={bgViz} onChange={onBgVizChange} context="findings" />
+        </>
+      ) : (
+        <VizStage
+          playing={playing}
+          stages={stages}
+          setStages={setStages}
+          viz={viz}
+          director={director}
+          height={stageHeight}
+          compact
+          activeModules={activeModules}
+          trackName={trackName}
+          trackSub={trackSub}
+          bgMode={bgViz}
+          onBgModeChange={onBgVizChange}
+          {...(getFrame ? { getFrame } : {})}
+        />
+      )}
       <div className="lr-ovl" style={{ right: 54 }}>
+        {findings != null && (
+          <span className="lr-seg lr-stage-seg" role="tablist" aria-label="Stage content">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={showBoard}
+              className={showBoard ? 'on' : ''}
+              onClick={() => onStageContentChange('findings')}
+            >
+              Findings
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={!showBoard}
+              className={!showBoard ? 'on' : ''}
+              onClick={() => onStageContentChange('visualizer')}
+            >
+              Visualizer
+            </button>
+          </span>
+        )}
         {section && <span className="lr-mchip sec">Section <b>{section}</b></span>}
         {showMeters && (
           <>
