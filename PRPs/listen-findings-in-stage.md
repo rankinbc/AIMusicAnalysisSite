@@ -1,6 +1,6 @@
 # Findings & Actions in the Listen stage — design spec
 
-_Status: binding design authority for `PRPs/listen-findings-in-stage-plan.md`._
+_Status: binding design authority for `PRPs/archive/2026-09-20_listen-findings-in-stage-plan.md` (executed 2026-09-20)._
 _Written 2026-09-19 against `solo` @ `df23e65`. Every code claim below was
 re-verified in the working tree; where the seed
 (`PRPs/source/listen-findings-in-stage.md`) disagrees with the code, the code
