@@ -61,6 +61,9 @@ interface FetcherConfig {
   signal?: AbortSignal | undefined;
   // Query params dictionary — orval passes these through as a plain object.
   params?: Record<string, string | number | boolean | null | undefined> | undefined;
+  /** Let the request outlive the page (a save fired from `pagehide`). Bodies
+   *  are capped at 64 KB by the browser — small JSON only. */
+  keepalive?: boolean | undefined;
 }
 
 /**
@@ -152,6 +155,7 @@ async function doFetch(config: FetcherConfig, token: string | null): Promise<Res
   };
   if (body !== undefined) init.body = body;
   if (config.signal) init.signal = config.signal;
+  if (config.keepalive) init.keepalive = true;
 
   let url = `/api${config.url}`;
   if (config.params) {

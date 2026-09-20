@@ -129,10 +129,27 @@ export function useRackDraft(versionId: string) {
   });
 }
 
+/** `keepalive` rides along for the pagehide flush only; it never reaches the wire body. */
+export type RackDraftSave = UpsertRackDraftRequest & { keepalive?: boolean };
+
 export function useUpsertRackDraft(versionId: string) {
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: UpsertRackDraftRequest) =>
-      fetcher<RackDraftDto>({ url: `/versions/${versionId}/rack/draft`, method: 'PUT', data: body }),
+    mutationFn: ({ chain, keepalive }: RackDraftSave) =>
+      fetcher<RackDraftDto>({
+        url: `/versions/${versionId}/rack/draft`, method: 'PUT', data: { chain },
+        ...(keepalive ? { keepalive: true } : {}),
+      }),
+    // The draft query is `staleTime: Infinity`, so a return visit inside gcTime
+    // is served from this cache with no refetch. Nothing else writes the key:
+    // without this the page restored the FIRST visit's draft over the saved one,
+    // and the next autosave persisted that stale rack. Written before the PUT
+    // settles because a quick round trip can beat it.
+    onMutate: ({ chain }) => {
+      qc.setQueryData<RackDraftDto | null>(draftKey(versionId), {
+        songVersionId: versionId, chain, updatedAt: new Date().toISOString(),
+      });
+    },
     // E6.7 (draft half) — deliberately NOT meta.errorToast: the autosave fires
     // this on a 1.2 s debounce, so repeated failures would stack toasts. The
     // sonner `id` replaces the existing toast instead. Autosave stays ARMED —
@@ -174,6 +191,8 @@ export function resolveDraftRestore(s: {
  * Debounced rack-draft autosave. Calls the upsert mutation `delayMs` after the
  * chain last changed, so transient knob-drags don't spam the server. Skips the
  * very first render (the initial draft restore shouldn't echo straight back).
+ * A change still waiting on the debounce is sent when the page unmounts or is
+ * hidden — cancelling it there silently dropped the user's last edit.
  */
 export function useRackDraftAutosave(
   versionId: string,
@@ -185,18 +204,43 @@ export function useRackDraftAutosave(
   const upsertRef = useRef(upsert);
   upsertRef.current = upsert;
   const skipFirst = useRef(true);
+  const pendingRef = useRef<Chain | null>(null); // changed, not yet sent
 
   // Serialize so the effect only fires on a real content change.
   const serialized = JSON.stringify(chain);
   useEffect(() => {
-    if (!enabled || !versionId) return undefined;
+    if (!enabled || !versionId) {
+      pendingRef.current = null;
+      return undefined;
+    }
     if (skipFirst.current) {
       skipFirst.current = false;
       return undefined;
     }
+    pendingRef.current = JSON.parse(serialized) as Chain;
     const id = setTimeout(() => {
-      upsertRef.current.mutate({ chain: JSON.parse(serialized) as Chain });
+      const chain = pendingRef.current;
+      if (!chain) return; // a pagehide flush already sent it
+      pendingRef.current = null;
+      upsertRef.current.mutate({ chain });
     }, delayMs);
     return () => clearTimeout(id);
   }, [serialized, enabled, versionId, delayMs]);
+
+  // Declared AFTER the debounce effect on purpose: on unmount React runs that
+  // effect's cleanup (clearTimeout) first, then this one sends what it cancelled.
+  useEffect(() => {
+    const flush = (keepalive: boolean) => {
+      const chain = pendingRef.current;
+      if (!chain) return;
+      pendingRef.current = null;
+      upsertRef.current.mutate(keepalive ? { chain, keepalive: true } : { chain });
+    };
+    const onPageHide = () => flush(true);
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      window.removeEventListener('pagehide', onPageHide);
+      flush(false);
+    };
+  }, []);
 }
