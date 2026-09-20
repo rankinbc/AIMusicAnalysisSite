@@ -84,11 +84,12 @@ describe('useListenFindings', () => {
     act(() => result.current.overlay.toggle('v1'));
     expect(rs.applyRackMod).toHaveBeenCalledTimes(1);
     // The write is the fix's real patch — an EQ cut at 45 Hz — not a no-op.
-    const applied = vi.mocked(rs.applyRackMod).mock.calls[0][0] as {
-      eq: { enabled: boolean; bands: { freq: number; gainDb: number }[] };
-    };
-    expect(applied.eq.enabled).toBe(true);
-    expect(applied.eq.bands[0]).toMatchObject({ freq: 45, gainDb: -3 });
+    expect(vi.mocked(rs.applyRackMod).mock.calls[0][0]).toMatchObject({
+      eq: {
+        enabled: true,
+        bands: expect.arrayContaining([expect.objectContaining({ freq: 45, gainDb: -3 })]),
+      },
+    });
     await waitFor(() => expect(result.current.overlay.isApplied('v1')).toBe(true));
     expect(result.current.appliedIds.has('v1')).toBe(true);
 

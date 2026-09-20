@@ -21,7 +21,7 @@ const VERDICT: VerdictDto = {
   evidence: null,
   fix: {
     target: { name: 'Master bus' },
-    dsp_chain: [{ type: 'eq', params: { freq: 45, gain_db: -3, q: 1 } }],
+    dsp_chain: [{ type: 'peaking_eq', params: { frequency_hz: 45, gain_db: -3, q: 1 } }],
   },
   sources: null, problemId: 'p1', kind: 'fault', source: 'rule_engine',
   dataTier: 'audio_only', fixable: true, suspected: false,

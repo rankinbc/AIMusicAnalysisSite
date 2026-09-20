@@ -50,11 +50,26 @@
   min-height: 0;
   align-items: stretch;
 }
-.rdx .lr-stage-board .fb-list { min-height: 0; }
+/* `.fb-list` is a plain block in the report sheet, so `flex:1` on `.fb-scroll`
+   below would be inert: the list grew to its full content height (4700px in a
+   349px box, measured in Chrome) and `.fb-list{overflow:hidden}` clipped it
+   with no scrollbar. `.fb-detail` is already a flex column there, which is why
+   only the list pane was affected. jsdom has no layout — only a browser shows this. */
+.rdx .lr-stage-board .fb-list { display: flex; flex-direction: column; min-height: 0; }
 .rdx .lr-stage-board .fb-scroll { max-height: none; flex: 1; min-height: 0; }
 .rdx .lr-stage-board .fb-detail { position: static; max-height: none; min-height: 0; }
 .rdx .lr-stage-board .fb-detail.empty { min-height: 0; padding: 20px; }
 .rdx .lr-stage-board .fbd-scroll { flex: 1; min-height: 0; }
+
+/* Spec §5: while a carried preset locks toggling (the gate chip is showing) the
+   apply controls must LOOK disabled too — the handler already no-ops. */
+.rdx .lr-stage-board:has(.lr-stage-gate) .rack-toggle,
+.rdx .lr-stage-board:has(.lr-stage-gate) .fr-add,
+.rdx .lr-stage-board:has(.lr-stage-gate) .fr-ckbox {
+  opacity: 0.45;
+  pointer-events: none;
+  cursor: not-allowed;
+}
 
 .rdx .lr-stage-modes { align-items: center; }
 .rdx .lr-stage-gate {
