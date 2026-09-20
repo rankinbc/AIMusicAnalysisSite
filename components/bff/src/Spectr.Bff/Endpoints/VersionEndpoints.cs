@@ -369,6 +369,7 @@ public static class VersionEndpoints
         var latestJobId = await db.Analyses.AsNoTracking()
             .Where(a => a.UserId == userId && a.VersionId == versionId)
             .OrderByDescending(a => a.CreatedAt)
+            .ThenByDescending(a => a.Id) // deterministic when two rows share a timestamp
             .Select(a => (Guid?)a.JobId)
             .FirstOrDefaultAsync(ct);
 
