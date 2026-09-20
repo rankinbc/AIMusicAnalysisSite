@@ -13,6 +13,8 @@ import {
   groupForVerdict,
   SEV_ORDER,
   type FilterState,
+  type FixBoardSurface,
+  type SeekAffordance,
   type Sev,
 } from './fix-board-helpers';
 import { FixBoardFilters } from './FixBoardFilters';
@@ -43,13 +45,16 @@ interface FixBoardProps {
   onConsumeFocus: () => void;
   onShowFix: (verdictId: string) => void;
   onShowFinding: (verdictId: string) => void;
-  onAskCoach: (v: VerdictDto) => void;
-  /** Server dismiss (the ONLY row action besides applied/rate that writes
-   *  server state). */
-  onIgnore: (v: VerdictDto) => void;
-  onMarkApplied: (v: VerdictDto) => void;
-  onRate: (v: VerdictDto, rating: number, notes: string) => void;
+  onAskCoach?: ((v: VerdictDto) => void) | undefined;
+  /** Server dismiss. Never supplied on the Listen surface (spec D2). */
+  onIgnore?: ((v: VerdictDto) => void) | undefined;
+  onMarkApplied?: ((v: VerdictDto) => void) | undefined;
+  onRate?: ((v: VerdictDto, rating: number, notes: string) => void) | undefined;
   onShowSpectrum?: ((range: [number, number]) => void) | undefined;
+  /** Which page this board is on. Default 'report' — everything below that is
+   *  conditional on it is a server write or report-only geography (spec D9). */
+  surface?: FixBoardSurface | undefined;
+  seek?: SeekAffordance | undefined;
 }
 
 interface Row {
@@ -76,6 +81,8 @@ export function FixBoard({
   onMarkApplied,
   onRate,
   onShowSpectrum,
+  surface = 'report',
+  seek,
 }: FixBoardProps) {
   const findingsMode = mode === 'findings';
   const findings = useMemo(
@@ -279,6 +286,7 @@ export function FixBoard({
                         <BoardRow
                           row={r}
                           mode={mode}
+                          surface={surface}
                           selected={r.v.id === selId}
                           committed={r.move != null && committedIds.has(r.move.id)}
                           noted={checkedNoteIds.has(r.v.id)}
@@ -293,6 +301,7 @@ export function FixBoard({
                             key={c.v.id}
                             row={c}
                             mode={mode}
+                            surface={surface}
                             selected={c.v.id === selId}
                             committed={c.move != null && committedIds.has(c.move.id)}
                             noted={checkedNoteIds.has(c.v.id)}
@@ -320,6 +329,8 @@ export function FixBoard({
           onAskCoach={onAskCoach}
           onShowFix={onShowFix}
           onShowSpectrum={onShowSpectrum}
+          surface={surface}
+          seek={seek}
         />
       ) : (
         <ActionDetail
@@ -332,6 +343,8 @@ export function FixBoard({
           onMarkApplied={onMarkApplied}
           onRate={onRate}
           onShowSpectrum={onShowSpectrum}
+          surface={surface}
+          seek={seek}
         />
       )}
     </div>
@@ -341,6 +354,7 @@ export function FixBoard({
 function BoardRow({
   row,
   mode,
+  surface,
   selected,
   committed,
   noted,
@@ -352,14 +366,15 @@ function BoardRow({
 }: {
   row: Row;
   mode: FixBoardMode;
+  surface: FixBoardSurface;
   selected: boolean;
   committed: boolean;
   noted: boolean;
   onSelect: () => void;
   onToggleCommit: (move: Move) => void;
   onToggleNote: (verdictId: string) => void;
-  onAskCoach: (v: VerdictDto) => void;
-  onIgnore: (v: VerdictDto) => void;
+  onAskCoach?: ((v: VerdictDto) => void) | undefined;
+  onIgnore?: ((v: VerdictDto) => void) | undefined;
 }) {
   const { v, move, isNote, depth } = row;
   const findingsMode = mode === 'findings';
@@ -399,9 +414,13 @@ function BoardRow({
               onKeyDown={(e) => e.key === 'Enter' && onToggleCommit(move)}
             >
               <Icon name={committed ? 'check' : 'plus'} size={11} />
-              <span className="gtip">A suggested fix is available — check to queue it</span>
+              <span className="gtip">
+                {surface === 'listen'
+                  ? 'A suggested fix is available — check to hear it'
+                  : 'A suggested fix is available — check to queue it'}
+              </span>
             </span>
-          ) : (
+          ) : surface === 'report' ? (
             <span
               className={`fr-ckbox off gloss${noted ? ' on' : ''}`}
               role="button"
@@ -412,18 +431,20 @@ function BoardRow({
               {noted && <Icon name="check" size={11} />}
               <span className="gtip">No one-click fix — check to add as a note to Actions</span>
             </span>
+          ) : null}
+          {surface === 'report' && onAskCoach && (
+            <span
+              className="fr-ic gloss"
+              role="button"
+              tabIndex={0}
+              onClick={() => onAskCoach(v)}
+              onKeyDown={(e) => e.key === 'Enter' && onAskCoach(v)}
+            >
+              <CoachStatic size={15} />
+              <span className="gtip">Ask the Coach about this</span>
+            </span>
           )}
-          <span
-            className="fr-ic gloss"
-            role="button"
-            tabIndex={0}
-            onClick={() => onAskCoach(v)}
-            onKeyDown={(e) => e.key === 'Enter' && onAskCoach(v)}
-          >
-            <CoachStatic size={15} />
-            <span className="gtip">Ask the Coach about this</span>
-          </span>
-          {!dismissed && (
+          {surface === 'report' && !dismissed && onIgnore && (
             <span
               className="fr-ic gloss"
               role="button"
@@ -443,7 +464,11 @@ function BoardRow({
             e.stopPropagation();
             onToggleCommit(move);
           }}
-          title={committed ? 'Remove from Listen queue' : 'Queue this fix'}
+          title={
+            committed
+              ? surface === 'listen' ? 'Remove from the rack' : 'Remove from Listen queue'
+              : surface === 'listen' ? 'Apply to the rack' : 'Queue this fix'
+          }
         >
           <Icon name={committed ? 'check' : 'plus'} size={12} />
         </span>

@@ -9,7 +9,14 @@ import { parseEvidenceRows } from './evidence-model';
 import { Glossify } from './glossary';
 import { EvRows, GroupChip, SourceTag } from './FixBoardChips';
 import { OpRack } from './OpRack';
-import { GROUP_TIP, groupForVerdict, sevTitle, specName } from './fix-board-helpers';
+import {
+  GROUP_TIP,
+  groupForVerdict,
+  sevTitle,
+  specName,
+  type FixBoardSurface,
+  type SeekAffordance,
+} from './fix-board-helpers';
 
 // Actions-mode detail panel (v4): fix-first. Sub-tabs Applicable Fix (op rack +
 // Listen-queue toggle — localStorage ONLY, the 78-fixes footgun) | Quick DAW
@@ -21,10 +28,12 @@ interface ActionDetailProps {
   added: boolean;
   onToggleCommit: (move: Move) => void;
   onShowFinding: (verdictId: string) => void;
-  onAskCoach: (v: VerdictDto) => void;
-  onMarkApplied: (v: VerdictDto) => void;
-  onRate: (v: VerdictDto, rating: number, notes: string) => void;
+  onAskCoach?: ((v: VerdictDto) => void) | undefined;
+  onMarkApplied?: ((v: VerdictDto) => void) | undefined;
+  onRate?: ((v: VerdictDto, rating: number, notes: string) => void) | undefined;
   onShowSpectrum?: ((range: [number, number]) => void) | undefined;
+  surface?: FixBoardSurface | undefined;
+  seek?: SeekAffordance | undefined;
 }
 
 export function ActionDetail({
@@ -37,6 +46,8 @@ export function ActionDetail({
   onMarkApplied,
   onRate,
   onShowSpectrum,
+  surface = 'report',
+  seek,
 }: ActionDetailProps) {
   const [fixTab, setFixTab] = useState<'fix' | 'daw'>('fix');
   const [rateOpen, setRateOpen] = useState(false);
@@ -61,6 +72,10 @@ export function ActionDetail({
   const rated = f.userState.feedback != null;
   const isMaster = move ? /^master/i.test(move.scope) : true;
   const expectedOutcome = f.fix?.expected_outcome?.trim();
+  // Spec D2/D9 — the Listen surface never writes server state, and must not
+  // tell the reader to go to the page they are already standing on.
+  const listen = surface === 'listen';
+  const seekLabel = seek ? seek.label(f) : null;
 
   return (
     <div className="fb-detail" style={{ ['--sev' as string]: severityColor(f.severity) }}>
@@ -82,6 +97,18 @@ export function ActionDetail({
           </span>
           <SourceTag v={f} spec={spec !== group ? spec : null} />
         </div>
+
+        {seek && seekLabel && (
+          <button
+            type="button"
+            className="fbd-seek"
+            title="Jump to this moment in the track"
+            onClick={() => seek.go(f)}
+          >
+            <Icon name="play" size={11} />
+            {seekLabel}
+          </button>
+        )}
 
         {move ? (
           <div className="fbd-fix">
@@ -131,16 +158,20 @@ export function ActionDetail({
                         <span className="scopechip gloss">
                           Master
                           <span className="gtip">
-                            Applies to the whole master bus — the Listen rack reproduces it exactly.
+                            {listen
+                              ? 'Applies to the whole master bus — the rack reproduces it exactly.'
+                              : 'Applies to the whole master bus — the Listen rack reproduces it exactly.'}
                           </span>
                         </span>
                       ) : (
                         <span className="scopechip dev gloss">
                           Device: {move.scope}
                           <span className="gtip">
-                            This fix targets {move.scope}. Listen plays the bounced mix, so adding
-                            it auditions a master-bus approximation — the exact per-device move is
-                            in your DAW Plan.
+                            This fix targets {move.scope}.{' '}
+                            {listen
+                              ? 'Listen plays the bounced mix, so applying it auditions a master-bus approximation'
+                              : 'Listen plays the bounced mix, so adding it auditions a master-bus approximation'}
+                            {' '}— the exact per-device move is in your DAW Plan.
                           </span>
                         </span>
                       )}
@@ -148,8 +179,13 @@ export function ActionDetail({
                         {added ? (
                           <>
                             <span className="dot on" />
-                            Queued for Listen{!isMaster && ' · approximation'}
+                            {listen ? 'Applied to the rack' : 'Queued for Listen'}
+                            {!isMaster && ' · approximation'}
                           </>
+                        ) : listen ? (
+                          isMaster
+                            ? 'Apply it to hear it on the rack now'
+                            : 'Apply it to preview an approximation'
                         ) : isMaster ? (
                           'Add to apply live on the Listen page'
                         ) : (
@@ -162,7 +198,9 @@ export function ActionDetail({
                         onClick={() => onToggleCommit(move)}
                       >
                         <Icon name={added ? 'check' : 'plus'} size={12} />
-                        {added ? 'Added' : 'Add to fix rack'}
+                        {listen
+                          ? added ? 'Applied' : 'Apply live'
+                          : added ? 'Added' : 'Add to fix rack'}
                       </button>
                     </div>
                     <OpRack ops={move.ops} />
@@ -234,62 +272,66 @@ export function ActionDetail({
               </div>
             )}
 
-            <div className="fbd-fb">
-              {applied ? (
-                <span className="fb-done">
-                  <Icon name="check" size={13} />
-                  Marked applied — re-analyze to verify the result
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  className="fbd-ask"
-                  onClick={() => onMarkApplied(f)}
-                  title="Record that you made this move in your DAW"
-                >
-                  <Icon name="check" size={13} />
-                  Mark applied
-                </button>
-              )}
-              {rated ? (
-                <span className="fb-done">
-                  <Icon name="check" size={13} />
-                  Rating submitted — thanks, it tunes future fixes
-                </span>
-              ) : (
-                <span className="fb-rate">
-                  <button type="button" className="fbd-ask" onClick={() => setRateOpen(true)}>
-                    Rate this Suggestion
-                  </button>
-                  <button
-                    type="button"
-                    className="fb-thumb"
-                    onClick={() => setRateOpen(true)}
-                    title="Helpful — rate this suggestion"
-                  >
-                    <Icon name="thumbup" size={13} />
-                  </button>
-                  <button
-                    type="button"
-                    className="fb-thumb dn"
-                    onClick={() => setRateOpen(true)}
-                    title="Not helpful — rate this suggestion"
-                  >
-                    <Icon name="thumbdown" size={13} />
-                  </button>
-                </span>
-              )}
-            </div>
-            {rateOpen && (
-              <RatingModal
-                f={f}
-                move={move}
-                onClose={() => setRateOpen(false)}
-                onSubmit={(rating, notes) => {
-                  setRateOpen(false);
-                  onRate(f, rating, notes);
-                }}
-              />
+            {!listen && (
+              <>
+                <div className="fbd-fb">
+                  {applied ? (
+                    <span className="fb-done">
+                      <Icon name="check" size={13} />
+                      Marked applied — re-analyze to verify the result
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="fbd-ask"
+                      onClick={() => onMarkApplied?.(f)}
+                      title="Record that you made this move in your DAW"
+                    >
+                      <Icon name="check" size={13} />
+                      Mark applied
+                    </button>
+                  )}
+                  {rated ? (
+                    <span className="fb-done">
+                      <Icon name="check" size={13} />
+                      Rating submitted — thanks, it tunes future fixes
+                    </span>
+                  ) : (
+                    <span className="fb-rate">
+                      <button type="button" className="fbd-ask" onClick={() => setRateOpen(true)}>
+                        Rate this Suggestion
+                      </button>
+                      <button
+                        type="button"
+                        className="fb-thumb"
+                        onClick={() => setRateOpen(true)}
+                        title="Helpful — rate this suggestion"
+                      >
+                        <Icon name="thumbup" size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        className="fb-thumb dn"
+                        onClick={() => setRateOpen(true)}
+                        title="Not helpful — rate this suggestion"
+                      >
+                        <Icon name="thumbdown" size={13} />
+                      </button>
+                    </span>
+                  )}
+                </div>
+                {rateOpen && (
+                  <RatingModal
+                    f={f}
+                    move={move}
+                    onClose={() => setRateOpen(false)}
+                    onSubmit={(rating, notes) => {
+                      setRateOpen(false);
+                      onRate?.(f, rating, notes);
+                    }}
+                  />
+                )}
+              </>
             )}
           </div>
         ) : f.severity === 'win' ? (
@@ -318,16 +360,20 @@ export function ActionDetail({
                 <Glossify text={GROUP_TIP[group]} />
               </p>
               <p className="sub mono">
-                This is a DAW move — apply it in your project; nothing gets queued to Listen.
+                {listen
+                  ? 'This is a DAW move — apply it in your project; there is nothing to put on the rack.'
+                  : 'This is a DAW move — apply it in your project; nothing gets queued to Listen.'}
               </p>
             </div>
             <div className="fbd-cta">
-              <button type="button" className="fbd-ask" onClick={() => onAskCoach(f)}>
-                <span className="coach-ic">
-                  <CoachStatic size={17} />
-                </span>
-                Ask the coach about this
-              </button>
+              {surface === 'report' && onAskCoach && (
+                <button type="button" className="fbd-ask" onClick={() => onAskCoach(f)}>
+                  <span className="coach-ic">
+                    <CoachStatic size={17} />
+                  </span>
+                  Ask the coach about this
+                </button>
+              )}
               <button type="button" className="fbd-ask" onClick={() => onShowFinding(f.id)}>
                 View finding
                 <Icon name="arrow" size={13} />

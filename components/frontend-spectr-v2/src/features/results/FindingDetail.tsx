@@ -8,7 +8,14 @@ import { severityColor } from './helpers/severity';
 import { parseEvidenceRows } from './evidence-model';
 import { Glossify } from './glossary';
 import { EvRows, GroupChip, MetaChips, SourceTag } from './FixBoardChips';
-import { defaultWhy, groupForVerdict, sevTitle, specName } from './fix-board-helpers';
+import {
+  defaultWhy,
+  groupForVerdict,
+  sevTitle,
+  specName,
+  type FixBoardSurface,
+  type SeekAffordance,
+} from './fix-board-helpers';
 
 // Findings-mode detail panel (v4): diagnosis-first. Why-it-matters is always
 // open (with fallback copy), the ev2 evidence table renders auto-expanded, and
@@ -17,12 +24,22 @@ import { defaultWhy, groupForVerdict, sevTitle, specName } from './fix-board-hel
 interface FindingDetailProps {
   f: VerdictDto | null;
   move: Move | null;
-  onAskCoach: (v: VerdictDto) => void;
+  onAskCoach?: ((v: VerdictDto) => void) | undefined;
   onShowFix: (verdictId: string) => void;
   onShowSpectrum?: ((range: [number, number]) => void) | undefined;
+  surface?: FixBoardSurface | undefined;
+  seek?: SeekAffordance | undefined;
 }
 
-export function FindingDetail({ f, move, onAskCoach, onShowFix, onShowSpectrum }: FindingDetailProps) {
+export function FindingDetail({
+  f,
+  move,
+  onAskCoach,
+  onShowFix,
+  onShowSpectrum,
+  surface = 'report',
+  seek,
+}: FindingDetailProps) {
   const evRows = useMemo(() => (f ? parseEvidenceRows(f.evidence) : []), [f]);
 
   if (!f) {
@@ -37,6 +54,8 @@ export function FindingDetail({ f, move, onAskCoach, onShowFix, onShowSpectrum }
   const group = groupForVerdict(f);
   const spec = specName(f);
   const dimmed = f.userState.dismissed;
+  const seekLabel = seek ? seek.label(f) : null;
+  const showAsk = surface === 'report' && onAskCoach != null;
 
   return (
     <div
@@ -51,6 +70,18 @@ export function FindingDetail({ f, move, onAskCoach, onShowFix, onShowSpectrum }
           <SourceTag v={f} spec={spec !== group ? spec : null} />
         </div>
         <MetaChips v={f} />
+
+        {seek && seekLabel && (
+          <button
+            type="button"
+            className="fbd-seek"
+            title="Jump to this moment in the track"
+            onClick={() => seek.go(f)}
+          >
+            <Icon name="play" size={11} />
+            {seekLabel}
+          </button>
+        )}
 
         <h3 className="fbd-head">
           {f.headline}
@@ -115,25 +146,29 @@ export function FindingDetail({ f, move, onAskCoach, onShowFix, onShowSpectrum }
           )
         )}
 
-        <div className="fbd-cta divided">
-          <button type="button" className="fbd-ask" onClick={() => onAskCoach(f)}>
-            <span className="coach-ic">
-              <CoachStatic size={17} />
-            </span>
-            Ask the coach about this
-          </button>
-          {move && (
-            <button
-              type="button"
-              className="fbd-ask green"
-              onClick={() => onShowFix(f.id)}
-              title={`${move.title} — open on the Actions tab`}
-            >
-              Show Suggested Fix
-              <Icon name="arrow" size={13} />
-            </button>
-          )}
-        </div>
+        {(showAsk || move) && (
+          <div className="fbd-cta divided">
+            {showAsk && (
+              <button type="button" className="fbd-ask" onClick={() => onAskCoach?.(f)}>
+                <span className="coach-ic">
+                  <CoachStatic size={17} />
+                </span>
+                Ask the coach about this
+              </button>
+            )}
+            {move && (
+              <button
+                type="button"
+                className="fbd-ask green"
+                onClick={() => onShowFix(f.id)}
+                title={`${move.title} — open on the Actions tab`}
+              >
+                Show Suggested Fix
+                <Icon name="arrow" size={13} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

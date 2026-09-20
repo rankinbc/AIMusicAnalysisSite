@@ -143,3 +143,16 @@ export function formatParam(v: unknown): string {
   if (v === null || v === undefined) return '';
   return String(v);
 }
+
+/** Which page the board is mounted on. `listen` is READ-ONLY toward the server
+ *  (spec D2): no dismiss, no mark-applied, no feedback — and "apply" means the
+ *  live rack, not a queue. */
+export type FixBoardSurface = 'report' | 'listen';
+
+/** Spec D4 — the "jump to it" affordance. `label` returns null when the finding
+ *  carries no usable time range, and then NOTHING renders: no disabled button,
+ *  no tooltip, no placeholder. */
+export interface SeekAffordance {
+  label: (v: VerdictDto) => string | null;
+  go: (v: VerdictDto) => void;
+}
