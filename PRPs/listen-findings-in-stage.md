@@ -244,6 +244,11 @@ satisfies `canvas.width <= innerWidth * 2 && canvas.height <= innerHeight * 2`.
 
 - `carryPhase === 'pending'` → the board renders and reads normally; every
   apply control is disabled with the note **"Loading the carried fix rack…"**.
+  `pending` is bounded: a preset GET that has not answered after
+  `CARRY_TIMEOUT_MS` (15 s) flips to `failed` with the existing "could not
+  load" toast, and a late answer is ignored — otherwise a hung request would
+  hold per-fix toggling AND the draft restore/autosave forever (added
+  2026-09-20).
 - `carryPhase === 'applied'` → apply controls stay disabled with the note
   **"A fix preset is loaded — clear it to A/B single fixes."** plus a
   **Clear preset** button that calls the page's existing

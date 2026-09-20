@@ -29,6 +29,11 @@ export interface FixCarryOver {
   onResetCarriedFixes: () => void;
 }
 
+/** A carried-preset GET that never answers must not hold per-fix toggling and
+ *  the draft restore (both wait on `pending`) hostage. Past this the carry is
+ *  treated as failed; `retry: 1` on the query settles well inside it. */
+export const CARRY_TIMEOUT_MS = 15_000;
+
 export function useFixCarryOver({ versionId, fixPreset, realAudio, rsRef, currentChain }: {
   versionId: string | undefined;
   fixPreset: string | undefined;
@@ -116,6 +121,19 @@ export function useFixCarryOver({ versionId, fixPreset, realAudio, rsRef, curren
     setFixesApplied(applied);
     setCarryPhase('applied');
   }, [carryArmed, fixPreset, carriedPresetQuery.isError, carriedPresetQuery.data, rsRef]);
+
+  // Give up on a carry that never answers. Marking the preset id as handled
+  // is what keeps a late answer from landing on a rack the user is already using.
+  useEffect(() => {
+    if (carryPhase !== 'pending' || !fixPreset) return;
+    const timer = setTimeout(() => {
+      if (appliedPresetRef.current === fixPreset) return;
+      appliedPresetRef.current = fixPreset;
+      setCarryPhase('failed');
+      toast.error('Could not load the carried fix rack — your saved draft is untouched.');
+    }, CARRY_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [carryPhase, fixPreset]);
 
   const onResetCarriedFixes = useCallback(() => {
     rsRef.current.reset();

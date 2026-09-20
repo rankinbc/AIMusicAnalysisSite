@@ -4,7 +4,7 @@
  * 'applied'; a failed carry NEVER touches the rack; with no carry the saved
  * draft is restored instead. */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 
@@ -19,7 +19,7 @@ vi.mock('../../../api/fetcher', async (importOriginal) => {
 import { ApiError, fetcher } from '../../../api/fetcher';
 import type { Chain } from '../chain';
 import type { RackState } from '../rackState';
-import { useFixCarryOver } from '../useFixCarryOver';
+import { CARRY_TIMEOUT_MS, useFixCarryOver } from '../useFixCarryOver';
 
 const fetcherMock = vi.mocked(fetcher);
 
@@ -100,6 +100,45 @@ describe('useFixCarryOver', () => {
     await waitFor(() => expect(result.current.carryPhase).toBe('failed'), { timeout: 3000 });
     expect(rs.applyRackMod).not.toHaveBeenCalled();
     expect(result.current.fixesApplied).toBeNull();
+  });
+
+  it('a carry that never answers gives up: failed, rack untouched, a late answer is ignored', async () => {
+    vi.useFakeTimers();
+    try {
+      let answer: (dto: unknown) => void = () => {};
+      fetcherMock.mockImplementation(({ url }: { url: string }) => {
+        if (url.includes('/rack/presets/')) return new Promise((res) => { answer = res; });
+        return Promise.resolve(null);
+      });
+      const { ref, rs } = fakeRackRef();
+
+      const { result } = renderHook(
+        () => useFixCarryOver({
+          versionId: 'v1', fixPreset: 'slow', realAudio: true, rsRef: ref, currentChain: CHAIN,
+        }),
+        { wrapper },
+      );
+      expect(result.current.carryPhase).toBe('pending');
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(CARRY_TIMEOUT_MS - 1); });
+      expect(result.current.carryPhase).toBe('pending');
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(result.current.carryPhase).toBe('failed');
+
+      // The GET finally answers — the user has moved on, so it must NOT land.
+      await act(async () => {
+        answer({
+          id: 'slow', name: 'Late', source: 'analysis',
+          chain: { order: ['limiter'], modules: { limiter: { enabled: true } }, masterBypass: false },
+        });
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(result.current.carryPhase).toBe('failed');
+      expect(rs.applyRackMod).not.toHaveBeenCalled();
+      expect(result.current.fixesApplied).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('with no carry, the saved draft is restored', async () => {
