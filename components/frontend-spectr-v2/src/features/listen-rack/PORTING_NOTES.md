@@ -39,7 +39,7 @@ Per the `ListenRackPage.tsx` header comment:
 | `NotesSidebar.tsx` | Notes-only sidebar beside the rack panel. |
 | `data.ts` | Engine truth (`RACK_MANIFEST` / `MODULE_DEFAULTS`) + remaining fixtures + viz config. |
 | `rackState.ts` / `rackBindings.ts` / `rackCore.tsx` / `rackLayouts.tsx` | Rack state mirror, engine binding, control renderers, `InlineRack`. |
-| `viz.tsx` / `ui.tsx` / `helpers.ts` | Visual stage, control primitives. |
+| `viz.tsx` / `viz-canvases.tsx` / `ui.tsx` / `helpers.ts` | Visual stage (`VizStage` + its canvas layers), control primitives. |
 | `useRackPresets.ts` / `useVizPresetsServer.ts` / `chain.ts` | Server persistence + the `Chain` currency. |
 | `fixToRackPatch.ts` / `listenFixes.ts` / `useFixOverlay.ts` | Fix-rack → rack overlay. |
 | `trackFromAnalysis.ts` | Real analysis → `Track` shape for header/stats/scrubber. |
