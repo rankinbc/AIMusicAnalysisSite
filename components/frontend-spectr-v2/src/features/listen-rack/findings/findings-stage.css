@@ -1,0 +1,97 @@
+/* Listen stage — the findings board.
+ *
+ * A plain GLOBAL sheet on purpose (spec D10 / §12): every rule here overrides a
+ * .rdx-scoped global class that features/results/redesign-v3-tabs.css owns, and
+ * a CSS module cannot win those ties with deterministic specificity. Tokens
+ * only — no raw colors. Imported once, from ListenRackPage, after
+ * redesign-v3-tabs.css and listen-rack-v2.css.
+ */
+
+/* The stage's overlay band is pointer-events:none so the visualizer stays
+   interactive underneath; the content switch has to opt back in. */
+.rdx .lr-stage-seg { pointer-events: auto; }
+.rdx .lr-stage-seg button { background: color-mix(in srgb, var(--bg-2) 62%, transparent); }
+
+/* Spec D5 — two-step stage. The visualizer keeps its compact 210px; the board
+   gets room to be a master-detail surface, clamped so the transport and the
+   rack tabs stay on screen on a 900px-tall window. The top padding is the band
+   the Section / Chain chips float in, so nothing is ever covered. */
+.rdx .lr-findings-stage {
+  position: relative;
+  height: clamp(210px, calc(100vh - 470px), 420px);
+  padding: 34px 10px 10px;
+  display: flex;
+  min-height: 0;
+}
+
+/* Spec D7 — never blur a repainting full-screen canvas behind a scrolling
+   list. `.rdx .lr-glass .card` (0,3,0) puts a blur(9px) on this card because
+   its className is `card lr-stagecard`; this selector is (0,4,0) and wins
+   whatever the import order turns out to be. */
+.rdx .lr-glass .lr-stagecard[data-stage='findings'] {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: color-mix(in srgb, var(--surface-2) 88%, transparent);
+}
+
+/* The board's own height rules assume a full page column — re-base them on the
+   stage box (spec D5's table). */
+.rdx .lr-stage-board {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  min-height: 0;
+}
+.rdx .lr-stage-board .fixboard {
+  margin: 0;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
+}
+.rdx .lr-stage-board .fb-list { min-height: 0; }
+.rdx .lr-stage-board .fb-scroll { max-height: none; flex: 1; min-height: 0; }
+.rdx .lr-stage-board .fb-detail { position: static; max-height: none; min-height: 0; }
+.rdx .lr-stage-board .fb-detail.empty { min-height: 0; padding: 20px; }
+.rdx .lr-stage-board .fbd-scroll { flex: 1; min-height: 0; }
+
+.rdx .lr-stage-modes { align-items: center; }
+.rdx .lr-stage-gate {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: 6px;
+  padding: 3px 9px;
+  border-radius: 7px;
+  border: 1px solid var(--border-2);
+  background: color-mix(in srgb, var(--violet) 10%, transparent);
+  color: var(--text-2);
+  font-size: 10.5px;
+}
+.rdx .lr-stage-msg {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Spec D4 — "jump to it". Only the Listen board passes a `seek` affordance,
+   so this only ever renders here. */
+.rdx .fbd-seek {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 8px 0 0;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-2);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  cursor: pointer;
+}
+.rdx .fbd-seek:hover { border-color: var(--accent); }
