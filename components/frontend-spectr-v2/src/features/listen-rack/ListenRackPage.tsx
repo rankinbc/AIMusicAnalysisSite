@@ -22,13 +22,18 @@ import { useAudioGraph } from '../listen/useAudioGraph';
 import { CoverArt } from '../../ui/CoverArt';
 import { Icon } from '../results/Icon';
 import '../results/redesign-v3.css';
+import '../results/redesign-v3-tabs.css';
 import './listen-rack-v2.css';
 import './listen-rack-v2-extras.css';
+import './findings/findings-stage.css';
 import { CoachTabV2 } from './CoachTabV2';
 import {
   COACH_SUGGESTIONS, DEFAULT_VIZ, DIRECTORS, MANIFEST_BY_ID, TRACK,
   type Director, type ModuleManifest, type Track, type VizState,
 } from './data';
+import { FindingsStage } from './findings/FindingsStage';
+import { useListenFindings } from './findings/useListenFindings';
+import { useStagePrefs } from './findings/stage-prefs';
 import { LightShow } from './LightShow';
 import { readListenFixes } from './listenFixes';
 import { lrTime } from './lrUtil';
@@ -131,6 +136,11 @@ export interface ListenRackPageProps {
   reportRef?: ReportRef | null;
   /** Wave-3 E6.3 — retained for the route contract (no Stats rail in v2). */
   statsSource?: StatsSource | null;
+  /** The playing version's song, for the "not analyzed yet" link. */
+  songId?: string | undefined;
+  /** Spec D3 — the newest analysis FOR THIS VERSION (VersionDto.latestJobId).
+   *  Never the song's latest. */
+  latestJobId?: string | null | undefined;
 }
 
 const LR_TABS = [
@@ -139,7 +149,7 @@ const LR_TABS = [
   ['coach', 'Coach', 'robot'],
 ] as const;
 
-export function ListenRackPage({ versionId, track: trackProp, fixPreset, reportRef = null }: ListenRackPageProps) {
+export function ListenRackPage({ versionId, track: trackProp, fixPreset, reportRef = null, songId, latestJobId = null }: ListenRackPageProps) {
   const track = trackProp ?? TRACK;
   // ── Real-audio seam ──
   const realAudio = versionId != null;
@@ -168,11 +178,6 @@ export function ListenRackPage({ versionId, track: trackProp, fixPreset, reportR
   const [stages, setStages] = useState<string[]>(['eq']);
   const toggleStage = useCallback((id: string) => setStages((s) => (s.includes(id) ? (s.length > 1 ? s.filter((x) => x !== id) : s) : [...s, id])), []);
   const [activeNote, setActiveNote] = useState<string | null>(null);
-  // Temporary local wiring for `VizStage`'s now-controlled background mode —
-  // Task 8 replaces this with `useStagePrefs()` (persisted, and paired with
-  // the findings board). Keeps in-session toggling identical to before this
-  // task; only cross-remount persistence is deferred.
-  const [bgViz, setBgViz] = useState(false);
 
   const rs = useRackState(realAudio ? graph : null);
   const rsRef = useRef(rs);
@@ -183,10 +188,12 @@ export function ListenRackPage({ versionId, track: trackProp, fixPreset, reportR
     () => ({ order: rs.order, modules: rs.mod, masterBypass: rs.masterBypass }),
     [rs.order, rs.mod, rs.masterBypass],
   );
-  const { fixesApplied, onResetCarriedFixes } = useFixCarryOver({
+  const { fixesApplied, carryPhase, onResetCarriedFixes } = useFixCarryOver({
     versionId, fixPreset, realAudio, rsRef, currentChain,
   });
   const presetActions = useRackPresetActions({ versionId, realAudio, rs, currentChain });
+  const stagePrefs = useStagePrefs();
+  const findings = useListenFindings({ versionId: versionId ?? '', latestJobId, rs });
 
   // ── Pitch lane: a constant-tempo worklet shifter at the end of the master
   // path (NOT an insert). No buffer decode, no source swap — the media element
@@ -416,10 +423,22 @@ export function ListenRackPage({ versionId, track: trackProp, fixPreset, reportR
             activeModules={activeModuleManifests}
             trackName={track.name}
             trackSub={track.grade ? `grade ${track.grade}` : 'Listen session'}
-            stageContent="visualizer"
-            onStageContentChange={() => {}}
-            bgViz={bgViz}
-            onBgVizChange={setBgViz}
+            stageContent={stagePrefs.content}
+            onStageContentChange={stagePrefs.setContent}
+            bgViz={stagePrefs.bgViz}
+            onBgVizChange={stagePrefs.setBgViz}
+            {...(realAudio ? {
+              findings: (
+                <FindingsStage
+                  findings={findings}
+                  songId={songId}
+                  durationSeconds={duration}
+                  onSeek={seek}
+                  carryPhase={carryPhase}
+                  onClearPreset={onResetCarriedFixes}
+                />
+              ),
+            } : {})}
           />
 
           {/* Sidebar lives OUTSIDE the tabbody so it reads as its own box beside
@@ -461,7 +480,10 @@ export function ListenRackPage({ versionId, track: trackProp, fixPreset, reportR
                   />
                 )}
                 {tab === 'coach' && (
-                  <CoachTabV2 rs={rs} real={realAudio} versionId={versionId ?? null} reportRef={reportRef} />
+                  <CoachTabV2
+                    rs={rs} real={realAudio} versionId={versionId ?? null} reportRef={reportRef}
+                    fixOverlay={realAudio ? findings.overlay : null}
+                  />
                 )}
               </div>
             </div>

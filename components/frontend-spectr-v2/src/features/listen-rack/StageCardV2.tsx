@@ -86,34 +86,15 @@ export function StageCardV2({ playing, onPlay, position, duration, onSeek, mod, 
 }) {
   const active = order.filter((id) => mod[id]?.enabled).length;
   const showBoard = findings != null && stageContent === 'findings';
+  // VizStage is rendered from exactly ONE call site so its element type and
+  // sibling position never change across a Findings <-> Visualizer switch —
+  // two structurally different branches here would unmount/remount the canvas
+  // subtree (spectrogram trail buffer, particle refs, the document.body
+  // portal) on every toggle. Only its bgMode/slot props change.
   return (
     <div className="card lr-stagecard" data-stage={showBoard ? 'findings' : 'visualizer'}>
-      {showBoard ? (
-        <>
-          <div className="lr-findings-stage">{findings}</div>
-          {/* The visualizer keeps playing behind the whole page; the card slot
-              belongs to the board, so no ghost placeholder. */}
-          {bgViz && (
-            <VizStage
-              playing={playing}
-              stages={stages}
-              setStages={setStages}
-              viz={viz}
-              director={director}
-              height={stageHeight}
-              compact
-              activeModules={activeModules}
-              trackName={trackName}
-              trackSub={trackSub}
-              bgMode
-              onBgModeChange={onBgVizChange}
-              slot="none"
-              {...(getFrame ? { getFrame } : {})}
-            />
-          )}
-          <StagePlacementButton bgMode={bgViz} onChange={onBgVizChange} context="findings" />
-        </>
-      ) : (
+      {showBoard && <div className="lr-findings-stage">{findings}</div>}
+      {(!showBoard || bgViz) && (
         <VizStage
           playing={playing}
           stages={stages}
@@ -125,10 +106,17 @@ export function StageCardV2({ playing, onPlay, position, duration, onSeek, mod, 
           activeModules={activeModules}
           trackName={trackName}
           trackSub={trackSub}
-          bgMode={bgViz}
+          bgMode={showBoard ? true : bgViz}
           onBgModeChange={onBgVizChange}
+          slot={showBoard ? 'none' : 'ghost'}
           {...(getFrame ? { getFrame } : {})}
         />
+      )}
+      {/* The board owns the card slot, so VizStage above is portal-only
+          (slot="none") and renders no placement button of its own — supply
+          it here instead. In visualizer mode VizStage renders its own. */}
+      {showBoard && (
+        <StagePlacementButton bgMode={bgViz} onChange={onBgVizChange} context="findings" />
       )}
       <div className="lr-ovl" style={{ right: 54 }}>
         {findings != null && (

@@ -13,10 +13,10 @@ import { toast } from 'sonner';
 import { Coach } from '../../ui/Coach';
 import { Icon } from '../results/Icon';
 import { COACH_SUGGESTIONS, PLAN_ITEMS } from './data';
+import type { FixOverlayHandle } from './findings/useListenFindings';
 import { readListenFixes, type ListenFix } from './listenFixes';
 import type { ReportRef } from './types';
 import type { RackState } from './rackState';
-import { useFixOverlay } from './useFixOverlay';
 
 function SecLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
   return (
@@ -32,15 +32,12 @@ const SEV_COLOR: Record<string, string> = {
 };
 
 /** Real-route fixes column: each Added fix is a toggle applying that one fix
- *  to the live rack (uncheck to compare) — same overlay engine as 12.4. */
-function RealFixes({ rs, versionId }: { rs: RackState; versionId: string }) {
+ *  to the live rack (uncheck to compare). The overlay instance is the PAGE's
+ *  (spec D11) — a second one here would hold its own fix-free baseline and
+ *  silently discard whatever the stage board had applied. */
+function RealFixes({ versionId, overlay }: { versionId: string; overlay: FixOverlayHandle }) {
   const fixes: ListenFix[] = useMemo(() => readListenFixes(versionId), [versionId]);
-  const { isApplied, toggle } = useFixOverlay({
-    versionId,
-    fixes,
-    applyRackMod: rs.applyRackMod,
-    getLiveMod: () => rs.mod,
-  });
+  const { isApplied, toggle } = overlay;
   if (fixes.length === 0) {
     return (
       <div className="mono" style={{ fontSize: 10.5, color: 'var(--muted)', lineHeight: 1.55 }}>
@@ -82,12 +79,14 @@ function RealFixes({ rs, versionId }: { rs: RackState; versionId: string }) {
   );
 }
 
-export function CoachTabV2({ rs, real, versionId, reportRef }: {
+export function CoachTabV2({ rs, real, versionId, reportRef, fixOverlay }: {
   rs: RackState;
   /** Real-audio route ⇒ honest coach hand-off + real Added fixes. */
   real: boolean;
   versionId: string | null;
   reportRef: ReportRef | null;
+  /** The page's single fix overlay (spec D11); null on the mock demo route. */
+  fixOverlay: FixOverlayHandle | null;
 }) {
   const [done, setDone] = useState<Record<string, boolean>>({});
   const [fixDone, setFixDone] = useState<Record<string, boolean>>({});
@@ -126,7 +125,7 @@ export function CoachTabV2({ rs, real, versionId, reportRef }: {
           </div>
           <div>
             <SecLabel hint="toggle to compare">Fixes from analysis</SecLabel>
-            {versionId && <RealFixes rs={rs} versionId={versionId} />}
+            {versionId && fixOverlay && <RealFixes versionId={versionId} overlay={fixOverlay} />}
           </div>
         </div>
       </div>

@@ -77,4 +77,70 @@ describe('StageCardV2 stage content', () => {
     renderStage({ findings: undefined, stageContent: 'visualizer' });
     expect(screen.queryByRole('tab', { name: 'Findings' })).toBeNull();
   });
+
+  it('the findings board is wrapped in .lr-findings-stage under data-stage="findings"', () => {
+    const { container } = renderStage();
+    const card = container.querySelector('.lr-stagecard');
+    expect(card?.getAttribute('data-stage')).toBe('findings');
+    const wrapper = card?.querySelector('.lr-findings-stage');
+    expect(wrapper).not.toBeNull();
+    expect(wrapper?.querySelector('[data-testid="board"]')).not.toBeNull();
+  });
+
+  it('clicking the placement button in the findings context toggles bgViz', () => {
+    const onBgVizChange = vi.fn();
+    renderStage({ bgViz: false, onBgVizChange });
+    fireEvent.click(screen.getByTitle('Play the visualizer full-screen behind the page'));
+    expect(onBgVizChange).toHaveBeenCalledWith(true);
+  });
+
+  // VizStage owns a spectrogram trail buffer + particle refs, and in bgMode it
+  // portals its canvas to document.body — a two-branch render (Findings vs.
+  // Visualizer as structurally different subtrees) would unmount/remount all
+  // of that on every switch. VizStage must be rendered from ONE call site so
+  // React's positional reconciliation preserves it across the switch.
+  it('VizStage keeps the same DOM node across a Findings <-> Visualizer switch (bgViz on)', () => {
+    const { rerender } = renderStage({ bgViz: true });
+    const before = document.body.querySelector('canvas');
+    expect(before).not.toBeNull();
+
+    rerender(
+      <StageCardV2
+        playing={false}
+        onPlay={vi.fn()}
+        position={0}
+        duration={240}
+        onSeek={vi.fn()}
+        mod={{}}
+        order={[]}
+        bypass={false}
+        meters={METERS}
+        stageHeight={210}
+        showMeters={false}
+        notes={TRACK.notes}
+        activeNote={null}
+        onNote={vi.fn()}
+        showNotes={false}
+        section={null}
+        bpm={128}
+        keyLabel="A#"
+        getFrame={null}
+        viz={DEFAULT_VIZ}
+        stages={['eq']}
+        setStages={vi.fn()}
+        director={undefined}
+        activeModules={[]}
+        trackName="Neon Skyline"
+        trackSub="Listen session"
+        stageContent="visualizer"
+        onStageContentChange={vi.fn()}
+        bgViz
+        onBgVizChange={vi.fn()}
+        findings={<div data-testid="board">the board</div>}
+      />,
+    );
+    const after = document.body.querySelector('canvas');
+    expect(after).not.toBeNull();
+    expect(after).toBe(before);
+  });
 });

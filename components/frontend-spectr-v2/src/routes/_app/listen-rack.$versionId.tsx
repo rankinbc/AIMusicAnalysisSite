@@ -102,6 +102,8 @@ function ListenRackVersionRoute() {
   return (
     <ListenRackPage versionId={versionId}
       reportRef={reportRef} statsSource={statsSource}
+      {...(version?.songId ? { songId: version.songId } : {})}
+      {...(version?.latestJobId ? { latestJobId: version.latestJobId } : {})}
       {...(fixPreset ? { fixPreset } : {})}
       {...(track ? { track } : {})} />
   );
