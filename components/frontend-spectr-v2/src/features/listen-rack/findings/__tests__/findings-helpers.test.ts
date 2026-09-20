@@ -105,4 +105,12 @@ describe('boardListenFixes', () => {
   it('drops rule-engine prose moves, which have no verdict and no ops', () => {
     expect(boardListenFixes([move({ id: 'r1', verdictId: null, ops: [] })])).toEqual([]);
   });
+
+  it('keeps an AI move whose ops map to no rack module, flagged notApplicable', () => {
+    const fixes = boardListenFixes([
+      move({ id: 'm3', verdictId: 'v3', ops: [{ type: 'rearrange_section', params: {} }] }),
+    ]);
+    expect(fixes.map((f) => f.fixId)).toEqual(['m3']);
+    expect(fixes[0].notApplicable).toBe(true);
+  });
 });

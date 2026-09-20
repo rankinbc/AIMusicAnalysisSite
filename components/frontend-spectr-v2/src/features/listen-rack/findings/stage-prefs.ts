@@ -2,7 +2,7 @@
  * they live under one localStorage key rather than per version. Every access is
  * try/catch'd: the page must work in a private window, with site data blocked,
  * and in a test environment that has no storage at all. */
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 export type StageContent = 'findings' | 'visualizer';
 
@@ -68,12 +68,15 @@ export interface StagePrefsHandle extends StagePrefs {
 
 export function useStagePrefs(): StagePrefsHandle {
   const [prefs, setPrefs] = useState<StagePrefs>(readStagePrefs);
+  // The storage write happens HERE, in the event handler — never inside a
+  // `setPrefs` updater: React re-runs updaters under StrictMode, which would
+  // write twice. The ref keeps two same-tick updates composing.
+  const latest = useRef(prefs);
   const update = useCallback((patch: Partial<StagePrefs>) => {
-    setPrefs((prev) => {
-      const next = { ...prev, ...patch };
-      writeStagePrefs(next);
-      return next;
-    });
+    const next = { ...latest.current, ...patch };
+    latest.current = next;
+    writeStagePrefs(next);
+    setPrefs(next);
   }, []);
   const setContent = useCallback((content: StageContent) => update({ content }), [update]);
   const setBgViz = useCallback((bgViz: boolean) => update({ bgViz }), [update]);
