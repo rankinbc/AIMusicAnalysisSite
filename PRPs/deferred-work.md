@@ -163,3 +163,9 @@ Real findings that are out of scope for the current story but worth revisiting.
 
 ### Status corrections (2026-07-13)
 - 12-6's "arbiter vs relabel" decision is MADE and SHIPPED (relabel → "Fix Rack", PR #44); the flaky `Concurrent_Posts_Converge` double and refused-turn cap counting are FIXED — earlier entries referencing them as open are superseded.
+
+## Deferred from: listen-findings-in-stage (2026-09-20)
+
+- **Time-localised findings (make Listen seek chips common)** — the Listen board renders a "jump to" chip only where a verdict carries `where.start_seconds` / `fix.section.start_seconds` (`findings-helpers.ts::timeRangeOf`). Today the rule engine never sets them (`where` is only ever `{"track_names": [...]}`, `rule_engine.py`), and rules grade whole-track metrics, so nothing knows WHEN a problem happens. The only time-resolved data in `final_json` is `phase1.structure.segments` (`{label,start,end}`, allin1 — absent when Docker structure detection is off). Making chips common is a real feature: per-section measurements in the analysis pipeline (golden-snapshot guarded), a localisation policy per rule (worst section? first occurrence?), and "never grade absent data" when segments are missing. Needs a PRP + a product call on which findings localise. Frontend needs no change. [spec `PRPs/listen-findings-in-stage.md` D4]
+- **Closing a tab inside the 1.2 s rack-draft autosave debounce** can leave the saved draft without a fix the board lists as applied; toggling the fix off/on reconciles. Harmless today; a `pagehide` flush (`navigator.sendBeacon` or a keepalive PUT) would close it. [ledger ruling L9]
+- **BFF integration tests write to the dev `spectr` database** and leave `pending` job / coach rows behind (one made the coach queue look stuck). A dedicated test database (or Testcontainers) belongs with the P14 test-infrastructure cleanup above.
