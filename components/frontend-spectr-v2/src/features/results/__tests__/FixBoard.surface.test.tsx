@@ -94,4 +94,27 @@ describe('FixBoard surface="listen"', () => {
     renderBoard({ surface: 'listen', seek: { label: () => null, go: vi.fn() } });
     expect(screen.queryByTitle('Jump to this moment in the track')).toBeNull();
   });
+
+  // The FINDINGS detail pane is a different component (FindingDetail) fed by a
+  // different prop-thread inside FixBoard — pin it too, or a dropped
+  // `surface`/`seek` there would pass every test above.
+  it('findings mode: same gating — seek chip present, ask-the-coach gone', () => {
+    const go = vi.fn();
+    renderBoard({
+      mode: 'findings',
+      surface: 'listen',
+      seek: { label: (v) => (v.where?.start_seconds != null ? '1:23–1:41' : null), go },
+    });
+    const chip = screen.getByTitle('Jump to this moment in the track');
+    expect(chip.textContent).toContain('1:23–1:41');
+    chip.click();
+    expect(go).toHaveBeenCalledWith(VERDICT);
+    expect(screen.queryByText(/Ask the coach/i)).toBeNull();
+  });
+
+  it('findings mode on the report surface still offers ask-the-coach and no seek chip', () => {
+    renderBoard({ mode: 'findings', onAskCoach: vi.fn(), onIgnore: vi.fn() });
+    expect(screen.getAllByText(/Ask the coach/i).length).toBeGreaterThan(0);
+    expect(screen.queryByTitle('Jump to this moment in the track')).toBeNull();
+  });
 });
