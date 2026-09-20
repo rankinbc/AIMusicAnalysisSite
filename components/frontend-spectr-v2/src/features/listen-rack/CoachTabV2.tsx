@@ -13,10 +13,12 @@ import { toast } from 'sonner';
 import { Coach } from '../../ui/Coach';
 import { Icon } from '../results/Icon';
 import { COACH_SUGGESTIONS, PLAN_ITEMS } from './data';
+import { applyGate } from './findings/findings-helpers';
 import type { FixOverlayHandle } from './findings/useListenFindings';
 import { readListenFixes, type ListenFix } from './listenFixes';
 import type { ReportRef } from './types';
 import type { RackState } from './rackState';
+import type { CarryPhase } from './useFixCarryOver';
 
 function SecLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
   return (
@@ -35,9 +37,14 @@ const SEV_COLOR: Record<string, string> = {
  *  to the live rack (uncheck to compare). The overlay instance is the PAGE's
  *  (spec D11) — a second one here would hold its own fix-free baseline and
  *  silently discard whatever the stage board had applied. */
-function RealFixes({ versionId, overlay }: { versionId: string; overlay: FixOverlayHandle }) {
+function RealFixes({ versionId, overlay, carryPhase }: {
+  versionId: string; overlay: FixOverlayHandle; carryPhase: CarryPhase;
+}) {
   const fixes: ListenFix[] = useMemo(() => readListenFixes(versionId), [versionId]);
   const { isApplied, toggle } = overlay;
+  // Spec D8: this tab shares the stage board's overlay, so the carried-preset
+  // lock must hold here too — same gate, same reason copy.
+  const gate = applyGate(carryPhase);
   if (fixes.length === 0) {
     return (
       <div className="mono" style={{ fontSize: 10.5, color: 'var(--muted)', lineHeight: 1.55 }}>
@@ -48,8 +55,14 @@ function RealFixes({ versionId, overlay }: { versionId: string; overlay: FixOver
   }
   return (
     <div className="lr-nl">
+      {!gate.enabled && gate.reason && (
+        <div className="mono" data-testid="coach-fix-gate" style={{ fontSize: 10.5, color: 'var(--muted)', lineHeight: 1.55 }}>
+          {gate.reason}
+        </div>
+      )}
       {fixes.map((f) => {
         const na = f.notApplicable === true;
+        const locked = na || !gate.enabled;
         const on = !na && isApplied(f.fixId);
         const c = SEV_COLOR[f.sev] ?? 'var(--cyan)';
         const modules = [...new Set(f.ops.map((o) => o.type))].join(' · ');
@@ -58,9 +71,9 @@ function RealFixes({ versionId, overlay }: { versionId: string; overlay: FixOver
             type="button"
             key={f.fixId}
             className={'lr-fix' + (on ? ' done' : '')}
-            disabled={na}
-            style={na ? { opacity: 0.55, cursor: 'default' } : undefined}
-            onClick={() => { if (!na) toggle(f.fixId); }}
+            disabled={locked}
+            style={locked ? { opacity: 0.55, cursor: 'default' } : undefined}
+            onClick={() => { if (!locked) toggle(f.fixId); }}
           >
             <span className="tg" style={{ color: c, background: `color-mix(in srgb, ${c} 12%, transparent)` }}>
               {(f.scope || 'fix').toUpperCase()}
@@ -79,7 +92,7 @@ function RealFixes({ versionId, overlay }: { versionId: string; overlay: FixOver
   );
 }
 
-export function CoachTabV2({ rs, real, versionId, reportRef, fixOverlay }: {
+export function CoachTabV2({ rs, real, versionId, reportRef, fixOverlay, carryPhase }: {
   rs: RackState;
   /** Real-audio route ⇒ honest coach hand-off + real Added fixes. */
   real: boolean;
@@ -87,6 +100,8 @@ export function CoachTabV2({ rs, real, versionId, reportRef, fixOverlay }: {
   reportRef: ReportRef | null;
   /** The page's single fix overlay (spec D11); null on the mock demo route. */
   fixOverlay: FixOverlayHandle | null;
+  /** Spec D8 — a carried report preset locks per-fix toggling here too. */
+  carryPhase: CarryPhase;
 }) {
   const [done, setDone] = useState<Record<string, boolean>>({});
   const [fixDone, setFixDone] = useState<Record<string, boolean>>({});
@@ -125,7 +140,9 @@ export function CoachTabV2({ rs, real, versionId, reportRef, fixOverlay }: {
           </div>
           <div>
             <SecLabel hint="toggle to compare">Fixes from analysis</SecLabel>
-            {versionId && fixOverlay && <RealFixes versionId={versionId} overlay={fixOverlay} />}
+            {versionId && fixOverlay && (
+              <RealFixes versionId={versionId} overlay={fixOverlay} carryPhase={carryPhase} />
+            )}
           </div>
         </div>
       </div>

@@ -482,7 +482,7 @@ export function ListenRackPage({ versionId, track: trackProp, fixPreset, reportR
                 {tab === 'coach' && (
                   <CoachTabV2
                     rs={rs} real={realAudio} versionId={versionId ?? null} reportRef={reportRef}
-                    fixOverlay={realAudio ? findings.overlay : null}
+                    fixOverlay={realAudio ? findings.overlay : null} carryPhase={carryPhase}
                   />
                 )}
               </div>
