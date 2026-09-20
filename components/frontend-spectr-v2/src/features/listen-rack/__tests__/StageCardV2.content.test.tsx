@@ -61,21 +61,44 @@ describe('StageCardV2 stage content', () => {
   it('switching to the visualizer swaps the box back', () => {
     const onStageContentChange = vi.fn();
     renderStage({ onStageContentChange });
-    fireEvent.click(screen.getByRole('tab', { name: 'Visualizer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Visualizer' }));
     expect(onStageContentChange).toHaveBeenCalledWith('visualizer');
   });
 
-  it('the ghost placeholder belongs to the visualizer view only', () => {
+  // Ruling L7: "Visualizer" shows the visualizer IN THE BOX. The persisted
+  // bgViz pref is about the FINDINGS view ("visuals behind the board"); letting
+  // it drive this view too meant a first visit clicking "Visualizer" got the
+  // frosted "playing in the background" placeholder and no visualizer.
+  it('the visualizer view is IN THE BOX even with the background pref on', () => {
     const { container } = renderStage({ stageContent: 'visualizer', bgViz: true });
-    expect(container.querySelector('.lr-vizbg-ghost')).not.toBeNull();
+    expect(container.querySelector('.lr-vizbg-ghost')).toBeNull();
+    expect(container.querySelector('canvas')).not.toBeNull();
     expect(container.querySelector('.lr-stagecard')?.getAttribute('data-stage'))
       .toBe('visualizer');
     expect(screen.queryByTestId('board')).toBeNull();
   });
 
+  it('its placement control sends the visuals back for THIS SESSION only', () => {
+    const onBgVizChange = vi.fn();
+    const { container } = renderStage({ stageContent: 'visualizer', bgViz: false, onBgVizChange });
+    fireEvent.click(screen.getByTitle('Play full-screen in the background'));
+    expect(container.querySelector('.lr-vizbg-ghost')).not.toBeNull();
+    expect(onBgVizChange).not.toHaveBeenCalled(); // never persisted
+  });
+
   it('without a findings node the content switch never appears (demo route)', () => {
     renderStage({ findings: undefined, stageContent: 'visualizer' });
-    expect(screen.queryByRole('tab', { name: 'Findings' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Findings' })).toBeNull();
+  });
+
+  it('the stage content switch is a pressed-state group, not an unmanaged tablist', () => {
+    renderStage();
+    const group = screen.getByRole('group', { name: 'Stage content' });
+    const findingsBtn = screen.getByRole('button', { name: 'Findings' });
+    expect(group.contains(findingsBtn)).toBe(true);
+    expect(findingsBtn.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Visualizer' }).getAttribute('aria-pressed'))
+      .toBe('false');
   });
 
   it('the findings board is wrapped in .lr-findings-stage under data-stage="findings"', () => {
@@ -99,8 +122,13 @@ describe('StageCardV2 stage content', () => {
   // Visualizer as structurally different subtrees) would unmount/remount all
   // of that on every switch. VizStage must be rendered from ONE call site so
   // React's positional reconciliation preserves it across the switch.
-  it('VizStage keeps the same DOM node across a Findings <-> Visualizer switch (bgViz on)', () => {
-    const { rerender } = renderStage({ bgViz: true });
+  // Ruling L7 moved the visualizer view in-box by default, so the node survives
+  // only where bgMode stays ON across the switch: visualizer-in-background →
+  // findings-with-background. (The reverse, findings-background → visualizer-
+  // in-box, is a legitimate remount now — bgMode really does change.)
+  it('VizStage keeps the same DOM node when the background survives the switch', () => {
+    const { rerender } = renderStage({ stageContent: 'visualizer', bgViz: true });
+    fireEvent.click(screen.getByTitle('Play full-screen in the background'));
     const before = document.body.querySelector('canvas');
     expect(before).not.toBeNull();
 
@@ -132,7 +160,7 @@ describe('StageCardV2 stage content', () => {
         activeModules={[]}
         trackName="Neon Skyline"
         trackSub="Listen session"
-        stageContent="visualizer"
+        stageContent="findings"
         onStageContentChange={vi.fn()}
         bgViz
         onBgVizChange={vi.fn()}

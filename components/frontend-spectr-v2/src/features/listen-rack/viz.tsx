@@ -387,17 +387,17 @@ export function VizStage({
   const laserRef = useRef<LaserFanHandle>(null);
   const fireRef = useRef<FireworksHandle>(null);
   const bgLayerRef = useRef<HTMLDivElement>(null);
-  // Background mode: pop the visualizer out to a fixed full-viewport layer that
-  // sits BEHIND the page (portaled to <body>, z-index 0). The listen page content
-  // is lifted above it (`.lr-page` → position:relative; z-index:1), and the global
-  // top nav is z-index:50, so the rest of the page stays exactly in place on top
-  // while the viz fills the whole window behind it. Esc (or the toggle) exits.
+  // Background mode: the visualizer pops out to a fixed full-viewport layer
+  // BEHIND the page (portaled to <body>, z-index 0; page content z-index 1, top
+  // nav 50), so the page stays in place while the viz fills the window. Esc
+  // exits — but ONLY when this stage owns the card slot: in the findings view
+  // the board owns it, and Esc must not silently kill the background visuals.
   useEffect(() => {
-    if (!bgMode) return undefined;
+    if (!bgMode || slot === 'none') return undefined;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onBgModeChange(false); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [bgMode, onBgModeChange]);
+  }, [bgMode, slot, onBgModeChange]);
   const frameRef = useRef<VizFrame>({ t: 0, spectrum: new Array(56).fill(0), energy: 0.4, pulse: 0, beat: false, flash: 0 });
   const beatPhase = useRef(0), lastDrop = useRef(0), autoLast = useRef(0);
   const flashPtsRef = useRef<FlashPoint[]>([]), lastBurst = useRef(0), autoReactLast = useRef(0);

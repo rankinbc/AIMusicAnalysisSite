@@ -91,5 +91,10 @@ export function useListenFindings({ versionId, latestJobId, rs }: {
         ? 'loading'
         : 'ready';
 
-  return { status, jobId, verdicts, moves, appliedIds: appliedSet, overlay, retry };
+  // F5 — a stable identity when nothing changed: consumers take the whole
+  // object as a prop, so a fresh one every render re-renders the board (and
+  // re-fires any `[findings]`-dep effect) for nothing.
+  return useMemo(
+    () => ({ status, jobId, verdicts, moves, appliedIds: appliedSet, overlay, retry }),
+    [status, jobId, verdicts, moves, appliedSet, overlay, retry]);
 }

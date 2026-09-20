@@ -61,6 +61,12 @@ the user has committed to.
 **Consequence.** `onIgnore`, `onMarkApplied`, `onRate` are never passed on
 Listen, and the affordances that call them do not render there (D9).
 
+**Caveat (2026-09-19).** "Never writes verdict state" is exact; "read-only
+toward the server" is not. Opening the board performs
+`GET /reports/{jobId}/verdicts/`, which on a never-opened report lazily
+dispatches the triage job — no verdict-state write, but not side-effect free.
+See D12.
+
 ### D3 — The board shows findings for the playing version only, resolved by a new `latestJobId` on the version DTO
 
 **Decision.** The board's `jobId` comes from a new
@@ -131,12 +137,22 @@ stays — it clips the card's rounded corners and is harmless because the board
 owns its own scroll regions. What must be re-based are the board's *own*
 height rules, which assume a full page column:
 
-| rule | today (`redesign-v3-tabs.css`) | inside the stage |
+**What actually shipped** (`findings/findings-stage.css`), after the first
+build was measured in Chrome — `max-height: 100%` alone does not make a
+*block* box scroll inside a flex column, so `.fb-list` grew to its full
+content height (**4700 px in a 349 px box**) and `.fb-list { overflow: hidden }`
+clipped it with no scrollbar. The list pane had to become a flex column of its
+own before `flex: 1` on `.fb-scroll` meant anything. jsdom has no layout, so
+only a browser shows this.
+
+| rule | today (`redesign-v3-tabs.css`) | inside the stage (shipped) |
 | --- | --- | --- |
-| `.fb-scroll` | `max-height: min(64vh, 540px)` | `max-height: 100%` inside a flex column |
-| `.fb-detail` | `position: sticky; top:14px; max-height: calc(100vh - 28px)` | `position: static; max-height: 100%` |
-| `.fb-detail.empty` | `min-height: 220px` | `min-height: 0` (the stage sets the floor) |
-| `.fixboard` | `margin-top: 14px` | `margin: 0; height: 100%` |
+| `.fb-list` | *(plain block)* | `display: flex; flex-direction: column; min-height: 0` |
+| `.fb-scroll` | `max-height: min(64vh, 540px)` | `max-height: none; flex: 1; min-height: 0` |
+| `.fb-detail` | `position: sticky; top:14px; max-height: calc(100vh - 28px)` | `position: static; max-height: none; min-height: 0` |
+| `.fb-detail.empty` | `min-height: 220px` | `min-height: 0; padding: 20px` |
+| `.fbd-scroll` | *(inherits)* | `flex: 1; min-height: 0` |
+| `.fixboard` | `margin-top: 14px` | `margin: 0; width: 100%; flex: 1; min-height: 0; align-items: stretch` |
 
 **Rationale.** 420 px is the smallest height at which the master-detail board
 is usable (the detail panel's own empty state is 220 px). The `clamp` floor
@@ -173,11 +189,27 @@ is legal and meaningful:
 | --- | --- | --- |
 | `findings` | `true` | board in the box; visualizer portaled full-screen behind the page (**default**) |
 | `findings` | `false` | board in the box; no visualizer rendering at all |
-| `visualizer` | `false` | today's stage, unchanged |
-| `visualizer` | `true` | today's background mode: frosted ghost in the box + portaled visualizer, unchanged |
+| `visualizer` | *(n/a)* | today's stage, in the box — see ruling L7 |
 
-`bgViz` *is* today's `bgMode` with identical meaning; only the in-box ghost
-depends on `content`. No visualizer behaviour changes.
+**Ruling L7 (2026-09-19, after the whole-feature review).** The original
+model above let the persisted `bgViz` drive BOTH views, so a first visit
+(`bgViz: true` by default) that clicked "Visualizer" got the frosted "playing
+full-screen in the background" placeholder and no visualizer in the box. The
+persisted pref means **"visuals behind the board"** — what the product owner
+asked for — so it governs the **findings view only**.
+
+In the **visualizer view** the visuals are IN THE BOX by default and the ⛶
+placement control sends them to the background for **that session only**
+(local `useState` inside `StageCardV2`, default `false`, never persisted) —
+exactly the pre-feature behaviour, which is also what makes §9 item 14 ("the
+visualizer view is unchanged") true.
+
+`StageCardV2` therefore keeps its single stable `<VizStage>` call site and
+passes `bgMode={showBoard ? true : vizBg}`,
+`onBgModeChange={showBoard ? onBgVizChange : setVizBg}`,
+`slot={showBoard ? 'none' : 'ghost'}`, rendered when `(!showBoard || bgViz)`.
+A Findings(background) → Visualizer(in-box) switch is a legitimate remount;
+node identity is only preserved where `bgMode` stays on across the switch.
 
 ### D7 — No `backdrop-filter` behind the board; the device-pixel cap stays
 
@@ -320,6 +352,17 @@ feature adds anything:
   save / recall / export / import handlers plus the hidden file input
   (`ListenRackPage.tsx:184-194, 294-339`, ~55 lines).
 
+**Final line counts as shipped** (2026-09-19, after the fix wave):
+
+| file | lines | cap |
+| --- | --- | --- |
+| `ListenRackPage.tsx` | 512 | 515 (P10 escape clause; was 635) |
+| `viz.tsx` | 592 | must not grow — holds the Fragment-shape fix (D6/L7) |
+| `FixBoard.tsx` | 496 | 500 |
+| `ActionDetail.tsx` | 476 | 480 |
+| `StageCardV2.tsx` | 179 | — |
+| `useFixOverlay.ts` | 145 | — |
+
 Net: ~635 → ~490, then ~505 after this feature's ~15 lines. The feature's own
 additions to the page are: one CSS import, one `useStagePrefs()` call, one
 `useListenFindings()` call, six props on `StageCardV2`, one prop on
@@ -359,6 +402,53 @@ and `buildMoves({ verdicts })` with `topFixes`/`coachedFixes` omitted.
 construction. Fetching `final_json` on Listen just to feed two arrays the
 board cannot render would be a wasted request — and the only `final_json` the
 route has is the *song's* latest, which D3 forbids using.
+
+**Not side-effect free (correction to D2/D12).** Opening the board performs
+`GET /reports/{jobId}/verdicts/`, and on a report that has never been opened
+that endpoint lazily dispatches the triage job. It writes no verdict *user*
+state — D2 holds — but "read-only toward the server" is not literally true:
+standing on Listen can start an analysis-side job the viewer never asked for.
+
+---
+
+### Overlay safety (added 2026-09-19 — whole-feature review, F1/F2)
+
+The fix overlay is shared by two surfaces whose rows come from two different
+id spaces: the stage board's rows are built from the CURRENT analysis's moves
+(`boardListenFixes(moves)`), while the Coach tab's rows are read from the
+version's localStorage queue (`readListenFixes(versionId)`), which can outlive
+the analysis that produced it. The rules that make that safe:
+
+1. **An id the overlay cannot resolve is a complete no-op.** `toggle(id)`
+   returns immediately when `!byId.has(id)` (unknown id, or a `notApplicable`
+   fix): no `appliedIds` change, no storage write, no rack write. Before this,
+   such an id fell into recompute's "nothing checked" branch and rebuilt the
+   rack from nothing.
+2. **The overlay never resets the rack to factory defaults.** With nothing
+   resolvable checked it restores the captured baseline **only if one exists**.
+   The legacy `composeRack([])` fallback survives only for a caller that passes
+   no `getLiveMod` — no production caller does. A reset to defaults here was
+   silently persisted by the ~1.2 s rack-draft autosave: data loss, not a
+   cosmetic bug.
+3. **The baseline is persisted per version** under `listenBaseline:{versionId}`,
+   beside `listenApplied:{versionId}`. It is written the moment it is captured
+   and cleared when the applied set empties, on `FIX_OVERLAY_CLEAR_EVENT` and
+   inside `clearFixOverlay(versionId)`. Both halves are restored on mount and
+   on every `versionId` change. Without it, the first un-apply after a reload
+   hit the same defaults branch — the rack restored from the autosaved draft
+   (which already contained the fix) was replaced by defaults.
+4. **Applied ids with no stored baseline are dropped** (`[]` + rewritten), and
+   the rack is left alone: we cannot undo what we cannot reconstruct, and the
+   UI must not claim "applied" for something it cannot un-apply.
+5. **Fixes are never re-applied on mount.** The draft-restore effect races the
+   overlay with a chain that already contains whatever was applied when
+   autosave last fired. Residual gap: if the tab closes inside the autosave
+   debounce the draft may lack a fix the board lists as applied — toggling it
+   off and on reconciles.
+6. **The Coach tab obeys the same gate.** It shares the page's one overlay
+   (D11), so the D8 carried-preset lock holds there, and a queued row whose id
+   `!overlay.canToggle(fixId)` renders disabled ("from an earlier analysis —
+   add it again from this version's report") and never reaches `toggle`.
 
 ---
 
@@ -450,12 +540,16 @@ padding so the floating chip band never covers the first board row.
   no frosted ghost, because the board owns the box.
 - the internal `useState`, the Escape-key effect and the ghost markup are
   otherwise unchanged; the Escape handler now calls `onBgModeChange(false)`.
+- **shipped correction (L7):** the Escape handler binds only when
+  `slot !== 'none'`. In the findings view the board owns the box, so a stray
+  Escape would silently kill the background visualizer the viewer had asked
+  for, with no visible control having been touched.
 
 ### 4.4 Board states
 
 | state | render |
 | --- | --- |
-| `latestJobId == null` | `.fb-empty`-styled panel: "This version hasn't been analyzed yet." + `<Link to="/songs/$songId">Open this song to analyze it</Link>` |
+| `latestJobId == null` | `.lr-stage-msg` panel (the stage's own muted row — *not* `.fb-empty`, which is `FixBoard`'s internal empty state and never renders outside it): "This version hasn't been analyzed yet." + `<Link to="/songs/$songId">Open this song to analyze it</Link>` |
 | verdicts loading | one muted `.mono` line: "Loading findings…" |
 | verdicts error | "Couldn't load the findings for this version." + a **Retry** button calling `retry()` |
 | verdicts empty | `FixBoard`'s own `.fb-empty` "No issues found" (`FixBoard.tsx:174-186`) |
@@ -613,7 +707,11 @@ All four are checked in the live task (§9).
 13. Applying a fix audibly changes the rack (module count chip in the header
     moves) and unchecking restores it.
 14. The visualizer view is pixel-unchanged from before the feature
-    (screenshot comparison).
+    (screenshot comparison). **True again as of ruling L7 (D6):** picking
+    "Visualizer" shows the visualizer IN THE BOX regardless of the persisted
+    `bgViz`, and its ⛶ control backgrounds it for that session only. Between
+    the first build and L7 this item was false — `bgViz` defaulting to `true`
+    meant a first visit got the frosted ghost and no visualizer.
 
 **Gates.** From `components/frontend-spectr-v2`: `npx tsc -b`,
 `npm run lint`, `npm run build`, `npx vitest run` (baseline ≈ 930 tests, 0

@@ -99,4 +99,33 @@ public sealed class VersionLatestJobIdTests(WebApplicationFactory<Program> facto
         Assert.NotNull(v);
         Assert.Null(v!.LatestJobId);
     }
+
+    // The lookup filters on `a.UserId == userId` as well as the version id.
+    // Nothing covered that predicate: an analyses row carrying ANOTHER user's
+    // UserId but this VersionId must not surface, or the Listen board would
+    // fetch a foreign report for a version the caller does own.
+    [SkippableFact]
+    public async Task Another_users_analysis_of_the_same_version_never_surfaces()
+    {
+        await TestDb.RequireAsync(_factory);
+        var client = _factory.CreateClient();
+        var (userId, token) = await TestAuth.RegisterAsync(client);
+        var (songId, versionId) = await TestSeed.SongWithVersionAsync(_factory, userId);
+
+        var otherClient = _factory.CreateClient();
+        var (otherUserId, _) = await TestAuth.RegisterAsync(otherClient);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Analyses.Add(Row(otherUserId, songId, versionId, Guid.NewGuid(), hoursAgo: 1));
+            await db.SaveChangesAsync();
+        }
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var v = await client.GetFromJsonAsync<VersionDto>($"/api/versions/{versionId}");
+
+        Assert.NotNull(v);
+        Assert.Null(v!.LatestJobId);
+    }
 }

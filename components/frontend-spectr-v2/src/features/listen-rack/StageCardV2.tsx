@@ -4,7 +4,7 @@
  * the design's overlay meter chips + transport lane (play, waveform scrub,
  * note pins). Real-audio route: the stage + meter chips read the live
  * AnalyserNode frame; mock demo route keeps the synthetic spectrum. */
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 
 import type { AudioFrame } from '../listen/useAudioGraph';
 import { Icon } from '../results/Icon';
@@ -86,6 +86,13 @@ export function StageCardV2({ playing, onPlay, position, duration, onSeek, mod, 
 }) {
   const active = order.filter((id) => mod[id]?.enabled).length;
   const showBoard = findings != null && stageContent === 'findings';
+  // Ruling L7: the PERSISTED `bgViz` pref means "visuals behind the board" and
+  // governs the FINDINGS view only. Picking "Visualizer" must show the
+  // visualizer IN THE BOX — otherwise a first visit lands on the frosted
+  // "playing in the background" placeholder instead of any visualizer at all.
+  // Its ⛶ control sends the visuals behind the page for THIS SESSION, exactly
+  // the pre-feature behaviour, so nothing is persisted from this view.
+  const [vizBg, setVizBg] = useState(false);
   // VizStage is rendered from exactly ONE call site so its element type and
   // sibling position never change across a Findings <-> Visualizer switch —
   // two structurally different branches here would unmount/remount the canvas
@@ -106,8 +113,8 @@ export function StageCardV2({ playing, onPlay, position, duration, onSeek, mod, 
           activeModules={activeModules}
           trackName={trackName}
           trackSub={trackSub}
-          bgMode={showBoard ? true : bgViz}
-          onBgModeChange={onBgVizChange}
+          bgMode={showBoard ? true : vizBg}
+          onBgModeChange={showBoard ? onBgVizChange : setVizBg}
           slot={showBoard ? 'none' : 'ghost'}
           {...(getFrame ? { getFrame } : {})}
         />
@@ -120,11 +127,13 @@ export function StageCardV2({ playing, onPlay, position, duration, onSeek, mod, 
       )}
       <div className="lr-ovl" style={{ right: 54 }}>
         {findings != null && (
-          <span className="lr-seg lr-stage-seg" role="tablist" aria-label="Stage content">
+          // Plain buttons with a pressed state: neither controls a tabpanel and
+          // there is no roving arrow-key focus, so role="tab" promised a
+          // keyboard contract this never implemented.
+          <span className="lr-seg lr-stage-seg" role="group" aria-label="Stage content">
             <button
               type="button"
-              role="tab"
-              aria-selected={showBoard}
+              aria-pressed={showBoard}
               className={showBoard ? 'on' : ''}
               onClick={() => onStageContentChange('findings')}
             >
@@ -132,8 +141,7 @@ export function StageCardV2({ playing, onPlay, position, duration, onSeek, mod, 
             </button>
             <button
               type="button"
-              role="tab"
-              aria-selected={!showBoard}
+              aria-pressed={!showBoard}
               className={!showBoard ? 'on' : ''}
               onClick={() => onStageContentChange('visualizer')}
             >

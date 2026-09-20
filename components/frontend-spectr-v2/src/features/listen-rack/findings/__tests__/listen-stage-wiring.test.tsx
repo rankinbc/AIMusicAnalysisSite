@@ -70,8 +70,8 @@ describe('Listen stage wiring', () => {
 
   it('remembers the switch to the visualizer', async () => {
     const { container } = renderPage();
-    await waitFor(() => expect(screen.getByRole('tab', { name: 'Visualizer' })).toBeTruthy());
-    fireEvent.click(screen.getByRole('tab', { name: 'Visualizer' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Visualizer' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Visualizer' }));
 
     await waitFor(() =>
       expect(container.querySelector('.lr-stagecard')?.getAttribute('data-stage'))

@@ -76,6 +76,7 @@ export function FindingDetail({
             type="button"
             className="fbd-seek"
             title="Jump to this moment in the track"
+            aria-label={`Jump to ${seekLabel}`}
             onClick={() => seek.go(f)}
           >
             <Icon name="play" size={11} />

@@ -34,6 +34,8 @@ interface ActionDetailProps {
   onShowSpectrum?: ((range: [number, number]) => void) | undefined;
   surface?: FixBoardSurface | undefined;
   seek?: SeekAffordance | undefined;
+  /** Listen's D8 preset lock — the apply button is really disabled, not dim. */
+  applyLocked?: boolean | undefined;
 }
 
 export function ActionDetail({
@@ -48,6 +50,7 @@ export function ActionDetail({
   onShowSpectrum,
   surface = 'report',
   seek,
+  applyLocked,
 }: ActionDetailProps) {
   const [fixTab, setFixTab] = useState<'fix' | 'daw'>('fix');
   const [rateOpen, setRateOpen] = useState(false);
@@ -103,6 +106,7 @@ export function ActionDetail({
             type="button"
             className="fbd-seek"
             title="Jump to this moment in the track"
+            aria-label={`Jump to ${seekLabel}`}
             onClick={() => seek.go(f)}
           >
             <Icon name="play" size={11} />
@@ -195,6 +199,7 @@ export function ActionDetail({
                       <button
                         type="button"
                         className={`rack-toggle sm${added ? ' on' : ''}`}
+                        disabled={applyLocked}
                         onClick={() => onToggleCommit(move)}
                       >
                         <Icon name={added ? 'check' : 'plus'} size={12} />

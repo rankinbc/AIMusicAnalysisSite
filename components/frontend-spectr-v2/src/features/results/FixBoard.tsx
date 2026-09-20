@@ -55,6 +55,10 @@ interface FixBoardProps {
    *  conditional on it is a server write or report-only geography (spec D9). */
   surface?: FixBoardSurface | undefined;
   seek?: SeekAffordance | undefined;
+  /** Listen's D8 preset lock. Dimming alone left every apply control focusable,
+   *  operable by Enter and silent to a screen reader. Omit it (the report) and
+   *  the board behaves exactly as it always has. */
+  applyLocked?: boolean | undefined;
 }
 
 interface Row {
@@ -83,6 +87,7 @@ export function FixBoard({
   onShowSpectrum,
   surface = 'report',
   seek,
+  applyLocked,
 }: FixBoardProps) {
   const findingsMode = mode === 'findings';
   const findings = useMemo(
@@ -295,6 +300,7 @@ export function FixBoard({
                           onToggleNote={onToggleNote}
                           onAskCoach={onAskCoach}
                           onIgnore={onIgnore}
+                          applyLocked={applyLocked}
                         />
                         {children.map((c) => (
                           <BoardRow
@@ -310,6 +316,7 @@ export function FixBoard({
                             onToggleNote={onToggleNote}
                             onAskCoach={onAskCoach}
                             onIgnore={onIgnore}
+                            applyLocked={applyLocked}
                           />
                         ))}
                       </div>
@@ -345,6 +352,7 @@ export function FixBoard({
           onShowSpectrum={onShowSpectrum}
           surface={surface}
           seek={seek}
+          applyLocked={applyLocked}
         />
       )}
     </div>
@@ -352,17 +360,8 @@ export function FixBoard({
 }
 
 function BoardRow({
-  row,
-  mode,
-  surface,
-  selected,
-  committed,
-  noted,
-  onSelect,
-  onToggleCommit,
-  onToggleNote,
-  onAskCoach,
-  onIgnore,
+  row, mode, surface, selected, committed, noted, onSelect,
+  onToggleCommit, onToggleNote, onAskCoach, onIgnore, applyLocked,
 }: {
   row: Row;
   mode: FixBoardMode;
@@ -375,11 +374,15 @@ function BoardRow({
   onToggleNote: (verdictId: string) => void;
   onAskCoach?: ((v: VerdictDto) => void) | undefined;
   onIgnore?: ((v: VerdictDto) => void) | undefined;
+  applyLocked?: boolean | undefined;
 }) {
   const { v, move, isNote, depth } = row;
   const findingsMode = mode === 'findings';
   const dismissed = v.userState.dismissed;
   const group = groupForVerdict(v);
+  // Applied to the apply controls only — an inert element still needs to say
+  // so, and stay out of the tab order, not just look dim.
+  const lock = applyLocked ? { 'aria-disabled': true, tabIndex: -1 } : {};
   return (
     <button
       type="button"
@@ -410,8 +413,9 @@ function BoardRow({
               className={`fr-ckbox gloss${committed ? ' on' : ''}`}
               role="button"
               tabIndex={0}
-              onClick={() => onToggleCommit(move)}
-              onKeyDown={(e) => e.key === 'Enter' && onToggleCommit(move)}
+              {...lock}
+              onClick={() => { if (!applyLocked) onToggleCommit(move); }}
+              onKeyDown={(e) => { if (!applyLocked && e.key === 'Enter') onToggleCommit(move); }}
             >
               <Icon name={committed ? 'check' : 'plus'} size={11} />
               <span className="gtip">
@@ -460,9 +464,10 @@ function BoardRow({
       ) : move ? (
         <span
           className={`fr-add${committed ? ' on' : ''}`}
+          {...lock}
           onClick={(e) => {
             e.stopPropagation();
-            onToggleCommit(move);
+            if (!applyLocked) onToggleCommit(move);
           }}
           title={
             committed

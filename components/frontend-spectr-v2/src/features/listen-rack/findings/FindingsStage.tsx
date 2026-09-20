@@ -97,9 +97,14 @@ export function FindingsStage({
 
   return (
     <div className="lr-stage-board">
-      <div className="lr-seg lr-stage-modes">
+      {/* Two plain buttons with a pressed state, not a tablist: neither one
+          controls a tabpanel and there is no arrow-key roving, so `role="tab"`
+          promised a keyboard contract this never implemented. Colour alone
+          carried the state before. */}
+      <div className="lr-seg lr-stage-modes" role="group" aria-label="Board view">
         <button
           type="button"
+          aria-pressed={mode === 'actions'}
           className={mode === 'actions' ? 'on' : ''}
           onClick={() => setMode('actions')}
         >
@@ -107,13 +112,17 @@ export function FindingsStage({
         </button>
         <button
           type="button"
+          aria-pressed={mode === 'findings'}
           className={mode === 'findings' ? 'on' : ''}
           onClick={() => setMode('findings')}
         >
           Findings
         </button>
         {gate.reason && (
-          <span className="lr-stage-gate">
+          // role="status": the reason CHANGES while you stand here ("Loading
+          // the carried fix rack…" → "A fix preset is loaded…") and it is the
+          // only explanation for why every apply control just went dead.
+          <span className="lr-stage-gate" role="status">
             <Icon name="info" size={12} />
             {gate.reason}
             {gate.showClearPreset && (
@@ -138,6 +147,7 @@ export function FindingsStage({
         onConsumeFocus={onConsumeFocus}
         onShowFix={onShowFix}
         onShowFinding={onShowFinding}
+        applyLocked={!gate.enabled}
       />
     </div>
   );

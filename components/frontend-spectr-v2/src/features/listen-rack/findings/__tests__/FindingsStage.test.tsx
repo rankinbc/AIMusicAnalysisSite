@@ -116,4 +116,25 @@ describe('FindingsStage', () => {
     fireEvent.click(screen.getByText('Clear preset'));
     expect(onClearPreset).toHaveBeenCalled();
   });
+
+  // F3 — the lock is a state change a screen reader has to hear, and the apply
+  // control has to be really disabled, not just dimmed with pointer-events.
+  it('the gate chip announces itself and the apply control is disabled (F3)', async () => {
+    renderStage({ carryPhase: 'applied' });
+
+    const chip = await screen.findByRole('status');
+    expect(chip.textContent).toContain('A fix preset is loaded');
+    expect(screen.getByText('Apply live').closest('button')?.disabled).toBe(true);
+  });
+
+  it('the board-mode switch is a pressed-state group, not an unmanaged tablist', async () => {
+    renderStage();
+
+    const group = await screen.findByRole('group', { name: /board view/i });
+    const actions = screen.getByRole('button', { name: 'Actions' });
+    expect(group.contains(actions)).toBe(true);
+    expect(actions.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Findings' }).getAttribute('aria-pressed'))
+      .toBe('false');
+  });
 });

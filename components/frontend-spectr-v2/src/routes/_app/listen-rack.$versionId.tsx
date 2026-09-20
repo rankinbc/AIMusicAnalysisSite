@@ -55,8 +55,12 @@ function ListenRackVersionRoute() {
   const versionQ = useVersion(versionId);
   const version = versionQ.data;
   const { data: song } = useSong(version?.songId ?? '');
-  const latestJobId = song?.latestResult?.jobId;
-  const { data: results } = useJobResults(latestJobId ?? '', Boolean(latestJobId));
+  // The SONG's latest analysis — it may belong to a DIFFERENT version than the
+  // one playing, which is why it only feeds the header stats and the report
+  // link. The board's job id is `version.latestJobId` (spec D3). Named apart
+  // deliberately: the two sat 50 lines from each other under one name.
+  const songLatestJobId = song?.latestResult?.jobId;
+  const { data: results } = useJobResults(songLatestJobId ?? '', Boolean(songLatestJobId));
   const { data: notes } = useNotes(version ? versionId : '');
 
   // Build the real track once the song name resolves; stats fill in as the
@@ -99,8 +103,12 @@ function ListenRackVersionRoute() {
     return <VersionErrorShell error={versionQ.error} onRetry={() => void versionQ.refetch()} />;
   }
 
+  // `key` — an in-place $versionId change must REMOUNT the page, not re-render
+  // it. useFixCarryOver's `draftRestored` latch stays true across a param
+  // switch, so version B's saved draft would never be restored while autosave
+  // kept PUTting version A's live rack into B's draft.
   return (
-    <ListenRackPage versionId={versionId}
+    <ListenRackPage key={versionId} versionId={versionId}
       reportRef={reportRef} statsSource={statsSource}
       {...(version?.songId ? { songId: version.songId } : {})}
       {...(version?.latestJobId ? { latestJobId: version.latestJobId } : {})}

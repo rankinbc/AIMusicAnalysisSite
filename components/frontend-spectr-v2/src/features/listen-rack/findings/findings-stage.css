@@ -61,11 +61,14 @@
 .rdx .lr-stage-board .fb-detail.empty { min-height: 0; padding: 20px; }
 .rdx .lr-stage-board .fbd-scroll { flex: 1; min-height: 0; }
 
-/* Spec §5: while a carried preset locks toggling (the gate chip is showing) the
-   apply controls must LOOK disabled too — the handler already no-ops. */
-.rdx .lr-stage-board:has(.lr-stage-gate) .rack-toggle,
-.rdx .lr-stage-board:has(.lr-stage-gate) .fr-add,
-.rdx .lr-stage-board:has(.lr-stage-gate) .fr-ckbox {
+/* Spec §5 / F3: while a carried preset locks toggling, the apply controls must
+   LOOK disabled — and now they really ARE (`applyLocked` gives the real button
+   `disabled` and the role="button" spans aria-disabled + tabIndex -1). Keying
+   the dimming on that state instead of on `:has(.lr-stage-gate)` means the
+   look can never drift from the behaviour. */
+.rdx .lr-stage-board .rack-toggle[disabled],
+.rdx .lr-stage-board .fr-add[aria-disabled='true'],
+.rdx .lr-stage-board .fr-ckbox[aria-disabled='true'] {
   opacity: 0.45;
   pointer-events: none;
   cursor: not-allowed;

@@ -2,7 +2,7 @@
 /* Spec D2/D9: the same board, mounted on Listen, must offer no way to write
  * server state and must not tell the reader to go to the page they are on.
  * The report surface stays exactly as it was. */
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { VerdictDto } from '../../../api/types';
@@ -86,6 +86,8 @@ describe('FixBoard surface="listen"', () => {
     });
     const chip = screen.getByTitle('Jump to this moment in the track');
     expect(chip.textContent).toContain('1:23–1:41');
+    // F5 — the visible text is a bare timestamp and `title` is not a name.
+    expect(chip.getAttribute('aria-label')).toBe('Jump to 1:23–1:41');
     chip.click();
     expect(go).toHaveBeenCalledWith(VERDICT);
   });
@@ -107,6 +109,7 @@ describe('FixBoard surface="listen"', () => {
     });
     const chip = screen.getByTitle('Jump to this moment in the track');
     expect(chip.textContent).toContain('1:23–1:41');
+    expect(chip.getAttribute('aria-label')).toBe('Jump to 1:23–1:41'); // F5, FindingDetail too
     chip.click();
     expect(go).toHaveBeenCalledWith(VERDICT);
     expect(screen.queryByText(/Ask the coach/i)).toBeNull();
@@ -116,5 +119,78 @@ describe('FixBoard surface="listen"', () => {
     renderBoard({ mode: 'findings', onAskCoach: vi.fn(), onIgnore: vi.fn() });
     expect(screen.getAllByText(/Ask the coach/i).length).toBeGreaterThan(0);
     expect(screen.queryByTitle('Jump to this moment in the track')).toBeNull();
+  });
+
+  // F6 — the fix-less row's report affordances (note checkbox, ignore) are
+  // server/report concepts. Pin their ABSENCE on Listen: a dropped `surface`
+  // check would otherwise reintroduce a control that writes nothing.
+  it('findings mode: a verdict with no fix shows neither a note checkbox nor an ignore icon', () => {
+    const noFix: VerdictDto = { ...VERDICT, id: 'v2', problemId: 'p2', fix: null, fixable: false };
+    render(
+      <FixBoard
+        mode="findings"
+        surface="listen"
+        verdicts={[noFix]}
+        moves={buildMoves({ verdicts: [noFix] })}
+        committedIds={new Set<string>()}
+        onToggleCommit={vi.fn()}
+        checkedNoteIds={new Set<string>()}
+        onToggleNote={vi.fn()}
+        focusId={null}
+        onConsumeFocus={vi.fn()}
+        onShowFix={vi.fn()}
+        onShowFinding={vi.fn()}
+        onIgnore={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByText('Sub is masking the kick').length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('.fr-ckbox')).toHaveLength(0);
+    expect(screen.queryByText(/Ignore this finding/i)).toBeNull();
+  });
+});
+
+// F3 — under the D8 carried-preset lock the board only DIMMED its apply
+// controls with pointer-events:none. A keyboard user could still focus and
+// activate them; the handler no-opped and nothing conveyed the state.
+describe('FixBoard applyLocked (F3)', () => {
+  it('actions mode: the apply button is really disabled', () => {
+    const onToggleCommit = vi.fn();
+    renderBoard({ surface: 'listen', applyLocked: true, onToggleCommit });
+    const apply = screen.getByText('Apply live').closest('button');
+    expect(apply?.disabled).toBe(true);
+    apply?.click();
+    expect(onToggleCommit).not.toHaveBeenCalled();
+  });
+
+  it('actions mode: the row add control is aria-disabled and inert', () => {
+    const onToggleCommit = vi.fn();
+    const { container } = renderBoard({ surface: 'listen', applyLocked: true, onToggleCommit });
+    const add = container.querySelector('.fr-add') as HTMLElement;
+    expect(add.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(add);
+    expect(onToggleCommit).not.toHaveBeenCalled();
+  });
+
+  it('findings mode: the row checkbox is out of the tab order and Enter does nothing', () => {
+    const onToggleCommit = vi.fn();
+    const { container } = renderBoard({
+      mode: 'findings', surface: 'listen', applyLocked: true, onToggleCommit,
+    });
+    const ckbox = container.querySelector('.fr-ckbox') as HTMLElement;
+    expect(ckbox.getAttribute('aria-disabled')).toBe('true');
+    expect(ckbox.getAttribute('tabindex')).toBe('-1');
+    fireEvent.keyDown(ckbox, { key: 'Enter' });
+    fireEvent.click(ckbox);
+    expect(onToggleCommit).not.toHaveBeenCalled();
+  });
+
+  it('WITHOUT applyLocked the report surface is byte-for-byte what it was', () => {
+    const onToggleCommit = vi.fn();
+    const { container } = renderBoard({ mode: 'findings', onToggleCommit });
+    const ckbox = container.querySelector('.fr-ckbox') as HTMLElement;
+    expect(ckbox.getAttribute('aria-disabled')).toBeNull();
+    expect(ckbox.getAttribute('tabindex')).toBe('0');
+    fireEvent.keyDown(ckbox, { key: 'Enter' });
+    expect(onToggleCommit).toHaveBeenCalled();
   });
 });
