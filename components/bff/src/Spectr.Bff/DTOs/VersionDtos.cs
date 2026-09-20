@@ -19,7 +19,14 @@ public sealed record VersionDto(
     string? AlsFilePath = null,
     string? ReferencePath = null,
     VersionMetricsDto? LatestResult = null,
-    int? PersonalScore = null);
+    int? PersonalScore = null,
+    // The newest COMPLETED analysis for THIS version. An `analyses` row is 1:1
+    // with a successful job (Entities/Analysis.cs), so a row means "completed"
+    // and no status join is needed. Populated by GET /api/versions/{id} ONLY —
+    // the Listen page resolves the playing version's findings through it and
+    // must never fall back to the SONG's latest analysis, which can belong to
+    // a different version.
+    Guid? LatestJobId = null);
 
 // GET /api/versions/{id}/files — metadata for all files attached to a version.
 // `Available` is false when the file has been deleted / expired from storage.

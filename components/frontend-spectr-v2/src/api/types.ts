@@ -164,6 +164,13 @@ export interface VersionDto {
   referencePath: string | null;
   latestResult?: VersionMetricsDto | null;
   personalScore?: number | null;
+  /** Spec D3 — the newest COMPLETED analysis for THIS version (an `analyses`
+   *  row is 1:1 with a successful job). Populated by GET /api/versions/{id};
+   *  absent/null from every other VersionDto source. The Listen page resolves
+   *  the playing version's findings through this and NEVER through
+   *  `SongDto.latestResult`, which is the song's latest and may belong to a
+   *  different version. */
+  latestJobId?: string | null;
 }
 
 export type VersionFileType = 'mix' | 'als' | 'stem' | 'reference';

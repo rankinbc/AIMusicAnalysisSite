@@ -365,9 +365,16 @@ public static class VersionEndpoints
             select v
         ).FirstOrDefaultAsync(ct);
         if (row is null) return Results.NotFound();
+
+        var latestJobId = await db.Analyses.AsNoTracking()
+            .Where(a => a.UserId == userId && a.VersionId == versionId)
+            .OrderByDescending(a => a.CreatedAt)
+            .Select(a => (Guid?)a.JobId)
+            .FirstOrDefaultAsync(ct);
+
         return Results.Ok(new VersionDto(
             row.Id, row.SongId, row.VersionNumber, row.Label, row.IsCurrent, row.FilePath, row.CreatedAt,
-            row.AlsFilePath, row.ReferencePath));
+            row.AlsFilePath, row.ReferencePath, LatestJobId: latestJobId));
     }
 
     // DELETE /api/versions/{id}
