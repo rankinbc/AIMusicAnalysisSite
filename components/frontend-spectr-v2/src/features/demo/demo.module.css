@@ -19,3 +19,41 @@
   gap: 10px;
   margin-top: 6px;
 }
+
+/* D10 — guest-shell banner. flex-wrap + no fixed widths so it collapses to
+   two lines instead of forcing horizontal scroll at phone width (390px). */
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-2, 8px);
+  row-gap: 2px;
+  padding: var(--space-2, 8px) var(--space-4, 16px);
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text-2);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.bannerText {
+  margin: 0;
+  min-width: 0;
+}
+
+.bannerLink {
+  color: var(--cyan);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.bannerLink:hover {
+  text-decoration: underline;
+}
+
+/* D10 — GuestUpgradeDialog body copy. */
+.upgradeBody {
+  color: var(--text-2);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}

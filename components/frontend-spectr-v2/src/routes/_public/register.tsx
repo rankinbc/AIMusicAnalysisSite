@@ -23,8 +23,15 @@ function safeNext(raw: string | undefined): string | undefined {
   return raw;
 }
 
+// D10 (addendum h) — `?from=guest` marks a guest-conversion entry (the
+// upgrade dialog / banner). The actual `POST /api/auth/guest/convert` call
+// this should trigger belongs to task G5; this route only needs to accept
+// and carry the param without breaking the existing `next` passthrough.
 export const Route = createFileRoute('/_public/register')({
-  validateSearch: optionalString('next'),
+  validateSearch: (search: Record<string, unknown>): { next?: string; from?: string } => ({
+    ...optionalString('next')(search),
+    ...optionalString('from')(search),
+  }),
   component: RegisterPage,
 });
 

@@ -12,8 +12,29 @@
 import { MutationCache } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
-import { extractApiMessage } from './error-utils';
+import { openGuestUpgrade, type GuestUpgradeReason } from '../features/demo/guest-upgrade-bus';
+import { capture } from '../lib/analytics';
+import { extractApiError, extractApiMessage } from './error-utils';
 import { ApiError } from './fetcher';
+
+// D10 — task D6/G1 `details.reason` values (see guest-upgrade-bus.ts for the
+// authoritative list + why "coach_limit" isn't one). An unrecognized value
+// (a future reason this build doesn't know about yet) degrades to the
+// generic copy rather than crashing the dialog.
+const KNOWN_GUEST_REASONS: readonly GuestUpgradeReason[] = [
+  'not_allowed',
+  'upload_limit',
+  'analysis_limit',
+  'stems_limit',
+  'reference_limit',
+  'fix_rack_limit',
+];
+
+function guestUpgradeReason(raw: unknown): GuestUpgradeReason {
+  return KNOWN_GUEST_REASONS.includes(raw as GuestUpgradeReason)
+    ? (raw as GuestUpgradeReason)
+    : 'not_allowed';
+}
 
 /**
  * Toast a failed mutation's error iff the mutation opted in via
@@ -38,6 +59,21 @@ export function mutationErrorToast(
  */
 export function createMutationCache(): MutationCache {
   return new MutationCache({
-    onError: (error, _vars, _ctx, mutation) => mutationErrorToast(error, mutation),
+    onError: (error, _vars, _ctx, mutation) => {
+      // D10 — a guest_restricted 403 opens the ONE upgrade dialog instead of
+      // the generic error toast, for EVERY mutation (opted into
+      // meta.errorToast or not — this runs unconditionally, before the
+      // opt-in check inside mutationErrorToast) and never falls through to
+      // it, so the two surfaces can never fire for the same error.
+      if (error instanceof ApiError && extractApiError(error.body).code === 'guest_restricted') {
+        const details = (error.body as { error?: { details?: { reason?: unknown } } } | undefined)
+          ?.error?.details;
+        const reason = guestUpgradeReason(details?.reason);
+        capture('demo_guest_restricted', { reason });
+        openGuestUpgrade(reason, extractApiMessage(error.body));
+        return;
+      }
+      mutationErrorToast(error, mutation);
+    },
   });
 }

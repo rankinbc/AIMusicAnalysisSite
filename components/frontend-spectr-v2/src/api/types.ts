@@ -167,6 +167,25 @@ export interface DemoStartResponse {
   resumed: boolean;
 }
 
+/** D10 — GET /api/me/guest (task D6 + G1 trailing fields). 404 for a real
+ *  (non-guest) user; the frontend never calls this except when
+ *  `AuthedUser.isGuest` is true. Drives the guest banner, the "+ Upload" →
+ *  "Create free account" swap, and the stems/reference helper copy in
+ *  UnifiedUploadDialog. */
+export interface GuestStateDto {
+  uploadsUsed: number;
+  uploadsMax: number;
+  analysesUsed: number;
+  analysesMax: number;
+  coachMessagesUsed: number;
+  coachMessagesMax: number;
+  expiresAt: string | null;
+  stemsMaxFiles: number;
+  stemsMaxMb: number;
+  referencesUsed: number;
+  referencesMax: number;
+}
+
 export interface VersionMetricsDto {
   score: number | null;
   lufs: number | null;
