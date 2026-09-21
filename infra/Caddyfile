@@ -11,6 +11,10 @@ www.{$SPECTR_DOMAIN} {
 
 {$SPECTR_DOMAIN} {
 	encode zstd gzip
+	# Task P4 — short link for the engineering page; kept a temporary 302
+	# (not `permanent`) while the URL is young. The bot-preview shell for
+	# this path is a later task (P6/P9).
+	redir /how-its-built /trust/how-its-built
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 
 	# Story 6.1/6.2 — SOCIAL-PREVIEW bots on the public funnel pages get the

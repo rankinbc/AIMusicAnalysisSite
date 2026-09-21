@@ -72,7 +72,9 @@ type EventName =
   | 'demo_started' // props: { resumed, surface }
   | 'demo_start_failed' // props: { code }
   | 'demo_signup_clicked' // props: { source }
-  | 'demo_guest_restricted'; // props: { reason }
+  | 'demo_guest_restricted' // props: { reason }
+  // Task P4 — the "How it's built" engineering page mounted.
+  | 'engineering_viewed';
 
 export function capture(event: EventName, props?: Record<string, unknown>): void {
   run((p) => {

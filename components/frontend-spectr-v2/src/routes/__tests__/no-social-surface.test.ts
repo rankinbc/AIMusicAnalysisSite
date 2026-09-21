@@ -39,6 +39,7 @@ const ALLOWED_ROUTE_FILES = [
   'demo.tsx',
   'index.tsx',
   'pricing.tsx',
+  'trust.how-its-built.tsx',
   'trust.index.tsx',
   'trust.no-training.tsx',
   'trust.privacy.tsx',
