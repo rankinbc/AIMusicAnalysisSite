@@ -742,12 +742,22 @@ public static class VersionEndpoints
     // cap (CheckStemsAsync). A missing/orphaned blob counts as 0 rather than
     // failing the whole request — this is a best-effort cap, not a strict
     // accounting ledger.
+    // Fix round 1 item 3 — a stem staged via the presigned path (stage-keys)
+    // lives ONLY in object storage, never on local IFileStorage; without the
+    // fallback below every such entry read back as 0 bytes, so the 300 MB cap
+    // only ever applied per-request. Same ExistsAsync-then-Probe shape as
+    // GetFiles' ProbeAsync.
     internal static async Task<long> SumStemBytesAsync(
-        IEnumerable<StemRawEntry> entries, IFileStorage storage, CancellationToken ct)
+        IEnumerable<StemRawEntry> entries, IFileStorage storage, IMultipartObjectStore store, CancellationToken ct)
     {
         long total = 0;
         foreach (var e in entries)
-            total += await storage.GetFileSizeAsync(e.Key, ct) ?? 0;
+        {
+            var size = await storage.GetFileSizeAsync(e.Key, ct);
+            if (size is null && store.IsConfigured)
+                size = await store.GetObjectSizeAsync(e.Key, ct);
+            total += size ?? 0;
+        }
         return total;
     }
 
@@ -776,56 +786,99 @@ public static class VersionEndpoints
     // POST /api/versions/{id}/stems/stage — append staged stems (call once or in batches).
     private static async Task<IResult> StageStems(
         Guid versionId, HttpRequest request, ClaimsPrincipal currentUser,
-        AppDbContext db, IFileStorage storage, GuestLimits limits, CancellationToken ct)
+        AppDbContext db, IFileStorage storage, IMultipartObjectStore store, GuestLimits limits, CancellationToken ct)
     {
         if (!request.HasFormContentType)
             return Results.BadRequest(new { error = "multipart/form-data required." });
         var userId = currentUser.UserId();
-        var version = await OwnedVersion(db, versionId, userId, ct);
-        if (version is null) return Results.NotFound();
+        var isGuest = currentUser.IsGuest();
 
-        var form = await request.ReadFormAsync(ct);
-        if (form.Files.Count == 0)
-            return Results.BadRequest(new { error = "At least one stem file required." });
-
-        var entries = ReadRaw(version.StemPathsRaw);
-
-        // Task G1 — the guest stems cap (count + total bytes), checked before
-        // anything is written to storage.
-        if (currentUser.IsGuest())
+        // Fix round 1 item 4(a) — reject an over-budget guest body from its
+        // Content-Length BEFORE the form is read: ReadFormAsync buffers the
+        // WHOLE multipart body first (the route's own size limit is ~5 GB),
+        // so a capped-out guest could otherwise push gigabytes into temp
+        // storage per request and still land a tidy 403. A non-tracking
+        // probe of the version's current staged bytes — reads no
+        // request-body bytes, only a DB row.
+        if (isGuest)
         {
-            var addBytes = form.Files.Where(f => f.Length > 0).Sum(f => f.Length);
-            var existingBytes = await SumStemBytesAsync(entries, storage, ct);
-            if (await limits.CheckStemsAsync(entries.Count, existingBytes, form.Files.Count, addBytes, ct) is { } denied)
-                return denied;
+            var stagedJson = await db.SongVersions.AsNoTracking()
+                .Where(v => v.Id == versionId && db.Songs.Any(s => s.Id == v.SongId && s.UserId == userId))
+                .Select(v => v.StemPathsRaw)
+                .FirstOrDefaultAsync(ct);
+            var existingForBudget = await SumStemBytesAsync(ReadRaw(stagedJson), storage, store, ct);
+            if (await limits.CheckStemsContentLengthAsync(existingForBudget, request.ContentLength, ct) is { } tooLarge)
+                return tooLarge;
         }
 
-        if (entries.Count + form.Files.Count > MaxStems)
-            return Results.BadRequest(new { error = $"Up to {MaxStems} stems per version." });
-
-        foreach (var file in form.Files)
+        // Fix round 1 item 4(b) — stems/stage is check-then-write on
+        // song_versions.stem_paths_raw; N parallel guest requests each read
+        // the SAME "before" state and can all pass CheckStemsAsync below,
+        // or clobber each other's writes outright (no concurrency token on
+        // this column). A short-lived per-guest Redis lock serialises one
+        // guest's OWN stage calls. Real users are unaffected — no lock.
+        string? lockToken = null;
+        if (isGuest)
         {
-            if (file.Length == 0) continue;
-            if (file.Length > MaxUploadBytes)
-                return Results.BadRequest(new { error = $"'{file.FileName}' exceeds the 250 MB limit." });
-            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
-            if (!StemAudioExts.Contains(ext))
-                return Results.BadRequest(new { error = $"'{file.FileName}': only .wav / .flac stems are supported." });
-
-            await using var src = file.OpenReadStream();
-            if (!await LooksLikeAudioAsync(src, ct))
-                return Results.BadRequest(new { error = $"'{file.FileName}' is not a valid WAV/FLAC file." });
-
-            var stemId = Guid.NewGuid().ToString();
-            var key = $"audio/stems/{versionId}/{stemId}{ext}";
-            await storage.WriteAsync(key, src, file.ContentType ?? "application/octet-stream", ct);
-            entries.Add(new StemRawEntry { Id = stemId, OriginalFilename = file.FileName, Key = key });
+            var lockResult = await limits.AcquireStemsLockAsync(userId, ct);
+            if (!lockResult.Ok) return lockResult.Error!;
+            lockToken = lockResult.Token;
         }
+        try
+        {
+            var version = await OwnedVersion(db, versionId, userId, ct);
+            if (version is null) return Results.NotFound();
 
-        version.StemPathsRaw = JsonSerializer.Serialize(entries);
-        version.UpdatedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(ct);
-        return Results.Ok(new StageStemsResponse(versionId, entries.Select(ToDto).ToList()));
+            var form = await request.ReadFormAsync(ct);
+            if (form.Files.Count == 0)
+                return Results.BadRequest(new { error = "At least one stem file required." });
+
+            var entries = ReadRaw(version.StemPathsRaw);
+
+            // Task G1 — the guest stems cap (count + total bytes), checked
+            // before anything is written to storage. This is the PRECISE
+            // check (against a fresh read taken under the lock); the
+            // Content-Length probe above is only a cheap upper-bound proxy.
+            if (isGuest)
+            {
+                var addBytes = form.Files.Where(f => f.Length > 0).Sum(f => f.Length);
+                var existingBytes = await SumStemBytesAsync(entries, storage, store, ct);
+                if (await limits.CheckStemsAsync(entries.Count, existingBytes, form.Files.Count, addBytes, ct) is { } denied)
+                    return denied;
+            }
+
+            if (entries.Count + form.Files.Count > MaxStems)
+                return Results.BadRequest(new { error = $"Up to {MaxStems} stems per version." });
+
+            foreach (var file in form.Files)
+            {
+                if (file.Length == 0) continue;
+                if (file.Length > MaxUploadBytes)
+                    return Results.BadRequest(new { error = $"'{file.FileName}' exceeds the 250 MB limit." });
+                var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+                if (!StemAudioExts.Contains(ext))
+                    return Results.BadRequest(new { error = $"'{file.FileName}': only .wav / .flac stems are supported." });
+
+                await using var src = file.OpenReadStream();
+                if (!await LooksLikeAudioAsync(src, ct))
+                    return Results.BadRequest(new { error = $"'{file.FileName}' is not a valid WAV/FLAC file." });
+
+                var stemId = Guid.NewGuid().ToString();
+                var key = $"audio/stems/{versionId}/{stemId}{ext}";
+                await storage.WriteAsync(key, src, file.ContentType ?? "application/octet-stream", ct);
+                entries.Add(new StemRawEntry { Id = stemId, OriginalFilename = file.FileName, Key = key });
+            }
+
+            version.StemPathsRaw = JsonSerializer.Serialize(entries);
+            version.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(new StageStemsResponse(versionId, entries.Select(ToDto).ToList()));
+        }
+        finally
+        {
+            if (lockToken is not null)
+                await limits.ReleaseStemsLockAsync(userId, lockToken);
+        }
     }
 
     // ── Story 3.2 — presigned-attachment registration (JSON, no file bytes) ──
@@ -866,7 +919,7 @@ public static class VersionEndpoints
         // size before the PUT happens).
         if (currentUser.IsGuest())
         {
-            var existingBytes = await SumStemBytesAsync(entries, storage, ct);
+            var existingBytes = await SumStemBytesAsync(entries, storage, store, ct);
             long addBytes = 0;
             foreach (var item in body.Stems)
                 addBytes += await store.GetObjectSizeAsync(item.Key, ct) ?? 0;

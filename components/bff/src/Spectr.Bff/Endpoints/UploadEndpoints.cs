@@ -319,6 +319,17 @@ public static class UploadEndpoints
             return Results.BadRequest(new { error = "fileSize must be positive." });
 
         var userId = currentUser.UserId();
+
+        // Fix round 1 item 3 — the mint itself must be capped: it counts only
+        // REGISTERED entries downstream, but a script that never registers can
+        // still mint unlimited presigned PUT URLs of bytes no row tracks and
+        // no sweep finds. Checked BEFORE any URL is minted, for every kind.
+        if (currentUser.IsGuest())
+        {
+            if (await limits.CheckAttachmentMintAsync(userId, ct) is { } mintDenied)
+                return mintDenied;
+        }
+
         var ext = Path.GetExtension(body.FileName).ToLowerInvariant();
 
         switch (body.Kind)
@@ -357,7 +368,7 @@ public static class UploadEndpoints
                     // stage-keys re-checks the ACTUAL object size at register.
                     if (currentUser.IsGuest())
                     {
-                        var existingBytes = await VersionEndpoints.SumStemBytesAsync(stagedEntries, storage, ct);
+                        var existingBytes = await VersionEndpoints.SumStemBytesAsync(stagedEntries, storage, store, ct);
                         if (await limits.CheckStemsAsync(stagedEntries.Count, existingBytes, addFiles: 1, addBytes: body.FileSize, ct) is { } denied)
                             return denied;
                     }
@@ -379,6 +390,15 @@ public static class UploadEndpoints
             }
             case "reference":
             {
+                // Fix round 1 item 3 — this branch had no guest cap at all
+                // beyond the general mint budget above; the per-guest
+                // reference COUNT cap must also apply at init, not just on
+                // the direct multipart upload route.
+                if (currentUser.IsGuest())
+                {
+                    if (await limits.CheckReferenceAsync(userId, ct) is { } refDenied)
+                        return refDenied;
+                }
                 if (!ReferenceExts.Contains(ext))
                     return Results.BadRequest(new { error = "Unsupported reference audio format." });
                 if (body.FileSize > MaxUploadBytes)

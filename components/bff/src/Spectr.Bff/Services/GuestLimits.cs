@@ -16,7 +16,8 @@ namespace Spectr.Bff.Services;
 // versions. Stems and references get their own per-version/per-guest caps
 // below (CheckStemsAsync / CheckReferenceAsync).
 public sealed class GuestLimits(
-    AppDbContext db, EntitlementService ents, IRateLimiter limiter, IConfiguration cfg, ILogger<GuestLimits> log)
+    AppDbContext db, EntitlementService ents, IRateLimiter limiter, IDistributedLock distLock,
+    IConfiguration cfg, ILogger<GuestLimits> log)
 {
     // Delegates to the single flag-parsing helper (GuestIdentity.Flag) so
     // every guest-flag read in the codebase agrees on missing/garbage → fallback.
@@ -195,7 +196,7 @@ public sealed class GuestLimits(
         catch (Exception ex)
         {
             log.LogError(ex, "guest stems flags unavailable — failing CLOSED");
-            return DemoCapacity();
+            return DemoCapacityNeutral();
         }
 
         var maxFiles = Flag(flags, "guest_stems_max_files", 12);
@@ -209,6 +210,84 @@ public sealed class GuestLimits(
             return GuestGuard.Restricted("stems_limit",
                 $"A guest session includes {maxMb} MB of stems per version — create a free account to add more.");
         return null;
+    }
+
+    // Fix round 1 item 4(a) — reject an over-budget guest body from its raw
+    // Content-Length BEFORE ReadFormAsync buffers the whole multipart body
+    // (the route's own size limit is ~5 GB). Content-Length is a proxy for
+    // the files inside a multipart body (always >= their combined bytes, due
+    // to boundaries/headers), so a legitimate request under budget is never
+    // falsely rejected once the 1 MB multipart slack is added. Fails CLOSED
+    // like CheckStemsAsync.
+    private const long MultipartSlackBytes = 1L * 1024 * 1024;
+
+    public async Task<IResult?> CheckStemsContentLengthAsync(
+        long existingBytes, long? contentLength, CancellationToken ct)
+    {
+        Dictionary<string, string> flags;
+        try
+        {
+            flags = await ents.GetFlagsAsync(ct);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            log.LogError(ex, "guest stems content-length flags unavailable — failing CLOSED");
+            return DemoCapacityNeutral();
+        }
+
+        var maxMb = Flag(flags, "guest_stems_max_mb", 300);
+        var maxBytes = (long)maxMb * 1024 * 1024;
+        var remaining = Math.Max(0, maxBytes - existingBytes);
+        if (contentLength is null || contentLength > remaining + MultipartSlackBytes)
+            return GuestGuard.Restricted("stems_limit",
+                $"A guest session includes {maxMb} MB of stems per version — create a free account to add more.");
+        return null;
+    }
+
+    // Fix round 1 item 4(b) — stems/stage is check-then-write on the
+    // per-version stem count/bytes (ReadRaw → append → SaveChanges); N
+    // parallel guest requests each read the SAME "before" state and can all
+    // pass CheckStemsAsync, so the version ends up well over its cap. A
+    // short-lived per-guest Redis lock serialises one guest's OWN stage
+    // calls (keyed by userId — no other guest is ever blocked by this).
+    private static readonly TimeSpan StemsLockTtl = TimeSpan.FromMilliseconds(120_000);
+
+    public readonly record struct StemsLockResult(bool Ok, string? Token, IResult? Error);
+
+    public async Task<StemsLockResult> AcquireStemsLockAsync(Guid userId, CancellationToken ct)
+    {
+        var key = $"guest_stems_lock:{userId}";
+        try
+        {
+            var token = await distLock.TryAcquireAsync(key, StemsLockTtl, ct);
+            if (token is null)
+                return new StemsLockResult(false, null, ErrorEnvelope.Build(429, "guest_busy",
+                    "One upload at a time — try again in a moment."));
+            return new StemsLockResult(true, token, null);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            log.LogError(ex, "guest stems lock unavailable — failing CLOSED");
+            return new StemsLockResult(false, null, DemoCapacityNeutral());
+        }
+    }
+
+    // Best-effort release — called from the handler's `finally`. A failure
+    // here is harmless: the PX 120000 TTL above reclaims the key on its own,
+    // which is also what rescues a request that died mid-upload and never
+    // reached this line at all.
+    public async Task ReleaseStemsLockAsync(Guid userId, string token)
+    {
+        try
+        {
+            await distLock.ReleaseAsync($"guest_stems_lock:{userId}", token, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            log.LogWarning(ex, "guest stems lock release failed — TTL will reclaim it");
+        }
     }
 
     // Task G1 — one reference track per guest (guest_references_max).
@@ -229,7 +308,7 @@ public sealed class GuestLimits(
         catch (Exception ex)
         {
             log.LogError(ex, "guest reference flags unavailable — failing CLOSED");
-            return DemoCapacity();
+            return DemoCapacityNeutral();
         }
 
         var max = Flag(flags, "guest_references_max", 1);
@@ -242,12 +321,14 @@ public sealed class GuestLimits(
         catch (Exception ex)
         {
             log.LogError(ex, "guest reference count unavailable — failing CLOSED");
-            return DemoCapacity();
+            return DemoCapacityNeutral();
         }
 
+        // Fix round 1 minor — plural agreement (the flag can be raised above 1).
+        var noun = max == 1 ? "reference track" : "reference tracks";
         return used >= max
             ? GuestGuard.Restricted("reference_limit",
-                $"A guest session includes {max} reference track — create a free account to add more.")
+                $"A guest session includes {max} {noun} — create a free account to add more.")
             : null;
     }
 
@@ -275,7 +356,7 @@ public sealed class GuestLimits(
         catch (Exception ex)
         {
             log.LogError(ex, "guest stem-classify limiter unavailable — failing CLOSED");
-            return DemoCapacity();
+            return DemoCapacityNeutral();
         }
         return null;
     }
@@ -305,7 +386,39 @@ public sealed class GuestLimits(
         catch (Exception ex)
         {
             log.LogError(ex, "guest reference-analyze limiter unavailable — failing CLOSED");
-            return DemoCapacity();
+            return DemoCapacityNeutral();
+        }
+        return null;
+    }
+
+    // Fix round 1 item 3 — every presigned mint is a byte allowance no DB row
+    // tracks until the object is registered (stage-keys/als-key/complete-key)
+    // and mints a fresh random id every call, so a loop can spin unlimited
+    // presigned PUT URLs of bytes no row tracks and no sweep finds. Checked
+    // BEFORE any URL is minted, for every kind. Same shape as
+    // CheckClassifyAsync — atomic limiter, fails CLOSED.
+    public async Task<IResult?> CheckAttachmentMintAsync(Guid userId, CancellationToken ct)
+    {
+        if (string.Equals(cfg["RateLimits:Enabled"], "false", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var flags = await ents.GetFlagsAsync(ct);
+        var max = Flag(flags, "guest_attachment_mints_max", 30);
+        var key = $"guest_attach_init:{userId}";
+        try
+        {
+            var verdict = await limiter.CheckAsync(
+                key, key, "guest_attach_init", max,
+                TimeSpan.FromHours(Flag(flags, "guest_ttl_hours", 24)), ct);
+            if (!verdict.Allowed)
+                return GuestGuard.Restricted("mint_limit",
+                    $"A guest session includes {max} upload requests — create a free account for more.");
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            log.LogError(ex, "guest attachment-mint limiter unavailable — failing CLOSED");
+            return DemoCapacityNeutral();
         }
         return null;
     }
@@ -337,4 +450,11 @@ public sealed class GuestLimits(
     // visitors — no "busy", "queued", "too many visitors".
     private static IResult DemoCapacity() => ErrorEnvelope.Build(503, "demo_capacity",
         "The demo sandbox can't start new analyses right now — create a free account to analyze your track.");
+
+    // Fix round 1 minor (Opus review) — DemoCapacity()'s "can't start new
+    // analyses" wording is wrong when the failure isn't about dispatching an
+    // analysis at all (a stems/reference/classify/mint flag or lock read).
+    // Neutral, scope-agnostic copy for those fail-closed sites.
+    private static IResult DemoCapacityNeutral() => ErrorEnvelope.Build(503, "demo_capacity",
+        "That isn't available right now — please try again in a moment.");
 }

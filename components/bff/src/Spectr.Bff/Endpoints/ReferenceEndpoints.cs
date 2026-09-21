@@ -72,18 +72,45 @@ public static class ReferenceEndpoints
             ToDto(r, membership.TryGetValue(r.Id, out var sids) ? sids : null)).ToList());
     }
 
+    // Fix round 1 item 4(a) — Content-Length proxy slack for multipart
+    // boundaries/headers, same value as VersionEndpoints.StageStems.
+    private const long MultipartSlackBytes = 1L * 1024 * 1024;
+
     private static async Task<IResult> Upload(
-        [FromForm] IFormFile file,
-        [FromForm(Name = "title")] string? title,
-        [FromForm(Name = "artist")] string? artist,
-        [FromForm(Name = "genre")] string? genre,
+        HttpRequest request,
         ClaimsPrincipal currentUser,
         AppDbContext db,
         IFileStorage storage,
         GuestLimits limits,
         CancellationToken ct)
     {
+        if (!request.HasFormContentType)
+            return Results.BadRequest(new { error = "multipart/form-data required." });
         var userId = currentUser.UserId();
+
+        // Fix round 1 item 4(a) — reject an over-budget guest body from its
+        // Content-Length BEFORE the form is read: the [FromForm] auto-bound
+        // IFormFile this used to be buffers the whole file during parameter
+        // binding, before ANY handler code runs — moving the check inside the
+        // handler body alone can't prevent that read, so this endpoint reads
+        // the request manually instead (same pattern as StageStems).
+        // References are capped by COUNT, not bytes (CheckReferenceAsync
+        // below), so the budget here is simply the existing single-file
+        // ceiling + multipart slack.
+        if (currentUser.IsGuest())
+        {
+            var len = request.ContentLength;
+            if (len is null || len > MaxUploadBytes + MultipartSlackBytes)
+                return GuestGuard.Restricted("reference_limit",
+                    "A guest session includes a limited upload size — create a free account for more.");
+        }
+
+        var form = await request.ReadFormAsync(ct);
+        var file = form.Files.GetFile("file");
+        var title = form.TryGetValue("title", out var titleVals) ? titleVals.ToString() : null;
+        var artist = form.TryGetValue("artist", out var artistVals) ? artistVals.ToString() : null;
+        var genre = form.TryGetValue("genre", out var genreVals) ? genreVals.ToString() : null;
+
         if (file is null || file.Length == 0)
             return Results.BadRequest(new { error = "Empty file." });
         if (file.Length > MaxUploadBytes)

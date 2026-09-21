@@ -307,6 +307,10 @@ builder.Services.AddScoped<GuestLimits>();
 // Redis rate limiter. No DB — Redis + interface only.
 builder.Services.AddSingleton<IRateLimiter, RedisRateLimiter>();
 
+// Fix round 1 item 4(b) — short-lived Redis mutex (SET NX PX / CAS release)
+// serialising a single guest's stem-staging calls. See IDistributedLock.cs.
+builder.Services.AddSingleton<IDistributedLock, RedisDistributedLock>();
+
 // Listen V3 (PRP-1) — no-op generator seam for source=coach/analysis presets
 // (real impl is PRP-8; mirrors the PRP-0 sink convention).
 builder.Services.AddScoped<IPresetGenerator, NoOpPresetGenerator>();

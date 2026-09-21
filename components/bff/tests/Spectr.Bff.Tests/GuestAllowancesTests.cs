@@ -309,10 +309,30 @@ public sealed class GuestAllowancesTests(WebApplicationFactory<Program> factory)
         { "POST", "/api/me/delete" }, { "GET", "/api/me/export" },
     };
 
+    // Fix round 1 minor (Opus review) — these two routes bind [FromForm]/read
+    // the form manually; a JSON body 415s (or 400s) at MODEL BINDING, before
+    // the guard filter (or, for references/, our own HasFormContentType
+    // check) ever runs — so the assertion below passed vacuously whether or
+    // not the guard actually opened the route. A real minimal multipart body
+    // lets the guard (or the handler, once past it) be what answers.
+    private static readonly HashSet<string> FormBodyRoutes =
+        new() { "/api/references/", "/api/versions/{id}/als" };
+
     private static async Task<(int Status, string? Code)> SendAsync(HttpClient c, string method, string path)
     {
         var req = new HttpRequestMessage(new HttpMethod(method), path.Replace("{id}", Guid.NewGuid().ToString()));
-        if (method != "GET" && method != "DELETE") req.Content = JsonContent.Create(new { });
+        if (FormBodyRoutes.Contains(path))
+        {
+            var form = new MultipartFormDataContent();
+            var fileContent = new ByteArrayContent(DemoSeeder.GenerateToneWav());
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
+            form.Add(fileContent, "file", "guard-probe.wav");
+            req.Content = form;
+        }
+        else if (method != "GET" && method != "DELETE")
+        {
+            req.Content = JsonContent.Create(new { });
+        }
         var resp = await c.SendAsync(req);
         string? code = null;
         try { code = (await resp.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetProperty("code").GetString(); } catch { }
