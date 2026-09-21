@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, type QueryClient } from '@tanstack/react-query';
 
 import { fetcher } from '../../api/fetcher';
 import type { GuestStateDto } from '../../api/types';
@@ -40,4 +40,16 @@ export function useGuestState(): {
   const canUpload = state ? state.uploadsUsed < state.uploadsMax : true;
 
   return { isGuest, canUpload, state };
+}
+
+/**
+ * D10 fix1 (item 2/3) — the ONE place that knows the guest-state query key.
+ * Every mutation that changes a number `GET /api/me/guest` reports (upload,
+ * analyze, reference, fix-rack generation, coach message, song/version
+ * delete + restore, …) must call this in its `onSuccess`/`onSettled` — a
+ * no-op for a real user, since the query above is `enabled: isGuest` and
+ * never fetches for them regardless of invalidation.
+ */
+export function invalidateGuestState(qc: QueryClient): void {
+  void qc.invalidateQueries({ queryKey: ['me', 'guest'] });
 }

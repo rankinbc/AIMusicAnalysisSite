@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'rea
 import { toast } from 'sonner';
 
 import { useClassifyStems, useConfirmStems, useStemProposals } from '../api/hooks';
+import { handleGuestRestricted, isGuestRestrictedError } from '../api/mutation-error-toast';
 import { STEM_ROLES, type StemRole } from '../api/types';
 import { useStemStaging } from '../hooks/useStemStaging';
 import f from '../styles/forms.module.css';
@@ -145,6 +146,11 @@ export function StemsUploadDialog({ open, onOpenChange, versionId, songId }: Pro
       await classify.mutateAsync();
     } catch (err) {
       setPhase('pick');
+      // D10 fix1 (item 1) — staging.stage() (useStemStaging) is raw XHR, not
+      // useMutation, and is the endpoint that actually enforces the guest
+      // stems_limit (VersionEndpoints.StageStems) — the app's global
+      // MutationCache never sees it, so this catch handles it directly.
+      if (handleGuestRestricted(err)) return;
       toast.error(err instanceof Error ? err.message : 'Upload failed');
     }
   };
@@ -165,6 +171,11 @@ export function StemsUploadDialog({ open, onOpenChange, versionId, songId }: Pro
         params: { songId, jobId: res.reanalysisJobId },
       });
     } catch (err) {
+      // D10 fix1 (item 1) — confirm.mutateAsync (useConfirmStems) is a
+      // useMutation; the app's global MutationCache already handled a
+      // guest_restricted 403 (e.g. analysis_limit from the dispatch it
+      // triggers). Skip ONLY the toast here.
+      if (isGuestRestrictedError(err)) return;
       toast.error(err instanceof Error ? err.message : 'Confirm failed');
     }
   };

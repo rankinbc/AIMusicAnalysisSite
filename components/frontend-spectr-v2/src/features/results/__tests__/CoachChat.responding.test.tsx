@@ -6,6 +6,7 @@
 //   3. finished — `done` frame            → neither
 // Drives the REAL send() → POST → SSE reader path with a controllable stream,
 // so the phases are asserted off genuine state transitions, not props.
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -63,10 +64,15 @@ async function renderAndAsk() {
   });
   vi.stubGlobal('fetch', fetchMock);
 
+  // D10 fix1 — useCoachSession now calls useQueryClient() (guest-state
+  // invalidation on send), so CoachChat needs a QueryClientProvider ancestor.
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <div className="rdx">
-      <CoachChat trackName="Night Drive" analysisId="analysis-1" verdicts={[]} measurementsCount={12} />
-    </div>,
+    <QueryClientProvider client={qc}>
+      <div className="rdx">
+        <CoachChat trackName="Night Drive" analysisId="analysis-1" verdicts={[]} measurementsCount={12} />
+      </div>
+    </QueryClientProvider>,
   );
   const input = await screen.findByLabelText('Coach question input');
   await waitFor(() =>

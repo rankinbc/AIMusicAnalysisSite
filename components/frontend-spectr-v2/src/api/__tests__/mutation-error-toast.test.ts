@@ -5,13 +5,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+vi.mock('../../lib/analytics', () => ({ capture: vi.fn() }));
 
 import { toast } from 'sonner';
 
 import { ApiError } from '../fetcher';
-import { mutationErrorToast } from '../mutation-error-toast';
+import { capture } from '../../lib/analytics';
+import { mutationErrorToast, handleGuestRestricted, isGuestRestrictedError } from '../mutation-error-toast';
+import { onGuestUpgrade } from '../../features/demo/guest-upgrade-bus';
 
 const errorSpy = vi.mocked(toast.error);
+const captureSpy = vi.mocked(capture);
 
 describe('mutationErrorToast (opt-in global handler)', () => {
   beforeEach(() => errorSpy.mockClear());
@@ -50,5 +54,85 @@ describe('mutationErrorToast (opt-in global handler)', () => {
       meta: { errorToast: 'Could not follow.' },
     });
     expect(errorSpy).toHaveBeenCalledWith('Could not follow.');
+  });
+});
+
+// D10 fix1 (item 1) — the ONE shared envelope-parsing helper every
+// hand-written catch around a raw fetcher()/XHR call routes through, so
+// `UnifiedUploadDialog` and friends never re-implement this check.
+describe('isGuestRestrictedError', () => {
+  it('is true only for an ApiError carrying the guest_restricted code', () => {
+    expect(
+      isGuestRestrictedError(
+        new ApiError(403, { error: { code: 'guest_restricted', message: 'm' } }),
+      ),
+    ).toBe(true);
+  });
+
+  it('is false for guest_busy, any other code, and non-ApiError failures', () => {
+    expect(
+      isGuestRestrictedError(new ApiError(429, { error: { code: 'guest_busy', message: 'm' } })),
+    ).toBe(false);
+    expect(
+      isGuestRestrictedError(new ApiError(403, { error: { code: 'forbidden', message: 'm' } })),
+    ).toBe(false);
+    expect(isGuestRestrictedError(new Error('boom'))).toBe(false);
+    expect(isGuestRestrictedError(undefined)).toBe(false);
+  });
+});
+
+describe('handleGuestRestricted', () => {
+  beforeEach(() => {
+    captureSpy.mockClear();
+  });
+
+  it('opens the bus with the reason + server message, fires the analytics event once, returns true', () => {
+    const seen: Array<[string, string | undefined]> = [];
+    const off = onGuestUpgrade((r, m) => seen.push([r, m]));
+    const handled = handleGuestRestricted(
+      new ApiError(403, {
+        error: { code: 'guest_restricted', message: 'M', details: { reason: 'analysis_limit' } },
+      }),
+    );
+    off();
+    expect(handled).toBe(true);
+    expect(seen).toEqual([['analysis_limit', 'M']]);
+    expect(captureSpy).toHaveBeenCalledTimes(1);
+    expect(captureSpy).toHaveBeenCalledWith('demo_guest_restricted', { reason: 'analysis_limit' });
+  });
+
+  it('an unrecognized reason falls back to not_allowed', () => {
+    const seen: string[] = [];
+    const off = onGuestUpgrade((r) => seen.push(r));
+    handleGuestRestricted(
+      new ApiError(403, {
+        error: { code: 'guest_restricted', message: 'nope', details: { reason: 'something_new' } },
+      }),
+    );
+    off();
+    expect(seen).toEqual(['not_allowed']);
+  });
+
+  it('does nothing and returns false for guest_busy (429) — stays a plain toast elsewhere', () => {
+    const seen: string[] = [];
+    const off = onGuestUpgrade((r) => seen.push(r));
+    const handled = handleGuestRestricted(
+      new ApiError(429, { error: { code: 'guest_busy', message: 'Still working on your last upload.' } }),
+    );
+    off();
+    expect(handled).toBe(false);
+    expect(seen).toEqual([]);
+    expect(captureSpy).not.toHaveBeenCalled();
+  });
+
+  it('does nothing and returns false for a non-guest_restricted error', () => {
+    const seen: string[] = [];
+    const off = onGuestUpgrade((r) => seen.push(r));
+    const handled = handleGuestRestricted(
+      new ApiError(403, { error: { code: 'forbidden', message: 'no' } }),
+    );
+    off();
+    expect(handled).toBe(false);
+    expect(seen).toEqual([]);
   });
 });

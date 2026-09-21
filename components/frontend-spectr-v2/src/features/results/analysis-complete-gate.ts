@@ -10,6 +10,12 @@
 // that happens to start the same way is a coincidence we must NOT suppress
 // for (hence `isGuest` gates this too, not the name alone).
 const DEMO_SONG_PREFIX = 'Demo: ';
+// D10 fix1 (item 4) — the un-renamable signal: `PATCH /songs/{id}` lets a
+// guest rename their OWN song to start with "Demo: " too, which would
+// wrongly suppress the modal on the name check alone. The version's storage
+// key is server-assigned and never user-editable — mirrors the BFF's own
+// check (GuestLimits.cs / DemoSeeder.DemoAudioKey: "audio/demo/source.wav").
+const DEMO_STORAGE_PREFIX = 'audio/demo/';
 
 export function shouldShowAnalysisCompleteModal(params: {
   /** Whatever the caller's own "not yet seen this session" check produced
@@ -17,8 +23,16 @@ export function shouldShowAnalysisCompleteModal(params: {
   wantsToShow: boolean;
   isGuest: boolean;
   songName: string;
+  /** VersionDto.filePath, when the caller already has it loaded — the
+   *  authoritative (un-renamable) signal. Falls back to the (renamable)
+   *  name-prefix check when omitted/unknown. */
+  versionFilePath?: string | null;
 }): boolean {
   if (!params.wantsToShow) return false;
-  if (params.isGuest && params.songName.startsWith(DEMO_SONG_PREFIX)) return false;
-  return true;
+  if (!params.isGuest) return true;
+  const isDemoTrack =
+    params.versionFilePath != null
+      ? params.versionFilePath.startsWith(DEMO_STORAGE_PREFIX)
+      : params.songName.startsWith(DEMO_SONG_PREFIX);
+  return !isDemoTrack;
 }

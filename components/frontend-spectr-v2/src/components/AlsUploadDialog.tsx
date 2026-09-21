@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 
 import { useUploadAls } from '../api/hooks';
+import { isGuestRestrictedError } from '../api/mutation-error-toast';
 import f from '../styles/forms.module.css';
 import s from './UploadVersionDialog.module.css';
 
@@ -36,6 +37,12 @@ export function AlsUploadDialog({ open, onOpenChange, versionId, songId }: Props
         });
       }
     } catch (err) {
+      // D10 fix1 (item 1) — useUploadAls is a useMutation; the app's global
+      // MutationCache already opened the upgrade dialog + fired analytics
+      // for a guest_restricted 403 (mutation-error-toast.ts). Skip ONLY the
+      // toast here — calling handleGuestRestricted again would double-fire
+      // both.
+      if (isGuestRestrictedError(err)) return;
       toast.error(err instanceof Error ? err.message : 'Upload failed');
     }
   };

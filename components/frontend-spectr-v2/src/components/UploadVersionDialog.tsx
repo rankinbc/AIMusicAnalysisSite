@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 
+import { handleGuestRestricted } from '../api/mutation-error-toast';
 import f from '../styles/forms.module.css';
 import s from './UploadVersionDialog.module.css';
 import { useFileUpload } from '../hooks/useFileUpload';
@@ -37,6 +38,10 @@ export function UploadVersionDialog({ open, onOpenChange, songId }: Props) {
         });
       }
     } catch (err) {
+      // D10 fix1 (item 1) — useFileUpload is a raw XHR hook, not useMutation
+      // (see hooks/useFileUpload.ts), so the app's global MutationCache
+      // never sees this error.
+      if (handleGuestRestricted(err)) return;
       toast.error(err instanceof Error ? err.message : 'Upload failed');
     }
   };

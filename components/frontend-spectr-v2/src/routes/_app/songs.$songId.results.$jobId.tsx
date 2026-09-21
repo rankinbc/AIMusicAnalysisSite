@@ -131,6 +131,7 @@ function ResultsPage() {
           songId={songId}
           tab={activeTab}
           onTabChange={setTab}
+          versionFilePath={version.data?.filePath ?? null}
         />
       );
     }

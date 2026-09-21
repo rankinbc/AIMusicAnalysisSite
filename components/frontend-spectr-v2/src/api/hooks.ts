@@ -5,6 +5,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { fetcher } from './fetcher';
 import { terminalPoll } from './poll-helpers';
+// D10 fix1 (item 2/3) — every mutation below that changes a number
+// `GET /api/me/guest` reports invalidates it through this ONE shared
+// helper; a no-op for a real user (the query is `enabled: isGuest`).
+import { invalidateGuestState } from '../features/demo/useGuestState';
 import type {
   ActivityItemDto,
   AuthResponse,
@@ -205,7 +209,10 @@ export function useArchiveSong() {
   return useMutation({
     mutationFn: (songId: string) =>
       fetcher<void>({ url: `/songs/${songId}`, method: 'DELETE' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['songs'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['songs'] });
+      invalidateGuestState(qc); // D10 fix1 — a guest's song count changed
+    },
   });
 }
 
@@ -216,7 +223,10 @@ export function useRestoreSong() {
   return useMutation({
     mutationFn: (songId: string) =>
       fetcher<void>({ url: `/songs/${songId}/restore`, method: 'POST' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['songs'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['songs'] });
+      invalidateGuestState(qc); // D10 fix1 — a guest's song count changed
+    },
   });
 }
 
@@ -227,7 +237,10 @@ export function useDeleteSong() {
   return useMutation({
     mutationFn: (songId: string) =>
       fetcher<void>({ url: `/songs/${songId}/permanent`, method: 'DELETE' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['songs'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['songs'] });
+      invalidateGuestState(qc); // D10 fix1 — a guest's song count changed
+    },
   });
 }
 
@@ -278,6 +291,7 @@ export function useReanalyzeVersion(versionId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['versions', versionId] });
       qc.invalidateQueries({ queryKey: ['songs'] });
+      invalidateGuestState(qc); // D10 fix1 — a guest's analysis count changed
     },
   });
 }
@@ -652,9 +666,11 @@ export function useRunSpecialist(jobId: string) {
 /** Dispatch deterministic fix-rack generation (POST → 202 queued). Poll the
  *  result with `useFixRack`. */
 export function useGenerateFixRack(jobId: string) {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: () =>
       fetcher<{ status: string }>({ url: `/reports/${jobId}/fix-rack`, method: 'POST' }),
+    onSuccess: () => invalidateGuestState(qc), // D10 fix1 — a guest's fix-rack generation count changed
   });
 }
 
@@ -749,7 +765,10 @@ export function useUploadReference() {
         body: fd,
       });
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['references'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['references'] });
+      invalidateGuestState(qc); // D10 fix1 (item 2) — a guest's reference count changed
+    },
   });
 }
 
@@ -774,7 +793,10 @@ export function useDeleteReference() {
   return useMutation({
     mutationFn: (referenceId: string) =>
       fetcher<void>({ url: `/references/${referenceId}`, method: 'DELETE' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['references'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['references'] });
+      invalidateGuestState(qc); // D10 fix1 — a guest's reference count changed
+    },
   });
 }
 
@@ -897,7 +919,10 @@ export function useDeleteVersion() {
   return useMutation({
     mutationFn: (versionId: string) =>
       fetcher<void>({ url: `/versions/${versionId}`, method: 'DELETE' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['songs'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['songs'] });
+      invalidateGuestState(qc); // D10 fix1 — a guest's version count changed
+    },
   });
 }
 

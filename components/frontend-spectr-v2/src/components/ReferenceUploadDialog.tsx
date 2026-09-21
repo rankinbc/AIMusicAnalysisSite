@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 
 import { useAnalyzeReference, useUploadReference } from '../api/hooks';
+import { isGuestRestrictedError } from '../api/mutation-error-toast';
 import f from '../styles/forms.module.css';
 import s from './UploadVersionDialog.module.css';
 
@@ -54,6 +55,10 @@ export function ReferenceUploadDialog({ open, onOpenChange, defaultGenre, onUplo
       onOpenChange(false);
       reset();
     } catch (err) {
+      // D10 fix1 (item 1) — useUploadReference is a useMutation; the app's
+      // global MutationCache already handled a guest_restricted 403 (see
+      // AlsUploadDialog's matching comment). Skip ONLY the toast here.
+      if (isGuestRestrictedError(err)) return;
       toast.error(err instanceof Error ? err.message : 'Upload failed');
     }
   };

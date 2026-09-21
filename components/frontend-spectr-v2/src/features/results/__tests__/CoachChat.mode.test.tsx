@@ -4,6 +4,7 @@
 // 'concise', Normal (default) → 'qa'. Reuses the fetch-stubbing harness from
 // CoachChat.responding.test.tsx (stubs `/conversation`, POST `.../messages`
 // and the `/stream` body) and drives the real send() path via user events.
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -52,10 +53,15 @@ async function renderCoach() {
   });
   vi.stubGlobal('fetch', fetchMock);
 
+  // D10 fix1 — useCoachSession now calls useQueryClient() (guest-state
+  // invalidation on send), so CoachChat needs a QueryClientProvider ancestor.
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <div className="rdx">
-      <CoachChat trackName="Night Drive" analysisId="analysis-1" verdicts={[]} measurementsCount={12} />
-    </div>,
+    <QueryClientProvider client={qc}>
+      <div className="rdx">
+        <CoachChat trackName="Night Drive" analysisId="analysis-1" verdicts={[]} measurementsCount={12} />
+      </div>
+    </QueryClientProvider>,
   );
   const input = await screen.findByLabelText('Coach question input');
   await waitFor(() =>

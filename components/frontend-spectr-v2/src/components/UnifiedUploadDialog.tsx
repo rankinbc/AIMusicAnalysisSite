@@ -15,9 +15,10 @@ import {
   useStemProposals,
 } from '../api/hooks';
 import { extractApiError } from '../api/error-utils';
+import { handleGuestRestricted } from '../api/mutation-error-toast';
 import { STEM_ROLES } from '../api/types';
 import { GuestUpgradeDialog } from '../features/demo/GuestUpgradeDialog';
-import { useGuestState } from '../features/demo/useGuestState';
+import { invalidateGuestState, useGuestState } from '../features/demo/useGuestState';
 import type {
   AlsUploadResponse,
   ConfirmStemsResponse,
@@ -535,7 +536,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
           method: 'POST',
         });
         qc.invalidateQueries({ queryKey: ['songs'] });
-        qc.invalidateQueries({ queryKey: ['me', 'guest'] }); // D10 — refresh guest quota
+        invalidateGuestState(qc); // D10 — refresh guest quota
         finishNavigate(mixRes.songId, r.jobId);
         return;
       }
@@ -604,7 +605,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
         },
       });
       qc.invalidateQueries({ queryKey: ['songs'] });
-      qc.invalidateQueries({ queryKey: ['me', 'guest'] }); // D10 — refresh guest quota
+      invalidateGuestState(qc); // D10 — refresh guest quota
       finishNavigate(mixRes.songId, res.reanalysisJobId);
     } catch (err) {
       // Server-side entitlement gate (catches races where the client check passed but the
@@ -640,6 +641,20 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
         );
         return;
       }
+      // D10 fix1 (item 1) — this whole flow calls fetcher() directly (never
+      // useMutation, see the file-header comment), so the app's global
+      // MutationCache never sees these errors. A guest who still had an
+      // upload slot but hit ANOTHER budget mid-dispatch (analysis_limit,
+      // stems_limit, reference_limit, …) gets the ONE upgrade dialog instead
+      // of a generic toast — same shared helper the MutationCache uses. A
+      // 429 guest_busy is NOT guest_restricted — it falls through to the
+      // generic toast below, unchanged.
+      if (handleGuestRestricted(err)) {
+        setPhase('form');
+        setStatus('');
+        setBusy(false);
+        return;
+      }
       // The version may already exist un-analyzed — let the user retry from the song page.
       setPhase('form');
       setStatus('');
@@ -667,10 +682,13 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
         },
       });
       qc.invalidateQueries({ queryKey: ['songs'] });
-      qc.invalidateQueries({ queryKey: ['me', 'guest'] }); // D10 — refresh guest quota
+      invalidateGuestState(qc); // D10 — refresh guest quota
       finishNavigate(songIdState, res.reanalysisJobId);
     } catch (err) {
       setBusy(false);
+      // D10 fix1 (item 1) — raw fetcher() call, not useMutation; see the
+      // matching comment on handleSubmit's catch.
+      if (handleGuestRestricted(err)) return;
       toast.error(err instanceof Error ? err.message : 'Confirm failed');
     }
   };
@@ -704,6 +722,8 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
     try {
       await fetcher<unknown>({ url: `/versions/${versionId}/stems/classify`, method: 'POST' });
     } catch (err) {
+      // D10 fix1 (item 1) — raw fetcher() call, not useMutation.
+      if (handleGuestRestricted(err)) return;
       toast.error(err instanceof Error ? err.message : 'Could not restart classification');
       return;
     }

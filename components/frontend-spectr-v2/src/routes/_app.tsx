@@ -17,9 +17,7 @@ import { CommandPalette } from '../components/CommandPalette';
 import { ShortcutSheet } from '../components/ShortcutSheet';
 import { UnifiedUploadDialog } from '../components/UnifiedUploadDialog';
 import { AppDunningNotice } from '../features/billing/AppDunningNotice';
-import { GuestBanner } from '../features/demo/GuestBanner';
-import { GuestUpgradeDialog } from '../features/demo/GuestUpgradeDialog';
-import { onGuestUpgrade, type GuestUpgradeReason } from '../features/demo/guest-upgrade-bus';
+import { GuestShell } from '../features/demo/GuestShell';
 import { useGuestState } from '../features/demo/useGuestState';
 import { AppWorkerHealthNotice } from '../features/health/AppWorkerHealthNotice';
 import { DevHealthDot } from '../features/health/DevHealthDot';
@@ -54,20 +52,14 @@ function AppLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // D10 — guest shell: quota state for the banner/"+ Upload" swap, and the
-  // ONE upgrade dialog, opened by ANY guest_restricted 403 anywhere in the
-  // app (via the MutationCache in api/mutation-error-toast.ts) or by a
-  // proactive pre-request gate (e.g. UnifiedUploadDialog itself).
+  // D10 — guest shell: quota state for the banner/"+ Upload" swap / ⌘U gate.
+  // The banner + the ONE upgrade dialog + its bus subscription (opened by
+  // ANY guest_restricted 403 anywhere in the app, via the MutationCache in
+  // api/mutation-error-toast.ts, or by a proactive pre-request gate like
+  // UnifiedUploadDialog itself) live in GuestShell (D10 fix1 item 5) — this
+  // second useGuestState() call shares the same ['me','guest'] query, no
+  // extra fetch.
   const guest = useGuestState();
-  // `message` stays a required-but-nullable field (not `message?:`) — the
-  // bus callback always passes a value, possibly `undefined`, and
-  // exactOptionalPropertyTypes rejects assigning `undefined` into an
-  // optional field.
-  const [upgrade, setUpgrade] = useState<{
-    reason: GuestUpgradeReason;
-    message: string | undefined;
-  } | null>(null);
-  useEffect(() => onGuestUpgrade((reason, message) => setUpgrade({ reason, message })), []);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -299,8 +291,9 @@ function AppLayout() {
       {pathname !== '/billing' && (
         <AppDunningNotice className={s.dunningSlot} />
       )}
-      {/* D10 — guest-shell banner; renders nothing for a real user. */}
-      <GuestBanner />
+      {/* D10 — guest-shell banner + ONE upgrade dialog; renders nothing for
+          a real user (GuestShell). */}
+      <GuestShell />
       {/* Global analysis-worker outage notice — renders nothing while healthy. */}
       <AppWorkerHealthNotice className={s.workerHealthSlot} />
       {/* Story 12.1 — unverified-email notice (free tier only); renders
@@ -315,15 +308,6 @@ function AppLayout() {
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <ShortcutSheet open={sheetOpen} onOpenChange={setSheetOpen} />
       <UnifiedUploadDialog open={uploadOpen} onOpenChange={setUploadOpen} />
-      {/* D10 — the ONE guest upgrade dialog, driven by onGuestUpgrade. */}
-      <GuestUpgradeDialog
-        open={upgrade !== null}
-        reason={upgrade?.reason ?? 'not_allowed'}
-        {...(upgrade?.message !== undefined ? { message: upgrade.message } : {})}
-        onOpenChange={(next) => {
-          if (!next) setUpgrade(null);
-        }}
-      />
     </div>
   );
 }

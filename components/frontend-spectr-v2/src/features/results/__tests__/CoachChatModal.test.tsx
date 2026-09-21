@@ -11,6 +11,7 @@
 // hydrated inline must still be visible inside the dialog, and the
 // conversation GET must fire exactly once across the whole interaction.
 import type { ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -62,16 +63,21 @@ async function renderCoachChat(headerActions?: ReactNode) {
   // the whole results page (including CoachChat) in `<div className="rdx">`.
   // Every coach style is a GLOBAL `.rdx .coach-*` rule, so a render that
   // omits this wrapper can't prove — or disprove — the scoping fix below.
+  // D10 fix1 — useCoachSession now calls useQueryClient() (guest-state
+  // invalidation on send), so CoachChat needs a QueryClientProvider ancestor.
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <div className="rdx">
-      <CoachChat
-        trackName="Night Drive"
-        analysisId="analysis-1"
-        verdicts={[]}
-        measurementsCount={12}
-        {...(headerActions ? { headerActions } : {})}
-      />
-    </div>,
+    <QueryClientProvider client={qc}>
+      <div className="rdx">
+        <CoachChat
+          trackName="Night Drive"
+          analysisId="analysis-1"
+          verdicts={[]}
+          measurementsCount={12}
+          {...(headerActions ? { headerActions } : {})}
+        />
+      </div>
+    </QueryClientProvider>,
   );
   // Wait for the conversation hydration to land before interacting.
   await screen.findByText(SEEDED_MESSAGE);

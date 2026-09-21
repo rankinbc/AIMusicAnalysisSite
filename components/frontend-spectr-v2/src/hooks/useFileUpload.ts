@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from 'react';
 
 import { parseErrorText } from '../api/error-utils';
-import { getFreshAccessToken, resolveRetryToken } from '../api/fetcher';
+import { ApiError, getFreshAccessToken, resolveRetryToken } from '../api/fetcher';
 import type { UploadResponse } from '../api/types';
 
 interface UploadFields {
@@ -85,7 +85,17 @@ export function useFileUpload() {
               const msg =
                 parseErrorText(xhr.responseText).message ?? `Upload failed (${xhr.status})`;
               setState((s) => ({ ...s, isUploading: false, error: msg }));
-              reject(new Error(msg));
+              // D10 fix1 — reject with the same ApiError shape fetcher() throws
+              // (status + parsed body) so guest_restricted/guest_busy detection
+              // (mutation-error-toast.ts's handleGuestRestricted) works
+              // identically across the fetch and XHR upload paths.
+              let body: unknown;
+              try {
+                body = JSON.parse(xhr.responseText);
+              } catch {
+                body = undefined;
+              }
+              reject(new ApiError(xhr.status, body, msg));
             }
           });
           xhr.addEventListener('error', () => {

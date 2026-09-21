@@ -37,6 +37,40 @@ function guestUpgradeReason(raw: unknown): GuestUpgradeReason {
 }
 
 /**
+ * D10 fix1 (item 1) — the ONE place that recognizes a guest_restricted 403.
+ * Used by `createMutationCache` (below, for every `useMutation` in the app)
+ * AND by every hand-written catch around a raw `fetcher()`/XHR call a guest
+ * can reach (`UnifiedUploadDialog`'s own orchestration, the standalone
+ * upload dialogs, the XHR upload hooks) — no second copy of the envelope
+ * parsing.
+ */
+export function isGuestRestrictedError(error: unknown): error is ApiError {
+  return error instanceof ApiError && extractApiError(error.body).code === 'guest_restricted';
+}
+
+/**
+ * Full guest_restricted handling: opens the ONE upgrade dialog with the
+ * server's reason + message and fires the analytics event exactly once.
+ * Returns whether the error was a guest_restricted 403.
+ *
+ * Call this ONLY where nothing else already runs it for the same error —
+ * `createMutationCache` (every `useMutation`) or a catch around a call that
+ * bypasses `useMutation` entirely (raw `fetcher()`/XHR). A catch wrapping an
+ * ALREADY-`useMutation`-backed call (its error already ran through
+ * `createMutationCache`) should use `isGuestRestrictedError` instead, to
+ * skip its own toast without re-firing the dialog/analytics a second time.
+ */
+export function handleGuestRestricted(error: unknown): boolean {
+  if (!isGuestRestrictedError(error)) return false;
+  const details = (error.body as { error?: { details?: { reason?: unknown } } } | undefined)
+    ?.error?.details;
+  const reason = guestUpgradeReason(details?.reason);
+  capture('demo_guest_restricted', { reason });
+  openGuestUpgrade(reason, extractApiMessage(error.body));
+  return true;
+}
+
+/**
  * Toast a failed mutation's error iff the mutation opted in via
  * `meta.errorToast`. Message priority: the server's own wording (any of the
  * three parsed body shapes — never a raw "HTTP 500") → the meta fallback
@@ -65,14 +99,7 @@ export function createMutationCache(): MutationCache {
       // meta.errorToast or not — this runs unconditionally, before the
       // opt-in check inside mutationErrorToast) and never falls through to
       // it, so the two surfaces can never fire for the same error.
-      if (error instanceof ApiError && extractApiError(error.body).code === 'guest_restricted') {
-        const details = (error.body as { error?: { details?: { reason?: unknown } } } | undefined)
-          ?.error?.details;
-        const reason = guestUpgradeReason(details?.reason);
-        capture('demo_guest_restricted', { reason });
-        openGuestUpgrade(reason, extractApiMessage(error.body));
-        return;
-      }
+      if (handleGuestRestricted(error)) return;
       mutationErrorToast(error, mutation);
     },
   });

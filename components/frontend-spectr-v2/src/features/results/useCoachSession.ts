@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { getAccessToken } from '../../api/fetcher';
 import { capture } from '../../lib/analytics';
+import { invalidateGuestState } from '../demo/useGuestState';
 import type {
   CoachCapsDto,
   CoachConversationDto,
@@ -84,6 +86,7 @@ export function useCoachSession({
   // Story 1.9 — per-analysis cap state. `null` pre-hydration; the server is
   // the single source of truth (no frontend arithmetic — see Task 6.2).
   const [caps, setCaps] = useState<CoachCapsDto | null>(null);
+  const qc = useQueryClient();
   const abortRef = useRef<AbortController | null>(null);
   // Code-review P3 — synchronous double-send guard. `streaming` state is
   // batched; rapid Enter+click could slip through the React-state check.
@@ -226,7 +229,10 @@ export function useCoachSession({
         signal: ac.signal,
       });
 
-      if (postRes.ok) capture('coach_message_sent'); // KPI: follow-up rate
+      if (postRes.ok) {
+        capture('coach_message_sent'); // KPI: follow-up rate
+        invalidateGuestState(qc); // D10 fix1 (item 3) — a guest's coach-message count changed
+      }
       if (!postRes.ok) {
         const errBody = await postRes.json().catch(() => null as unknown);
         const code = extractErrorCode(errBody);
@@ -380,6 +386,7 @@ export function useCoachSession({
     flushAriaLive,
     input,
     offlineState,
+    qc,
     resetAriaLive,
     scheduleAriaLive,
     streaming,

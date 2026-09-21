@@ -4,7 +4,7 @@
 import { useCallback, useRef, useState } from 'react';
 
 import { parseErrorText } from '../api/error-utils';
-import { getFreshAccessToken, resolveRetryToken } from '../api/fetcher';
+import { ApiError, getFreshAccessToken, resolveRetryToken } from '../api/fetcher';
 import type { StageStemsResponse } from '../api/types';
 
 interface State {
@@ -62,7 +62,16 @@ export function useStemStaging(versionId: string) {
               const msg =
                 parseErrorText(xhr.responseText).message ?? `Upload failed (${xhr.status})`;
               setState((s) => ({ ...s, isUploading: false, error: msg }));
-              reject(new Error(msg));
+              // D10 fix1 — see useFileUpload.ts's matching comment: reject with
+              // the same ApiError shape fetcher() throws so guest_restricted/
+              // guest_busy detection works identically here too.
+              let body: unknown;
+              try {
+                body = JSON.parse(xhr.responseText);
+              } catch {
+                body = undefined;
+              }
+              reject(new ApiError(xhr.status, body, msg));
             }
           });
           xhr.addEventListener('error', () => {

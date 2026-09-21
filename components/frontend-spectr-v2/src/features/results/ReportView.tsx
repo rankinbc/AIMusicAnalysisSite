@@ -70,9 +70,20 @@ interface ReportViewProps {
   /** Active tab — owned by the route's URL search params (deep-linkable). */
   tab: ResultsTabKey;
   onTabChange: (tab: ResultsTabKey) => void;
+  /** D10 fix1 (item 4) — VersionDto.filePath, when the route has already
+   *  loaded it (it fetches `useVersion` for the in-progress checklist
+   *  anyway). Feeds the analysis-complete-modal gate's un-renamable demo
+   *  signal; omitted/null falls back to the song-name-prefix check. */
+  versionFilePath?: string | null;
 }
 
-export function ReportView({ results, songId, tab: rawTab, onTabChange }: ReportViewProps) {
+export function ReportView({
+  results,
+  songId,
+  tab: rawTab,
+  onTabChange,
+  versionFilePath = null,
+}: ReportViewProps) {
   const { user } = useAuth(); // D10 — isGuest for the analysis-complete-modal gate
   // Story 12.5 review: 'debug' stays a valid deep-link KEY (dev builds), but a
   // prod user hitting ?tab=debug must not land on a blank pane with no tab
@@ -339,6 +350,7 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
       wantsToShow,
       isGuest: user?.isGuest === true,
       songName: trackName,
+      versionFilePath,
     });
   });
   const dismissModal = useCallback(() => {

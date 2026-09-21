@@ -69,4 +69,65 @@ describe('shouldShowAnalysisCompleteModal', () => {
       shouldShowAnalysisCompleteModal({ wantsToShow: true, isGuest: true, songName: 'My Demo: Track' }),
     ).toBe(true);
   });
+
+  // D10 fix1 (item 4) — the un-renamable signal: PATCH /songs/{id} lets a
+  // guest rename their OWN song to start with "Demo: " too, which would
+  // wrongly suppress the modal on the name check alone. The version's
+  // storage key (VersionDto.filePath) is server-assigned and never
+  // user-editable — mirrors the BFF's own "audio/demo/" check
+  // (GuestLimits.cs / DemoSeeder.DemoAudioKey).
+  describe('versionFilePath (the un-renamable signal)', () => {
+    it('suppresses for a guest on the seeded demo storage key, even if the song was renamed off the "Demo: " prefix', () => {
+      expect(
+        shouldShowAnalysisCompleteModal({
+          wantsToShow: true,
+          isGuest: true,
+          songName: 'My totally normal track',
+          versionFilePath: 'audio/demo/source.wav',
+        }),
+      ).toBe(false);
+    });
+
+    it('shows for a guest whose OWN song happens to be named "Demo: …" but whose storage key is their own', () => {
+      expect(
+        shouldShowAnalysisCompleteModal({
+          wantsToShow: true,
+          isGuest: true,
+          songName: 'Demo: My Own Upload',
+          versionFilePath: 'audio/users/abc123/mix.wav',
+        }),
+      ).toBe(true);
+    });
+
+    it('falls back to the name-prefix check when the path is unknown (omitted/null)', () => {
+      expect(
+        shouldShowAnalysisCompleteModal({
+          wantsToShow: true,
+          isGuest: true,
+          songName: 'Demo: Sample Report',
+          // versionFilePath omitted entirely — exactOptionalPropertyTypes
+          // forbids an explicit `undefined` on this optional field.
+        }),
+      ).toBe(false);
+      expect(
+        shouldShowAnalysisCompleteModal({
+          wantsToShow: true,
+          isGuest: true,
+          songName: 'Demo: Sample Report',
+          versionFilePath: null,
+        }),
+      ).toBe(false);
+    });
+
+    it('never suppresses for a real user even if the path looks like the demo key', () => {
+      expect(
+        shouldShowAnalysisCompleteModal({
+          wantsToShow: true,
+          isGuest: false,
+          songName: 'Demo: Sample Report',
+          versionFilePath: 'audio/demo/source.wav',
+        }),
+      ).toBe(true);
+    });
+  });
 });
