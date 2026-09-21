@@ -40,3 +40,21 @@
 .navLink:hover {
   color: var(--text);
 }
+
+/* MANDATORY 390px requirement (public-surfaces-polish P1/P2 live pass): the
+   header must stay on ONE row. "How it's built" and Pricing (when credits
+   are on) are secondary — hide them below 480px so the logo, Sign in and
+   the primary CTA button always stay visible and unclipped. */
+@media (max-width: 480px) {
+  .navOptional {
+    display: none;
+  }
+
+  .chrome {
+    padding: 12px 16px;
+  }
+
+  .nav {
+    gap: 12px;
+  }
+}

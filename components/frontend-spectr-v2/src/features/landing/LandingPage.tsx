@@ -6,9 +6,8 @@
 import { useEffect } from 'react';
 
 import { PublicChrome } from '../../components/PublicChrome';
-import { PricingLink } from '../../components/PricingLink';
+import { PublicFooter } from '../../components/PublicFooter';
 import { capture } from '../../lib/analytics';
-import { useCreditsEnabled } from '../../lib/public-plans';
 import { usePageMeta } from '../../lib/usePageMeta';
 import { LandingResumeSlot } from '../anon-analyze/LandingResumeSlot';
 import { SampleReportEmbed } from './SampleReportEmbed';
@@ -28,10 +27,6 @@ export function LandingPage() {
   );
   // Story 6.5 — top of funnel (once per mount; no-op without a PostHog key).
   useEffect(() => { capture('landing_viewed'); }, []);
-  // Task P2 (D6/D8) — the secondary CTA below links Pricing, so it hides on
-  // the same signal PricingLink does. P3 replaces this CTA with "Explore
-  // the demo".
-  const creditsEnabled = useCreditsEnabled();
 
   return (
     <div className={s.page}>
@@ -56,9 +51,15 @@ export function LandingPage() {
             <a href="/analyze" className="btn primary" data-testid="landing-cta">
               Analyze my track free
             </a>
-            {creditsEnabled === true && (
-              <a href="/pricing" className="btn ghost">See pricing</a>
-            )}
+            {/* Task P3 — the guest demo needs no upload and no account. */}
+            <a
+              href="/demo"
+              className="btn ghost"
+              data-testid="landing-demo-cta"
+              onClick={() => capture('demo_cta_clicked', { source: 'landing' })}
+            >
+              Explore the demo
+            </a>
           </div>
           <p className={`mono ${s.ctaHint}`}>WAV · FLAC · MP3 · no account needed for the first one</p>
         </section>
@@ -74,15 +75,7 @@ export function LandingPage() {
           ))}
         </section>
 
-        <footer className={s.footer}>
-          <PricingLink className={s.footerLink} />
-          <a href="/login" className={s.footerLink}>Sign in</a>
-          {/* Story 6.2 — trust pages. */}
-          <a href="/trust/no-training" className={s.footerLink}>No AI training</a>
-          <a href="/trust/results-forever" className={s.footerLink}>Results forever</a>
-          <a href="/trust/privacy" className={s.footerLink}>Privacy</a>
-          <span className={`mono ${s.footerNote}`}>SPECTR</span>
-        </footer>
+        <PublicFooter />
       </main>
     </div>
   );

@@ -14,8 +14,10 @@ describe('PricingPage states', () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(body(false), { status: 200 }))));
     render(<PricingPage />);
     expect(await screen.findByRole('heading', { level: 1, name: 'Free while we launch.' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Analyze a track' }).getAttribute('href')).toBe('/analyze');
-    expect(screen.getByRole('link', { name: 'Explore the demo' }).getAttribute('href')).toBe('/demo');
+    // Task P3 — PublicFooter's Product group repeats these labels, so the
+    // page's own CTA row is now disambiguated by data-testid.
+    expect(screen.getByTestId('pricing-off-analyze-cta').getAttribute('href')).toBe('/analyze');
+    expect(screen.getByTestId('pricing-off-demo-cta').getAttribute('href')).toBe('/demo');
     expect(screen.queryByText('Honest billing. No asterisks.')).toBeNull();
     expect(document.body.textContent).not.toContain('*');
   });

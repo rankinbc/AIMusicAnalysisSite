@@ -3,6 +3,7 @@
  * plans that cannot be bought. Wording matches the copy already used at
  * features/account/plan-copy.ts:20-21 for the same kill-switch state. */
 import { PublicChrome } from '../../components/PublicChrome';
+import { PublicFooter } from '../../components/PublicFooter';
 import s from './pricing.module.css';
 
 export function PricingOffView() {
@@ -19,15 +20,17 @@ export function PricingOffView() {
       </header>
 
       <div className={s.offCtaRow}>
-        <a href="/analyze" className="btn primary">Analyze a track</a>
-        <a href="/demo" className="btn ghost">Explore the demo</a>
+        {/* Task P3 — the shared footer's Product group repeats these labels;
+            testids disambiguate the page's own CTA row for tests. */}
+        <a href="/analyze" className="btn primary" data-testid="pricing-off-analyze-cta">
+          Analyze a track
+        </a>
+        <a href="/demo" className="btn ghost" data-testid="pricing-off-demo-cta">
+          Explore the demo
+        </a>
       </div>
 
-      <footer className={s.footer}>
-        <p className={s.fineprint}>
-          <a href="/trust/results-forever">Your reports stay yours</a>
-        </p>
-      </footer>
+      <PublicFooter />
     </main>
     </>
   );

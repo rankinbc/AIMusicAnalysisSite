@@ -26,6 +26,8 @@ describe('PublicChrome (story 6.1 AC3 — UX-DR6 slim chrome)', () => {
     expect(html).toContain('Analyze free');
     expect(html).not.toContain('Open library');
     expect(html).toContain('SPEC'); // wordmark
+    // Task P3 — the engineering link in the chrome (hidden below 480px via CSS).
+    expect(html).toContain('href="/trust/how-its-built"');
   });
 
   it('swaps to "Open library" for an authed user (no register dead-end mid-upgrade)', () => {
@@ -82,6 +84,14 @@ describe('LandingPage (story 6.1 AC1)', () => {
     expect(html).toContain('No AI training on your audio');
     expect(html).toContain('Reports stay yours forever');
     expect(html).toContain('href="/login"');
+  });
+
+  it('replaces the pricing CTA with a link to the guest demo (task P3)', () => {
+    expect(html).toContain('data-testid="landing-demo-cta"');
+    expect(html).toContain('href="/demo"');
+    expect(html).toContain('Explore the demo');
+    expect(html).not.toContain('See pricing');
+    expect((html.match(/href="\/demo"/g) ?? []).length).toBeGreaterThanOrEqual(1);
   });
 });
 

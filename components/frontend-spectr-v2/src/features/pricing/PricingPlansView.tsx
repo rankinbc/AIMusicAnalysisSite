@@ -6,6 +6,7 @@
  * this component owns no state of its own. */
 import type { PlansResponse } from '../../api/types';
 import { PublicChrome } from '../../components/PublicChrome';
+import { PublicFooter } from '../../components/PublicFooter';
 import { Pill } from '../../ui/Pill';
 import { formatCents } from '../billing/format-price';
 import s from './pricing.module.css';
@@ -104,7 +105,9 @@ export function PricingPlansView({
         </article>
       </section>
 
-      <footer className={s.footer}>
+      {/* Task P3 — billing-specific fineprint stays here; the trust-link
+          paragraph that used to live below it is now the shared footer. */}
+      <div className={s.footer}>
         <p className={s.fineprint}>
           Cancel anytime in two clicks. Your reports remain accessible after
           cancellation.
@@ -113,13 +116,8 @@ export function PricingPlansView({
           {/* Plain <a>: static-render testable + full-nav is fine on funnel pages. */}
           <a href="/login">Sign in</a> if you already have an account.
         </p>
-        {/* Story 6.2 — the commitments behind the copy above, as real pages. */}
-        <p className={s.fineprint}>
-          <a href="/trust/no-training">No AI training</a> ·{' '}
-          <a href="/trust/results-forever">Results forever</a> ·{' '}
-          <a href="/trust/privacy">Privacy defaults</a>
-        </p>
-      </footer>
+      </div>
+      <PublicFooter />
     </main>
     </>
   );

@@ -4,15 +4,14 @@
 import type { ReactNode } from 'react';
 
 import { PublicChrome } from '../../components/PublicChrome';
-import { PricingLink } from '../../components/PricingLink';
+import { PublicFooter } from '../../components/PublicFooter';
 import { usePageMeta } from '../../lib/usePageMeta';
+import { TRUST_PAGES } from './trust-pages';
 import s from './trust.module.css';
 
-export const TRUST_PAGES = [
-  { path: '/trust/no-training', label: 'No AI training' },
-  { path: '/trust/results-forever', label: 'Results forever' },
-  { path: '/trust/privacy', label: 'Privacy defaults' },
-] as const;
+// Re-exported for backward compatibility (task P3 moved the source of truth
+// to trust-pages.ts so PublicFooter can import it too).
+export { TRUST_PAGES };
 
 interface TrustPageProps {
   path: (typeof TRUST_PAGES)[number]['path'];
@@ -34,12 +33,7 @@ export function TrustPage({ path, title, metaDescription, updated, children }: T
           <p className={`mono ${s.updated}`}>Last updated {updated}</p>
         </header>
         <article className={s.prose}>{children}</article>
-        <footer className={s.footer}>
-          {TRUST_PAGES.filter((p) => p.path !== path).map((p) => (
-            <a key={p.path} href={p.path} className={s.footerLink}>{p.label}</a>
-          ))}
-          <PricingLink className={s.footerLink} />
-        </footer>
+        <PublicFooter currentPath={path} />
       </main>
     </div>
   );
