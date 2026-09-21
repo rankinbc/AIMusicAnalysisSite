@@ -428,7 +428,19 @@ The SEEDER is the last line of defence; it does not trust the snapshot:
   three image keys) are captured BEFORE token substitution, validated against
   `DemoSnapshotStore.SharedPrefix` (`audio/demo/`, mirrors the worker's
   `SHARED_STORAGE_PREFIXES`) and stamped back verbatim. The exporter must still
-  write **id-free asset keys** under `audio/demo/snapshot/`.
+  write asset keys **free of SOURCE ids** under `audio/demo/snapshot/`.
+- **Exports are atomic with respect to the live demo (D4 review, 2026-09-21).**
+  Each export writes its assets into a fresh per-export directory
+  `<dir>/<exportId>/…` (a random export id — never a source id), writes
+  `snapshot.json` LAST at the fixed key, and only then best-effort deletes the
+  PREVIOUS export's directory. An abort deletes only what that export created.
+  The exporter refuses a destination outside `audio/demo/`
+  (`snapshot_key_invalid`), refuses when `Demo:SnapshotKey` is empty = disabled
+  (`demo_snapshot_disabled`), and requires a `reason` like every admin mutation.
+- **Free text is the operator's responsibility.** The leak scan only knows the
+  owner's id and email. The song title, rack preset names and the owner's OWN
+  typed coach questions are exported verbatim by design; the export response
+  lists them (`FreeText`) — READ THEM before switching `demo_enabled` on.
 - **`Demo:SnapshotKey` and every asset key must live under `audio/demo/`** (no
   leading slash, no backslash, no `..`) — anything else = "no snapshot" →
   fallback seed. Outside that prefix the first guest purge would delete the demo
