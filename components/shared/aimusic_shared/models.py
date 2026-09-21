@@ -522,7 +522,7 @@ class CoachMessage(Base):
             name="ck_coach_messages_status",
         ),
         CheckConstraint(
-            "mode IN ('qa','teach','concise')", name="ck_coach_messages_mode",
+            "mode IN ('qa','teach','concise','brief')", name="ck_coach_messages_mode",
         ),
         Index(
             "ix_coach_messages_conversation_created_at",

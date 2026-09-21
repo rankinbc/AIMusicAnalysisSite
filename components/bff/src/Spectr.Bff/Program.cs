@@ -594,6 +594,7 @@ api.MapReportsEndpoints();
 api.MapJobEndpoints();
 api.MapVerdictEndpoints();
 api.MapFixRackEndpoints();
+api.MapCoachBriefEndpoints();     // Task G3 — POST /api/coach/{analysisId}/brief
 api.MapReportPhaseEndpoints();
 api.MapReferenceEndpoints();
 api.MapFileEndpoints();

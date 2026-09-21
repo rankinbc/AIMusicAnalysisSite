@@ -104,6 +104,9 @@ public sealed class CoachCapService(AppDbContext db, EntitlementService ents)
             : await db.CoachMessages.AsNoTracking()
                 .CountAsync(m => m.ConversationId == conversationId
                     && m.Role == "user"
+                    // Task G3: the brief's hidden trigger row must never
+                    // count against the free per-analysis follow-up cap.
+                    && m.Mode != CoachBrief.Mode
                     && m.RefusalReason == null, ct);
         return new CoachCapState(
             Used: usedFree,

@@ -48,6 +48,7 @@ public sealed class GuestGuardInventoryTests(WebApplicationFactory<Program> fact
         // caller passes the guard's first branch (never marker-gated); a
         // guest passes here to reach the 403/409/410 checks in the handler.
         ("POST", "/api/auth/guest/convert", "None"),
+        ("POST", "/api/coach/{analysisId:guid}/brief", "None"),
         ("POST", "/api/coach/{analysisId:guid}/messages", "None"),
         ("DELETE", "/api/compare/notes", "None"),
         ("PUT", "/api/compare/notes", "None"),

@@ -277,11 +277,17 @@ public static class CoachConversationEndpoints
                 capService.ToDto(cap)));
         }
 
+        // Task G3: the brief's server-authored trigger row (role=user,
+        // mode=brief, content=CoachBrief.Instruction) is a hidden system
+        // prompt, never a producer message — excluded from every read
+        // surface (chat UI, caps/meters, the demo snapshot exporter).
         var rows = await db.CoachMessages.AsNoTracking()
             .Where(m => m.ConversationId == conversation.Id)
+            .Where(m => !(m.Role == "user" && m.Mode == CoachBrief.Mode))
             .OrderBy(m => m.CreatedAt)
             .ToListAsync(ct);
 
+        var isGuest = currentUser.IsGuest();
         var messages = rows
             .Select(m => new CoachMessageDto(
                 m.Id,
@@ -292,7 +298,15 @@ public static class CoachConversationEndpoints
                 m.RefusalReason,
                 m.CreatedAt,
                 m.CompletedAt,
-                m.Mode))
+                m.Mode,
+                IsBrief: m.Mode == CoachBrief.Mode,
+                // The closing line is NEVER stored in the message text — it's
+                // a read-time DTO field, guests only, so a converted user no
+                // longer sees it and the snapshot exporter never bakes it in.
+                ClosingLine: m.Mode == CoachBrief.Mode && m.Role == "assistant"
+                    && m.Status == "complete" && isGuest
+                    ? CoachBrief.GuestClosingLine
+                    : null))
             .ToList();
 
         // Story 2.6: the caps chip is whatever CoachCapService resolved above
@@ -307,7 +321,9 @@ public static class CoachConversationEndpoints
     // row per pair; on the rare race a second SaveChanges raises a
     // unique-violation, we detach the locally-tracked draft and re-read
     // the row the winning POST inserted.
-    private static async Task<Conversation> GetOrCreateConversationAsync(
+    // Task G3: internal (not private) so CoachBriefEndpoints can reuse the
+    // exact same race-safe get-or-create instead of duplicating it.
+    internal static async Task<Conversation> GetOrCreateConversationAsync(
         AppDbContext db, Guid analysisId, Guid userId, CancellationToken ct)
     {
         var existing = await db.Conversations

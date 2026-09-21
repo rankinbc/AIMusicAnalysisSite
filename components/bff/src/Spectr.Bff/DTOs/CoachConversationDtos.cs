@@ -16,7 +16,14 @@ public sealed record CoachMessageDto(
     string? RefusalReason,                        // set on refused/coach_offline rows
     DateTimeOffset CreatedAt,
     DateTimeOffset? CompletedAt,
-    string Mode = "qa");                           // "qa" | "teach" | "concise" — lets the UI badge teach answers durably
+    string Mode = "qa",                            // "qa" | "teach" | "concise" | "brief"
+    // Task G3: badges the coach's once-per-conversation opening brief so the
+    // UI can render it distinctly. `ClosingLine` is set ONLY at read time —
+    // never stored on the row — and only for a guest caller viewing a
+    // completed brief, so a converted user stops seeing it and the demo
+    // snapshot exporter (which reads the same row) never bakes it in.
+    bool IsBrief = false,
+    string? ClosingLine = null);
 
 // Story 1.9 / UX-DR16 + Story 2.6 / FR15: coach follow-up cap state. `CapReached`
 // is server-computed (single source of truth — the frontend never re-derives it).
@@ -52,3 +59,24 @@ public sealed record CreateCoachMessageResponse(
     Guid UserMessageId,
     Guid PendingAssistantMessageId,
     CoachCapsDto Caps);
+
+// Task G3 — the coach's once-per-conversation opening brief. The BFF writes
+// a server-authored trigger row (never shown, never counted) through the
+// SAME coach_reply actor in a new "brief" mode; POST is idempotent under
+// concurrency via a partial unique index on (conversation_id) WHERE
+// mode='brief' AND role='assistant'.
+//   "created" (202) — this call inserted the pair and enqueued coach_reply.
+//   "exists"  (200) — a brief already exists (this call or a race loser);
+//                     MessageId is the existing assistant row, nothing enqueued.
+//   "skipped" (200) — the version is the seeded demo track; MessageId is null.
+public sealed record CoachBriefResponse(string Status, Guid? MessageId);
+
+public static class CoachBrief
+{
+    public const string Mode = "brief";
+    // Fixed system trigger — never producer text, never shown, never billed.
+    public const string Instruction = "Give me your opening brief for this mix.";
+    // Exact copy per the controller's ruling — deterministic, never LLM-generated.
+    public const string GuestClosingLine =
+        "Create a free account and let's save our progress — so we can make this mix awesome.";
+}

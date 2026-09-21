@@ -132,8 +132,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         // teach-mode-coach: enum-as-string CHECK on coach_messages mode + a
         // DB default of 'qa' so existing rows backfill to a CHECK-valid value
         // (an empty-string default would violate the CHECK on create).
+        // Task G3: widened to add 'brief' — the coach's once-per-conversation
+        // opening brief mode.
         builder.Entity<CoachMessage>().ToTable(t => t.HasCheckConstraint(
-            "ck_coach_messages_mode", "\"mode\" IN ('qa','teach','concise')"));
+            "ck_coach_messages_mode", "\"mode\" IN ('qa','teach','concise','brief')"));
         builder.Entity<CoachMessage>().Property(m => m.Mode).HasDefaultValue("qa");
 
         // Notifications inbox (story 11.6): recipient-scoped list ordered by
