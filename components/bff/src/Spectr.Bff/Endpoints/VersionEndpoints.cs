@@ -833,6 +833,16 @@ public static class VersionEndpoints
             if (form.Files.Count == 0)
                 return Results.BadRequest(new { error = "At least one stem file required." });
 
+            // Task G7a (R2) — the lock above has a 120s TTL; on a slow
+            // upload it can expire mid-read, letting a second request in and
+            // out while this one is still parsing its (possibly large)
+            // multipart body. `version` was loaded BEFORE that read, so its
+            // in-memory StemPathsRaw can be stale by now. Reload the tracked
+            // entity from the DB (not a re-query — EF's identity map would
+            // just hand back the same stale in-memory instance) so the count
+            // check and the eventual write are both based on the CURRENT row.
+            await db.Entry(version).ReloadAsync(ct);
+
             var entries = ReadRaw(version.StemPathsRaw);
 
             // Task G1 — the guest stems cap (count + total bytes), checked

@@ -89,10 +89,12 @@ public sealed class GuestLimits(
         if (string.Equals(cfg["RateLimits:Enabled"], "false", StringComparison.OrdinalIgnoreCase))
             return null;
 
-        var flags = await ents.GetFlagsAsync(ct);
         var key = $"guest_fix_rack:{userId}";
         try
         {
+            // Task G7a (minor) — moved inside the try: a flags/DB failure
+            // here used to answer a raw 500 instead of the friendly 503.
+            var flags = await ents.GetFlagsAsync(ct);
             var verdict = await limiter.CheckAsync(
                 key, key, "guest_fix_rack",
                 Flag(flags, "guest_fix_racks_max", 2),
@@ -340,11 +342,13 @@ public sealed class GuestLimits(
         if (string.Equals(cfg["RateLimits:Enabled"], "false", StringComparison.OrdinalIgnoreCase))
             return null;
 
-        var flags = await ents.GetFlagsAsync(ct);
-        var max = Flag(flags, "guest_classify_max", 6);
         var key = $"guest_classify:{userId}";
         try
         {
+            // Task G7a (minor) — moved inside the try: a flags/DB failure
+            // here used to answer a raw 500 instead of the friendly 503.
+            var flags = await ents.GetFlagsAsync(ct);
+            var max = Flag(flags, "guest_classify_max", 6);
             var verdict = await limiter.CheckAsync(
                 key, key, "guest_classify", max,
                 TimeSpan.FromHours(Flag(flags, "guest_ttl_hours", 24)), ct);
@@ -370,11 +374,13 @@ public sealed class GuestLimits(
         if (string.Equals(cfg["RateLimits:Enabled"], "false", StringComparison.OrdinalIgnoreCase))
             return null;
 
-        var flags = await ents.GetFlagsAsync(ct);
-        var max = Flag(flags, "guest_ref_analyze_max", 3);
         var key = $"guest_ref_analyze:{userId}";
         try
         {
+            // Task G7a (minor) — moved inside the try: a flags/DB failure
+            // here used to answer a raw 500 instead of the friendly 503.
+            var flags = await ents.GetFlagsAsync(ct);
+            var max = Flag(flags, "guest_ref_analyze_max", 3);
             var verdict = await limiter.CheckAsync(
                 key, key, "guest_ref_analyze", max,
                 TimeSpan.FromHours(Flag(flags, "guest_ttl_hours", 24)), ct);
@@ -402,11 +408,13 @@ public sealed class GuestLimits(
         if (string.Equals(cfg["RateLimits:Enabled"], "false", StringComparison.OrdinalIgnoreCase))
             return null;
 
-        var flags = await ents.GetFlagsAsync(ct);
-        var max = Flag(flags, "guest_attachment_mints_max", 30);
         var key = $"guest_attach_init:{userId}";
         try
         {
+            // Task G7a (minor) — moved inside the try: a flags/DB failure
+            // here used to answer a raw 500 instead of the friendly 503.
+            var flags = await ents.GetFlagsAsync(ct);
+            var max = Flag(flags, "guest_attachment_mints_max", 30);
             var verdict = await limiter.CheckAsync(
                 key, key, "guest_attach_init", max,
                 TimeSpan.FromHours(Flag(flags, "guest_ttl_hours", 24)), ct);

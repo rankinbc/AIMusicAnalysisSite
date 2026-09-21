@@ -103,6 +103,13 @@ public static class ReferenceEndpoints
             if (len is null || len > MaxUploadBytes + MultipartSlackBytes)
                 return GuestGuard.Restricted("reference_limit",
                     "A guest session includes a limited upload size — create a free account for more.");
+
+            // Task G7a (R1) — needs only the userId, so it runs BEFORE
+            // ReadFormAsync below. Previously this ran after the form was
+            // already read/buffered, so an at-cap guest could push up to
+            // 250 MB into temp storage per rejected request, repeatedly.
+            if (await limits.CheckReferenceAsync(userId, ct) is { } denied)
+                return denied;
         }
 
         var form = await request.ReadFormAsync(ct);
@@ -115,10 +122,6 @@ public static class ReferenceEndpoints
             return Results.BadRequest(new { error = "Empty file." });
         if (file.Length > MaxUploadBytes)
             return Results.BadRequest(new { error = "File exceeds 250 MB limit." });
-
-        // Task G1 — one reference track per guest.
-        if (currentUser.IsGuest() && await limits.CheckReferenceAsync(userId, ct) is { } denied)
-            return denied;
 
         var titleClean = (title ?? Path.GetFileNameWithoutExtension(file.FileName) ?? "Untitled").Trim();
         if (string.IsNullOrEmpty(titleClean)) titleClean = "Untitled";

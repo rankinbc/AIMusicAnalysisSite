@@ -74,4 +74,43 @@ public sealed class SpinePrimitivesTests
         // ...a rotated anonId from the SAME ip is still denied (ip is the ceiling).
         Assert.False((await rl.CheckAsync("anon-B", ip, action, 2, window)).Allowed);
     }
+
+    // ── Task G7a (R3b) — IDistributedLock (Redis), directly, no HTTP round trip ──
+    // The 6-parallel HTTP race test (GuestStemsByteCapAndRaceTests) exercises
+    // this indirectly and also passed on the pre-fix code, so it proves
+    // nothing about the lock primitive itself. This is a deterministic,
+    // no-sleep test of RedisDistributedLock's actual CAS semantics.
+    [SkippableFact]
+    public async Task RedisDistributedLock_Acquire_Is_Exclusive_And_Release_Is_Token_Gated()
+    {
+        TestDb.Require(RedisReachable(), "Redis");
+
+        using var mux = ConnectionMultiplexer.Connect(TestDb.RedisEndpoint("abortConnect=false"));
+        var db = mux.GetDatabase();
+        var key = "spine-lock-test-" + Guid.NewGuid().ToString("N");
+        var lockSvc = new RedisDistributedLock(mux);
+        try
+        {
+            var token = await lockSvc.TryAcquireAsync(key, TimeSpan.FromSeconds(30));
+            Assert.NotNull(token);
+
+            // A second acquire of the SAME key, before release, is refused.
+            var second = await lockSvc.TryAcquireAsync(key, TimeSpan.FromSeconds(30));
+            Assert.Null(second);
+
+            // Release with the WRONG token is a no-op — the key stays held.
+            await lockSvc.ReleaseAsync(key, "not-the-real-token");
+            Assert.True(await db.KeyExistsAsync(key));
+            var ttl = await db.KeyTimeToLiveAsync(key);
+            Assert.NotNull(ttl); // the key carries a TTL, not a bare SET
+
+            // Release with the RIGHT token frees it.
+            await lockSvc.ReleaseAsync(key, token!);
+            Assert.False(await db.KeyExistsAsync(key));
+        }
+        finally
+        {
+            await db.KeyDeleteAsync(key);
+        }
+    }
 }
