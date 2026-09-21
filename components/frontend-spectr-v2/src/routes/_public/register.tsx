@@ -3,27 +3,12 @@ import { useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 
 import { useAuth } from '../../auth/AuthContext';
+import { setPendingLoginEmail } from '../../auth/pending-login-email';
 import { capture } from '../../lib/analytics';
 import { optionalString } from '../../lib/search-params';
+import { safeNext } from './safe-next';
 import f from '../../styles/forms.module.css';
 import s from './auth.module.css';
-
-// Story 2.1 review-fix P13 — accept `?next=/path` so that anonymous users
-// bounced from the pricing page (or any other "must-be-authed" flow)
-// return to the same page after registration. Sanitized: only same-origin
-// path-relative values are accepted; absolute or scheme-bearing values
-// are silently dropped to defeat open-redirect via `?next=http://evil.com`.
-
-function safeNext(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  // Must start with a single `/` and not be a protocol-relative URL
-  // (`//evil.com`). Reject anything containing `:` to drop scheme-based
-  // attacks. Path may include `?` query, but no scheme/host.
-  if (!raw.startsWith('/')) return undefined;
-  if (raw.startsWith('//')) return undefined;
-  if (raw.includes(':')) return undefined;
-  return raw;
-}
 
 // D10 (addendum h) / G5 (spec G-D4) — `?from=guest` marks a guest-conversion
 // entry (the upgrade dialog / banner). A signed-in GUEST submitting this
@@ -38,7 +23,7 @@ export const Route = createFileRoute('/_public/register')({
   component: RegisterPage,
 });
 
-function RegisterPage() {
+export function RegisterPage() {
   const { register, convertGuest, user } = useAuth();
   const navigate = useNavigate();
   const { next } = Route.useSearch();
@@ -64,7 +49,11 @@ function RegisterPage() {
         capture('guest_converted');
         if ('sessionIssued' in res) {
           toast.info(res.message);
-          void navigate({ to: '/login', search: { email } });
+          // G5 fix1 item 3 — off-URL: a `?email=` search param lands in
+          // PostHog's `$current_url` (capture_pageview: true) and in
+          // browser history/referrers. Relay it in memory instead.
+          setPendingLoginEmail(email);
+          void navigate({ to: '/login' });
           return;
         }
       } else {

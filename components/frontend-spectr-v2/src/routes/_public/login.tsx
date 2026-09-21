@@ -1,30 +1,39 @@
 import { Link, createFileRoute, useNavigate, useRouter } from '@tanstack/react-router';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 
 import { useAuth } from '../../auth/AuthContext';
+import { clearPendingLoginEmail, peekPendingLoginEmail } from '../../auth/pending-login-email';
 import { optionalString } from '../../lib/search-params';
 import f from '../../styles/forms.module.css';
 import s from './auth.module.css';
 
-// `?email=` prefills the form — used by G5's guest-conversion fallback (a
+// G5 fix1 item 3 — the form prefill for G5's guest-conversion fallback (a
 // converted account with no session issued lands here to sign in normally
-// with the password they just set).
+// with the password they just set) now comes off the in-memory
+// pending-login-email relay, NEVER a `?email=` search param (which leaked
+// into PostHog's captured page URL and browser history).
 export const Route = createFileRoute('/_public/login')({
-  validateSearch: (search: Record<string, unknown>): { next?: string; email?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { next?: string } => ({
     ...optionalString('next')(search),
-    ...optionalString('email')(search),
   }),
   component: LoginPage,
 });
 
 const DEV_EMAIL = 'brankin92@yahoo.com';
 
-function LoginPage() {
+export function LoginPage() {
   const { login, devLogin } = useAuth();
   const navigate = useNavigate();
   const router = useRouter();
-  const { next, email: prefillEmail } = Route.useSearch();
-  const [email, setEmail] = useState(prefillEmail ?? '');
+  const { next } = Route.useSearch();
+  const [email, setEmail] = useState(() => peekPendingLoginEmail() ?? '');
+  // Consume it once mounted — split peek/clear (rather than one destructive
+  // read) keeps this safe under StrictMode's double-invoked lazy `useState`
+  // initializer above; a clear is idempotent under StrictMode's double-fired
+  // effect too.
+  useEffect(() => {
+    clearPendingLoginEmail();
+  }, []);
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
