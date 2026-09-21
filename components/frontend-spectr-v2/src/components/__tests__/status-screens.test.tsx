@@ -33,4 +33,12 @@ describe('status screens', () => {
     expect(spies.reloadOnce).toHaveBeenCalledTimes(1);
     expect(spies.reportError).not.toHaveBeenCalled();
   });
+  it('a chunk error that recurs inside the reload guard IS reported — that is a broken deploy, not a stale tab', () => {
+    spies.reloadOnce.mockReturnValueOnce(false); // the one guarded reload was already spent
+    const err = new Error('Failed to fetch dynamically imported module: /assets/x.js');
+    render(<RouteErrorScreen error={err} reset={() => {}} />);
+    expect(spies.reloadOnce).toHaveBeenCalledTimes(1);
+    expect(spies.reportError).toHaveBeenCalledTimes(1);
+    expect(spies.reportError).toHaveBeenCalledWith(err);
+  });
 });

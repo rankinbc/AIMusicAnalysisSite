@@ -2,7 +2,7 @@
  * catches before Sentry.ErrorBoundary ever sees anything, so this is the
  * one place route-render errors get reported. A stale chunk (deploy landed
  * while the tab was open) gets a guarded reload instead of a report — see
- * lib/chunk-reload.ts. */
+ * lib/chunk-reload.ts — unless the guard refuses, which means it is not stale. */
 import { useEffect } from 'react';
 import type { ErrorComponentProps } from '@tanstack/react-router';
 import { isStaleChunkError, reloadOnceForStaleChunk } from '../lib/chunk-reload';
@@ -12,10 +12,10 @@ import s from './StatusScreen.module.css';
 
 export function RouteErrorScreen({ error }: ErrorComponentProps) {
   useEffect(() => {
-    if (isStaleChunkError(error)) {
-      reloadOnceForStaleChunk();
-      return;
-    }
+    // A reload that actually happens is the whole remedy for a stale tab. If the
+    // guard refuses (the one reload was already spent, or storage is off), the
+    // chunk is genuinely missing — a broken deploy — and that must be reported.
+    if (isStaleChunkError(error) && reloadOnceForStaleChunk()) return;
     reportError(error);
   }, [error]);
 
