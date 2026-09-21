@@ -267,12 +267,22 @@ no WSL package update and no WSLService restart. Nothing in this repo runs
 detection on a LONG track.** The engine had been up 12.5 h. The first death came
 6 minutes after a 9-minute MP3 was uploaded; that version had a second job stuck
 in `processing` at phase `Arrangement` = the `docker run allin1:latest` container
-(4 GB image, CPU, 30-minute timeout, **no `--memory` limit** —
+(4 GB image, CPU, 30-minute timeout, **no `--memory` limit at the time** —
 `audio_analysis/structure/docker_allin1.py`). It was re-run after each stack
 restart and the VM went down again 35 and 19 minutes later. After that job was
-marked `failed` the engine stayed up. Until the container gets a memory cap,
-treat "Docker died a few minutes after uploading a long track" as this, and
-before restarting the workers fail the stuck job so it cannot run again:
+marked `failed` the engine stayed up.
+
+**Fixed (G4):** the container now runs with `--memory` and `--memory-swap` both
+set to `ALLIN1_MEMORY_LIMIT` (default `6g`; equal, not higher, swap so it
+can't page the host to death). Docker OOM-kills the container instead, and the
+analysis still completes — arrangement comes back "not assessed" rather than
+the VM going down. If a long track now reports arrangement as "not assessed"
+instead of a score, raise `ALLIN1_MEMORY_LIMIT` and give WSL more RAM in
+`.wslconfig`; set it to `""` or `"0"` to disable the flags entirely. The "avoid
+analysing long tracks on this machine" caution is lifted once this has been
+verified against a real long track. Until then, treat "Docker died a few
+minutes after uploading a long track" as this history, and before restarting
+the workers fail the stuck job so it cannot run again:
 ```sql
 select id, status, current_phase from analysis_jobs where status = 'processing';
 update analysis_jobs set status = 'failed', error_code = 'structure_detection_killed_docker' where id = '<that id>';

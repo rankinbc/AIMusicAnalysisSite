@@ -129,8 +129,14 @@ def _probe_duration(path: Path, fmt: str) -> float:
         ) from exc
 
 
-def validate_source(path: str | Path) -> float:
+def validate_source(path: str | Path, *, max_seconds: float | None = None) -> float:
     """Magic-byte + duration validation (AR19). Returns the probed duration.
+
+    ``max_seconds`` (G4) is the caller-supplied binding length limit — e.g. the
+    guest track-length cap. ``None`` (the default) means "no caller-specific
+    limit": the ``MAX_AUDIO_DURATION_SECONDS`` env default (1800) still applies.
+    When ``max_seconds`` IS the binding limit, the rejection message is the
+    guest-facing copy (offers a free account) instead of the generic one.
 
     Raises InvalidFileError with a reason code on any failure. Never raises
     anything else for bad file CONTENT — an OS-level read error (missing file)
@@ -152,7 +158,14 @@ def validate_source(path: str | Path) -> float:
         raise InvalidFileError(
             REASON_TOO_SHORT, f"duration {duration:.1f}s is below the {_min_duration():.0f}s minimum"
         )
-    if duration > _max_duration():
+    effective_max = max_seconds if max_seconds is not None else _max_duration()
+    if duration > effective_max:
+        if max_seconds is not None:
+            raise InvalidFileError(
+                REASON_TOO_LONG,
+                f"this track is {duration / 60:.0f} minutes long — guest uploads go up to "
+                f"{max_seconds / 60:.0f} minutes; create a free account for longer tracks",
+            )
         raise InvalidFileError(
             REASON_TOO_LONG, f"duration {duration:.0f}s exceeds the {_max_duration():.0f}s maximum"
         )
