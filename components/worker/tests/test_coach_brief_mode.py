@@ -128,16 +128,33 @@ def test_brief_mode_with_llm_fake_completes_with_coach_brief_slug(
     fake path (not a stub of coach_actor.gateway) so this proves the whole
     LLM_FAKE=1 round trip works for the new mode, not just that the actor
     calls whatever function is bound to that name.
+
+    Fix round 1 item 3c: also asserts prompt_slug=="coach_brief" and that
+    the SYSTEM prompt actually sent is CoachOpeningBrief.md's body — a
+    mutant that swapped the branch onto the grounded prompt (right slug,
+    wrong file) or a different slug must fail. Spies on
+    stream_complete_sync by wrapping (capture then delegate through) rather
+    than replacing it, so this stays the real LLM_FAKE round trip.
     """
     from app import coach_actor  # noqa: PLC0415
     from app.llm import budget, gateway  # noqa: PLC0415
     from app.llm.settings import reset_llm_settings_cache  # noqa: PLC0415
+    from app.verdict_lib.prompt_loader import load_coach_brief  # noqa: PLC0415
 
     monkeypatch.setenv("LLM_FAKE", "1")
     monkeypatch.setattr(gateway, "record_llm_call", lambda **kw: "llm_FAKE_ROW")
     monkeypatch.setattr(budget, "check_budget", lambda *, tier, purpose, user_id: None)
     monkeypatch.setattr(budget, "record_outcome", lambda *, outcome: None)
     reset_llm_settings_cache()
+
+    captured: dict = {}
+    real_stream = coach_actor.gateway.stream_complete_sync
+
+    def spy_stream(**kwargs):
+        captured.update(kwargs)
+        yield from real_stream(**kwargs)
+
+    monkeypatch.setattr(coach_actor.gateway, "stream_complete_sync", spy_stream)
 
     with sqlite_db.SessionFactory.begin() as s:
         analysis_id = _seed_analysis(s)
@@ -151,6 +168,10 @@ def test_brief_mode_with_llm_fake_completes_with_coach_brief_slug(
         row = _fetch_message(s, aid)
         assert row.status == "complete"
         assert row.content  # non-empty
+
+    assert captured["prompt_slug"] == "coach_brief"
+    _, expected_system_body = load_coach_brief()
+    assert captured["system"] == expected_system_body
 
 
 # ── (ii) degraded analysis → template brief, status=complete ────────────────
@@ -260,3 +281,44 @@ def test_qa_mode_still_errors_on_llm_error(sqlite_db, monkeypatch):
         row = _fetch_message(s, aid)
         assert row.status == "error"
         assert "transient error" in row.content
+
+
+# ── Fix round 1 item 4: the trigger row never re-enters a LATER reply's
+# history as a real user turn (it would otherwise be fed back to the LLM
+# verbatim on every later turn). Identified by the same marker the BFF uses
+# to hide it (role="user", mode="brief") — the brief's own assistant reply
+# stays in tail as legitimate context.
+
+def test_trigger_row_never_reenters_later_reply_as_a_user_turn(sqlite_db, monkeypatch):
+    from app import coach_actor  # noqa: PLC0415
+    from aimusic_shared.models import CoachMessage  # noqa: PLC0415
+
+    with sqlite_db.SessionFactory.begin() as s:
+        analysis_id = _seed_analysis(s)
+        cid = _seed_conversation(s, analysis_id)
+        uid, aid = _seed_brief_pair(s, cid)
+
+    # Simulate the worker having already completed the brief.
+    with sqlite_db.SessionFactory.begin() as s:
+        row = s.get(CoachMessage, aid)
+        row.status = "complete"
+        row.content = "Here's your opening brief. Top priority: fix the loudness."
+
+    # A later, ordinary qa-mode turn in the SAME conversation.
+    with sqlite_db.SessionFactory.begin() as s:
+        now = datetime.now(tz=timezone.utc)
+        uid2 = uuid.uuid4()
+        aid2 = uuid.uuid4()
+        s.add(CoachMessage(id=uid2, conversation_id=cid, role="user",
+                            status="complete", content="What about the low end?",
+                            mode="qa", completed_at=now))
+        s.add(CoachMessage(id=aid2, conversation_id=cid, role="assistant",
+                            status="pending", content="", mode="qa"))
+
+    calls = _stub_gateway_raises(monkeypatch, LlmInvocationError("boom"))
+    coach_actor.coach_reply.fn(str(cid), str(uid2), str(aid2))
+
+    assert len(calls) == 1
+    user_turn = calls[0]["user"]
+    assert "Give me your opening brief for this mix." not in user_turn
+    assert "Top priority: fix the loudness." in user_turn

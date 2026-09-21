@@ -20,6 +20,11 @@ V = [
      "metric_line": None, "priority_score": 99, "suspected": True},
     {"specialist": "clarity", "severity": "moderate", "category": "spectrum", "headline": "Specialist failed", "summary": "boom",
      "metric_line": None, "priority_score": 98, "suspected": False},
+    # Fix round 1 item 3b: a "win" is something the mix already does right,
+    # not a problem — priority_score 95 is the HIGHEST in the fixture set,
+    # so a mutant that drops the severity=="win" filter would put it #1.
+    {"specialist": "loudness", "severity": "win", "category": "loudness", "headline": "Loudness nailed the streaming target",
+     "summary": "Right on the money.", "metric_line": "LUFS -14.0", "priority_score": 95, "suspected": False},
 ]
 
 
@@ -33,6 +38,15 @@ def test_lists_the_three_highest_priorities_in_order():
 def test_never_leads_with_a_suspected_or_failed_finding():
     text = build_template_brief(V)
     assert "Maybe dull" not in text and "Specialist failed" not in text
+
+
+def test_never_lists_a_win_as_a_priority():
+    text = build_template_brief(V)
+    assert "Loudness nailed the streaming target" not in text
+    # Still lists the three highest ACTUAL problems — a win at the top of
+    # the priority_score ranking must not displace them.
+    a, b, c = (text.index("Correlation 0.12"), text.index("Integrated loudness"), text.index("Low-mid mud"))
+    assert a < b < c
 
 
 def test_only_repeats_numbers_that_are_stored():

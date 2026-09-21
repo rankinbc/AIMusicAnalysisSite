@@ -370,7 +370,7 @@ def coach_reply(
 
     # ── Phase A: load assistant row + user row + conversation + analysis ──
     try:
-        from sqlalchemy import select  # noqa: PLC0415 — lazy SA usage
+        from sqlalchemy import or_, select  # noqa: PLC0415 — lazy SA usage
 
         from .db_sync import SessionFactory  # noqa: PLC0415 — lazy DB import
         from aimusic_shared.models import (  # noqa: PLC0415
@@ -443,6 +443,13 @@ def coach_reply(
             # capping at SQL keeps memory bounded (story 1.5 deferred
             # follow-up). Fetch newest-first + LIMIT, then reverse to restore
             # chronological order for the prompt.
+            # Fix round 1 item 4: the brief's server-authored trigger row
+            # (role="user", mode="brief") must never re-enter a LATER
+            # reply's history as a real user turn — same marker the BFF
+            # uses to hide it from the chat UI (CoachConversationEndpoints
+            # .cs GetConversation: `!(Role == "user" && Mode == "brief")`).
+            # The brief's own ASSISTANT reply stays in tail as legitimate
+            # context.
             tail_rows = s.execute(
                 select(CoachMessage)
                 .where(
@@ -450,6 +457,7 @@ def coach_reply(
                     CoachMessage.id != mid,
                     CoachMessage.id != uid_msg,
                     CoachMessage.status != "pending",
+                    or_(CoachMessage.role != "user", CoachMessage.mode != "brief"),
                 )
                 .order_by(CoachMessage.created_at.desc())
                 .limit(10)

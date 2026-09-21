@@ -528,6 +528,24 @@ class CoachMessage(Base):
             "ix_coach_messages_conversation_created_at",
             "conversation_id", "created_at",
         ),
+        # Task G3 / fix round 1 item 5 — mirror of the BFF's raw-SQL partial
+        # unique index (migration AddCoachBriefMode; EF can't express a
+        # partial index fluently). One brief per conversation: at most one
+        # role="assistant", mode="brief" row. Declared here for metadata
+        # completeness only — no Alembic/EF change, this file has no
+        # migration runner of its own. `sqlite_where` mirrors the same
+        # predicate: several worker tests create this table against a
+        # sqlite engine (`CoachMessage.__table__.create(...)`), and without
+        # it `unique=True` would compile as a table-wide unique index on
+        # conversation_id under sqlite — breaking every multi-message
+        # conversation those tests seed.
+        Index(
+            "ux_coach_messages_brief",
+            "conversation_id",
+            unique=True,
+            postgresql_where=text("mode = 'brief' AND role = 'assistant'"),
+            sqlite_where=text("mode = 'brief' AND role = 'assistant'"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
