@@ -23,7 +23,12 @@ import {
 } from '../api/fetcher';
 import { resetVerifyResendState } from '../components/verify-email';
 import { identifyUser } from '../lib/analytics';
-import type { AuthResponse, AuthedUser, DemoStartResponse } from '../api/types';
+import type {
+  AuthResponse,
+  AuthedUser,
+  DemoStartResponse,
+  GuestConvertResponse,
+} from '../api/types';
 
 interface AuthState {
   user: AuthedUser | null;
@@ -36,6 +41,11 @@ interface AuthContextValue extends AuthState {
   /** Development-only one-click sign-in (no password). Defaults to the dev account. */
   devLogin: (email?: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
+  /** G2/G5 — a guest upgrades the SAME account in place (POST
+   *  /auth/guest/convert). Sits next to `register`; `register.tsx` calls
+   *  this instead of `register` when `user?.isGuest`. Two response shapes —
+   *  see GuestConvertResponse. */
+  convertGuest: (email: string, password: string) => Promise<GuestConvertResponse>;
   logout: () => Promise<void>;
   refresh: () => Promise<boolean>;
   updateUser: (user: AuthedUser) => void;
@@ -193,6 +203,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [applyAuth],
   );
 
+  // G2/G5 — a guest's "create an account" IS this same account, upgraded in
+  // place (same user id — songs, analyses, coach conversation untouched).
+  // Bumps the generation first, exactly like login/register/startDemo, so a
+  // boot refresh still in flight for the OLD guest cookie can't resolve on
+  // top of the conversion.
+  const convertGuest = useCallback(
+    async (email: string, password: string): Promise<GuestConvertResponse> => {
+      bumpSessionGeneration();
+      const res = await fetcher<GuestConvertResponse>({
+        url: '/auth/guest/convert',
+        method: 'POST',
+        data: { email, password },
+      });
+      if ('sessionIssued' in res) {
+        // The DB write already committed — the account IS real now — but no
+        // session came back. The guest's in-memory token is dead either way
+        // (the server evicted its token-version cache entry), so clear it;
+        // the caller (register.tsx) routes to /login on this branch, where a
+        // normal sign-in re-derives everything. Deliberately NOT the same as
+        // logout(): no /auth/logout call, since there is no live session to
+        // end server-side.
+        applyAuth(null);
+        return res;
+      }
+      // Same user id as the guest that called this — the prevUserId effect
+      // above sees no id change, so the guest's already-loaded query cache
+      // (their songs, the analysis in progress) survives untouched.
+      applyAuth(res);
+      return res;
+    },
+    [applyAuth],
+  );
+
   // D9 — one-click guest sandbox. A boot refresh may still be in flight on a
   // cold /demo load. Bumping the session generation makes its late result a
   // no-op (see refresh() above, and fetcher.ts's own gate on the token
@@ -246,8 +289,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ ...state, login, devLogin, register, logout, refresh, updateUser, startDemo }),
-    [state, login, devLogin, register, logout, refresh, updateUser, startDemo],
+    () => ({
+      ...state,
+      login,
+      devLogin,
+      register,
+      convertGuest,
+      logout,
+      refresh,
+      updateUser,
+      startDemo,
+    }),
+    [state, login, devLogin, register, convertGuest, logout, refresh, updateUser, startDemo],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

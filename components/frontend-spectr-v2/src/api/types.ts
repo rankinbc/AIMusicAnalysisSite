@@ -150,6 +150,18 @@ export interface AuthResponse {
   user: AuthedUser;
 }
 
+/** G2 (spec G-D4) — POST /api/auth/guest/convert. Two response shapes: the
+ *  normal one is an AuthResponse for the SAME user id (now `isGuest: false`),
+ *  a rotated refresh cookie. The fallback fires only when session issuance
+ *  failed AFTER the DB conversion already committed — the account is real,
+ *  but the caller gets no tokens and signs in normally with the password
+ *  they just set. */
+export interface GuestConvertFallback {
+  sessionIssued: false;
+  message: string;
+}
+export type GuestConvertResponse = AuthResponse | GuestConvertFallback;
+
 /** D9 — POST /api/auth/demo response: the seeded demo song/version/job the
  *  guest lands on. */
 export interface DemoTarget {

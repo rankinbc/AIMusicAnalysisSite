@@ -6,8 +6,14 @@ import { optionalString } from '../../lib/search-params';
 import f from '../../styles/forms.module.css';
 import s from './auth.module.css';
 
+// `?email=` prefills the form — used by G5's guest-conversion fallback (a
+// converted account with no session issued lands here to sign in normally
+// with the password they just set).
 export const Route = createFileRoute('/_public/login')({
-  validateSearch: optionalString('next'),
+  validateSearch: (search: Record<string, unknown>): { next?: string; email?: string } => ({
+    ...optionalString('next')(search),
+    ...optionalString('email')(search),
+  }),
   component: LoginPage,
 });
 
@@ -17,8 +23,8 @@ function LoginPage() {
   const { login, devLogin } = useAuth();
   const navigate = useNavigate();
   const router = useRouter();
-  const { next } = Route.useSearch();
-  const [email, setEmail] = useState('');
+  const { next, email: prefillEmail } = Route.useSearch();
+  const [email, setEmail] = useState(prefillEmail ?? '');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);

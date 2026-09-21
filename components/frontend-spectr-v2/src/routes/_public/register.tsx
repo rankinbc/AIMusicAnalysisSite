@@ -1,7 +1,9 @@
-import { Link, createFileRoute } from '@tanstack/react-router';
+import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
+import { toast } from 'sonner';
 
 import { useAuth } from '../../auth/AuthContext';
+import { capture } from '../../lib/analytics';
 import { optionalString } from '../../lib/search-params';
 import f from '../../styles/forms.module.css';
 import s from './auth.module.css';
@@ -23,10 +25,11 @@ function safeNext(raw: string | undefined): string | undefined {
   return raw;
 }
 
-// D10 (addendum h) — `?from=guest` marks a guest-conversion entry (the
-// upgrade dialog / banner). The actual `POST /api/auth/guest/convert` call
-// this should trigger belongs to task G5; this route only needs to accept
-// and carry the param without breaking the existing `next` passthrough.
+// D10 (addendum h) / G5 (spec G-D4) — `?from=guest` marks a guest-conversion
+// entry (the upgrade dialog / banner). A signed-in GUEST submitting this
+// form upgrades the SAME account in place (AuthContext.convertGuest, POST
+// /auth/guest/convert) instead of creating a second one; anyone else still
+// registers normally.
 export const Route = createFileRoute('/_public/register')({
   validateSearch: (search: Record<string, unknown>): { next?: string; from?: string } => ({
     ...optionalString('next')(search),
@@ -36,8 +39,10 @@ export const Route = createFileRoute('/_public/register')({
 });
 
 function RegisterPage() {
-  const { register } = useAuth();
+  const { register, convertGuest, user } = useAuth();
+  const navigate = useNavigate();
   const { next } = Route.useSearch();
+  const isGuest = user?.isGuest === true;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -52,11 +57,24 @@ function RegisterPage() {
     }
     setPending(true);
     try {
-      await register(email, password);
+      if (isGuest) {
+        const res = await convertGuest(email, password);
+        // The DB conversion committed either way — only whether a session
+        // came back with it differs (addendum, G-D4).
+        capture('guest_converted');
+        if ('sessionIssued' in res) {
+          toast.info(res.message);
+          void navigate({ to: '/login', search: { email } });
+          return;
+        }
+      } else {
+        await register(email, password);
+      }
       const target = safeNext(next) ?? '/library';
-      // window.location.assign so a `/pricing` redirect reaches the
-      // public route (TanStack Router would otherwise need a typed
-      // entry for every possible target).
+      // window.location.assign so a `/pricing` redirect reaches the public
+      // route (TanStack Router would otherwise need a typed entry for every
+      // possible target) — and so the router's live context (auth, _app's
+      // beforeLoad) is unambiguously fresh right after a conversion.
       window.location.assign(target);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
@@ -68,8 +86,12 @@ function RegisterPage() {
   return (
     <div className={s.card}>
       <div className={s.header}>
-        <h1 className={s.title}>Create account</h1>
-        <p className={s.subtitle}>Sign up for SPECTR.</p>
+        <h1 className={s.title}>{isGuest ? 'Save your progress' : 'Create account'}</h1>
+        <p className={s.subtitle}>
+          {isGuest
+            ? 'Create a free account and keep everything you have done here.'
+            : 'Sign up for SPECTR.'}
+        </p>
       </div>
       <form onSubmit={handleSubmit} className={s.form}>
         <label className={f.label}>

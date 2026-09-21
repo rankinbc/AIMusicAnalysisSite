@@ -74,7 +74,10 @@ type EventName =
   | 'demo_signup_clicked' // props: { source }
   | 'demo_guest_restricted' // props: { reason }
   // Task P4 — the "How it's built" engineering page mounted.
-  | 'engineering_viewed';
+  | 'engineering_viewed'
+  // ── Task G5 — /analyze uploads land the visitor as a guest, no teaser. ──
+  | 'guest_upload_started' // props: { job_id } — the guest's /analyze upload dispatched
+  | 'guest_converted'; // a guest submitted the register form (POST /auth/guest/convert)
 
 export function capture(event: EventName, props?: Record<string, unknown>): void {
   run((p) => {
