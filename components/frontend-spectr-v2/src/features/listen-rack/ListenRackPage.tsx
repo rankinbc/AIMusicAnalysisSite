@@ -28,13 +28,15 @@ import './listen-rack-v2-extras.css';
 import './findings/findings-stage.css';
 import { CoachTabV2 } from './CoachTabV2';
 import {
-  COACH_SUGGESTIONS, DEFAULT_VIZ, DIRECTORS, MANIFEST_BY_ID, TRACK,
+  COACH_SUGGESTIONS, DIRECTORS, MANIFEST_BY_ID, TRACK,
   type Director, type ModuleManifest, type Track, type VizState,
 } from './data';
+import { applyDirectorToViz, initialDirectorState } from './director';
 import { FindingsStage } from './findings/FindingsStage';
 import { useListenFindings } from './findings/useListenFindings';
 import { useStagePrefs } from './findings/stage-prefs';
 import { LightShow } from './LightShow';
+import { LR_TABPANEL_ID, ListenTabBar, type LrTabId } from './ListenTabBar';
 import { readListenFixes } from './listenFixes';
 import { lrTime } from './lrUtil';
 import { NotesSidebar } from './NotesSidebar';
@@ -143,12 +145,6 @@ export interface ListenRackPageProps {
   latestJobId?: string | null | undefined;
 }
 
-const LR_TABS = [
-  ['rack', 'Rack', 'sliders'],
-  ['visuals', 'Visuals', 'sparkle'],
-  ['coach', 'Coach', 'robot'],
-] as const;
-
 export function ListenRackPage({ versionId, track: trackProp, fixPreset, reportRef = null, songId, latestJobId = null }: ListenRackPageProps) {
   const track = trackProp ?? TRACK;
   // ── Real-audio seam ──
@@ -169,12 +165,17 @@ export function ListenRackPage({ versionId, track: trackProp, fixPreset, reportR
     (window as unknown as { __spectrRackGraph?: typeof graph }).__spectrRackGraph = graph;
   }, [graph]);
 
-  const [tab, setTab] = useState<'rack' | 'visuals' | 'coach'>('rack');
+  const [tab, setTab] = useState<LrTabId>('rack');
   const [playing, setPlaying] = useState(!realAudio);
   const [position, setPosition] = useState(realAudio ? 0 : 42);
   const [duration, setDuration] = useState(realAudio ? 0 : track.durationSec);
-  const [director, setDirector] = useState('off');
-  const [viz, setViz] = useState<VizState>(DEFAULT_VIZ);
+  // Task V1 — no persisted viz/director choice is restored into this page
+  // today (see director.ts's persistence note), so a visitor's first paint
+  // is base state + the Minimal program applied — the SAME transform
+  // chooseDirector uses below. Lazy initializers run once, pre-paint: no
+  // flash, no write-back.
+  const [director, setDirector] = useState<string>(() => initialDirectorState().director);
+  const [viz, setViz] = useState<VizState>(() => initialDirectorState().viz);
   const [stages, setStages] = useState<string[]>(['eq']);
   const toggleStage = useCallback((id: string) => setStages((s) => (s.includes(id) ? (s.length > 1 ? s.filter((x) => x !== id) : s) : [...s, id])), []);
   const [activeNote, setActiveNote] = useState<string | null>(null);
@@ -223,7 +224,7 @@ export function ListenRackPage({ versionId, track: trackProp, fixPreset, reportR
   const chooseDirector = useCallback((id: string) => {
     setDirector(id);
     const d = DIRECTORS.find((x) => x.id === id);
-    if (d && d.apply && !d.behaviorOnly) setViz((s) => ({ ...s, ...d.apply }));
+    setViz((s) => applyDirectorToViz(s, d));
   }, []);
   const directorObj: Director | undefined = useMemo(
     () => DIRECTORS.find((d) => d.id === director), [director]);
@@ -447,16 +448,8 @@ export function ListenRackPage({ versionId, track: trackProp, fixPreset, reportR
               stacked with the tabbody in the left column. */}
           <div className="lr-layout">
             <div style={{ minWidth: 0 }}>
-              <div className="rtabs">
-                {LR_TABS.map(([id, label, icon]) => (
-                  <button type="button" key={id} className={'rtab' + (tab === id ? ' active' : '')} onClick={() => setTab(id)}>
-                    <span className="ic"><Icon name={icon} size={14} /></span>{label}
-                    {id === 'rack' && <span className="rtab-badge">{activeCount}</span>}
-                    {id === 'coach' && coachCount > 0 && <span className="rtab-badge">{coachCount}</span>}
-                  </button>
-                ))}
-              </div>
-              <div className="tabbody">
+              <ListenTabBar tab={tab} onSelect={setTab} activeCount={activeCount} coachCount={coachCount} />
+              <div className="tabbody" id={LR_TABPANEL_ID}>
                 {tab === 'rack' && (
                   <RackTabV2
                     rs={rs}
