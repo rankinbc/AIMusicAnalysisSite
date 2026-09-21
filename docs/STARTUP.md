@@ -267,7 +267,7 @@ issuing WSL commands; free RAM was fine (13 GB).
 
 **Fix (about 2 minutes, no reboot):**
 ```powershell
-& 'C:\Program Files\Docker\Dockeresourcesin\docker.exe' desktop restart
+& 'C:\Program Files\Docker\Docker\resources\bin\docker.exe' desktop restart
 # wait until `docker.exe ps` answers, then:
 ./scripts/start-spectr.ps1        # with the 127.0.0.1 overrides from #2b / #2c
 ```
