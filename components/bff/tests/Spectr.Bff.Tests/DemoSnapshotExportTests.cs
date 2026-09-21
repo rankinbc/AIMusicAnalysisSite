@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -32,7 +33,7 @@ namespace Spectr.Bff.Tests;
 public sealed class DemoSnapshotExportTests(WebApplicationFactory<Program> factory)
     : IClassFixture<WebApplicationFactory<Program>>, IAsyncLifetime
 {
-    private const string Key = "test-admin-key-0123456789-0123456789-d4";
+    internal const string Key = "test-admin-key-0123456789-0123456789-d4";
     private readonly List<Guid> _userIds = [];
     private readonly List<Guid> _versionIds = [];
     private readonly List<string> _assetKeys = [];
@@ -42,29 +43,43 @@ public sealed class DemoSnapshotExportTests(WebApplicationFactory<Program> facto
 
     private WebApplicationFactory<Program> Build(long? maxBytes = null)
     {
-        _dir = $"audio/demo/test-snapshots/{Guid.NewGuid():N}/";
-        return factory.WithWebHostBuilder(b =>
-        {
-            b.UseSetting("Admin:ApiKey", Key);
-            b.UseSetting("Demo:SnapshotKey", _dir + "snapshot.json");
-            if (maxBytes is { } m) b.UseSetting("Demo:SnapshotExportMaxBytes", m.ToString());
-        });
+        WebApplicationFactory<Program> f;
+        (f, _dir) = BuildFactory(factory, Key, maxBytes);
+        return f;
     }
 
-    private static HttpClient Admin(WebApplicationFactory<Program> f)
+    // Fix-round-2: extracted as `internal static` (explicit params, no hidden
+    // instance state) so DemoSnapshotExportSafetyTests.cs can reuse the exact
+    // same factory-construction logic instead of duplicating it. The instance
+    // `Build` above is a thin wrapper that also stashes `_dir` for this
+    // class's own cleanup.
+    internal static (WebApplicationFactory<Program> Factory, string Dir) BuildFactory(
+        WebApplicationFactory<Program> factory, string adminKey, long? maxBytes = null)
+    {
+        var dir = $"audio/demo/test-snapshots/{Guid.NewGuid():N}/";
+        var f = factory.WithWebHostBuilder(b =>
+        {
+            b.UseSetting("Admin:ApiKey", adminKey);
+            b.UseSetting("Demo:SnapshotKey", dir + "snapshot.json");
+            if (maxBytes is { } m) b.UseSetting("Demo:SnapshotExportMaxBytes", m.ToString());
+        });
+        return (f, dir);
+    }
+
+    internal static HttpClient Admin(WebApplicationFactory<Program> f)
     {
         var c = f.CreateClient();
         c.DefaultRequestHeaders.Add("X-Admin-Key", Key);
         return c;
     }
 
-    private static async Task<string?> Code(HttpResponseMessage r)
+    internal static async Task<string?> Code(HttpResponseMessage r)
     {
         using var doc = JsonDocument.Parse(await r.Content.ReadAsStringAsync());
         return doc.RootElement.GetProperty("error").GetProperty("code").GetString();
     }
 
-    private static async Task SetAsync(WebApplicationFactory<Program> f, Guid analysisId, Action<Analysis> mutate)
+    internal static async Task SetAsync(WebApplicationFactory<Program> f, Guid analysisId, Action<Analysis> mutate)
     {
         using var scope = f.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -79,14 +94,18 @@ public sealed class DemoSnapshotExportTests(WebApplicationFactory<Program> facto
     // D3 already carries a non-null routing plan) and returns the seeded
     // version/analysis to export FROM.
     private async Task<(Guid VersionId, Guid AnalysisId, Guid UserId, string Email)> SeedAnalyzedAsync(WebApplicationFactory<Program> f)
+        => await SeedAnalyzedAsync(f, _userIds, _versionIds);
+
+    internal static async Task<(Guid VersionId, Guid AnalysisId, Guid UserId, string Email)> SeedAnalyzedAsync(
+        WebApplicationFactory<Program> f, List<Guid> userIds, List<Guid> versionIds)
     {
         var (userId, _) = await TestAuth.RegisterAsync(f.CreateClient());
-        _userIds.Add(userId);
+        userIds.Add(userId);
         using var scope = f.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var user = await db.Users.AsNoTracking().SingleAsync(u => u.Id == userId);
         var analysis = await db.Analyses.AsNoTracking().SingleAsync(a => a.UserId == userId);
-        _versionIds.Add(analysis.VersionId!.Value);
+        versionIds.Add(analysis.VersionId!.Value);
         return (analysis.VersionId!.Value, analysis.Id, userId, user.Email);
     }
 
@@ -96,7 +115,7 @@ public sealed class DemoSnapshotExportTests(WebApplicationFactory<Program> facto
     // reading the pointer document is the only way to discover exactly what
     // an export wrote — used both for content assertions and for this test
     // class's own cleanup list.
-    private static async Task<(string? AudioKey, List<string> ImageKeys)> ReadAssetKeysAsync(
+    internal static async Task<(string? AudioKey, List<string> ImageKeys)> ReadAssetKeysAsync(
         WebApplicationFactory<Program> f, string snapshotKey)
     {
         using var scope = f.Services.CreateScope();
@@ -120,7 +139,7 @@ public sealed class DemoSnapshotExportTests(WebApplicationFactory<Program> facto
         _assetKeys.AddRange(imageKeys);
     }
 
-    private static async Task<byte[]> ReadBytesAsync(WebApplicationFactory<Program> f, string key)
+    internal static async Task<byte[]> ReadBytesAsync(WebApplicationFactory<Program> f, string key)
     {
         using var scope = f.Services.CreateScope();
         var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
@@ -350,7 +369,11 @@ public sealed class DemoSnapshotExportTests(WebApplicationFactory<Program> facto
 
         const string verdict1Id = "vrd_01ROUNDTRIPAAAAAAAAAAAAAAA";
         const string verdict2Id = "vrd_01ROUNDTRIPBBBBBBBBBBBBBB";
+        const string sourceFixJson = "{\"ops\":[{\"type\":\"peaking_eq\",\"frequency_hz\":45,\"gain_db\":-3,\"q\":1.2}]}";
+        const string sourceChainJson =
+            "{\"order\":[\"eq\",\"comp\"],\"modules\":{\"eq\":{\"enabled\":true},\"comp\":{\"enabled\":true}},\"masterBypass\":false}";
         string sourceSongName;
+        Guid sourceSongId, sourceJobId;
 
         using (var scope = f.Services.CreateScope())
         {
@@ -362,7 +385,7 @@ public sealed class DemoSnapshotExportTests(WebApplicationFactory<Program> facto
                 Id = verdict1Id, AnalysisId = analysisId, Specialist = "low_end", PromptVersion = "low_end@1.0.0",
                 Model = "fixture", Severity = "moderate", Category = "low_end", Confidence = 0.8, PriorityScore = 90,
                 Headline = "Sub build-up", Evidence = "[]", Sources = "[]",
-                Fix = "{\"ops\":[{\"type\":\"peaking_eq\",\"frequency_hz\":45,\"gain_db\":-3,\"q\":1.2}]}",
+                Fix = sourceFixJson,
             });
             db.Verdicts.Add(new Verdict
             {
@@ -395,7 +418,7 @@ public sealed class DemoSnapshotExportTests(WebApplicationFactory<Program> facto
             db.RackPresets.Add(new RackPreset
             {
                 Id = Guid.NewGuid(), SongVersionId = versionId, Name = "My Fix Rack", Source = "user",
-                ChainJson = "{\"order\":[\"eq\",\"comp\"],\"modules\":{\"eq\":{\"enabled\":true},\"comp\":{\"enabled\":true}},\"masterBypass\":false}",
+                ChainJson = sourceChainJson,
             });
 
             var srcSpectro = _dir + "source-assets/spectrogram.webp";
@@ -417,6 +440,8 @@ public sealed class DemoSnapshotExportTests(WebApplicationFactory<Program> facto
             a.WaveformImagePath = srcWaveform;
             a.WaveformPeaksPath = srcPeaks;
             sourceSongName = a.SongName!;
+            sourceSongId = a.SongId!.Value;
+            sourceJobId = a.JobId;
             await db.SaveChangesAsync();
         }
 
@@ -449,13 +474,12 @@ public sealed class DemoSnapshotExportTests(WebApplicationFactory<Program> facto
         var newFixVerdict = Assert.Single(newVerdicts, v => v.Fix is not null);
         // Structural, not textual — postgres jsonb re-canonicalizes stored
         // JSON (key order, whitespace) on every round trip through the
-        // column, so a raw substring match on Fix text is inherently fragile.
-        using (var fixDoc = JsonDocument.Parse(newFixVerdict.Fix!))
-        {
-            var op = fixDoc.RootElement.GetProperty("ops")[0];
-            Assert.Equal("peaking_eq", op.GetProperty("type").GetString());
-            Assert.Equal(45, op.GetProperty("frequency_hz").GetInt32());
-        }
+        // column, so a raw substring match is inherently fragile. Full deep
+        // equality against the SOURCE fix ops (every property, incl.
+        // gain_db/q) — not just a couple of spot-checked fields.
+        Assert.True(
+            JsonNode.DeepEquals(JsonNode.Parse(sourceFixJson), JsonNode.Parse(newFixVerdict.Fix!)),
+            $"seeded fix ops differ structurally from the source: {newFixVerdict.Fix}");
 
         var newConvo = await db2.Conversations.AsNoTracking().SingleAsync(c => c.UserId == newUserId);
         var newMsgs = await db2.CoachMessages.AsNoTracking()
@@ -472,8 +496,10 @@ public sealed class DemoSnapshotExportTests(WebApplicationFactory<Program> facto
 
         var newPreset = await db2.RackPresets.AsNoTracking().SingleAsync(p => p.SongVersionId == newAnalysis.VersionId);
         Assert.Equal("My Fix Rack", newPreset.Name);
-        Assert.Contains("\"eq\"", newPreset.ChainJson);
-        Assert.Contains("\"comp\"", newPreset.ChainJson);
+        // Structural, incl. module order and masterBypass — not a substring probe.
+        Assert.True(
+            JsonNode.DeepEquals(JsonNode.Parse(sourceChainJson), JsonNode.Parse(newPreset.ChainJson)),
+            $"seeded rack chain differs structurally from the source: {newPreset.ChainJson}");
 
         var newVersion = await db2.SongVersions.AsNoTracking().SingleAsync(v => v.Id == newAnalysis.VersionId);
         Assert.Equal(audioKey, newVersion.FilePath);
@@ -489,10 +515,13 @@ public sealed class DemoSnapshotExportTests(WebApplicationFactory<Program> facto
             Assert.Equal("low_end", entries[0].GetProperty("name").GetString());
         }
 
-        // No source id (song/version/job/analysis, either Guid form) anywhere in the new user's rows.
+        // None of the FOUR source ids (song, version, job, analysis — either
+        // Guid form) appears anywhere in the new user's rows.
         var forbidden = new[]
         {
+            sourceSongId.ToString("D"), sourceSongId.ToString("N"),
             versionId.ToString("D"), versionId.ToString("N"),
+            sourceJobId.ToString("D"), sourceJobId.ToString("N"),
             analysisId.ToString("D"), analysisId.ToString("N"),
         };
         var blob = string.Join('\n',
@@ -502,6 +531,11 @@ public sealed class DemoSnapshotExportTests(WebApplicationFactory<Program> facto
             newPreset.ChainJson);
         foreach (var id in forbidden)
             Assert.DoesNotContain(id, blob, StringComparison.OrdinalIgnoreCase);
+
+        // The audit row records the OPERATOR's own reason, verbatim.
+        var audit = await db2.AuditLogs.AsNoTracking()
+            .SingleAsync(x => x.Action == "demo_snapshot_export" && x.Target == versionId.ToString());
+        Assert.Equal("rich export", audit.Reason);
     }
 
     // The class deletes its own snapshot-directory objects (and every DB row

@@ -111,6 +111,11 @@ public static partial class AdminEndpoints
         var ext = ExtensionOf(version.FilePath);
         var audioKey = exportDir + "source" + ext;
         var writtenKeys = new List<string>();
+        // Fix-round-2 item (b): once the go-live write succeeds, writtenKeys
+        // stops meaning "delete these on failure" and starts meaning "the
+        // live demo's own assets" — a post-go-live failure (cancellation, a
+        // failing audit SaveChangesAsync, …) must never delete them.
+        var wentLive = false;
 
         // Read the CURRENTLY LIVE snapshot's asset keys BEFORE we overwrite
         // the pointer. Best-effort: a missing or corrupt previous snapshot
@@ -161,6 +166,7 @@ public static partial class AdminEndpoints
             // it references already exists under exportDir before this runs.
             await storage.WriteAsync(snapshotKey,
                 new MemoryStream(Encoding.UTF8.GetBytes(docJson)), "application/json", ct);
+            wentLive = true; // the demo is now live on these assets — nothing below may delete them
             var audioBytes = await storage.GetFileSizeAsync(audioKey, ct) ?? 0;
 
             // The next sign-up must see this without waiting out the 60s TTL.
@@ -179,11 +185,26 @@ public static partial class AdminEndpoints
             // retire the PREVIOUS export's assets. A failure here is logged
             // and swallowed; it must never turn a successful export into an
             // error response.
+            //
+            // Fix-round-2 item (a): the OLD snapshot.json is untrusted input
+            // (corrupted, tampered, or hand-edited) — it could name ANY
+            // storage key. Retire a key only when it passes every guard:
+            // inside the required shared prefix, inside THIS snapshot's own
+            // directory, not the pointer file itself, and not (defense in
+            // depth) under the brand-new export directory. Anything else is
+            // skipped and logged, never deleted — a foreign user's audio or
+            // the shared canonical sine-tone key must never be retired.
             if (previousAssetKeys.Count > 0)
             {
                 var logger = httpCtx.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Admin");
                 foreach (var key in previousAssetKeys)
                 {
+                    if (!IsRetireableAssetKey(key, dir, snapshotKey, exportDir))
+                    {
+                        logger.LogWarning(
+                            "Refusing to retire demo snapshot asset outside its own export directory: {Key}", key);
+                        continue;
+                    }
                     try { await storage.DeleteAsync(key, ct); }
                     catch (Exception ex) { logger.LogWarning(ex, "Could not retire old demo snapshot asset {Key}", key); }
                 }
@@ -199,15 +220,33 @@ public static partial class AdminEndpoints
         }
         catch
         {
-            // This export's own assets only — the live snapshot and any
-            // previous export's assets are never touched on an abort.
-            foreach (var key in writtenKeys)
+            // Fix-round-2 item (b): once wentLive is true, writtenKeys ARE
+            // the live demo's assets — a failure here (cancellation, a
+            // failing audit SaveChangesAsync, …) must never delete them.
+            // Pre-go-live, this is exactly the old behaviour: this export's
+            // own assets only, never the live snapshot or any previous
+            // export's assets.
+            if (!wentLive)
             {
-                try { await storage.DeleteAsync(key, ct); }
-                catch { /* best-effort cleanup — the original exception is what matters */ }
+                foreach (var key in writtenKeys)
+                {
+                    try { await storage.DeleteAsync(key, ct); }
+                    catch { /* best-effort cleanup — the original exception is what matters */ }
+                }
             }
             throw;
         }
+    }
+
+    // Fix-round-2 item (a) — every hold must pass before a key read from an
+    // untrusted OLD snapshot.json is ever deleted.
+    private static bool IsRetireableAssetKey(string key, string dir, string snapshotKey, string exportDir)
+    {
+        if (!DemoSnapshotStore.IsSharedKey(key)) return false;
+        if (!key.StartsWith(dir, StringComparison.Ordinal)) return false;
+        if (key == snapshotKey) return false;
+        if (key.StartsWith(exportDir, StringComparison.Ordinal)) return false; // never the NEW export's own assets
+        return true;
     }
 
     // Fix-round-1 items 1+4 — resolves the configured destination BEFORE any
