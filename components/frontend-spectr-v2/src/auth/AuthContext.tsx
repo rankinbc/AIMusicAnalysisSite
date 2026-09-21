@@ -8,11 +8,14 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { flushSync } from 'react-dom';
 
 import { useQueryClient } from '@tanstack/react-query';
 
 import {
+  bumpSessionGeneration,
   fetcher,
+  getSessionGeneration,
   onAuthCleared,
   onTokenRefreshed,
   refreshSession,
@@ -50,10 +53,12 @@ export const AuthContext = createContext<AuthContextValue | null>(null);
 // lives in fetcher.refreshSession — shared with the 401 handler so the two
 // mechanisms can never race token rotation against each other.
 //
-// Session epoch: logout bumps this so a refresh that was already in flight
-// when the user logged out can never re-apply its (stale) session onto the
-// logged-out UI.
-let sessionEpoch = 0;
+// Session generation: logout/startDemo/login bump fetcher.ts's shared
+// sessionGeneration counter (see fetcher.ts) so a refresh that was already
+// in flight when the session changed can never re-apply its stale result —
+// neither the `user` object here NOR the module-level token in fetcher.ts
+// (D9 fix round 1, item 1: the token assignment itself is gated inside
+// refreshSession, not just this component's use of its result).
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
@@ -69,10 +74,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // twice before (bdc9596 / 915732d) — clear on every user-id change, not
   // just logout, so a guest→real-user or guest→guest handoff is covered too.
   const queryClient = useQueryClient();
-  const prevUserId = useRef<string | null>(null);
+  // D9 fix round 1 (item 2): `undefined` means "not observed yet" — distinct
+  // from `null` ("signed out"/never signed in). Using `null` as the initial
+  // sentinel made the FIRST sign-in of any browsing session (anon `null` →
+  // a real id, including the very first guest) never clear, because
+  // `prevUserId.current !== null` was false before any transition had
+  // happened. Now every id change after the first observation clears,
+  // including `null → id` and `id → null`.
+  const prevUserId = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     const id = state.user?.id ?? null;
-    if (prevUserId.current !== null && prevUserId.current !== id) queryClient.clear();
+    if (prevUserId.current !== undefined && prevUserId.current !== id) queryClient.clear();
     prevUserId.current = id;
   }, [state.user?.id, queryClient]);
 
@@ -91,16 +103,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refresh = useCallback(async (): Promise<boolean> => {
-    const epoch = sessionEpoch;
+    const epoch = getSessionGeneration();
     try {
       const data = await refreshSession();
-      // Logout happened while this refresh was in flight — do not resurrect
-      // the stale session.
-      if (epoch !== sessionEpoch) return false;
+      // Logout/startDemo/login happened while this refresh was in flight —
+      // do not resurrect the stale session.
+      if (epoch !== getSessionGeneration()) return false;
       applyAuth(data);
       return data !== null;
     } catch {
-      if (epoch === sessionEpoch) applyAuth(null);
+      if (epoch === getSessionGeneration()) applyAuth(null);
       return false;
     }
   }, [applyAuth]);
@@ -173,20 +185,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   // D9 — one-click guest sandbox. A boot refresh may still be in flight on a
-  // cold /demo load. Bumping the epoch makes its late result a no-op (see
-  // refresh() above) instead of overwriting — or, when it resolves null,
-  // wiping — the guest session applied below.
+  // cold /demo load. Bumping the session generation makes its late result a
+  // no-op (see refresh() above, and fetcher.ts's own gate on the token
+  // assignment) instead of overwriting — or, when it resolves null, wiping —
+  // the guest session applied below.
   const startDemo = useCallback(async () => {
-    sessionEpoch++;
-    const res = await fetcher<DemoStartResponse>({ url: '/auth/demo', method: 'POST' });
-    applyAuth({ accessToken: res.accessToken, user: res.user });
-    return res;
-  }, [applyAuth]);
+    bumpSessionGeneration();
+    try {
+      const res = await fetcher<DemoStartResponse>({ url: '/auth/demo', method: 'POST' });
+      // D9 fix round 1 (item 3a): clear synchronously, inside this function,
+      // BEFORE the launcher can navigate — the passive prevUserId effect
+      // above is the safety net for login/logout, not the primary mechanism
+      // for a flow whose caller acts on the return value immediately.
+      queryClient.clear();
+      // flushSync: guarantees every context.auth consumer (notably
+      // main.tsx's RouterBridge, which feeds the LIVE TanStack Router
+      // context) has already re-rendered with the guest by the time this
+      // promise resolves. Without it, React's default scheduling can defer
+      // the commit past the launcher's immediately-following
+      // router.invalidate() call, which would then re-run `_app`'s
+      // beforeLoad against a still-stale `context.auth.user === null` and
+      // bounce the guest to /login. Scoped to startDemo only — login/logout
+      // /refresh keep their existing (batched) behaviour.
+      flushSync(() => {
+        applyAuth({ accessToken: res.accessToken, user: res.user });
+      });
+      return res;
+    } catch (err) {
+      // D9 fix round 1 (item 3b): the generation bump above discarded
+      // whatever refresh was already in flight. The demo failed to start,
+      // so recover the cookie's real session (if any) rather than stranding
+      // a signed-in visitor logged out. The error still propagates.
+      void refresh();
+      throw err;
+    }
+  }, [applyAuth, refresh, queryClient]);
 
   const logout = useCallback(async () => {
     // Invalidate any in-flight refresh FIRST so its result can't re-apply
     // a session after the user chose to leave.
-    sessionEpoch++;
+    bumpSessionGeneration();
     try {
       await fetcher<void>({ url: '/auth/logout', method: 'POST' });
     } finally {

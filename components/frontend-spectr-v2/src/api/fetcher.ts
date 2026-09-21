@@ -18,6 +18,23 @@ let refreshInFlight: Promise<AuthResponse | null> | null = null;
 let onAuthClearedCallback: (() => void) | null = null;
 let onTokenRefreshedCallback: ((token: string) => void) | null = null;
 
+// D9 fix round 1 (item 1): a monotonically increasing session generation.
+// AuthContext bumps it on startDemo/login/logout — refreshSession captures
+// the generation live WHEN a refresh starts and re-checks it before
+// installing the response, so a refresh that was already in flight when the
+// session changed underneath it can never overwrite (or, on a 401, wipe) the
+// new session's token. Single source of truth for both fetcher.ts's own 401
+// retry path and AuthContext's boot/silent refresh.
+let sessionGeneration = 0;
+
+export function bumpSessionGeneration(): void {
+  sessionGeneration++;
+}
+
+export function getSessionGeneration(): number {
+  return sessionGeneration;
+}
+
 export function setAccessToken(token: string | null): void {
   accessToken = token;
   // Session boundary (logout / auth clear): a stale traceId must not leak
@@ -77,6 +94,14 @@ interface FetcherConfig {
  */
 export async function refreshSession(): Promise<AuthResponse | null> {
   refreshInFlight ??= (async () => {
+    // Captured for the WHOLE in-flight request (not per-caller): a bump that
+    // happens after this fetch started means the response, even a 200,
+    // belongs to a session that no longer exists by the time it arrives.
+    // The data is still returned to every awaiter — AuthContext.refresh()
+    // has its own generation check before deciding whether to apply it —
+    // but the token/callback side effect below (the only place that mutates
+    // module state unconditionally) must not fire for a superseded request.
+    const startGeneration = sessionGeneration;
     const doRefresh = async (): Promise<AuthResponse | null> => {
       try {
         const r = await fetch('/api/auth/refresh', {
@@ -85,8 +110,10 @@ export async function refreshSession(): Promise<AuthResponse | null> {
         });
         if (!r.ok) return null;
         const data = (await r.json()) as AuthResponse;
-        accessToken = data.accessToken;
-        onTokenRefreshedCallback?.(data.accessToken);
+        if (sessionGeneration === startGeneration) {
+          accessToken = data.accessToken;
+          onTokenRefreshedCallback?.(data.accessToken);
+        }
         return data;
       } catch {
         return null;
