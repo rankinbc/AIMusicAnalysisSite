@@ -36,7 +36,7 @@ Making spectrmix.com impressive to a first-time visitor who is a software hiring
 ## Project state
 - Branch: `solo`, pushed at `a3961cc`; this HANDOFF commit is local on top.
 - Uncommitted: 2 files — `components/frontend-spectr-v2/src/features/results/AnalysisCompleteModal.tsx` / `.module.css` (ANOTHER session's work — never stage or edit).
-- Ledgers (git-ignored, the real state): `.superpowers/sdd/first-impression-ledger.md` (controller: decisions, checkpoints, dispatch recipe), `.superpowers/sdd/guest-demo-sandbox-plan/progress.md`, `.superpowers/sdd/public-surfaces-polish-plan/progress.md`, plus `task-*-brief.md` files there.
+- Ledgers — COPIES committed under `PRPs/handoff-ledgers/` (incl. `approved-plan.md`) so they travel between machines; on a new machine copy them back to `.superpowers/sdd/` (git-ignored working location). Originals: `.superpowers/sdd/first-impression-ledger.md` (controller: decisions, checkpoints, dispatch recipe), `.superpowers/sdd/guest-demo-sandbox-plan/progress.md`, `.superpowers/sdd/public-surfaces-polish-plan/progress.md`, plus `task-*-brief.md` files there.
 - Running: dev stack from this worktree (BFF :5000, frontend :5174, coach + analysis workers, Docker Postgres/Redis). The shared Playwright browser is logged OUT on purpose. Several stale empty "SPECTR …" PowerShell windows can be closed.
 - Local demo track (analyzed, NO arrangement data): song `a2fe6c31-e9ce-4f7d-95ed-3f0af4b938c4`, version `eb0ef7bb-e5da-42b1-a137-1fc7b9a0fc59`, job `eca86baf-1d85-4f29-9243-a3042a1968d0` in the local showcase account. Before exporting a snapshot it still needs verdicts/triage, a short coach conversation, a fix rack, and a clean title.
 
