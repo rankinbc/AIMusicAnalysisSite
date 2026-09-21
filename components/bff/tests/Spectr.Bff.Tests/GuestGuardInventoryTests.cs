@@ -37,25 +37,41 @@ public sealed class GuestGuardInventoryTests(WebApplicationFactory<Program> fact
     // is the live route table's marker set, captured once and frozen: opening
     // (or closing) a route to guests now requires a deliberate edit here, and
     // any accidental marker change fails this test instead of shipping quiet.
+    // Task G1 added 15 rows (all "None") — see GuestAllowancesTests.cs's
+    // NowOpen theory for the same list exercised end-to-end: song
+    // delete/restore, version delete, stems stage/stage-keys/classify/confirm,
+    // .als/als-key, uploads/attachments/init, references create/complete-key/
+    // delete/analyze, jobs/retry.
     private static readonly (string Method, string Pattern, string Marker)[] FrozenMarkers =
     [
         ("POST", "/api/coach/{analysisId:guid}/messages", "None"),
         ("DELETE", "/api/compare/notes", "None"),
         ("PUT", "/api/compare/notes", "None"),
+        ("POST", "/api/jobs/{jobId:guid}/retry", "None"),
         ("GET", "/api/me/export", "Denied"),
+        ("POST", "/api/references/", "None"),
+        ("POST", "/api/references/complete-key", "None"),
+        ("DELETE", "/api/references/{referenceId:guid}", "None"),
+        ("POST", "/api/references/{referenceId:guid}/analyze", "None"),
         ("POST", "/api/reports/{jobId:guid}/fix-rack/", "None"),
         ("POST", "/api/reports/{jobId:guid}/verdicts/run/{specialist}", "None"),
+        ("DELETE", "/api/songs/{songId:guid}", "None"),
         ("PATCH", "/api/songs/{songId:guid}", "None"),
+        ("POST", "/api/songs/{songId:guid}/restore", "None"),
         ("POST", "/api/songs/{songId:guid}/tags", "None"),
         ("DELETE", "/api/songs/{songId:guid}/tags/{tagId:guid}", "None"),
         ("POST", "/api/uploads/abort", "None"),
+        ("POST", "/api/uploads/attachments/init", "None"),
         ("POST", "/api/uploads/complete", "Upload"),
         ("POST", "/api/uploads/init", "Upload"),
         ("POST", "/api/verdicts/{verdictId}/applied", "None"),
         ("POST", "/api/verdicts/{verdictId}/dismiss", "None"),
         ("POST", "/api/verdicts/{verdictId}/feedback", "None"),
         ("POST", "/api/versions/", "Upload"),
+        ("DELETE", "/api/versions/{versionId:guid}", "None"),
         ("PATCH", "/api/versions/{versionId:guid}", "None"),
+        ("POST", "/api/versions/{versionId:guid}/als", "None"),
+        ("POST", "/api/versions/{versionId:guid}/als-key", "None"),
         ("POST", "/api/versions/{versionId:guid}/analyze", "None"),
         ("POST", "/api/versions/{versionId:guid}/notes", "None"),
         ("DELETE", "/api/versions/{versionId:guid}/notes/{noteId:guid}", "None"),
@@ -66,6 +82,10 @@ public sealed class GuestGuardInventoryTests(WebApplicationFactory<Program> fact
         ("DELETE", "/api/versions/{versionId:guid}/rating", "None"),
         ("PUT", "/api/versions/{versionId:guid}/rating", "None"),
         ("POST", "/api/versions/{versionId:guid}/set-current", "None"),
+        ("POST", "/api/versions/{versionId:guid}/stems/classify", "None"),
+        ("POST", "/api/versions/{versionId:guid}/stems/confirm", "None"),
+        ("POST", "/api/versions/{versionId:guid}/stems/stage", "None"),
+        ("POST", "/api/versions/{versionId:guid}/stems/stage-keys", "None"),
         ("POST", "/api/viz/presets", "None"),
         ("DELETE", "/api/viz/presets/{presetId:guid}", "None"),
     ];

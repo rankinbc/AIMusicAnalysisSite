@@ -26,7 +26,14 @@ public static class VersionEndpoints
             .AllowGuestUpload();
 
         g.MapGet("/{versionId:guid}", GetById);
-        g.MapDelete("/{versionId:guid}", Delete); // denied by default (D4) — cannot reset the upload quota via delete+reupload
+        // Task G1 (ruling R7): a guest may delete their own version. WHY this
+        // is still safe under the upload quota: a delete can lower the
+        // version DB count, but the upload quota is enforced by the ATOMIC
+        // `guest_upload:{userId}` limiter (CheckUploadAsync) — a bucket that
+        // never resets on delete — plus the analysis count is append-only
+        // usage_events. Neither bound is reset by removing a row, so
+        // delete+reupload cannot mint extra quota.
+        g.MapDelete("/{versionId:guid}", Delete).AllowGuest();
         g.MapPatch("/{versionId:guid}", PatchVersion).AllowGuest();
         g.MapPost("/{versionId:guid}/analyze", Reanalyze).AllowGuest(); // quota enforced inside DispatchAnalysisAsync
         g.MapPost("/{versionId:guid}/set-current", SetCurrent).AllowGuest();
@@ -43,22 +50,29 @@ public static class VersionEndpoints
             .WithMetadata(new RequestSizeLimitAttribute(MaxUploadBytes * 30));  // up to 30 stems (legacy role-keyed)
 
         // Bulk stem flow: stage (multi-file) -> classify (worker) -> poll -> confirm.
+        // Task G1 — guests get the bulk stem flow (under CheckStemsAsync caps
+        // enforced inside the handlers); the legacy role-keyed UploadStems
+        // above stays closed.
         g.MapPost("/{versionId:guid}/stems/stage", StageStems)
             .DisableAntiforgery()
-            .WithMetadata(new RequestSizeLimitAttribute(MaxUploadBytes * 20));
-        g.MapPost("/{versionId:guid}/stems/classify", ClassifyStems);
+            .WithMetadata(new RequestSizeLimitAttribute(MaxUploadBytes * 20))
+            .AllowGuest();
+        g.MapPost("/{versionId:guid}/stems/classify", ClassifyStems).AllowGuest();
         g.MapGet("/{versionId:guid}/stems", GetStems);
-        g.MapPost("/{versionId:guid}/stems/confirm", ConfirmStems);
+        g.MapPost("/{versionId:guid}/stems/confirm", ConfirmStems).AllowGuest();
         g.MapGet("/{versionId:guid}/stems/{stemId}/audio", StreamStemAudio);
 
         g.MapPost("/{versionId:guid}/als", UploadAls)
             .DisableAntiforgery()
-            .WithMetadata(new RequestSizeLimitAttribute(50L * 1024 * 1024));    // .als files are small
+            .WithMetadata(new RequestSizeLimitAttribute(50L * 1024 * 1024))    // .als files are small
+            .AllowGuest();
 
         // Story 3.2 — register attachments already PUT to object storage via
         // the presigned path (/uploads/attachments/init). JSON-only (no bytes).
-        g.MapPost("/{versionId:guid}/stems/stage-keys", StageStemKeys);
-        g.MapPost("/{versionId:guid}/als-key", RegisterAlsKey);
+        // Task G1 — guests get the presigned stems/.als registration too
+        // (CheckStemsAsync applies the same cap as the proxy-upload path).
+        g.MapPost("/{versionId:guid}/stems/stage-keys", StageStemKeys).AllowGuest();
+        g.MapPost("/{versionId:guid}/als-key", RegisterAlsKey).AllowGuest();
 
         // Personal score — per-user × per-version rating (Change B)
         g.MapPut("/{versionId:guid}/rating", SetRating).AllowGuest();
@@ -702,7 +716,10 @@ public static class VersionEndpoints
 
     // Persisted shape of song_versions.stem_paths_raw. JsonPropertyName forces
     // snake_case keys so the Python worker (classify_stems / phase4) reads them.
-    private sealed class StemRawEntry
+    // Task G1 — internal (was private): UploadEndpoints.AttachmentInit reuses
+    // this shape + ReadRaw/SumStemBytesAsync to apply the same guest stems
+    // cap to the presigned single-attachment path.
+    internal sealed class StemRawEntry
     {
         [JsonPropertyName("id")] public string Id { get; set; } = "";
         [JsonPropertyName("original_filename")] public string OriginalFilename { get; set; } = "";
@@ -713,13 +730,26 @@ public static class VersionEndpoints
         [JsonPropertyName("confirmed_role")] public string? ConfirmedRole { get; set; }
     }
 
-    private static List<StemRawEntry> ReadRaw(string? json) =>
+    internal static List<StemRawEntry> ReadRaw(string? json) =>
         string.IsNullOrEmpty(json)
             ? new List<StemRawEntry>()
             : JsonSerializer.Deserialize<List<StemRawEntry>>(json) ?? new List<StemRawEntry>();
 
     private static StemRawDto ToDto(StemRawEntry e) =>
         new(e.Id, e.OriginalFilename, e.DetectedRole, e.Confidence, e.Evidence, e.ConfirmedRole);
+
+    // Task G1 — total byte size of already-staged stems, for the guest stems
+    // cap (CheckStemsAsync). A missing/orphaned blob counts as 0 rather than
+    // failing the whole request — this is a best-effort cap, not a strict
+    // accounting ledger.
+    internal static async Task<long> SumStemBytesAsync(
+        IEnumerable<StemRawEntry> entries, IFileStorage storage, CancellationToken ct)
+    {
+        long total = 0;
+        foreach (var e in entries)
+            total += await storage.GetFileSizeAsync(e.Key, ct) ?? 0;
+        return total;
+    }
 
     // NOTE: no AsNoTracking — stage/confirm write through the returned entity, and
     // AsNoTracking anywhere in a query makes the WHOLE query no-tracking, which would
@@ -746,7 +776,7 @@ public static class VersionEndpoints
     // POST /api/versions/{id}/stems/stage — append staged stems (call once or in batches).
     private static async Task<IResult> StageStems(
         Guid versionId, HttpRequest request, ClaimsPrincipal currentUser,
-        AppDbContext db, IFileStorage storage, CancellationToken ct)
+        AppDbContext db, IFileStorage storage, GuestLimits limits, CancellationToken ct)
     {
         if (!request.HasFormContentType)
             return Results.BadRequest(new { error = "multipart/form-data required." });
@@ -759,6 +789,17 @@ public static class VersionEndpoints
             return Results.BadRequest(new { error = "At least one stem file required." });
 
         var entries = ReadRaw(version.StemPathsRaw);
+
+        // Task G1 — the guest stems cap (count + total bytes), checked before
+        // anything is written to storage.
+        if (currentUser.IsGuest())
+        {
+            var addBytes = form.Files.Where(f => f.Length > 0).Sum(f => f.Length);
+            var existingBytes = await SumStemBytesAsync(entries, storage, ct);
+            if (await limits.CheckStemsAsync(entries.Count, existingBytes, form.Files.Count, addBytes, ct) is { } denied)
+                return denied;
+        }
+
         if (entries.Count + form.Files.Count > MaxStems)
             return Results.BadRequest(new { error = $"Up to {MaxStems} stems per version." });
 
@@ -799,7 +840,7 @@ public static class VersionEndpoints
     // the source key, never the client), and each object must actually exist.
     private static async Task<IResult> StageStemKeys(
         Guid versionId, StageStemKeysRequest body, ClaimsPrincipal currentUser,
-        AppDbContext db, IMultipartObjectStore store, CancellationToken ct)
+        AppDbContext db, IMultipartObjectStore store, IFileStorage storage, GuestLimits limits, CancellationToken ct)
     {
         if (!store.IsConfigured)
             return ErrorEnvelope.Build(501, "presigned_unavailable",
@@ -818,6 +859,21 @@ public static class VersionEndpoints
         var expectedPrefix = $"stems/{jobId}/";
 
         var entries = ReadRaw(version.StemPathsRaw);
+
+        // Task G1 — same guest stems cap as StageStems. The presigned objects
+        // already exist in object storage, so their actual size is available
+        // up front (unlike AttachmentInit, which only has a client-declared
+        // size before the PUT happens).
+        if (currentUser.IsGuest())
+        {
+            var existingBytes = await SumStemBytesAsync(entries, storage, ct);
+            long addBytes = 0;
+            foreach (var item in body.Stems)
+                addBytes += await store.GetObjectSizeAsync(item.Key, ct) ?? 0;
+            if (await limits.CheckStemsAsync(entries.Count, existingBytes, body.Stems.Count, addBytes, ct) is { } denied)
+                return denied;
+        }
+
         if (entries.Count + body.Stems.Count > MaxStems)
             return Results.BadRequest(new { error = $"Up to {MaxStems} stems per version." });
 

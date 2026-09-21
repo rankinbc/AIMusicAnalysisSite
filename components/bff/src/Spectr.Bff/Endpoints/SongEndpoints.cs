@@ -21,9 +21,11 @@ public static class SongEndpoints
         g.MapPost("/", Create); // denied by default (D4) — guest song creation is the upload quota's job
         g.MapGet("/{songId:guid}", GetById);
         g.MapPatch("/{songId:guid}", Patch).AllowGuest();
-        g.MapDelete("/{songId:guid}", Archive); // denied by default (D4)
-        g.MapDelete("/{songId:guid}/permanent", HardDelete); // denied by default (D4)
-        g.MapPost("/{songId:guid}/restore", Restore); // denied by default (D4)
+        // Task G1 — a guest may archive (soft-delete) and restore their own
+        // songs; the DB query is already owner-scoped (WHERE user_id).
+        g.MapDelete("/{songId:guid}", Archive).AllowGuest();
+        g.MapDelete("/{songId:guid}/permanent", HardDelete); // still denied by default (D4) — guest data auto-purges at 24h anyway
+        g.MapPost("/{songId:guid}/restore", Restore).AllowGuest();
         g.MapPost("/{songId:guid}/tags", AddTag).AllowGuest();
         g.MapDelete("/{songId:guid}/tags/{tagId:guid}", RemoveTag).AllowGuest();
 

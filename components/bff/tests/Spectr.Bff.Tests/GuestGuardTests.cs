@@ -92,13 +92,17 @@ public sealed class GuestGuardTests(WebApplicationFactory<Program> factory)
     }
 
     // ── D4 theory: explicitly denied routes ─────────────────────────────────
+    // Task G1 moved 7 of these from Denied to Allowed (song delete/restore,
+    // version delete, stems/classify, als-key, uploads/attachments/init,
+    // jobs/retry) — see GuestAllowancesTests.cs (NowOpen/StillClosed) for the
+    // full, current-as-of-G1 open/closed route list; this theory keeps only
+    // what G1 left untouched.
     public static TheoryData<string, string> Denied => new()
     {
-        { "DELETE", "/api/songs/{song}" }, { "DELETE", "/api/songs/{song}/permanent" }, { "POST", "/api/songs/{song}/restore" },
-        { "POST", "/api/songs/" }, { "DELETE", "/api/versions/{version}" }, { "POST", "/api/versions/{version}/stems/classify" },
-        { "POST", "/api/versions/{version}/als-key" }, { "POST", "/api/uploads/attachments/init" }, { "POST", "/api/me/delete" },
+        { "DELETE", "/api/songs/{song}/permanent" },
+        { "POST", "/api/songs/" }, { "POST", "/api/me/delete" },
         { "PATCH", "/api/auth/me" }, { "PATCH", "/api/me/profile" }, { "POST", "/api/auth/resend-verification" },
-        { "POST", "/api/billing/portal" }, { "POST", "/api/reports/{job}/phases/3/rerun" }, { "POST", "/api/jobs/{job}/retry" },
+        { "POST", "/api/billing/portal" }, { "POST", "/api/reports/{job}/phases/3/rerun" },
         { "GET", "/api/me/export" },
     };
 

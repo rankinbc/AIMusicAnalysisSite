@@ -21,7 +21,11 @@ public static class JobEndpoints
         g.MapGet("/{jobId:guid}/stream", StreamStatus);
         g.MapGet("/{jobId:guid}/results", GetResults);
         g.MapGet("/{jobId:guid}/images/{kind}", GetImage);
-        g.MapPost("/{jobId:guid}/retry", RetryFree);
+        // Task G1 — a guest may retry their own failed/degraded analysis.
+        // Ownership is enforced inside RetryFree (WHERE user_id); eligibility
+        // is bounded server-side (once per original consuming analysis), so
+        // this can't be used to mint unbounded free re-analyses.
+        g.MapPost("/{jobId:guid}/retry", RetryFree).AllowGuest();
 
         return app;
     }

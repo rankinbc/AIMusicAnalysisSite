@@ -32,8 +32,9 @@ public static class UploadEndpoints
         g.MapPost("/complete", Complete).AllowGuestUpload();
         g.MapPost("/abort", Abort).AllowGuest();
         // Story 3.2 — single-PUT presign for attachments (stems/.als/reference).
-        // Denied by default (D4) — guests may not upload stems/.als/reference.
-        g.MapPost("/attachments/init", AttachmentInit);
+        // Task G1 — guests may presign stems/.als/reference now too (caps
+        // enforced inside the handler; the stem branch calls CheckStemsAsync).
+        g.MapPost("/attachments/init", AttachmentInit).AllowGuest();
         return app;
     }
 
@@ -301,6 +302,8 @@ public static class UploadEndpoints
         ClaimsPrincipal currentUser,
         AppDbContext db,
         IMultipartObjectStore store,
+        IFileStorage storage,
+        GuestLimits limits,
         ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
@@ -348,10 +351,17 @@ public static class UploadEndpoints
                     // presigns (stage-keys enforces the cap again at register).
                     var stagedJson = await db.SongVersions.AsNoTracking()
                         .Where(v => v.Id == vid).Select(v => v.StemPathsRaw).FirstOrDefaultAsync(ct);
-                    var stagedCount = string.IsNullOrEmpty(stagedJson)
-                        ? 0
-                        : System.Text.Json.JsonDocument.Parse(stagedJson).RootElement.GetArrayLength();
-                    if (stagedCount >= 100)
+                    var stagedEntries = VersionEndpoints.ReadRaw(stagedJson);
+                    // Task G1 — the guest stems cap. `addBytes` here is the
+                    // client-DECLARED size (the PUT hasn't happened yet) —
+                    // stage-keys re-checks the ACTUAL object size at register.
+                    if (currentUser.IsGuest())
+                    {
+                        var existingBytes = await VersionEndpoints.SumStemBytesAsync(stagedEntries, storage, ct);
+                        if (await limits.CheckStemsAsync(stagedEntries.Count, existingBytes, addFiles: 1, addBytes: body.FileSize, ct) is { } denied)
+                            return denied;
+                    }
+                    if (stagedEntries.Count >= 100)
                         return Results.BadRequest(new { error = "Up to 100 stems per version." });
                     var stemId = Guid.NewGuid().ToString();
                     var stemKey = $"stems/{jobId}/{stemId}{ext}";

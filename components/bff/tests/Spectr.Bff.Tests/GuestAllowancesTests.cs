@@ -118,4 +118,91 @@ public sealed class GuestAllowancesTests(WebApplicationFactory<Program> factory)
             .OfType<Microsoft.EntityFrameworkCore.Migrations.Operations.SqlOperation>().Select(o => o.Sql));
         Assert.Matches($@"UPDATE feature_flags SET value\s*=\s*'{to}'[^;]*WHERE name\s*=\s*'{name}'\s+AND value\s*=\s*'{from}'", sql);
     }
+
+    // ── the second reference upload trips CheckReferenceAsync (same style as
+    // The_Analysis_Cap_Counts_Analyses_Not_Uploads) — needs the POST
+    // /api/references/ marker from step 5, so it lives here rather than with
+    // the other cap tests above. ────────────────────────────────────────────
+
+    [SkippableFact]
+    public async Task The_Second_Guest_Reference_Upload_Is_403_Restricted()
+    {
+        await TestDb.RequireAsync(factory);
+        using var f = Build(); var (client, demo) = await StartGuestAsync(f);
+        try
+        {
+            using (var scope = f.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                db.ReferenceTracks.Add(new ReferenceTrack { UserId = demo.User.Id, Title = "Seeded ref" });
+                await db.SaveChangesAsync();
+            }
+
+            var form = new MultipartFormDataContent();
+            var fileContent = new ByteArrayContent(DemoSeeder.GenerateToneWav());
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
+            form.Add(fileContent, "file", "second-ref.wav");
+            var resp = await client.PostAsync("/api/references/", form);
+            var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(403, (int)resp.StatusCode);
+            Assert.Equal("guest_restricted", body.GetProperty("error").GetProperty("code").GetString());
+            Assert.Equal("reference_limit", body.GetProperty("error").GetProperty("details").GetProperty("reason").GetString());
+        }
+        finally { await CleanupAsync(f, demo.User.Id); }
+    }
+
+    // ── step 3's allowance tests: the NowOpen / StillClosed route lists ─────
+
+    public static TheoryData<string, string> NowOpen => new()
+    {
+        { "DELETE", "/api/versions/{id}" }, { "POST", "/api/versions/{id}/stems/stage" },
+        { "POST", "/api/versions/{id}/stems/stage-keys" }, { "POST", "/api/versions/{id}/stems/classify" },
+        { "POST", "/api/versions/{id}/stems/confirm" }, { "POST", "/api/versions/{id}/als" },
+        { "POST", "/api/versions/{id}/als-key" }, { "POST", "/api/uploads/attachments/init" },
+        { "POST", "/api/references/" }, { "POST", "/api/references/complete-key" },
+        { "POST", "/api/references/{id}/analyze" }, { "DELETE", "/api/references/{id}" },
+        { "DELETE", "/api/songs/{id}" }, { "POST", "/api/songs/{id}/restore" }, { "POST", "/api/jobs/{id}/retry" },
+    };
+    public static TheoryData<string, string> StillClosed => new()
+    {
+        { "DELETE", "/api/songs/{id}/permanent" }, { "POST", "/api/songs/" },
+        { "POST", "/api/reports/{id}/phases/4/rerun" }, { "POST", "/api/versions/{id}/stems" },
+        { "POST", "/api/me/delete" }, { "GET", "/api/me/export" },
+    };
+
+    private static async Task<(int Status, string? Code)> SendAsync(HttpClient c, string method, string path)
+    {
+        var req = new HttpRequestMessage(new HttpMethod(method), path.Replace("{id}", Guid.NewGuid().ToString()));
+        if (method != "GET" && method != "DELETE") req.Content = JsonContent.Create(new { });
+        var resp = await c.SendAsync(req);
+        string? code = null;
+        try { code = (await resp.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetProperty("code").GetString(); } catch { }
+        return ((int)resp.StatusCode, code);
+    }
+
+    [SkippableTheory, MemberData(nameof(NowOpen))]
+    public async Task A_Guest_Reaches_The_Handler(string method, string path)
+    {
+        await TestDb.RequireAsync(factory);
+        using var f = Build(); var (client, demo) = await StartGuestAsync(f);
+        try
+        {
+            var (_, code) = await SendAsync(client, method, path);
+            Assert.NotEqual("guest_restricted", code); // 400/404/415 from the handler are all fine — the GUARD let it through
+        }
+        finally { await CleanupAsync(f, demo.User.Id); }
+    }
+
+    [SkippableTheory, MemberData(nameof(StillClosed))]
+    public async Task A_Guest_Is_Still_Refused(string method, string path)
+    {
+        await TestDb.RequireAsync(factory);
+        using var f = Build(); var (client, demo) = await StartGuestAsync(f);
+        try
+        {
+            var (status, code) = await SendAsync(client, method, path);
+            Assert.Equal(403, status); Assert.Equal("guest_restricted", code);
+        }
+        finally { await CleanupAsync(f, demo.User.Id); }
+    }
 }

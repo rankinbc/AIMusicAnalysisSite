@@ -18,19 +18,21 @@ public static class ReferenceEndpoints
     {
         var refs = app.MapGroup("/references").WithTags("references").RequireAuthorization();
         refs.MapGet("/", List);
+        // Task G1 — a guest may upload ONE reference track (CheckReferenceAsync).
         refs.MapPost("/", Upload)
             .DisableAntiforgery()
-            .WithMetadata(new RequestSizeLimitAttribute(MaxUploadBytes));
+            .WithMetadata(new RequestSizeLimitAttribute(MaxUploadBytes))
+            .AllowGuest();
         refs.MapPost("/batch", UploadBatch)
             .DisableAntiforgery()
             .WithMetadata(new RequestSizeLimitAttribute(MaxUploadBytes * 100));
         // Story 3.2 — register a reference already PUT via the presigned path.
-        refs.MapPost("/complete-key", CompleteKey);
+        refs.MapPost("/complete-key", CompleteKey).AllowGuest();
         refs.MapPost("/analyze", AnalyzeBatch);
         refs.MapGet("/{referenceId:guid}", GetById);
         refs.MapPatch("/{referenceId:guid}", Patch);
-        refs.MapDelete("/{referenceId:guid}", Delete);
-        refs.MapPost("/{referenceId:guid}/analyze", Analyze);
+        refs.MapDelete("/{referenceId:guid}", Delete).AllowGuest();
+        refs.MapPost("/{referenceId:guid}/analyze", Analyze).AllowGuest();
 
         var sets = app.MapGroup("/reference-sets").WithTags("reference-sets").RequireAuthorization();
         sets.MapGet("/", ListSets);
@@ -78,6 +80,7 @@ public static class ReferenceEndpoints
         ClaimsPrincipal currentUser,
         AppDbContext db,
         IFileStorage storage,
+        GuestLimits limits,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -85,6 +88,10 @@ public static class ReferenceEndpoints
             return Results.BadRequest(new { error = "Empty file." });
         if (file.Length > MaxUploadBytes)
             return Results.BadRequest(new { error = "File exceeds 250 MB limit." });
+
+        // Task G1 — one reference track per guest.
+        if (currentUser.IsGuest() && await limits.CheckReferenceAsync(userId, ct) is { } denied)
+            return denied;
 
         var titleClean = (title ?? Path.GetFileNameWithoutExtension(file.FileName) ?? "Untitled").Trim();
         if (string.IsNullOrEmpty(titleClean)) titleClean = "Untitled";
@@ -131,6 +138,7 @@ public static class ReferenceEndpoints
         ClaimsPrincipal currentUser,
         AppDbContext db,
         IMultipartObjectStore store,
+        GuestLimits limits,
         CancellationToken ct)
     {
         if (!store.IsConfigured)
@@ -138,6 +146,11 @@ public static class ReferenceEndpoints
                 "Presigned upload storage is not configured; use the legacy upload endpoint.");
 
         var userId = currentUser.UserId();
+
+        // Task G1 — one reference track per guest (same cap as Upload).
+        if (currentUser.IsGuest() && await limits.CheckReferenceAsync(userId, ct) is { } denied)
+            return denied;
+
         var expectedPrefix = $"reference/{body.ReferenceId}/";
         if (!UploadEndpoints.ValidSingleSegmentKey(body.Key, expectedPrefix))
             return Results.BadRequest(new { error = "Key does not match this reference upload." });
@@ -248,7 +261,11 @@ public static class ReferenceEndpoints
 
         if (!string.IsNullOrEmpty(key))
         {
-            try { await storage.DeleteAsync(key, ct); }
+            // Task G1 — a reference blob is never seeded/shared (no demo
+            // reference exists), but route every guest-reachable delete
+            // through the shared-audio guard for consistency with the
+            // version/song delete paths.
+            try { await storage.DeleteUnlessSharedAsync(key, ct); }
             catch { /* orphaned file is harmless once row is gone */ }
         }
         return Results.NoContent();
@@ -269,11 +286,13 @@ public static class ReferenceEndpoints
             return Results.BadRequest(new { error = "Reference has no file to analyze." });
 
         // Enqueue the dedicated reference-analyzer actor; it'll populate
-        // BPM/LUFS/etc. and flip `analyzed=true` on success.
+        // BPM/LUFS/etc. and flip `analyzed=true` on success. Task G1 —
+        // guest reference-analysis work rides the free lane, same as every
+        // other guest LLM/analysis dispatch (GuestLimits.QueueFor).
         await queue.EnqueueAsync(
             DramatiqTasks.RunReferenceAnalyzer,
             new object[] { referenceId.ToString() },
-            DramatiqQueues.AnalysisPaid, // story 2.5: low-volume secondary op → W1
+            GuestLimits.QueueFor(currentUser, DramatiqQueues.AnalysisPaid), // story 2.5: low-volume secondary op → W1
             ct);
         return Results.Accepted(value: ToDto(row));
     }
