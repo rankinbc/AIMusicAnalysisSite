@@ -225,6 +225,7 @@ public sealed class GuestPurgeTests(WebApplicationFactory<Program> factory)
         var q = new RecordingQueue();
         var f = Build(queue: q);
         Guid deadId = default, liveId = default;
+        string? deadDeviceId = null;
         try
         {
             var (_, dead) = await StartGuestAsync(f);
@@ -233,11 +234,18 @@ public sealed class GuestPurgeTests(WebApplicationFactory<Program> factory)
             liveId = live.User.Id;
 
             using (var scope = f.Services.CreateScope())
-                await scope.ServiceProvider.GetRequiredService<AppDbContext>().Users
+            {
+                var seedDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                deadDeviceId = await seedDb.Users.Where(u => u.Id == deadId).Select(u => u.GuestDeviceId).SingleAsync();
+                await seedDb.Users
                     .Where(u => u.Id == dead.User.Id)
                     .ExecuteUpdateAsync(s => s.SetProperty(u => u.GuestExpiresAt, DateTimeOffset.UtcNow.AddHours(-1)));
+            }
 
-            await Sweeper(f).RunOnceAsync(CancellationToken.None);
+            // I5 test seam: restrict the pass to the two ids this test
+            // created — never RunOnceAsync (which would sweep every expired
+            // guest in the shared dev DB and send real warning emails).
+            await Sweeper(f).PurgeExpiredGuestsAsync(DateTimeOffset.UtcNow, new[] { deadId, liveId }, CancellationToken.None);
 
             using var s2 = f.Services.CreateScope();
             var db = s2.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -249,32 +257,52 @@ public sealed class GuestPurgeTests(WebApplicationFactory<Program> factory)
                 m.Task == DramatiqTasks.DeleteAccountData && (string)m.Args[0] == live.User.Id.ToString());
             Assert.True(await db.AuditLogs.AnyAsync(a => a.Action == "guest_purge" && a.Target == dead.User.Id.ToString()));
         }
-        finally { await DemoAuthEndpointsTests.CleanupAsync(f, deadId, liveId); f.Dispose(); }
+        finally
+        {
+            await DemoAuthEndpointsTests.CleanupAsync(f, deadId, liveId);
+            await DeleteDeviceRowsAsync(f, deadDeviceId);
+            f.Dispose();
+        }
     }
 
     [SkippableFact]
     public async Task A_Purged_Guests_Token_Stops_Working_Immediately()
     {
         await TestDb.RequireAsync(_factory);
-        var f = Build();
+        // I4: every test in this file uses the recording queue — nothing may
+        // reach the live worker (this test previously called Build() with no
+        // override, so the real DramatiqJobQueue enqueued a real
+        // sweep_retention + delete_account_data).
+        var q = new RecordingQueue();
+        var f = Build(queue: q);
         Guid userId = default;
+        string? deviceId = null;
         try
         {
             var (client, g) = await StartGuestAsync(f);
             userId = g.User.Id;
 
             using (var scope = f.Services.CreateScope())
-                await scope.ServiceProvider.GetRequiredService<AppDbContext>().Users
+            {
+                var seedDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                deviceId = await seedDb.Users.Where(u => u.Id == userId).Select(u => u.GuestDeviceId).SingleAsync();
+                await seedDb.Users
                     .Where(u => u.Id == g.User.Id)
                     .ExecuteUpdateAsync(s => s.SetProperty(u => u.GuestExpiresAt, DateTimeOffset.UtcNow.AddHours(-1)));
+            }
 
-            await Sweeper(f).RunOnceAsync(CancellationToken.None);
+            await Sweeper(f).PurgeExpiredGuestsAsync(DateTimeOffset.UtcNow, new[] { userId }, CancellationToken.None);
 
             // Teardown evicted the tver: cache — the guest's access token,
             // still well inside its normal TTL, must die immediately.
             Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/songs/")).StatusCode);
         }
-        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); f.Dispose(); }
+        finally
+        {
+            await DemoAuthEndpointsTests.CleanupAsync(f, userId);
+            await DeleteDeviceRowsAsync(f, deviceId);
+            f.Dispose();
+        }
     }
 
     [SkippableFact]
@@ -288,7 +316,7 @@ public sealed class GuestPurgeTests(WebApplicationFactory<Program> factory)
         {
             (userId, _) = await TestAuth.RegisterAsync(f.CreateClient());
 
-            await Sweeper(f).RunOnceAsync(CancellationToken.None);
+            await Sweeper(f).PurgeExpiredGuestsAsync(DateTimeOffset.UtcNow, new[] { userId }, CancellationToken.None);
 
             using var scope = f.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -302,6 +330,7 @@ public sealed class GuestPurgeTests(WebApplicationFactory<Program> factory)
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             await TestAuth.AllowPurgeAsync(db);
             await db.Users.Where(u => u.Id == userId).ExecuteDeleteAsync();
+            f.Dispose(); // M4
         }
     }
 
@@ -324,7 +353,7 @@ public sealed class GuestPurgeTests(WebApplicationFactory<Program> factory)
                     .Where(u => u.Id == userId)
                     .ExecuteUpdateAsync(s => s.SetProperty(u => u.GuestExpiresAt, DateTimeOffset.UtcNow.AddHours(-1)));
 
-            await Sweeper(f).RunOnceAsync(CancellationToken.None);
+            await Sweeper(f).PurgeExpiredGuestsAsync(DateTimeOffset.UtcNow, new[] { userId }, CancellationToken.None);
 
             using var scope2 = f.Services.CreateScope();
             var db = scope2.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -370,7 +399,7 @@ public sealed class GuestPurgeTests(WebApplicationFactory<Program> factory)
                 await db.SaveChangesAsync();
             }
 
-            await Sweeper(f).RunOnceAsync(CancellationToken.None);
+            await Sweeper(f).PurgeExpiredGuestsAsync(DateTimeOffset.UtcNow, new[] { userId }, CancellationToken.None);
 
             using var scope2 = f.Services.CreateScope();
             var db2 = scope2.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -396,16 +425,21 @@ public sealed class GuestPurgeTests(WebApplicationFactory<Program> factory)
         var q = new RecordingQueue();
         var f = Build(queue: q);
         Guid userId = default;
+        string? deviceId = null;
         try
         {
             var (_, g) = await StartGuestAsync(f);
             userId = g.User.Id;
             using (var scope = f.Services.CreateScope())
-                await scope.ServiceProvider.GetRequiredService<AppDbContext>().Users
+            {
+                var seedDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                deviceId = await seedDb.Users.Where(u => u.Id == userId).Select(u => u.GuestDeviceId).SingleAsync();
+                await seedDb.Users
                     .Where(u => u.Id == userId)
                     .ExecuteUpdateAsync(s => s.SetProperty(u => u.GuestExpiresAt, (DateTimeOffset?)null));
+            }
 
-            await Sweeper(f).RunOnceAsync(CancellationToken.None);
+            await Sweeper(f).PurgeExpiredGuestsAsync(DateTimeOffset.UtcNow, new[] { userId }, CancellationToken.None);
 
             using var scope2 = f.Services.CreateScope();
             var db = scope2.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -413,7 +447,12 @@ public sealed class GuestPurgeTests(WebApplicationFactory<Program> factory)
             Assert.Contains(q.SentWithArgs, m =>
                 m.Task == DramatiqTasks.DeleteAccountData && (string)m.Args[0] == userId.ToString());
         }
-        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); f.Dispose(); }
+        finally
+        {
+            await DemoAuthEndpointsTests.CleanupAsync(f, userId);
+            await DeleteDeviceRowsAsync(f, deviceId);
+            f.Dispose();
+        }
     }
 
     // I3 (controller ruling, fix round 1): the guest's own device row
