@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using Spectr.Bff.Auth;
 using Spectr.Bff.Services;
 using Spectr.Data;
@@ -226,7 +225,7 @@ public static class AccountEndpoints
         ClaimsPrincipal currentUser,
         AppDbContext db,
         PasswordHasher hasher,
-        RefreshTokenService refresh,
+        AccountTeardown teardown,
         IJobQueue queue,
         IStripeSubscriptionClient stripe,
         IRateLimiter limiter,
@@ -298,43 +297,10 @@ public static class AccountEndpoints
             }
         }
 
-        // AC4 + identity teardown in ONE transaction: the audit row must
-        // commit with the delete (actor = the user being removed; audit_log
-        // deliberately has no FK for exactly this reason).
-        await using (var tx = await db.Database.BeginTransactionAsync(ct))
-        {
-            db.AuditLogs.Add(new AuditLog
-            {
-                ActorUserId = userId,
-                Action = "account_delete",
-                Target = userId.ToString(),
-                Reason = "user-initiated (FR27)",
-            });
-            await db.SaveChangesAsync(ct);
-
-            await refresh.RevokeAllForUserAsync(userId, ct);
-            await db.AuthTokens.Where(t => t.UserId == userId).ExecuteDeleteAsync(ct);
-            await db.RefreshTokens.Where(t => t.UserId == userId).ExecuteDeleteAsync(ct);
-            // Devices this user claimed: sever attribution AND scrub the
-            // peppered ip/ua hashes (hashed network identifiers are still
-            // personal data once the account is gone).
-            await db.Devices.Where(d => d.ClaimedByUserId == userId)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(d => d.ClaimedByUserId, (Guid?)null)
-                    .SetProperty(d => d.IpHash, "")
-                    .SetProperty(d => d.UaHash, ""), ct);
-
-            // The user row: FK-cascades take viz_presets, notifications,
-            // reference_sets, session_notes, credit_ledger, usage_events, subscriptions.
-            db.Users.Remove(user);
-            await db.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);
-        }
-
-        // Local session teardown FIRST — must happen even if the enqueue
-        // below fails (the deleted user's cached tver must not validate for
-        // another 60 s).
-        httpCtx.RequestServices.GetRequiredService<IMemoryCache>().Remove($"tver:{userId:N}");
+        // AC4 + identity teardown — extracted to AccountTeardown (D7) so the
+        // nightly guest-purge pass can run the EXACT same transaction +
+        // audit row + tver cache eviction for expired guest sandboxes.
+        await teardown.TearDownAsync(user, "account_delete", "user-initiated (FR27)", ct);
         resp.Cookies.Delete(RefreshTokenService.CookieName);
 
         // Content subtree + storage objects purge asynchronously (idempotent).

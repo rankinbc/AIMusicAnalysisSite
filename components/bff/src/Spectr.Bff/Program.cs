@@ -230,6 +230,9 @@ builder.Services.AddAuthorization();
 builder.Services.AddSingleton<PasswordHasher>();
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<RefreshTokenService>();
+// Task D7 — identity-teardown transaction shared by account deletion AND
+// the nightly guest-purge pass (RetentionSweepScheduler).
+builder.Services.AddScoped<AccountTeardown>();
 builder.Services.AddScoped<AuthTokenService>();  // story 4.3 — verify/reset tokens
 builder.Services.AddScoped<DeviceService>();     // story 4.5 — anon devices + claim
 builder.Services.AddScoped<DemoSeeder>();  // story 12.8 — first-run demo report

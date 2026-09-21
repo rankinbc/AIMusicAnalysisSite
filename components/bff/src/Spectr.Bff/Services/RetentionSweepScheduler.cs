@@ -98,6 +98,84 @@ internal sealed class RetentionSweepScheduler(
 
         var cfg = scope.ServiceProvider.GetRequiredService<IConfiguration>();
         await SendDueWarningsAsync(db, email, opts, cfg, ct);
+
+        // Task D7 (spec D8) — guest sandboxes cannot self-delete (POST
+        // /api/me/delete is guard-denied for guests, Auth/GuestGuard.cs);
+        // this nightly pass is the ONLY path off an expired guest row. A
+        // warning-pass or sweep-enqueue failure above must never block it.
+        await PurgeExpiredGuestsAsync(scope.ServiceProvider, ct);
+    }
+
+    // internal test seam (InternalsVisibleTo). Batches so a backlog of
+    // thousands of guests never holds one giant transaction or a single
+    // DbContext with an unbounded change tracker — each batch gets its own
+    // scope (own DbContext), and each guest gets its own try/catch so one
+    // bad row can't stop the rest (left for the next nightly run).
+    internal async Task<int> PurgeExpiredGuestsAsync(IServiceProvider sp, CancellationToken ct)
+    {
+        const int BatchSize = 200;
+        var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
+        var now = DateTimeOffset.UtcNow;
+        var purged = 0;
+
+        while (!ct.IsCancellationRequested)
+        {
+            using var batchScope = scopeFactory.CreateScope();
+            var db = batchScope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var teardown = batchScope.ServiceProvider.GetRequiredService<AccountTeardown>();
+            var queue = batchScope.ServiceProvider.GetRequiredService<IJobQueue>();
+
+            // Predicate lives in exactly ONE place, and it's a query on
+            // IsGuest — never the email suffix. D5 ruling: a NULL
+            // guest_expires_at on a guest row counts as expired (a stray row
+            // from a failed seed must not live forever). A real user can
+            // never match this (IsGuest is always false for one), even if
+            // some inconsistent row happened to carry a past
+            // guest_expires_at or a guest-looking email.
+            var batch = await db.Users
+                .Where(u => u.IsGuest && (u.GuestExpiresAt == null || u.GuestExpiresAt < now))
+                .OrderBy(u => u.CreatedAt)
+                .Take(BatchSize)
+                .ToListAsync(ct);
+            if (batch.Count == 0) break;
+
+            foreach (var guest in batch)
+            {
+                try
+                {
+                    var deviceId = guest.GuestDeviceId;
+                    await teardown.TearDownAsync(guest, "guest_purge", "guest sandbox expired", ct);
+                    await queue.EnqueueAsync(
+                        DramatiqTasks.DeleteAccountData, [guest.Id.ToString()], DramatiqQueues.Maintenance, ct);
+
+                    // D5 review finding: a guest's OWN device (users.guest_
+                    // device_id) is a pointer TearDownAsync never touches —
+                    // it only unclaims devices.claimed_by_user_id (a
+                    // different relationship real users also use). Delete
+                    // the device row only when nothing still needs it: a
+                    // later-purged guest sharing the same device (resume
+                    // flow), or ANY user (real or guest) that has since
+                    // claimed it, must keep it alive.
+                    if (deviceId is not null)
+                    {
+                        var stillReferenced = await db.Users.AnyAsync(u => u.GuestDeviceId == deviceId, ct)
+                            || await db.Devices.AnyAsync(d => d.Id == deviceId && d.ClaimedByUserId != null, ct);
+                        if (!stillReferenced)
+                            await db.Devices.Where(d => d.Id == deviceId).ExecuteDeleteAsync(ct);
+                    }
+
+                    purged++;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogError(ex, "Guest purge failed for {UserId} — left for the next nightly run.", guest.Id);
+                }
+            }
+        }
+
+        if (purged > 0)
+            _logger.LogInformation("Guest purge: {Count} expired guest sandbox(es) torn down.", purged);
+        return purged;
     }
 
     private async Task SendDueWarningsAsync(
