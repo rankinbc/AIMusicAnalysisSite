@@ -13,3 +13,9 @@ public sealed record DemoSnapshotFreeText(
 public sealed record DemoSnapshotExportResponse(
     string SnapshotKey, int Verdicts, int Messages, int RackPresets, long AudioBytes,
     DemoSnapshotFreeText FreeText);
+
+// Task D5 — POST /api/auth/demo response shapes (spec §5).
+public sealed record DemoTarget(Guid SongId, Guid VersionId, Guid JobId);
+
+public sealed record DemoStartResponse(
+    string AccessToken, AuthedUser User, DemoTarget Demo, bool Resumed);

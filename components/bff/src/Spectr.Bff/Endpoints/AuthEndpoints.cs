@@ -186,6 +186,10 @@ public static class AuthEndpoints
                 { ["password"] = ["At most 256 characters."] }); // BCrypt truncates at 72 bytes; a MB-sized value is a hash-DoS
 
         var normalizedEmail = req.Email.Trim();
+        // Task D5 — the guest domain is reserved (RFC 2606, D1); a real
+        // registration must never collide with a minted guest email.
+        if (GuestIdentity.IsGuestEmail(normalizedEmail))
+            return ErrorEnvelope.Build(400, "invalid_email", "That email address can't be used.");
         var existing = await db.Users.AnyAsync(u => u.Email == normalizedEmail, ct);
         // Wave-2 (E2.4) — typed AR38 envelope so the frontend can key on the code.
         if (existing) return ErrorEnvelope.Build(409, "email_taken", "Email already registered.");
@@ -433,11 +437,17 @@ public static class AuthEndpoints
         if (user.BannedAt is not null)
             return ErrorEnvelope.Build(403, "account_banned",
                 "This account is suspended. Contact support.");
+        // Task D5 — an expired guest must not refresh into a fresh session.
+        if (user.IsGuest && user.GuestExpiresAt <= DateTimeOffset.UtcNow)
+            return Results.Unauthorized();
 
         if (!resolved.GraceHit)
         {
-            var (newRaw, _) = await refresh.RotateAsync(resolved.Row, ct);
-            resp.Cookies.Append(RefreshTokenService.CookieName, newRaw, refresh.CookieOptions());
+            // Task D5 — a guest's rotated cookie/row is capped at GuestExpiresAt
+            // (never the default 30-day window) so it can't outlive the guest.
+            var (newRaw, _) = await refresh.RotateAsync(resolved.Row, user.IsGuest ? user.GuestExpiresAt : null, ct);
+            resp.Cookies.Append(RefreshTokenService.CookieName, newRaw,
+                user.IsGuest ? refresh.CookieOptions(user.GuestExpiresAt!.Value) : refresh.CookieOptions());
         }
         // Grace hit (E2.1): another tab already rotated — the browser holds the
         // successor cookie. Mint the access token only; rotating again or re-appending
@@ -446,7 +456,7 @@ public static class AuthEndpoints
         var access = jwt.Issue(user);
         return Results.Ok(new AuthResponse(access,
             new AuthedUser(user.Id, user.Email, user.DisplayName,
-                await ResolveTierAsync(db, user.Id, ct))));
+                await ResolveTierAsync(db, user.Id, ct), user.IsGuest)));
     }
 
     // POST /api/auth/logout — revokes the current refresh row + clears the cookie.
@@ -486,6 +496,7 @@ public static class AuthEndpoints
                 u.Id,
                 u.Email,
                 u.DisplayName,
+                u.IsGuest,
                 SubStatus = sub == null ? null : sub.Status,
             }
         ).FirstOrDefaultAsync(ct);
@@ -493,7 +504,7 @@ public static class AuthEndpoints
 
         var tier = ResolveTier(row.SubStatus);
         return Results.Ok(new AuthedUser(
-            row.Id, row.Email, row.DisplayName, tier));
+            row.Id, row.Email, row.DisplayName, tier, row.IsGuest));
     }
 
     // Story 2.1 — Stripe subscription status → product tier mapping.
@@ -620,8 +631,10 @@ public static class AuthEndpoints
                 var scfg = scope.ServiceProvider.GetRequiredService<IConfiguration>();
                 var slf = scope.ServiceProvider.GetRequiredService<ILoggerFactory>();
 
+                // Task D5 — a guest has no real inbox; skip silently (same
+                // 204 shape as the "no such account" path — no oracle).
                 var user = await sdb.Users.AsNoTracking()
-                    .FirstOrDefaultAsync(u => u.Email == address && u.IsActive);
+                    .FirstOrDefaultAsync(u => u.Email == address && u.IsActive && !u.IsGuest);
                 if (user is null) return;
 
                 var raw = await stokens.IssueAsync(

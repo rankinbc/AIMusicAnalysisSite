@@ -8,11 +8,14 @@ public sealed record AuthResponse(string AccessToken, AuthedUser User);
 // Story 2.1 — Tier is "free" until a subscription with status ∈ {active,
 // trialing} exists. Transitional field; story 2.4's Entitlements.For(user)
 // resolver will widen this into a richer object.
+// Task D5 — trailing IsGuest flag (defaulted so every existing positional
+// caller keeps compiling without a fifth argument).
 public sealed record AuthedUser(
     Guid Id,
     string Email,
     string? DisplayName,
-    string Tier);
+    string Tier,
+    bool IsGuest = false);
 
 // PATCH /api/auth/me. Null = leave unchanged. Empty string for DisplayName
 // is treated as "clear it".

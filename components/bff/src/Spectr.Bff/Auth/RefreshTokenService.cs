@@ -32,6 +32,25 @@ public sealed class RefreshTokenService(AppDbContext db, IConfiguration config)
         return (raw, row);
     }
 
+    // Task D5 — guest overload: caller supplies the expiry directly (capped
+    // at GuestExpiresAt) instead of the default _days window, so a guest's
+    // refresh cookie can never outlive the guest itself.
+    public async Task<(string Raw, RefreshToken Row)> IssueAsync(
+        Guid userId, DateTimeOffset expiresAt, CancellationToken ct = default)
+    {
+        var raw = GenerateRawToken();
+        var row = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            TokenHash = HashRaw(raw),
+            ExpiresAt = expiresAt,
+        };
+        db.RefreshTokens.Add(row);
+        await db.SaveChangesAsync(ct);
+        return (raw, row);
+    }
+
     // Returns the matching row only if not revoked and not expired.
     public async Task<RefreshToken?> ResolveAsync(string rawCookie, CancellationToken ct = default)
     {
@@ -55,6 +74,29 @@ public sealed class RefreshTokenService(AppDbContext db, IConfiguration config)
             UserId = current.UserId,
             TokenHash = HashRaw(raw),
             ExpiresAt = DateTimeOffset.UtcNow.AddDays(_days),
+        };
+        current.ReplacedById = fresh.Id;
+        db.RefreshTokens.Add(fresh);
+        await db.SaveChangesAsync(ct);
+        return (raw, fresh);
+    }
+
+    // Task D5 — guest overload: caps the successor's expiry at expiresAtCap
+    // (the guest's GuestExpiresAt) instead of the default _days window, so
+    // rotation can never push a guest's session past its sandbox lifetime.
+    public async Task<(string Raw, RefreshToken Row)> RotateAsync(
+        RefreshToken current, DateTimeOffset? expiresAtCap, CancellationToken ct = default)
+    {
+        current.RevokedAt = DateTimeOffset.UtcNow;
+        var raw = GenerateRawToken();
+        var expires = DateTimeOffset.UtcNow.AddDays(_days);
+        if (expiresAtCap is { } cap && cap < expires) expires = cap;
+        var fresh = new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = current.UserId,
+            TokenHash = HashRaw(raw),
+            ExpiresAt = expires,
         };
         current.ReplacedById = fresh.Id;
         db.RefreshTokens.Add(fresh);
@@ -110,6 +152,17 @@ public sealed class RefreshTokenService(AppDbContext db, IConfiguration config)
         SameSite = SameSiteMode.Lax,
         Path = "/api/auth",
         Expires = DateTimeOffset.UtcNow.AddDays(_days),
+    };
+
+    // Task D5 — guest overload: an explicit expiry (GuestExpiresAt) instead
+    // of the default _days window.
+    public CookieOptions CookieOptions(DateTimeOffset expires) => new()
+    {
+        HttpOnly = true,
+        Secure = true,
+        SameSite = SameSiteMode.Lax,
+        Path = "/api/auth",
+        Expires = expires,
     };
 
     public CookieOptions ClearCookieOptions() => new()

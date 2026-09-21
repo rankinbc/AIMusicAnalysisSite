@@ -16,4 +16,8 @@ public static class ClaimsPrincipalExtensions
     public static string? Email(this ClaimsPrincipal p) =>
         p.FindFirstValue(JwtRegisteredClaimNames.Email)
         ?? p.FindFirstValue(ClaimTypes.Email);
+
+    // Task D5/D3 — the in-process spectr_guest claim GuestIdentity.Mark adds
+    // during OnTokenValidated (never carried on the signed JWT itself).
+    public static bool IsGuest(this ClaimsPrincipal p) => p.HasClaim(GuestIdentity.ClaimType, "1");
 }

@@ -157,30 +157,38 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             // cross-replica — vs the token's 15-minute natural TTL.
             OnTokenValidated = async ctx =>
             {
+                // D3 — the fail-open path below (missing/unreachable cache) has
+                // no snapshot to consult; the signed JWT email claim is the
+                // fallback signal. Registration rejects the reserved domain, so
+                // this suffix can never belong to a real user.
+                var email = ctx.Principal?.Email();
+                if (GuestIdentity.IsGuestEmail(email)) GuestIdentity.Mark(ctx.Principal!);
+
                 var tverClaim = ctx.Principal?.FindFirst("tver")?.Value;
                 var sub = ctx.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
                     ?? ctx.Principal?.FindFirst("sub")?.Value;
                 if (tverClaim is null || sub is null || !Guid.TryParse(sub, out var uid))
                     return; // pre-4.6 token without tver: honored until natural expiry (≤15 min, one-time rollout window)
 
-                (int Version, bool Banned)? current;
+                AuthSnapshot? current;
                 try
                 {
                     var cache = ctx.HttpContext.RequestServices
                         .GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
                     // 10.5: same cached lookup now also carries the ban flag —
                     // one query, one cache key, one eviction path.
+                    // D3: widened again to carry guest status + expiry.
                     current = await cache.GetOrCreateAsync($"tver:{uid:N}", async e =>
                     {
                         e.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(60);
                         var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
                         var row = await db.Users.AsNoTracking()
                             .Where(u => u.Id == uid)
-                            .Select(u => new { u.TokenVersion, u.BannedAt })
+                            .Select(u => new { u.TokenVersion, u.BannedAt, u.IsGuest, u.GuestExpiresAt })
                             .FirstOrDefaultAsync();
                         return row is null
-                            ? ((int, bool)?)null
-                            : (row.TokenVersion, row.BannedAt != null);
+                            ? (AuthSnapshot?)null
+                            : new AuthSnapshot(row.TokenVersion, row.BannedAt != null, row.IsGuest, row.GuestExpiresAt);
                     });
                 }
                 catch (Exception ex)
@@ -191,7 +199,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     // (revocation bounded by the 15-min token TTL) — and a
                     // fail-closed 401 would trigger mass refresh attempts that
                     // ALSO need the down DB. Same direction as the rate
-                    // limiter's fail-open (4.3).
+                    // limiter's fail-open (4.3). Guest expiry has no fail-open
+                    // enforcement in this branch — the email-suffix Mark()
+                    // above already ran, and the natural 15-min token TTL
+                    // bounds the exposure exactly like every other revocation.
                     ctx.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
                         .CreateLogger("Auth").LogWarning(ex,
                             "Token-version check unavailable — failing OPEN.");
@@ -201,6 +212,13 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     ctx.Fail("stale token version");
                 else if (current.Value.Banned)
                     ctx.Fail("account banned"); // 10.5 — bans kill live tokens too
+                else if (current.Value.IsGuest)
+                {
+                    if (current.Value.GuestExpiresAt is { } exp && exp <= DateTimeOffset.UtcNow)
+                        ctx.Fail("guest expired"); // D3 — an expired guest's token must not authenticate
+                    else
+                        GuestIdentity.Mark(ctx.Principal!);
+                }
             },
         };
     });
@@ -536,6 +554,7 @@ app.MapPublicSiteEndpoints();
 var api = app.MapGroup("/api");
 
 api.MapAuthEndpoints();
+api.MapDemoAuthEndpoints();
 api.MapMeEndpoints();
 api.MapAnonAnalysisEndpoints();  // story 6.3 — /api/anon/* device-identity vertical
 api.MapSongEndpoints();
