@@ -25,11 +25,21 @@ namespace Spectr.Bff.Services;
 // the very first GET /verdicts for every single account.
 public sealed record DemoSeedResult(Guid SongId, Guid VersionId, Guid JobId, bool FromSnapshot);
 
+// Task D5 fix round 1 (I2) — the seam DemoAuthEndpoints depends on instead of
+// the concrete sealed DemoSeeder, so a test can substitute a throwing/null
+// decorating fake without touching the real seeder's (intentionally
+// never-throws) internals.
+public interface IGuestSeeder
+{
+    Task<DemoSeedResult?> FindAsync(Guid userId, CancellationToken ct = default);
+    Task<DemoSeedResult?> SeedAsync(Guid userId, CancellationToken ct = default);
+}
+
 public sealed class DemoSeeder(
     AppDbContext db,
     IFileStorage storage,
     DemoSnapshotStore snapshotStore,
-    ILogger<DemoSeeder> logger)
+    ILogger<DemoSeeder> logger) : IGuestSeeder
 {
     public const string DemoSongName = "Demo: Sample Report";
     public const string DemoSongPrefix = "Demo: ";

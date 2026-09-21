@@ -341,6 +341,13 @@ public static class AuthEndpoints
             return ErrorEnvelope.Build(401, "invalid_credentials", "Wrong email or password.");
         if (!user.IsActive)
             return ErrorEnvelope.Build(401, "invalid_credentials", "Wrong email or password.");
+        // Task D5 fix round 1 (I6) — defense in depth: a guest's shared,
+        // unknowable password hash already makes a real match practically
+        // impossible, but a guest principal must NEVER get the default
+        // uncapped 30-day cookie even in that scenario. Indistinguishable
+        // from bad credentials — no oracle.
+        if (user.IsGuest)
+            return ErrorEnvelope.Build(401, "invalid_credentials", "Wrong email or password.");
         // Story 10.5 — bans block login with an EXPLICIT code (not a silent
         // 401: a banned user retrying passwords is noise for support).
         if (user.BannedAt is not null)
@@ -438,8 +445,11 @@ public static class AuthEndpoints
             return ErrorEnvelope.Build(403, "account_banned",
                 "This account is suspended. Contact support.");
         // Task D5 — an expired guest must not refresh into a fresh session.
-        if (user.IsGuest && user.GuestExpiresAt <= DateTimeOffset.UtcNow)
-            return Results.Unauthorized();
+        // Fix round 1 — a NULL GuestExpiresAt counts as EXPIRED (never as
+        // "no expiry"); ErrorEnvelope (not a bare 401) so the frontend can
+        // key off a stable code instead of an empty body.
+        if (user.IsGuest && (user.GuestExpiresAt is not { } guestExpiry || guestExpiry <= DateTimeOffset.UtcNow))
+            return ErrorEnvelope.Build(401, "guest_expired", "This demo sandbox has expired.");
 
         if (!resolved.GraceHit)
         {
@@ -581,6 +591,10 @@ public static class AuthEndpoints
         var user = await db.Users.AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == userId, ct);
         if (user is null) return Results.Unauthorized();
+        // Task D5 fix round 1 (I6) — a guest is stamped EmailVerifiedAt at
+        // creation, so this is normally unreachable in practice; explicit
+        // anyway so no future change to that stamp can open a send path.
+        if (user.IsGuest) return Results.NoContent();
         if (user.EmailVerifiedAt is not null) return Results.NoContent(); // already done
 
         var lf = httpCtx.RequestServices.GetRequiredService<ILoggerFactory>();
@@ -689,7 +703,11 @@ public static class AuthEndpoints
             return ErrorEnvelope.Build(400, "invalid_token",
                 "This reset link is invalid, expired, or already used.");
 
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId && u.IsActive, ct);
+        // Task D5 fix round 1 (I5) — a guest can never reset its way into a
+        // permanent, loginable account. Same "invalid_token" shape as a
+        // stale/consumed token — no oracle distinguishing "guest" from
+        // "expired link".
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId && u.IsActive && !u.IsGuest, ct);
         if (user is null)
             return ErrorEnvelope.Build(400, "invalid_token",
                 "This reset link is invalid, expired, or already used.");

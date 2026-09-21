@@ -34,18 +34,18 @@ public static class GuestIdentity
     // Computed lazily on first use, never per request — bcrypt costs ~250ms
     // and every guest shares the same unknowable password. A real hash is
     // required: BCrypt.Verify throws on a malformed one.
-    private static string? _sharedHash;
-    private static readonly object SharedHashLock = new();
+    private static Lazy<string>? _sharedHash;
 
     public static string SharedPasswordHash(PasswordHasher hasher)
     {
-        if (_sharedHash is not null) return _sharedHash;
-        lock (SharedHashLock)
-        {
-            _sharedHash ??= hasher.Hash(Convert.ToBase64String(
-                System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)));
-        }
-        return _sharedHash;
+        // LazyInitializer guards the ONE-TIME assignment of the Lazy<T>
+        // reference itself; Lazy<T>'s own default mode (ExecutionAndPublication)
+        // then guarantees the hash factory runs exactly once even under
+        // concurrent first callers.
+        System.Threading.LazyInitializer.EnsureInitialized(ref _sharedHash, () =>
+            new Lazy<string>(() => hasher.Hash(Convert.ToBase64String(
+                System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)))));
+        return _sharedHash!.Value;
     }
 
     // Demo:Enabled config key wins when set (non-empty); else the

@@ -15,27 +15,58 @@ using Xunit;
 
 namespace Spectr.Bff.Tests;
 
+// Fix round 1 — the three demo-auth test classes all read/count the SHARED
+// `users.is_guest` rows (daily-cap baselines, before/after orphan checks);
+// no other test class in the suite creates guest rows. One collection keeps
+// them from running in PARALLEL with each other (xUnit's default across
+// classes), which was racing the daily-cap and orphan-count assertions.
+[CollectionDefinition("DemoAuth")]
+public sealed class DemoAuthCollection;
+
 // Task D5 — POST /api/auth/demo: isolated guest sandbox, resume-by-device,
 // fail-closed limiter/flags/daily-cap, guest-token expiry, and the guard
 // edits to login/register/forgot-password (spec D1/D2/D3, §5).
+[Collection("DemoAuth")]
 public sealed class DemoAuthEndpointsTests(WebApplicationFactory<Program> factory)
     : IClassFixture<WebApplicationFactory<Program>>
 {
-    private sealed class NoOpJobQueue : IJobQueue
+    // Fix round 1 — upgraded from a pure no-op so I8's "no send_email enqueue"
+    // assertions (and any future queue-shaped assertion) can inspect Tasks.
+    // Reused by DemoAuthEndpointsFixRound1Tests via the internal accessor below.
+    internal sealed class RecordingJobQueue : IJobQueue
     {
-        public Task EnqueueAsync(string t, object[] a, CancellationToken ct = default) => Task.CompletedTask;
-        public Task EnqueueAsync(string t, object[] a, string q, CancellationToken ct = default) => Task.CompletedTask;
-        public Task EnqueueDelayedAsync(string t, object[] a, string q, TimeSpan d, CancellationToken ct = default) => Task.CompletedTask;
+        public readonly List<string> Tasks = [];
+        public Task EnqueueAsync(string t, object[] a, CancellationToken ct = default) { Tasks.Add(t); return Task.CompletedTask; }
+        public Task EnqueueAsync(string t, object[] a, string q, CancellationToken ct = default) { Tasks.Add(t); return Task.CompletedTask; }
+        public Task EnqueueDelayedAsync(string t, object[] a, string q, TimeSpan d, CancellationToken ct = default) { Tasks.Add(t); return Task.CompletedTask; }
     }
 
-    private sealed class ThrowingLimiter : IRateLimiter
+    internal sealed class ThrowingLimiter : IRateLimiter
     {
         public Task<RateLimitResult> CheckAsync(
             string actorKey, string ip, string action, int limit, TimeSpan window, CancellationToken ct = default)
             => throw new InvalidOperationException("limiter unavailable (test double)");
     }
 
-    private WebApplicationFactory<Program> Build(Action<IWebHostBuilder>? extra = null) =>
+    // Fix round 1 (C1/I8) — lets a test deny or throw on ONE named action
+    // (e.g. "demo_resume" or "demo_create") while every other action/actor
+    // passes normally, so resume-vs-create routing can be proven directly
+    // instead of exhausting a real Redis window.
+    internal sealed class ActionAwareLimiter : IRateLimiter
+    {
+        public string? DenyAction;
+        public string? ThrowAction;
+        public Task<RateLimitResult> CheckAsync(
+            string actorKey, string ip, string action, int limit, TimeSpan window, CancellationToken ct = default)
+        {
+            if (action == ThrowAction) throw new InvalidOperationException("limiter unavailable (test double)");
+            if (action == DenyAction) return Task.FromResult(new RateLimitResult(false, window));
+            return Task.FromResult(RateLimitResult.Ok);
+        }
+    }
+
+    internal static WebApplicationFactory<Program> BuildFactory(
+        WebApplicationFactory<Program> factory, IJobQueue queue, Action<IWebHostBuilder>? extra = null) =>
         factory.WithWebHostBuilder(b =>
         {
             b.UseSetting("Demo:Enabled", "true");
@@ -43,23 +74,26 @@ public sealed class DemoAuthEndpointsTests(WebApplicationFactory<Program> factor
             b.ConfigureTestServices(s =>
             {
                 s.RemoveAll(typeof(IJobQueue));
-                s.AddSingleton<IJobQueue>(new NoOpJobQueue());
+                s.AddSingleton(queue);
             });
             extra?.Invoke(b);
         });
 
-    private static async Task<string?> Code(HttpResponseMessage resp)
+    private WebApplicationFactory<Program> Build(Action<IWebHostBuilder>? extra = null) =>
+        BuildFactory(factory, new RecordingJobQueue(), extra);
+
+    internal static async Task<string?> Code(HttpResponseMessage resp)
     {
         using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
         return doc.RootElement.GetProperty("error").GetProperty("code").GetString();
     }
 
-    private static string DeviceCookie(HttpResponseMessage resp) =>
+    internal static string DeviceCookie(HttpResponseMessage resp) =>
         resp.Headers.GetValues("Set-Cookie")
             .First(c => c.StartsWith("spectr_device=", StringComparison.Ordinal))
             .Split(';')[0];
 
-    private async Task CleanupAsync(WebApplicationFactory<Program> f, params Guid[] userIds)
+    internal static async Task CleanupAsync(WebApplicationFactory<Program> f, params Guid[] userIds)
     {
         using var scope = f.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -117,7 +151,7 @@ public sealed class DemoAuthEndpointsTests(WebApplicationFactory<Program> factor
         await TestDb.RequireAsync(factory);
         var f = Build();
         var client = f.CreateClient();
-        Guid userId = default;
+        Guid userId = default, otherId = default;
         try
         {
             var first = await client.PostAsync("/api/auth/demo", null);
@@ -129,8 +163,17 @@ public sealed class DemoAuthEndpointsTests(WebApplicationFactory<Program> factor
             Assert.Equal(a.User.Id, b!.User.Id);
             Assert.True(b.Resumed);
             Assert.Equal(a.Demo, b.Demo);
+
+            // Fix round 1 (I8) — teeth: don't rely on `client`'s own cookie
+            // container to prove distinctness. A completely SEPARATE client
+            // with NO cookie at all must land on a DIFFERENT guest.
+            var other = await f.CreateClient().PostAsync("/api/auth/demo", null);
+            var c = await other.Content.ReadFromJsonAsync<DemoStartResponse>();
+            otherId = c!.User.Id;
+            Assert.False(c.Resumed);
+            Assert.NotEqual(a.User.Id, c.User.Id);
         }
-        finally { await CleanupAsync(f, userId); }
+        finally { await CleanupAsync(f, userId, otherId); }
     }
 
     [SkippableFact]

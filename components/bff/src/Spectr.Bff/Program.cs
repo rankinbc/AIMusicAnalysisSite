@@ -214,7 +214,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     ctx.Fail("account banned"); // 10.5 — bans kill live tokens too
                 else if (current.Value.IsGuest)
                 {
-                    if (current.Value.GuestExpiresAt is { } exp && exp <= DateTimeOffset.UtcNow)
+                    // Fix round 1 — a NULL GuestExpiresAt is treated as EXPIRED,
+                    // not as "never expires": `is not { } exp` covers null.
+                    if (current.Value.GuestExpiresAt is not { } exp || exp <= DateTimeOffset.UtcNow)
                         ctx.Fail("guest expired"); // D3 — an expired guest's token must not authenticate
                     else
                         GuestIdentity.Mark(ctx.Principal!);
@@ -231,6 +233,10 @@ builder.Services.AddScoped<RefreshTokenService>();
 builder.Services.AddScoped<AuthTokenService>();  // story 4.3 — verify/reset tokens
 builder.Services.AddScoped<DeviceService>();     // story 4.5 — anon devices + claim
 builder.Services.AddScoped<DemoSeeder>();  // story 12.8 — first-run demo report
+// Task D5 fix round 1 (I2) — expose DemoSeeder through the IGuestSeeder seam
+// too (same scoped instance) so DemoAuthEndpoints can depend on the
+// substitutable interface instead of the concrete sealed class.
+builder.Services.AddScoped<IGuestSeeder>(sp => sp.GetRequiredService<DemoSeeder>());
 builder.Services.AddScoped<DemoSnapshotStore>();  // D6 — track-agnostic snapshot template loader (60s cached)
 
 // File storage — swap LocalDiskFileStorage for R2FileStorage via config when public.
