@@ -21,11 +21,16 @@ public sealed record DemoStartResponse(
     string AccessToken, AuthedUser User, DemoTarget Demo, bool Resumed);
 
 // Task D6 — GET /api/me/guest response (404 for non-guests). Lets the
-// frontend flip "+ Upload" to "Create free account" once the guest's one
-// upload / one analysis is spent, and render the coach chip consistently
+// frontend flip "+ Upload" to "Create free account" once the guest's
+// upload / analysis quota is spent, and render the coach chip consistently
 // with CoachCapsDto's Used/Limit shape.
+// Task G1 — trailing fields (defaulted so older callers still bind): the
+// stems cap (per version) and the reference-track cap (per guest), so the
+// frontend can render the same "N of M" chip for the newly-opened assets.
 public sealed record GuestStateDto(
     int UploadsUsed, int UploadsMax,
     int AnalysesUsed, int AnalysesMax,
     int CoachMessagesUsed, int CoachMessagesMax,
-    DateTimeOffset? ExpiresAt);
+    DateTimeOffset? ExpiresAt,
+    int StemsMaxFiles = 12, int StemsMaxMb = 300,
+    int ReferencesUsed = 0, int ReferencesMax = 1);

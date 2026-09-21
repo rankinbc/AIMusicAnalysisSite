@@ -143,7 +143,7 @@ public static class DemoAuthEndpoints
                 NotifyAnalysisComplete = false,
                 DisplayName = "Guest",
                 IsGuest = true,
-                GuestExpiresAt = now.AddHours(GuestIdentity.Flag(flags, "guest_ttl_hours", 72)),
+                GuestExpiresAt = now.AddHours(GuestIdentity.Flag(flags, "guest_ttl_hours", 24)),
                 GuestDeviceId = device.Id,
             };
             db.Users.Add(user);

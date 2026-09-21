@@ -297,7 +297,7 @@ public sealed class GuestCapsTests(WebApplicationFactory<Program> factory)
             var used = await db.SongVersions.CountAsync(v =>
                 !v.FilePath.StartsWith("audio/demo/")
                 && db.Songs.Any(s => s.Id == v.SongId && s.UserId == guestId));
-            Assert.Equal(1, used); // guest_uploads_max seeds 1
+            Assert.Equal(2, used); // guest_uploads_max seeds 2 (Task G1: was 1)
         }
         finally { await CleanupAsync(f, guestId); f.Dispose(); }
     }

@@ -179,36 +179,44 @@ public sealed class GuestGuardTests(WebApplicationFactory<Program> factory)
     }
 
     [SkippableFact]
-    public async Task One_Upload_Then_The_Quota_Closes()
+    public async Task Two_Uploads_Then_The_Quota_Closes()
     {
         await TestDb.RequireAsync(factory);
         var f = Build();
         Guid userId = default;
-        Guid versionId = default;
+        var versionIds = new List<Guid>();
         try
         {
             var (client, g) = await StartGuestAsync(f);
             userId = g.User.Id;
+            // guest_uploads_max seeds 2 (Task G1: was 1).
             var uploaded = await client.PostAsync("/api/versions/", Wav("mine.wav", analyze: false));
             Assert.Equal(HttpStatusCode.OK, uploaded.StatusCode);
-            versionId = (await uploaded.Content.ReadFromJsonAsync<UploadResponse>())!.VersionId;
+            versionIds.Add((await uploaded.Content.ReadFromJsonAsync<UploadResponse>())!.VersionId);
             var second = await client.PostAsync("/api/versions/", Wav("again.wav", analyze: false));
-            Assert.Equal(HttpStatusCode.Forbidden, second.StatusCode);
-            Assert.Equal("upload_limit", await Reason(second));
+            Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+            versionIds.Add((await second.Content.ReadFromJsonAsync<UploadResponse>())!.VersionId);
+            var third = await client.PostAsync("/api/versions/", Wav("once-more.wav", analyze: false));
+            Assert.Equal(HttpStatusCode.Forbidden, third.StatusCode);
+            Assert.Equal("upload_limit", await Reason(third));
             var state = await client.GetFromJsonAsync<GuestStateDto>("/api/me/guest");
-            Assert.Equal((1, 1), (state!.UploadsUsed, state.UploadsMax));
+            Assert.Equal((2, 2), (state!.UploadsUsed, state.UploadsMax));
         }
         finally
         {
-            // The quota-check WAV lands on real IFileStorage — nothing else
-            // deletes that blob, so do it explicitly before dropping the row.
-            if (versionId != default)
+            // The quota-check WAVs land on real IFileStorage — nothing else
+            // deletes those blobs, so do it explicitly before dropping the rows.
+            if (versionIds.Count > 0)
             {
                 using var scope = f.Services.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                var path = await db.SongVersions.Where(v => v.Id == versionId).Select(v => v.FilePath).SingleOrDefaultAsync();
-                if (path is not null)
-                    await scope.ServiceProvider.GetRequiredService<IFileStorage>().DeleteAsync(path);
+                var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
+                foreach (var versionId in versionIds)
+                {
+                    var path = await db.SongVersions.Where(v => v.Id == versionId).Select(v => v.FilePath).SingleOrDefaultAsync();
+                    if (path is not null)
+                        await storage.DeleteAsync(path);
+                }
             }
             await DemoAuthEndpointsTests.CleanupAsync(f, userId);
             f.Dispose();
@@ -232,6 +240,23 @@ public sealed class GuestGuardTests(WebApplicationFactory<Program> factory)
             // ReanalyzeResponse contract already in VersionEndpoints.cs.
             Assert.Equal(HttpStatusCode.Accepted, (await client.PostAsync($"/api/versions/{up!.VersionId}/analyze", null)).StatusCode);
             Assert.Contains((DramatiqTasks.AnalyzeAudioJob, DramatiqQueues.AnalysisFree), q.Sent);
+
+            // guest_analyses_max seeds 6 (Task G1: was tied to guest_uploads_max,
+            // 1) — push the count to the cap directly (5 more, on top of the one
+            // just dispatched above) rather than 5 more HTTP round trips; the
+            // free-lane dispatch behavior is already proven by the assertion above.
+            using (var scope = f.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                for (var i = 0; i < 5; i++)
+                    db.UsageEvents.Add(new Spectr.Data.Entities.UsageEvent
+                    {
+                        UserId = userId, EventType = "analysis",
+                        BillingPeriod = DateTimeOffset.UtcNow.ToString("yyyy-MM"), Reference = Guid.NewGuid().ToString(),
+                    });
+                await db.SaveChangesAsync();
+            }
+
             var again = await client.PostAsync($"/api/versions/{up.VersionId}/analyze", null);
             Assert.Equal(HttpStatusCode.Forbidden, again.StatusCode);
             Assert.Equal("analysis_limit", await Reason(again));

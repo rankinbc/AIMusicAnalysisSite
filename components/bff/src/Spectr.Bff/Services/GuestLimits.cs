@@ -8,11 +8,13 @@ using Spectr.Data.Entities;
 
 namespace Spectr.Bff.Services;
 
-// Task D6 (spec D5) — the guest's own quotas: ONE upload, ONE analysis, plus
-// the global fail-closed hourly arm on analysis dispatch. Scoped (per-request
-// AppDbContext). Both CheckUploadAsync and CheckAnalysisAsync key off
-// `guest_uploads_max` (default 1) — the flag literally means "one of each",
-// by design (spec D5).
+// Task D6 (spec D5) — the guest's own quotas, plus the global fail-closed
+// hourly arm on analysis dispatch. Scoped (per-request AppDbContext).
+// Task G1 (spec G-D5/G-D7) split the once-shared cap: CheckUploadAsync keys
+// off `guest_uploads_max` (2), CheckAnalysisAsync off `guest_analyses_max`
+// (6) — a guest may re-analyze a version more times than they uploaded
+// versions. Stems and references get their own per-version/per-guest caps
+// below (CheckStemsAsync / CheckReferenceAsync).
 public sealed class GuestLimits(
     AppDbContext db, EntitlementService ents, IRateLimiter limiter, IConfiguration cfg, ILogger<GuestLimits> log)
 {
@@ -53,10 +55,10 @@ public sealed class GuestLimits(
             {
                 var verdict = await limiter.CheckAsync(
                     key, key, "guest_upload", max,
-                    TimeSpan.FromHours(Flag(flags, "guest_ttl_hours", 72)), ct);
+                    TimeSpan.FromHours(Flag(flags, "guest_ttl_hours", 24)), ct);
                 if (!verdict.Allowed)
                     return GuestGuard.Restricted("upload_limit",
-                        "The demo sandbox includes one upload — create a free account to analyze more.");
+                        $"A guest session includes {max} uploads — create a free account to analyze more.");
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
@@ -71,7 +73,7 @@ public sealed class GuestLimits(
             && db.Songs.Any(s => s.Id == v.SongId && s.UserId == userId), ct);
         return used >= max
             ? GuestGuard.Restricted("upload_limit",
-                "The demo sandbox includes one upload — create a free account to analyze more.")
+                $"A guest session includes {max} uploads — create a free account to analyze more.")
             : null;
     }
 
@@ -93,7 +95,7 @@ public sealed class GuestLimits(
             var verdict = await limiter.CheckAsync(
                 key, key, "guest_fix_rack",
                 Flag(flags, "guest_fix_racks_max", 2),
-                TimeSpan.FromHours(Flag(flags, "guest_ttl_hours", 72)), ct);
+                TimeSpan.FromHours(Flag(flags, "guest_ttl_hours", 24)), ct);
             if (!verdict.Allowed)
                 return GuestGuard.Restricted("fix_rack_limit",
                     "The demo sandbox includes a couple of fix-rack generations — create a free account for more.");
@@ -116,12 +118,17 @@ public sealed class GuestLimits(
     public async Task<IResult?> CheckAnalysisAsync(Guid userId, HttpContext http, CancellationToken ct)
     {
         var flags = await ents.GetFlagsAsync(ct);
-        var max = Flag(flags, "guest_uploads_max", 1);
+        // Task G1 — analyses are no longer 1:1 with uploads: a guest may
+        // re-analyze the same version (Reanalyze, stems confirm, .als
+        // attach) many times within their own analysis budget, independent
+        // of how many versions they uploaded. `guest_analyses_max` (6)
+        // replaces `guest_uploads_max` (2) as the source of this cap.
+        var max = Flag(flags, "guest_analyses_max", 6);
         var used = await db.UsageEvents.CountAsync(
             e => e.UserId == userId && e.EventType == "analysis", ct);
         if (used >= max)
             return GuestGuard.Restricted("analysis_limit",
-                "The demo sandbox includes one analysis — create a free account to analyze more.");
+                $"A guest session includes {max} analyses — create a free account to analyze more.");
 
         var rateLimitsEnabled = !string.Equals(cfg["RateLimits:Enabled"], "false", StringComparison.OrdinalIgnoreCase);
         if (!rateLimitsEnabled) return null;
@@ -170,21 +177,101 @@ public sealed class GuestLimits(
         return null;
     }
 
+    // Task G1 — per-VERSION stems cap (count + total bytes), checked BEFORE
+    // any bytes are written to storage. `existingFiles`/`existingBytes`
+    // describe what's already staged on the version; `addFiles`/`addBytes`
+    // describe the files this call would add. Fails CLOSED like every other
+    // guest limiter check — a flags/DB outage must never let an unbounded
+    // batch of stems through.
+    public async Task<IResult?> CheckStemsAsync(
+        int existingFiles, long existingBytes, int addFiles, long addBytes, CancellationToken ct)
+    {
+        Dictionary<string, string> flags;
+        try
+        {
+            flags = await ents.GetFlagsAsync(ct);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            log.LogError(ex, "guest stems flags unavailable — failing CLOSED");
+            return DemoCapacity();
+        }
+
+        var maxFiles = Flag(flags, "guest_stems_max_files", 12);
+        var maxMb = Flag(flags, "guest_stems_max_mb", 300);
+        var maxBytes = (long)maxMb * 1024 * 1024;
+
+        if (existingFiles + addFiles > maxFiles)
+            return GuestGuard.Restricted("stems_limit",
+                $"A guest session includes {maxFiles} stems per version — create a free account to add more.");
+        if (existingBytes + addBytes > maxBytes)
+            return GuestGuard.Restricted("stems_limit",
+                $"A guest session includes {maxMb} MB of stems per version — create a free account to add more.");
+        return null;
+    }
+
+    // Task G1 — one reference track per guest (guest_references_max).
+    // Counts ReferenceTrack rows directly (append-only from the guest's own
+    // POV — the guard denies DELETE on ReferenceTrack for nobody in
+    // particular today, but the count is still the right measure: a guest
+    // who deletes and re-uploads does not get to keep spending the slot
+    // beyond the flag's intent, since references are cheap and rarely
+    // deleted in practice). Fails CLOSED on a flags/DB outage.
+    public async Task<IResult?> CheckReferenceAsync(Guid userId, CancellationToken ct)
+    {
+        Dictionary<string, string> flags;
+        try
+        {
+            flags = await ents.GetFlagsAsync(ct);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            log.LogError(ex, "guest reference flags unavailable — failing CLOSED");
+            return DemoCapacity();
+        }
+
+        var max = Flag(flags, "guest_references_max", 1);
+        int used;
+        try
+        {
+            used = await db.ReferenceTracks.CountAsync(r => r.UserId == userId, ct);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            log.LogError(ex, "guest reference count unavailable — failing CLOSED");
+            return DemoCapacity();
+        }
+
+        return used >= max
+            ? GuestGuard.Restricted("reference_limit",
+                $"A guest session includes {max} reference track — create a free account to add more.")
+            : null;
+    }
+
     // GET /api/me/guest — lets the frontend flip "+ Upload" to "Create free account".
     public async Task<GuestStateDto> GetStateAsync(User guest, CancellationToken ct)
     {
         var flags = await ents.GetFlagsAsync(ct);
-        var uploadsMax = Flag(flags, "guest_uploads_max", 1);
+        var uploadsMax = Flag(flags, "guest_uploads_max", 2);
         var uploadsUsed = await db.SongVersions.CountAsync(v =>
             !v.FilePath.StartsWith("audio/demo/")
             && db.Songs.Any(s => s.Id == v.SongId && s.UserId == guest.Id), ct);
+        var analysesMax = Flag(flags, "guest_analyses_max", 6);
         var analysesUsed = await db.UsageEvents.CountAsync(
             e => e.UserId == guest.Id && e.EventType == "analysis", ct);
         var coachMax = Flag(flags, "coach_guest_messages", 20);
         var coachUsed = await db.UsageEvents.CountAsync(
             e => e.UserId == guest.Id && e.EventType == "coach_message", ct);
+        var stemsMaxFiles = Flag(flags, "guest_stems_max_files", 12);
+        var stemsMaxMb = Flag(flags, "guest_stems_max_mb", 300);
+        var referencesMax = Flag(flags, "guest_references_max", 1);
+        var referencesUsed = await db.ReferenceTracks.CountAsync(r => r.UserId == guest.Id, ct);
         return new GuestStateDto(
-            uploadsUsed, uploadsMax, analysesUsed, uploadsMax, coachUsed, coachMax, guest.GuestExpiresAt);
+            uploadsUsed, uploadsMax, analysesUsed, analysesMax, coachUsed, coachMax, guest.GuestExpiresAt,
+            stemsMaxFiles, stemsMaxMb, referencesUsed, referencesMax);
     }
 
     // Copy rule (solo principle, spec D2/D5): never describe load or other
