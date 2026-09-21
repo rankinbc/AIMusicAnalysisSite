@@ -71,7 +71,12 @@ public static class BillingEndpoints
 
     // ── GET /plans ──────────────────────────────────────────────────────────
 
-    private static IResult GetPlans(IOptions<PricingDisplayOptions> opts)
+    private static async Task<IResult> GetPlans(
+        IOptions<PricingDisplayOptions> opts,
+        EntitlementService entitlements,
+        IConfiguration config,
+        ILoggerFactory loggers,
+        CancellationToken ct)
     {
         var o = opts.Value;
         return Results.Ok(new PlansResponse(
@@ -79,7 +84,9 @@ public static class BillingEndpoints
             ProAnnualCents: o.ProAnnualCents,
             CreditPack5Cents: o.CreditPack5Cents,
             CreditPack10Cents: o.CreditPack10Cents,
-            Currency: o.Currency));
+            Currency: o.Currency,
+            CreditsEnabled: await PublicCredits.ResolveAsync(
+                config, entitlements.GetFlagsAsync, loggers.CreateLogger("PublicCredits"), ct)));
     }
 
     // ── POST /checkout/subscription ─────────────────────────────────────────

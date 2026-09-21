@@ -135,6 +135,20 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
         Assert.Equal("USD", body.Currency);
     }
 
+    [SkippableFact]
+    public async Task Get_Plans_Reports_Credits_Enabled()
+    {
+        TestDb.Require(TestDb.RedisUp(_factory), "Redis");
+        var (factory, _) = BuildWithFakeStripe();
+        var on = factory.WithWebHostBuilder(b => b.UseSetting("Credits:Enabled", "true")).CreateClient();
+        var off = factory.WithWebHostBuilder(b => b.UseSetting("Credits:Enabled", "false")).CreateClient();
+        var onBody = await (await on.GetAsync("/api/billing/plans")).Content.ReadFromJsonAsync<PlansResponse>();
+        var offBody = await (await off.GetAsync("/api/billing/plans")).Content.ReadFromJsonAsync<PlansResponse>();
+        Assert.True(onBody!.CreditsEnabled);
+        Assert.False(offBody!.CreditsEnabled);
+        Assert.True(offBody.ProMonthlyCents > 0); // cents still served — the page decides what to show
+    }
+
     // ── POST /checkout/subscription ─────────────────────────────────────────
 
     [SkippableFact]

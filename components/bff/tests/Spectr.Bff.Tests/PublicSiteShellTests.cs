@@ -50,4 +50,14 @@ public sealed class PublicSiteShellTests(WebApplicationFactory<Program> factory)
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/pricing")).StatusCode);
     }
+
+    [Fact]
+    public async Task Pricing_Shell_Tells_The_Truth_When_Credits_Are_Off()
+    {
+        var client = _factory.WithWebHostBuilder(b => b.UseSetting("Credits:Enabled", "false")).CreateClient();
+        var html = await (await client.GetAsync("/pricing")).Content.ReadAsStringAsync();
+        Assert.Contains("<title>Pricing — SPECTR</title>", html);
+        Assert.Contains("Free while we launch", html);
+        Assert.DoesNotContain("per-release credits", html);
+    }
 }

@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { LandingPage } from '../../landing/LandingPage';
-import { PricingPage } from '../../../routes/pricing';
+import { PricingPlansView } from '../../pricing/PricingPlansView';
 import { NoTrainingPage, PLEDGE_VERSION } from '../../../routes/trust.no-training';
 import { ResultsForeverPage } from '../../../routes/trust.results-forever';
 import { PrivacyDefaultsPage } from '../../../routes/trust.privacy';
@@ -71,7 +71,11 @@ describe('trust links on funnel surfaces (story 6.2 AC2)', () => {
   });
 
   it('pricing footer links all three trust pages', () => {
-    const html = renderToStaticMarkup(<PricingPage />);
+    // Task P2 (D7) — PricingPage itself resolves to the loading state under
+    // static render; exercise the "credits on" view directly instead.
+    const html = renderToStaticMarkup(
+      <PricingPlansView plans={null} pending={null} onCheckout={() => {}} />,
+    );
     expect(html).toContain('href="/trust/no-training"');
     expect(html).toContain('href="/trust/results-forever"');
     expect(html).toContain('href="/trust/privacy"');

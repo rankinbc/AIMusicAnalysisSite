@@ -22,7 +22,11 @@ public sealed record PlansResponse(
     // render prices via formatCents (AR39 no-literals lint).
     int CreditPack5Cents,
     int CreditPack10Cents,
-    string Currency);
+    string Currency,
+    // Task P2 (public-surfaces-polish D6) — true/false only when the
+    // server actually resolved it; null means "unknown" (a failed flag
+    // read), which logged-out callers must treat as hidden, not as off.
+    bool? CreditsEnabled = null);
 
 // ── Story 2.2 — manage-subscription self-service wire shapes ──────────
 

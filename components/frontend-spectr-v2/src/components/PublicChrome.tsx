@@ -13,6 +13,7 @@
  * page load is fine, and plain anchors keep this component static-render
  * testable without a RouterProvider. */
 import { useOptionalAuth } from '../auth/AuthContext';
+import { PricingLink } from './PricingLink';
 import s from './PublicChrome.module.css';
 
 export function PublicChrome() {
@@ -23,7 +24,8 @@ export function PublicChrome() {
         SPEC<span className={s.brandAccent}>TR</span>
       </a>
       <nav className={s.nav}>
-        <a href="/pricing" className={s.navLink}>Pricing</a>
+        {/* Task P2 (D6) — hidden until the server says credits are on. */}
+        <PricingLink className={s.navLink} />
         {authed ? (
           <a href="/library" className="btn primary sm">Open library</a>
         ) : (

@@ -11,13 +11,18 @@ vi.mock('../../../lib/analytics', () => ({ capture: (...a: unknown[]) => capture
 
 import { ResumeCard } from '../ResumeCard';
 import type { ResumeInfo } from '../useAnonAnalysis';
+import { resetPublicPlansForTests } from '../../../lib/public-plans';
 
 function resume(over: Partial<ResumeInfo> = {}): ResumeInfo {
   return { jobId: 'j1', status: 'complete', dispatchedAt: new Date().toISOString(), grade: 'C', ...over };
 }
 
 describe('funnel events (story 6.5)', () => {
-  afterEach(() => capture.mockClear());
+  afterEach(() => {
+    capture.mockClear();
+    resetPublicPlansForTests();
+    vi.unstubAllGlobals();
+  });
 
   it('landing mount fires landing_viewed', async () => {
     const { LandingPage } = await import('../../landing/LandingPage');
@@ -26,7 +31,11 @@ describe('funnel events (story 6.5)', () => {
   });
 
   it('pricing mount fires pricing_viewed', async () => {
-    const { PricingPage } = await import('../../../routes/pricing');
+    // Task P2 (D7) — PricingPage now lives in features/pricing/. Pending
+    // fetch so it settles nowhere near this test (pricing_viewed fires on
+    // mount regardless of which view eventually renders).
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
+    const { PricingPage } = await import('../../pricing/PricingPage');
     render(<PricingPage />);
     expect(capture).toHaveBeenCalledWith('pricing_viewed');
   });

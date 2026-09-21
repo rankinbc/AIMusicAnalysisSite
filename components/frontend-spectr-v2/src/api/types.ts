@@ -33,6 +33,10 @@ export interface PlansResponse {
   creditPack5Cents: number;
   creditPack10Cents: number;
   currency: string;
+  /** Task P2 (public-surfaces-polish D6) — true/false only when the server
+   *  resolved it; null/absent means "unknown", which logged-out callers
+   *  must treat as hidden, not as on. */
+  creditsEnabled?: boolean | null;
 }
 
 /** Story 2.2 — GET /api/billing/me summary for the Billing page. */

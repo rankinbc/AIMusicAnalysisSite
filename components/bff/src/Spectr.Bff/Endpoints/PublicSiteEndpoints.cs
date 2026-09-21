@@ -1,4 +1,5 @@
 using System.Text;
+using Spectr.Bff.Services;
 
 namespace Spectr.Bff.Endpoints;
 
@@ -57,14 +58,39 @@ public static class PublicSiteEndpoints
             heading: "Know exactly what's wrong with your mix",
             body: "A graded report across loudness, low end, stereo image and arrangement — with concrete fixes you can hear.");
 
-    private static IResult PricingShell(HttpContext context) =>
-        Shell(context,
+    // Task P2 (public-surfaces-polish D6/D7) — the crawler shell tells the
+    // same truth the SPA does: when credits are off, don't advertise plans
+    // that can't be bought. `creditsEnabled == null` (unknown — a failed
+    // flag read) falls through to today's plans copy rather than blocking
+    // the crawler response on a retry.
+    private static async Task<IResult> PricingShell(
+        HttpContext context,
+        EntitlementService entitlements,
+        IConfiguration config,
+        ILoggerFactory loggers,
+        CancellationToken ct)
+    {
+        var creditsEnabled = await PublicCredits.ResolveAsync(
+            config, entitlements.GetFlagsAsync, loggers.CreateLogger("PublicCredits"), ct);
+
+        if (creditsEnabled == false)
+        {
+            return Shell(context,
+                path: "/pricing",
+                title: "Pricing — SPECTR",
+                description: "SPECTR is free while we launch — paid plans are switched off. Reports stay yours forever.",
+                heading: "Free while we launch.",
+                body: "Unlimited analyses, the full coach and every specialist. Paid plans are switched off for now.");
+        }
+
+        return Shell(context,
             path: "/pricing",
             title: "Pricing — SPECTR",
             description: "Free, Pro, and per-release credits. Honest billing, no asterisks — " +
                          "reports stay yours forever, even after you cancel.",
             heading: "Honest billing. No asterisks.",
             body: "Free, Pro, and per-release credits. Reports stay yours forever — even after you cancel.");
+    }
 
     private static IResult Shell(
         HttpContext context, string path, string title, string description, string heading, string body)

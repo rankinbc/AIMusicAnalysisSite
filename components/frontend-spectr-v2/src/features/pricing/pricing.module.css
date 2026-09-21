@@ -106,3 +106,39 @@
   letter-spacing: 0.08em;
   color: var(--muted);
 }
+
+/* Task P2 (D7) — PricingOffView's two CTAs, centered like the header above. */
+.offCtaRow {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Task P2 (D7) — PricingLoadingView's pending skeleton (no prices, no plan
+   copy — just a shape while loadPublicPlans() is in flight). */
+.skeletonGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.skeletonCard {
+  height: 220px;
+  border-radius: var(--radius);
+  background: var(--card);
+  border: 1px solid var(--border);
+  animation: pricingSkeletonPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pricingSkeletonPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeletonCard {
+    animation: none;
+    opacity: 0.8;
+  }
+}

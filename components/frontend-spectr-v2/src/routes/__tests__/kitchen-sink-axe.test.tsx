@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { cleanup, render } from '@testing-library/react';
 import { run as axeRun } from 'axe-core';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LandingPage } from '../../features/landing/LandingPage';
-import { PricingPage } from '../pricing';
+import { PricingOffView } from '../../features/pricing/PricingOffView';
+import { PricingPlansView } from '../../features/pricing/PricingPlansView';
+import { resetPublicPlansForTests } from '../../lib/public-plans';
 import { KitchenSinkPage } from '../_app/dev.kitchen-sink';
 
 // Story 5.10 (UX-DR44/46) — axe over the kitchen-sink inventory (the a11y
@@ -12,6 +14,13 @@ import { KitchenSinkPage } from '../_app/dev.kitchen-sink';
 // five AA routes; they render router-free by design, story 6.1). Login and
 // the report surface are covered in report-axe.test.tsx and by the funnel
 // pages' shared PublicChrome. color-contrast disabled (jsdom has no paint).
+
+beforeEach(() => {
+  // Task P2 (D6) — loadPublicPlans() memoizes one in-flight promise at
+  // module scope; reset it so each test's own fetch stub is the one that
+  // resolves PricingLink's useCreditsEnabled() inside PublicChrome.
+  resetPublicPlansForTests();
+});
 
 afterEach(() => {
   cleanup();
@@ -48,9 +57,17 @@ describe('axe WCAG 2.1 AA smoke (story 5.10)', () => {
     await expectNoViolations(container);
   });
 
-  it('pricing page is clean', async () => {
+  it('pricing page (credits on) is clean', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 401 })));
-    const { container } = render(<PricingPage />);
+    const { container } = render(
+      <PricingPlansView plans={null} pending={null} onCheckout={() => {}} />,
+    );
+    await expectNoViolations(container);
+  });
+
+  it('pricing page (credits off) is clean', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 401 })));
+    const { container } = render(<PricingOffView />);
     await expectNoViolations(container);
   });
 });

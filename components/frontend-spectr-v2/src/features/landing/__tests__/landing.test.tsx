@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { AuthContext } from '../../../auth/AuthContext';
 import type { AuthedUser } from '../../../api/types';
 import { PublicChrome } from '../../../components/PublicChrome';
-import { PricingPage } from '../../../routes/pricing';
+import { PricingPlansView } from '../../pricing/PricingPlansView';
 import { LandingPage } from '../LandingPage';
 import { SampleReportEmbed } from '../SampleReportEmbed';
 import { SAMPLE_REPORT } from '../sample-report';
@@ -17,7 +17,10 @@ describe('PublicChrome (story 6.1 AC3 — UX-DR6 slim chrome)', () => {
     // No AuthProvider → useOptionalAuth() is null → anon chrome.
     const html = renderToStaticMarkup(<PublicChrome />);
     expect(html).toContain('href="/"');
-    expect(html).toContain('href="/pricing"');
+    // Task P2 (D6) — PricingLink is hidden until the server answers, and
+    // effects never run under renderToStaticMarkup, so no fetch fires and
+    // the link never appears.
+    expect(html).not.toContain('href="/pricing"');
     expect(html).toContain('href="/login"');
     expect(html).toContain('href="/analyze"'); // 6.3 — CTA targets the anon funnel
     expect(html).toContain('Analyze free');
@@ -72,7 +75,9 @@ describe('LandingPage (story 6.1 AC1)', () => {
   });
 
   it('renders chrome, sample embed, honesty strip, and footer links', () => {
-    expect(html).toContain('href="/pricing"');
+    // Task P2 (D6) — same as above: PricingLink never resolves under
+    // renderToStaticMarkup, so the footer link is hidden too.
+    expect(html).not.toContain('href="/pricing"');
     expect(html).toContain('Live sample report');
     expect(html).toContain('No AI training on your audio');
     expect(html).toContain('Reports stay yours forever');
@@ -81,7 +86,13 @@ describe('LandingPage (story 6.1 AC1)', () => {
 });
 
 describe('PricingPage (story 6.1 AC2 — UX-DR25 polish)', () => {
-  const html = renderToStaticMarkup(<PricingPage />);
+  // Task P2 (D7) — PricingPage itself resolves to the loading state under
+  // static render (no fetch ever settles); these assertions exercise the
+  // "credits on" view directly, the same way PricingPage renders it once
+  // loadPublicPlans() answers true.
+  const html = renderToStaticMarkup(
+    <PricingPlansView plans={null} pending={null} onCheckout={() => {}} />,
+  );
 
   it('states tax honesty up front and restates terms at the buttons', () => {
     expect(html).toContain('Tax is calculated and shown at checkout');

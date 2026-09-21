@@ -4,6 +4,7 @@
 import type { ReactNode } from 'react';
 
 import { PublicChrome } from '../../components/PublicChrome';
+import { PricingLink } from '../../components/PricingLink';
 import { usePageMeta } from '../../lib/usePageMeta';
 import s from './trust.module.css';
 
@@ -37,7 +38,7 @@ export function TrustPage({ path, title, metaDescription, updated, children }: T
           {TRUST_PAGES.filter((p) => p.path !== path).map((p) => (
             <a key={p.path} href={p.path} className={s.footerLink}>{p.label}</a>
           ))}
-          <a href="/pricing" className={s.footerLink}>Pricing</a>
+          <PricingLink className={s.footerLink} />
         </footer>
       </main>
     </div>
