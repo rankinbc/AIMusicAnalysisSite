@@ -24,9 +24,17 @@ public static class FixRackEndpoints
     // POST /api/reports/{jobId}/fix-rack — enqueue rack generation.
     private static async Task<IResult> Generate(
         Guid jobId, ClaimsPrincipal user, AppDbContext db, IJobQueue queue,
-        EntitlementService ents, CancellationToken ct)
+        EntitlementService ents, GuestLimits guestLimits, CancellationToken ct)
     {
         var userId = user.UserId();
+
+        // Fix round 1 item 2: a guest's fix-rack generations are capped
+        // separately from the analysis/upload quotas (unbounded otherwise —
+        // every POST here enqueues an LLM generation against the shared
+        // guest-lane budget).
+        if (user.IsGuest() && await guestLimits.CheckFixRackAsync(userId, ct) is { } denied)
+            return denied;
+
         var analysis = await db.Analyses.AsNoTracking()
             .Where(a => a.JobId == jobId && a.UserId == userId)
             .Select(a => new { a.Id, a.VersionId })
@@ -51,7 +59,8 @@ public static class FixRackEndpoints
         await queue.EnqueueAsync(
             DramatiqTasks.GenerateFixRack,
             new object[] { analysis.Id.ToString(), userId.ToString(), tier },
-            DramatiqQueues.AnalysisPaid, // story 2.5: secondary op → W1
+            // Fix round 1 item 1: guests ride the free lane.
+            GuestLimits.QueueFor(user, DramatiqQueues.AnalysisPaid), // story 2.5: secondary op → W1
             ct);
 
         return Results.Accepted(value: new { status = "queued" });
