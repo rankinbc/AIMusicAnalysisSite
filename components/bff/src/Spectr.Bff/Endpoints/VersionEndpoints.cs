@@ -401,7 +401,10 @@ public static class VersionEndpoints
         db.SongVersions.Remove(row);
         await db.SaveChangesAsync(ct);
 
-        try { await storage.DeleteAsync(key, ct); }
+        // DeleteUnlessSharedAsync — a seeded demo version's FilePath can point
+        // at the shared "audio/demo/" blob; never delete that out from under
+        // every other seeded account.
+        try { await storage.DeleteUnlessSharedAsync(key, ct); }
         catch { /* best-effort — version row is gone, orphaned file is harmless */ }
 
         return Results.NoContent();

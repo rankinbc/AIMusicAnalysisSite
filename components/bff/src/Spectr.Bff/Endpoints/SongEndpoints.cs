@@ -305,9 +305,12 @@ public static class SongEndpoints
         await tx.CommitAsync(ct);
 
         // Best-effort blob cleanup — a missing blob must never fail the delete.
+        // DeleteUnlessSharedAsync — a seeded demo version's FilePath (or its
+        // .als/reference/stem keys) can point at the shared "audio/demo/"
+        // blob(s); never delete those out from under every other seeded account.
         foreach (var key in blobKeys)
         {
-            try { await storage.DeleteAsync(key, ct); }
+            try { await storage.DeleteUnlessSharedAsync(key, ct); }
             catch { /* orphaned/missing blob is harmless; rows are already gone */ }
         }
 

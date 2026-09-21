@@ -15,6 +15,26 @@ public interface IFileStorage
     Task<long?> GetFileSizeAsync(string key, CancellationToken ct = default);
 }
 
+// WHY: shared demo assets under DemoSnapshotStore.SharedPrefix ("audio/demo/")
+// serve EVERY seeded account (registered users + guests) — one blob, many DB
+// rows pointing at it. A row-owner's delete must remove their own DB rows but
+// never the underlying blob, or the first person to delete their seeded demo
+// song deletes the demo audio for everybody. Only the admin snapshot exporter
+// (AdminEndpoints.DemoSnapshot.cs, via its own IsRetireableAssetKey guard) may
+// remove those assets. Every other storage-cleanup site whose key can come
+// from a SongVersion/Analysis row (version delete, song hard-delete, …) must
+// route through this helper instead of calling storage.DeleteAsync directly.
+public static class FileStorageExtensions
+{
+    public static async Task DeleteUnlessSharedAsync(
+        this IFileStorage storage, string? key, CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(key)) return;
+        if (DemoSnapshotStore.IsSharedKey(key)) return;
+        await storage.DeleteAsync(key, ct);
+    }
+}
+
 internal sealed class LocalDiskFileStorage(IConfiguration config) : IFileStorage
 {
     private readonly string _root = System.IO.Path.GetFullPath(
