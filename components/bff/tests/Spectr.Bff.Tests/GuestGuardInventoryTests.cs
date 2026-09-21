@@ -44,6 +44,10 @@ public sealed class GuestGuardInventoryTests(WebApplicationFactory<Program> fact
     // delete/analyze, jobs/retry.
     private static readonly (string Method, string Pattern, string Marker)[] FrozenMarkers =
     [
+        // Task G2 — the guest→account conversion route: a real (non-guest)
+        // caller passes the guard's first branch (never marker-gated); a
+        // guest passes here to reach the 403/409/410 checks in the handler.
+        ("POST", "/api/auth/guest/convert", "None"),
         ("POST", "/api/coach/{analysisId:guid}/messages", "None"),
         ("DELETE", "/api/compare/notes", "None"),
         ("PUT", "/api/compare/notes", "None"),

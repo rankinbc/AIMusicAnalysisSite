@@ -579,6 +579,7 @@ api.AddEndpointFilter(GuestGuard.Filter);
 
 api.MapAuthEndpoints();
 api.MapDemoAuthEndpoints();
+api.MapGuestConvertEndpoints();  // Task G2 — POST /api/auth/guest/convert (guest → account, same row)
 api.MapMeEndpoints();
 api.MapGuestEndpoints();      // Task D6 — GET /api/me/guest
 api.MapAnonAnalysisEndpoints();  // story 6.3 — /api/anon/* device-identity vertical

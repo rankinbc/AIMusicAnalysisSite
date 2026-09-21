@@ -36,13 +36,13 @@ public static class AuthEndpoints
 
     // ── Story 4.3 helpers ─────────────────────────────────────────────────────
 
-    private static string ClientIp(HttpContext ctx)
+    internal static string ClientIp(HttpContext ctx)
         => ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 
     // Loopback-only, mirroring the dev-login guard (a null remote — in-memory
     // TestServer — counts as local). Used to keep the dev verify-link log off
     // any non-loopback request even on a box misconfigured to Development.
-    private static bool IsLoopbackRequest(HttpContext ctx)
+    internal static bool IsLoopbackRequest(HttpContext ctx)
     {
         var remote = ctx.Connection.RemoteIpAddress;
         return remote is null || System.Net.IPAddress.IsLoopback(remote);
@@ -56,7 +56,7 @@ public static class AuthEndpoints
     // invented name.
     private const int DisplayNameMaxLength = 80;
 
-    private static string? DeriveDisplayNameFromEmail(string email)
+    internal static string? DeriveDisplayNameFromEmail(string email)
     {
         var at = email.IndexOf('@');
         var local = (at > 0 ? email[..at] : email).Trim();
@@ -69,7 +69,7 @@ public static class AuthEndpoints
     // limits off for dev + the test suite — hundreds of same-IP registrations
     // per minute are normal there and would trip any honest ceiling. Any
     // non-Development environment enforces (default true).
-    private static async Task<IResult?> RateLimitAsync(
+    internal static async Task<IResult?> RateLimitAsync(
         IRateLimiter limiter, HttpContext ctx, string action, string actorKey,
         int limit, TimeSpan window, CancellationToken ct)
     {
@@ -99,7 +99,7 @@ public static class AuthEndpoints
     private static string FrontendOrigin(IConfiguration cfg, ILoggerFactory lf)
         => AppUrls.FrontendOrigin(cfg, lf.CreateLogger("Auth"));
 
-    private static async Task SendVerificationEmailAsync(
+    internal static async Task SendVerificationEmailAsync(
         IEmailSender email, AuthTokenService tokens, IConfiguration cfg,
         IWebHostEnvironment env, ILoggerFactory lf, Guid userId, string toEmail,
         bool localRequest, CancellationToken ct)
@@ -126,7 +126,10 @@ public static class AuthEndpoints
     // POST /api/auth/register
     // Story 10.6 — numeric abuse knobs read through the 60 s flag cache;
     // fail-safe to the fallback (a flag outage must not block registration).
-    private static async Task<int> ReadNumericFlagAsync(
+    // Bumped to internal alongside the other register-path helpers (G2) —
+    // GuestConvertEndpoints reuses the disposable-domain arm verbatim, which
+    // reads this same per-hour flag.
+    internal static async Task<int> ReadNumericFlagAsync(
         HttpContext ctx, string name, int fallback, CancellationToken ct)
     {
         try
@@ -761,7 +764,7 @@ public static class AuthEndpoints
 
     // Convenience for register/login/refresh/patch paths that already have
     // the user row but need the tier field on AuthedUser.
-    private static async Task<string> ResolveTierAsync(
+    internal static async Task<string> ResolveTierAsync(
         AppDbContext db, Guid userId, CancellationToken ct)
     {
         var status = await db.Subscriptions.AsNoTracking()
