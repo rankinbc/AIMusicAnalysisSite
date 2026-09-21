@@ -127,16 +127,6 @@ from .trace import trace_runs_enabled  # noqa: E402
 from . import object_store  # noqa: E402
 from . import source_validation  # noqa: E402
 
-# G4 — guest track-length cap: guest-owned jobs (not anon device jobs, which
-# skip structure detection entirely) are capped shorter than the general
-# MAX_AUDIO_DURATION_SECONDS ceiling. feature_flags is fail-open by design
-# (get_flag_int falls back to its `default` arg on any read problem) and
-# resolve_lane is fail-open too (keeps the caller's `default` — here None —
-# on any lookup problem), so a flag-read or guest-lookup failure never blocks
-# a real user; it just means no guest-specific cap is applied.
-from . import feature_flags  # noqa: E402
-from .llm.lane import GUEST_TIER, resolve_lane  # noqa: E402
-
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -278,19 +268,12 @@ def analyze_audio_job(job_id: str) -> None:
         # AR19 — magic-byte + duration validation BEFORE fetching attachments
         # or starting the pipeline. InvalidFileError is handled in its own
         # except arm below (typed fail, no retry, AR16 reversal trigger).
-        # G4 — guest-owned jobs get a shorter, guest-specific length cap;
-        # everyone else keeps the plain call (== the pre-G4 behaviour) so a
-        # flag/lookup hiccup can only ever narrow a guest's ceiling, never
-        # touch a real user's.
-        guest_max_seconds = (
-            feature_flags.get_flag_int("guest_track_max_seconds", 720)
-            if resolve_lane(user_id, None) == GUEST_TIER
-            else None
-        )
-        if guest_max_seconds is not None:
-            source_validation.validate_source(file_abs, max_seconds=guest_max_seconds)
-        else:
-            source_validation.validate_source(file_abs)
+        # G4 fix1 — the guest-vs-real-user decision (+ its flag/lane-lookup
+        # fail-open behaviour) is now ONE tested function: a flag/lookup
+        # hiccup can only ever narrow a guest's ceiling, never touch a real
+        # user's. See source_validation.guest_max_seconds_for's docstring.
+        guest_max_seconds = source_validation.guest_max_seconds_for(user_id)
+        source_validation.validate_source(file_abs, max_seconds=guest_max_seconds)
 
         reference_abs: str | None = None
         if reference_path:

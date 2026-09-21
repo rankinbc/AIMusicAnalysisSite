@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -65,6 +66,46 @@ def _env_str(name: str, default: str) -> str:
     if raw is None:
         return default
     return raw.strip()
+
+
+# G4 fix1 #2 — docker's own `--memory` size grammar: an integer or decimal
+# byte count with an optional b/k/m/g suffix (case-insensitive).
+_MEMORY_LIMIT_RE = re.compile(r"^(\d+(?:\.\d+)?)([bkmgBKMG]?)$")
+
+
+def _validate_memory_limit(name: str, raw: str) -> str:
+    """Validate/normalize an ``ALLIN1_MEMORY_LIMIT``-shaped value.
+
+    A malformed value (``"6 g"``, ``"six"``, ``"-1"``) used to reach
+    ``docker run`` verbatim, which failed with docker's own generic usage
+    error — indistinguishable from any other container failure, so it
+    silently disabled arrangement scoring on EVERY analysis with nothing but
+    a buried log line (G4 fix1 #2). Now an invalid value logs one loud
+    ``ERROR`` naming the variable and the bad value, and falls back to
+    :data:`DEFAULT_MEMORY_LIMIT` — never to "no cap", and never lets a bad
+    value reach docker.
+
+    ``""``/``"0"`` remain the explicit, intentional "run uncapped" escape
+    hatch (e.g. a GPU/managed host that fences memory another way) — but log
+    a ``WARNING`` on every launch, since an uncapped container is exactly
+    the failure mode G4 exists to prevent.
+    """
+    if raw in ("", "0"):
+        logger.warning(
+            "structure detection is running WITHOUT a memory cap "
+            "(%s=%r) — a long track can take the host down", name, raw,
+        )
+        return ""
+    match = _MEMORY_LIMIT_RE.match(raw)
+    if match and float(match.group(1)) > 0:
+        return raw
+    logger.error(
+        "%s=%r is not a valid docker memory size (expected an integer or "
+        "decimal byte count with an optional b/k/m/g suffix, e.g. '3g', "
+        "'512m') — falling back to the default cap %s",
+        name, raw, DEFAULT_MEMORY_LIMIT,
+    )
+    return DEFAULT_MEMORY_LIMIT
 
 # Python run inside the container. Bypasses the image entrypoint so a CRLF /
 # shell quirk in entrypoint.sh can't break us. allin1 (and its demucs
@@ -174,8 +215,12 @@ class DockerAllin1:
         # Per-track analysis timeout (seconds). Env-tunable; see DEFAULT_TIMEOUT_S.
         self.timeout = timeout if timeout is not None else _env_int("ALLIN1_TIMEOUT", DEFAULT_TIMEOUT_S)
         # G4 — container memory cap (see DEFAULT_MEMORY_LIMIT above). "" / "0"
-        # disables --memory/--memory-swap entirely.
-        self.memory_limit = _env_str("ALLIN1_MEMORY_LIMIT", DEFAULT_MEMORY_LIMIT)
+        # disables --memory/--memory-swap entirely. G4 fix1 #2 — validated
+        # against docker's size grammar so a typo falls back to the default
+        # cap instead of silently disabling structure detection.
+        self.memory_limit = _validate_memory_limit(
+            "ALLIN1_MEMORY_LIMIT", _env_str("ALLIN1_MEMORY_LIMIT", DEFAULT_MEMORY_LIMIT)
+        )
 
     # -- availability probes ------------------------------------------------
     @staticmethod
@@ -230,7 +275,10 @@ class DockerAllin1:
         self.ensure_available()
 
         cmd = ["docker", "run", "--rm"]
-        if self.memory_limit and self.memory_limit != "0":
+        if self.memory_limit:
+            # memory_limit is already validated/normalized to "" (no cap) or
+            # a docker-grammar size string by _validate_memory_limit — never
+            # a bare "0" here (G4 fix1 #2).
             # --memory-swap == --memory (not omitted, not higher): the
             # container gets no swap headroom, so it OOM-kills instead of
             # paging the host VM to death (G4 — verified crashing this

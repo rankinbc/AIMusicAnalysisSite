@@ -22,6 +22,9 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import feature_flags
+from .llm.lane import GUEST_TIER, resolve_lane
+
 logger = logging.getLogger(__name__)
 
 REASON_BAD_MAGIC = "bad_magic_bytes"
@@ -127,6 +130,51 @@ def _probe_duration(path: Path, fmt: str) -> float:
         raise InvalidFileError(
             REASON_UNDECODABLE, f"header declares {fmt} but the stream won't decode: {exc}"
         ) from exc
+
+
+def guest_max_seconds_for(user_id: object) -> float | None:
+    """G4 fix1 — the ONE place that decides a job's guest track-length ceiling.
+
+    Previously this branch (guest-vs-real-user, flag lookup, lane lookup) lived
+    inline in ``tasks_dramatiq.analyze_audio_job`` with no test coverage of its
+    own. Returns the guest cap in seconds when ``user_id`` belongs to a guest
+    account, else ``None`` (no caller-specific limit — ``validate_source``'s
+    plain ``MAX_AUDIO_DURATION_SECONDS`` ceiling still applies).
+
+    Fails toward the SAFER outcome in both directions:
+      * ``user_id is None`` (an anonymous, device-owned job — anon jobs skip
+        structure detection and never reach here in practice, but this stays
+        correct regardless) -> ``None``, with NO lane lookup attempted: there
+        is no user row to look up.
+      * the guest lane lookup raises -> ``None`` (fail OPEN toward "no cap").
+        A DB blip must never narrow — or effectively refuse — a real user's
+        upload; the container's own memory cap (G4) is what protects the box
+        either way. ``resolve_lane`` already fails open internally, but this
+        guards the contract even if that ever changes.
+      * the flag read raises -> the code default ``720``, NEVER "no limit".
+        An unreadable flag store must not silently hand every guest an
+        unlimited upload.
+    """
+    if user_id is None:
+        return None
+    try:
+        is_guest = resolve_lane(user_id, None) == GUEST_TIER
+    except Exception:
+        logger.warning(
+            "guest_max_seconds_for: lane lookup raised for user_id=%s — "
+            "treating as non-guest (no cap)", user_id, exc_info=True,
+        )
+        return None
+    if not is_guest:
+        return None
+    try:
+        return float(feature_flags.get_flag_int("guest_track_max_seconds", 720))
+    except Exception:
+        logger.warning(
+            "guest_max_seconds_for: flag read raised for user_id=%s — "
+            "falling back to the default cap (720s)", user_id, exc_info=True,
+        )
+        return 720.0
 
 
 def validate_source(path: str | Path, *, max_seconds: float | None = None) -> float:

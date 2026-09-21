@@ -47,7 +47,7 @@ def harness(monkeypatch, tmp_path):
     monkeypatch.setattr(td, "run_pipeline", fake_run_pipeline)
     monkeypatch.setattr(td, "LOCAL_ROOT", str(tmp_path))
     monkeypatch.setattr(td, "_try_write_artifact", lambda *a, **k: None)
-    monkeypatch.setattr(td.source_validation, "validate_source", lambda _p: 120.0)
+    monkeypatch.setattr(td.source_validation, "validate_source", lambda _p, **_k: 120.0)
     monkeypatch.setattr(td, "render_analysis_images", lambda *a, **k: {})
     monkeypatch.setattr(td, "run_rule_engine_for_analysis", lambda _aid: 0)
 

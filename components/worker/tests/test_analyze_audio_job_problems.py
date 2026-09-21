@@ -51,7 +51,7 @@ def harness(monkeypatch, tmp_path):
     monkeypatch.setattr(td, "LOCAL_ROOT", str(tmp_path))
     monkeypatch.setattr(td, "_try_write_artifact", lambda *a, **k: None)
     # Story 3.2: source validation runs pre-pipeline; these tests never write a real file.
-    monkeypatch.setattr(td.source_validation, "validate_source", lambda _p: 180.0)
+    monkeypatch.setattr(td.source_validation, "validate_source", lambda _p, **_k: 180.0)
     monkeypatch.setattr(td, "render_analysis_images", lambda *a, **k: {})
     monkeypatch.setattr(td, "_enqueue_structure_detection", lambda *a, **k: None)
     monkeypatch.setattr(td, "run_rule_engine_for_analysis", lambda aid: calls.append(aid) or 1)
