@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 
 import { ApiError } from '../../api/fetcher';
 import { extractApiError } from '../../api/error-utils';
-import { useFreeRetry, useJob, useJobResults } from '../../api/hooks';
+import { useFreeRetry, useJob, useJobResults, useVersion, useVersionFiles } from '../../api/hooks';
 import { capture } from '../../lib/analytics';
 import { setCorrelation } from '../../lib/sentry';
 import { ProgressStoryline } from '../../features/results/ProgressStoryline';
@@ -41,6 +41,20 @@ function ResultsPage() {
   const isComplete = job.data?.status === 'complete';
   const isFailed = job.data?.status === 'failed';
   const results = useJobResults(jobId, isComplete);
+
+  // Task G0 — the in-progress checklist must not claim stems/reference/.als
+  // analysis ran when the visitor never supplied that input. Derived from the
+  // same version the rest of the page already loads through, never a new
+  // endpoint/DTO field.
+  const versionId = job.data?.versionId ?? '';
+  const version = useVersion(versionId);
+  const versionFiles = useVersionFiles(versionId);
+  const inputsLoading = Boolean(versionId) && (version.data === undefined || versionFiles.data === undefined);
+  const progressInputs = {
+    hasStems: (versionFiles.data?.files ?? []).some((f) => f.type === 'stem'),
+    hasReference: Boolean(version.data?.referencePath),
+    hasAls: Boolean(version.data?.alsFilePath),
+  };
 
   // Story 5.7 (FR6): failed-job free retry. The server owns eligibility —
   // a 409 (not eligible / already used) just hides the button.
@@ -191,7 +205,9 @@ function ResultsPage() {
   return (
     <FrameWithBack songId={songId}>
       <h1 className={s.heading}>Analysis in progress</h1>
-      {job.data && <ProgressStoryline job={job.data} />}
+      {job.data && (
+        <ProgressStoryline job={job.data} inputs={progressInputs} inputsLoading={inputsLoading} />
+      )}
     </FrameWithBack>
   );
 }

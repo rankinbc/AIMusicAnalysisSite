@@ -21,7 +21,7 @@ import { PublicChrome } from '../../components/PublicChrome';
 import { usePageMeta } from '../../lib/usePageMeta';
 import { GradeHero } from '../results/GradeHero';
 import { ProgressStorylineView } from '../results/ProgressStoryline';
-import { BASE_PHASES, PHASE_EXPLAINERS } from '../results/progress-phases';
+import { BASE_PHASES, PHASE_EXPLAINERS, buildProgressPlan } from '../results/progress-phases';
 import { StreamingCard } from '../results/StreamingCard';
 import { useAnonCurrentJob, useAnonJob, useAnonResults, useAnonUpload } from './useAnonAnalysis';
 import { type AnonReportVM, vmFromAnon, vmFromFull } from './anon-report-vm';
@@ -79,12 +79,20 @@ export function DropZoneView({ onFile, error, disabled }: {
   );
 }
 
+// Task G0: /analyze is mix-only (no stems/reference/.als), so the fallback
+// rotation below must skip any BASE_PHASES entry the plan marks not-included
+// (Reference Comparison) — it must never describe a skipped phase as running.
+const MIX_ONLY_PLAN = buildProgressPlan({ hasStems: false, hasReference: false, hasAls: false });
+const ROTATING_PHASES = BASE_PHASES.filter(
+  (name) => !MIX_ONLY_PLAN.some((row) => row.kind === 'not-included' && row.label === name),
+);
+
 /** Rotating educational one-liner, KEYED to the current phase (AC2): shows the
  *  explainer for whatever phase the worker reports, advancing with the job.
  *  Falls back to a gentle rotation before the first phase name arrives. */
 export function ExplainerLine({ currentPhase, tick }: { currentPhase: string; tick: number }) {
   const known = (BASE_PHASES as readonly string[]).indexOf(currentPhase);
-  const name = known >= 0 ? BASE_PHASES[known] : BASE_PHASES[tick % BASE_PHASES.length]!;
+  const name = known >= 0 ? BASE_PHASES[known] : ROTATING_PHASES[tick % ROTATING_PHASES.length]!;
   return (
     <p className={`mono ${s.explainer}`} data-testid="rotating-explainer">
       <b>{name}</b> — {PHASE_EXPLAINERS[name]}

@@ -2,7 +2,13 @@ import { useEffect, useState } from 'react';
 
 import { useWorkerHealth } from '../../api/hooks';
 import type { JobStatusDto } from '../../api/types';
-import { BASE_PHASES, PHASE_EXPLAINERS } from './progress-phases';
+import {
+  BASE_PHASES,
+  PHASE_EXPLAINERS,
+  PHASE_SEQUENCE,
+  buildProgressPlan,
+} from './progress-phases';
+import type { ProgressPlanInputs, ProgressRow } from './progress-phases';
 import s from './ProgressStoryline.module.css';
 
 // Story 12.2 (AC3) — per-phase progress storyline for the results page.
@@ -28,6 +34,13 @@ const PHASE_ALIASES: Record<string, string> = {
 const SLOW_ELAPSED_MS = 10 * 60 * 1000; // any status, 10 min total
 const SLOW_PENDING_MS = 2 * 60 * 1000; // still queued after 2 min
 
+// Task G0 default: no optional input supplied — mix-only.
+const DEFAULT_INPUTS: ProgressPlanInputs = {
+  hasStems: false,
+  hasReference: false,
+  hasAls: false,
+};
+
 export interface ProgressStorylineViewProps {
   status: string;
   currentPhase: string;
@@ -37,6 +50,24 @@ export interface ProgressStorylineViewProps {
    *  health probe itself errors — an unreachable BFF/Redis must not read as
    *  "everything fine" on the page whose whole job is failure visibility. */
   workerOffline: boolean;
+  /** Task G0 — which optional inputs (stems / reference / .als) were
+   *  supplied. Drives which checklist rows show as "Not included" instead of
+   *  pretending an analysis is running. Default: mix-only (all false). */
+  inputs?: ProgressPlanInputs;
+  /** Task G0 — true while the caller doesn't know `inputs` yet (e.g. the
+   *  signed-in route's version query hasn't resolved). Renders the optional
+   *  rows in a NEUTRAL state instead of guessing "Not included", so a
+   *  supplied input never flashes the wrong verdict. */
+  inputsLoading?: boolean;
+}
+
+type RowState = 'done' | 'current' | 'todo' | 'not-included' | 'neutral';
+
+interface DisplayRow {
+  key: string;
+  label: string;
+  state: RowState;
+  benefit?: string;
 }
 
 function formatElapsed(ms: number): string {
@@ -56,10 +87,15 @@ export function ProgressStorylineView({
   phasePct,
   elapsedMs,
   workerOffline,
+  inputs,
+  inputsLoading = false,
 }: ProgressStorylineViewProps) {
   const pct = Math.max(0, Math.min(1, phasePct));
   const phase = PHASE_ALIASES[currentPhase] ?? currentPhase;
-  const knownIdx = (BASE_PHASES as readonly string[]).indexOf(phase);
+  // Task G0: matching now runs against the full worker phase sequence (the 7
+  // base phases + the conditional ALS phase), not just BASE_PHASES — the ALS
+  // phase is a real plan row now (phaseIndex 7), not an appended unknown one.
+  const knownIdx = (PHASE_SEQUENCE as readonly string[]).indexOf(phase);
   const isSentinel = SENTINELS.has(phase);
   const isUnknownPhase = knownIdx === -1 && !isSentinel;
   // Hints and the ticking clock only make sense while the job is actually
@@ -67,29 +103,43 @@ export function ProgressStorylineView({
   // payload loads, and must not show "taking longer than usual".
   const active = status === 'pending' || status === 'processing';
 
-  const rows: { name: string; state: 'done' | 'current' | 'todo' }[] =
-    BASE_PHASES.map((name, idx) => {
-      if (status === 'complete') return { name, state: 'done' };
-      if (knownIdx >= 0) {
-        if (idx < knownIdx) return { name, state: 'done' };
-        if (idx === knownIdx) return { name, state: 'current' };
-        return { name, state: 'todo' };
-      }
-      // Unknown/extra phase in flight (ALS phase 8, Mix Translation, …):
-      // base phases are checked off by overall progress — the only signal we
-      // still have. Denominator assumes one extra phase, since the known
-      // extras run AFTER the 7 base phases (worker pct is (phase-1+frac)/8
-      // for an ALS job, so /8 marks all base rows done exactly then).
-      if (isUnknownPhase) {
-        return {
-          name,
-          state: pct >= (idx + 1) / (BASE_PHASES.length + 1) ? 'done' : 'todo',
-        };
-      }
-      return { name, state: 'todo' };
-    });
+  const plan: ProgressRow[] = buildProgressPlan(inputs ?? DEFAULT_INPUTS);
+  const runsPhaseIndexes = plan
+    .filter((row) => row.kind === 'runs' && row.phaseIndex !== undefined)
+    .map((row) => row.phaseIndex as number);
+  const maxKnownPhaseIndex = runsPhaseIndexes.length > 0 ? Math.max(...runsPhaseIndexes) : -1;
+
+  const rows: DisplayRow[] = plan.map((row) => {
+    if (row.kind === 'not-included') {
+      // While the caller doesn't know the real inputs yet, never guess
+      // "Not included" — render plain/neutral instead (never flashes wrong).
+      if (inputsLoading) return { key: row.key, label: row.label, state: 'neutral' };
+      return {
+        key: row.key,
+        label: row.label,
+        state: 'not-included',
+        ...(row.benefit !== undefined ? { benefit: row.benefit } : {}),
+      };
+    }
+    const idx = row.phaseIndex as number;
+    let rowState: RowState;
+    if (status === 'complete') {
+      rowState = 'done';
+    } else if (knownIdx >= 0) {
+      rowState = idx < knownIdx ? 'done' : idx === knownIdx ? 'current' : 'todo';
+    } else if (isUnknownPhase) {
+      // Unknown/extra phase in flight (a worker phase name not in the plan,
+      // e.g. "Mix Translation"): known rows are checked off by overall
+      // progress — the only signal left. Denominator assumes one extra phase
+      // beyond the plan's known slots.
+      rowState = pct >= (idx + 1) / (maxKnownPhaseIndex + 2) ? 'done' : 'todo';
+    } else {
+      rowState = 'todo';
+    }
+    return { key: row.key, label: row.label, state: rowState };
+  });
   if (isUnknownPhase) {
-    rows.push({ name: phase, state: 'current' });
+    rows.push({ key: `unknown:${phase}`, label: phase, state: 'current' });
   }
 
   const slow =
@@ -110,24 +160,57 @@ export function ProgressStorylineView({
       </div>
 
       <ol className={s.phases} aria-label="Analysis phases">
-        {rows.map((row) => (
-          <li
-            key={row.name}
-            className={`${s.phase} ${
-              row.state === 'current'
-                ? s.phaseCurrent
-                : row.state === 'done'
-                  ? s.phaseDone
-                  : ''
-            }`}
-            aria-current={row.state === 'current' ? 'step' : undefined}
-          >
-            <span className={s.phaseMark} aria-hidden="true">
-              {row.state === 'done' ? '✓' : row.state === 'current' ? '●' : '○'}
-            </span>
-            {row.name}
-          </li>
-        ))}
+        {rows.map((row) => {
+          // Task G0 — an analysis that wasn't supplied is greyed + struck
+          // through with a real "Not included" tag + benefit copy. It never
+          // shows the active/done/failed marks, whatever currentPhase is.
+          if (row.state === 'not-included') {
+            return (
+              <li key={row.key} className={`${s.phase} ${s.phaseNotIncluded}`} aria-disabled="true">
+                <span className={s.phaseMark} aria-hidden="true">
+                  –
+                </span>
+                <span className={s.phaseNotIncludedBody}>
+                  <span>
+                    <span className={s.phaseLabelStruck}>{row.label}</span>{' '}
+                    <span className="pill">Not included</span>
+                  </span>
+                  {row.benefit && <span className={s.phaseBenefit}>{row.benefit}</span>}
+                </span>
+              </li>
+            );
+          }
+          // Neutral: the caller doesn't know `inputs` yet (version still
+          // loading) — plain label, no strike-through, no benefit, no tag.
+          if (row.state === 'neutral') {
+            return (
+              <li key={row.key} className={s.phase}>
+                <span className={s.phaseMark} aria-hidden="true">
+                  ○
+                </span>
+                {row.label}
+              </li>
+            );
+          }
+          return (
+            <li
+              key={row.key}
+              className={`${s.phase} ${
+                row.state === 'current'
+                  ? s.phaseCurrent
+                  : row.state === 'done'
+                    ? s.phaseDone
+                    : ''
+              }`}
+              aria-current={row.state === 'current' ? 'step' : undefined}
+            >
+              <span className={s.phaseMark} aria-hidden="true">
+                {row.state === 'done' ? '✓' : row.state === 'current' ? '●' : '○'}
+              </span>
+              {row.label}
+            </li>
+          );
+        })}
       </ol>
 
       <progress className={s.progress} value={pct} max={1} />
@@ -163,7 +246,17 @@ export function ProgressStorylineView({
 
 // Container — owns the elapsed-time tick and the shared worker-health poll
 // (same TanStack Query cache as the global banner: no extra requests).
-export function ProgressStoryline({ job }: { job: JobStatusDto }) {
+export function ProgressStoryline({
+  job,
+  inputs = DEFAULT_INPUTS,
+  inputsLoading = false,
+}: {
+  job: JobStatusDto;
+  /** Task G0 — forwarded to ProgressStorylineView. Omit for mix-only
+   *  callers (the anon /analyze funnel never supplies these). */
+  inputs?: ProgressPlanInputs;
+  inputsLoading?: boolean;
+}) {
   const health = useWorkerHealth();
   const startIso = job.startedAt ?? job.dispatchedAt;
   const [now, setNow] = useState(() => Date.now());
@@ -180,6 +273,8 @@ export function ProgressStoryline({ job }: { job: JobStatusDto }) {
       phasePct={job.phasePct}
       elapsedMs={now - Date.parse(startIso)}
       workerOffline={health.data?.healthy === false || health.isError}
+      inputs={inputs}
+      inputsLoading={inputsLoading}
     />
   );
 }

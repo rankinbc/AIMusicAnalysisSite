@@ -96,16 +96,23 @@ describe('ProgressStorylineView', () => {
     expect(html).toContain('✓');
   });
 
-  it('ALS phase 8 (pct 7/8) marks all 7 base phases done under the appended row', () => {
+  it('ALS phase 8 is now a normal plan row (Task G0): 6 earlier rows done, ALS row current', () => {
+    // Task G0 folded the ALS phase into the plan as a real row (phaseIndex 7)
+    // instead of an appended "unknown phase" row — it only appears this way
+    // when hasAls is true (else it's a not-included row, see the G0 suite).
     const html = renderToStaticMarkup(
       <ProgressStorylineView
         {...base}
         currentPhase="Ableton Project Analysis"
         phasePct={7 / 8}
+        inputs={{ hasStems: false, hasReference: false, hasAls: true }}
       />,
     );
-    // 7 done base rows + 1 appended current row — no ○ left.
-    expect(html.match(/✓/g)).toHaveLength(7);
+    // 6 earlier runs-rows done + the ALS row itself current — no ○ left among
+    // runs rows (the 2 not-included rows render their own "Not included" tag,
+    // never a ○/●/✓ mark).
+    expect(html.match(/✓/g)).toHaveLength(6);
+    expect(html.match(/aria-current="step"/g)).toHaveLength(1);
     expect(html).not.toContain('○');
   });
 
@@ -134,5 +141,90 @@ describe('ProgressStorylineView', () => {
     );
     expect(html).not.toContain('Taking longer than usual');
     expect(html).not.toContain('appears to be down');
+  });
+});
+
+// Task G0 — the checklist must not claim optional analyses ran when the
+// visitor never supplied that input. These cover ProgressStorylineView's
+// rendering of buildProgressPlan's not-included rows.
+
+/** Extracts the single <li>…</li> block containing `label`, from the phase
+ *  list portion of the rendered HTML — avoids brittle fixed-offset slicing. */
+function rowContaining(html: string, label: string): string {
+  const phaseList = html.slice(0, html.indexOf('</ol>'));
+  const textIdx = phaseList.indexOf(label);
+  if (textIdx === -1) throw new Error(`row for "${label}" not found`);
+  const liStart = phaseList.lastIndexOf('<li', textIdx);
+  const liEndTag = phaseList.indexOf('</li>', textIdx);
+  return phaseList.slice(liStart, liEndTag + '</li>'.length);
+}
+
+describe('ProgressStorylineView — optional-input rows (Task G0)', () => {
+  it('not-included row never shows active/done, even if currentPhase lands exactly on it', () => {
+    // Defensive case: currentPhase literally equals "Reference Comparison"
+    // (its slot in the worker's phase sequence) even though the row is
+    // not-included — the row must still never render as active or done.
+    const atPhase = renderToStaticMarkup(
+      <ProgressStorylineView {...base} currentPhase="Reference Comparison" phasePct={0.5} />,
+    );
+    const atRow = rowContaining(atPhase, 'Reference Comparison');
+    expect(atRow).toContain('Not included');
+    expect(atRow).toContain('aria-disabled="true"');
+    expect(atRow).not.toContain('aria-current');
+
+    // Completed job: not-included rows must still never read as done.
+    const completed = renderToStaticMarkup(
+      <ProgressStorylineView {...base} status="complete" currentPhase="complete" phasePct={1} />,
+    );
+    const completedRow = rowContaining(completed, 'Reference Comparison');
+    expect(completedRow).toContain('Not included');
+    expect(completedRow).not.toContain('✓');
+  });
+
+  it('mapping is not shifted by inserted not-included rows: the ACTUAL current phase is still the active row', () => {
+    // currentPhase is past phase 5 (Reference Comparison, not-included here)
+    // — Gap Analysis (phaseIndex 5) must be the one and only active row.
+    const html = renderToStaticMarkup(
+      <ProgressStorylineView {...base} currentPhase="Gap Analysis" phasePct={0.7} />,
+    );
+    const phaseList = html.slice(0, html.indexOf('</ol>'));
+    expect(phaseList.match(/aria-current="step"/g)).toHaveLength(1);
+    const gapRow = rowContaining(html, 'Gap Analysis');
+    expect(gapRow).toContain('aria-current="step"');
+    // Reference Comparison (before Gap Analysis in worker order, but rendered
+    // after Per-Stem Analysis in the checklist) is still not-included, not
+    // mistaken for a "done" phase just because Gap Analysis is current.
+    const refRow = rowContaining(html, 'Reference Comparison');
+    expect(refRow).toContain('Not included');
+    expect(refRow).not.toContain('aria-current');
+  });
+
+  it('the benefit line is real text, readable without relying on style', () => {
+    const html = renderToStaticMarkup(<ProgressStorylineView {...base} currentPhase="Gap Analysis" />);
+    expect(html).toContain(
+      'Add a reference track to see how your mix measures up to a record you love',
+    );
+    expect(html).toContain(
+      'Upload your stems to see which instruments are fighting each other',
+    );
+    expect(html).toContain(
+      'Add your Ableton project (.als) to get advice that names your actual tracks and devices.',
+    );
+  });
+
+  it('hasReference: true makes Reference Comparison behave like a normal row', () => {
+    const html = renderToStaticMarkup(
+      <ProgressStorylineView
+        {...base}
+        currentPhase="Reference Comparison"
+        phasePct={0.5}
+        inputs={{ hasStems: false, hasReference: true, hasAls: false }}
+      />,
+    );
+    const refRow = rowContaining(html, 'Reference Comparison');
+    expect(refRow).not.toContain('Not included');
+    expect(refRow).toContain('aria-current="step"');
+    const phaseList = html.slice(0, html.indexOf('</ol>'));
+    expect(phaseList.match(/aria-current="step"/g)).toHaveLength(1);
   });
 });

@@ -71,6 +71,16 @@ describe('ExplainerLine (AC2 — keyed to the current phase)', () => {
     const b = renderToStaticMarkup(<ExplainerLine currentPhase="" tick={1} />);
     expect(a).not.toEqual(b);
   });
+
+  // Task G0 — /analyze is mix-only (no stems/reference/.als), so Reference
+  // Comparison is a not-included phase for this page. The fallback rotation
+  // must never describe it as if it's running.
+  it('never rotates to a not-included phase (Reference Comparison) on the mix-only funnel', () => {
+    for (let tick = 0; tick < 12; tick++) {
+      const html = renderToStaticMarkup(<ExplainerLine currentPhase="" tick={tick} />);
+      expect(html).not.toContain('<b>Reference Comparison</b>');
+    }
+  });
 });
 
 describe('AnonReportView (AC3 — visible hero + gated depth)', () => {

@@ -73,6 +73,30 @@
   color: var(--cyan);
 }
 
+/* Task G0 — an optional analysis (stems / reference / .als) that wasn't
+   supplied: greyed, struck through, with a "Not included" tag + benefit. */
+.phaseNotIncluded {
+  align-items: flex-start;
+  color: var(--muted);
+}
+
+.phaseNotIncludedBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.phaseLabelStruck {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.phaseBenefit {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
 .progress {
   -webkit-appearance: none;
   appearance: none;
