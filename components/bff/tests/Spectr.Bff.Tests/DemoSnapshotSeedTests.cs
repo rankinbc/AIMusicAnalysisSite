@@ -28,7 +28,9 @@ public sealed class DemoSnapshotSeedTests(WebApplicationFactory<Program> factory
     // (Verdict/Conversation/CoachMessage/RackPreset are plain Guid columns,
     // no HasForeignKey mapping in AppDbContext), so deletion order is not
     // constrained.
-    private static async Task CleanupAsync(WebApplicationFactory<Program> f, Guid userId)
+    // Fix-round-2: internal (not private) so DemoSnapshotHardeningTests.cs
+    // can reuse it instead of duplicating the delete cascade.
+    internal static async Task CleanupAsync(WebApplicationFactory<Program> f, Guid userId)
     {
         if (userId == default) return;
         using var scope = f.Services.CreateScope();
@@ -133,44 +135,9 @@ public sealed class DemoSnapshotSeedTests(WebApplicationFactory<Program> factory
         }
     }
 
-    [SkippableFact]
-    public async Task Snapshot_Without_A_Routing_Plan_Still_Seeds_One_And_Fires_No_Triage()
-    {
-        // Item 1 — the seeder is the LAST line of defence: a snapshot whose
-        // analysis.routingPlan is missing/null/not-an-object must never
-        // seed a NULL RoutingPlan (VerdictEndpoints.ListVerdicts lazy-fires
-        // paid run_triage exactly when it's null).
-        await TestDb.RequireAsync(factory);
-        var dir = $"audio/demo/test-snapshots/{Guid.NewGuid():N}/";
-        var (f, q) = Build(dir + "snapshot.json");
-        using (var scope = f.Services.CreateScope())
-        {
-            var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
-            await storage.WriteAsync(dir + "snapshot.json",
-                new MemoryStream(Encoding.UTF8.GetBytes(DemoSnapshotFixture.Json(dir + "source.wav", routingPlan: "null"))),
-                "application/json");
-        }
-        Guid userId = default;
-        try
-        {
-            var client = f.CreateClient();
-            string token;
-            (userId, token) = await TestAuth.RegisterAsync(client);
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            using var scope = f.Services.CreateScope();
-            var analysis = await scope.ServiceProvider.GetRequiredService<AppDbContext>()
-                .Analyses.AsNoTracking().SingleAsync(a => a.UserId == userId);
-            Assert.NotNull(analysis.RoutingPlan);
-            (await client.GetAsync($"/api/reports/{analysis.JobId}/verdicts/")).EnsureSuccessStatusCode();
-            Assert.DoesNotContain(DramatiqTasks.RunTriage, q.Tasks);
-        }
-        finally
-        {
-            using var scope = f.Services.CreateScope();
-            await scope.ServiceProvider.GetRequiredService<IFileStorage>().DeleteAsync(dir + "snapshot.json");
-            await CleanupAsync(f, userId);
-        }
-    }
+    // Fix-round-2 item 3: the "routing plan is missing/null/not-an-object"
+    // family of cases moved to a parameterized theory in
+    // DemoSnapshotHardeningTests.cs (Snapshot_With_An_Unusable_Routing_Plan_...).
 
     [SkippableFact]
     public async Task Snapshot_With_Zero_Covered_Specialists_Seeds_An_Empty_Roster_That_Still_Parses()

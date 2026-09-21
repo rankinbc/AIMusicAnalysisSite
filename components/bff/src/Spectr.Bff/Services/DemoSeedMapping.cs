@@ -43,16 +43,27 @@ internal static class DemoSeedMapping
             if (JsonNode.Parse(routingPlanJson) is not JsonObject plan)
                 return EmptyRoutingPlanJson;
 
-            if (plan["specialists_to_run"] is JsonArray entries)
+            if (plan.ContainsKey("specialists_to_run"))
             {
+                // Fix-round-2 item 1: `kept` starts empty and stays empty
+                // unless the value is actually a JsonArray — a malformed
+                // operator-supplied snapshot with specialists_to_run as a
+                // string/number/object/null must never leave that
+                // non-list value in place. VerdictEndpoints'
+                // RoutingPlanDto expects a list; a non-list value there
+                // would 500 every guest's GET …/verdicts, not just skip
+                // seeding one specialist.
                 var kept = new JsonArray();
-                foreach (var entry in entries)
+                if (plan["specialists_to_run"] is JsonArray entries)
                 {
-                    if (entry is not JsonObject entryObj) continue;
-                    if (entryObj["name"] is not JsonValue nameValue) continue;
-                    if (!nameValue.TryGetValue<string>(out var slug)) continue;
-                    if (coveredSpecialistSlugs.Contains(slug))
-                        kept.Add(entry.DeepClone());
+                    foreach (var entry in entries)
+                    {
+                        if (entry is not JsonObject entryObj) continue;
+                        if (entryObj["name"] is not JsonValue nameValue) continue;
+                        if (!nameValue.TryGetValue<string>(out var slug)) continue;
+                        if (coveredSpecialistSlugs.Contains(slug))
+                            kept.Add(entry.DeepClone());
+                    }
                 }
                 plan["specialists_to_run"] = kept;
             }

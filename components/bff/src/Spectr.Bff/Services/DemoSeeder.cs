@@ -100,9 +100,15 @@ public sealed class DemoSeeder(
         // happens to rename "Demo: something" must never shadow it (the
         // guest landing flow in task D5 depends on always finding the
         // ORIGINAL seed here).
+        // Fix-round-2 item 2: deterministic tie-break. Two rows can share
+        // the exact same CreatedAt (same-millisecond insert, or a clock
+        // with coarser resolution than the test suite) — without a second
+        // ORDER BY key, which one "FirstOrDefault" returns is unspecified
+        // and can flip between calls. Id is unique, so this makes the
+        // result stable and reproducible.
         var song = await db.Songs.AsNoTracking()
             .Where(s => s.UserId == userId && s.Name.StartsWith(DemoSongPrefix))
-            .OrderBy(s => s.CreatedAt)
+            .OrderBy(s => s.CreatedAt).ThenBy(s => s.Id)
             .FirstOrDefaultAsync(ct);
         if (song is null) return null;
 

@@ -32,6 +32,10 @@ internal static class DemoSnapshotFixture
         "{\"specialists_to_run\":[{\"name\":\"stereo\",\"priority\":1,\"focus\":\"width\"}],"
         + "\"skip\":[],\"rationale\":\"width needs attention\",\"estimated_total_tokens\":200}";
 
+    public const string DefaultRackPresetsJson =
+        "[{\"name\":\"Fix Rack\",\"source\":\"analysis\","
+        + "\"chain\":{\"order\":[\"eq\"],\"modules\":{\"eq\":{\"enabled\":true}},\"masterBypass\":false},\"coachMeta\":null}]";
+
     private static string Lit(string? s) => s is null ? "null" : $"\"{s}\"";
 
     // NOTE (D3 deviation): the brief's snippet used a $$ raw-string prefix with
@@ -41,21 +45,31 @@ internal static class DemoSnapshotFixture
     // or is two literal braces). Bumped to $$$ / {{{X}}} — same content, wider
     // delimiter so the literal "}}" run is unambiguous.
     //
-    // routingPlan is inserted as a raw JSON fragment verbatim (pass "null" for
-    // a missing/null plan — fix-round-1 item 1). Image keys are optional;
-    // null renders as JSON null, matching the base fixture's original shape.
+    // routingPlan is inserted as a raw JSON fragment verbatim: pass the C#
+    // literal `null` to OMIT the "routingPlan" key entirely (fix-round-2 item
+    // 3's "key absent" shape), the string "null" for an explicit JSON null,
+    // or any other JSON value/fragment (a string, an array, an object) —
+    // callers are responsible for valid JSON syntax. Image keys are
+    // optional; C# null renders as JSON null. `title`/`rackPresetsJson`
+    // let tests exercise the song-name-truncation and null/absent-chain
+    // guards without hand-rolling a whole new snapshot document — title
+    // must not contain `"` or `\` (inserted unescaped between quotes).
     public static string Json(
         string audioKey,
-        string routingPlan = RealRoutingPlanJson,
+        string? routingPlan = RealRoutingPlanJson,
         string? spectrogramImageKey = null,
         string? waveformImageKey = null,
-        string? waveformPeaksKey = null) => $$$"""
+        string? waveformPeaksKey = null,
+        string title = "Fixture Track",
+        string rackPresetsJson = DefaultRackPresetsJson)
+    {
+        var routingPlanFragment = routingPlan is null ? "" : $"\"routingPlan\":{routingPlan},";
+        return $$$"""
     { "format":"spectr-demo-snapshot/v1","exportedAt":"2026-09-20T00:00:00Z",
       "source":{"songId":"22222222-2222-2222-2222-222222222222","versionId":"{{{SourceVersion}}}","jobId":"{{{SourceJob}}}","analysisId":"44444444-4444-4444-4444-444444444444"},
-      "song":{"title":"Fixture Track","genreHint":"house"},
+      "song":{"title":"{{{title}}}","genreHint":"house"},
       "version":{"audioKey":"{{{audioKey}}}"},
-      "analysis":{"finalJson":{"grade":"C","overall_score":61,"job_ref":"{{{SourceJob}}}"},"routingPlan":{{{routingPlan}}},
-                  "pipelineVersion":"t","ruleEngineVersion":"t","validatorVersion":"t","promptSetVersion":"t","phaseDurations":{},
+      "analysis":{"finalJson":{"grade":"C","overall_score":61,"job_ref":"{{{SourceJob}}}"},{{{routingPlanFragment}}}"pipelineVersion":"t","ruleEngineVersion":"t","validatorVersion":"t","promptSetVersion":"t","phaseDurations":{},
                   "stemMetrics":null,"spectrogramImageKey":{{{Lit(spectrogramImageKey)}}},"waveformImageKey":{{{Lit(waveformImageKey)}}},"waveformPeaksKey":{{{Lit(waveformPeaksKey)}}}},
       "verdicts":[
         {"id":"{{{SourceVerdict}}}","specialist":"low_end","promptVersion":"low_end@1.0.0","model":"fixture","severity":"moderate","category":"low_end",
@@ -71,6 +85,7 @@ internal static class DemoSnapshotFixture
       "conversation":{"messages":[
         {"role":"user","status":"complete","mode":"qa","content":"What first?","evidence":null,"refusalReason":null},
         {"role":"assistant","status":"complete","mode":"qa","content":"Tame the sub ({{{SourceVerdict}}}).","evidence":[{"label":"45 Hz"}],"refusalReason":null}]},
-      "rackPresets":[{"name":"Fix Rack","source":"analysis","chain":{"order":["eq"],"modules":{"eq":{"enabled":true}},"masterBypass":false},"coachMeta":null}] }
+      "rackPresets":{{{rackPresetsJson}}} }
     """;
+    }
 }
