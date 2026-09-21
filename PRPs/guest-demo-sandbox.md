@@ -409,6 +409,36 @@ The exporter refuses a version whose analysis has `RoutingPlan == null` or a
 `DegradationNotice` (`snapshot_not_ready`) — a snapshot that would fire triage
 on open defeats the point.
 
+### 6.1 Seed-time safety (added 2026-09-21 after the D3 review — binding)
+
+The SEEDER is the last line of defence; it does not trust the snapshot:
+
+- **Never seed a null routing plan.** A missing/null/non-object
+  `analysis.routingPlan` is replaced with the empty plan
+  (`DemoSeedMapping.EmptyRoutingPlanJson`), because `VerdictEndpoints` fires paid
+  `run_triage` on `RoutingPlan is null`.
+- **`specialists_to_run` is rewritten at seed time** to keep only entries whose
+  `name` already has a seeded verdict (`DemoSeedMapping.RewriteRoutingPlanForSeed`).
+  This DEVIATES from "export verbatim" on purpose: `CoachTab.tsx` auto-POSTs
+  `/verdicts/run/{slug}` on first view for every routed specialist without a
+  verdict — N paid LLM calls per guest, on page load. `skip`, `rationale` and
+  `estimated_total_tokens` stay as exported. Cost: the demo roster omits
+  specialists that never ran; a guest can still start one by hand under the D7 cap.
+- **Asset keys are never id-remapped.** The four keys (`version.audioKey` + the
+  three image keys) are captured BEFORE token substitution, validated against
+  `DemoSnapshotStore.SharedPrefix` (`audio/demo/`, mirrors the worker's
+  `SHARED_STORAGE_PREFIXES`) and stamped back verbatim. The exporter must still
+  write **id-free asset keys** under `audio/demo/snapshot/`.
+- **`Demo:SnapshotKey` and every asset key must live under `audio/demo/`** (no
+  leading slash, no backslash, no `..`) — anything else = "no snapshot" →
+  fallback seed. Outside that prefix the first guest purge would delete the demo
+  for everyone.
+- The snapshot read runs inside the sign-up / demo request: 5 s timeout, 4 MB cap,
+  positive AND negative results cached 60 s. Any failure → fallback seed; nothing
+  escapes `SeedAsync`.
+- `FindAsync` returns the user's FIRST `"Demo: "` song (`CreatedAt ASC`), so a
+  later user song renamed "Demo: …" cannot become the guest landing.
+
 ---
 
 ## 7. Security & abuse
