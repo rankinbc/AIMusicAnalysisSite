@@ -54,6 +54,29 @@ const OFFLINE_CODES = new Set<string>([
   'coach_stream_idle',
 ]);
 
+// Task G6 — pure mapper, shared by the mount-time hydration effect below and
+// `refetchConversation` (fired when useCoachBrief invalidates the shared
+// conversation query key). Adds `isBrief`/`closingLine` so a brief message
+// renders CoachBriefCta once it lands.
+function mapMessagesToTurns(messages: CoachConversationDto['messages']): ChatTurn[] {
+  return messages.map((m) => {
+    const turn: ChatTurn = {
+      role: m.role,
+      text: m.content,
+      finalized: m.status === 'complete' || m.status === 'refused',
+    };
+    if (m.evidence) turn.evidence = m.evidence;
+    if (m.mode === 'teach') turn.mode = 'teach';
+    if (m.isBrief) turn.isBrief = true;
+    if (typeof m.closingLine === 'string') turn.closingLine = m.closingLine;
+    if (m.status === 'refused') {
+      turn.refused = true;
+      if (m.refusalReason) turn.refusalReason = m.refusalReason;
+    }
+    return turn;
+  });
+}
+
 interface UseCoachSessionArgs {
   analysisId: string;
   /** teach-mode-coach + adhoc-concise: the wire mode derived from the
@@ -149,21 +172,7 @@ export function useCoachSession({
         }
         // Hydrate prior turns so a refresh mid-conversation keeps context.
         if (dto.messages.length > 0) {
-          const prior: ChatTurn[] = dto.messages.map((m) => {
-            const turn: ChatTurn = {
-              role: m.role,
-              text: m.content,
-              finalized: m.status === 'complete' || m.status === 'refused',
-            };
-            if (m.evidence) turn.evidence = m.evidence;
-            if (m.mode === 'teach') turn.mode = 'teach';
-            if (m.status === 'refused') {
-              turn.refused = true;
-              if (m.refusalReason) turn.refusalReason = m.refusalReason;
-            }
-            return turn;
-          });
-          setTurns(prior);
+          setTurns(mapMessagesToTurns(dto.messages));
         }
       } catch {
         /* hydration is best-effort; the user can still send messages */
@@ -171,6 +180,32 @@ export function useCoachSession({
     })();
 
     return () => ac.abort();
+  }, [analysisId]);
+
+  // Task G6 — useCoachBrief invalidates the ['coach-conversation', analysisId]
+  // query key on success; CoachChat mounts a small signal query under that
+  // same key and calls this when it changes, so the brief message shows up
+  // the same way the chat refreshes after a user sends a message. Guarded by
+  // `sendingRef` so it can never clobber a live send mid-stream.
+  const refetchConversation = useCallback(async () => {
+    if (sendingRef.current) return;
+    const requestAnalysisId = analysisId;
+    try {
+      const token = getAccessToken();
+      const authHeaders: Record<string, string> = token
+        ? { Authorization: `Bearer ${token}` }
+        : {};
+      const res = await fetch(`/api/coach/${analysisId}/conversation`, { headers: authHeaders });
+      if (!res.ok) return;
+      const dto = (await res.json()) as CoachConversationDto;
+      if (requestAnalysisId !== analysisId) return;
+      setCaps(dto.caps);
+      if (dto.messages.length > 0) {
+        setTurns(mapMessagesToTurns(dto.messages));
+      }
+    } catch {
+      /* best-effort, same as the mount-time hydration above */
+    }
   }, [analysisId]);
 
   const handleStop = useCallback(() => {
@@ -402,5 +437,6 @@ export function useCoachSession({
     send,
     handleStop,
     handleRetry,
+    refetchConversation,
   };
 }

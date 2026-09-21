@@ -19,6 +19,11 @@ export interface ChatTurn {
    *  transcript ("concise" gets no badge). Set optimistically at send time;
    *  survives reload via CoachMessageDto.mode. */
   mode?: 'qa' | 'teach' | 'concise';
+  /** Task G6 — true for the once-per-conversation coach brief. */
+  isBrief?: boolean;
+  /** Task G6 — non-null only for a guest's completed brief; render verbatim
+   *  (never hard-code) under the bubble alongside the account-creation CTA. */
+  closingLine?: string | null;
 }
 
 export interface UnlockAction {

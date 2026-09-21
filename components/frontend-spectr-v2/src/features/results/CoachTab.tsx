@@ -179,6 +179,7 @@ export function CoachTab({
         headerActions={headerActions}
         specialistsRan={ranSlugs.size}
         specialistsSuggested={suggestedCount}
+        triageDone={data?.routingPlan != null || data?.degradation != null}
         greeting={greeting}
         {...(onUnlockAction ? { onUnlockAction } : {})}
         askSeed={askSeed ?? null}

@@ -1384,6 +1384,14 @@ export interface CoachMessageDto {
    *  reloads ("concise" gets no badge). Optional — older payloads omit it
    *  (treat as "qa"). */
   mode?: 'qa' | 'teach' | 'concise';
+  /** Task G6 — true for the once-per-conversation coach brief (BFF: POST
+   *  /api/coach/{analysisId}/brief). */
+  isBrief: boolean;
+  /** Task G6 — set ONLY on a guest's completed brief: the exact sentence to
+   *  render verbatim under the brief, plus the "Create free account" CTA
+   *  (G-D3 — never hard-code this string). Null for every other message,
+   *  including a signed-in user's brief. */
+  closingLine: string | null;
 }
 
 /** Story 1.9 / UX-DR16 — per-analysis follow-up cap state. `capReached` is

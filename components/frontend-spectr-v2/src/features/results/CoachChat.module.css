@@ -436,3 +436,15 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+
+/* Task G6 — the closing line + account-creation CTA under a guest's brief. */
+.briefCta {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.briefClosingLine {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--text-2);
+}

@@ -36,6 +36,8 @@ const conversation: CoachConversationDto = {
       refusalReason: null,
       createdAt: '2026-09-19T00:00:00Z',
       completedAt: '2026-09-19T00:00:01Z',
+      isBrief: false,
+      closingLine: null,
     },
   ],
   caps: { used: 0, limit: 5, capReached: false },

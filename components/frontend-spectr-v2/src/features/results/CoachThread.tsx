@@ -1,6 +1,7 @@
 import type { ReactNode, Ref } from 'react';
 
 import { Pill } from '../../ui/Pill';
+import { CoachBriefCta } from './CoachBriefCta';
 import { StreamCaret, TypingDots } from './CoachResponding';
 import { EvidenceChips } from './EvidenceChips';
 import { resolveUnlockAction, type ChatTurn } from './coach-chat-helpers';
@@ -68,6 +69,9 @@ export function CoachThread({
                     <Pill tone="violet">{unlock.label}</Pill>
                   </button>
                 </div>
+              )}
+              {isAssistant && turn.finalized && turn.isBrief && turn.closingLine && (
+                <CoachBriefCta closingLine={turn.closingLine} />
               )}
             </div>
           </div>

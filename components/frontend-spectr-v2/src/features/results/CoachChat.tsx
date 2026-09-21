@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import type { VerdictDto } from '../../api/types';
@@ -10,6 +11,7 @@ import { CoachThread } from './CoachThread';
 import { CoachComposer } from './CoachComposer';
 import { useCoachAriaLive } from './useCoachAriaLive';
 import { COACH_OFFLINE_COPY, useCoachSession } from './useCoachSession';
+import { coachConversationQueryKey, useCoachBrief } from './useCoachBrief';
 import s from './CoachChat.module.css';
 
 interface CoachChatProps {
@@ -25,6 +27,10 @@ interface CoachChatProps {
   /** Cap-line stats (prototype: "· N specialists ran · M/N suggested"). */
   specialistsRan?: number;
   specialistsSuggested?: number;
+  /** Task G6 — true once Triage has landed a routing plan (or the analysis
+   *  is degraded); gates the coach-brief trigger. Defaults false so a bare
+   *  mount (e.g. existing tests) never fires the brief request. */
+  triageDone?: boolean;
   /** Grounded greeting shown when the thread is empty (prototype seeds one). */
   greeting?: React.ReactNode;
   /** Story 12.5: unlock chips open the REAL upload dialogs (owner: ReportView).
@@ -41,6 +47,7 @@ export function CoachChat({
   headerActions,
   specialistsRan = 0,
   specialistsSuggested = 0,
+  triageDone = false,
   greeting,
   onUnlockAction,
   askSeed,
@@ -106,17 +113,66 @@ export function CoachChat({
   // own hook now (useCoachSession.ts); same statements, same conditions,
   // same dependency arrays, just moved. The wire mode is passed in fresh
   // every render so send() never closes over a stale mode (invariant 4).
-  const { turns, streaming, offlineState, streamStatus, caps, send, handleStop, handleRetry } =
-    useCoachSession({
-      analysisId,
-      wireMode,
-      input,
-      clearInput,
-      scheduleAriaLive,
-      flushAriaLive,
-      resetAriaLive,
-      cancelAriaLiveTimer,
-    });
+  const {
+    turns,
+    streaming,
+    offlineState,
+    streamStatus,
+    caps,
+    send,
+    handleStop,
+    handleRetry,
+    refetchConversation,
+  } = useCoachSession({
+    analysisId,
+    wireMode,
+    input,
+    clearInput,
+    scheduleAriaLive,
+    flushAriaLive,
+    resetAriaLive,
+    cancelAriaLiveTimer,
+  });
+
+  // Task G6 — the coach brief trigger. `caps !== null` is the
+  // conversationLoaded signal (set the same tick as `turns` by
+  // useCoachSession's hydration); `hasBrief` comes from the hydrated
+  // thread so a re-mount never re-asks.
+  const hasBrief = turns.some((t) => t.role === 'assistant' && t.isBrief === true);
+  useCoachBrief({
+    analysisId,
+    triageDone,
+    specialistsSuggested,
+    specialistsRan,
+    conversationLoaded: caps !== null,
+    hasBrief,
+  });
+
+  // useCoachBrief invalidates ['coach-conversation', analysisId] on success.
+  // This tiny signal query has no network cost of its own (its queryFn is a
+  // local no-op) — it exists only so that invalidation has an ACTIVE query
+  // to refetch, which then re-runs refetchConversation() and pulls the
+  // brief into `turns` the same way the chat refreshes after a user sends a
+  // message.
+  const conversationSignal = useQuery({
+    queryKey: coachConversationQueryKey(analysisId),
+    queryFn: () => Date.now(),
+    enabled: Boolean(analysisId),
+    staleTime: Infinity,
+    gcTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
+  });
+  const firstSignalRef = useRef(true);
+  useEffect(() => {
+    if (conversationSignal.data === undefined) return;
+    if (firstSignalRef.current) {
+      firstSignalRef.current = false;
+      return;
+    }
+    void refetchConversation();
+  }, [conversationSignal.data, refetchConversation]);
 
   // adhoc task (2026-09-19) — auto-scroll the thread to the latest message
   // on every turn change (send / stream token) AND whenever the dialog
