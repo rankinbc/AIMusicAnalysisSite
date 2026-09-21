@@ -164,11 +164,18 @@ public sealed class GuestGuardTests(WebApplicationFactory<Program> factory)
     public async Task A_Real_User_Is_Untouched_By_The_Guard()
     {
         await TestDb.RequireAsync(factory);
-        var client = Build().CreateClient();
-        var (_, token) = await TestAuth.RegisterAsync(client);
-        client.DefaultRequestHeaders.Authorization = new("Bearer", token);
-        var resp = await client.PatchAsJsonAsync("/api/me/profile", new { displayName = "Still Me" });
-        Assert.NotEqual(HttpStatusCode.Forbidden, resp.StatusCode);
+        var f = Build();
+        Guid userId = default;
+        try
+        {
+            var client = f.CreateClient();
+            var (uid, token) = await TestAuth.RegisterAsync(client);
+            userId = uid;
+            client.DefaultRequestHeaders.Authorization = new("Bearer", token);
+            var resp = await client.PatchAsJsonAsync("/api/me/profile", new { displayName = "Still Me" });
+            Assert.NotEqual(HttpStatusCode.Forbidden, resp.StatusCode);
+        }
+        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); f.Dispose(); }
     }
 
     [SkippableFact]
@@ -177,18 +184,35 @@ public sealed class GuestGuardTests(WebApplicationFactory<Program> factory)
         await TestDb.RequireAsync(factory);
         var f = Build();
         Guid userId = default;
+        Guid versionId = default;
         try
         {
             var (client, g) = await StartGuestAsync(f);
             userId = g.User.Id;
-            Assert.Equal(HttpStatusCode.OK, (await client.PostAsync("/api/versions/", Wav("mine.wav", analyze: false))).StatusCode);
+            var uploaded = await client.PostAsync("/api/versions/", Wav("mine.wav", analyze: false));
+            Assert.Equal(HttpStatusCode.OK, uploaded.StatusCode);
+            versionId = (await uploaded.Content.ReadFromJsonAsync<UploadResponse>())!.VersionId;
             var second = await client.PostAsync("/api/versions/", Wav("again.wav", analyze: false));
             Assert.Equal(HttpStatusCode.Forbidden, second.StatusCode);
             Assert.Equal("upload_limit", await Reason(second));
             var state = await client.GetFromJsonAsync<GuestStateDto>("/api/me/guest");
             Assert.Equal((1, 1), (state!.UploadsUsed, state.UploadsMax));
         }
-        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); f.Dispose(); }
+        finally
+        {
+            // The quota-check WAV lands on real IFileStorage — nothing else
+            // deletes that blob, so do it explicitly before dropping the row.
+            if (versionId != default)
+            {
+                using var scope = f.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var path = await db.SongVersions.Where(v => v.Id == versionId).Select(v => v.FilePath).SingleOrDefaultAsync();
+                if (path is not null)
+                    await scope.ServiceProvider.GetRequiredService<IFileStorage>().DeleteAsync(path);
+            }
+            await DemoAuthEndpointsTests.CleanupAsync(f, userId);
+            f.Dispose();
+        }
     }
 
     [SkippableFact]
@@ -270,10 +294,17 @@ public sealed class GuestGuardTests(WebApplicationFactory<Program> factory)
     public async Task Guest_State_Is_404_For_Real_Users()
     {
         await TestDb.RequireAsync(factory);
-        var client = Build().CreateClient();
-        var (_, token) = await TestAuth.RegisterAsync(client);
-        client.DefaultRequestHeaders.Authorization = new("Bearer", token);
-        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/me/guest")).StatusCode);
+        var f = Build();
+        Guid userId = default;
+        try
+        {
+            var client = f.CreateClient();
+            var (uid, token) = await TestAuth.RegisterAsync(client);
+            userId = uid;
+            client.DefaultRequestHeaders.Authorization = new("Bearer", token);
+            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/me/guest")).StatusCode);
+        }
+        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); f.Dispose(); }
     }
 
     // ── Ownership still applies on an ALLOWED route ─────────────────────────
