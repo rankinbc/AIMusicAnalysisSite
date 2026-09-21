@@ -48,7 +48,7 @@ export function SampleReportEmbed() {
 
       <p className={s.embedCaption}>
         This is a real report from a real rough mix — SPECTR doesn&rsquo;t flatter.{' '}
-        <a href="/register">Get yours free →</a>{' '}
+        <a href="/register">Get yours free →</a>{' · '}
         <a href="/demo">See a full report in the demo →</a>
       </p>
     </section>
