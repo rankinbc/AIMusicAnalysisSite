@@ -1,17 +1,13 @@
 import { Link, createFileRoute, useNavigate, useRouter } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
-import { z } from 'zod';
 
 import { useAuth } from '../../auth/AuthContext';
+import { optionalString } from '../../lib/search-params';
 import f from '../../styles/forms.module.css';
 import s from './auth.module.css';
 
-const search = z.object({
-  next: z.string().optional(),
-});
-
 export const Route = createFileRoute('/_public/login')({
-  validateSearch: search,
+  validateSearch: optionalString('next'),
   component: LoginPage,
 });
 

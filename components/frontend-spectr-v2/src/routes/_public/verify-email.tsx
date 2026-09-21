@@ -1,16 +1,12 @@
 import { Link, createFileRoute } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
-import { z } from 'zod';
 
 import { fetcher } from '../../api/fetcher';
 import { VerifyEmailView, type VerifyStatus } from '../../features/auth/AuthFlowViews';
-
-const search = z.object({
-  token: z.string().optional(),
-});
+import { optionalString } from '../../lib/search-params';
 
 export const Route = createFileRoute('/_public/verify-email')({
-  validateSearch: search,
+  validateSearch: optionalString('token'),
   component: VerifyEmailPage,
 });
 

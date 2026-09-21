@@ -1,28 +1,54 @@
 // Story 10.3 — PostHog (EU) behind a no-op-safe wrapper. Without
-// VITE_POSTHOG_KEY every call is a silent no-op (dev, tests, self-hosters).
+// VITE_POSTHOG_KEY nothing is even imported (dev, tests, self-hosters).
 // Event set = the product-side KPI rows (PRD Measurable Outcomes); the
 // DB/Stripe-derived rows are documented in the runbook mapping table, and
 // Epic 6 owns the landing/funnel/k-factor events.
-import posthog from 'posthog-js';
+//
+// P7 (bundle diet) — posthog-js (~220 KB raw) is a dynamic import made only
+// when a key is present, so a keyless build never pays for it. Calls made
+// before the SDK finishes loading are queued (bounded) and flushed in order
+// once it arrives; an init failure (blocked storage, adblock) drops the
+// queue silently rather than throwing.
+type PostHog = typeof import('posthog-js').default;
 
 const KEY = import.meta.env['VITE_POSTHOG_KEY'] as string | undefined;
-let initialized = false;
+const MAX_QUEUE = 50;
+let client: PostHog | null = null;
+let loading = false;
+let dead = false;
+const queue: Array<(p: PostHog) => void> = [];
+
+function run(fn: (p: PostHog) => void): void {
+  if (!KEY || dead) return;
+  if (client) fn(client);
+  else if (queue.length < MAX_QUEUE) queue.push(fn);
+}
 
 export function initAnalytics(): void {
-  if (!KEY || initialized) return;
-  posthog.init(KEY, {
-    api_host: 'https://eu.i.posthog.com',
-    autocapture: false, // explicit events only — KPI table, not clickstream
-    capture_pageview: true,
-    persistence: 'localStorage',
-  });
-  initialized = true;
+  if (!KEY || loading || client || dead) return;
+  loading = true;
+  void import('posthog-js')
+    .then(({ default: posthog }) => {
+      posthog.init(KEY, {
+        api_host: 'https://eu.i.posthog.com',
+        autocapture: false, // explicit events only — KPI table, not clickstream
+        capture_pageview: true,
+        persistence: 'localStorage',
+      });
+      client = posthog;
+      for (const fn of queue.splice(0)) fn(posthog);
+    })
+    .catch(() => {
+      dead = true;
+      queue.length = 0;
+    });
 }
 
 export function identifyUser(userId: string | null): void {
-  if (!KEY || !initialized) return;
-  if (userId) posthog.identify(userId);
-  else posthog.reset();
+  run((p) => {
+    if (userId) p.identify(userId);
+    else p.reset();
+  });
 }
 
 type EventName =
@@ -42,6 +68,7 @@ type EventName =
   | 'resume_clicked'; // props: { status } — resume card opened
 
 export function capture(event: EventName, props?: Record<string, unknown>): void {
-  if (!KEY || !initialized) return;
-  posthog.capture(event, props);
+  run((p) => {
+    p.capture(event, props);
+  });
 }

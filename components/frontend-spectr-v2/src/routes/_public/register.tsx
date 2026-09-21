@@ -1,8 +1,8 @@
 import { Link, createFileRoute } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
-import { z } from 'zod';
 
 import { useAuth } from '../../auth/AuthContext';
+import { optionalString } from '../../lib/search-params';
 import f from '../../styles/forms.module.css';
 import s from './auth.module.css';
 
@@ -11,10 +11,6 @@ import s from './auth.module.css';
 // return to the same page after registration. Sanitized: only same-origin
 // path-relative values are accepted; absolute or scheme-bearing values
 // are silently dropped to defeat open-redirect via `?next=http://evil.com`.
-
-const search = z.object({
-  next: z.string().optional(),
-});
 
 function safeNext(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
@@ -28,7 +24,7 @@ function safeNext(raw: string | undefined): string | undefined {
 }
 
 export const Route = createFileRoute('/_public/register')({
-  validateSearch: search,
+  validateSearch: optionalString('next'),
   component: RegisterPage,
 });
 

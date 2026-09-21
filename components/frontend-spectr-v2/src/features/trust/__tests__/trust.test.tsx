@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 
 import { LandingPage } from '../../landing/LandingPage';
 import { PricingPlansView } from '../../pricing/PricingPlansView';
-import { NoTrainingPage, PLEDGE_VERSION } from '../../../routes/trust.no-training';
-import { ResultsForeverPage } from '../../../routes/trust.results-forever';
-import { PrivacyDefaultsPage } from '../../../routes/trust.privacy';
+import { NoTrainingPage, PLEDGE_VERSION } from '../pages/NoTrainingPage';
+import { ResultsForeverPage } from '../pages/ResultsForeverPage';
+import { PrivacyDefaultsPage } from '../pages/PrivacyDefaultsPage';
 
 // Story 6.2 — static renders (6-1 idiom: plain <a>, no providers needed;
 // PublicChrome renders its anon variant outside AuthProvider).

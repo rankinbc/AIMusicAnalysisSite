@@ -7,11 +7,12 @@ import { Toaster } from 'sonner';
 import { createMutationCache } from './api/mutation-error-toast';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { AppCrashFallback } from './components/AppCrashFallback';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { NotFoundScreen } from './components/NotFoundScreen';
 import { RouteErrorScreen } from './components/RouteErrorScreen';
 import { initAnalytics } from './lib/analytics';
 import { installChunkReloadListener } from './lib/chunk-reload';
-import { Sentry, initSentry } from './lib/sentry';
+import { initSentry } from './lib/sentry';
 import { routeTree } from './routeTree.gen';
 import './styles/tokens.css';
 import './styles/global.css';
@@ -81,14 +82,16 @@ function RouterBridge() {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {/* Story 10.3 — root error boundary: a render crash reports to Sentry
-        (when configured) and shows a recoverable shell, never a white page. */}
-    <Sentry.ErrorBoundary fallback={<AppCrashFallback />}>
+        (when configured) and shows a recoverable shell, never a white page.
+        P7 — a local class boundary; Sentry is a lazy import and can no
+        longer supply its own ErrorBoundary component at this outer layer. */}
+    <AppErrorBoundary fallback={<AppCrashFallback />}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <RouterBridge />
         </AuthProvider>
         <Toaster theme="dark" position="top-right" />
       </QueryClientProvider>
-    </Sentry.ErrorBoundary>
+    </AppErrorBoundary>
   </StrictMode>,
 );

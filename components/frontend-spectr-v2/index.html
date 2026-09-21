@@ -8,6 +8,10 @@
     <!-- Story 1.7 / UX-DR1 — Syne + JetBrains Mono are now self-hosted from
          /public/fonts/ via @font-face in src/styles/global.css. GDPR-clean:
          no third-party font CDN. Enforced by scripts/check-no-google-fonts.mjs. -->
+    <!-- P7 (bundle diet) — preload the display face used above the fold
+         (headings render in Syne); the browser would otherwise discover it
+         only after parsing the CSS that references it. -->
+    <link rel="preload" href="/fonts/syne-variable-latin.woff2" as="font" type="font/woff2" crossorigin />
     <title>SPECTR</title>
     <!-- Story 6.1 — site-generic base meta for humans; crawlers on / and
          /pricing get the BFF meta shell via the Caddy bot split. -->

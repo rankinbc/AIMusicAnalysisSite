@@ -7,7 +7,7 @@ import { LandingPage } from '../../features/landing/LandingPage';
 import { PricingOffView } from '../../features/pricing/PricingOffView';
 import { PricingPlansView } from '../../features/pricing/PricingPlansView';
 import { resetPublicPlansForTests } from '../../lib/public-plans';
-import { KitchenSinkPage } from '../_app/dev.kitchen-sink';
+import { KitchenSinkPage } from '../../features/dev/KitchenSinkPage';
 
 // Story 5.10 (UX-DR44/46) — axe over the kitchen-sink inventory (the a11y
 // audit surface) and the anon funnel pages (landing + pricing — two of the

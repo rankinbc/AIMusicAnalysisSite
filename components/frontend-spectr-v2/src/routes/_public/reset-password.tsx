@@ -1,16 +1,12 @@
 import { Link, createFileRoute } from '@tanstack/react-router';
 import { useEffect, useState, type FormEvent } from 'react';
-import { z } from 'zod';
 
 import { fetcher } from '../../api/fetcher';
 import { ResetPasswordView } from '../../features/auth/AuthFlowViews';
-
-const search = z.object({
-  token: z.string().optional(),
-});
+import { optionalString } from '../../lib/search-params';
 
 export const Route = createFileRoute('/_public/reset-password')({
-  validateSearch: search,
+  validateSearch: optionalString('token'),
   component: ResetPasswordPage,
 });
 
