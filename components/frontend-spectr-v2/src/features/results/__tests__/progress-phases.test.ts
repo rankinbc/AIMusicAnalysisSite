@@ -128,3 +128,62 @@ describe('buildProgressPlan', () => {
     expect(byLabel['Ableton Project Analysis']!.phaseIndex).toBe(7);
   });
 });
+
+// Fix round 1 (C1) — a row's `matchKey` is the LITERAL worker progress_cb
+// string; its `label` is display copy. They must never be conflated: the
+// worker always emits "ALS Analysis" (audio_analysis/pipeline.py ~260, ~266,
+// ~314, ~321), never the display label "Ableton Project Analysis".
+describe('buildProgressPlan — match keys are the worker\'s literal strings, not labels', () => {
+  it('runs rows carry the literal worker phase-callback string as matchKey', () => {
+    const plan = buildProgressPlan({ hasStems: false, hasReference: false, hasAls: false });
+    const byKey = Object.fromEntries(plan.map((r) => [r.key, r]));
+    expect(byKey['universal-mix']!.matchKey).toBe('Universal Mix Analysis');
+    expect(byKey['genre-detection']!.matchKey).toBe('Genre Detection');
+    expect(byKey['genre-scoring']!.matchKey).toBe('Genre-Specific Scoring');
+    expect(byKey['clash']!.matchKey).toBe('Stem Separation & Clash');
+    expect(byKey['gap-analysis']!.matchKey).toBe('Gap Analysis');
+    expect(byKey['arrangement']!.matchKey).toBe('Arrangement Advice');
+    // not-included rows never carry a matchKey — they're never "current".
+    expect(byKey['per-stem']!.matchKey).toBeUndefined();
+    expect(byKey['reference']!.matchKey).toBeUndefined();
+    expect(byKey['als']!.matchKey).toBeUndefined();
+  });
+
+  it('the ALS row: matchKey is "ALS Analysis", label stays "Ableton Project Analysis" — they differ on purpose', () => {
+    const plan = buildProgressPlan({ hasStems: false, hasReference: false, hasAls: true });
+    const als = plan.find((r) => r.key === 'als')!;
+    expect(als.label).toBe('Ableton Project Analysis');
+    expect(als.matchKey).toBe('ALS Analysis');
+    expect(als.matchKey).not.toBe(als.label);
+  });
+
+  it('the clash row: matchKey is always "Stem Separation & Clash" regardless of hasStems', () => {
+    const withStems = buildProgressPlan({ hasStems: true, hasReference: false, hasAls: false });
+    const withoutStems = buildProgressPlan({ hasStems: false, hasReference: false, hasAls: false });
+    expect(withStems.find((r) => r.key === 'clash')!.matchKey).toBe('Stem Separation & Clash');
+    expect(withoutStems.find((r) => r.key === 'clash')!.matchKey).toBe('Stem Separation & Clash');
+  });
+});
+
+// Fix round 1 (I2) — each 'runs' row carries its own one-line explainer so
+// the anon /analyze rotation and the "How analysis works" block both
+// describe phase 4 correctly for THIS upload, not a hard-coded stem copy.
+describe('buildProgressPlan — per-row explainers', () => {
+  it('phase 4 explainer is mix-wide without stems, stem-specific with stems', () => {
+    const withStems = buildProgressPlan({ hasStems: true, hasReference: false, hasAls: false });
+    const withoutStems = buildProgressPlan({ hasStems: false, hasReference: false, hasAls: false });
+    expect(withoutStems.find((r) => r.key === 'clash')!.explainer).toBe(
+      'where parts of your mix compete for the same frequencies.',
+    );
+    expect(withStems.find((r) => r.key === 'clash')!.explainer).toBe(
+      'where instruments fight for the same frequencies.',
+    );
+  });
+
+  it('not-included rows never carry an explainer (they carry a benefit instead)', () => {
+    const plan = buildProgressPlan({ hasStems: false, hasReference: false, hasAls: false });
+    const notIncluded = plan.filter((r) => r.kind === 'not-included');
+    expect(notIncluded.length).toBeGreaterThan(0);
+    for (const row of notIncluded) expect(row.explainer).toBeUndefined();
+  });
+});

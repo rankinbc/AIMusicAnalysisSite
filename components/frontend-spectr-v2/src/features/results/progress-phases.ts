@@ -40,16 +40,29 @@ export const PHASE_EXPLAINERS: Record<(typeof BASE_PHASES)[number], string> = {
 // analyses that didn't run show as "not-included" with a benefit line instead
 // of pretending they're in progress.
 
-/** The Ableton-project phase (8th, conditional — only runs with an .als). Not
- *  part of BASE_PHASES (which is the fixed 7-phase base pipeline), but it IS
- *  a literal worker-reported phase name, same as any BASE_PHASES entry. */
-export const ALS_PHASE_NAME = 'Ableton Project Analysis';
+// ── Fix round 1 (C1) ─────────────────────────────────────────────────────
+// A row's `label` is display copy; its `matchKey` is the LITERAL string the
+// worker's progress_cb emits (see audio_analysis/pipeline.py). The two must
+// never be conflated — that conflation was the bug: the ALS row's label is
+// "Ableton Project Analysis" but the worker always emits "ALS Analysis"
+// (pipeline.py ~260, ~266, ~314, ~321), for EVERY job, .als or not. Rows
+// with no real worker phase behind them (Per-Stem Analysis) carry no
+// matchKey and are never matched.
+export const ALS_PHASE_LABEL = 'Ableton Project Analysis';
+/** Literal worker string for phase 8 (pipeline.py ~260/~266/~314/~321). */
+export const ALS_MATCH_KEY = 'ALS Analysis';
+/** Literal worker string for phase 4 (pipeline.py PHASE_DEFS[3]) — the same
+ *  regardless of hasStems; only the display label changes with stems. */
+export const CLASH_MATCH_KEY = 'Stem Separation & Clash';
 
-// Full worker phase-name sequence used to match `currentPhase` against a row:
-// the 7 base phases plus the ALS phase. Position is the `phaseIndex` contract
-// — display labels below may differ from these names (e.g. "Frequency Clash
-// Check" vs "Stem Separation & Clash"), but phaseIndex always ties back here.
-export const PHASE_SEQUENCE = [...BASE_PHASES, ALS_PHASE_NAME] as const;
+// Canonical worker phase-callback sequence, in phaseIndex order (0-7) — every
+// entry is a literal string the worker emits, never a display label.
+// ProgressStorylineView matches `currentPhase` against this array, not
+// against any row's `label`.
+export const PHASE_MATCH_SEQUENCE = [...BASE_PHASES, ALS_MATCH_KEY] as const;
+
+const CLASH_NO_STEMS_EXPLAINER = 'where parts of your mix compete for the same frequencies.';
+const ALS_RUNS_EXPLAINER = 'naming the exact tracks and devices in your Ableton project.';
 
 export interface ProgressPlanInputs {
   hasStems: boolean;
@@ -63,6 +76,14 @@ export interface ProgressRow {
   kind: 'runs' | 'not-included';
   benefit?: string;
   phaseIndex?: number;
+  /** The literal worker progress_cb string this row corresponds to — only
+   *  set on 'runs' rows that map to a real analysis step (see the C1 note
+   *  above). Never equal to `label` when the two diverge (the ALS row). */
+  matchKey?: string;
+  /** One-line explainer, only on 'runs' rows — feeds both the anon /analyze
+   *  rotating line and the "How analysis works" block so neither surface
+   *  describes a phase differently from how it actually ran. */
+  explainer?: string;
 }
 
 export function buildProgressPlan({
@@ -71,12 +92,47 @@ export function buildProgressPlan({
   hasAls,
 }: ProgressPlanInputs): ProgressRow[] {
   const rows: ProgressRow[] = [
-    { key: 'universal-mix', label: 'Universal Mix Analysis', kind: 'runs', phaseIndex: 0 },
-    { key: 'genre-detection', label: 'Genre Detection', kind: 'runs', phaseIndex: 1 },
-    { key: 'genre-scoring', label: 'Genre-Specific Scoring', kind: 'runs', phaseIndex: 2 },
+    {
+      key: 'universal-mix',
+      label: 'Universal Mix Analysis',
+      kind: 'runs',
+      phaseIndex: 0,
+      matchKey: 'Universal Mix Analysis',
+      explainer: PHASE_EXPLAINERS['Universal Mix Analysis'],
+    },
+    {
+      key: 'genre-detection',
+      label: 'Genre Detection',
+      kind: 'runs',
+      phaseIndex: 1,
+      matchKey: 'Genre Detection',
+      explainer: PHASE_EXPLAINERS['Genre Detection'],
+    },
+    {
+      key: 'genre-scoring',
+      label: 'Genre-Specific Scoring',
+      kind: 'runs',
+      phaseIndex: 2,
+      matchKey: 'Genre-Specific Scoring',
+      explainer: PHASE_EXPLAINERS['Genre-Specific Scoring'],
+    },
     hasStems
-      ? { key: 'clash', label: 'Stem Analysis & Clash', kind: 'runs', phaseIndex: 3 }
-      : { key: 'clash', label: 'Frequency Clash Check', kind: 'runs', phaseIndex: 3 },
+      ? {
+          key: 'clash',
+          label: 'Stem Analysis & Clash',
+          kind: 'runs',
+          phaseIndex: 3,
+          matchKey: CLASH_MATCH_KEY,
+          explainer: PHASE_EXPLAINERS['Stem Separation & Clash'],
+        }
+      : {
+          key: 'clash',
+          label: 'Frequency Clash Check',
+          kind: 'runs',
+          phaseIndex: 3,
+          matchKey: CLASH_MATCH_KEY,
+          explainer: CLASH_NO_STEMS_EXPLAINER,
+        },
   ];
 
   if (!hasStems) {
@@ -91,7 +147,14 @@ export function buildProgressPlan({
 
   rows.push(
     hasReference
-      ? { key: 'reference', label: 'Reference Comparison', kind: 'runs', phaseIndex: 4 }
+      ? {
+          key: 'reference',
+          label: 'Reference Comparison',
+          kind: 'runs',
+          phaseIndex: 4,
+          matchKey: 'Reference Comparison',
+          explainer: PHASE_EXPLAINERS['Reference Comparison'],
+        }
       : {
           key: 'reference',
           label: 'Reference Comparison',
@@ -102,16 +165,37 @@ export function buildProgressPlan({
   );
 
   rows.push(
-    { key: 'gap-analysis', label: 'Gap Analysis', kind: 'runs', phaseIndex: 5 },
-    { key: 'arrangement', label: 'Arrangement Advice', kind: 'runs', phaseIndex: 6 },
+    {
+      key: 'gap-analysis',
+      label: 'Gap Analysis',
+      kind: 'runs',
+      phaseIndex: 5,
+      matchKey: 'Gap Analysis',
+      explainer: PHASE_EXPLAINERS['Gap Analysis'],
+    },
+    {
+      key: 'arrangement',
+      label: 'Arrangement Advice',
+      kind: 'runs',
+      phaseIndex: 6,
+      matchKey: 'Arrangement Advice',
+      explainer: PHASE_EXPLAINERS['Arrangement Advice'],
+    },
   );
 
   rows.push(
     hasAls
-      ? { key: 'als', label: ALS_PHASE_NAME, kind: 'runs', phaseIndex: 7 }
+      ? {
+          key: 'als',
+          label: ALS_PHASE_LABEL,
+          kind: 'runs',
+          phaseIndex: 7,
+          matchKey: ALS_MATCH_KEY,
+          explainer: ALS_RUNS_EXPLAINER,
+        }
       : {
           key: 'als',
-          label: ALS_PHASE_NAME,
+          label: ALS_PHASE_LABEL,
           kind: 'not-included',
           benefit:
             'Add your Ableton project (.als) to get advice that names your actual tracks and devices.',

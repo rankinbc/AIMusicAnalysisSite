@@ -96,24 +96,53 @@ describe('ProgressStorylineView', () => {
     expect(html).toContain('✓');
   });
 
-  it('ALS phase 8 is now a normal plan row (Task G0): 6 earlier rows done, ALS row current', () => {
+  it('C1 fix round 1: currentPhase is the worker\'s REAL string "ALS Analysis" + hasAls true — Ableton row is current, no duplicate row', () => {
     // Task G0 folded the ALS phase into the plan as a real row (phaseIndex 7)
-    // instead of an appended "unknown phase" row — it only appears this way
-    // when hasAls is true (else it's a not-included row, see the G0 suite).
+    // instead of an appended "unknown phase" row. The worker never emits the
+    // display label "Ableton Project Analysis" — it always emits the literal
+    // "ALS Analysis" (audio_analysis/pipeline.py ~260/~266/~314/~321), so the
+    // match must key off that string, not the label.
     const html = renderToStaticMarkup(
       <ProgressStorylineView
         {...base}
-        currentPhase="Ableton Project Analysis"
+        currentPhase="ALS Analysis"
         phasePct={7 / 8}
         inputs={{ hasStems: false, hasReference: false, hasAls: true }}
       />,
     );
+    const phaseList = html.slice(0, html.indexOf('</ol>'));
     // 6 earlier runs-rows done + the ALS row itself current — no ○ left among
     // runs rows (the 2 not-included rows render their own "Not included" tag,
     // never a ○/●/✓ mark).
-    expect(html.match(/✓/g)).toHaveLength(6);
-    expect(html.match(/aria-current="step"/g)).toHaveLength(1);
-    expect(html).not.toContain('○');
+    expect(phaseList.match(/✓/g)).toHaveLength(6);
+    expect(phaseList.match(/aria-current="step"/g)).toHaveLength(1);
+    expect(phaseList).not.toContain('○');
+    // No duplicate/appended row for the phase — exactly one Ableton row, and
+    // it is the current one.
+    expect(phaseList.match(/Ableton Project Analysis/g)).toHaveLength(1);
+    expect(phaseList).not.toContain('>ALS Analysis<');
+    const alsRow = rowContaining(html, 'Ableton Project Analysis');
+    expect(alsRow).toContain('aria-current="step"');
+  });
+
+  it('C1 fix round 1: currentPhase "ALS Analysis" + all-false inputs — no appended row, Ableton row stays Not included, nearest preceding runs row reads current', () => {
+    // The worker emits "ALS Analysis" for EVERY job, .als or not (it's
+    // unconditional in run_pipeline). When it lands on a not-included row,
+    // that row must never read active/failed, nothing gets appended, and the
+    // nearest earlier RUNS row (Arrangement Advice) reads current instead —
+    // otherwise the page looks stalled with no spinner anywhere.
+    const html = renderToStaticMarkup(
+      <ProgressStorylineView {...base} currentPhase="ALS Analysis" phasePct={0.97} />,
+    );
+    const phaseList = html.slice(0, html.indexOf('</ol>'));
+    expect(phaseList).not.toContain('>ALS Analysis<');
+    expect(phaseList.match(/Ableton Project Analysis/g)).toHaveLength(1);
+    expect(phaseList.match(/aria-current="step"/g)).toHaveLength(1);
+    const alsRow = rowContaining(html, 'Ableton Project Analysis');
+    expect(alsRow).toContain('Not included');
+    expect(alsRow).not.toContain('aria-current');
+    const arrangementRow = rowContaining(html, 'Arrangement Advice');
+    expect(arrangementRow).toContain('aria-current="step"');
   });
 
   it('structure_actor "Arrangement" aliases to the base row, no duplicate', () => {

@@ -81,6 +81,43 @@ describe('ExplainerLine (AC2 — keyed to the current phase)', () => {
       expect(html).not.toContain('<b>Reference Comparison</b>');
     }
   });
+
+  // Fix round 1 (I2) — the worker always emits the literal phase-4 name
+  // "Stem Separation & Clash" (audio_analysis pipeline.py PHASE_DEFS), even
+  // on this mix-only funnel (phase 4 still runs — it's a full-mix frequency
+  // check without stems). The keyed lookup used to resolve that string to
+  // the static stem-based label + explainer regardless of whether stems were
+  // supplied. It must now describe what phase 4 actually did here.
+  it('phase 4 (keyed path): the worker\'s real phase-4 string renders the mix-only copy, not the stem copy', () => {
+    const html = renderToStaticMarkup(
+      <ExplainerLine currentPhase="Stem Separation & Clash" tick={0} />,
+    );
+    expect(html).toContain('<b>Frequency Clash Check</b>');
+    expect(html).toContain('where parts of your mix compete for the same frequencies.');
+    expect(html).not.toContain('Stem Separation');
+    expect(html).not.toContain('where instruments fight for the same frequencies.');
+  });
+
+  it('phase 4 (rotation path): whenever the fallback rotation lands on phase 4 it is the mix-only copy, never the stem copy', () => {
+    let sawClashRow = false;
+    for (let tick = 0; tick < 12; tick++) {
+      const html = renderToStaticMarkup(<ExplainerLine currentPhase="" tick={tick} />);
+      expect(html).not.toContain('Stem Separation');
+      expect(html).not.toContain('Stem Analysis &amp; Clash');
+      if (html.includes('Frequency Clash Check')) {
+        sawClashRow = true;
+        expect(html).toContain('where parts of your mix compete for the same frequencies.');
+      }
+    }
+    expect(sawClashRow).toBe(true);
+  });
+
+  it('never describes a not-included phase even when the worker reports it as current — falls back to the rotation instead', () => {
+    for (const notIncludedPhase of ['Reference Comparison', 'ALS Analysis']) {
+      const html = renderToStaticMarkup(<ExplainerLine currentPhase={notIncludedPhase} tick={0} />);
+      expect(html).not.toContain(`<b>${notIncludedPhase}</b>`);
+    }
+  });
 });
 
 describe('AnonReportView (AC3 — visible hero + gated depth)', () => {

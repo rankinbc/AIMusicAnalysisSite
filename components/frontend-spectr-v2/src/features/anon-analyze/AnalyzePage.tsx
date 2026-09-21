@@ -21,7 +21,7 @@ import { PublicChrome } from '../../components/PublicChrome';
 import { usePageMeta } from '../../lib/usePageMeta';
 import { GradeHero } from '../results/GradeHero';
 import { ProgressStorylineView } from '../results/ProgressStoryline';
-import { BASE_PHASES, PHASE_EXPLAINERS, buildProgressPlan } from '../results/progress-phases';
+import { buildProgressPlan } from '../results/progress-phases';
 import { StreamingCard } from '../results/StreamingCard';
 import { useAnonCurrentJob, useAnonJob, useAnonResults, useAnonUpload } from './useAnonAnalysis';
 import { type AnonReportVM, vmFromAnon, vmFromFull } from './anon-report-vm';
@@ -79,23 +79,26 @@ export function DropZoneView({ onFile, error, disabled }: {
   );
 }
 
-// Task G0: /analyze is mix-only (no stems/reference/.als), so the fallback
-// rotation below must skip any BASE_PHASES entry the plan marks not-included
-// (Reference Comparison) — it must never describe a skipped phase as running.
+// /analyze is mix-only (no stems/reference/.als) — all three inputs false.
+// Fix round 1 (I2): both the keyed lookup and the fallback rotation are
+// driven from THIS plan's own rows (label + explainer together), never a
+// static BASE_PHASES/PHASE_EXPLAINERS pairing — that pairing is how phase 4
+// used to show the stem-based copy ("Stem Separation & Clash") even though
+// this page never has stems and phase 4 here is a full-mix frequency check.
 const MIX_ONLY_PLAN = buildProgressPlan({ hasStems: false, hasReference: false, hasAls: false });
-const ROTATING_PHASES = BASE_PHASES.filter(
-  (name) => !MIX_ONLY_PLAN.some((row) => row.kind === 'not-included' && row.label === name),
-);
+const ROTATING_ROWS = MIX_ONLY_PLAN.filter((row) => row.kind === 'runs');
 
 /** Rotating educational one-liner, KEYED to the current phase (AC2): shows the
  *  explainer for whatever phase the worker reports, advancing with the job.
- *  Falls back to a gentle rotation before the first phase name arrives. */
+ *  Falls back to a gentle rotation before the first phase name arrives — and
+ *  for any not-included phase, since currentPhase can land on one (the
+ *  worker's "ALS Analysis" fires on every job, .als or not). */
 export function ExplainerLine({ currentPhase, tick }: { currentPhase: string; tick: number }) {
-  const known = (BASE_PHASES as readonly string[]).indexOf(currentPhase);
-  const name = known >= 0 ? BASE_PHASES[known] : ROTATING_PHASES[tick % ROTATING_PHASES.length]!;
+  const matched = ROTATING_ROWS.find((row) => row.matchKey === currentPhase);
+  const row = matched ?? ROTATING_ROWS[tick % ROTATING_ROWS.length]!;
   return (
     <p className={`mono ${s.explainer}`} data-testid="rotating-explainer">
-      <b>{name}</b> — {PHASE_EXPLAINERS[name]}
+      <b>{row.label}</b> — {row.explainer}
     </p>
   );
 }
