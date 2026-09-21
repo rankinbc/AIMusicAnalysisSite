@@ -142,7 +142,7 @@ public sealed class DemoAuthEndpointsTests(WebApplicationFactory<Program> factor
             Assert.True(audio.StatusCode is HttpStatusCode.OK or HttpStatusCode.PartialContent);
             Assert.Contains(resp.Headers.GetValues("Set-Cookie"), c => c.StartsWith("spectr_refresh="));
         }
-        finally { await CleanupAsync(f, userId); }
+        finally { await CleanupAsync(f, userId); f.Dispose(); }
     }
 
     [SkippableFact]
@@ -173,7 +173,7 @@ public sealed class DemoAuthEndpointsTests(WebApplicationFactory<Program> factor
             Assert.False(c.Resumed);
             Assert.NotEqual(a.User.Id, c.User.Id);
         }
-        finally { await CleanupAsync(f, userId, otherId); }
+        finally { await CleanupAsync(f, userId, otherId); f.Dispose(); }
     }
 
     [SkippableFact]
@@ -198,7 +198,7 @@ public sealed class DemoAuthEndpointsTests(WebApplicationFactory<Program> factor
             Assert.NotEqual(a.User.Id, b.User.Id);
             Assert.False(b.Resumed);
         }
-        finally { await CleanupAsync(f, userIdA, userIdB); }
+        finally { await CleanupAsync(f, userIdA, userIdB); f.Dispose(); }
     }
 
     [SkippableFact]
@@ -222,7 +222,7 @@ public sealed class DemoAuthEndpointsTests(WebApplicationFactory<Program> factor
             }
             Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/songs/")).StatusCode);
         }
-        finally { await CleanupAsync(f, userId); }
+        finally { await CleanupAsync(f, userId); f.Dispose(); }
     }
 
     [SkippableFact]
@@ -270,7 +270,7 @@ public sealed class DemoAuthEndpointsTests(WebApplicationFactory<Program> factor
             var reg = await client.PostAsJsonAsync("/api/auth/register", new { email = "x@guest.spectr.invalid", password = TestAuth.Password });
             Assert.Equal(HttpStatusCode.BadRequest, reg.StatusCode);
         }
-        finally { await CleanupAsync(f, userId); }
+        finally { await CleanupAsync(f, userId); f.Dispose(); }
     }
 
     [SkippableFact]
@@ -294,7 +294,7 @@ public sealed class DemoAuthEndpointsTests(WebApplicationFactory<Program> factor
                      })
                 Assert.Equal(HttpStatusCode.NotFound, (await bClient.GetAsync(url)).StatusCode);
         }
-        finally { await CleanupAsync(f, userIdA, userIdB); }
+        finally { await CleanupAsync(f, userIdA, userIdB); f.Dispose(); }
     }
 
     [SkippableFact]
@@ -321,6 +321,6 @@ public sealed class DemoAuthEndpointsTests(WebApplicationFactory<Program> factor
             Assert.All(await db.RefreshTokens.AsNoTracking().Where(t => t.UserId == g.User.Id).ToListAsync(),
                 t => Assert.True(t.ExpiresAt <= expires));
         }
-        finally { await CleanupAsync(f, userId); }
+        finally { await CleanupAsync(f, userId); f.Dispose(); }
     }
 }

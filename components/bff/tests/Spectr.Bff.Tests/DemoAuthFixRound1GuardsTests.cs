@@ -66,7 +66,7 @@ public sealed class DemoAuthFixRound1GuardsTests(WebApplicationFactory<Program> 
             var after = (await db2.Users.AsNoTracking().SingleAsync(u => u.Id == userId)).HashedPassword;
             Assert.Equal(originalHash, after);
         }
-        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); }
+        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); f.Dispose(); }
     }
 
     // ── I6 — explicit guest refusals in login + resend-verification ────────
@@ -87,7 +87,7 @@ public sealed class DemoAuthFixRound1GuardsTests(WebApplicationFactory<Program> 
             Assert.False(resp.Headers.TryGetValues("Set-Cookie", out var cookies)
                 && cookies.Any(c => c.StartsWith("spectr_refresh=", StringComparison.Ordinal)));
         }
-        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); }
+        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); f.Dispose(); }
     }
 
     [SkippableFact]
@@ -125,7 +125,7 @@ public sealed class DemoAuthFixRound1GuardsTests(WebApplicationFactory<Program> 
             var queue = (DemoAuthEndpointsTests.RecordingJobQueue)f.Services.GetRequiredService<IJobQueue>();
             Assert.DoesNotContain(DramatiqTasks.SendEmail, queue.Tasks);
         }
-        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); }
+        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); f.Dispose(); }
     }
 
     // ── I8 — real daily cap, tampered cookie, expired-refresh envelope,
@@ -163,7 +163,7 @@ public sealed class DemoAuthFixRound1GuardsTests(WebApplicationFactory<Program> 
             Assert.Equal(HttpStatusCode.OK, underCap.StatusCode);
             createdId = (await underCap.Content.ReadFromJsonAsync<DemoStartResponse>())!.User.Id;
         }
-        finally { await DemoAuthEndpointsTests.CleanupAsync(f, [.. seeded, createdId]); }
+        finally { await DemoAuthEndpointsTests.CleanupAsync(f, [.. seeded, createdId]); f.Dispose(); }
     }
 
     [SkippableFact]
@@ -183,7 +183,7 @@ public sealed class DemoAuthFixRound1GuardsTests(WebApplicationFactory<Program> 
             Assert.NotEqual(existingId, body.User.Id);
             newId = body.User.Id;
         }
-        finally { await DemoAuthEndpointsTests.CleanupAsync(f, existingId, newId); }
+        finally { await DemoAuthEndpointsTests.CleanupAsync(f, existingId, newId); f.Dispose(); }
     }
 
     [SkippableFact]
@@ -208,7 +208,7 @@ public sealed class DemoAuthFixRound1GuardsTests(WebApplicationFactory<Program> 
             Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
             Assert.Equal("guest_expired", await DemoAuthEndpointsTests.Code(resp));
         }
-        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); }
+        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); f.Dispose(); }
     }
 
     [SkippableFact]
@@ -233,7 +233,7 @@ public sealed class DemoAuthFixRound1GuardsTests(WebApplicationFactory<Program> 
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             Assert.False(await db.AuthTokens.AsNoTracking().AnyAsync(t => t.UserId == userId));
         }
-        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); }
+        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); f.Dispose(); }
     }
 
     [SkippableFact]
@@ -247,6 +247,7 @@ public sealed class DemoAuthFixRound1GuardsTests(WebApplicationFactory<Program> 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, off.StatusCode); // baseline seed: demo_enabled='false'
 
         Guid userId = default;
+        WebApplicationFactory<Program>? fOn = null;
         try
         {
             using (var scope = fOff.Services.CreateScope())
@@ -254,7 +255,7 @@ public sealed class DemoAuthFixRound1GuardsTests(WebApplicationFactory<Program> 
                     .ExecuteSqlRawAsync("UPDATE feature_flags SET value = 'true' WHERE name = 'demo_enabled'");
 
             // Fresh factory — a cold 60s flag cache, so the flip above is seen immediately.
-            var fOn = factory.WithWebHostBuilder(b => b.UseSetting("Demo:Enabled", "").UseSetting("Demo:SnapshotKey", ""));
+            fOn = factory.WithWebHostBuilder(b => b.UseSetting("Demo:Enabled", "").UseSetting("Demo:SnapshotKey", ""));
             var on = await fOn.CreateClient().PostAsync("/api/auth/demo", null);
             Assert.Equal(HttpStatusCode.OK, on.StatusCode);
             userId = (await on.Content.ReadFromJsonAsync<DemoStartResponse>())!.User.Id;
@@ -265,6 +266,8 @@ public sealed class DemoAuthFixRound1GuardsTests(WebApplicationFactory<Program> 
             await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database
                 .ExecuteSqlRawAsync("UPDATE feature_flags SET value = 'false' WHERE name = 'demo_enabled'");
             await DemoAuthEndpointsTests.CleanupAsync(fOff, userId);
+            fOn?.Dispose();
+            fOff.Dispose();
         }
     }
 }

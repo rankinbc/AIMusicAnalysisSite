@@ -117,7 +117,7 @@ public sealed class DemoAuthFixRound1Tests(WebApplicationFactory<Program> factor
             var rows = await db.RefreshTokens.AsNoTracking().Where(t => t.UserId == userId).CountAsync();
             Assert.Equal(1, rows);
         }
-        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); }
+        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); f.Dispose(); }
     }
 
     [SkippableFact]
@@ -136,7 +136,7 @@ public sealed class DemoAuthFixRound1Tests(WebApplicationFactory<Program> factor
             Assert.True(body!.Resumed);
             Assert.Equal(userId, body.User.Id);
         }
-        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); }
+        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); f.Dispose(); }
     }
 
     [SkippableFact]
@@ -160,7 +160,7 @@ public sealed class DemoAuthFixRound1Tests(WebApplicationFactory<Program> factor
             Assert.Equal(HttpStatusCode.ServiceUnavailable, broken.StatusCode);
             Assert.Equal("demo_unavailable", await DemoAuthEndpointsTests.Code(broken));
         }
-        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); }
+        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); f.Dispose(); }
     }
 
     // ── I8 — creation limiter DENY (not only the exception arm) ────────────
@@ -172,9 +172,13 @@ public sealed class DemoAuthFixRound1Tests(WebApplicationFactory<Program> factor
         var limiter = new DemoAuthEndpointsTests.ActionAwareLimiter { DenyAction = "demo_create" };
         var f = Build(b => b.UseSetting("RateLimits:Enabled", "true")
             .ConfigureTestServices(s => { s.RemoveAll(typeof(IRateLimiter)); s.AddSingleton<IRateLimiter>(limiter); }));
-        var resp = await f.CreateClient().PostAsync("/api/auth/demo", null);
-        Assert.Equal(HttpStatusCode.TooManyRequests, resp.StatusCode);
-        Assert.Equal("rate_limited", await DemoAuthEndpointsTests.Code(resp));
+        try
+        {
+            var resp = await f.CreateClient().PostAsync("/api/auth/demo", null);
+            Assert.Equal(HttpStatusCode.TooManyRequests, resp.StatusCode);
+            Assert.Equal("rate_limited", await DemoAuthEndpointsTests.Code(resp));
+        }
+        finally { f.Dispose(); }
     }
 
     // ── I2 — the endpoint never 500s, and never burns a cap slot on a guest
@@ -191,24 +195,30 @@ public sealed class DemoAuthFixRound1Tests(WebApplicationFactory<Program> factor
             s.RemoveAll(typeof(IGuestSeeder));
             s.AddScoped<IGuestSeeder>(sp => new DecoratingGuestSeeder(sp.GetRequiredService<DemoSeeder>(), faults));
         }));
-        using var scope = f.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var beforeIds = await db.Users.Where(u => u.IsGuest).Select(u => u.Id).ToListAsync();
+        List<Guid> beforeIds;
+        using (var scope = f.Services.CreateScope())
+            beforeIds = await scope.ServiceProvider.GetRequiredService<AppDbContext>()
+                .Users.Where(u => u.IsGuest).Select(u => u.Id).ToListAsync();
         try
         {
             var resp = await f.CreateClient().PostAsync("/api/auth/demo", null);
             Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
             Assert.Equal("demo_unavailable", await DemoAuthEndpointsTests.Code(resp));
 
-            var afterIds = await db.Users.Where(u => u.IsGuest).Select(u => u.Id).ToListAsync();
+            using var scope = f.Services.CreateScope();
+            var afterIds = await scope.ServiceProvider.GetRequiredService<AppDbContext>()
+                .Users.Where(u => u.IsGuest).Select(u => u.Id).ToListAsync();
             Assert.Equal(beforeIds.Count, afterIds.Count); // the committed row was compensated away
         }
         finally
         {
             // Belt and suspenders: if the assertion above ever fails again, don't
             // leave a real guest row behind for a LATER test's daily-cap count.
-            var leftover = await db.Users.Where(u => u.IsGuest && !beforeIds.Contains(u.Id)).Select(u => u.Id).ToListAsync();
+            using var scope = f.Services.CreateScope();
+            var leftover = await scope.ServiceProvider.GetRequiredService<AppDbContext>()
+                .Users.Where(u => u.IsGuest && !beforeIds.Contains(u.Id)).Select(u => u.Id).ToListAsync();
             if (leftover.Count > 0) await DemoAuthEndpointsTests.CleanupAsync(f, [.. leftover]);
+            f.Dispose();
         }
     }
 
@@ -238,7 +248,7 @@ public sealed class DemoAuthFixRound1Tests(WebApplicationFactory<Program> factor
             Assert.NotNull(still); // pre-existing guest was never minted THIS request — no compensation
             Assert.True(still!.GuestExpiresAt >= expires.AddSeconds(-1)); // and not expired by I4 either — this was a throw, not a null/null
         }
-        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); }
+        finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); f.Dispose(); }
     }
 
     // ── I4 — newest guest wins; a dead-end orphan is expired, not flapped ───
@@ -248,20 +258,23 @@ public sealed class DemoAuthFixRound1Tests(WebApplicationFactory<Program> factor
     {
         await TestDb.RequireAsync(factory);
         var f = Build();
-        using var scope = f.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var cfg = scope.ServiceProvider.GetRequiredService<IConfiguration>();
         var deviceId = UlidGen.NewUlid();
         var older = Guid.NewGuid();
         var newer = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
-        db.Users.AddRange(
-            new User { Id = older, Email = GuestIdentity.EmailFor(older), HashedPassword = "x", EmailVerifiedAt = now,
-                IsGuest = true, GuestExpiresAt = now.AddHours(72), GuestDeviceId = deviceId, CreatedAt = now.AddMinutes(-10) },
-            new User { Id = newer, Email = GuestIdentity.EmailFor(newer), HashedPassword = "x", EmailVerifiedAt = now,
-                IsGuest = true, GuestExpiresAt = now.AddHours(72), GuestDeviceId = deviceId, CreatedAt = now });
-        await db.SaveChangesAsync();
-        var cookie = $"{DeviceService.CookieName}={DeviceService.Sign(deviceId, cfg["Anon:SigningKey"]!)}";
+        string cookie;
+        using (var scope = f.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Users.AddRange(
+                new User { Id = older, Email = GuestIdentity.EmailFor(older), HashedPassword = "x", EmailVerifiedAt = now,
+                    IsGuest = true, GuestExpiresAt = now.AddHours(72), GuestDeviceId = deviceId, CreatedAt = now.AddMinutes(-10) },
+                new User { Id = newer, Email = GuestIdentity.EmailFor(newer), HashedPassword = "x", EmailVerifiedAt = now,
+                    IsGuest = true, GuestExpiresAt = now.AddHours(72), GuestDeviceId = deviceId, CreatedAt = now });
+            await db.SaveChangesAsync();
+            var cfg = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+            cookie = $"{DeviceService.CookieName}={DeviceService.Sign(deviceId, cfg["Anon:SigningKey"]!)}";
+        }
         try
         {
             var resp = await f.CreateClient().SendAsync(DemoPost(cookie));
@@ -270,7 +283,7 @@ public sealed class DemoAuthFixRound1Tests(WebApplicationFactory<Program> factor
             Assert.True(body!.Resumed);
             Assert.Equal(newer, body.User.Id);
         }
-        finally { await DemoAuthEndpointsTests.CleanupAsync(f, older, newer); }
+        finally { await DemoAuthEndpointsTests.CleanupAsync(f, older, newer); f.Dispose(); }
     }
 
     [SkippableFact]
@@ -302,6 +315,6 @@ public sealed class DemoAuthFixRound1Tests(WebApplicationFactory<Program> factor
             var orphan = await db.Users.AsNoTracking().SingleAsync(u => u.Id == orphanId);
             Assert.True(orphan.GuestExpiresAt <= DateTimeOffset.UtcNow);
         }
-        finally { await DemoAuthEndpointsTests.CleanupAsync(f, orphanId, newId); }
+        finally { await DemoAuthEndpointsTests.CleanupAsync(f, orphanId, newId); f.Dispose(); }
     }
 }
