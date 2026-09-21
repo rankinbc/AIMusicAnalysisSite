@@ -9,7 +9,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.llm import budget, gateway
+from app.llm import budget, gateway, lane
 from app.llm.settings import LlmSettings
 
 _DEFAULTS = dict(
@@ -46,6 +46,10 @@ def _reset_breaker_and_stub_spend(monkeypatch):
     SPEND-guard ceilings stay purely env/``configure()``-driven here, hermetic
     against the module-level flag cache (its own coverage lives in
     tests/test_feature_flags.py + tests/test_budget_flag_override.py).
+
+    D2: also reset the guest-lane cache per-test and stub its DB lookup to
+    "not a guest" so no LLM unit test opens a DB connection; tests that want
+    guest-lane behaviour override ``lane._lookup_is_guest`` via monkeypatch.
     """
     budget.reset_breaker_state()
     monkeypatch.setattr(
@@ -53,6 +57,8 @@ def _reset_breaker_and_stub_spend(monkeypatch):
         lambda tier, *, include_all_tiers=False: Decimal("0"),
     )
     monkeypatch.setattr(budget, "_ceiling_override", lambda _flag_name: None)
+    lane.reset_lane_cache()
+    monkeypatch.setattr(lane, "_lookup_is_guest", lambda _uid: False)
     yield
     budget.reset_breaker_state()
 

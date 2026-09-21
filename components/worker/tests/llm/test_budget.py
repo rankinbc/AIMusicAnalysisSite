@@ -219,3 +219,36 @@ def test_record_outcome_handles_unknown_outcome_strings(configure):
     # State unchanged from initial.
     assert budget._breaker.consecutive_errors == 0
     assert budget._breaker.opened_at is None
+
+
+# ── guest LLM budget lane (D2) ──────────────────────────────────────────────
+
+def _spend(by_tier, total): return lambda tier, *, include_all_tiers=False: total if include_all_tiers else by_tier.get(tier, Decimal("0"))
+def test_guest_lane_trips_on_its_own_ceiling(configure, monkeypatch):
+    configure(llm_budget_guest_usd=Decimal("5.00"), llm_budget_global_usd=Decimal("1000.00"))
+    monkeypatch.setattr(budget, "_aggregate_tier_spend", _spend({"guest": Decimal("5.00")}, Decimal("5.00")))
+    with pytest.raises(LlmBudgetExceeded) as exc:
+        budget.check_budget(tier="guest", purpose="coach", user_id="u")
+    assert exc.value.reason == DEGRADATION_REASON_TIER_BUDGET
+def test_guest_lane_is_not_checked_against_the_global_cap(configure, monkeypatch):
+    configure(llm_budget_guest_usd=Decimal("5.00"), llm_budget_global_usd=Decimal("10.00"))
+    monkeypatch.setattr(budget, "_aggregate_tier_spend", _spend({"guest": Decimal("1.00")}, Decimal("999.00")))
+    budget.check_budget(tier="guest", purpose="coach", user_id="u")  # no raise
+def test_guest_spend_never_counts_against_real_users(configure, monkeypatch):
+    configure(llm_budget_pro_usd=Decimal("100.00"), llm_budget_global_usd=Decimal("10.00"))
+    monkeypatch.setattr(budget, "_aggregate_tier_spend",
+                        _spend({"guest": Decimal("4.00"), "pro": Decimal("1.00")}, Decimal("12.00")))
+    budget.check_budget(tier="pro", purpose="coach", user_id="u")  # 12 - 4 = 8 < 10 → no raise
+def test_real_spend_still_trips_the_global_cap(configure, monkeypatch):
+    configure(llm_budget_pro_usd=Decimal("100.00"), llm_budget_global_usd=Decimal("10.00"))
+    monkeypatch.setattr(budget, "_aggregate_tier_spend",
+                        _spend({"guest": Decimal("4.00"), "pro": Decimal("1.00")}, Decimal("14.00")))
+    with pytest.raises(LlmBudgetExceeded) as exc:
+        budget.check_budget(tier="pro", purpose="coach", user_id="u")
+    assert exc.value.reason == DEGRADATION_REASON_GLOBAL_BUDGET
+def test_guest_ceiling_honours_the_flag_override(configure, monkeypatch):
+    configure(llm_budget_guest_usd=Decimal("5.00"))
+    monkeypatch.setattr(budget, "_ceiling_override",
+                        lambda name: Decimal("0") if name == "llm_budget_guest_usd" else None)
+    with pytest.raises(LlmBudgetExceeded):
+        budget.check_budget(tier="guest", purpose="coach", user_id="u")

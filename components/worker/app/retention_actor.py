@@ -92,6 +92,21 @@ def _as_json(v):
 # per-user demo SongVersion in EVERY account. Purging it via any single user's
 # retention/deletion pass would break demo playback fleet-wide.
 SHARED_STORAGE_KEYS = frozenset({"audio/demo/source.wav"})
+# Guest demo sandbox (D2): everything under audio/demo/ is shared — the 12.8
+# tone AND the demo snapshot's audio + images — so a guest purge or account
+# deletion must never delete what every account (and every future guest)
+# plays from.
+SHARED_STORAGE_PREFIXES = ("audio/demo/",)
+
+
+def is_shared_key(key: str | None) -> bool:
+    """True if ``key`` is a shared storage object that no single user's or
+    guest's purge/deletion pass may ever delete: an exact legacy shared key,
+    or anything under a shared prefix (``audio/demo/...``). The prefix check
+    is a true path-segment match — ``audio/demolition/...`` is NOT shared."""
+    if not key:
+        return False
+    return key in SHARED_STORAGE_KEYS or key.startswith(SHARED_STORAGE_PREFIXES)
 
 
 def _version_keys(row) -> list[str]:
@@ -118,7 +133,7 @@ def _version_keys(row) -> list[str]:
             keys.append(e)
     # De-dup while preserving order (grouped stem_paths repeat raw keys).
     seen: set[str] = set()
-    return [k for k in keys if k not in SHARED_STORAGE_KEYS
+    return [k for k in keys if not is_shared_key(k)
             and not (k in seen or seen.add(k))]
 
 

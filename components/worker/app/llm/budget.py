@@ -165,6 +165,9 @@ def _tier_ceiling(tier: str, settings: Any) -> Decimal:
     if tier == "pro":
         override = _ceiling_override("llm_budget_pro_usd")
         return override if override is not None else settings.llm_budget_pro_usd
+    if tier == "guest":
+        override = _ceiling_override("llm_budget_guest_usd")
+        return override if override is not None else settings.llm_budget_guest_usd
     # Unknown/None tier → operator global hard floor.
     return _global_ceiling(settings)
 
@@ -225,8 +228,12 @@ def check_budget(*, tier: str | None, purpose: str, user_id: Any | None) -> None
             f"ceiling=${_fmt_money(tier_cap)}",
         )
 
-    # 3. Global operator hard cap (sum across all tiers; AR35-overridable).
-    global_spent = _aggregate_tier_spend(effective_tier, include_all_tiers=True)
+    # 3. Global operator hard cap — REAL users only. The guest lane is additive: it has
+    #    its own ceiling above, is excluded from this sum, and is not checked against it.
+    if effective_tier == "guest":
+        return
+    global_spent = max(Decimal("0"),
+                       _aggregate_tier_spend(effective_tier, include_all_tiers=True) - _aggregate_tier_spend("guest"))
     global_cap = _global_ceiling(settings)
     if global_spent >= global_cap:
         logger.warning(

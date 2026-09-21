@@ -53,6 +53,10 @@ class LlmSettings(BaseSettings):
     # tier), "pro" (Epic 2). Unknown tier falls back to the global ceiling.
     llm_budget_free_usd: Decimal = Decimal("5.00")
     llm_budget_pro_usd: Decimal = Decimal("100.00")
+    # Guest demo sandbox (D2): its own ceiling, additive on top of the global
+    # cap — guest traffic must never be able to exhaust the budget real users
+    # depend on. Mirrors the seeded feature_flags row (llm_budget_guest_usd=5).
+    llm_budget_guest_usd: Decimal = Decimal("5.00")
     # Operator hard cap across all tiers in a calendar month.
     llm_budget_global_usd: Decimal = Decimal("1000.00")
 
@@ -78,6 +82,8 @@ class LlmSettings(BaseSettings):
             return self.llm_budget_free_usd
         if tier == "pro":
             return self.llm_budget_pro_usd
+        if tier == "guest":
+            return self.llm_budget_guest_usd
         return self.llm_budget_global_usd
 
 

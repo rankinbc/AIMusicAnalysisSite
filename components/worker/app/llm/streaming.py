@@ -147,7 +147,8 @@ def stream_complete_sync(
     """
     settings = get_llm_settings()
     timeout_s = settings.llm_timeout_s if timeout_s is None else timeout_s
-    effective_tier = tier or settings.llm_default_tier
+    from . import lane as _lane  # noqa: PLC0415 — deliberate lazy, next to the budget import
+    effective_tier = _lane.resolve_lane(user_id, tier or settings.llm_default_tier)
 
     # Story 1.4: budget + circuit-breaker guard fires PRE-call, un-metered.
     # Lazy import keeps the streaming module DB-import-free.
