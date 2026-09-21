@@ -32,12 +32,18 @@ internal static class TestProcessBaseline
     /// demo snapshot on a developer's machine can never change existing
     /// DemoSeederTests behavior — they always exercise the sine-tone fallback
     /// unless a test explicitly opts in via UseSetting("Demo:SnapshotKey", …).
+    /// Also pins Admin:ApiKey empty (= unconfigured, the admin surface 404s): a
+    /// developer who keeps a local key in `dotnet user-secrets` (needed to run
+    /// the demo snapshot exporter) would otherwise leak it into every factory
+    /// and break the "invisible until configured" test. Admin tests opt in via
+    /// UseSetting("Admin:ApiKey", …).
     /// </remarks>
     [System.Runtime.CompilerServices.ModuleInitializer]
     internal static void PinCreditsEnabled()
     {
         Environment.SetEnvironmentVariable("Credits__Enabled", "true");
         Environment.SetEnvironmentVariable("Demo__SnapshotKey", "");
+        Environment.SetEnvironmentVariable("Admin__ApiKey", "");
     }
 }
 
