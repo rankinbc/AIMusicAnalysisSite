@@ -19,4 +19,13 @@ export function setCorrelation(id: string | null): void {
   Sentry.getCurrentScope().setTag('correlation_id', id ?? undefined);
 }
 
+// D10 — the router's notFound/error boundaries catch before
+// Sentry.ErrorBoundary ever sees anything, so route-level errors report
+// through here instead. (P7 swaps the internals for the dynamic-import
+// buffered version; the name and no-DSN no-op behavior stay.)
+export function reportError(err: unknown): void {
+  if (!DSN) return;
+  Sentry.captureException(err);
+}
+
 export { Sentry };

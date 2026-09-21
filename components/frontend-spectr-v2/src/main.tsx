@@ -6,7 +6,11 @@ import { Toaster } from 'sonner';
 
 import { createMutationCache } from './api/mutation-error-toast';
 import { AuthProvider, useAuth } from './auth/AuthContext';
+import { AppCrashFallback } from './components/AppCrashFallback';
+import { NotFoundScreen } from './components/NotFoundScreen';
+import { RouteErrorScreen } from './components/RouteErrorScreen';
 import { initAnalytics } from './lib/analytics';
+import { installChunkReloadListener } from './lib/chunk-reload';
 import { Sentry, initSentry } from './lib/sentry';
 import { routeTree } from './routeTree.gen';
 import './styles/tokens.css';
@@ -17,6 +21,10 @@ import './styles/global.css';
 try {
   initSentry();
   initAnalytics();
+  // D10 — a deploy while a tab is open turns the next lazy navigation into a
+  // failed dynamic import; this reloads once per five minutes instead of
+  // showing the user a broken page.
+  installChunkReloadListener();
 } catch {
   // observability is optional; the app is not
 }
@@ -48,6 +56,8 @@ const router = createRouter({
     auth: { user: null, accessToken: null, isLoading: true },
   },
   defaultPreload: 'intent',
+  defaultNotFoundComponent: NotFoundScreen,
+  defaultErrorComponent: RouteErrorScreen,
 });
 
 declare module '@tanstack/react-router' {
@@ -72,17 +82,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {/* Story 10.3 — root error boundary: a render crash reports to Sentry
         (when configured) and shows a recoverable shell, never a white page. */}
-    <Sentry.ErrorBoundary
-      fallback={
-        <div style={{ padding: '4rem', textAlign: 'center', color: '#e6e8ef' }}>
-          <h1>Something broke.</h1>
-          <p>The error has been reported. Reload to continue.</p>
-          <button type="button" onClick={() => window.location.reload()}>
-            Reload
-          </button>
-        </div>
-      }
-    >
+    <Sentry.ErrorBoundary fallback={<AppCrashFallback />}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <RouterBridge />

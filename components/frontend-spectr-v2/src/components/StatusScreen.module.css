@@ -1,0 +1,36 @@
+/* D10 — shared shell for NotFoundScreen / RouteErrorScreen / AppCrashFallback.
+ * Centred column, generous top padding so the message reads as intentional
+ * rather than a stack trace left on screen. */
+.shell {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 96px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+
+.title {
+  margin: 0;
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(26px, 4vw, 36px);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.body {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 8px;
+}
