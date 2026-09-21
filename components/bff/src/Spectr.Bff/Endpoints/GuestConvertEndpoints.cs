@@ -124,21 +124,52 @@ public static class GuestConvertEndpoints
         // "stale token version" instead of riding out its 15-minute TTL.
         cache.Remove($"tver:{userId:N}");
 
-        // The guest's refresh row(s) are deleted outright (not merely
-        // revoked) — post-conversion this account has exactly one live
-        // session: the one this response mints.
-        await db.RefreshTokens.Where(t => t.UserId == userId).ExecuteDeleteAsync(ct);
-        var (rawRefresh, _) = await refresh.IssueAsync(userId, ct);
+        // Fix round 1 (item 3) — the UPDATE above already COMMITTED: this
+        // account is real no matter what happens next. The tail below
+        // (refresh-row delete, new refresh issue, cookie write) is NOT part
+        // of that transaction, so a DB blip here must never turn a
+        // completed conversion into a 500 on the product's conversion
+        // moment. If it fails, the caller still gets 200 with
+        // SessionIssued=false and NO tokens — they sign in normally with
+        // the password they just set.
+        string rawRefresh;
+        try
+        {
+            // The guest's refresh row(s) are deleted outright (not merely
+            // revoked) — post-conversion this account has exactly one live
+            // session: the one this response mints.
+            await db.RefreshTokens.Where(t => t.UserId == userId).ExecuteDeleteAsync(ct);
+            (rawRefresh, _) = await refresh.IssueAsync(userId, ct);
+        }
+        catch (Exception ex)
+        {
+            // User id only — no email; the account is real, but nothing
+            // here proves the caller controls that inbox.
+            loggerFactory.CreateLogger("Auth").LogError(ex,
+                "Session issuance failed for converted guest {UserId}.", userId);
+            return Results.Ok(new GuestConversionFallback(false,
+                "Your account is ready — please sign in with your new password."));
+        }
         resp.Cookies.Append(RefreshTokenService.CookieName, rawRefresh, refresh.CookieOptions());
 
-        db.AuditLogs.Add(new AuditLog
+        // Audit insert, BEST-EFFORT — never fails the response (same
+        // precedent as the verification email below).
+        try
         {
-            ActorUserId = userId,
-            Action = "guest_converted",
-            Target = userId.ToString(),
-            Reason = "guest created an account",
-        });
-        await db.SaveChangesAsync(ct);
+            db.AuditLogs.Add(new AuditLog
+            {
+                ActorUserId = userId,
+                Action = "guest_converted",
+                Target = userId.ToString(),
+                Reason = "guest created an account",
+            });
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            loggerFactory.CreateLogger("Auth").LogError(ex,
+                "Audit insert failed for converted guest {UserId}.", userId);
+        }
 
         // A device cookie from the guest's browsing has nothing left to
         // claim — this account already has everything an anon-device claim
@@ -164,6 +195,6 @@ public static class GuestConvertEndpoints
         var access = jwt.Issue(user);
         return Results.Ok(new AuthResponse(access,
             new AuthedUser(user.Id, user.Email, user.DisplayName,
-                await AuthEndpoints.ResolveTierAsync(db, user.Id, ct))));
+                await AuthEndpoints.ResolveTierAsync(db, user.Id, ct), user.IsGuest)));
     }
 }

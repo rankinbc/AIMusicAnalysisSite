@@ -507,4 +507,82 @@ public sealed class GuestPurgeTests(WebApplicationFactory<Program> factory)
             f.Dispose();
         }
     }
+
+    // Task G2 fix round 1 (item 5) — drives the FULL PurgeExpiredGuestsAsync
+    // batch flow (GuestConvertTests.The_Purge_Never_Tears_Down_A_Converted_Account
+    // only calls PurgeOneGuestAsync directly) with a guest that converts to
+    // a real account in the exact window between the batch SELECT and its
+    // own teardown. OnBatchSelectedAsync — the smallest internal hook that
+    // fits between those two points — fires right after the batch is
+    // selected, so the test can convert the guest before PurgeOneGuestAsync
+    // ever reloads it. PurgeOneGuestAsync's own re-check (is_guest AND
+    // expired) does the rest.
+    [SkippableFact]
+    public async Task A_Guest_That_Converts_Mid_Batch_Survives_The_Full_Purge_Pass()
+    {
+        await TestDb.RequireAsync(_factory);
+        var q = new RecordingQueue();
+        var f = Build(queue: q);
+        Guid userId = default;
+        try
+        {
+            var (_, g) = await StartGuestAsync(f);
+            userId = g.User.Id;
+
+            // The "accepted as-is" note (fix round 1 review): TryConvertAsync
+            // itself requires GuestExpiresAt > now, so a guest already
+            // expired-per-the-sweep's `now` can never satisfy the endpoint's
+            // OWN guard — this exact race is unreachable end to end. To
+            // still exercise PurgeOneGuestAsync's re-check through the FULL
+            // batch method, the two `now`s are deliberately decoupled, the
+            // way two different real-world instants would be: guestExpiresAt
+            // is in the past relative to BOTH, so the sweep's SELECT (using
+            // sweepNow) matches it as expired — but the hook converts using
+            // convertNow, a moment strictly BEFORE guestExpiresAt, so
+            // TryConvertAsync's own guard is satisfied (as it would be for a
+            // real conversion that completed shortly before the guest's
+            // session lapsed, hours before this nightly sweep runs).
+            var guestExpiresAt = DateTimeOffset.UtcNow.AddHours(-1);
+            var convertNow = guestExpiresAt.AddMinutes(-1);
+            var sweepNow = DateTimeOffset.UtcNow;
+            using (var scope = f.Services.CreateScope())
+            {
+                var seedDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                await seedDb.Users.Where(u => u.Id == userId)
+                    .ExecuteUpdateAsync(s => s.SetProperty(u => u.GuestExpiresAt, guestExpiresAt));
+            }
+
+            var sweeper = Sweeper(f);
+            var converted = false;
+            sweeper.OnBatchSelectedAsync = async (ids, ct) =>
+            {
+                if (!ids.Contains(userId)) return;
+                using var scope = f.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var rows = await Spectr.Bff.Auth.GuestConversion.TryConvertAsync(
+                    db, userId, $"race+{Guid.NewGuid():N}@spectr.test", "hash", "Race",
+                    autoVerify: false, convertNow, ct);
+                converted = rows == 1;
+            };
+
+            var purged = await sweeper.PurgeExpiredGuestsAsync(
+                sweepNow, new[] { userId }, CancellationToken.None);
+
+            Assert.True(converted, "the race conversion itself failed (TryConvertAsync returned 0 rows).");
+            Assert.Equal(0, purged);
+
+            using var verify = f.Services.CreateScope();
+            var verifyDb = verify.ServiceProvider.GetRequiredService<AppDbContext>();
+            var row = await verifyDb.Users.AsNoTracking().SingleAsync(u => u.Id == userId);
+            Assert.False(row.IsGuest);
+            Assert.False(await verifyDb.AuditLogs.AnyAsync(a => a.Target == userId.ToString() && a.Action == "guest_purge"));
+            Assert.DoesNotContain(q.SentWithArgs, m =>
+                m.Task == DramatiqTasks.DeleteAccountData && (string)m.Args[0] == userId.ToString());
+        }
+        finally
+        {
+            await DemoAuthEndpointsTests.CleanupAsync(f, userId);
+            f.Dispose();
+        }
+    }
 }

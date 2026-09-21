@@ -45,6 +45,10 @@ internal sealed class RetentionSweepScheduler(
     private readonly int _guestPurgeBatchSize = guestPurgeBatchSize;
     private readonly int _guestPurgeMaxBatches = guestPurgeMaxBatches;
 
+    // Task G2 fix round 1 (item 5) — see PurgeExpiredGuestsAsync's fix
+    // comment. Test-only; production never sets this.
+    internal Func<IReadOnlyCollection<Guid>, CancellationToken, Task>? OnBatchSelectedAsync { get; set; }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // Same do-while shape as BillingReconciliationService (run soon after
@@ -169,6 +173,15 @@ internal sealed class RetentionSweepScheduler(
             }
 
             if (batchIds.Count == 0) break;
+
+            // Task G2 fix round 1 (item 5) — internal test seam
+            // (InternalsVisibleTo). Fires once per batch, right after the
+            // SELECT and before any guest in it is torn down, so a test can
+            // simulate "the owner converted in exactly this window" without
+            // reaching into PurgeOneGuestAsync's own reload. Null (always,
+            // in production) — inert.
+            if (OnBatchSelectedAsync is not null)
+                await OnBatchSelectedAsync(batchIds, ct);
 
             var successesThisBatch = 0;
             foreach (var id in batchIds)

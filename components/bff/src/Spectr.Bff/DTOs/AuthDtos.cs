@@ -17,6 +17,14 @@ public sealed record AuthedUser(
     string Tier,
     bool IsGuest = false);
 
+// Task G2 fix round 1 (item 3) — POST /api/auth/guest/convert's fallback
+// body. The conversion UPDATE has already committed by the time this can be
+// returned; a DB blip only in the post-UPDATE tail (refresh-row delete, new
+// refresh issue, cookie write) must not turn a completed conversion into a
+// 500. No tokens here — SessionIssued=false tells the caller no session was
+// minted, so they sign in normally with the password they just set.
+public sealed record GuestConversionFallback(bool SessionIssued, string Message);
+
 // PATCH /api/auth/me. Null = leave unchanged. Empty string for DisplayName
 // is treated as "clear it".
 public sealed record PatchMeRequest(string? DisplayName);

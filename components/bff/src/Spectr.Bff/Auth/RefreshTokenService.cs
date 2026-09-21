@@ -6,7 +6,11 @@ using System.Text;
 
 namespace Spectr.Bff.Auth;
 
-public sealed class RefreshTokenService(AppDbContext db, IConfiguration config)
+// Task G2 fix round 1 (item 3) — non-sealed with a virtual 2-arg IssueAsync
+// SOLELY so a test can substitute a throw-once subclass to simulate a DB
+// blip in the guest-conversion tail without mocking EF. No other member is
+// virtual; every other consumer (login/register/refresh) is unaffected.
+public class RefreshTokenService(AppDbContext db, IConfiguration config)
 {
     private readonly int _days = int.Parse(config["Jwt:RefreshTokenDays"] ?? "30");
 
@@ -17,7 +21,7 @@ public sealed class RefreshTokenService(AppDbContext db, IConfiguration config)
     public static readonly TimeSpan RotationGrace = TimeSpan.FromSeconds(60);
 
     // Returns (rawToken, persistedRow). Raw goes to the cookie; SHA-256(raw) is persisted.
-    public async Task<(string Raw, RefreshToken Row)> IssueAsync(Guid userId, CancellationToken ct = default)
+    public virtual async Task<(string Raw, RefreshToken Row)> IssueAsync(Guid userId, CancellationToken ct = default)
     {
         var raw = GenerateRawToken();
         var row = new RefreshToken

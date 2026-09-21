@@ -33,7 +33,14 @@ internal static class GuestConversion
                 .SetProperty(u => u.GuestExpiresAt, (DateTimeOffset?)null)
                 .SetProperty(u => u.GuestDeviceId, (string?)null)
                 .SetProperty(u => u.TokenVersion, u => u.TokenVersion + 1)
-                .SetProperty(u => u.EmailVerifiedAt, u => autoVerify ? now : u.EmailVerifiedAt),
+                // Fix round 1 (item 1) — a guest is stamped EmailVerifiedAt
+                // at mint (DemoAuthEndpoints ~142) for an address nobody
+                // proved. Outside auto-verify (dev) mode, conversion must
+                // CLEAR that synthetic stamp exactly as register leaves a
+                // brand-new row: null until the owner verifies the REAL
+                // address (see GuestConvertEndpoints' autoVerify decision,
+                // which mirrors AuthEndpoints.Register's verbatim).
+                .SetProperty(u => u.EmailVerifiedAt, autoVerify ? now : (DateTimeOffset?)null),
                 ct);
     }
 }
