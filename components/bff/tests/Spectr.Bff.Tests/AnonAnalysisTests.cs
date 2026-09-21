@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Spectr.Bff.Services;
 using Spectr.Data;
 using Spectr.Data.Entities;
 using System.Net;
@@ -85,7 +87,20 @@ public sealed class AnonAnalysisTests(WebApplicationFactory<Program> factory)
     public async Task Anon_Upload_Creates_Songless_Device_Job_And_Is_Pollable()
     {
         await TestDb.RequireAsync(_factory);
-        var client = Client();
+        // Diagnosis (D6 fix round 1, Part B, item 5): this test used the real
+        // Redis-backed IJobQueue via the shared factory. With the dev stack's
+        // live worker running, it can consume the tiny fake-audio job and
+        // flip it to `failed` before the second POST below runs — a status
+        // HasActiveAnalysisAsync no longer counts as active — so the
+        // one-active-analysis-per-device 409 assertion flakes to 200 OK when
+        // the worker wins the race (confirmed: 1/3 solo runs failed with
+        // Expected Conflict, Actual OK). A recording queue keeps the first
+        // job `pending` so the guard is deterministic.
+        var client = _factory.WithWebHostBuilder(b => b.ConfigureTestServices(s =>
+        {
+            s.RemoveAll(typeof(IJobQueue));
+            s.AddSingleton<IJobQueue>(new RecordingJobQueue());
+        })).CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
 
         var resp = await client.PostAsync("/api/anon/analyses", Wav());
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
