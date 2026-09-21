@@ -27,9 +27,18 @@ internal static class TestProcessBaseline
     /// (same pattern as RateLimits:Enabled) or by passing an explicit
     /// IConfiguration to EntitlementService.
     /// </summary>
+    /// <remarks>
+    /// D3 (2026-09-20): also pins Demo:SnapshotKey empty so an operator-installed
+    /// demo snapshot on a developer's machine can never change existing
+    /// DemoSeederTests behavior — they always exercise the sine-tone fallback
+    /// unless a test explicitly opts in via UseSetting("Demo:SnapshotKey", …).
+    /// </remarks>
     [System.Runtime.CompilerServices.ModuleInitializer]
     internal static void PinCreditsEnabled()
-        => Environment.SetEnvironmentVariable("Credits__Enabled", "true");
+    {
+        Environment.SetEnvironmentVariable("Credits__Enabled", "true");
+        Environment.SetEnvironmentVariable("Demo__SnapshotKey", "");
+    }
 }
 
 /// <summary>
