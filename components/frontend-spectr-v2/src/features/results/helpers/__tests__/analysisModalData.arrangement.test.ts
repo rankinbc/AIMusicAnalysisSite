@@ -1,0 +1,35 @@
+// Task G6 (item 5) — arrangement_status === 'unavailable' is a real,
+// expected terminal state for most production tracks (no .als / too short
+// for structure detection), not a missing-data default. Before this fix the
+// phase-7 row fell through to the default branch and showed "Grade —" (an
+// N/A grade pill) instead of an honest "not assessed" message.
+import { describe, expect, it } from 'vitest';
+
+import type { FinalJson } from '../../../../api/types';
+import { derivePhaseRows } from '../analysisModalData';
+
+function finalJsonWithPhase7(data: Record<string, unknown>): FinalJson {
+  return {
+    phases: [{ phase: 7, status: 'ok', data }],
+  } as unknown as FinalJson;
+}
+
+describe('derivePhaseRows — phase 7 (arrangement)', () => {
+  it('shows "Not assessed" and no grade when arrangement_status is unavailable', () => {
+    const rows = derivePhaseRows(finalJsonWithPhase7({ arrangement_status: 'unavailable' }));
+    const phase7 = rows.find((r) => r.phase === 7);
+    expect(phase7?.detail).toBe('Not assessed for this track');
+    expect(phase7?.kv).toEqual([]);
+    expect(phase7?.detail).not.toMatch(/grade/i);
+    expect(phase7?.detail).not.toContain('N/A');
+    expect(phase7?.detail).not.toContain('—');
+  });
+
+  it('still shows a grade when the arrangement was actually scored', () => {
+    const rows = derivePhaseRows(
+      finalJsonWithPhase7({ arrangement_status: 'scored', grade: 'B+', section_count: 6 }),
+    );
+    const phase7 = rows.find((r) => r.phase === 7);
+    expect(phase7?.detail).toBe('Grade B+ · 6 sections');
+  });
+});

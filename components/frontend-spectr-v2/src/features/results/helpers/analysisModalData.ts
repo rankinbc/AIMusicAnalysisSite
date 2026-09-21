@@ -289,6 +289,15 @@ function summarize(fj: FinalJson, p: PhaseResult): PhaseRow {
           : 'The background structure job failed. The rest of the report is unaffected — re-analyze to try again.';
         break;
       }
+      // G6 (item 5) — 'unavailable' is a real, expected terminal state (most
+      // production tracks land here), never a missing-data default. Match
+      // the "not assessed" idiom used elsewhere (TrackInfoTab) — no letter
+      // grade or N/A pill for this phase.
+      if (d.arrangement_status === 'unavailable') {
+        row.detail = 'Not assessed for this track';
+        row.kv = [];
+        break;
+      }
       row.detail = `Grade ${d.grade ?? '—'}${d.section_count ? ` · ${d.section_count} sections` : ''}`;
       row.kv = [
         { k: 'Arrangement grade', v: d.grade ?? '—', tone: 'good' },
