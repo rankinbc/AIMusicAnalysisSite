@@ -1,30 +1,38 @@
-/* Story 6.3 (FR7/UX-DR27) — the anonymous instant-analysis funnel at /analyze.
+/* Task G5 (spec G-D1/G-D4, controller addendum 2026-09-21) — the public
+ * instant-analysis funnel at /analyze. Owner's ruling on the old teaser page
+ * ("I dont want this shit bait page. I want to show off the product. Do the
+ * full analysis ... I'd like them to have all the features."): an upload
+ * here becomes the visitor's OWN song inside the real app — full 7-phase
+ * analysis, full report, every feature — as a capped, 24-hour guest account.
+ * No grade teaser, no blur, no "create an account to see your findings".
  *
- * State machine: idle → uploading → processing → report, with an AC5 restore
- * leg (GET /api/anon/jobs/current on mount resumes progress or re-renders the
- * report after a refresh — the device cookie is the whole session).
+ * The old AnonReportView/InlineRegisterCard teaser + its /api/anon/* polling
+ * vertical (useAnonAnalysis.ts, anon-report-vm.ts, resume-dismissed.ts) are
+ * gone. The BFF /api/anon/* endpoints stay (unused by this page now) for a
+ * later cleanup — see the task brief's scope notes.
  *
- * The report is claim-bait by design: grade hero + #1 finding + streaming
- * readiness fully visible; everything deeper BlurLocked behind the inline
- * register card. Registration re-parents the device rows server-side (4.5) —
- * the page then unlocks in place via the authed results endpoint.
+ * Sequencing (startGuestUpload.ts): a first-time visitor gets a guest
+ * session minted via startDemo() before the mix upload; an EXISTING guest or
+ * a signed-in real user skips straight to the upload (a real user is routed
+ * to their library before the drop zone ever renders — see below). The mix
+ * goes through the SAME useMixUpload() hook UnifiedUploadDialog uses for a
+ * plain mix-only upload (no stems/.als/reference on this page) — one
+ * upload, one dispatch — then straight onto the real signed-in results
+ * route, which owns its own honest progress list (G0) and the full report.
+ * "Explore a finished report while yours is analyzing" (scope note, spec
+ * G-D1) belongs on THAT route, not here — left for G6.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate, useRouter } from '@tanstack/react-router';
 
+import { handleGuestRestricted } from '../../api/mutation-error-toast';
 import { useAuth } from '../../auth/AuthContext';
-import { fetcher } from '../../api/fetcher';
+import { useMixUpload } from '../../hooks/useMixUpload';
 import { capture } from '../../lib/analytics';
-import { readAttribution } from '../../lib/attribution';
-import type { JobResultsDto } from '../../api/types';
-import { BlurLock } from '../../components/BlurLock';
 import { PublicChrome } from '../../components/PublicChrome';
+import { PublicFooter } from '../../components/PublicFooter';
 import { usePageMeta } from '../../lib/usePageMeta';
-import { GradeHero } from '../results/GradeHero';
-import { ProgressStorylineView } from '../results/ProgressStoryline';
-import { buildProgressPlan } from '../results/progress-phases';
-import { StreamingCard } from '../results/StreamingCard';
-import { useAnonCurrentJob, useAnonJob, useAnonResults, useAnonUpload } from './useAnonAnalysis';
-import { type AnonReportVM, vmFromAnon, vmFromFull } from './anon-report-vm';
+import { GuestStartFailedError, startGuestUpload } from './startGuestUpload';
 import s from './analyze.module.css';
 
 // ── pure pieces (static-render testable) ────────────────────────────────────
@@ -79,94 +87,9 @@ export function DropZoneView({ onFile, error, disabled }: {
   );
 }
 
-// /analyze is mix-only (no stems/reference/.als) — all three inputs false.
-// Fix round 1 (I2): both the keyed lookup and the fallback rotation are
-// driven from THIS plan's own rows (label + explainer together), never a
-// static BASE_PHASES/PHASE_EXPLAINERS pairing — that pairing is how phase 4
-// used to show the stem-based copy ("Stem Separation & Clash") even though
-// this page never has stems and phase 4 here is a full-mix frequency check.
-const MIX_ONLY_PLAN = buildProgressPlan({ hasStems: false, hasReference: false, hasAls: false });
-const ROTATING_ROWS = MIX_ONLY_PLAN.filter((row) => row.kind === 'runs');
-
-/** Rotating educational one-liner, KEYED to the current phase (AC2): shows the
- *  explainer for whatever phase the worker reports, advancing with the job.
- *  Falls back to a gentle rotation before the first phase name arrives — and
- *  for any not-included phase, since currentPhase can land on one (the
- *  worker's "ALS Analysis" fires on every job, .als or not). */
-export function ExplainerLine({ currentPhase, tick }: { currentPhase: string; tick: number }) {
-  const matched = ROTATING_ROWS.find((row) => row.matchKey === currentPhase);
-  const row = matched ?? ROTATING_ROWS[tick % ROTATING_ROWS.length]!;
-  return (
-    <p className={`mono ${s.explainer}`} data-testid="rotating-explainer">
-      <b>{row.label}</b> — {row.explainer}
-    </p>
-  );
-}
-
-export function AnonReportView({ vm, locked, onUnlock }: {
-  vm: AnonReportVM;
-  locked: boolean;
-  onUnlock: () => void;
-}) {
-  const lockedCount = Math.max(0, vm.totalFindings - 1);
-  return (
-    <div className={s.report} data-testid="anon-report">
-      <GradeHero grade={vm.grade} score={vm.score} danceability={vm.danceability} />
-
-      {vm.topFinding && (
-        <section className={`card ${s.topFinding}`}>
-          <span className="label">#1 finding</span>
-          <p className={s.topFindingText}>{vm.topFinding}</p>
-        </section>
-      )}
-
-      <StreamingCard phase1={vm.phase1} />
-
-      {locked ? (
-        // The withheld findings are NOT in this payload (server-gated) — the
-        // blur teases a count over a placeholder, never the real text.
-        vm.totalFindings > 0 && (
-          <BlurLock
-            locked
-            reason={`Create a free account to keep this report + see all ${vm.totalFindings} findings.`}
-            ctaLabel="Create free account"
-            onUnlock={onUnlock}
-          >
-            <section className={`card ${s.lockedList}`} aria-hidden>
-              <span className="label">All findings</span>
-              <ul>
-                {Array.from({ length: lockedCount }, (_, i) => (
-                  <li key={i}>••••••••••••••••••••••••</li>
-                ))}
-              </ul>
-            </section>
-          </BlurLock>
-        )
-      ) : (
-        // Claimed — the full authed report is in hand; show everything.
-        vm.allFindings && vm.allFindings.length > 0 && (
-          <section className={`card ${s.lockedList}`}>
-            <span className="label">All findings</span>
-            <ul>
-              {vm.allFindings.map((f, i) => <li key={i}>{f}</li>)}
-            </ul>
-            {vm.coachIntro && <p className={s.coachIntro}>{vm.coachIntro}</p>}
-          </section>
-        )
-      )}
-
-      {locked && lockedCount > 0 && (
-        <p className={`mono ${s.lockHint}`}>
-          {lockedCount} more finding{lockedCount === 1 ? '' : 's'} behind the blur — already computed, yours to keep.
-        </p>
-      )}
-    </div>
-  );
-}
-
 // ── the page ────────────────────────────────────────────────────────────────
 
-type Stage = 'idle' | 'uploading' | 'processing' | 'report' | 'lost';
+type Stage = 'idle' | 'busy' | 'failed';
 
 export function AnalyzePage() {
   usePageMeta(
@@ -175,233 +98,89 @@ export function AnalyzePage() {
   );
 
   const auth = useAuth();
-  const uploadApi = useAnonUpload();
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [claimed, setClaimed] = useState(false);
-  const [showRegister, setShowRegister] = useState(false);
-  const [startedAtMs] = useState(() => Date.now());
-  const [tick, setTick] = useState(0);
-  // Once the user resets (after a failure, or to analyze another), STOP the
-  // restore query from dragging the same job back — the query is staleTime:
-  // Infinity, so without this the failed/old job id reappears forever (review).
-  const [restoreDismissed, setRestoreDismissed] = useState(false);
+  const navigate = useNavigate();
+  const router = useRouter();
+  const mixUpload = useMixUpload();
+  const [stage, setStage] = useState<Stage>('idle');
+  const [dropError, setDropError] = useState<string | null>(null);
 
-  // AC5 — restore the device's latest job on a cold mount.
-  const restore = useAnonCurrentJob(jobId === null && !uploadApi.isUploading && !restoreDismissed);
+  // Scope note (addendum) — an already-signed-in REAL user never mints a
+  // guest here; send them to their library's upload entry point instead.
+  const isRealUser = !auth.isLoading && Boolean(auth.user) && !auth.user?.isGuest;
   useEffect(() => {
-    if (jobId === null && !restoreDismissed && restore.data?.jobId) setJobId(restore.data.jobId);
-  }, [jobId, restoreDismissed, restore.data]);
-
-  const job = useAnonJob(jobId);
-  const status = job.data?.status;
-  const stage: Stage = uploadApi.isUploading
-    ? 'uploading'
-    : jobId === null
-      ? 'idle'
-      : job.lost
-        ? 'lost' // E1.1 — the job vanished for this device; no fake spinner
-        : status === 'complete'
-          ? 'report'
-          : 'processing';
-
-  const resetToDropZone = useCallback(() => {
-    setJobId(null);
-    setRestoreDismissed(true); // do not let the cached failed/old job restore
-  }, []);
-
-  const anonResults = useAnonResults(jobId, stage === 'report' && !claimed);
-  // Post-claim the device rows are re-parented — the AUTHED endpoint owns them
-  // and serves the FULL report (the anon endpoint only ever sent the teaser).
-  const [claimedResults, setClaimedResults] = useState<JobResultsDto | null>(null);
-  useEffect(() => {
-    if (!claimed || !jobId || claimedResults) return;
-    void fetcher<JobResultsDto>({ url: `/jobs/${jobId}/results`, method: 'GET' })
-      .then(setClaimedResults)
-      .catch(() => { /* keep the anon render — claim already succeeded */ });
-  }, [claimed, jobId, claimedResults]);
-
-  // Rotating explainer clock (AC2).
-  useEffect(() => {
-    if (stage !== 'processing') return undefined;
-    const h = setInterval(() => setTick((t) => t + 1), 6000);
-    return () => clearInterval(h);
-  }, [stage]);
-
-  // Story 6.5 — funnel telemetry (PII-free; no-op without a PostHog key).
-  // analyze_completed fires ONCE, and ONLY for a job THIS session started —
-  // a returning visitor whose completed report is RESTORED must not re-fire
-  // it (no paired analyze_started → orphaned/negative TTFI; review).
-  const startedThisSessionRef = useRef(false);
-  const completedFiredRef = useRef(false);
-  useEffect(() => {
-    if (stage === 'report' && jobId && startedThisSessionRef.current && !completedFiredRef.current) {
-      completedFiredRef.current = true;
-      capture('analyze_completed', { job_id: jobId });
-    }
-  }, [stage, jobId]);
+    if (isRealUser) void navigate({ to: '/library', replace: true });
+  }, [isRealUser, navigate]);
 
   const onFile = useCallback((file: File) => {
-    setRestoreDismissed(false);
-    void uploadApi.upload(file)
-      .then((r) => {
-        startedThisSessionRef.current = true;
-        setJobId(r.jobId);
-        capture('analyze_started', { job_id: r.jobId });
+    setDropError(null);
+    setStage('busy');
+    startGuestUpload(
+      { user: auth.user, startDemo: auth.startDemo, upload: (f) => mixUpload.upload(f) },
+      file,
+    )
+      .then(async (res) => {
+        // The _app route guard reads router context — invalidate so it sees
+        // a freshly-minted guest's auth state BEFORE navigating (DemoLauncher
+        // precedent), or the first landing bounces to /login.
+        await router.invalidate();
+        if (!res.jobId) {
+          // UploadResponse.jobId is only null when analyze=false — this page
+          // never sends that, but never guess at a job that doesn't exist.
+          await navigate({ to: '/songs/$songId', params: { songId: res.songId } });
+          return;
+        }
+        capture('guest_upload_started', { job_id: res.jobId });
+        await navigate({
+          to: '/songs/$songId/results/$jobId',
+          params: { songId: res.songId, jobId: res.jobId },
+        });
       })
-      .catch(() => { /* error state shown */ });
-  }, [uploadApi]);
+      .catch((err: unknown) => {
+        if (err instanceof GuestStartFailedError) {
+          setStage('failed');
+          return;
+        }
+        setStage('idle');
+        // Guest upload/analysis caps refused the request — the shared
+        // upgrade dialog owns this, not page-local copy (D10).
+        if (handleGuestRestricted(err)) return;
+        setDropError(err instanceof Error ? err.message : 'Upload failed. Try again.');
+      });
+  }, [auth.user, auth.startDemo, mixUpload, navigate, router]);
 
-  const vm: AnonReportVM | null = claimedResults
-    ? vmFromFull(claimedResults)
-    : anonResults.data
-      ? vmFromAnon(anonResults.data)
-      : null;
+  const showDropZone = stage === 'idle' && !auth.isLoading && !isRealUser;
 
   return (
     <div className={s.page}>
       <PublicChrome />
       <main className={s.main}>
-        {stage === 'idle' && (
-          <DropZoneView onFile={onFile} error={uploadApi.error} />
-        )}
+        {showDropZone && <DropZoneView onFile={onFile} error={dropError} />}
 
-        {stage === 'uploading' && (
+        {stage === 'busy' && (
           <section className={s.center}>
-            <h2 className={s.stageTitle}>Uploading…</h2>
-            <progress className={s.uploadBar} max={1} value={uploadApi.progress} />
-            <p className={`mono ${s.stageHint}`}>{Math.round(uploadApi.progress * 100)}%</p>
-          </section>
-        )}
-
-        {stage === 'processing' && (
-          <section className={s.center} data-testid="anon-progress">
-            <h2 className={s.stageTitle}>Analyzing your track</h2>
-            <ProgressStorylineView
-              status={status ?? 'pending'}
-              currentPhase={job.data?.currentPhase ?? ''}
-              phasePct={job.data?.phasePct ?? 0}
-              elapsedMs={Date.now() - startedAtMs}
-              workerOffline={false}
-            />
-            <ExplainerLine currentPhase={job.data?.currentPhase ?? ''} tick={tick} />
-            {status === 'failed' && (
-              <p className={s.dropError}>
-                {job.data?.errorMessage ?? 'Analysis failed.'}{' '}
-                <button type="button" className="btn sm ghost" onClick={resetToDropZone}>
-                  Try another file
-                </button>
-              </p>
+            <h2 className={s.stageTitle}>
+              {mixUpload.isUploading ? 'Uploading…' : 'Setting up your guest session…'}
+            </h2>
+            <progress className={s.uploadBar} max={1} value={mixUpload.progress} />
+            {mixUpload.isUploading && (
+              <p className={`mono ${s.stageHint}`}>{Math.round(mixUpload.progress * 100)}%</p>
             )}
           </section>
         )}
 
-        {stage === 'lost' && (
-          <section className={s.center} data-testid="anon-lost">
-            <h2 className={s.stageTitle}>We lost track of this analysis</h2>
-            <p className={`mono ${s.stageHint}`}>
-              It may have been claimed on another device, expired, or your browser is
-              blocking the cookie that ties it to you.
-            </p>
-            <button type="button" className="btn primary" onClick={resetToDropZone}>
-              Start over
-            </button>
+        {stage === 'failed' && (
+          <section className={`card ${s.center}`} role="alert">
+            <span className="label">Guest session</span>
+            <h2 className={s.stageTitle}>Uploads aren&rsquo;t available right now.</h2>
+            <div className={s.failedActions}>
+              <a href="/register" className="btn primary">Create a free account</a>
+              <a href="/demo" className="btn ghost">Explore the demo</a>
+              <a href="/" className="btn ghost">Back home</a>
+            </div>
           </section>
         )}
-
-        {stage === 'report' && vm && (
-          <AnonReportView
-            vm={vm}
-            locked={!claimed && !auth.user}
-            onUnlock={() => setShowRegister(true)}
-          />
-        )}
-        {stage === 'report' && !vm && (
-          <p className={`mono ${s.stageHint}`}>Loading your report…</p>
-        )}
-
-        {showRegister && !claimed && (
-          <InlineRegisterCard
-            onClaimed={() => {
-              setClaimed(true);
-              setShowRegister(false);
-              // AC2/AC4 — the device→user moment + inbound attribution (drains
-              // the 7.4 stash). identifyUser already stitched via AuthContext.
-              capture('report_claimed', { job_id: jobId, ...readAttribution() });
-            }}
-            onDismiss={() => setShowRegister(false)}
-          />
-        )}
-
-        {claimed && (
-          <p className={`mono ${s.claimBanner}`} data-testid="claim-banner">
-            Your full report is unlocked here and saved to your account.{' '}
-            Email verification gates your <b>next</b> analysis, not this one.{' '}
-            <a href="/library">Go to your library →</a>
-          </p>
-        )}
       </main>
-    </div>
-  );
-}
-
-// ── inline register (AC4) — email+password card over the visible report ─────
-
-export function InlineRegisterCard({ onClaimed, onDismiss }: {
-  onClaimed: () => void;
-  onDismiss: () => void;
-}) {
-  const auth = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setPending(true);
-    setError(null);
-    try {
-      // The httpOnly device cookie rides this POST — the server claims the
-      // device and re-parents the report atomically (4.5). No claim API call.
-      await auth.register(email, password);
-      onClaimed();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not create the account.');
-    } finally {
-      setPending(false);
-    }
-  };
-
-  return (
-    <div className={s.registerOverlay} data-testid="inline-register">
-      <form className={`card ${s.registerCard}`} onSubmit={submit}>
-        <h3 className={s.registerTitle}>Keep this report</h3>
-        <p className={s.registerSub}>Free account · the report re-attaches to it instantly.</p>
-        <label className={s.registerLabel}>
-          Email
-          <input type="email" required autoComplete="email" value={email}
-            onChange={(e) => setEmail(e.target.value)} className={s.registerInput} />
-        </label>
-        <label className={s.registerLabel}>
-          Password
-          <input type="password" required minLength={8} autoComplete="new-password" value={password}
-            onChange={(e) => setPassword(e.target.value)} className={s.registerInput} />
-        </label>
-        {error && <p className={s.dropError}>{error}</p>}
-        <div className={s.registerActions}>
-          <button type="submit" className="btn primary" disabled={pending}>
-            {pending ? 'Creating…' : 'Create free account'}
-          </button>
-          <button type="button" className="btn ghost" onClick={onDismiss} disabled={pending}>
-            Not now
-          </button>
-        </div>
-        <p className={`mono ${s.registerTrust}`}>
-          <a href="/trust/no-training">No AI training on your audio</a>
-          {' · '}
-          <a href="/trust/results-forever">reports stay yours</a>
-        </p>
-      </form>
+      <PublicFooter currentPath="/analyze" />
     </div>
   );
 }
