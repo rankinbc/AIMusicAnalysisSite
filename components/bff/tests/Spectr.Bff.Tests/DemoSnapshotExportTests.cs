@@ -258,9 +258,9 @@ public sealed class DemoSnapshotExportTests(WebApplicationFactory<Program> facto
         Assert.False(await db.AuditLogs.AnyAsync(a => a.Action == "demo_snapshot_export" && a.Target == versionId.ToString()));
     }
 
-    // ── Item 2(a)+(c) — a second export retires the first's assets; every asset key is fresh and id-free ──
+    // ── Item 2(a)+(c) — a second export defers the first's assets; every asset key is fresh and id-free ──
     [SkippableFact]
-    public async Task Second_Export_Retires_The_Firsts_Assets_And_Keys_Stay_Id_Free()
+    public async Task Second_Export_Defers_The_Firsts_Assets_And_Keys_Stay_Id_Free()
     {
         await TestDb.RequireAsync(factory);
         var f = Build();
@@ -282,11 +282,20 @@ public sealed class DemoSnapshotExportTests(WebApplicationFactory<Program> facto
         using var scope = f.Services.CreateScope();
         var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
         Assert.True(await storage.ExistsAsync(audioKeyB!));
-        Assert.False(await storage.ExistsAsync(audioKeyA!)); // A's asset object is gone
+        // Task G7a — retirement is now DEFERRED (staged into
+        // "<dir>retired.json", swept only after guest_ttl_hours + 1h): a
+        // guest already mid-session against A must keep working against A's
+        // audio for the rest of their guest lifetime, so A's object must
+        // still exist immediately after B goes live. See
+        // DemoSnapshotExportSafetyTests for the deferred-retirement/sweep
+        // coverage.
+        Assert.True(await storage.ExistsAsync(audioKeyA!));
 
         Assert.True(DemoSnapshotStore.IsSharedKey(audioKeyB!));
         Assert.DoesNotContain(versionId.ToString("D"), audioKeyB, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(versionId.ToString("N"), audioKeyB, StringComparison.OrdinalIgnoreCase);
+
+        await storage.DeleteAsync(audioKeyA!); // not caught by this class's own generic cleanup
     }
 
     // ── Item 2(b) — an aborted (leaking) export never touches the live snapshot ──
@@ -561,6 +570,7 @@ public sealed class DemoSnapshotExportTests(WebApplicationFactory<Program> facto
             await storage.DeleteAsync(_dir + "source-assets/spectrogram.webp");
             await storage.DeleteAsync(_dir + "source-assets/waveform.webp");
             await storage.DeleteAsync(_dir + "source-assets/peaks.json");
+            await storage.DeleteAsync(_dir + "retired.json"); // Task G7a — the deferred-retirement manifest
         }
         if (_versionIds.Count > 0)
         {

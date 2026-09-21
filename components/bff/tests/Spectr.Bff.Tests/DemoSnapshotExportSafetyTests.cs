@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
@@ -64,15 +65,154 @@ public sealed class DemoSnapshotExportSafetyTests(WebApplicationFactory<Program>
         }
     }
 
-    // ── (a) — retirement must never delete a key it does not own ──────────
+    // Task G7a — retirement of the PREVIOUS export's assets is now deferred:
+    // a guest mid-session against export A must keep working for the rest of
+    // their guest lifetime, so a second export must never delete A's assets
+    // immediately. Instead it stages them into a manifest
+    // ("<dir>retired.json", next to snapshot.json — same directory as the
+    // configured Demo:SnapshotKey, so every test below that uses
+    // BuildFactory's per-test random dir is automatically isolated from the
+    // real installed manifest) and only actually deletes an entry once it is
+    // older than guest_ttl_hours + 1h. The IsRetireableAssetKey guard still
+    // applies at the moment a key is ACTUALLY deleted (item (d) below).
+
+    private static async Task<(WebApplicationFactory<Program> F, string Dir, string SnapshotKey, string AudioKeyA)>
+        SeedTwoLiveExportsAsync(WebApplicationFactory<Program> factory, List<Guid> userIds, List<Guid> versionIds)
+    {
+        var (f, dir) = DemoSnapshotExportTests.BuildFactory(factory, DemoSnapshotExportTests.Key);
+        var snapshotKey = dir + "snapshot.json";
+
+        var (versionIdA, _, _, _) = await DemoSnapshotExportTests.SeedAnalyzedAsync(f, userIds, versionIds);
+        var rA = await DemoSnapshotExportTests.Admin(f)
+            .PostAsJsonAsync("/api/admin/demo/snapshot", new { versionId = versionIdA, reason = "export-a" });
+        rA.EnsureSuccessStatusCode();
+        var (audioKeyA, _) = await DemoSnapshotExportTests.ReadAssetKeysAsync(f, snapshotKey);
+        Assert.NotNull(audioKeyA);
+
+        var (versionIdB, _, _, _) = await DemoSnapshotExportTests.SeedAnalyzedAsync(f, userIds, versionIds);
+        var rB = await DemoSnapshotExportTests.Admin(f)
+            .PostAsJsonAsync("/api/admin/demo/snapshot", new { versionId = versionIdB, reason = "export-b" });
+        rB.EnsureSuccessStatusCode();
+
+        return (f, dir, snapshotKey, audioKeyA!);
+    }
+
+    private static async Task SetVersionFilePathAsync(WebApplicationFactory<Program> f, Guid versionId, string filePath)
+    {
+        using var scope = f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var v = await db.SongVersions.SingleAsync(x => x.Id == versionId);
+        v.FilePath = filePath;
+        await db.SaveChangesAsync();
+    }
+
+    // ── (a) — a version whose source audio object does not exist ──────────
     [SkippableFact]
-    public async Task Retirement_Never_Deletes_A_Key_Outside_The_Export_Directory()
+    public async Task Export_Refuses_When_The_Source_Audio_Is_Missing()
     {
         await TestDb.RequireAsync(factory);
         WebApplicationFactory<Program> f;
         (f, _dir) = DemoSnapshotExportTests.BuildFactory(factory, DemoSnapshotExportTests.Key);
         var (versionId, _, _, _) = await DemoSnapshotExportTests.SeedAnalyzedAsync(f, _userIds, _versionIds);
-        var snapshotKey = _dir + "snapshot.json";
+        var missingKey = $"audio/versions/{Guid.NewGuid():N}/gone.wav";
+        await SetVersionFilePathAsync(f, versionId, missingKey);
+
+        var r = await DemoSnapshotExportTests.Admin(f)
+            .PostAsJsonAsync("/api/admin/demo/snapshot", new { versionId, reason = "missing-audio" });
+
+        Assert.Equal(HttpStatusCode.Conflict, r.StatusCode);
+        Assert.Equal("snapshot_not_ready", await DemoSnapshotExportTests.Code(r));
+
+        using var scope = f.Services.CreateScope();
+        var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
+        Assert.False(await storage.ExistsAsync(_dir + "snapshot.json"),
+            "nothing should be written when the source audio is missing");
+    }
+
+    // ── (b) — a second export defers retirement instead of deleting immediately ──
+    [SkippableFact]
+    public async Task Retirement_Is_Deferred_Not_Immediate()
+    {
+        await TestDb.RequireAsync(factory);
+        var (f, dir, _, audioKeyA) = await SeedTwoLiveExportsAsync(factory, _userIds, _versionIds);
+        _dir = dir;
+
+        using var scope = f.Services.CreateScope();
+        var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
+        try
+        {
+            Assert.True(await storage.ExistsAsync(audioKeyA),
+                "export B must not delete export A's audio while a guest could still be pointing at it");
+
+            var manifestKey = dir + "retired.json";
+            Assert.True(await storage.ExistsAsync(manifestKey), "export B must record A's assets for later retirement");
+            await using var stream = await storage.OpenReadAsync(manifestKey);
+            using var doc = await JsonDocument.ParseAsync(stream);
+            var root = doc.RootElement;
+            Assert.Equal(JsonValueKind.Array, root.ValueKind);
+            Assert.True(root.GetArrayLength() >= 1);
+            var entry = root[0];
+            var keys = entry.GetProperty("keys").EnumerateArray().Select(e => e.GetString()).ToList();
+            Assert.Contains(audioKeyA, keys);
+            var retiredAt = entry.GetProperty("retiredAt").GetDateTimeOffset();
+            Assert.True(
+                retiredAt > DateTimeOffset.UtcNow.AddMinutes(-5) && retiredAt <= DateTimeOffset.UtcNow.AddMinutes(1),
+                "retiredAt should be close to the time export B went live");
+        }
+        finally
+        {
+            // Not caught by DisposeAsync's snapshot-key reader — B, not A, is
+            // the current live snapshot's audio by the time this test ends.
+            await storage.DeleteAsync(audioKeyA);
+        }
+    }
+
+    // ── (c) — an entry past guest_ttl_hours + 1h is actually swept ────────
+    [SkippableFact]
+    public async Task Retirement_Sweeps_Expired_Entries_After_The_Guest_Ttl_Window()
+    {
+        await TestDb.RequireAsync(factory);
+        var (f, dir, _, audioKeyA) = await SeedTwoLiveExportsAsync(factory, _userIds, _versionIds);
+        _dir = dir;
+        var manifestKey = dir + "retired.json";
+
+        using (var scope = f.Services.CreateScope())
+        {
+            var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
+            // Age the one recorded entry past the default 24h guest TTL + 1h grace window.
+            var aged = "[{\"keys\":[\"" + audioKeyA + "\"],\"retiredAt\":\""
+                + DateTimeOffset.UtcNow.AddHours(-(24 + 2)).ToString("O") + "\"}]";
+            await storage.WriteAsync(manifestKey, new MemoryStream(Encoding.UTF8.GetBytes(aged)), "application/json");
+        }
+
+        // A third export runs the sweep again.
+        var (versionIdC, _, _, _) = await DemoSnapshotExportTests.SeedAnalyzedAsync(f, _userIds, _versionIds);
+        var rC = await DemoSnapshotExportTests.Admin(f)
+            .PostAsJsonAsync("/api/admin/demo/snapshot", new { versionId = versionIdC, reason = "export-c" });
+        rC.EnsureSuccessStatusCode();
+
+        using var scope2 = f.Services.CreateScope();
+        var storage2 = scope2.ServiceProvider.GetRequiredService<IFileStorage>();
+        Assert.False(await storage2.ExistsAsync(audioKeyA),
+            "an entry past the guest TTL + 1h window must actually be deleted");
+
+        await using var stream = await storage2.OpenReadAsync(manifestKey);
+        using var doc = await JsonDocument.ParseAsync(stream);
+        var keysStillListed = doc.RootElement.EnumerateArray()
+            .SelectMany(e => e.GetProperty("keys").EnumerateArray().Select(k => k.GetString()))
+            .ToList();
+        Assert.DoesNotContain(audioKeyA, keysStillListed);
+    }
+
+    // ── (d) — the sweep must never delete a key it does not own ───────────
+    [SkippableFact]
+    public async Task Retirement_Sweep_Never_Deletes_A_Key_Outside_Its_Own_Directory()
+    {
+        await TestDb.RequireAsync(factory);
+        WebApplicationFactory<Program> f;
+        (f, _dir) = DemoSnapshotExportTests.BuildFactory(factory, DemoSnapshotExportTests.Key);
+        var (versionId, _, _, _) = await DemoSnapshotExportTests.SeedAnalyzedAsync(f, _userIds, _versionIds);
+        var manifestKey = _dir + "retired.json";
 
         using var scope = f.Services.CreateScope();
         var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
@@ -89,12 +229,12 @@ public sealed class DemoSnapshotExportSafetyTests(WebApplicationFactory<Program>
         // writing it ourselves (never author-write the shared canonical key).
         Assert.True(await storage.ExistsAsync(sharedKey));
 
-        // A tampered/corrupted "previous" snapshot.json naming a foreign key
-        // and the shared canonical key alongside one legitimate old-export key.
-        var craftedOldDoc = "{\"version\":{\"audioKey\":\"" + foreignKey + "\"},"
-            + "\"analysis\":{\"spectrogramImageKey\":\"" + sharedKey + "\","
-            + "\"waveformImageKey\":\"" + legitimateOldKey + "\",\"waveformPeaksKey\":null}}";
-        await storage.WriteAsync(snapshotKey, new MemoryStream(Encoding.UTF8.GetBytes(craftedOldDoc)), "application/json");
+        // An already-expired manifest entry naming a foreign key and the
+        // shared canonical key alongside one legitimate old-export key — as
+        // if a prior export's asset discovery had been tampered with.
+        var expiredEntry = "[{\"keys\":[\"" + foreignKey + "\",\"" + sharedKey + "\",\"" + legitimateOldKey + "\"],"
+            + "\"retiredAt\":\"" + DateTimeOffset.UtcNow.AddHours(-(24 + 2)).ToString("O") + "\"}]";
+        await storage.WriteAsync(manifestKey, new MemoryStream(Encoding.UTF8.GetBytes(expiredEntry)), "application/json");
 
         try
         {
@@ -107,7 +247,7 @@ public sealed class DemoSnapshotExportSafetyTests(WebApplicationFactory<Program>
             Assert.True(await storage.ExistsAsync(sharedKey),
                 "the shared sine-tone canonical audio must never be retired");
             Assert.False(await storage.ExistsAsync(legitimateOldKey),
-                "the legitimate old export asset under this export's own directory SHOULD be retired");
+                "the legitimate expired old-export asset SHOULD be retired");
         }
         finally
         {
@@ -121,7 +261,35 @@ public sealed class DemoSnapshotExportSafetyTests(WebApplicationFactory<Program>
         }
     }
 
-    // ── (b) — a post-go-live failure must never delete the live demo ──────
+    // ── (e) — a corrupt manifest never blocks the export ───────────────────
+    [SkippableFact]
+    public async Task Retirement_Manifest_Corruption_Never_Blocks_The_Export()
+    {
+        await TestDb.RequireAsync(factory);
+        WebApplicationFactory<Program> f;
+        (f, _dir) = DemoSnapshotExportTests.BuildFactory(factory, DemoSnapshotExportTests.Key);
+        var manifestKey = _dir + "retired.json";
+
+        using (var scope = f.Services.CreateScope())
+        {
+            var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
+            await storage.WriteAsync(manifestKey, new MemoryStream("{not valid json"u8.ToArray()), "application/json");
+        }
+
+        var (versionId, _, _, _) = await DemoSnapshotExportTests.SeedAnalyzedAsync(f, _userIds, _versionIds);
+        var r = await DemoSnapshotExportTests.Admin(f)
+            .PostAsJsonAsync("/api/admin/demo/snapshot", new { versionId, reason = "corrupt-manifest" });
+        r.EnsureSuccessStatusCode();
+
+        using var scope2 = f.Services.CreateScope();
+        var storage2 = scope2.ServiceProvider.GetRequiredService<IFileStorage>();
+        // The corrupt manifest is replaced with a fresh, valid, parseable one.
+        await using var stream = await storage2.OpenReadAsync(manifestKey);
+        using var doc = await JsonDocument.ParseAsync(stream);
+        Assert.Equal(JsonValueKind.Array, doc.RootElement.ValueKind);
+    }
+
+    // ── fix-round-2 (b) — a post-go-live failure must never delete the live demo ──
     [SkippableFact]
     public async Task A_Failure_After_GoLive_Never_Deletes_The_New_Live_Demo()
     {
@@ -199,6 +367,13 @@ public sealed class DemoSnapshotExportSafetyTests(WebApplicationFactory<Program>
             if (audioKey is not null) await storage.DeleteAsync(audioKey);
             foreach (var key in imageKeys) await storage.DeleteAsync(key);
             await storage.DeleteAsync(_dir + "snapshot.json");
+            // Task G7a — the deferred-retirement manifest lives next to
+            // snapshot.json; some tests' own audioKeyA (from an earlier
+            // export round in the same dir) is not the CURRENT live
+            // snapshot's audio key, so it is not caught by ReadAssetKeysAsync
+            // above — those tests clean it up themselves. This only clears
+            // the manifest file itself.
+            await storage.DeleteAsync(_dir + "retired.json");
         }
         if (_versionIds.Count > 0)
         {

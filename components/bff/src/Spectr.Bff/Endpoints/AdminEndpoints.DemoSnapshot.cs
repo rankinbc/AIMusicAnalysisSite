@@ -2,7 +2,9 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
+using Spectr.Bff.Auth;
 using Spectr.Bff.DTOs;
 using Spectr.Bff.Services;
 using Spectr.Data;
@@ -48,7 +50,8 @@ public static partial class AdminEndpoints
 
     private static async Task<IResult> PostDemoSnapshot(
         DemoSnapshotExportRequest req, AppDbContext db, IFileStorage storage,
-        DemoSnapshotStore snapshotStore, IConfiguration config, HttpContext httpCtx, CancellationToken ct)
+        DemoSnapshotStore snapshotStore, EntitlementService ents, IConfiguration config, HttpContext httpCtx,
+        CancellationToken ct)
     {
         // Same convention as every other admin mutation (PostRefund/PostBan/…).
         if (ValidateReason(req.Reason) is { } badReason) return badReason;
@@ -123,6 +126,16 @@ public static partial class AdminEndpoints
         // export.
         var previousAssetKeys = await ReadPreviousAssetKeysAsync(storage, snapshotKey, ct);
 
+        // Fix-round-3 (G7a) — a version whose underlying audio object is
+        // missing (deleted, never actually uploaded, storage misconfig)
+        // used to blow up CopyAsync below with a raw 500
+        // (DirectoryNotFoundException on local disk, since the source
+        // directory itself doesn't exist). Checked before any write — same
+        // refusal code as the other "not ready to export" guards above.
+        if (!await storage.ExistsAsync(version.FilePath, ct))
+            return ErrorEnvelope.Build(409, "snapshot_not_ready",
+                "That version's audio file could not be found in storage — check the upload before exporting.");
+
         try
         {
             await CopyAsync(storage, version.FilePath, audioKey, AudioContentType(ext), ct);
@@ -182,33 +195,14 @@ public static partial class AdminEndpoints
             await db.SaveChangesAsync(ct);
 
             // Only NOW — after the new snapshot.json is live — best-effort
-            // retire the PREVIOUS export's assets. A failure here is logged
-            // and swallowed; it must never turn a successful export into an
-            // error response.
-            //
-            // Fix-round-2 item (a): the OLD snapshot.json is untrusted input
-            // (corrupted, tampered, or hand-edited) — it could name ANY
-            // storage key. Retire a key only when it passes every guard:
-            // inside the required shared prefix, inside THIS snapshot's own
-            // directory, not the pointer file itself, and not (defense in
-            // depth) under the brand-new export directory. Anything else is
-            // skipped and logged, never deleted — a foreign user's audio or
-            // the shared canonical sine-tone key must never be retired.
-            if (previousAssetKeys.Count > 0)
-            {
-                var logger = httpCtx.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Admin");
-                foreach (var key in previousAssetKeys)
-                {
-                    if (!IsRetireableAssetKey(key, dir, snapshotKey, exportDir))
-                    {
-                        logger.LogWarning(
-                            "Refusing to retire demo snapshot asset outside its own export directory: {Key}", key);
-                        continue;
-                    }
-                    try { await storage.DeleteAsync(key, ct); }
-                    catch (Exception ex) { logger.LogWarning(ex, "Could not retire old demo snapshot asset {Key}", key); }
-                }
-            }
+            // STAGE the PREVIOUS export's assets for retirement (never
+            // delete them immediately: a guest already mid-session against
+            // export A must keep working against A's audio for the rest of
+            // their guest lifetime). See RetireOldAssetsAsync. A failure
+            // here is logged and swallowed; it must never turn a successful
+            // export into an error response.
+            var logger = httpCtx.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Admin");
+            await RetireOldAssetsAsync(storage, ents, logger, dir, snapshotKey, exportDir, previousAssetKeys, ct);
 
             var freeText = new DemoSnapshotFreeText(
                 song.Name,
@@ -247,6 +241,113 @@ public static partial class AdminEndpoints
         if (key == snapshotKey) return false;
         if (key.StartsWith(exportDir, StringComparison.Ordinal)) return false; // never the NEW export's own assets
         return true;
+    }
+
+    // Fix-round-3 (G7a) — one entry of the deferred-retirement manifest: the
+    // asset keys ONE export's predecessor owned, plus when that predecessor
+    // was superseded. JsonSerializer-shaped (not JsonNode, unlike the rest of
+    // this file) since the wire shape here is small and internal-only, never
+    // round-tripped byte-for-byte from a jsonb column.
+    internal sealed class RetiredManifestEntry
+    {
+        [JsonPropertyName("keys")] public List<string> Keys { get; set; } = [];
+        [JsonPropertyName("retiredAt")] public DateTimeOffset RetiredAt { get; set; }
+    }
+
+    // Fix-round-3 (G7a) — replaces "delete the previous export's assets
+    // immediately" (the old inline block here, up to fix-round-2). A guest
+    // already mid-session against export A must keep working against A's
+    // audio for the rest of their guest lifetime, so an asset is staged into
+    // a manifest at "<dir>retired.json" (next to snapshot.json — inside the
+    // configured Demo:SnapshotKey's own directory, so a test using its own
+    // isolated key/dir can never touch the real installed manifest) instead
+    // of being deleted on the spot. Only entries older than
+    // guest_ttl_hours + 1h grace are actually swept, through the SAME
+    // IsRetireableAssetKey guard as before (an untrusted/tampered manifest
+    // must never let a foreign or shared key be deleted).
+    //
+    // Never blocks or fails the export: every failure mode (corrupt/missing
+    // manifest, a flags read failure, an individual delete failure, a
+    // failure writing the manifest back) is caught and logged here, never
+    // propagated. `now` is an optional seam for deterministic direct testing
+    // of the cutoff math — production callers omit it (defaults to
+    // DateTimeOffset.UtcNow).
+    private static async Task RetireOldAssetsAsync(
+        IFileStorage storage, EntitlementService ents, ILogger logger,
+        string dir, string snapshotKey, string exportDir, List<string> previousAssetKeys,
+        CancellationToken ct, DateTimeOffset? now = null)
+    {
+        var resolvedNow = now ?? DateTimeOffset.UtcNow;
+        var manifestKey = dir + "retired.json";
+        try
+        {
+            var entries = await ReadRetiredManifestAsync(storage, logger, manifestKey, ct);
+
+            if (previousAssetKeys.Count > 0)
+                entries.Add(new RetiredManifestEntry { Keys = previousAssetKeys, RetiredAt = resolvedNow });
+
+            var ttlHours = 24;
+            try
+            {
+                var flags = await ents.GetFlagsAsync(ct);
+                ttlHours = GuestIdentity.Flag(flags, "guest_ttl_hours", 24);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex,
+                    "Could not read guest_ttl_hours flag for demo snapshot retirement — using the 24h default");
+            }
+            var cutoff = resolvedNow - TimeSpan.FromHours(ttlHours + 1);
+
+            var remaining = new List<RetiredManifestEntry>();
+            foreach (var entry in entries)
+            {
+                if (entry.RetiredAt >= cutoff) { remaining.Add(entry); continue; }
+                // Expired — best-effort delete through the same ownership
+                // guard as fix-round-2. The entry is dropped either way
+                // (never retried): a rejected/failed key is logged, not
+                // re-staged.
+                foreach (var key in entry.Keys)
+                {
+                    if (!IsRetireableAssetKey(key, dir, snapshotKey, exportDir))
+                    {
+                        logger.LogWarning(
+                            "Refusing to retire demo snapshot asset outside its own directory: {Key}", key);
+                        continue;
+                    }
+                    try { await storage.DeleteAsync(key, ct); }
+                    catch (Exception ex) { logger.LogWarning(ex, "Could not retire old demo snapshot asset {Key}", key); }
+                }
+            }
+
+            var json = JsonSerializer.Serialize(remaining, SnapshotDocOptions);
+            await storage.WriteAsync(manifestKey, new MemoryStream(Encoding.UTF8.GetBytes(json)), "application/json", ct);
+        }
+        catch (Exception ex)
+        {
+            // Never turn a successful export into an error response.
+            logger.LogWarning(ex, "Demo snapshot retirement step failed for {ManifestKey} — skipped this round", manifestKey);
+        }
+    }
+
+    // Missing/corrupt/unparseable manifest → empty list, logged: never block
+    // or fail an export over a damaged retirement manifest. The next
+    // successful export replaces it with a fresh, valid one.
+    private static async Task<List<RetiredManifestEntry>> ReadRetiredManifestAsync(
+        IFileStorage storage, ILogger logger, string manifestKey, CancellationToken ct)
+    {
+        try
+        {
+            if (!await storage.ExistsAsync(manifestKey, ct)) return [];
+            await using var stream = await storage.OpenReadAsync(manifestKey, ct);
+            var entries = await JsonSerializer.DeserializeAsync<List<RetiredManifestEntry>>(stream, cancellationToken: ct);
+            return entries ?? [];
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Corrupt demo snapshot retirement manifest at {Key} — treating as empty", manifestKey);
+            return [];
+        }
     }
 
     // Fix-round-1 items 1+4 — resolves the configured destination BEFORE any
