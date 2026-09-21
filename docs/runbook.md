@@ -140,6 +140,32 @@ migration means merge == deploy == applied.
       failed deletes (future).
 - [ ] `backups/` prefix: 30-day expiry (10.2 wires the nightly pg_dump).
 
+### Sizing the structure-detection memory cap (G4 fix1)
+
+`ALLIN1_MEMORY_LIMIT` (optional, `.env`) caps the `allin1` structure-detection
+container's `--memory`/`--memory-swap` (equal, so it OOM-kills instead of
+paging the VM to death — an uncapped container took a 15.6 GiB dev VM down
+three times on a single 9-minute track). Only `worker-free` needs it
+(`infra/compose.prod.yml`) — it's the only prod service whose `WORKER_QUEUES`
+includes `analysis-paid`/`analysis-free`, i.e. the only one that can ever run
+`analyze_audio_job` and therefore launch the container. Compose defaults it to
+`1g` if unset.
+
+Sizing rule of thumb: ≤ 40% of host RAM, and never more than host RAM minus
+4 GB headroom for everything else on the box — on the documented prod VM
+(`Standard_D2als_v7`, 2 vCPU / 4 GB RAM, 2 GB swap;
+`docs/azure-deploy-remaining-work.md`) the "minus 4 GB" rule computes to zero
+(it assumes a host bigger than 4 GB), so the 40% ceiling (~1.6 GB) governs;
+`1g` was chosen because the idle stack plus one ordinary analysis already use
+roughly 3 GB of the 4 GB total (`PRPs/azure-deploy-spectr.md`), leaving little
+room for anything else. As of this writing the prod worker image has no
+`docker` CLI installed and this compose mounts no `docker.sock`
+(`components/worker/Dockerfile`), so the container cannot actually launch in
+prod at all — structure detection already reports "not assessed" there
+independent of this cap. The env var is set anyway, defensively, for if/when
+prod gains Docker access. `""` / `"0"` return to the pre-cap "no limit" state
+(warns on every container launch — see `docs/STARTUP.md` #2d).
+
 ## Observability (story 10.3 / AR32 / NFR30)
 
 - **.env additions with 10.3** (all have safe defaults — nothing

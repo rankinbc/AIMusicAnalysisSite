@@ -154,6 +154,23 @@ services:
       # single-VM demo still processes on-demand specialists; trade-off
       # accepted per brief — they queue behind a running analysis here.
       WORKER_QUEUES: "analysis-paid analysis-free maintenance"
+      # G4 fix1 #3 — worker-free is the ONLY service that can ever run
+      # analyze_audio_job / detect_structure_job (worker-paid's WORKER_QUEUES
+      # above is "coach" only), so it is the only service that can launch the
+      # allin1 structure-detection container — set the cap explicitly here
+      # rather than inherit the analysis package's developer-laptop default.
+      # As found while wiring this (2026-09): this worker image has no
+      # docker CLI installed (components/worker/Dockerfile) and this compose
+      # mounts no docker.sock, so the container CANNOT actually be launched
+      # from prod today — DockerAllin1.ensure_available() raises
+      # Allin1Unavailable and structure detection already reports "not
+      # assessed" regardless of this cap. Set defensively anyway (belt and
+      # braces for if/when prod ever gets Docker access) and sized to the
+      # documented VM (Standard_D2als_v7, 2 vCPU / 4 GB, 2 GB swap — see
+      # docs/azure-deploy-remaining-work.md): well under the usual "<=40% of
+      # host RAM" rule of thumb, since idle stack + one ordinary analysis
+      # already use roughly 3 GB of the 4 GB total per PRPs/azure-deploy-spectr.md.
+      ALLIN1_MEMORY_LIMIT: ${ALLIN1_MEMORY_LIMIT:-1g}
     volumes:
       - /opt/spectr/data:/data
     depends_on:

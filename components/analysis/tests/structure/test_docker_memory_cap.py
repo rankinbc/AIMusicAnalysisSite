@@ -30,8 +30,12 @@ def test_the_container_is_memory_capped_with_no_swap(monkeypatch, tmp_path):
     except Exception:
         pass  # result parsing is not under test
     cmd = seen["cmd"]
-    assert cmd[cmd.index("--memory") + 1] == "6g"
-    assert cmd[cmd.index("--memory-swap") + 1] == "6g"        # equal → the container cannot swap the VM to death
+    # G4 fix1 #3 — the code default is a DEVELOPER-LAPTOP value (4g, lowered
+    # from 6g); production sets ALLIN1_MEMORY_LIMIT explicitly (see
+    # infra/compose.prod.yml + docs/runbook.md), so this pins the laptop
+    # default only, not a production number.
+    assert cmd[cmd.index("--memory") + 1] == mod.DEFAULT_MEMORY_LIMIT == "4g"
+    assert cmd[cmd.index("--memory-swap") + 1] == "4g"        # equal → the container cannot swap the VM to death
     assert cmd.index("--memory") < cmd.index(d.image_name)    # flags precede the image
 
 def test_the_cap_is_env_tunable(monkeypatch, tmp_path):

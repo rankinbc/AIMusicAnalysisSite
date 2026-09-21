@@ -273,12 +273,20 @@ restart and the VM went down again 35 and 19 minutes later. After that job was
 marked `failed` the engine stayed up.
 
 **Fixed (G4):** the container now runs with `--memory` and `--memory-swap` both
-set to `ALLIN1_MEMORY_LIMIT` (default `6g`; equal, not higher, swap so it
-can't page the host to death). Docker OOM-kills the container instead, and the
-analysis still completes — arrangement comes back "not assessed" rather than
-the VM going down. If a long track now reports arrangement as "not assessed"
-instead of a score, raise `ALLIN1_MEMORY_LIMIT` and give WSL more RAM in
-`.wslconfig`; set it to `""` or `"0"` to disable the flags entirely. The "avoid
+set to `ALLIN1_MEMORY_LIMIT` (default `4g` on a dev laptop — G4 fix1 lowered
+this from the original `6g`; prod sets its own value explicitly, see
+`docs/runbook.md` "Sizing the structure-detection memory cap"; equal, not
+higher, swap so it can't page the host to death). Docker OOM-kills the
+container instead, and the analysis still completes — arrangement comes back
+"not assessed" rather than the VM going down. If a long track now reports
+arrangement as "not assessed" instead of a score, raise `ALLIN1_MEMORY_LIMIT`
+and give WSL more RAM in `.wslconfig`. G4 fix1 also validates the value: a
+malformed one (a typo, not a docker size like `3g`/`512m`) logs a loud ERROR
+and falls back to the default instead of silently disabling structure
+detection on every analysis. Setting it to `""` or `"0"` is still the
+intentional escape hatch, but now WARNS on every container launch — it
+returns to the pre-cap state in which a long track can take the whole VM
+down, exactly as it did three times before this fix. The "avoid
 analysing long tracks on this machine" caution is lifted once this has been
 verified against a real long track. Until then, treat "Docker died a few
 minutes after uploading a long track" as this history, and before restarting

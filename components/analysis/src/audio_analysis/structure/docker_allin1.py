@@ -44,7 +44,13 @@ DEFAULT_TIMEOUT_S = 1800
 # OOM-kills the container (exit 137) instead. Env-tunable via
 # ALLIN1_MEMORY_LIMIT; "" or "0" disables the flags entirely (e.g. a
 # GPU/managed host where memory is already fenced another way).
-DEFAULT_MEMORY_LIMIT = "6g"
+# G4 fix1 #3 — this is a DEVELOPER-LAPTOP default (was 6g; lowered so an
+# unset env var on a laptop with modest free RAM still can't repeat the
+# 15.6 GiB-VM crash this cap exists to prevent). Production sets its OWN
+# value explicitly on the worker service that can launch this container
+# (infra/compose.prod.yml, sized to the deployed VM's RAM) — see
+# docs/runbook.md "Sizing the structure-detection memory cap".
+DEFAULT_MEMORY_LIMIT = "4g"
 
 
 def _env_truthy(name: str) -> bool:
