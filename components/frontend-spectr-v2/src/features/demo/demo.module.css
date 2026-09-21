@@ -1,0 +1,21 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 420px;
+  margin: 60px auto;
+  padding: 24px;
+  text-align: center;
+  align-items: center;
+}
+
+.line {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}

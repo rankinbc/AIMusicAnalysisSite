@@ -9,6 +9,8 @@ import {
   type ReactNode,
 } from 'react';
 
+import { useQueryClient } from '@tanstack/react-query';
+
 import {
   fetcher,
   onAuthCleared,
@@ -18,7 +20,7 @@ import {
 } from '../api/fetcher';
 import { resetVerifyResendState } from '../components/verify-email';
 import { identifyUser } from '../lib/analytics';
-import type { AuthResponse, AuthedUser } from '../api/types';
+import type { AuthResponse, AuthedUser, DemoStartResponse } from '../api/types';
 
 interface AuthState {
   user: AuthedUser | null;
@@ -34,6 +36,10 @@ interface AuthContextValue extends AuthState {
   logout: () => Promise<void>;
   refresh: () => Promise<boolean>;
   updateUser: (user: AuthedUser) => void;
+  /** D9 — one-click guest sandbox: POST /auth/demo, apply the returned
+   *  session, return the full response so the caller can route off `demo`
+   *  and `resumed`. */
+  startDemo: () => Promise<DemoStartResponse>;
 }
 
 // Exported for tests only (PublicChrome authed-variant pin) — app code goes
@@ -56,6 +62,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading: true,
   });
   const mountedRef = useRef(true);
+
+  // Cache isolation (D9): a different user (including a guest) must never
+  // see the previous user's cached queries. A never-stale query left over
+  // from a signed-in session is exactly the bug class this project has hit
+  // twice before (bdc9596 / 915732d) — clear on every user-id change, not
+  // just logout, so a guest→real-user or guest→guest handoff is covered too.
+  const queryClient = useQueryClient();
+  const prevUserId = useRef<string | null>(null);
+  useEffect(() => {
+    const id = state.user?.id ?? null;
+    if (prevUserId.current !== null && prevUserId.current !== id) queryClient.clear();
+    prevUserId.current = id;
+  }, [state.user?.id, queryClient]);
 
   const applyAuth = useCallback((auth: AuthResponse | null) => {
     if (auth) {
@@ -153,6 +172,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [applyAuth],
   );
 
+  // D9 — one-click guest sandbox. A boot refresh may still be in flight on a
+  // cold /demo load. Bumping the epoch makes its late result a no-op (see
+  // refresh() above) instead of overwriting — or, when it resolves null,
+  // wiping — the guest session applied below.
+  const startDemo = useCallback(async () => {
+    sessionEpoch++;
+    const res = await fetcher<DemoStartResponse>({ url: '/auth/demo', method: 'POST' });
+    applyAuth({ accessToken: res.accessToken, user: res.user });
+    return res;
+  }, [applyAuth]);
+
   const logout = useCallback(async () => {
     // Invalidate any in-flight refresh FIRST so its result can't re-apply
     // a session after the user chose to leave.
@@ -169,8 +199,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ ...state, login, devLogin, register, logout, refresh, updateUser }),
-    [state, login, devLogin, register, logout, refresh, updateUser],
+    () => ({ ...state, login, devLogin, register, logout, refresh, updateUser, startDemo }),
+    [state, login, devLogin, register, logout, refresh, updateUser, startDemo],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

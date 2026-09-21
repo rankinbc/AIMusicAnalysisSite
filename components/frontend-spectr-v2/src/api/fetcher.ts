@@ -173,7 +173,7 @@ async function doFetch(config: FetcherConfig, token: string | null): Promise<Res
 // E2.2/E2.3: only credential-presenting endpoints are excluded from the 401
 // refresh-retry. Everything else — logout, /auth/me GET+PATCH,
 // resend-verification, verify-email — must survive an expired access token.
-const NO_REFRESH_RETRY = ['/auth/refresh', '/auth/login', '/auth/register', '/auth/dev-login'];
+const NO_REFRESH_RETRY = ['/auth/refresh', '/auth/login', '/auth/register', '/auth/dev-login', '/auth/demo'];
 
 export async function fetcher<T>(config: FetcherConfig): Promise<T> {
   let res = await doFetch(config, accessToken);

@@ -65,7 +65,14 @@ type EventName =
   | 'pricing_viewed' // pricing page mounted
   | 'checkout_started' // props: { cadence } — Stripe checkout redirect initiated
   | 'resume_shown' // props: { status } — a returning-visitor resume card resolved
-  | 'resume_clicked'; // props: { status } — resume card opened
+  | 'resume_clicked' // props: { status } — resume card opened
+  // ── D9 (guest demo sandbox) — the /demo funnel. `demo_cta_clicked` is
+  //    emitted by the linking surfaces (landing/pricing), not /demo itself. ──
+  | 'demo_cta_clicked'
+  | 'demo_started' // props: { resumed, surface }
+  | 'demo_start_failed' // props: { code }
+  | 'demo_signup_clicked' // props: { source }
+  | 'demo_guest_restricted'; // props: { reason }
 
 export function capture(event: EventName, props?: Record<string, unknown>): void {
   run((p) => {

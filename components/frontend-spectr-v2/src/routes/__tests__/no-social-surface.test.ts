@@ -36,6 +36,7 @@ const ALLOWED_ROUTE_FILES = [
   '_public/reset-password.tsx',
   '_public/verify-email.tsx',
   'analyze.tsx',
+  'demo.tsx',
   'index.tsx',
   'pricing.tsx',
   'trust.index.tsx',

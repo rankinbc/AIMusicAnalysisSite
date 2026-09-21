@@ -11,6 +11,9 @@ export interface AuthedUser {
    *  active or trialing subscription. Story 2.4 will widen this to a
    *  richer Entitlements.For(user) shape. */
   tier: 'free' | 'pro';
+  /** D9 (guest demo sandbox) — true for a `POST /api/auth/demo` guest account.
+   *  Lives on AuthContext state, never a `staleTime: Infinity` query. */
+  isGuest?: boolean;
 }
 
 /** Story 2.1 — POST /api/billing/checkout/subscription request body. */
@@ -145,6 +148,23 @@ export interface HonestMathDto {
 export interface AuthResponse {
   accessToken: string;
   user: AuthedUser;
+}
+
+/** D9 — POST /api/auth/demo response: the seeded demo song/version/job the
+ *  guest lands on. */
+export interface DemoTarget {
+  songId: string;
+  versionId: string;
+  jobId: string;
+}
+
+export interface DemoStartResponse {
+  accessToken: string;
+  user: AuthedUser;
+  demo: DemoTarget;
+  /** true when this visitor already had a live guest sandbox (same device
+   *  cookie) and the endpoint resumed it instead of minting a new one. */
+  resumed: boolean;
 }
 
 export interface VersionMetricsDto {
