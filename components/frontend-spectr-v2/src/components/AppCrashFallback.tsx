@@ -1,4 +1,4 @@
-/* D10 — the outermost Sentry.ErrorBoundary fallback in main.tsx. This is the
+/* D10 — the fallback of the outermost AppErrorBoundary in main.tsx. This is the
  * one shell that renders OUTSIDE every provider (query client, auth, router),
  * so no PublicChrome, no hooks that reach into app context — just the shared
  * StatusScreen chrome and a reload. */

@@ -1,5 +1,5 @@
 /* D10 — the router's defaultErrorComponent. The router's error boundary
- * catches before Sentry.ErrorBoundary ever sees anything, so this is the
+ * catches before the outer AppErrorBoundary ever sees anything, so this is the
  * one place route-render errors get reported. A stale chunk (deploy landed
  * while the tab was open) gets a guarded reload instead of a report — see
  * lib/chunk-reload.ts — unless the guard refuses, which means it is not stale. */
