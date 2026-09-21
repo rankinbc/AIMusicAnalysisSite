@@ -31,4 +31,15 @@ describe('PricingPage states', () => {
     expect(await screen.findByText(/couldn.t load/i)).toBeTruthy();
     expect(screen.queryByText('Honest billing. No asterisks.')).toBeNull();
   });
+  it('200 with no creditsEnabled field (an older BFF): unavailable, not plans, not off', async () => {
+    const bodyMissingField = JSON.stringify({
+      proMonthlyCents: 100, proAnnualCents: 1000, creditPack5Cents: 500, creditPack10Cents: 900, currency: 'USD',
+      // no creditsEnabled key at all — distinct from `creditsEnabled: null`
+    });
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(bodyMissingField, { status: 200 }))));
+    render(<PricingPage />);
+    expect(await screen.findByText(/couldn.t load/i)).toBeTruthy();
+    expect(screen.queryByText('Honest billing. No asterisks.')).toBeNull();
+    expect(screen.queryByRole('heading', { level: 1, name: 'Free while we launch.' })).toBeNull();
+  });
 });

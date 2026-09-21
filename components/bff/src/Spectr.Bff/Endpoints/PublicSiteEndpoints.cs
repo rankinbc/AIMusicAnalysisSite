@@ -99,8 +99,14 @@ public static class PublicSiteEndpoints
         var origin = $"{request.Scheme}://{request.Host}";
         var url = $"{origin}{(path == "/" ? "/" : path)}";
 
-        // Review findings: (1) shells are cacheable — copy changes only on
-        // deploy; (2) the anon-identity middleware minted a Set-Cookie for
+        // Review findings: (1) shells are cacheable — for every shell but
+        // /pricing, copy changes only on deploy; /pricing's copy also
+        // follows the live credits_enabled flag (Task P2, D6/D7), so a flag
+        // flip can be crawler-visible up to max-age stale. Controller
+        // ruling: this page is crawler-only copy (humans get the SPA, which
+        // reads the flag live), so up to an hour of staleness after a flip
+        // is acceptable — not worth a shorter TTL or a cache-bust here.
+        // (2) the anon-identity middleware minted a Set-Cookie for
         // cookieless crawler hits, which must never ride a cacheable response
         // (shared-cache cookie bleed the moment an edge cache appears).
         context.Response.Headers.CacheControl = "public, max-age=3600";

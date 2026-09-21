@@ -85,7 +85,7 @@ describe('LandingPage (story 6.1 AC1)', () => {
   });
 });
 
-describe('PricingPage (story 6.1 AC2 — UX-DR25 polish)', () => {
+describe('PricingPlansView (story 6.1 AC2 — UX-DR25 polish)', () => {
   // Task P2 (D7) — PricingPage itself resolves to the loading state under
   // static render (no fetch ever settles); these assertions exercise the
   // "credits on" view directly, the same way PricingPage renders it once
