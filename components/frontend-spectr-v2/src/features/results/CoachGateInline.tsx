@@ -1,5 +1,6 @@
 import { toast } from 'sonner';
 
+import { useOptionalAuth } from '../../auth/AuthContext';
 import s from './CoachChat.module.css';
 
 // Story 1.9 — input-replacement gate component. Renders in the same DOM
@@ -41,6 +42,11 @@ export function CoachGateInline({
   onUpgrade = DEFAULT_UPGRADE,
   onBuyCredits = DEFAULT_BUY_CREDITS,
 }: CoachGateInlineProps) {
+  // D10 — a guest account has no billing to upsell; the CTA is registration,
+  // never pricing/credits. useOptionalAuth (not useAuth) so this component
+  // keeps rendering in the provider-less static-render tests above.
+  const isGuest = useOptionalAuth()?.user?.isGuest === true;
+
   return (
     <section
       className={`card ${s.gateCard}`}
@@ -50,15 +56,28 @@ export function CoachGateInline({
       <div className={s.gateHeader}>
         <span className="label">Follow-ups used for this analysis</span>
       </div>
-      <p className={s.gateBody}>Pro = pooled monthly coach access</p>
-      <div className={s.gateActions}>
-        <button type="button" className="btn primary" onClick={onUpgrade}>
-          Get Pro
-        </button>
-        <button type="button" className="btn ghost" onClick={onBuyCredits}>
-          or buy credits
-        </button>
-      </div>
+      {isGuest ? (
+        <>
+          <p className={s.gateBody}>Create a free account for more coach follow-ups</p>
+          <div className={s.gateActions}>
+            <a href="/register?from=guest" className="btn primary">
+              Create a free account
+            </a>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className={s.gateBody}>Pro = pooled monthly coach access</p>
+          <div className={s.gateActions}>
+            <button type="button" className="btn primary" onClick={onUpgrade}>
+              Get Pro
+            </button>
+            <button type="button" className="btn ghost" onClick={onBuyCredits}>
+              or buy credits
+            </button>
+          </div>
+        </>
+      )}
     </section>
   );
 }

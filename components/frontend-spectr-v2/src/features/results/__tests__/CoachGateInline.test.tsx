@@ -7,6 +7,8 @@ vi.mock('sonner', () => ({
   toast: { info: vi.fn() },
 }));
 
+import { AuthContext } from '../../../auth/AuthContext';
+import type { AuthedUser } from '../../../api/types';
 import { CoachGateInline } from '../CoachGateInline';
 import { createElement } from 'react';
 
@@ -85,5 +87,48 @@ describe('CoachGateInline', () => {
     // confirm the component renders with the documented defaults that
     // the future Stripe integration will replace.
     expect(typeof sonner.toast.info).toBe('function');
+  });
+});
+
+// D10 — a guest's CTA is registration, never pricing/credits (a guest
+// account has no billing to upsell). Same 6.1 idiom as landing.test.tsx:
+// AuthContext.Provider + renderToStaticMarkup, no RouterProvider needed
+// because the guest CTA is a plain <a>.
+describe('CoachGateInline — guest', () => {
+  const guestUser: AuthedUser = { id: 'g1', email: 'g@guest', displayName: null, tier: 'free', isGuest: true };
+  const guestValue = { user: guestUser, accessToken: 't', isLoading: false } as never;
+
+  it('renders a registration link instead of Get Pro / buy credits', () => {
+    const html = renderToStaticMarkup(
+      <AuthContext.Provider value={guestValue}>
+        <CoachGateInline />
+      </AuthContext.Provider>,
+    );
+    expect(html).toContain('href="/register?from=guest"');
+    expect(html).toContain('Create a free account');
+    expect(html).not.toContain('>Get Pro<');
+    expect(html).not.toContain('or buy credits');
+  });
+
+  it('keeps the same headline + landmark as the non-guest branch', () => {
+    const html = renderToStaticMarkup(
+      <AuthContext.Provider value={guestValue}>
+        <CoachGateInline />
+      </AuthContext.Provider>,
+    );
+    expect(html).toContain('Follow-ups used for this analysis');
+    expect(html).toContain('role="region"');
+  });
+
+  it('a real (non-guest) user is unaffected — still Get Pro / buy credits', () => {
+    const realUser: AuthedUser = { id: 'u1', email: 'u@x', displayName: null, tier: 'free' };
+    const value = { user: realUser, accessToken: 't', isLoading: false } as never;
+    const html = renderToStaticMarkup(
+      <AuthContext.Provider value={value}>
+        <CoachGateInline />
+      </AuthContext.Provider>,
+    );
+    expect(html).toContain('>Get Pro<');
+    expect(html).not.toContain('href="/register?from=guest"');
   });
 });

@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 
 import { ApiError } from '../../api/fetcher';
 import { extractApiError } from '../../api/error-utils';
+import { useAuth } from '../../auth/AuthContext';
 import {
   useApplyVerdict,
   useDismissVerdict,
@@ -31,6 +32,7 @@ import {
 import { AlsUploadDialog } from '../../components/AlsUploadDialog';
 import { ReferenceUploadDialog } from '../../components/ReferenceUploadDialog';
 import { StemsUploadDialog } from '../../components/StemsUploadDialog';
+import { shouldShowAnalysisCompleteModal } from './analysis-complete-gate';
 import { AnalysisCompleteModal } from './AnalysisCompleteModal';
 import { DegradationBanner } from './DegradationBanner';
 import { LlmDegradationNotice } from './LlmDegradationNotice';
@@ -71,6 +73,7 @@ interface ReportViewProps {
 }
 
 export function ReportView({ results, songId, tab: rawTab, onTabChange }: ReportViewProps) {
+  const { user } = useAuth(); // D10 — isGuest for the analysis-complete-modal gate
   // Story 12.5 review: 'debug' stays a valid deep-link KEY (dev builds), but a
   // prod user hitting ?tab=debug must not land on a blank pane with no tab
   // highlighted — coerce to the default tab outside DEV.
@@ -320,14 +323,23 @@ export function ReportView({ results, songId, tab: rawTab, onTabChange }: Report
     writeListenFixes(versionId, buildListenFixes(moves, (id) => committedIds.has(id)));
   }, [committedIds, moves, versionId, committedSeeded]);
 
-  // "Analysis complete" teaser modal — shown once per job.
+  // "Analysis complete" teaser modal — shown once per job. D10 (addendum f):
+  // never for a guest on the seeded demo song (pure decision in
+  // analysis-complete-gate.ts — AnalysisCompleteModal.tsx itself is
+  // off-limits, another session's uncommitted work).
   const seenKey = `analysisModalSeen:${jobId}`;
   const [showModal, setShowModal] = useState<boolean>(() => {
+    let wantsToShow: boolean;
     try {
-      return typeof sessionStorage !== 'undefined' && !sessionStorage.getItem(seenKey);
+      wantsToShow = typeof sessionStorage !== 'undefined' && !sessionStorage.getItem(seenKey);
     } catch {
-      return true;
+      wantsToShow = true;
     }
+    return shouldShowAnalysisCompleteModal({
+      wantsToShow,
+      isGuest: user?.isGuest === true,
+      songName: trackName,
+    });
   });
   const dismissModal = useCallback(() => {
     try {
