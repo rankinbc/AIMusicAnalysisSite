@@ -166,6 +166,19 @@ public sealed class GuestConvertTests(WebApplicationFactory<Program> factory)
         Assert.True((await db.Users.AsNoTracking().SingleAsync(u => u.Id == demo.User.Id)).IsGuest);
     }
 
+    [SkippableFact]
+    public async Task The_Purge_Never_Tears_Down_A_Converted_Account()
+    {
+        await TestDb.RequireAsync(factory);
+        using var f = Build(); var (client, demo) = await StartGuestAsync(f);
+        (await client.PostAsJsonAsync("/api/auth/guest/convert", Body())).EnsureSuccessStatusCode();
+        var sweeper = f.Services.GetServices<IHostedService>().OfType<RetentionSweepScheduler>().Single();
+        // Simulates the race: the id was selected as an expired guest, then the owner converted.
+        Assert.False(await sweeper.PurgeOneGuestAsync(demo.User.Id, DateTimeOffset.UtcNow.AddDays(30), default));
+        using var scope = f.Services.CreateScope();
+        Assert.True(await scope.ServiceProvider.GetRequiredService<AppDbContext>().Users.AnyAsync(u => u.Id == demo.User.Id));
+    }
+
     // Auth non-negotiable: the conversion must be provably ATOMIC. Two
     // concurrent conversions of the SAME guest row (different target
     // emails, so only the row-level guard — not the email-uniqueness index

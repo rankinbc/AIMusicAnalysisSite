@@ -174,7 +174,7 @@ internal sealed class RetentionSweepScheduler(
             foreach (var id in batchIds)
             {
                 attempted.Add(id);
-                if (await PurgeOneGuestAsync(id, ct))
+                if (await PurgeOneGuestAsync(id, now, ct))
                 {
                     purged++;
                     successesThisBatch++;
@@ -203,7 +203,16 @@ internal sealed class RetentionSweepScheduler(
     // Returns true once the teardown has COMMITTED (M5 — a guest counts as
     // purged even if the follow-up enqueue below fails; the row is already
     // gone either way).
-    private async Task<bool> PurgeOneGuestAsync(Guid userId, CancellationToken ct)
+    //
+    // Task G2 — the reload RE-CHECKS the purge predicate (is_guest AND
+    // expired), not just the id. Without this, a guest who converts to a
+    // real account in the window between the batch select above and this
+    // guest's own teardown would be torn down as if it were still a guest:
+    // the earlier `SingleOrDefaultAsync(u => u.Id == userId)` loaded
+    // whatever row currently has that id, guest or not. `now` is the SAME
+    // timestamp PurgeExpiredGuestsAsync selected the batch with, so a guest
+    // that expires mid-run isn't spuriously skipped.
+    internal async Task<bool> PurgeOneGuestAsync(Guid userId, DateTimeOffset now, CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -212,8 +221,11 @@ internal sealed class RetentionSweepScheduler(
 
         try
         {
-            var guest = await db.Users.SingleOrDefaultAsync(u => u.Id == userId, ct);
-            if (guest is null) return false; // already gone (e.g. raced with another purge path)
+            var guest = await db.Users.SingleOrDefaultAsync(u =>
+                u.Id == userId && u.IsGuest && (u.GuestExpiresAt == null || u.GuestExpiresAt < now), ct);
+            // Already gone, or no longer a live-expired guest (e.g. the
+            // owner converted between the batch select and this teardown).
+            if (guest is null) return false;
 
             await teardown.TearDownAsync(guest, "guest_purge", "guest sandbox expired", ct);
         }
