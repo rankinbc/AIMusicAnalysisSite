@@ -245,6 +245,38 @@ reboot** — point every consumer at `127.0.0.1` explicitly:
 A reboot also clears the stray relay (like #2), but isn't required once
 everything points at IPv4.
 
+### #2d Docker engine gone mid-session: `docker-desktop` WSL distro `Stopped`, Docker Desktop still open — restart Docker, no reboot
+Seen twice on 2026-09-20 (about 35 min apart, each time in the middle of a
+test run). Symptoms: everything that needs Postgres/Redis hangs or times out
+(`/healthz` never answers, `dotnet ef database update` → `Npgsql … timed out`,
+BFF tests mass-skip with "Postgres unreachable"); `docker.exe ps` hangs for
+minutes then fails with `… dockerDesktopLinuxEngine … EOF`; `wsl -l -v` shows
+**both** `docker-desktop` and `Ubuntu` as `Stopped` while the Docker Desktop
+processes are still running. Ports 5432/6379 are still LISTENING — but the
+owner is a LIVE `com.docker.backend` PID (that is how you tell it from #2,
+where the owner PID no longer exists).
+
+What happened (from `%LOCALAPPDATA%\Docker\log\host\com.docker.backend.exe.log`):
+the whole WSL utility VM was torn down underneath Docker —
+`Wsl/Service/0x80072746` ("connection forcibly closed"), then
+`engine stopped unexpectedly` / `wsl-bootstrap: exit status 1`. Windows' Hyper-V
+logs show an ORDERLY pause + NIC delete at the same second and no crash event,
+no WSL package update and no WSLService restart. Nothing in this repo runs
+`wsl --shutdown`. Cause not identified — suspect another session on the machine
+issuing WSL commands; free RAM was fine (13 GB).
+
+**Fix (about 2 minutes, no reboot):**
+```powershell
+& 'C:\Program Files\Docker\Dockeresourcesin\docker.exe' desktop restart
+# wait until `docker.exe ps` answers, then:
+./scripts/start-spectr.ps1        # with the 127.0.0.1 overrides from #2b / #2c
+```
+The launcher re-creates the containers (Postgres data survives — it is a
+volume), applies pending migrations and marks any job stranded in `processing`
+as a re-runnable failure. Anything that was mid-test must be re-run: results
+from the outage window are skips/timeouts, not passes. If `docker desktop
+restart` itself hangs, fall back to #2 (reboot).
+
 ### #2c Running the stack from a git worktree
 A fresh `git worktree` checkout has none of the git-ignored files the main
 checkout carries: `.env`, `components/worker/.env`, `docker/.env` (compose
