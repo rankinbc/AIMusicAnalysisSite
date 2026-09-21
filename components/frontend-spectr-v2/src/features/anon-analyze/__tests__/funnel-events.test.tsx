@@ -10,12 +10,7 @@ const capture = vi.fn();
 vi.mock('../../../lib/analytics', () => ({ capture: (...a: unknown[]) => capture(...a) }));
 
 import { ResumeCard } from '../ResumeCard';
-import type { ResumeInfo } from '../useAnonAnalysis';
 import { resetPublicPlansForTests } from '../../../lib/public-plans';
-
-function resume(over: Partial<ResumeInfo> = {}): ResumeInfo {
-  return { jobId: 'j1', status: 'complete', dispatchedAt: new Date().toISOString(), grade: 'C', ...over };
-}
 
 describe('funnel events (story 6.5)', () => {
   afterEach(() => {
@@ -42,9 +37,7 @@ describe('funnel events (story 6.5)', () => {
 
   it('resume card "Open" click invokes onOpen (→ resume_clicked in the slot)', () => {
     const onOpen = vi.fn();
-    const { getByTestId } = render(
-      <ResumeCard resume={resume()} onOpen={onOpen} onDismiss={() => {}} />,
-    );
+    const { getByTestId } = render(<ResumeCard onOpen={onOpen} />);
     getByTestId('resume-open').click();
     expect(onOpen).toHaveBeenCalledOnce();
   });

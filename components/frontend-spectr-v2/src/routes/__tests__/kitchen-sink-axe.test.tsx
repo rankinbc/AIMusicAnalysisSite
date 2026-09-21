@@ -51,7 +51,8 @@ describe('axe WCAG 2.1 AA smoke (story 5.10)', () => {
   });
 
   it('landing page is clean', async () => {
-    // LandingResumeSlot probes the anon resume endpoint on mount — stub it out.
+    // PublicChrome's PricingLink probes /api/billing/plans on mount (G5:
+    // LandingResumeSlot itself no longer makes a network call) — stub it out.
     vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 401 })));
     const { container } = render(<LandingPage />);
     await expectNoViolations(container);
