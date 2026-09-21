@@ -31,7 +31,9 @@ public sealed class RetentionOptions
 internal sealed class RetentionSweepScheduler(
     IServiceScopeFactory scopeFactory,
     IOptions<RetentionOptions> options,
-    ILogger<RetentionSweepScheduler> logger)
+    ILogger<RetentionSweepScheduler> logger,
+    int guestPurgeBatchSize = 200,
+    int guestPurgeMaxBatches = 50)
     : BackgroundService
 {
     private static readonly string[] LapsedStatuses = ["canceled", "unpaid", "incomplete_expired"];
@@ -40,6 +42,8 @@ internal sealed class RetentionSweepScheduler(
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly IOptions<RetentionOptions> _options = options;
     private readonly ILogger<RetentionSweepScheduler> _logger = logger;
+    private readonly int _guestPurgeBatchSize = guestPurgeBatchSize;
+    private readonly int _guestPurgeMaxBatches = guestPurgeMaxBatches;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -78,6 +82,10 @@ internal sealed class RetentionSweepScheduler(
     internal async Task RunOnceAsync(CancellationToken ct)
     {
         var opts = _options.Value;
+        // M2: the guest pass shares this ONE kill switch with the warning
+        // emails and the authoritative-sweep enqueue below — there is no
+        // separate "guest purge enabled" flag. With Retention:Enabled=false,
+        // expired guest sandboxes are never purged by this process either.
         if (!opts.Enabled)
         {
             _logger.LogInformation("Retention sweep disabled; skipping.");
@@ -103,79 +111,137 @@ internal sealed class RetentionSweepScheduler(
         // /api/me/delete is guard-denied for guests, Auth/GuestGuard.cs);
         // this nightly pass is the ONLY path off an expired guest row. A
         // warning-pass or sweep-enqueue failure above must never block it.
-        await PurgeExpiredGuestsAsync(scope.ServiceProvider, ct);
+        await PurgeExpiredGuestsAsync(DateTimeOffset.UtcNow, onlyUserIds: null, ct);
     }
 
     // internal test seam (InternalsVisibleTo). Batches so a backlog of
-    // thousands of guests never holds one giant transaction or a single
-    // DbContext with an unbounded change tracker — each batch gets its own
-    // scope (own DbContext), and each guest gets its own try/catch so one
-    // bad row can't stop the rest (left for the next nightly run).
-    internal async Task<int> PurgeExpiredGuestsAsync(IServiceProvider sp, CancellationToken ct)
+    // thousands of guests never holds one giant transaction. C1 fix: ids
+    // already ATTEMPTED in this run (success or failure) are excluded from
+    // the next batch's select — a guest whose teardown keeps throwing would
+    // otherwise re-match the same predicate forever (stable OrderBy, no
+    // cursor) and the run would never return. A hard cap on batches (default
+    // 50) is a second backstop, and the loop also stops the moment a whole
+    // batch produces zero successes (no forward progress left to make).
+    // C2 fix: each GUEST gets its own DI scope (own AppDbContext), resolved
+    // fresh right before that guest's teardown — never shared across guests
+    // in a batch. A failed teardown's poisoned ChangeTracker (a committed
+    // `Added` audit row the DbContext still thinks is pending, per a
+    // mid-transaction throw) dies with that scope instead of leaking into
+    // the next guest's SaveChanges.
+    //
+    // `onlyUserIds` is a TEST-ONLY narrowing filter (production always
+    // passes null): it restricts the purge to ids the caller already knows
+    // about instead of sweeping every expired guest in the shared dev DB.
+    internal async Task<int> PurgeExpiredGuestsAsync(
+        DateTimeOffset now, IReadOnlyCollection<Guid>? onlyUserIds, CancellationToken ct)
     {
-        const int BatchSize = 200;
-        var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
-        var now = DateTimeOffset.UtcNow;
         var purged = 0;
+        var attempted = new HashSet<Guid>();
 
-        while (!ct.IsCancellationRequested)
+        for (var batchNum = 1; batchNum <= _guestPurgeMaxBatches; batchNum++)
         {
-            using var batchScope = scopeFactory.CreateScope();
-            var db = batchScope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var teardown = batchScope.ServiceProvider.GetRequiredService<AccountTeardown>();
-            var queue = batchScope.ServiceProvider.GetRequiredService<IJobQueue>();
+            if (ct.IsCancellationRequested) break;
 
-            // Predicate lives in exactly ONE place, and it's a query on
-            // IsGuest — never the email suffix. D5 ruling: a NULL
-            // guest_expires_at on a guest row counts as expired (a stray row
-            // from a failed seed must not live forever). A real user can
-            // never match this (IsGuest is always false for one), even if
-            // some inconsistent row happened to carry a past
-            // guest_expires_at or a guest-looking email.
-            var batch = await db.Users
-                .Where(u => u.IsGuest && (u.GuestExpiresAt == null || u.GuestExpiresAt < now))
-                .OrderBy(u => u.CreatedAt)
-                .Take(BatchSize)
-                .ToListAsync(ct);
-            if (batch.Count == 0) break;
-
-            foreach (var guest in batch)
+            List<Guid> batchIds;
+            using (var selectScope = _scopeFactory.CreateScope())
             {
-                try
+                var db = selectScope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+                // Predicate lives in exactly ONE place, and it's a query on
+                // IsGuest — never the email suffix. D5 ruling: a NULL
+                // guest_expires_at on a guest row counts as expired (a stray
+                // row from a failed seed must not live forever). A real
+                // user can never match this (IsGuest is always false for
+                // one), even if some inconsistent row happened to carry a
+                // past guest_expires_at or a guest-looking email.
+                var query = db.Users
+                    .Where(u => u.IsGuest && (u.GuestExpiresAt == null || u.GuestExpiresAt < now));
+                if (onlyUserIds is not null)
+                    query = query.Where(u => onlyUserIds.Contains(u.Id));
+                if (attempted.Count > 0)
+                    query = query.Where(u => !attempted.Contains(u.Id));
+
+                batchIds = await query
+                    .OrderBy(u => u.CreatedAt)
+                    .Take(_guestPurgeBatchSize)
+                    .Select(u => u.Id)
+                    .ToListAsync(ct);
+            }
+
+            if (batchIds.Count == 0) break;
+
+            var successesThisBatch = 0;
+            foreach (var id in batchIds)
+            {
+                attempted.Add(id);
+                if (await PurgeOneGuestAsync(id, ct))
                 {
-                    var deviceId = guest.GuestDeviceId;
-                    await teardown.TearDownAsync(guest, "guest_purge", "guest sandbox expired", ct);
-                    await queue.EnqueueAsync(
-                        DramatiqTasks.DeleteAccountData, [guest.Id.ToString()], DramatiqQueues.Maintenance, ct);
-
-                    // D5 review finding: a guest's OWN device (users.guest_
-                    // device_id) is a pointer TearDownAsync never touches —
-                    // it only unclaims devices.claimed_by_user_id (a
-                    // different relationship real users also use). Delete
-                    // the device row only when nothing still needs it: a
-                    // later-purged guest sharing the same device (resume
-                    // flow), or ANY user (real or guest) that has since
-                    // claimed it, must keep it alive.
-                    if (deviceId is not null)
-                    {
-                        var stillReferenced = await db.Users.AnyAsync(u => u.GuestDeviceId == deviceId, ct)
-                            || await db.Devices.AnyAsync(d => d.Id == deviceId && d.ClaimedByUserId != null, ct);
-                        if (!stillReferenced)
-                            await db.Devices.Where(d => d.Id == deviceId).ExecuteDeleteAsync(ct);
-                    }
-
                     purged++;
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    _logger.LogError(ex, "Guest purge failed for {UserId} — left for the next nightly run.", guest.Id);
+                    successesThisBatch++;
                 }
             }
+
+            // No forward progress in a full batch — every remaining
+            // candidate just failed. Stop instead of re-selecting the same
+            // (now attempted-excluded, so actually empty) set forever.
+            if (successesThisBatch == 0) break;
+
+            if (batchNum == _guestPurgeMaxBatches)
+                _logger.LogWarning(
+                    "Guest purge hit the {MaxBatches}-batch cap ({Attempted} guest(s) attempted this run); "
+                    + "remaining expired guests are deferred to the next nightly run.",
+                    _guestPurgeMaxBatches, attempted.Count);
         }
 
         if (purged > 0)
             _logger.LogInformation("Guest purge: {Count} expired guest sandbox(es) torn down.", purged);
         return purged;
+    }
+
+    // C2: a fresh DI scope (own AppDbContext, own IAccountTeardown, own
+    // IJobQueue) per guest — see PurgeExpiredGuestsAsync's fix comment.
+    // Returns true once the teardown has COMMITTED (M5 — a guest counts as
+    // purged even if the follow-up enqueue below fails; the row is already
+    // gone either way).
+    private async Task<bool> PurgeOneGuestAsync(Guid userId, CancellationToken ct)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var teardown = scope.ServiceProvider.GetRequiredService<IAccountTeardown>();
+        var queue = scope.ServiceProvider.GetRequiredService<IJobQueue>();
+
+        try
+        {
+            var guest = await db.Users.SingleOrDefaultAsync(u => u.Id == userId, ct);
+            if (guest is null) return false; // already gone (e.g. raced with another purge path)
+
+            await teardown.TearDownAsync(guest, "guest_purge", "guest sandbox expired", ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Guest purge failed for {UserId} — left for the next nightly run.", userId);
+            return false;
+        }
+
+        try
+        {
+            await queue.EnqueueAsync(
+                DramatiqTasks.DeleteAccountData, [userId.ToString()], DramatiqQueues.Maintenance, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // M1: unlike the catch above, the teardown already COMMITTED —
+            // there is no user row left for "the next nightly run" to find
+            // and retry. Only the enqueue failed, so the account is gone
+            // but its content (analyses, songs, etc.) is stranded until
+            // something re-enqueues delete_account_data — same severity as
+            // the account-deletion endpoint's equivalent failure.
+            _logger.LogCritical(ex,
+                "Guest {UserId} torn down but delete_account_data enqueue failed; content orphaned; "
+                + "sweep_retention re-enqueues.", userId);
+        }
+
+        return true;
     }
 
     private async Task SendDueWarningsAsync(

@@ -9,6 +9,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Spectr.Bff.DTOs;
 using Spectr.Bff.Services;
 using Spectr.Data;
@@ -45,7 +47,20 @@ public sealed class GuestPurgeTests(WebApplicationFactory<Program> factory)
         { SentWithArgs.Enqueue((taskName, args, queueName)); return Task.CompletedTask; }
     }
 
-    private WebApplicationFactory<Program> Build(IJobQueue? queue = null) =>
+    // I6a — a fake that always THROWS for one specific guest id, never
+    // touching EF. Everyone else falls through to the real AccountTeardown
+    // (resolved from the same scope), so this is a substitution seam, not a
+    // mock of EF.
+    private sealed class ThrowingTeardown(AccountTeardown inner, Func<Guid> poisonUserId) : IAccountTeardown
+    {
+        public Task TearDownAsync(UserEntity user, string auditAction, string auditReason, CancellationToken ct) =>
+            user.Id == poisonUserId()
+                ? throw new InvalidOperationException("simulated teardown failure (GuestPurgeTests I6a)")
+                : inner.TearDownAsync(user, auditAction, auditReason, ct);
+    }
+
+    private WebApplicationFactory<Program> Build(
+        IJobQueue? queue = null, Func<IServiceProvider, IAccountTeardown>? teardownFactory = null) =>
         _factory.WithWebHostBuilder(b =>
         {
             b.UseSetting("Demo:Enabled", "true");
@@ -56,6 +71,11 @@ public sealed class GuestPurgeTests(WebApplicationFactory<Program> factory)
                 {
                     s.RemoveAll(typeof(IJobQueue));
                     s.AddSingleton(queue);
+                }
+                if (teardownFactory is not null)
+                {
+                    s.RemoveAll(typeof(IAccountTeardown));
+                    s.AddScoped(teardownFactory);
                 }
             });
         });
@@ -70,8 +90,133 @@ public sealed class GuestPurgeTests(WebApplicationFactory<Program> factory)
         return (client, body);
     }
 
+    // I3: the purge no longer deletes a purged guest's device row, and
+    // DemoAuthEndpointsTests.CleanupAsync reads GuestDeviceId off the user
+    // row to find it — which the purge already deleted. Tests that purge a
+    // guest must sweep its device row themselves; harmless no-op for a
+    // device already gone.
+    private static async Task DeleteDeviceRowsAsync(WebApplicationFactory<Program> f, params string?[] deviceIds)
+    {
+        var ids = deviceIds.Where(id => id is not null).Cast<string>().Distinct().ToList();
+        if (ids.Count == 0) return;
+        using var scope = f.Services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<AppDbContext>()
+            .Devices.Where(d => ids.Contains(d.Id)).ExecuteDeleteAsync();
+    }
+
     private static RetentionSweepScheduler Sweeper(WebApplicationFactory<Program> f) =>
         f.Services.GetServices<IHostedService>().OfType<RetentionSweepScheduler>().Single();
+
+    // I6b — a scheduler instance with an injected batch size, built fresh
+    // (not the app's own hosted instance) so a boundary test can force
+    // multiple batches without waiting for 200 guests.
+    private static RetentionSweepScheduler Sweeper(WebApplicationFactory<Program> f, int batchSize) =>
+        new(
+            f.Services.GetRequiredService<IServiceScopeFactory>(),
+            f.Services.GetRequiredService<IOptions<RetentionOptions>>(),
+            f.Services.GetRequiredService<ILogger<RetentionSweepScheduler>>(),
+            batchSize);
+
+    // I6a (C1) — a guest whose teardown throws must not loop forever and
+    // must not block the next guest. Hard 20s external timeout so a
+    // regression FAILS this test instead of hanging the suite.
+    [SkippableFact]
+    public async Task A_Guest_Whose_Teardown_Throws_Does_Not_Block_The_Next_Guest_And_The_Pass_Returns()
+    {
+        await TestDb.RequireAsync(_factory);
+        var q = new RecordingQueue();
+        Guid failId = default, okId = default;
+        string? okDeviceId = null;
+        var f = Build(
+            queue: q,
+            teardownFactory: sp => new ThrowingTeardown(sp.GetRequiredService<AccountTeardown>(), () => failId));
+        try
+        {
+            var (_, fail) = await StartGuestAsync(f);
+            var (_, ok) = await StartGuestAsync(f);
+            failId = fail.User.Id;
+            okId = ok.User.Id;
+
+            using (var scope = f.Services.CreateScope())
+            {
+                var seedDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                okDeviceId = await seedDb.Users.Where(u => u.Id == okId).Select(u => u.GuestDeviceId).SingleAsync();
+                await seedDb.Users
+                    .Where(u => u.Id == failId || u.Id == okId)
+                    .ExecuteUpdateAsync(s => s.SetProperty(u => u.GuestExpiresAt, DateTimeOffset.UtcNow.AddHours(-1)));
+            }
+
+            var sweep = Sweeper(f).PurgeExpiredGuestsAsync(
+                DateTimeOffset.UtcNow, new[] { failId, okId }, CancellationToken.None);
+            var winner = await Task.WhenAny(sweep, Task.Delay(TimeSpan.FromSeconds(20)));
+            Assert.True(ReferenceEquals(winner, sweep),
+                "PurgeExpiredGuestsAsync did not return within 20s (infinite-loop regression).");
+            Assert.Equal(1, await sweep);
+
+            using var scope2 = f.Services.CreateScope();
+            var db = scope2.ServiceProvider.GetRequiredService<AppDbContext>();
+            Assert.True(await db.Users.AnyAsync(u => u.Id == failId), "the failed guest's row must survive.");
+            Assert.False(await db.Users.AnyAsync(u => u.Id == okId), "the next guest must still be purged.");
+
+            Assert.Equal(1, await db.AuditLogs.CountAsync(a => a.Action == "guest_purge" && a.Target == okId.ToString()));
+            Assert.False(await db.AuditLogs.AnyAsync(a => a.Action == "guest_purge" && a.Target == failId.ToString()));
+            Assert.Contains(q.SentWithArgs, m =>
+                m.Task == DramatiqTasks.DeleteAccountData && (string)m.Args[0] == okId.ToString());
+            Assert.DoesNotContain(q.SentWithArgs, m =>
+                m.Task == DramatiqTasks.DeleteAccountData && (string)m.Args[0] == failId.ToString());
+        }
+        finally
+        {
+            await DemoAuthEndpointsTests.CleanupAsync(f, failId, okId);
+            await DeleteDeviceRowsAsync(f, okDeviceId);
+            f.Dispose();
+        }
+    }
+
+    // I6b — more guests than fit in one batch: batch size injected (2) so
+    // 5 guests force 3 batches without waiting on a real 200-guest backlog.
+    [SkippableFact]
+    public async Task More_Guests_Than_One_Batch_Are_All_Purged_With_Bounded_Iterations()
+    {
+        await TestDb.RequireAsync(_factory);
+        var q = new RecordingQueue();
+        var f = Build(queue: q);
+        var ids = new List<Guid>();
+        var deviceIds = new List<string?>();
+        try
+        {
+            for (var i = 0; i < 5; i++)
+            {
+                var (_, g) = await StartGuestAsync(f);
+                ids.Add(g.User.Id);
+            }
+
+            using (var scope = f.Services.CreateScope())
+            {
+                var seedDb = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                deviceIds = await seedDb.Users.Where(u => ids.Contains(u.Id)).Select(u => u.GuestDeviceId).ToListAsync();
+                await seedDb.Users
+                    .Where(u => ids.Contains(u.Id))
+                    .ExecuteUpdateAsync(s => s.SetProperty(u => u.GuestExpiresAt, DateTimeOffset.UtcNow.AddHours(-1)));
+            }
+
+            var sweep = Sweeper(f, batchSize: 2).PurgeExpiredGuestsAsync(DateTimeOffset.UtcNow, ids, CancellationToken.None);
+            var winner = await Task.WhenAny(sweep, Task.Delay(TimeSpan.FromSeconds(20)));
+            Assert.True(ReferenceEquals(winner, sweep), "PurgeExpiredGuestsAsync did not return within 20s.");
+            Assert.Equal(5, await sweep);
+
+            using var scope2 = f.Services.CreateScope();
+            var db = scope2.ServiceProvider.GetRequiredService<AppDbContext>();
+            foreach (var id in ids)
+                Assert.False(await db.Users.AnyAsync(u => u.Id == id));
+        }
+        finally
+        {
+            await DemoAuthEndpointsTests.CleanupAsync(f, ids.ToArray());
+            await DeleteDeviceRowsAsync(f, deviceIds.ToArray());
+            f.Dispose();
+        }
+    }
 
     [SkippableFact]
     public async Task The_Sweep_Purges_Expired_Guests_And_Keeps_Live_Ones()
@@ -271,57 +416,54 @@ public sealed class GuestPurgeTests(WebApplicationFactory<Program> factory)
         finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); f.Dispose(); }
     }
 
-    // D5 review finding: the guest's own device row (users.guest_device_id)
-    // is deleted once nothing references it — never a device a real user
-    // has since claimed.
+    // I3 (controller ruling, fix round 1): the guest's own device row
+    // (users.guest_device_id) is NEVER deleted by the purge. The same
+    // spectr_device row also serves the anonymous /analyze funnel
+    // (analysis_jobs.device_id has no FK to it) — deleting it would strand
+    // a visitor's in-flight anon analysis and mint them a new device id.
+    // Unclaimed devices are already swept elsewhere (72h retention purge);
+    // the row itself is tiny.
     [SkippableFact]
-    public async Task An_Unreferenced_Guest_Device_Row_Is_Deleted_But_A_Claimed_One_Survives()
+    public async Task The_Guests_Device_Row_Survives_The_Purge()
     {
         await TestDb.RequireAsync(_factory);
         var q = new RecordingQueue();
         var f = Build(queue: q);
-        Guid deadId = default, claimedGuestId = default;
+        Guid userId = default;
+        string? deviceId = null;
         try
         {
-            var (_, dead) = await StartGuestAsync(f);
-            deadId = dead.User.Id;
-            var (_, claimedGuest) = await StartGuestAsync(f);
-            claimedGuestId = claimedGuest.User.Id;
+            var (_, g) = await StartGuestAsync(f);
+            userId = g.User.Id;
 
-            string? deadDeviceId, claimedDeviceId;
             using (var scope = f.Services.CreateScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                deadDeviceId = await db.Users.Where(u => u.Id == deadId).Select(u => u.GuestDeviceId).SingleAsync();
-                claimedDeviceId = await db.Users.Where(u => u.Id == claimedGuestId).Select(u => u.GuestDeviceId).SingleAsync();
-                // Simulate: some real user has since claimed the second
-                // guest's device (e.g. a later unrelated anon-device claim).
-                await db.Devices.Where(d => d.Id == claimedDeviceId)
-                    .ExecuteUpdateAsync(s => s
-                        .SetProperty(d => d.ClaimedByUserId, (Guid?)Guid.NewGuid())
-                        .SetProperty(d => d.ClaimedAt, DateTimeOffset.UtcNow));
-                await db.Users.Where(u => u.Id == deadId || u.Id == claimedGuestId)
+                deviceId = await db.Users.Where(u => u.Id == userId).Select(u => u.GuestDeviceId).SingleAsync();
+                await db.Users.Where(u => u.Id == userId)
                     .ExecuteUpdateAsync(s => s.SetProperty(u => u.GuestExpiresAt, DateTimeOffset.UtcNow.AddHours(-1)));
             }
 
-            await Sweeper(f).RunOnceAsync(CancellationToken.None);
+            await Sweeper(f).PurgeExpiredGuestsAsync(DateTimeOffset.UtcNow, new[] { userId }, CancellationToken.None);
 
             using var scope2 = f.Services.CreateScope();
             var db2 = scope2.ServiceProvider.GetRequiredService<AppDbContext>();
-            Assert.False(await db2.Devices.AnyAsync(d => d.Id == deadDeviceId));
-            Assert.True(await db2.Devices.AnyAsync(d => d.Id == claimedDeviceId));
+            Assert.False(await db2.Users.AnyAsync(u => u.Id == userId));
+            Assert.NotNull(deviceId);
+            Assert.True(await db2.Devices.AnyAsync(d => d.Id == deviceId));
         }
         finally
         {
-            await DemoAuthEndpointsTests.CleanupAsync(f, deadId, claimedGuestId);
-            using (var scope = f.Services.CreateScope())
+            // CleanupAsync reads GuestDeviceId off the user row to know what
+            // device to remove — but the purge already deleted that row, so
+            // it can't reach this one. Delete it directly; it's a row only
+            // this test created.
+            await DemoAuthEndpointsTests.CleanupAsync(f, userId);
+            if (deviceId is not null)
             {
-                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                // CleanupAsync only deletes a guest's OWN device when the row
-                // is still is_guest-owned at cleanup time; here it was
-                // claimed by a fabricated real user id, so sweep it directly.
-                await db.Devices.Where(d => d.ClaimedByUserId != null
-                    && !db.Users.Any(u => u.Id == d.ClaimedByUserId)).ExecuteDeleteAsync();
+                using var scope = f.Services.CreateScope();
+                await scope.ServiceProvider.GetRequiredService<AppDbContext>()
+                    .Devices.Where(d => d.Id == deviceId).ExecuteDeleteAsync();
             }
             f.Dispose();
         }

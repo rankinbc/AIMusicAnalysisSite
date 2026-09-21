@@ -16,7 +16,16 @@ namespace Spectr.Bff.Services;
 // guest row — guests cannot self-delete (POST /api/me/delete is
 // guard-denied for guests, Auth/GuestGuard.cs), so this is the ONLY path
 // off an expired guest sandbox.
-public sealed class AccountTeardown(AppDbContext db, RefreshTokenService refresh, IMemoryCache cache)
+// Task D7 fix round 1 (C2) — a tiny seam so the guest-purge pass (and its
+// tests) can depend on the abstraction rather than the concrete sealed
+// class. Real account deletion (AccountEndpoints) keeps injecting the
+// concrete AccountTeardown unchanged.
+public interface IAccountTeardown
+{
+    Task TearDownAsync(User user, string auditAction, string auditReason, CancellationToken ct);
+}
+
+public sealed class AccountTeardown(AppDbContext db, RefreshTokenService refresh, IMemoryCache cache) : IAccountTeardown
 {
     public async Task TearDownAsync(User user, string auditAction, string auditReason, CancellationToken ct)
     {
