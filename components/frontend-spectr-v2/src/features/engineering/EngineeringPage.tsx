@@ -89,22 +89,24 @@ export function EngineeringPage() {
       </dl>
       <p>
         The pipeline runs {BASE_PHASES.length} phases end to end. Dispatch is tier-routed across four
-        named queues, so coach replies, paid analyses, free analyses and housekeeping never share one
-        undifferentiated backlog.
+        named queues, so a job&rsquo;s tier decides which lane it enters.
       </p>
 
       <h2>CI and security</h2>
-      {/* .github/workflows/ci.yml: 5 jobs (secrets, bff, frontend, python,
-          deploy); secrets job uses fetch-depth:0 + sha256sum -c; deploy job
-          builds images, Trivy-scans with exit-code 1 on CRITICAL, scan runs
-          BEFORE the push. infra/deploy.sh: verify_health + auto-rollback. */}
+      {/* .github/workflows/ci.yml: 5 jobs total (secrets, bff, frontend,
+          python, deploy); deploy is gated `if: github.ref ==
+          'refs/heads/solo' && github.event_name == 'push'` (~line 195), so
+          only the other 4 run on every push AND pull request; secrets job
+          uses fetch-depth:0 + sha256sum -c; deploy job builds images,
+          Trivy-scans with exit-code 1 on CRITICAL, scan runs BEFORE the
+          push. infra/deploy.sh: verify_health + auto-rollback. */}
       <p>
-        Five CI jobs run on every push. A secrets scan checks the full git history with a
-        checksum-verified scanner. Separate jobs build and test the BFF, the frontend and the Python
-        packages, with the integration suite running against real PostgreSQL and Redis, not mocks.
-        Container images are scanned before they&rsquo;re pushed, and a CRITICAL finding blocks the push.
-        The deploy script checks the new version&rsquo;s health after every deploy and rolls back
-        automatically if it fails.
+        Four checks run on every push and pull request; the deploy job runs only on pushes to the
+        production branch. A secrets scan checks the full git history with a checksum-verified scanner.
+        Separate jobs build and test the BFF, the frontend and the Python packages, with the integration
+        suite running against real PostgreSQL and Redis, not mocks. Container images are scanned before
+        they&rsquo;re pushed, and a CRITICAL finding blocks the push. The deploy script checks the new
+        version&rsquo;s health after every deploy and rolls back automatically if it fails.
       </p>
 
       <h2>Known limits</h2>
@@ -114,9 +116,16 @@ export function EngineeringPage() {
       <ul>
         <li>Analysis lanes share one worker pool on the current single-VM deployment.</li>
         <li>Full ML stem separation is off by default; a faster spectral-analysis path runs instead.</li>
+        {/* components/worker/Dockerfile (no docker CLI installed in the worker
+            image); infra/compose.prod.yml (worker-free mounts no
+            docker.sock — comment there confirms DockerAllin1.ensure_available()
+            raises Allin1Unavailable today); components/analysis/src/audio_analysis/
+            structure/docker_allin1.py (that unavailability path);
+            structure/arrangement_scorer.py (renders "not assessed", not a
+            failing grade, when structure detection couldn't run). */}
         <li>
-          The Listen rack&rsquo;s pitch tool couples pitch and tempo — true tempo-independent shifting
-          isn&rsquo;t built yet.
+          Arrangement analysis runs in a separate container that the single-server deployment does not
+          start yet, so a deployed report marks arrangement as not assessed instead of guessing.
         </li>
         <li>
           Audio streaming authenticates with a short-lived token in the URL, because a browser{' '}

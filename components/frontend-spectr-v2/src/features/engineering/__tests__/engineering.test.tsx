@@ -50,6 +50,26 @@ describe('EngineeringPage', () => {
     expect(html).not.toMatch(/SHA-pinned/i);
   });
 
+  it('does not repeat the two claims corrected in the truth-audit fix round', () => {
+    // Fix round 1: the pitch tool no longer couples pitch and tempo (the
+    // constant-tempo AudioWorklet lane shipped in 2880789) — "Known limits"
+    // must not claim otherwise.
+    expect(html).not.toMatch(/pitch and tempo|tempo-independent/i);
+    // Fix round 1: "Five CI jobs run on every push" counted the deploy job,
+    // which is gated to pushes on the production branch only — it isn't one
+    // of the checks that run on every push AND pull request. The old job
+    // count must be gone and the exact corrected sentence must be present
+    // (the unrelated "CI runs on every push →" source link is untouched).
+    expect(html).not.toMatch(/five ci jobs?/i);
+    expect(html).toContain(
+      'Four checks run on every push and pull request; the deploy job runs only on pushes to the production branch.',
+    );
+  });
+
+  it('has exactly one h1 (axe excludes page-has-heading-one from this run)', () => {
+    expect(html.match(/<h1[ >]/g) ?? []).toHaveLength(1);
+  });
+
   it("stays clear of the guard suite's banned phrases", () => {
     expect(html).not.toMatch(/jobs? waiting|jobs? queued|queueDepth|\bfollowers\b|isPublic/i);
   });

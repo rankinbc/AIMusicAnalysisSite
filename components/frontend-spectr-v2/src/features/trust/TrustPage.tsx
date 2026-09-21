@@ -13,12 +13,16 @@ import s from './trust.module.css';
 // to trust-pages.ts so PublicFooter can import it too).
 export { TRUST_PAGES };
 
+// Task P4 fix round 1: `path` had been widened to `string`, which let a typo
+// on an existing pledge route compile and silently mis-highlight the footer
+// (PublicFooter's `aria-current` match is a strict `===`). The engineering
+// page (`/trust/how-its-built`) is a PublicFooter "Engineering" link, not a
+// TRUST_PAGES entry (see trust-pages.ts), so the type is the TRUST_PAGES
+// union plus that one literal, not TRUST_PAGES alone.
+type TrustPath = (typeof TRUST_PAGES)[number]['path'] | '/trust/how-its-built';
+
 interface TrustPageProps {
-  // Task P4 widened this from the TRUST_PAGES union to `string` — the
-  // engineering page (`/trust/how-its-built`) is a PublicFooter "Engineering"
-  // link, not a TRUST_PAGES entry (see trust-pages.ts), so it was never a
-  // member of that union.
-  path: string;
+  path: TrustPath;
   // Task P4: an eyebrow lets a non-pledge trust page (e.g. "Engineering")
   // replace the default "Trust" label without every existing caller changing.
   eyebrow?: string;
