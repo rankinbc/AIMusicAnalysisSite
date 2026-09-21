@@ -120,6 +120,14 @@ public sealed class DemoSnapshotTemplate
     private readonly string _tokenized;
     private readonly int _verdictCount;
 
+    // Fix-round-1 item 3: captured from the ORIGINAL (pre-substitution) parse
+    // — see the constructor comment below for why these must never flow
+    // through the id-remapping text replace.
+    private readonly string _audioKey;
+    private readonly string? _spectrogramImageKey;
+    private readonly string? _waveformImageKey;
+    private readonly string? _waveformPeaksKey;
+
     public string Title { get; }
 
     internal DemoSnapshotTemplate(string rawJson)
@@ -135,15 +143,31 @@ public sealed class DemoSnapshotTemplate
         // audio/demo/ from guest/retention purges. Every asset key this
         // snapshot names must live under that prefix, or a seeded row would
         // point at storage the very first guest purge deletes for everyone.
+        //
+        // Fix-round-1 item 3: validate AND capture these strings here, from
+        // the ORIGINAL parse — before the id-remapping pass below does a raw
+        // text .Replace() of the four source Guids across the WHOLE
+        // document. An exporter layout that embeds one of those guids inside
+        // a path segment (e.g. "audio/demo/snapshot/{versionId}/source.flac")
+        // would otherwise have that segment silently rewritten to a fresh,
+        // non-existent guid on every single materialize — every demo's audio
+        // 404s, with nothing to notice. Asset keys are storage locations,
+        // never ids: Materialize() stamps these exact captured strings back
+        // onto the parsed doc, overriding whatever the substituted JSON text
+        // produced at those positions.
         var audioKey = root.GetProperty("version").GetProperty("audioKey").GetString();
         if (string.IsNullOrEmpty(audioKey))
             throw new JsonException("snapshot missing version.audioKey");
         RequireSharedKey(audioKey, "version.audioKey");
+        _audioKey = audioKey;
 
         var analysisEl = root.GetProperty("analysis");
-        RequireSharedKey(OptionalString(analysisEl, "spectrogramImageKey"), "analysis.spectrogramImageKey");
-        RequireSharedKey(OptionalString(analysisEl, "waveformImageKey"), "analysis.waveformImageKey");
-        RequireSharedKey(OptionalString(analysisEl, "waveformPeaksKey"), "analysis.waveformPeaksKey");
+        _spectrogramImageKey = OptionalString(analysisEl, "spectrogramImageKey");
+        _waveformImageKey = OptionalString(analysisEl, "waveformImageKey");
+        _waveformPeaksKey = OptionalString(analysisEl, "waveformPeaksKey");
+        RequireSharedKey(_spectrogramImageKey, "analysis.spectrogramImageKey");
+        RequireSharedKey(_waveformImageKey, "analysis.waveformImageKey");
+        RequireSharedKey(_waveformPeaksKey, "analysis.waveformPeaksKey");
 
         var text = rawJson;
         var src = root.GetProperty("source");
@@ -180,15 +204,28 @@ public sealed class DemoSnapshotTemplate
     }
 
     /// <summary>One fresh, internally consistent copy: every id — including ids embedded in
-    /// finalJson, coach prose or coachMeta — is replaced in a single pass.</summary>
+    /// finalJson, coach prose or coachMeta — is replaced in a single pass. Asset keys
+    /// (audio + image paths) are never part of that pass — they are stamped back
+    /// verbatim from the original export (see the constructor comment).</summary>
     public DemoSnapshotDoc Materialize()
     {
         var sb = new StringBuilder(_tokenized)
             .Replace("§song§", Guid.NewGuid().ToString()).Replace("§version§", Guid.NewGuid().ToString())
             .Replace("§job§", Guid.NewGuid().ToString()).Replace("§analysis§", Guid.NewGuid().ToString());
         for (var i = 0; i < _verdictCount; i++) sb.Replace($"§v{i}§", "vrd_" + UlidGen.NewUlid());
-        return JsonSerializer.Deserialize<DemoSnapshotDoc>(sb.ToString(), DemoSnapshotDoc.JsonOptions)
+        var doc = JsonSerializer.Deserialize<DemoSnapshotDoc>(sb.ToString(), DemoSnapshotDoc.JsonOptions)
                ?? throw new JsonException("empty snapshot");
+
+        return doc with
+        {
+            Version = doc.Version with { AudioKey = _audioKey },
+            Analysis = doc.Analysis with
+            {
+                SpectrogramImageKey = _spectrogramImageKey,
+                WaveformImageKey = _waveformImageKey,
+                WaveformPeaksKey = _waveformPeaksKey,
+            },
+        };
     }
 }
 
@@ -201,6 +238,8 @@ public sealed class DemoSnapshotStore(
     IFileStorage storage, IMemoryCache cache, IConfiguration config, ILogger<DemoSnapshotStore> logger)
 {
     private const int CacheSeconds = 60;
+    private const int LoadTimeoutSeconds = 5;
+    private const long MaxSnapshotBytes = 4 * 1024 * 1024; // 4 MB
 
     // Mirrors components/worker/app/retention_actor.py::SHARED_STORAGE_PREFIXES.
     // Keep these two in lockstep — anything outside this prefix is NOT
@@ -239,18 +278,63 @@ public sealed class DemoSnapshotStore(
                 return null;
             }
 
+            // Fix-round-1 item 4: this now runs INSIDE the registration
+            // request (DemoSeeder.SeedAsync is invoked with
+            // CancellationToken.None from AuthEndpoints.Register) — a
+            // stalled storage backend must never hang registration forever,
+            // and a runaway/oversized object must never be fully buffered
+            // into memory before we notice.
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(LoadTimeoutSeconds));
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+
             try
             {
-                if (!await storage.ExistsAsync(key, ct))
+                if (!await storage.ExistsAsync(key, linked.Token))
                 {
                     logger.LogWarning("Demo snapshot key {Key} does not exist — demo seed will use the fallback.", key);
                     return null;
                 }
 
-                await using var stream = await storage.OpenReadAsync(key, ct);
-                using var reader = new StreamReader(stream);
-                var raw = await reader.ReadToEndAsync(ct);
+                var declaredSize = await storage.GetFileSizeAsync(key, linked.Token);
+                if (declaredSize is { } size && size > MaxSnapshotBytes)
+                {
+                    logger.LogWarning(
+                        "Demo snapshot at {Key} is {Size} bytes, over the {Max} byte cap — demo seed will use the fallback.",
+                        key, size, MaxSnapshotBytes);
+                    return null;
+                }
+
+                await using var stream = await storage.OpenReadAsync(key, linked.Token);
+                using var buffered = new MemoryStream();
+                var chunk = new byte[81920];
+                long total = 0;
+                int read;
+                // Bounded read loop rather than StreamReader.ReadToEndAsync —
+                // catches an oversized/lying stream even when the backend's
+                // declared size (above) was missing or wrong.
+                while ((read = await stream.ReadAsync(chunk, linked.Token)) > 0)
+                {
+                    total += read;
+                    if (total > MaxSnapshotBytes)
+                    {
+                        logger.LogWarning(
+                            "Demo snapshot at {Key} exceeded the {Max} byte cap while reading — demo seed will use the fallback.",
+                            key, MaxSnapshotBytes);
+                        return null;
+                    }
+                    await buffered.WriteAsync(chunk.AsMemory(0, read), linked.Token);
+                }
+                buffered.Position = 0;
+                using var reader = new StreamReader(buffered);
+                var raw = await reader.ReadToEndAsync(linked.Token);
                 return new DemoSnapshotTemplate(raw);
+            }
+            catch (OperationCanceledException ex)
+            {
+                logger.LogWarning(ex,
+                    "Demo snapshot at {Key} took longer than {Seconds}s to load (or the request was cancelled) — demo seed will use the fallback.",
+                    key, LoadTimeoutSeconds);
+                return null;
             }
             catch (Exception ex)
             {

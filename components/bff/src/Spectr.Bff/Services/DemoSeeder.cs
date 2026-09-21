@@ -95,9 +95,14 @@ public sealed class DemoSeeder(
     /// Null if none exists yet.</summary>
     public async Task<DemoSeedResult?> FindAsync(Guid userId, CancellationToken ct = default)
     {
+        // Fix-round-1 item 7: ASCENDING — the seeded demo is always the
+        // user's FIRST "Demo: "-prefixed song. A later user song the user
+        // happens to rename "Demo: something" must never shadow it (the
+        // guest landing flow in task D5 depends on always finding the
+        // ORIGINAL seed here).
         var song = await db.Songs.AsNoTracking()
             .Where(s => s.UserId == userId && s.Name.StartsWith(DemoSongPrefix))
-            .OrderByDescending(s => s.CreatedAt)
+            .OrderBy(s => s.CreatedAt)
             .FirstOrDefaultAsync(ct);
         if (song is null) return null;
 
@@ -126,7 +131,7 @@ public sealed class DemoSeeder(
         {
             Id = doc.Source.SongId,
             UserId = userId,
-            Name = DemoSongPrefix + doc.Song.Title,
+            Name = DemoSeedMapping.TruncateSongName(DemoSongPrefix + doc.Song.Title),
             Description = DemoDescription,
             GenreHint = doc.Song.GenreHint,
         };
@@ -150,6 +155,19 @@ public sealed class DemoSeeder(
             DispatchedAt = DateTimeOffset.UtcNow,
             CompletedAt = DateTimeOffset.UtcNow,
         };
+        // Fix-round-1 items 1+2: the ids of specialists a seeded verdict
+        // actually covers — mirrors CoachTab.tsx's own "already" rule
+        // (data.specialists status != 'idle', i.e. ANY verdict row for that
+        // slug). Used to (a) guarantee RoutingPlan is never null — a null
+        // plan lazy-fires paid run_triage on the very first GET /verdicts
+        // (VerdictEndpoints.ListVerdicts) — and (b) strip every routed
+        // specialist that never produced a verdict, so CoachTab's auto-run
+        // effect has nothing uncovered left to fire on page load.
+        var coveredSpecialistSlugs = doc.Verdicts.Select(v => v.Specialist).ToHashSet(StringComparer.Ordinal);
+        var routingPlanJson = doc.Analysis.RoutingPlan is { ValueKind: JsonValueKind.Object } plan
+            ? DemoSeedMapping.RewriteRoutingPlanForSeed(plan.GetRawText(), coveredSpecialistSlugs)
+            : DemoSeedMapping.EmptyRoutingPlanJson;
+
         var analysis = new Analysis
         {
             Id = doc.Source.AnalysisId,
@@ -160,7 +178,7 @@ public sealed class DemoSeeder(
             SongName = song.Name,
             FinalJson = doc.Analysis.FinalJson.ValueKind is JsonValueKind.Undefined
                 ? "{}" : doc.Analysis.FinalJson.GetRawText(),
-            RoutingPlan = doc.Analysis.RoutingPlan?.GetRawText(),
+            RoutingPlan = routingPlanJson,
             PipelineVersion = doc.Analysis.PipelineVersion,
             RuleEngineVersion = doc.Analysis.RuleEngineVersion,
             ValidatorVersion = doc.Analysis.ValidatorVersion,
@@ -257,6 +275,11 @@ public sealed class DemoSeeder(
         {
             foreach (var p in doc.RackPresets)
             {
+                // Fix-round-1 item 9b: a missing/null chain (Undefined or
+                // JSON null) has nothing to seed — GetRawText() throws on
+                // Undefined specifically. Skip that ONE preset rather than
+                // letting it take down the whole SaveChanges.
+                if (p.Chain.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null) continue;
                 db.RackPresets.Add(new RackPreset
                 {
                     Id = Guid.NewGuid(),
