@@ -77,6 +77,13 @@ class User(Base):
     banned_at: Mapped[Optional[datetime]] = mapped_column(
         "banned_at", DateTime(timezone=True), nullable=True
     )
+    # Guest demo sandbox (D1) — mirror of EF AddGuestUsers. The worker never
+    # writes these; a guest is minted by the BFF's /api/auth/demo.
+    is_guest: Mapped[bool] = mapped_column("is_guest", Boolean, nullable=False, default=False)
+    guest_expires_at: Mapped[Optional[datetime]] = mapped_column(
+        "guest_expires_at", DateTime(timezone=True), nullable=True
+    )
+    guest_device_id: Mapped[Optional[str]] = mapped_column("guest_device_id", String(26), nullable=True)
     ban_reason: Mapped[Optional[str]] = mapped_column(
         "ban_reason", String(500), nullable=True
     )

@@ -63,4 +63,16 @@ public sealed class User
 
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    // Guest demo sandbox (D1) — a guest is a real users row so every
+    // ownership join, the audio stream, coach, and Listen page work
+    // unchanged; they key on users.id regardless of IsGuest.
+    [Column("is_guest")]
+    public bool IsGuest { get; set; } = false;
+
+    [Column("guest_expires_at")]
+    public DateTimeOffset? GuestExpiresAt { get; set; }
+
+    [Column("guest_device_id"), MaxLength(26)]
+    public string? GuestDeviceId { get; set; }
 }
