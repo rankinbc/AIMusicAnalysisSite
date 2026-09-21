@@ -1,9 +1,11 @@
 import * as Dialog from '@radix-ui/react-dialog';
+import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 
 import { handleGuestRestricted } from '../api/mutation-error-toast';
+import { invalidateGuestState } from '../features/demo/useGuestState';
 import f from '../styles/forms.module.css';
 import s from './UploadVersionDialog.module.css';
 import { useFileUpload } from '../hooks/useFileUpload';
@@ -19,6 +21,7 @@ export function UploadVersionDialog({ open, onOpenChange, songId }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const upload = useFileUpload();
   const navigate = useNavigate();
+  const qc = useQueryClient();
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -27,6 +30,7 @@ export function UploadVersionDialog({ open, onOpenChange, songId }: Props) {
       const fields = songId ? { song_id: songId } : {};
       const res = await upload.upload(file, fields);
       toast.success('Upload complete — analysis dispatched.');
+      invalidateGuestState(qc); // G6 (4a) — a guest's version/upload count changed
       onOpenChange(false);
       setFile(null);
       // This dialog always analyzes on upload (never sets analyze=false), so

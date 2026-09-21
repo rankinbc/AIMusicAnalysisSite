@@ -380,6 +380,7 @@ export function useConfirmStems(versionId: string) {
       qc.invalidateQueries({ queryKey: ['versions', versionId] });
       qc.invalidateQueries({ queryKey: ['songs'] });
       qc.invalidateQueries({ queryKey: ['stems', versionId] });
+      invalidateGuestState(qc); // G6 (4a) — a guest's stems count changed
     },
   });
 }
@@ -404,6 +405,7 @@ export function useUploadAls(versionId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['versions', versionId] });
       qc.invalidateQueries({ queryKey: ['songs'] });
+      invalidateGuestState(qc); // G6 (4a) — a guest's .als upload changed guest state
     },
   });
 }

@@ -4,6 +4,7 @@
 // so this is testable without mounting the whole authenticated shell.
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { StrictMode } from 'react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -92,7 +93,12 @@ describe('GuestShell', () => {
   it('unmount removes the listener (no leak under StrictMode double-mount)', () => {
     auth = { user: { id: 'g', isGuest: true } };
     vi.mocked(fetcher).mockReturnValue(new Promise(() => {}));
-    const { unmount } = render(<GuestShell />, { wrapper });
+    const { unmount } = render(
+      <StrictMode>
+        <GuestShell />
+      </StrictMode>,
+      { wrapper },
+    );
     expect(unsubscribeSpy).not.toHaveBeenCalled();
     unmount();
     expect(unsubscribeSpy).toHaveBeenCalledTimes(1);

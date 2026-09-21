@@ -361,6 +361,16 @@ export function ReportView({
     }
     setShowModal(false);
   }, [seenKey]);
+  // G6 (4b) — `versionFilePath` can arrive AFTER the useState initialiser
+  // above already ran (it starts undefined while the version query loads).
+  // This never re-opens the modal, only closes it — once the path lands and
+  // says `audio/demo/`, the modal must not be showing for a guest on the
+  // seeded demo song.
+  useEffect(() => {
+    if (versionFilePath?.includes('audio/demo/')) {
+      setShowModal(false);
+    }
+  }, [versionFilePath]);
 
   // Re-analyze: fire the same actor as a fresh upload, navigate to the new job.
   const reanalyze = useReanalyzeVersion(versionId ?? '');

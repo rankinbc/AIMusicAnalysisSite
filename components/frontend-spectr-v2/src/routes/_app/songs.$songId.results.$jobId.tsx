@@ -4,7 +4,15 @@ import { toast } from 'sonner';
 
 import { ApiError } from '../../api/fetcher';
 import { extractApiError } from '../../api/error-utils';
-import { useFreeRetry, useJob, useJobResults, useVersion, useVersionFiles } from '../../api/hooks';
+import {
+  useFreeRetry,
+  useJob,
+  useJobResults,
+  useSongs,
+  useVersion,
+  useVersionFiles,
+} from '../../api/hooks';
+import { useAuth } from '../../auth/AuthContext';
 import { capture } from '../../lib/analytics';
 import { setCorrelation } from '../../lib/sentry';
 import { ProgressStoryline } from '../../features/results/ProgressStoryline';
@@ -39,6 +47,19 @@ function ResultsPage() {
 
   const job = useJob(jobId, { pollMs: 2000 });
   const isComplete = job.data?.status === 'complete';
+  const isFinished = isComplete || job.data?.status === 'failed';
+
+  // Task G6 (item 3) — while a GUEST's own upload is analyzing, link to
+  // their already-finished seeded demo report so the wait isn't empty. The
+  // demo ids only live in memory from startDemo(); after a reload, resolve
+  // them from the library data the app already loads — never a new endpoint.
+  const isGuest = useAuth().user?.isGuest === true;
+  const librarySongs = useSongs(isGuest && !isFinished);
+  const demoSong = librarySongs.data?.find((sg) => sg.name.startsWith('Demo: '));
+  const demoReport =
+    demoSong?.latestResult != null
+      ? { songId: demoSong.id, jobId: demoSong.latestResult.jobId }
+      : null;
   const isFailed = job.data?.status === 'failed';
   const results = useJobResults(jobId, isComplete);
 
@@ -208,6 +229,16 @@ function ResultsPage() {
       <h1 className={s.heading}>Analysis in progress</h1>
       {job.data && (
         <ProgressStoryline job={job.data} inputs={progressInputs} inputsLoading={inputsLoading} />
+      )}
+      {isGuest && demoReport && (
+        <p className={s.failFooter}>
+          <Link
+            to="/songs/$songId/results/$jobId"
+            params={{ songId: demoReport.songId, jobId: demoReport.jobId }}
+          >
+            Explore a finished report while yours is analyzing →
+          </Link>
+        </p>
       )}
     </FrameWithBack>
   );
