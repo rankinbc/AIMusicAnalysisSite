@@ -24,16 +24,34 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useRouter } from '@tanstack/react-router';
+import { useQueryClient } from '@tanstack/react-query';
 
+import { extractApiMessage } from '../../api/error-utils';
+import { ApiError } from '../../api/fetcher';
 import { handleGuestRestricted } from '../../api/mutation-error-toast';
 import { useAuth } from '../../auth/AuthContext';
+import { GuestUpgradeHost } from '../demo/GuestUpgradeHost';
+import { invalidateGuestState } from '../demo/useGuestState';
 import { useMixUpload } from '../../hooks/useMixUpload';
 import { capture } from '../../lib/analytics';
 import { PublicChrome } from '../../components/PublicChrome';
 import { PublicFooter } from '../../components/PublicFooter';
 import { usePageMeta } from '../../lib/usePageMeta';
+import { validateMixFile } from './mix-file-validation';
 import { GuestStartFailedError, startGuestUpload } from './startGuestUpload';
 import s from './analyze.module.css';
+
+// Item 1 (CRITICAL) — /analyze is a top-level PUBLIC route with no
+// `GuestShell` (that's `_app.tsx` only), so nothing was listening on the
+// guest-upgrade bus here: a guest who hit a limit dropped a file and got a
+// silent dead end. `GuestUpgradeHost` is the same tiny host GuestShell uses
+// (bus subscription + the ONE dialog). A plain import, not React.lazy: this
+// route is already its own TanStack Router chunk (`analyze-*.js`, verified
+// via `npm run build` + `lint:bundle` — the shared entry chunk is unchanged
+// at ~364 KB raw / ~114 KB gzip), so React.lazy bought nothing here and, in
+// this app's full vitest run, proved to intermittently never resolve inside
+// this file's Suspense boundary (cross-file dynamic-import module reuse —
+// see the fix1 report for the reproduction).
 
 // ── pure pieces (static-render testable) ────────────────────────────────────
 
@@ -77,10 +95,11 @@ export function DropZoneView({ onFile, error, disabled }: {
         accept=".wav,.flac,.mp3,.aiff,.aif,.m4a,.ogg"
         style={{ display: 'none' }}
         data-testid="anon-file-input"
+        disabled={disabled}
         onChange={(e) => {
           const f = e.target.files?.[0];
           e.target.value = '';
-          if (f) onFile(f);
+          if (f && !disabled) onFile(f);
         }}
       />
     </section>
@@ -100,9 +119,14 @@ export function AnalyzePage() {
   const auth = useAuth();
   const navigate = useNavigate();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const mixUpload = useMixUpload();
   const [stage, setStage] = useState<Stage>('idle');
   const [dropError, setDropError] = useState<string | null>(null);
+  // Item 8 — set by the Cancel button so the eventual rejection from the
+  // aborted XHR (mixUpload.cancel()) doesn't re-show an "Upload aborted"
+  // error after the user already asked to back out.
+  const cancelledRef = useRef(false);
 
   // Scope note (addendum) — an already-signed-in REAL user never mints a
   // guest here; send them to their library's upload entry point instead.
@@ -112,6 +136,14 @@ export function AnalyzePage() {
   }, [isRealUser, navigate]);
 
   const onFile = useCallback((file: File) => {
+    // Item 5 — validate BEFORE minting: a bad file must never create a
+    // guest account.
+    const validationError = validateMixFile(file);
+    if (validationError) {
+      setDropError(validationError);
+      return;
+    }
+    cancelledRef.current = false;
     setDropError(null);
     setStage('busy');
     startGuestUpload(
@@ -119,6 +151,11 @@ export function AnalyzePage() {
       file,
     )
       .then(async (res) => {
+        if (cancelledRef.current) return;
+        // Item 2 — a returning guest's second upload must not leave the
+        // banner/upload gate reading a stale cached uploadsUsed. Before the
+        // router invalidate so both are current by the time _app re-renders.
+        invalidateGuestState(queryClient);
         // The _app route guard reads router context — invalidate so it sees
         // a freshly-minted guest's auth state BEFORE navigating (DemoLauncher
         // precedent), or the first landing bounces to /login.
@@ -136,25 +173,46 @@ export function AnalyzePage() {
         });
       })
       .catch((err: unknown) => {
+        if (cancelledRef.current) return;
         if (err instanceof GuestStartFailedError) {
           setStage('failed');
           return;
         }
         setStage('idle');
         // Guest upload/analysis caps refused the request — the shared
-        // upgrade dialog owns this, not page-local copy (D10).
-        if (handleGuestRestricted(err)) return;
+        // upgrade dialog owns this, but item 1 (CRITICAL): the page must
+        // never go mute even if the visitor dismisses the dialog, so the
+        // server's own message ALSO renders inline under the drop zone.
+        if (handleGuestRestricted(err)) {
+          setDropError(
+            err instanceof ApiError ? (extractApiMessage(err.body) ?? null) : null,
+          );
+          return;
+        }
         setDropError(err instanceof Error ? err.message : 'Upload failed. Try again.');
       });
-  }, [auth.user, auth.startDemo, mixUpload, navigate, router]);
+  }, [auth.user, auth.startDemo, mixUpload, navigate, router, queryClient]);
 
-  const showDropZone = stage === 'idle' && !auth.isLoading && !isRealUser;
+  const onCancel = useCallback(() => {
+    cancelledRef.current = true;
+    mixUpload.cancel();
+    setStage('idle');
+    setDropError(null);
+  }, [mixUpload]);
+
+  // Item 4 — the boot refresh (auth.isLoading) is the most common first
+  // paint of this public funnel; it must never render a blank <main>. Keep
+  // the safety (no upload while isLoading — DropZoneView's onFile calls are
+  // gated by `disabled` below), but always show the drop zone's normal copy.
+  const showDropZone = stage === 'idle' && !isRealUser;
 
   return (
     <div className={s.page}>
       <PublicChrome />
       <main className={s.main}>
-        {showDropZone && <DropZoneView onFile={onFile} error={dropError} />}
+        {showDropZone && (
+          <DropZoneView onFile={onFile} error={dropError} disabled={auth.isLoading} />
+        )}
 
         {stage === 'busy' && (
           <section className={s.center}>
@@ -163,7 +221,12 @@ export function AnalyzePage() {
             </h2>
             <progress className={s.uploadBar} max={1} value={mixUpload.progress} />
             {mixUpload.isUploading && (
-              <p className={`mono ${s.stageHint}`}>{Math.round(mixUpload.progress * 100)}%</p>
+              <>
+                <p className={`mono ${s.stageHint}`}>{Math.round(mixUpload.progress * 100)}%</p>
+                <button type="button" className="btn ghost" onClick={onCancel}>
+                  Cancel upload
+                </button>
+              </>
             )}
           </section>
         )}
@@ -179,6 +242,8 @@ export function AnalyzePage() {
             </div>
           </section>
         )}
+
+        <GuestUpgradeHost />
       </main>
       <PublicFooter currentPath="/analyze" />
     </div>
