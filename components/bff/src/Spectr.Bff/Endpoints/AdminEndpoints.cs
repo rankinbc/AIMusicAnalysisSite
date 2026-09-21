@@ -51,6 +51,7 @@ public static partial class AdminEndpoints
         admin.MapPut("/flags/{name}", PutFlag);
         admin.MapPut("/prompts/{slug}", PutPromptPin);
         admin.MapGet("/audit", GetAudit);
+        admin.MapPost("/demo/snapshot", PostDemoSnapshot); // Task D4 — AdminEndpoints.DemoSnapshot.cs
     }
 
     // ── AC1 — the billing/webhook trail for refund decisions ────────────────
