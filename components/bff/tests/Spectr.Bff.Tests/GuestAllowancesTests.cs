@@ -61,6 +61,120 @@ public sealed class GuestAllowancesTests(WebApplicationFactory<Program> factory)
     private static Task CleanupAsync(WebApplicationFactory<Program> f, params Guid[] userIds) =>
         DemoAuthEndpointsTests.CleanupAsync(f, userIds);
 
+    // Fix round 1 item 1 — a failed (non invalid_file) job with a "consumed"
+    // usage event is retry-ELIGIBLE per JobEndpoints.RetryFree without needing
+    // a stored final_json (unlike the "complete" path, which additionally
+    // requires a failed-phase in final_json). Pattern: GuestCapsTests.SeedAnalysisAsync.
+    private static async Task<Guid> SeedRetryableFailedJobAsync(WebApplicationFactory<Program> f, Guid userId)
+    {
+        using var scope = f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var song = new Song { Id = Guid.NewGuid(), UserId = userId, Name = "Guest retry test" };
+        var version = new SongVersion
+        {
+            Id = Guid.NewGuid(), SongId = song.Id, FilePath = "audio/guestretry/x.wav", VersionNumber = 1,
+        };
+        db.Songs.Add(song);
+        db.SongVersions.Add(version);
+        var jobId = Guid.NewGuid();
+        db.AnalysisJobs.Add(new AnalysisJob
+        {
+            Id = jobId, UserId = userId, VersionId = version.Id, Status = "failed", ErrorCode = "worker_error",
+        });
+        db.UsageEvents.Add(new UsageEvent
+        {
+            UserId = userId, EventType = "analysis",
+            BillingPeriod = DateTimeOffset.UtcNow.ToString("yyyy-MM"), Reference = jobId.ToString(),
+        });
+        await db.SaveChangesAsync();
+        return jobId;
+    }
+
+    // ── item 1: guest retry is counted, not free ─────────────────────────────
+
+    [SkippableFact]
+    public async Task Guest_Retry_At_The_Analysis_Cap_Is_403_And_Nothing_Enqueues()
+    {
+        await TestDb.RequireAsync(factory);
+        var queue = new RecordingQueue();
+        using var f = Build(queue); var (client, demo) = await StartGuestAsync(f);
+        try
+        {
+            var jobId = await SeedRetryableFailedJobAsync(f, demo.User.Id);
+            // The seeded job's own usage_event above is 1 of the 6 — five more
+            // fill the guest to guest_analyses_max (6) exactly.
+            using (var scope = f.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                for (var i = 0; i < 5; i++)
+                    db.UsageEvents.Add(new UsageEvent { UserId = demo.User.Id, EventType = "analysis",
+                        BillingPeriod = DateTimeOffset.UtcNow.ToString("yyyy-MM"), Reference = Guid.NewGuid().ToString() });
+                await db.SaveChangesAsync();
+            }
+            var resp = await client.PostAsync($"/api/jobs/{jobId}/retry", null);
+            var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(403, (int)resp.StatusCode);
+            Assert.Equal("guest_restricted", body.GetProperty("error").GetProperty("code").GetString());
+            Assert.Equal("analysis_limit", body.GetProperty("error").GetProperty("details").GetProperty("reason").GetString());
+            Assert.Empty(queue.Sent);
+        }
+        finally { await CleanupAsync(f, demo.User.Id); }
+    }
+
+    [SkippableFact]
+    public async Task Guest_Retry_Under_The_Cap_Counts_Against_It()
+    {
+        await TestDb.RequireAsync(factory);
+        var queue = new RecordingQueue();
+        using var f = Build(queue); var (client, demo) = await StartGuestAsync(f);
+        try
+        {
+            var jobId = await SeedRetryableFailedJobAsync(f, demo.User.Id);
+            int CountAnalysisEvents()
+            {
+                using var scope = f.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                return db.UsageEvents.Count(e => e.UserId == demo.User.Id && e.EventType == "analysis");
+            }
+            var before = CountAnalysisEvents();
+            var resp = await client.PostAsync($"/api/jobs/{jobId}/retry", null);
+            Assert.Equal(200, (int)resp.StatusCode);
+            var after = CountAnalysisEvents();
+            Assert.True(after > before, $"expected the retry to add a usage event ({before} -> {after})");
+            Assert.Single(queue.Sent);
+        }
+        finally { await CleanupAsync(f, demo.User.Id); }
+    }
+
+    [SkippableFact]
+    public async Task Real_User_Free_Retry_Still_Bypasses_The_Analysis_Cap()
+    {
+        await TestDb.RequireAsync(factory);
+        var queue = new RecordingQueue();
+        using var f = Build(queue);
+        var client = f.CreateClient();
+        var (userId, token) = await TestAuth.RegisterAsync(client);
+        client.DefaultRequestHeaders.Authorization = new("Bearer", token);
+        try
+        {
+            var jobId = await SeedRetryableFailedJobAsync(f, userId);
+            int CountAnalysisEvents()
+            {
+                using var scope = f.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                return db.UsageEvents.Count(e => e.UserId == userId && e.EventType == "analysis");
+            }
+            var before = CountAnalysisEvents();
+            var resp = await client.PostAsync($"/api/jobs/{jobId}/retry", null);
+            Assert.Equal(200, (int)resp.StatusCode);
+            var after = CountAnalysisEvents();
+            // Story 5.7 — a free retry consumes NOTHING; this must stay true
+            // for real users after the guest-only fix.
+            Assert.Equal(before, after);
+        }
+        finally { await CleanupAsync(f, userId); }
+    }
+
     // ── caps ──────────────────────────────────────────────────────────────
 
     [SkippableFact]
@@ -107,6 +221,31 @@ public sealed class GuestAllowancesTests(WebApplicationFactory<Program> factory)
         var sql = string.Join(" ", new Spectr.Data.Migrations.SeedGuestFirstUploadFlags().UpOperations
             .OfType<Microsoft.EntityFrameworkCore.Migrations.Operations.SqlOperation>().Select(o => o.Sql));
         Assert.Matches($@"'{name}'\s*,\s*'{value}'", sql);
+        // Fix round 1 review finding — the pin above never checked this seed
+        // is actually idempotent; add the same assertion here.
+        Assert.Contains("ON CONFLICT", sql);
+    }
+
+    // ── fix round 1 migration: SeedGuestAbuseBoundsFlags (items 2 + 3) ────────
+
+    [Theory]
+    [InlineData("guest_classify_max", "6")]
+    [InlineData("guest_ref_analyze_max", "3")]
+    [InlineData("guest_attachment_mints_max", "30")]
+    public void The_Abuse_Bounds_Migration_Seeds_The_New_Flags(string name, string value)
+    {
+        var sql = string.Join(" ", new Spectr.Data.Migrations.SeedGuestAbuseBoundsFlags().UpOperations
+            .OfType<Microsoft.EntityFrameworkCore.Migrations.Operations.SqlOperation>().Select(o => o.Sql));
+        Assert.Matches($@"'{name}'\s*,\s*'{value}'", sql);
+        Assert.Contains("ON CONFLICT", sql);
+    }
+
+    [Fact]
+    public void The_Abuse_Bounds_Migration_Down_Deletes_Exactly_The_Three_Names()
+    {
+        var sql = string.Join(" ", new Spectr.Data.Migrations.SeedGuestAbuseBoundsFlags().DownOperations
+            .OfType<Microsoft.EntityFrameworkCore.Migrations.Operations.SqlOperation>().Select(o => o.Sql));
+        Assert.Contains("'guest_classify_max', 'guest_ref_analyze_max', 'guest_attachment_mints_max'", sql);
     }
 
     [Theory]

@@ -983,14 +983,24 @@ public static class VersionEndpoints
 
     // POST /api/versions/{id}/stems/classify — enqueue audio-content classification.
     private static async Task<IResult> ClassifyStems(
-        Guid versionId, ClaimsPrincipal currentUser, AppDbContext db, IJobQueue queue, CancellationToken ct)
+        Guid versionId, ClaimsPrincipal currentUser, AppDbContext db, IJobQueue queue,
+        GuestLimits limits, CancellationToken ct)
     {
         var userId = currentUser.UserId();
         if (!await UserOwnsVersion(db, versionId, userId, ct)) return Results.NotFound();
+        // Fix round 1 item 2 — this enqueued unconditionally with no per-guest
+        // cap and hardcoded the paid lane (the only newly-opened guest enqueue
+        // not using GuestLimits.QueueFor).
+        if (currentUser.IsGuest())
+        {
+            if (await limits.CheckClassifyAsync(userId, ct) is { } denied)
+                return denied;
+        }
         // Story 2.5: paid-feature work → analysis-paid (W1). Free tier has stems=false.
+        // Guest work rides the free lane regardless (GuestLimits.QueueFor).
         await queue.EnqueueAsync(
             DramatiqTasks.ClassifyStems, new object[] { versionId.ToString() },
-            DramatiqQueues.AnalysisPaid, ct);
+            GuestLimits.QueueFor(currentUser, DramatiqQueues.AnalysisPaid), ct);
         return Results.Accepted(value: new { queued = true });
     }
 
@@ -1185,11 +1195,15 @@ public static class VersionEndpoints
     {
         // Task D6 (spec D5) — the guest's own quota + the global fail-closed
         // arm, checked FIRST so nothing below (entitlement resolution, job
-        // insert) runs for a guest who's already spent their one analysis. A
-        // free retry re-runs an ALREADY-granted analysis, so it is exempt —
-        // same reasoning as the verify gate below.
+        // insert) runs for a guest who's already spent their one analysis.
+        // Fix round 1 item 1 — unlike a real user's free retry (exempt, see
+        // below), a GUEST never takes the freeRetry exemption here: a
+        // degraded job is easy to provoke, and every degraded job was
+        // retry-eligible, so an exempt guest retry doubled the effective
+        // per-guest analysis budget for free. The retry is checked and
+        // counted exactly like any other guest analysis.
         var isGuest = httpCtx.User.IsGuest();
-        if (isGuest && !freeRetry)
+        if (isGuest)
         {
             var g = await httpCtx.RequestServices.GetRequiredService<GuestLimits>()
                 .CheckAnalysisAsync(userId, httpCtx, ct);
@@ -1337,8 +1351,9 @@ public static class VersionEndpoints
         if (freeRetry)
         {
             // Story 5.7 — entitlement-free lane: job row only, NO usage event,
-            // NO credit spend. A null origin would skip every once-only guard
-            // (an unmarked free job, itself retry-eligible) — hard-reject.
+            // NO credit spend, for a REAL user. A null origin would skip every
+            // once-only guard (an unmarked free job, itself retry-eligible) —
+            // hard-reject.
             if (retryOfJobId is not Guid)
                 throw new ArgumentException(
                     "freeRetry dispatch requires retryOfJobId", nameof(retryOfJobId));
@@ -1352,6 +1367,20 @@ public static class VersionEndpoints
                 Status = "pending",
                 RetryOfJobId = retryOfJobId,
             });
+            if (isGuest)
+            {
+                // Fix round 1 item 1 — a guest's retry is NOT entitlement-free:
+                // it must write the same usage_event a normal guest analysis
+                // does, or CheckAnalysisAsync's per-guest count above never
+                // moves and the cap it just passed is meaningless.
+                db.UsageEvents.Add(new UsageEvent
+                {
+                    UserId = userId,
+                    EventType = "analysis",
+                    BillingPeriod = billingPeriod,
+                    Reference = jobId.ToString(),
+                });
+            }
             try
             {
                 await db.SaveChangesAsync(ct);

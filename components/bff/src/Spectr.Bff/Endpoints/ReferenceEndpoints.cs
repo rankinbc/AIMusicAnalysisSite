@@ -276,6 +276,7 @@ public static class ReferenceEndpoints
         ClaimsPrincipal currentUser,
         AppDbContext db,
         IJobQueue queue,
+        GuestLimits limits,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -284,6 +285,14 @@ public static class ReferenceEndpoints
         if (row is null) return Results.NotFound();
         if (string.IsNullOrEmpty(row.FilePath))
             return Results.BadRequest(new { error = "Reference has no file to analyze." });
+
+        // Fix round 1 item 2 — this route already rode the free lane
+        // (GuestLimits.QueueFor below) but had no cap of its own.
+        if (currentUser.IsGuest())
+        {
+            if (await limits.CheckReferenceAnalyzeAsync(userId, ct) is { } denied)
+                return denied;
+        }
 
         // Enqueue the dedicated reference-analyzer actor; it'll populate
         // BPM/LUFS/etc. and flip `analyzed=true` on success. Task G1 —

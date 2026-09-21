@@ -251,6 +251,65 @@ public sealed class GuestLimits(
             : null;
     }
 
+    // Fix round 1 item 2 — stems/classify enqueued on EVERY call with no
+    // per-guest cap. Same shape as CheckFixRackAsync: atomic limiter, keyed
+    // per guest, window = guest TTL, fails CLOSED.
+    public async Task<IResult?> CheckClassifyAsync(Guid userId, CancellationToken ct)
+    {
+        if (string.Equals(cfg["RateLimits:Enabled"], "false", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var flags = await ents.GetFlagsAsync(ct);
+        var max = Flag(flags, "guest_classify_max", 6);
+        var key = $"guest_classify:{userId}";
+        try
+        {
+            var verdict = await limiter.CheckAsync(
+                key, key, "guest_classify", max,
+                TimeSpan.FromHours(Flag(flags, "guest_ttl_hours", 24)), ct);
+            if (!verdict.Allowed)
+                return GuestGuard.Restricted("classify_limit",
+                    $"A guest session includes {max} stem classifications — create a free account for more.");
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            log.LogError(ex, "guest stem-classify limiter unavailable — failing CLOSED");
+            return DemoCapacity();
+        }
+        return null;
+    }
+
+    // Fix round 1 item 2 — POST /references/{id}/analyze already routes a
+    // guest's dispatch to the free lane (QueueFor), but had no cap of its own
+    // — a stranger could re-trigger it indefinitely. Same shape as
+    // CheckClassifyAsync.
+    public async Task<IResult?> CheckReferenceAnalyzeAsync(Guid userId, CancellationToken ct)
+    {
+        if (string.Equals(cfg["RateLimits:Enabled"], "false", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var flags = await ents.GetFlagsAsync(ct);
+        var max = Flag(flags, "guest_ref_analyze_max", 3);
+        var key = $"guest_ref_analyze:{userId}";
+        try
+        {
+            var verdict = await limiter.CheckAsync(
+                key, key, "guest_ref_analyze", max,
+                TimeSpan.FromHours(Flag(flags, "guest_ttl_hours", 24)), ct);
+            if (!verdict.Allowed)
+                return GuestGuard.Restricted("reference_analyze_limit",
+                    $"A guest session includes {max} reference analyses — create a free account for more.");
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            log.LogError(ex, "guest reference-analyze limiter unavailable — failing CLOSED");
+            return DemoCapacity();
+        }
+        return null;
+    }
+
     // GET /api/me/guest — lets the frontend flip "+ Upload" to "Create free account".
     public async Task<GuestStateDto> GetStateAsync(User guest, CancellationToken ct)
     {
