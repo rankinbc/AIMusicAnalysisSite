@@ -22,9 +22,16 @@ def reset_lane_cache() -> None:
 def _lookup_is_guest(user_id: Any) -> bool:
     from sqlalchemy import text  # noqa: PLC0415 — lazy: keeps the gateway import DB-free
 
-    from app.db_sync import SessionFactory  # noqa: PLC0415
+    from app.db_sync import SessionFactory, uid_param  # noqa: PLC0415
     with SessionFactory() as s:
-        return bool(s.execute(text("SELECT is_guest FROM users WHERE id = :id"), {"id": str(user_id)}).scalar())
+        # uid_param normalizes per dialect — psycopg2 adapts uuid.UUID
+        # natively (Postgres, unchanged behaviour); sqlite (unit tests)
+        # stores the ORM's 32-hex form and needs the .hex string instead
+        # (same helper account_deletion_actor.purge_account_data uses).
+        return bool(s.execute(
+            text("SELECT is_guest FROM users WHERE id = :id"),
+            {"id": uid_param(s, user_id)},
+        ).scalar())
 
 
 def resolve_lane(user_id: Any | None, default: str | None) -> str | None:

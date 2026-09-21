@@ -319,6 +319,47 @@ def test_anon_purge_deletes_upload_objects(db, tmp_path, monkeypatch):
         assert s.execute(text("SELECT count(*) FROM devices")).scalar() == 0
 
 
+def test_anon_purge_never_deletes_shared_demo_keys(db, tmp_path, monkeypatch):
+    """D2 fix-round-1 (defense in depth): anon uploads key under
+    audio/anon/{device}/... today so this is inert in production — but a
+    future 'use our sample' option on the anon funnel could point
+    file_path/image paths at the shared audio/demo/ snapshot instead of
+    copying it. If that ever happens, the 72h anon purge must still remove
+    the ROWS (the trust-page 72h promise) but must NEVER request a delete of
+    a shared key — deleting it would break demo playback for every account
+    and every future guest, not just this device's."""
+    from aimusic_shared.models import Analysis, AnalysisJob, Device
+
+    factory, _ = db
+    monkeypatch.setattr(ra, "LOCAL_ROOT", str(tmp_path))
+    deleted: list[str] = []
+    monkeypatch.setattr(ra.object_store, "delete_object",
+                        lambda key, root: deleted.append(key) or True)
+
+    dev = "S" * 26
+    jid = uuid.uuid4()
+    shared_src = "audio/demo/snapshot/source.flac"
+    shared_spec = "audio/demo/snapshot/spectrogram.webp"
+    real_wave = f"analysis/images/{jid}/waveform.webp"
+
+    with factory.begin() as s:
+        s.add(Device(id=dev, ip_hash="i", ua_hash="u",
+                     created_at=NOW - timedelta(hours=73)))
+        s.add(AnalysisJob(id=jid, device_id=dev, status="complete", file_path=shared_src))
+        s.add(Analysis(id=uuid.uuid4(), job_id=jid, device_id=dev, final_json={},
+                       spectrogram_image_path=shared_spec, waveform_image_path=real_wave,
+                       created_at=NOW))
+
+    stats = ra.run_sweep(now=NOW)
+
+    assert stats["anon_purged"] == 1  # rows still purged as today
+    assert shared_src not in deleted
+    assert shared_spec not in deleted
+    assert real_wave in deleted  # an ordinary (non-shared) key is still deleted
+    with factory() as s:
+        assert s.execute(text("SELECT count(*) FROM devices")).scalar() == 0
+
+
 def test_auth_tokens_purge_and_absent_table_tolerance(db):
     """Story 4.3: consumed + long-expired auth tokens are deleted; live ones
     survive; a DB without the table (sqlite mirrors) is a logged no-op."""

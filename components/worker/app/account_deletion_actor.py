@@ -23,16 +23,10 @@ import dramatiq
 from sqlalchemy import text
 
 from . import object_store
-from .db_sync import SessionFactory
+from .db_sync import SessionFactory, uid_param
 from .tasks_dramatiq import LOCAL_ROOT
 
 logger = logging.getLogger(__name__)
-
-
-def _uid_param(s, uid: uuid_mod.UUID):
-    """psycopg2 adapts uuid.UUID natively; sqlite (tests) stores the ORM's
-    32-hex form and can't bind UUID objects — normalize per dialect."""
-    return uid if s.get_bind().dialect.name == "postgresql" else uid.hex
 
 
 def _collect_storage_keys(s, uid) -> list[str]:
@@ -124,7 +118,7 @@ def purge_account_data(user_id: str) -> dict:
     stats = {"rows_deleted": 0, "objects_deleted": 0, "objects_failed": 0}
 
     with SessionFactory() as s:
-        keys = _collect_storage_keys(s, _uid_param(s, uid))
+        keys = _collect_storage_keys(s, uid_param(s, uid))
 
     for key in keys:
         try:
@@ -139,7 +133,7 @@ def purge_account_data(user_id: str) -> dict:
             f"delete_account_data: {stats['objects_failed']} object delete(s) failed for {user_id} — retrying")
 
     with SessionFactory.begin() as s:
-        p = _uid_param(s, uid)
+        p = uid_param(s, uid)
         for stmt in _DELETE_STATEMENTS:
             result = s.execute(text(stmt), {"uid": p})
             stats["rows_deleted"] += result.rowcount or 0

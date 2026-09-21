@@ -30,6 +30,7 @@ _DEFAULTS = dict(
     # opt-in to "blow the budget" via ``configure(llm_budget_free_usd=...)``.
     llm_budget_free_usd=Decimal("1000000.00"),
     llm_budget_pro_usd=Decimal("1000000.00"),
+    llm_budget_guest_usd=Decimal("1000000.00"),
     llm_budget_global_usd=Decimal("1000000.00"),
     llm_circuit_breaker_threshold=5,
     llm_circuit_breaker_cooldown_s=300,

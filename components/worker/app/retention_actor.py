@@ -300,7 +300,15 @@ def _purge_unclaimed_anonymous(now: datetime) -> int:
         # released, so a concurrent register-claim never blocks on S3 latency.
         # Fail-soft per key (objects-before-rows already lost; a leaked orphan
         # is an operator log line for the next sweep, not a fatal error).
+        # D2 (fix round 1): anon uploads key under audio/anon/... today, so
+        # this filter is inert in production — but it's defense in depth
+        # against a future anon flow ever pointing file_path/image paths at
+        # the shared audio/demo/ snapshot instead of copying it. The ROW
+        # purge above still runs unconditionally (that's the 72h promise);
+        # only the object delete is skipped for a shared key.
         for key in anon_keys:
+            if is_shared_key(key):
+                continue
             try:
                 object_store.delete_object(key, LOCAL_ROOT)
             except Exception:
