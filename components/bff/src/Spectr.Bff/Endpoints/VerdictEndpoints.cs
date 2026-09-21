@@ -17,15 +17,15 @@ public static class VerdictEndpoints
     {
         var g = app.MapGroup("/reports/{jobId:guid}/verdicts").WithTags("verdicts").RequireAuthorization();
         g.MapGet("/", ListVerdicts);
-        g.MapPost("/run/{specialist}", RunSpecialist);
+        g.MapPost("/run/{specialist}", RunSpecialist).AllowGuest(); // Task D6 (spec D4)
         g.MapGet("/stream", StreamVerdicts);
 
         var per = app.MapGroup("/verdicts/{verdictId}").WithTags("verdicts").RequireAuthorization();
         per.MapPost("/dismiss", (string verdictId, ClaimsPrincipal user, AppDbContext db, CancellationToken ct) =>
-            UpsertUserState(verdictId, user, db, ct, set: s => s.Dismissed = true));
+            UpsertUserState(verdictId, user, db, ct, set: s => s.Dismissed = true)).AllowGuest();
         per.MapPost("/applied", (string verdictId, ClaimsPrincipal user, AppDbContext db, CancellationToken ct) =>
-            UpsertUserState(verdictId, user, db, ct, set: s => s.Applied = true));
-        per.MapPost("/feedback", SubmitFeedback);
+            UpsertUserState(verdictId, user, db, ct, set: s => s.Applied = true)).AllowGuest();
+        per.MapPost("/feedback", SubmitFeedback).AllowGuest();
 
         return app;
     }

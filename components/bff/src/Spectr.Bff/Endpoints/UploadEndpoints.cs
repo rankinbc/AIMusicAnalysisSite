@@ -26,10 +26,13 @@ public static class UploadEndpoints
     public static IEndpointRouteBuilder MapUploadEndpoints(this IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/uploads").WithTags("uploads").RequireAuthorization();
-        g.MapPost("/init", Init);
-        g.MapPost("/complete", Complete);
-        g.MapPost("/abort", Abort);
+        // Task D6 (spec D4) — init/complete carry the guest's one-upload quota;
+        // abort is allowed unconditionally (it never creates a version).
+        g.MapPost("/init", Init).AllowGuestUpload();
+        g.MapPost("/complete", Complete).AllowGuestUpload();
+        g.MapPost("/abort", Abort).AllowGuest();
         // Story 3.2 — single-PUT presign for attachments (stems/.als/reference).
+        // Denied by default (D4) — guests may not upload stems/.als/reference.
         g.MapPost("/attachments/init", AttachmentInit);
         return app;
     }

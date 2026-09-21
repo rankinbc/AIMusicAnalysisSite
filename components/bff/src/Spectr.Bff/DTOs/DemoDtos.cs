@@ -19,3 +19,13 @@ public sealed record DemoTarget(Guid SongId, Guid VersionId, Guid JobId);
 
 public sealed record DemoStartResponse(
     string AccessToken, AuthedUser User, DemoTarget Demo, bool Resumed);
+
+// Task D6 — GET /api/me/guest response (404 for non-guests). Lets the
+// frontend flip "+ Upload" to "Create free account" once the guest's one
+// upload / one analysis is spent, and render the coach chip consistently
+// with CoachCapsDto's Used/Limit shape.
+public sealed record GuestStateDto(
+    int UploadsUsed, int UploadsMax,
+    int AnalysesUsed, int AnalysesMax,
+    int CoachMessagesUsed, int CoachMessagesMax,
+    DateTimeOffset? ExpiresAt);

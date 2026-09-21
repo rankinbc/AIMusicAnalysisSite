@@ -16,7 +16,7 @@ public static class FixRackEndpoints
     public static IEndpointRouteBuilder MapFixRackEndpoints(this IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/reports/{jobId:guid}/fix-rack").WithTags("fix-rack").RequireAuthorization();
-        g.MapPost("/", Generate);
+        g.MapPost("/", Generate).AllowGuest(); // Task D6 (spec D4)
         g.MapGet("/", GetFixRack);
         return app;
     }

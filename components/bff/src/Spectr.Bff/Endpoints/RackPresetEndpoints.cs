@@ -23,16 +23,16 @@ public static class RackPresetEndpoints
             .WithTags("rack").RequireAuthorization();
         rack.MapGet("/presets", ListPresets);
         rack.MapGet("/presets/{presetId:guid}", GetPreset);
-        rack.MapPost("/presets", SavePreset);
-        rack.MapDelete("/presets/{presetId:guid}", DeletePreset);
+        rack.MapPost("/presets", SavePreset).AllowGuest(); // Task D6 (spec D4)
+        rack.MapDelete("/presets/{presetId:guid}", DeletePreset).AllowGuest();
         rack.MapGet("/draft", GetDraft);
-        rack.MapPut("/draft", UpsertDraft);
+        rack.MapPut("/draft", UpsertDraft).AllowGuest();
 
         // Viz presets are user-scoped "looks" — not bound to any version.
         var viz = app.MapGroup("/viz").WithTags("viz").RequireAuthorization();
         viz.MapGet("/presets", ListViz);
-        viz.MapPost("/presets", SaveViz);
-        viz.MapDelete("/presets/{presetId:guid}", DeleteViz);
+        viz.MapPost("/presets", SaveViz).AllowGuest();
+        viz.MapDelete("/presets/{presetId:guid}", DeleteViz).AllowGuest();
 
         return app;
     }

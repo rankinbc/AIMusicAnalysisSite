@@ -120,7 +120,15 @@ public sealed class DemoAuthFixRound1GuardsTests(WebApplicationFactory<Program> 
             var client = f.CreateClient();
             client.DefaultRequestHeaders.Authorization = new("Bearer", token);
             var resp = await client.PostAsync("/api/auth/resend-verification", null);
-            Assert.Equal(HttpStatusCode.NoContent, resp.StatusCode);
+            // Task D6 — resend-verification is now denied-by-default under the
+            // default-deny guest guard (spec D4), which intercepts BEFORE the
+            // handler's own `if (user.IsGuest) return NoContent()` no-op below
+            // ever runs. The guard's 403 guest_restricted supersedes the
+            // quieter 204 this test asserted pre-D6 — either way no email is
+            // ever sent to a guest address, which is the property this test
+            // actually protects.
+            Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+            Assert.Equal("guest_restricted", await DemoAuthEndpointsTests.Code(resp));
 
             var queue = (DemoAuthEndpointsTests.RecordingJobQueue)f.Services.GetRequiredService<IJobQueue>();
             Assert.DoesNotContain(DramatiqTasks.SendEmail, queue.Tasks);

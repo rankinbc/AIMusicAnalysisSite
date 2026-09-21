@@ -292,6 +292,10 @@ builder.Services.AddScoped<EntitlementService>();
 // model). Depends on EntitlementService + AppDbContext, so scoped.
 builder.Services.AddScoped<CoachCapService>();
 
+// Task D6 — guest quotas (one upload, one analysis, global fail-closed arm).
+// Scoped: depends on the per-request AppDbContext + EntitlementService.
+builder.Services.AddScoped<GuestLimits>();
+
 // ── Listen V3 · PRP-0 spine primitives ──────────────────────────────────────
 // Redis rate limiter. No DB — Redis + interface only.
 builder.Services.AddSingleton<IRateLimiter, RedisRateLimiter>();
@@ -559,9 +563,17 @@ app.MapPublicSiteEndpoints();
 
 var api = app.MapGroup("/api");
 
+// Task D6 — default-deny guest guard (spec D4). Applied to the WHOLE /api
+// group so it cascades to every nested MapGroup below (and any mapped in
+// the future): a guest's mutating request passes ONLY when the endpoint
+// carries .AllowGuest()/.AllowGuestUpload(), or IAllowAnonymous. Real users
+// skip the filter in its first branch — this is not a per-route opt-in.
+api.AddEndpointFilter(GuestGuard.Filter);
+
 api.MapAuthEndpoints();
 api.MapDemoAuthEndpoints();
 api.MapMeEndpoints();
+api.MapGuestEndpoints();      // Task D6 — GET /api/me/guest
 api.MapAnonAnalysisEndpoints();  // story 6.3 — /api/anon/* device-identity vertical
 api.MapSongEndpoints();
 api.MapVersionEndpoints();

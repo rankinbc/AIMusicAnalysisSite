@@ -19,19 +19,21 @@ public static class VersionEndpoints
     {
         var g = app.MapGroup("/versions").WithTags("versions").RequireAuthorization();
 
+        // Task D6 (spec D4) — the guest's one upload lives on THIS route.
         g.MapPost("/", UploadVersion)
             .DisableAntiforgery()
-            .WithMetadata(new RequestSizeLimitAttribute(MaxUploadBytes));
+            .WithMetadata(new RequestSizeLimitAttribute(MaxUploadBytes))
+            .AllowGuestUpload();
 
         g.MapGet("/{versionId:guid}", GetById);
-        g.MapDelete("/{versionId:guid}", Delete);
-        g.MapPatch("/{versionId:guid}", PatchVersion);
-        g.MapPost("/{versionId:guid}/analyze", Reanalyze);
-        g.MapPost("/{versionId:guid}/set-current", SetCurrent);
+        g.MapDelete("/{versionId:guid}", Delete); // denied by default (D4) — cannot reset the upload quota via delete+reupload
+        g.MapPatch("/{versionId:guid}", PatchVersion).AllowGuest();
+        g.MapPost("/{versionId:guid}/analyze", Reanalyze).AllowGuest(); // quota enforced inside DispatchAnalysisAsync
+        g.MapPost("/{versionId:guid}/set-current", SetCurrent).AllowGuest();
         g.MapGet("/{versionId:guid}/notes", ListNotes);
-        g.MapPost("/{versionId:guid}/notes", CreateNote);
-        g.MapPatch("/{versionId:guid}/notes/{noteId:guid}", PatchNote);
-        g.MapDelete("/{versionId:guid}/notes/{noteId:guid}", DeleteNote);
+        g.MapPost("/{versionId:guid}/notes", CreateNote).AllowGuest();
+        g.MapPatch("/{versionId:guid}/notes/{noteId:guid}", PatchNote).AllowGuest();
+        g.MapDelete("/{versionId:guid}/notes/{noteId:guid}", DeleteNote).AllowGuest();
         g.MapGet("/{versionId:guid}/audio", StreamAudio);
         g.MapGet("/{versionId:guid}/als", DownloadAls);
         g.MapGet("/{versionId:guid}/reference", DownloadReference);
@@ -59,8 +61,8 @@ public static class VersionEndpoints
         g.MapPost("/{versionId:guid}/als-key", RegisterAlsKey);
 
         // Personal score — per-user × per-version rating (Change B)
-        g.MapPut("/{versionId:guid}/rating", SetRating);
-        g.MapDelete("/{versionId:guid}/rating", ClearRating);
+        g.MapPut("/{versionId:guid}/rating", SetRating).AllowGuest();
+        g.MapDelete("/{versionId:guid}/rating", ClearRating).AllowGuest();
 
         return app;
     }
@@ -1122,6 +1124,19 @@ public static class VersionEndpoints
         bool freeRetry = false,
         Guid? retryOfJobId = null)
     {
+        // Task D6 (spec D5) — the guest's own quota + the global fail-closed
+        // arm, checked FIRST so nothing below (entitlement resolution, job
+        // insert) runs for a guest who's already spent their one analysis. A
+        // free retry re-runs an ALREADY-granted analysis, so it is exempt —
+        // same reasoning as the verify gate below.
+        var isGuest = httpCtx.User.IsGuest();
+        if (isGuest && !freeRetry)
+        {
+            var g = await httpCtx.RequestServices.GetRequiredService<GuestLimits>()
+                .CheckAnalysisAsync(userId, httpCtx, ct);
+            if (g is not null) return (Guid.Empty, g);
+        }
+
         // Story 5.7 (FR6/AR16): freeRetry dispatches WITHOUT consuming
         // entitlement — the exhausted-cap gate is skipped and NOTHING is
         // written to usage_events / credit_ledger (never-consumed beats
@@ -1348,7 +1363,11 @@ public static class VersionEndpoints
         // Route off ent.Tier (the resolver's authoritative value, already in hand) — not a
         // re-read of job.Tier. analyze_audio_job is consumed from BOTH lanes (W1 + W2); the
         // queue here is the real router (Dramatiq dispatches by actor_name on arrival).
-        var queueName = ent.Tier switch
+        // Task D6 (spec D5) — guest analyses ALWAYS route to analysis-free,
+        // whatever ent.Tier resolved to (a guest reads as "pro" when the
+        // credits kill switch is off — this override stops that from
+        // starving the paid lane).
+        var queueName = isGuest ? DramatiqQueues.AnalysisFree : ent.Tier switch
         {
             "pro"     => DramatiqQueues.AnalysisPaid,
             "credits" => DramatiqQueues.AnalysisPaid,

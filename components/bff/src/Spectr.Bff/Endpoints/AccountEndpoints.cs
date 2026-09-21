@@ -26,8 +26,10 @@ public static class AccountEndpoints
     public static IEndpointRouteBuilder MapAccountEndpoints(this IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/me").WithTags("account").RequireAuthorization();
-        g.MapGet("/export", Export);
-        g.MapPost("/delete", DeleteAccount);
+        // Task D6 (spec D4) — Export hands out presigned storage URLs; GETs
+        // pass by default, so this needs the explicit deny marker.
+        g.MapGet("/export", Export).DenyGuest();
+        g.MapPost("/delete", DeleteAccount); // denied by default (D4)
         return app;
     }
 

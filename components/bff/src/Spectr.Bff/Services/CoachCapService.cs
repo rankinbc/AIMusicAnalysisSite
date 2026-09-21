@@ -39,6 +39,22 @@ public sealed class CoachCapService(AppDbContext db, EntitlementService ents)
     {
         var flags = await ents.GetFlagsAsync(ct);
 
+        // Task D6/D7 — guests get their OWN cap, checked BEFORE the
+        // credits-off shortcut below (which forces Tier="pro" and would
+        // otherwise make every guest's coach unlimited). Read directly off
+        // users.is_guest so this stays the ONLY call site that needs to know
+        // about guests — the three CoachCapService call sites are untouched.
+        // Scope "analysis" reuses the existing free-tier chip/gate grammar
+        // (the seeded demo conversation has zero coach_message usage events,
+        // so a fresh guest always starts at 0/limit).
+        if (await db.Users.AsNoTracking().Where(u => u.Id == userId).Select(u => u.IsGuest).FirstOrDefaultAsync(ct))
+        {
+            var guestLimit = GetFlag(flags, "coach_guest_messages", 20);
+            var guestUsed = await db.UsageEvents.AsNoTracking()
+                .CountAsync(e => e.UserId == userId && e.EventType == "coach_message", ct);
+            return new CoachCapState(guestUsed, guestLimit, guestUsed >= guestLimit, ScopeAnalysis, null);
+        }
+
         // credits_enabled=false ⇒ credit system off, coach truly unlimited.
         // The entitlement override forces Tier="pro", which would otherwise
         // land in the pooled-monthly branch below — the kill switch means

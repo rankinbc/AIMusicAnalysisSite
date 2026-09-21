@@ -19,8 +19,8 @@ public static class CompareEndpoints
         // Per-user × per-version-pair notes (Change C).
         // Pair is normalized (A↔B → same row) so order doesn't matter to callers.
         g.MapGet("/notes", GetNotes);
-        g.MapPut("/notes", PutNotes);
-        g.MapDelete("/notes", DeleteNotes);
+        g.MapPut("/notes", PutNotes).AllowGuest(); // Task D6 (spec D4)
+        g.MapDelete("/notes", DeleteNotes).AllowGuest();
 
         return app;
     }

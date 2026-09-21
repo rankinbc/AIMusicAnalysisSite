@@ -46,7 +46,7 @@ public static class CoachConversationEndpoints
             .WithTags("coach-conversation")
             .RequireAuthorization();
 
-        g.MapPost("/messages", PostMessage);
+        g.MapPost("/messages", PostMessage).AllowGuest(); // Task D6 (spec D4) — guests may post coach messages, capped
         g.MapGet("/conversation", GetConversation);
         // Story 1.6 / AR9 / AR44: SSE relay for the worker's per-token
         // pub/sub stream on ``coach:{conversationId}:{messageId}``. Event

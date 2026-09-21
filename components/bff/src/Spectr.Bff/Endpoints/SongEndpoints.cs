@@ -18,14 +18,14 @@ public static class SongEndpoints
         var g = app.MapGroup("/songs").WithTags("songs").RequireAuthorization();
 
         g.MapGet("/", List);
-        g.MapPost("/", Create);
+        g.MapPost("/", Create); // denied by default (D4) — guest song creation is the upload quota's job
         g.MapGet("/{songId:guid}", GetById);
-        g.MapPatch("/{songId:guid}", Patch);
-        g.MapDelete("/{songId:guid}", Archive);
-        g.MapDelete("/{songId:guid}/permanent", HardDelete);
-        g.MapPost("/{songId:guid}/restore", Restore);
-        g.MapPost("/{songId:guid}/tags", AddTag);
-        g.MapDelete("/{songId:guid}/tags/{tagId:guid}", RemoveTag);
+        g.MapPatch("/{songId:guid}", Patch).AllowGuest();
+        g.MapDelete("/{songId:guid}", Archive); // denied by default (D4)
+        g.MapDelete("/{songId:guid}/permanent", HardDelete); // denied by default (D4)
+        g.MapPost("/{songId:guid}/restore", Restore); // denied by default (D4)
+        g.MapPost("/{songId:guid}/tags", AddTag).AllowGuest();
+        g.MapDelete("/{songId:guid}/tags/{tagId:guid}", RemoveTag).AllowGuest();
 
         return app;
     }

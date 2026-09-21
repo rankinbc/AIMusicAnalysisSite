@@ -19,9 +19,18 @@ public static class GuestIdentity
 
     public static string EmailFor(Guid id) => $"guest-{id:N}@{EmailDomain}";
 
-    public static bool IsGuestEmail(string? email) =>
-        !string.IsNullOrEmpty(email)
-        && email.EndsWith("@" + EmailDomain, StringComparison.OrdinalIgnoreCase);
+    // Task D6 — normalised ONCE so the register refusal (AuthEndpoints) and
+    // the guest-marking fallback (Program.cs OnTokenValidated) can never
+    // disagree. A bare EndsWith let "x@guest.spectr.invalid." (trailing dot)
+    // or whitespace-padded variants slip past the register check while still
+    // reading as "not a guest" to the marker — trimming whitespace AND
+    // trailing dots before the suffix compare closes both gaps at once.
+    public static bool IsGuestEmail(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email)) return false;
+        var normalized = email.Trim().TrimEnd('.');
+        return normalized.EndsWith("@" + EmailDomain, StringComparison.OrdinalIgnoreCase);
+    }
 
     public static void Mark(ClaimsPrincipal p)
     {
