@@ -43,6 +43,19 @@ export function DemoLauncher() {
   const startedRef = useRef(false);
   const [failed, setFailed] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  // Item 3 (fix round 2): the 15s bound races the UI, not the real request —
+  // startDemo() itself keeps running after we've shown the failure card.
+  // `timedOut` records that a late success needs the normal navigate path
+  // instead of being silently dropped (the guest session it applied would
+  // otherwise sit behind a card telling the visitor the demo is unavailable).
+  const timedOutRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (isLoading || startedRef.current) return;
@@ -54,8 +67,9 @@ export function DemoLauncher() {
     }
 
     const run = async () => {
+      const demoPromise = startDemo();
       try {
-        const res = await withTimeout(startDemo(), START_TIMEOUT_MS);
+        const res = await withTimeout(demoPromise, START_TIMEOUT_MS);
         await router.invalidate();
         const dest = demoDestination(res.demo, window.innerWidth);
         await navigate({ ...dest, replace: true });
@@ -64,6 +78,28 @@ export function DemoLauncher() {
           surface: dest.to === '/listen-rack/$versionId' ? 'listen' : 'report',
         });
       } catch (err) {
+        if (err instanceof DemoTimeoutError) {
+          timedOutRef.current = true;
+          // The real request is still in flight — if it eventually succeeds,
+          // route it exactly like the normal path instead of leaving the
+          // already-applied guest session stranded behind the failure card.
+          void demoPromise
+            .then(async (res) => {
+              if (!timedOutRef.current || !mountedRef.current) return;
+              await router.invalidate();
+              const dest = demoDestination(res.demo, window.innerWidth);
+              await navigate({ ...dest, replace: true });
+              capture('demo_started', {
+                resumed: res.resumed,
+                surface: dest.to === '/listen-rack/$versionId' ? 'listen' : 'report',
+                late: true,
+              });
+            })
+            .catch(() => {
+              // The demo genuinely failed after already timing out — the
+              // failure card is already showing; nothing further to do.
+            });
+        }
         setFailed(true);
         const code =
           err instanceof DemoTimeoutError

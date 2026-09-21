@@ -4,7 +4,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 // credential-presenting endpoints (login/register/dev-login/refresh) are
 // excluded; logout and /auth/me now refresh-retry like any other call.
 
-import { ApiError, fetcher, getFreshAccessToken, setAccessToken } from '../fetcher';
+import {
+  ApiError,
+  bumpSessionGeneration,
+  fetcher,
+  getAccessToken,
+  getFreshAccessToken,
+  refreshSession,
+  setAccessToken,
+} from '../fetcher';
 
 const b64url = (o: object) =>
   btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -103,5 +111,99 @@ describe('fetcher 401 refresh-retry contract (wave 1)', () => {
     const { calls } = stubFetch({ responses: [], refresh: refreshOk });
     await getFreshAccessToken();
     expect(calls.filter((u) => u === '/api/auth/refresh')).toHaveLength(1);
+  });
+
+  // D9 fix round 2 (item 1c) — pre-existing invariant, must survive the
+  // superseded-refresh fix: N concurrent same-generation 401s still share
+  // exactly one /api/auth/refresh call.
+  it('two concurrent same-generation 401s share exactly one refresh request', async () => {
+    setAccessToken(makeJwt(900));
+    const { calls } = stubFetch({
+      responses: [
+        { status: 401 },
+        { status: 401 },
+        { status: 200, body: { id: 'a' } },
+        { status: 200, body: { id: 'b' } },
+      ],
+      refresh: refreshOk,
+    });
+    const [a, b] = await Promise.all([
+      fetcher<{ id: string }>({ url: '/auth/me', method: 'GET' }),
+      fetcher<{ id: string }>({ url: '/auth/me', method: 'GET' }),
+    ]);
+    expect([a.id, b.id].sort()).toEqual(['a', 'b']);
+    expect(calls.filter((u) => u === '/api/auth/refresh')).toHaveLength(1);
+  });
+
+  // D9 fix round 2 (item 1a) — REAL RED without the fix: refreshSession()
+  // used to return the raw (possibly superseded) AuthResponse to every
+  // awaiter, so a guest request whose retry raced a still-open, OLDER-
+  // generation refresh (e.g. a lingering boot refresh) would be retried with
+  // that OTHER session's bearer the moment it resolved. Genuinely
+  // interleaved: the request 401s and starts its retry BEFORE the stale
+  // refresh is resolved.
+  it('a stale (older-generation) in-flight refresh never lends its token to a same-request retry', async () => {
+    setAccessToken('guest-token');
+    let settleOld: (r: { ok: boolean; status: number; json: () => Promise<unknown> }) => void =
+      () => {};
+    const oldRefresh = new Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>(
+      (resolve) => {
+        settleOld = resolve;
+      },
+    );
+    let refreshCalls = 0;
+    const protectedAuthHeaders: (string | null)[] = [];
+    const mock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === '/api/protected') {
+        const h = (init?.headers as Record<string, string> | undefined)?.['Authorization'] ?? null;
+        protectedAuthHeaders.push(h);
+        const body = protectedAuthHeaders.length === 1 ? undefined : { ok: true };
+        const status = protectedAuthHeaders.length === 1 ? 401 : 200;
+        return Promise.resolve({
+          ok: status >= 200 && status < 300,
+          status,
+          json: () => Promise.resolve(body),
+          text: () => Promise.resolve(body === undefined ? '' : JSON.stringify(body)),
+        });
+      }
+      if (url === '/api/auth/refresh') {
+        refreshCalls++;
+        if (refreshCalls === 1) return oldRefresh;
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({ accessToken: 'guest-token-2', user: { id: 'g1', email: 'g@x.c' } }),
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', mock);
+
+    // A generation-0 refresh is already open (e.g. a lingering boot
+    // refresh) when the guest session begins.
+    void refreshSession();
+    bumpSessionGeneration();
+    setAccessToken('guest-token');
+
+    const reqPromise = fetcher<{ ok: boolean }>({ url: '/protected', method: 'GET' });
+
+    // Let the request 401 and its retry's refreshSession() call reach the
+    // point where it chains behind the still-open stale refresh.
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // The stale refresh finally resolves with a DIFFERENT session's token —
+    // must never reach the retry.
+    settleOld({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ accessToken: 'real', user: { id: 'real-1', email: 'r@x.c' } }),
+    });
+
+    await reqPromise;
+    expect(protectedAuthHeaders[1]).toBe('Bearer guest-token-2');
+    expect(getAccessToken()).toBe('guest-token-2');
   });
 });

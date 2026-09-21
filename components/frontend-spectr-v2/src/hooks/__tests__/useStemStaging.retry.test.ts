@@ -2,11 +2,14 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// E3.9 — XHR uploads join the 401 contract: preflight-fresh token, then retry
-// ONCE on 401 after a silent refresh; non-401 failures never retry.
+// D9 fix round 2 (item 1b) — the same generation-safe 401 retry contract as
+// useFileUpload (E3.9): a stale, older-generation refresh must never lend
+// its token to a stems-staging XHR retry (a guest upload written into a
+// real account's version is the concrete failure mode this project is
+// guarding against).
 
 import { bumpSessionGeneration, refreshSession, setAccessToken } from '../../api/fetcher';
-import { useFileUpload } from '../useFileUpload';
+import { useStemStaging } from '../useStemStaging';
 
 const b64url = (o: object) =>
   btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -43,7 +46,7 @@ class MockXhr {
 const freshJwt = makeJwt(900);
 const rotatedJwt = makeJwt(1800);
 
-describe('useFileUpload 401 retry (E3.9)', () => {
+describe('useStemStaging 401 retry (D9 fix round 2)', () => {
   beforeEach(() => {
     MockXhr.instances = [];
     setAccessToken(freshJwt); // long-lived → preflight skips the refresh
@@ -64,9 +67,9 @@ describe('useFileUpload 401 retry (E3.9)', () => {
   });
 
   it('retries once after a 401 with the refreshed token', async () => {
-    const { result } = renderHook(() => useFileUpload());
-    const done = result.current.upload(new File(['x'], 'a.wav'));
-    done.catch(() => undefined); // avoid unhandled rejection noise on failure paths
+    const { result } = renderHook(() => useStemStaging('v1'));
+    const done = result.current.stage([new File(['x'], 'kick.wav')]);
+    done.catch(() => undefined);
 
     await waitFor(() => expect(MockXhr.instances).toHaveLength(1));
     expect(MockXhr.instances[0]!.headers['Authorization']).toBe(`Bearer ${freshJwt}`);
@@ -75,70 +78,17 @@ describe('useFileUpload 401 retry (E3.9)', () => {
     await waitFor(() => expect(MockXhr.instances).toHaveLength(2));
     expect(MockXhr.instances[1]!.headers['Authorization']).toBe(`Bearer ${rotatedJwt}`);
 
-    act(() => MockXhr.instances[1]!.respond(200, JSON.stringify({ versionId: 'v1' })));
-    await expect(done).resolves.toMatchObject({ versionId: 'v1' });
+    act(() => MockXhr.instances[1]!.respond(200, JSON.stringify({ proposals: [] })));
+    await expect(done).resolves.toMatchObject({ proposals: [] });
   });
 
-  it('does not retry non-401 failures', async () => {
-    const { result } = renderHook(() => useFileUpload());
-    const done = result.current.upload(new File(['x'], 'a.wav'));
-    done.catch(() => undefined);
-
-    await waitFor(() => expect(MockXhr.instances).toHaveLength(1));
-    act(() => MockXhr.instances[0]!.respond(500, '{}'));
-
-    await expect(done).rejects.toThrow();
-    expect(MockXhr.instances).toHaveLength(1);
-    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
-  });
-
-  // Wave 2 (E3.7b) — the XHR failure path parses ALL server error shapes via
-  // the shared parser: an envelope body must surface error.message (never
-  // "[object Object]"), a legacy body its text.
-  it('surfaces the envelope message on a non-401 failure (not "[object Object]")', async () => {
-    const { result } = renderHook(() => useFileUpload());
-    const done = result.current.upload(new File(['x'], 'a.wav'));
-    done.catch(() => undefined);
-
-    await waitFor(() => expect(MockXhr.instances).toHaveLength(1));
-    act(() =>
-      MockXhr.instances[0]!.respond(
-        400,
-        JSON.stringify({
-          error: { code: 'file_too_large', message: 'File exceeds 250 MB limit.' },
-        }),
-      ),
-    );
-
-    await expect(done).rejects.toThrow('File exceeds 250 MB limit.');
-    await waitFor(() => expect(result.current.error).toBe('File exceeds 250 MB limit.'));
-    expect(result.current.error).not.toContain('[object Object]');
-  });
-
-  it('surfaces the legacy { error: "text" } message on a non-401 failure', async () => {
-    const { result } = renderHook(() => useFileUpload());
-    const done = result.current.upload(new File(['x'], 'a.wav'));
-    done.catch(() => undefined);
-
-    await waitFor(() => expect(MockXhr.instances).toHaveLength(1));
-    act(() =>
-      MockXhr.instances[0]!.respond(
-        400,
-        JSON.stringify({ error: 'Unsupported file type.' }),
-      ),
-    );
-
-    await expect(done).rejects.toThrow('Unsupported file type.');
-    await waitFor(() => expect(result.current.error).toBe('Unsupported file type.'));
-  });
-
-  // D9 fix round 2 (item 1b) — REAL RED without the fix: a guest upload's
-  // 401 retry used to read `.accessToken` straight off `refreshSession()`'s
-  // RESULT, so a still-open, OLDER-generation refresh (e.g. a lingering
-  // boot refresh for a different, real, user) that resolves AFTER the retry
-  // starts would hand the guest upload that real user's bearer. Genuinely
-  // interleaved: the stale refresh is held open and resolved only after the
-  // XHR has already 401'd and its retry logic has reached refreshSession().
+  // REAL RED without the fix: a stems-staging retry used to read
+  // `.accessToken` straight off `refreshSession()`'s RESULT, so a still-open,
+  // OLDER-generation refresh (e.g. a lingering boot refresh for a different,
+  // real, user) that resolves AFTER the retry starts would hand this stems
+  // upload that real user's bearer. Genuinely interleaved: the stale refresh
+  // is held open and resolved only after the XHR has already 401'd and its
+  // retry logic has reached refreshSession().
   it('a stale (older-generation) in-flight refresh never lends its token to the XHR retry', async () => {
     let settleOld: (r: { ok: boolean; status: number; json: () => Promise<unknown> }) => void =
       () => {};
@@ -168,8 +118,8 @@ describe('useFileUpload 401 retry (E3.9)', () => {
     void refreshSession();
     bumpSessionGeneration();
 
-    const { result } = renderHook(() => useFileUpload());
-    const done = result.current.upload(new File(['x'], 'a.wav'));
+    const { result } = renderHook(() => useStemStaging('v1'));
+    const done = result.current.stage([new File(['x'], 'kick.wav')]);
     done.catch(() => undefined);
 
     await waitFor(() => expect(MockXhr.instances).toHaveLength(1));
@@ -198,13 +148,26 @@ describe('useFileUpload 401 retry (E3.9)', () => {
     await waitFor(() => expect(MockXhr.instances).toHaveLength(2));
     expect(MockXhr.instances[1]!.headers['Authorization']).toBe(`Bearer ${rotatedJwt}`);
 
-    act(() => MockXhr.instances[1]!.respond(200, JSON.stringify({ versionId: 'v1' })));
-    await expect(done).resolves.toMatchObject({ versionId: 'v1' });
+    act(() => MockXhr.instances[1]!.respond(200, JSON.stringify({ proposals: [] })));
+    await expect(done).resolves.toMatchObject({ proposals: [] });
+  });
+
+  it('does not retry non-401 failures', async () => {
+    const { result } = renderHook(() => useStemStaging('v1'));
+    const done = result.current.stage([new File(['x'], 'kick.wav')]);
+    done.catch(() => undefined);
+
+    await waitFor(() => expect(MockXhr.instances).toHaveLength(1));
+    act(() => MockXhr.instances[0]!.respond(500, '{}'));
+
+    await expect(done).rejects.toThrow();
+    expect(MockXhr.instances).toHaveLength(1);
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
   });
 
   it('a second 401 (refresh did not help) fails without a third attempt', async () => {
-    const { result } = renderHook(() => useFileUpload());
-    const done = result.current.upload(new File(['x'], 'a.wav'));
+    const { result } = renderHook(() => useStemStaging('v1'));
+    const done = result.current.stage([new File(['x'], 'kick.wav')]);
     done.catch(() => undefined);
 
     await waitFor(() => expect(MockXhr.instances).toHaveLength(1));

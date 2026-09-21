@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from 'react';
 
 import { parseErrorText } from '../api/error-utils';
-import { getFreshAccessToken, refreshSession } from '../api/fetcher';
+import { getFreshAccessToken, resolveRetryToken } from '../api/fetcher';
 import type { UploadResponse } from '../api/types';
 
 interface UploadFields {
@@ -66,9 +66,15 @@ export function useFileUpload() {
               }
             } else if (xhr.status === 401 && !retried) {
               retried = true;
-              void refreshSession().then((fresh) => {
+              // D9 fix round 2 (item 1): never retry with a superseded
+              // refresh's token — resolveRetryToken() only ever hands back a
+              // token that's genuinely fresh or the CURRENT module token
+              // (and only if it differs from `token`, the one that just
+              // 401'd), so a guest upload can never carry a stale real
+              // user's stale bearer.
+              void resolveRetryToken(token).then((fresh) => {
                 if (fresh) {
-                  resolve(attempt(fresh.accessToken));
+                  resolve(attempt(fresh));
                 } else {
                   const msg = 'Session expired — sign in again to upload.';
                   setState((s) => ({ ...s, isUploading: false, error: msg }));

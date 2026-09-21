@@ -14,7 +14,10 @@ export class ApiError extends Error {
 }
 
 let accessToken: string | null = null;
-let refreshInFlight: Promise<AuthResponse | null> | null = null;
+// D9 fix round 2 (item 1): tagged with the generation it was started under,
+// so a new caller arriving under a NEWER generation can tell its in-flight
+// promise is stale (see refreshSession below) instead of blindly sharing it.
+let refreshInFlight: { generation: number; promise: Promise<AuthResponse | null> } | null = null;
 let onAuthClearedCallback: (() => void) | null = null;
 let onTokenRefreshedCallback: ((token: string) => void) | null = null;
 
@@ -92,46 +95,76 @@ interface FetcherConfig {
  * deterministic in dev). Returns the full AuthResponse so AuthContext can
  * hydrate the user without a second round-trip.
  */
-export async function refreshSession(): Promise<AuthResponse | null> {
-  refreshInFlight ??= (async () => {
-    // Captured for the WHOLE in-flight request (not per-caller): a bump that
-    // happens after this fetch started means the response, even a 200,
-    // belongs to a session that no longer exists by the time it arrives.
-    // The data is still returned to every awaiter — AuthContext.refresh()
-    // has its own generation check before deciding whether to apply it —
-    // but the token/callback side effect below (the only place that mutates
-    // module state unconditionally) must not fire for a superseded request.
-    const startGeneration = sessionGeneration;
-    const doRefresh = async (): Promise<AuthResponse | null> => {
-      try {
-        const r = await fetch('/api/auth/refresh', {
-          method: 'POST',
-          credentials: 'include',
-        });
-        if (!r.ok) return null;
-        const data = (await r.json()) as AuthResponse;
-        if (sessionGeneration === startGeneration) {
-          accessToken = data.accessToken;
-          onTokenRefreshedCallback?.(data.accessToken);
-        }
-        return data;
-      } catch {
-        return null;
-      }
+export function refreshSession(): Promise<AuthResponse | null> {
+  const requestGeneration = sessionGeneration;
+  const existing = refreshInFlight;
+
+  if (existing && existing.generation === requestGeneration) {
+    // Same-generation dedupe: N concurrent callers share the one request.
+    return existing.promise;
+  }
+
+  if (existing) {
+    // D9 fix round 2 (item 1, bullet 3): `existing` was started under an
+    // OLDER generation (e.g. the boot refresh, still open when startDemo or
+    // login superseded it). The refresh cookie rotates on use, so firing a
+    // second POST while that one is still in flight would present it twice.
+    // Wait for it to settle — its result is irrelevant to us and is never
+    // read here — then start a genuinely fresh request under the CURRENT
+    // generation. Chained into `refreshInFlight` synchronously below so any
+    // other same-generation caller that arrives during the wait dedupes onto
+    // this one successor instead of each starting its own.
+    const chained: { generation: number; promise: Promise<AuthResponse | null> } = {
+      generation: requestGeneration,
+      promise: existing.promise.catch(() => null).then(() => startRefresh()),
     };
+    refreshInFlight = chained;
+    return chained.promise;
+  }
+
+  return startRefresh();
+}
+
+// D9 fix round 2 (item 1, bullet 1): a superseded refresh must resolve
+// `null` for EVERY awaiter, not just skip the module-token side effect —
+// otherwise a caller that reads the token off the returned AuthResponse
+// (rather than off `getAccessToken()`) still receives a bearer that belongs
+// to a session this tab has already moved on from.
+function startRefresh(): Promise<AuthResponse | null> {
+  const startGeneration = sessionGeneration;
+  const doRefresh = async (): Promise<AuthResponse | null> => {
     try {
-      // E2.1: serialize rotation across tabs of the same browser. The server's
-      // 60 s rotation grace is the correctness net (a loser tab's stale cookie
-      // still resolves); the lock just cuts rotation churn. Feature-detect —
-      // Safari <15.4 and some webviews lack Web Locks.
-      return typeof navigator !== 'undefined' && navigator.locks?.request
-        ? ((await navigator.locks.request('spectr_refresh', doRefresh)) as AuthResponse | null)
-        : await doRefresh();
-    } finally {
-      refreshInFlight = null;
+      const r = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (!r.ok) return null;
+      const data = (await r.json()) as AuthResponse;
+      if (sessionGeneration !== startGeneration) return null; // superseded while in flight
+      accessToken = data.accessToken;
+      onTokenRefreshedCallback?.(data.accessToken);
+      return data;
+    } catch {
+      return null;
     }
-  })();
-  return refreshInFlight;
+  };
+  // E2.1: serialize rotation across tabs of the same browser. The server's
+  // 60 s rotation grace is the correctness net (a loser tab's stale cookie
+  // still resolves); the lock just cuts rotation churn. Feature-detect —
+  // Safari <15.4 and some webviews lack Web Locks.
+  const run =
+    typeof navigator !== 'undefined' && navigator.locks?.request
+      ? (navigator.locks.request('spectr_refresh', doRefresh) as Promise<AuthResponse | null>)
+      : doRefresh();
+
+  const entry: { generation: number; promise: Promise<AuthResponse | null> } = {
+    generation: startGeneration,
+    promise: run.finally(() => {
+      if (refreshInFlight === entry) refreshInFlight = null;
+    }),
+  };
+  refreshInFlight = entry;
+  return entry.promise;
 }
 
 /**
@@ -159,8 +192,23 @@ export async function getFreshAccessToken(minTtlSeconds = 120): Promise<string |
   return accessToken;
 }
 
-async function refreshToken(): Promise<string | null> {
-  return (await refreshSession())?.accessToken ?? null;
+/**
+ * D9 fix round 2 (item 1, bullet 2): what a 401 retry site should use after
+ * awaiting a (possibly superseded) refresh. `refreshSession()` resolves
+ * `null` whenever it settled for a generation that's no longer current — so
+ * a genuinely fresh token from the refresh itself is used when there is one;
+ * otherwise fall back to whatever is CURRENTLY in module state (a session
+ * change, e.g. startDemo/login, may have installed a newer token while this
+ * caller was waiting) as long as it differs from the token the failed
+ * request already carried — retrying with the same still-401ing credential
+ * would just loop. Shared by the fetcher's own 401 handler and the two XHR
+ * upload hooks (useFileUpload, useStemStaging).
+ */
+export async function resolveRetryToken(failedToken: string | null): Promise<string | null> {
+  const data = await refreshSession();
+  if (data) return data.accessToken;
+  const current = getAccessToken();
+  return current && current !== failedToken ? current : null;
 }
 
 async function doFetch(config: FetcherConfig, token: string | null): Promise<Response> {
@@ -203,11 +251,12 @@ async function doFetch(config: FetcherConfig, token: string | null): Promise<Res
 const NO_REFRESH_RETRY = ['/auth/refresh', '/auth/login', '/auth/register', '/auth/dev-login', '/auth/demo'];
 
 export async function fetcher<T>(config: FetcherConfig): Promise<T> {
-  let res = await doFetch(config, accessToken);
+  const initialToken = accessToken;
+  let res = await doFetch(config, initialToken);
 
   if (res.status === 401 && !NO_REFRESH_RETRY.some((p) => config.url.startsWith(p))) {
     // Try once: silent refresh, then retry.
-    const fresh = await refreshToken();
+    const fresh = await resolveRetryToken(initialToken);
     if (fresh) {
       res = await doFetch(config, fresh);
     } else {

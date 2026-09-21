@@ -37,6 +37,11 @@ const REAL_USER_RESPONSE = {
   user: { id: 'real-1', email: 'real@example.com', displayName: 'Real', tier: 'free' },
 };
 
+const USER_B_RESPONSE = {
+  accessToken: 'b-token',
+  user: { id: 'b1', email: 'b@example.com', displayName: 'B', tier: 'free' },
+};
+
 const mount = (qc = new QueryClient()) => ({
   qc,
   ...renderHook(() => useAuth(), {
@@ -184,5 +189,63 @@ describe('AuthContext — startDemo', () => {
     await waitFor(() => expect(result.current.user?.id).toBe('real-1'));
     expect(result.current.accessToken).toBe('real-user-token');
     expect(getAccessToken()).toBe('real-user-token');
+  });
+
+  // Item 2 — REAL RED without the fix: login (unlike startDemo/logout)
+  // didn't bump the session generation, so a slow boot refresh resolving
+  // 200 for the PREVIOUS cookie's user after a fast login passed the
+  // generation check and applyAuth'd the old user over the fresh login.
+  it('login supersedes a still-open boot refresh for a different (stale-cookie) user', async () => {
+    const boot = stubHeldOpenBootFetch();
+    vi.mocked(fetcher).mockImplementation(({ url }: { url: string }) =>
+      url === '/auth/login'
+        ? Promise.resolve(USER_B_RESPONSE)
+        : Promise.reject(new Error(`unexpected fetcher call: ${url}`)),
+    );
+    const { result } = mount();
+    await act(async () => {
+      await result.current.login('b@example.com', 'pw');
+    });
+    await act(async () => {
+      boot.resolveRealUser();
+      // Flush the doRefresh chain: fetch → r.json() → (skipped) assignment.
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.user?.id).toBe('b1');
+    expect(result.current.accessToken).toBe('b-token');
+    expect(getAccessToken()).toBe('b-token');
+  });
+
+  // Item 4 — test gap: the earlier "first sign-in clears cached data" test
+  // also passes with only startDemo's explicit `queryClient.clear()`. This
+  // one exercises the passive `prevUserId` effect ALONE — login has no
+  // explicit clear of its own, and neither does logout.
+  it('the prevUserId effect alone clears the cache on login and on logout to null', async () => {
+    const boot = stubHeldOpenBootFetch();
+    vi.mocked(fetcher).mockImplementation(({ url }: { url: string }) => {
+      if (url === '/auth/login') return Promise.resolve(REAL_USER_RESPONSE);
+      if (url === '/auth/logout') return Promise.resolve(undefined);
+      return Promise.reject(new Error(`unexpected fetcher call: ${url}`));
+    });
+    const { result, qc } = mount();
+    boot.resolveNull();
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.user).toBeNull();
+
+    qc.setQueryData(['anon'], [1]);
+    await act(async () => {
+      await result.current.login('real@example.com', 'pw');
+    });
+    expect(result.current.user?.id).toBe('real-1');
+    expect(qc.getQueryData(['anon'])).toBeUndefined();
+
+    qc.setQueryData(['signed-in'], [1]);
+    await act(async () => {
+      await result.current.logout();
+    });
+    expect(result.current.user).toBeNull();
+    expect(qc.getQueryData(['signed-in'])).toBeUndefined();
   });
 });

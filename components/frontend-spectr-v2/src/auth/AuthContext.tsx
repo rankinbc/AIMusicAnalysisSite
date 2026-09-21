@@ -53,12 +53,14 @@ export const AuthContext = createContext<AuthContextValue | null>(null);
 // lives in fetcher.refreshSession — shared with the 401 handler so the two
 // mechanisms can never race token rotation against each other.
 //
-// Session generation: logout/startDemo/login bump fetcher.ts's shared
-// sessionGeneration counter (see fetcher.ts) so a refresh that was already
-// in flight when the session changed can never re-apply its stale result —
-// neither the `user` object here NOR the module-level token in fetcher.ts
-// (D9 fix round 1, item 1: the token assignment itself is gated inside
-// refreshSession, not just this component's use of its result).
+// Session generation: logout/startDemo/login/devLogin/register all bump
+// fetcher.ts's shared sessionGeneration counter (see fetcher.ts) so a
+// refresh that was already in flight when the session changed can never
+// re-apply its stale result — neither the `user` object here NOR the
+// module-level token in fetcher.ts (D9 fix round 1, item 1: the token
+// assignment itself is gated inside refreshSession, not just this
+// component's use of its result; D9 fix round 2, item 2: login/devLogin/
+// register were the gap — they didn't bump before).
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
@@ -150,6 +152,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string) => {
+      // D9 fix round 2 (item 2): supersede any still-in-flight refresh (the
+      // boot silent-refresh, most commonly) BEFORE it can resolve for the
+      // previous cookie's user and applyAuth over this fresh sign-in. Same
+      // pattern as startDemo/logout below.
+      bumpSessionGeneration();
       const auth = await fetcher<AuthResponse>({
         url: '/auth/login',
         method: 'POST',
@@ -162,6 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const devLogin = useCallback(
     async (email?: string) => {
+      bumpSessionGeneration();
       const auth = await fetcher<AuthResponse>({
         url: '/auth/dev-login',
         method: 'POST',
@@ -174,6 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(
     async (email: string, password: string) => {
+      bumpSessionGeneration();
       const auth = await fetcher<AuthResponse>({
         url: '/auth/register',
         method: 'POST',

@@ -138,6 +138,50 @@ describe('DemoLauncher', () => {
     }
   });
 
+  // Fix round 2, item 3 — REAL RED without the fix: startDemo() keeps
+  // running after the 15s bound rejects and shows the failure card. If it
+  // later succeeds, the guest session it applies would otherwise be
+  // stranded behind a card telling the visitor the demo is unavailable —
+  // this must instead route exactly like the normal path (invalidate, then
+  // navigate) and record `late: true`.
+  it('a late success after the timeout navigates instead of leaving the failure card', async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveStart: (res: DemoStartResponse) => void = () => {};
+      const startDemo = vi.fn(
+        () => new Promise<DemoStartResponse>((resolve) => (resolveStart = resolve)),
+      );
+      auth = { isLoading: false, user: null, startDemo };
+      render(<DemoLauncher />);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15_000);
+      });
+      expect(screen.getByText(/taking a break/i)).toBeTruthy();
+      expect(navigateSpy).not.toHaveBeenCalled();
+
+      await act(async () => {
+        resolveStart(GUEST);
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      expect(navigateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: '/listen-rack/$versionId',
+          params: { versionId: 'v' },
+          replace: true,
+        }),
+      );
+      expect(capture).toHaveBeenCalledWith('demo_started', {
+        resumed: false,
+        surface: 'listen',
+        late: true,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // Item 4b — accessibility: the progress line is a polite status region;
   // the failure card is an alert whose heading takes focus when it replaces
   // the progress line.
