@@ -17,6 +17,10 @@ import { CommandPalette } from '../components/CommandPalette';
 import { ShortcutSheet } from '../components/ShortcutSheet';
 import { UnifiedUploadDialog } from '../components/UnifiedUploadDialog';
 import { AppDunningNotice } from '../features/billing/AppDunningNotice';
+import { GuestBanner } from '../features/demo/GuestBanner';
+import { GuestUpgradeDialog } from '../features/demo/GuestUpgradeDialog';
+import { onGuestUpgrade, type GuestUpgradeReason } from '../features/demo/guest-upgrade-bus';
+import { useGuestState } from '../features/demo/useGuestState';
 import { AppWorkerHealthNotice } from '../features/health/AppWorkerHealthNotice';
 import { DevHealthDot } from '../features/health/DevHealthDot';
 import { BrandMark } from '../ui/BrandMark';
@@ -49,6 +53,21 @@ function AppLayout() {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // D10 — guest shell: quota state for the banner/"+ Upload" swap, and the
+  // ONE upgrade dialog, opened by ANY guest_restricted 403 anywhere in the
+  // app (via the MutationCache in api/mutation-error-toast.ts) or by a
+  // proactive pre-request gate (e.g. UnifiedUploadDialog itself).
+  const guest = useGuestState();
+  // `message` stays a required-but-nullable field (not `message?:`) — the
+  // bus callback always passes a value, possibly `undefined`, and
+  // exactOptionalPropertyTypes rejects assigning `undefined` into an
+  // optional field.
+  const [upgrade, setUpgrade] = useState<{
+    reason: GuestUpgradeReason;
+    message: string | undefined;
+  } | null>(null);
+  useEffect(() => onGuestUpgrade((reason, message) => setUpgrade({ reason, message })), []);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -96,9 +115,14 @@ function AppLayout() {
       const anyDialogOpen =
         shellSurfaceOpen ||
         document.querySelector('[role="dialog"], [role="alertdialog"]') !== null;
+      // D10 — a guest with no uploads left gets no ⌘U surface at all: the
+      // banner/"+ Upload" link already tells them where to go, and
+      // UnifiedUploadDialog would just substitute the upgrade dialog anyway
+      // (see its own guest.canUpload guard) — skip opening anything here.
+      const uploadBlockedForGuest = guest.isGuest && !guest.canUpload;
       const allowed =
         (action === 'palette' && !anyDialogOpen) ||
-        (action === 'upload' && !anyDialogOpen) ||
+        (action === 'upload' && !anyDialogOpen && !uploadBlockedForGuest) ||
         (action === 'sheet' && !anyDialogOpen);
       if (!allowed) return; // no preventDefault — the browser keeps its chord on a no-op
 
@@ -109,7 +133,7 @@ function AppLayout() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [paletteOpen, sheetOpen, uploadOpen]);
+  }, [paletteOpen, sheetOpen, uploadOpen, guest.isGuest, guest.canUpload]);
 
   if (isLoading) {
     return (
@@ -167,9 +191,17 @@ function AppLayout() {
           {/* Story 12.2 — dev-only aggregated-health dot. The conditional
               render keeps the /health/full query unmounted in prod builds. */}
           {import.meta.env.DEV && <DevHealthDot />}
-          <Link to="/library" className="btn primary sm">
-            + Upload
-          </Link>
+          {/* D10 — a guest with no uploads left never sees a working "+
+              Upload" entry point; it becomes the registration link instead. */}
+          {guest.isGuest && !guest.canUpload ? (
+            <Link to="/register" search={{ from: 'guest' }} className="btn primary sm">
+              Create a free account
+            </Link>
+          ) : (
+            <Link to="/library" className="btn primary sm">
+              + Upload
+            </Link>
+          )}
           <div ref={menuRef} className={s.navAvatarWrap}>
             <button
               type="button"
@@ -267,6 +299,8 @@ function AppLayout() {
       {pathname !== '/billing' && (
         <AppDunningNotice className={s.dunningSlot} />
       )}
+      {/* D10 — guest-shell banner; renders nothing for a real user. */}
+      <GuestBanner />
       {/* Global analysis-worker outage notice — renders nothing while healthy. */}
       <AppWorkerHealthNotice className={s.workerHealthSlot} />
       {/* Story 12.1 — unverified-email notice (free tier only); renders
@@ -281,6 +315,15 @@ function AppLayout() {
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <ShortcutSheet open={sheetOpen} onOpenChange={setSheetOpen} />
       <UnifiedUploadDialog open={uploadOpen} onOpenChange={setUploadOpen} />
+      {/* D10 — the ONE guest upgrade dialog, driven by onGuestUpgrade. */}
+      <GuestUpgradeDialog
+        open={upgrade !== null}
+        reason={upgrade?.reason ?? 'not_allowed'}
+        {...(upgrade?.message !== undefined ? { message: upgrade.message } : {})}
+        onOpenChange={(next) => {
+          if (!next) setUpgrade(null);
+        }}
+      />
     </div>
   );
 }

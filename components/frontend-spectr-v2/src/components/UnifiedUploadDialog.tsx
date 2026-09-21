@@ -16,6 +16,8 @@ import {
 } from '../api/hooks';
 import { extractApiError } from '../api/error-utils';
 import { STEM_ROLES } from '../api/types';
+import { GuestUpgradeDialog } from '../features/demo/GuestUpgradeDialog';
+import { useGuestState } from '../features/demo/useGuestState';
 import type {
   AlsUploadResponse,
   ConfirmStemsResponse,
@@ -49,7 +51,10 @@ import {
   buildAutoConfirmPayload,
   decideDispatchPath,
   decideSongAssociation,
+  formatGuestReferenceHelp,
+  formatGuestStemsHelp,
   GENRE_HINTS,
+  guestUploadBlocked,
 } from './unified-upload-helpers';
 import s from './UploadVersionDialog.module.css';
 
@@ -177,6 +182,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
   const navigate = useNavigate();
   const qc = useQueryClient();
   const ents = useEntitlements();
+  const guest = useGuestState(); // D10 — guest shell
   const proposals = useStemProposals(versionId, Boolean(versionId) && phase === 'review');
 
   // Review-ON: merge the worker's guesses into the rows as polling delivers them.
@@ -529,6 +535,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
           method: 'POST',
         });
         qc.invalidateQueries({ queryKey: ['songs'] });
+        qc.invalidateQueries({ queryKey: ['me', 'guest'] }); // D10 — refresh guest quota
         finishNavigate(mixRes.songId, r.jobId);
         return;
       }
@@ -597,6 +604,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
         },
       });
       qc.invalidateQueries({ queryKey: ['songs'] });
+      qc.invalidateQueries({ queryKey: ['me', 'guest'] }); // D10 — refresh guest quota
       finishNavigate(mixRes.songId, res.reanalysisJobId);
     } catch (err) {
       // Server-side entitlement gate (catches races where the client check passed but the
@@ -659,6 +667,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
         },
       });
       qc.invalidateQueries({ queryKey: ['songs'] });
+      qc.invalidateQueries({ queryKey: ['me', 'guest'] }); // D10 — refresh guest quota
       finishNavigate(songIdState, res.reanalysisJobId);
     } catch (err) {
       setBusy(false);
@@ -708,6 +717,15 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
   // Locked only once we positively know the tier lacks the feature.
   const stemsLocked = ents.data ? !ents.data.stemsEnabled : false;
   const alsLocked = ents.data ? !ents.data.alsEnabled : false;
+
+  // D10 — a guest with no uploads left never sees the upload form at all;
+  // the shell's ONE upgrade dialog substitutes for the entire dialog
+  // content, still bound to the SAME open/onOpenChange the caller passed
+  // in (library "+ New song", song page "+ Add version", and the ⌘U
+  // fallback in _app.tsx all reach this without knowing about guests).
+  if (guestUploadBlocked(guest)) {
+    return <GuestUpgradeDialog open={open} onOpenChange={onOpenChange} reason="upload_limit" />;
+  }
 
   return (
     <>
@@ -984,6 +1002,12 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                     <p className={s.subhead}>Reference track</p>
                     <span className={s.benefitChip}>Compare your mix to a pro track</span>
                   </div>
+                  {/* D10 (addendum a) — guest limit, server-sourced, never hidden. */}
+                  {guest.isGuest && guest.state && (
+                    <p className={s.dropHint}>
+                      {formatGuestReferenceHelp(guest.state.referencesMax, guest.state.referencesUsed)}
+                    </p>
+                  )}
                   <label className={f.label}>
                     Reference source
                     <select
@@ -1116,6 +1140,12 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                           : 'optional · per-stem balance & clash'}
                       </span>
                     </button>
+                    {/* D10 (addendum a) — guest limit, server-sourced, never hidden. */}
+                    {guest.isGuest && guest.state && (
+                      <p className={s.dropHint}>
+                        {formatGuestStemsHelp(guest.state.stemsMaxFiles, guest.state.stemsMaxMb)}
+                      </p>
+                    )}
                     {showStems && (
                       <div className={s.advancedBody}>
                         <label

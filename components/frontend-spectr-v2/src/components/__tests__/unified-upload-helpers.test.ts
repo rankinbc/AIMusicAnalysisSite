@@ -5,7 +5,10 @@ import {
   buildAutoConfirmPayload,
   decideDispatchPath,
   decideSongAssociation,
+  formatGuestReferenceHelp,
+  formatGuestStemsHelp,
   GENRE_HINTS,
+  guestUploadBlocked,
 } from '../unified-upload-helpers';
 
 describe('decideDispatchPath', () => {
@@ -86,5 +89,39 @@ describe('GENRE_HINTS', () => {
   it('is a non-empty, de-duplicated list of genre strings', () => {
     expect(GENRE_HINTS.length).toBeGreaterThan(0);
     expect(new Set(GENRE_HINTS).size).toBe(GENRE_HINTS.length);
+  });
+});
+
+// D10 (addendum a/b) — pure helpers behind the guest branch: the dialog is
+// NOT mix-only for a guest (stems/.als/reference stay visible), so these
+// only decide the upload-blocked substitution + the two limit helper lines.
+describe('guestUploadBlocked', () => {
+  it('blocks once the guest has used every upload', () => {
+    expect(guestUploadBlocked({ isGuest: true, canUpload: false })).toBe(true);
+  });
+
+  it('never blocks a real user regardless of canUpload', () => {
+    expect(guestUploadBlocked({ isGuest: false, canUpload: false })).toBe(false);
+  });
+
+  it('does not block a guest who still has uploads left', () => {
+    expect(guestUploadBlocked({ isGuest: true, canUpload: true })).toBe(false);
+  });
+});
+
+describe('formatGuestStemsHelp', () => {
+  it('reads the server-supplied file + size caps, never a hardcoded number', () => {
+    expect(formatGuestStemsHelp(12, 300)).toBe('Up to 12 stems · 300 MB per track');
+    expect(formatGuestStemsHelp(6, 150)).toBe('Up to 6 stems · 150 MB per track');
+  });
+});
+
+describe('formatGuestReferenceHelp', () => {
+  it('reports references remaining', () => {
+    expect(formatGuestReferenceHelp(1, 0)).toBe('1 reference left');
+  });
+
+  it('never goes negative when used somehow exceeds max', () => {
+    expect(formatGuestReferenceHelp(1, 3)).toBe('0 reference left');
   });
 });

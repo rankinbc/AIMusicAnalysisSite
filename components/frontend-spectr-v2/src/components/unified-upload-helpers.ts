@@ -81,3 +81,28 @@ export function buildAutoConfirmPayload(
 ): ConfirmStemItem[] {
   return stems.map((s) => ({ id: s.id, confirmedRole: s.detectedRole ?? 'other' }));
 }
+
+// D10 (guest shell, addendum a/b) — the guest upload dialog is NOT mix-only;
+// stems/.als/reference stay visible, with server-sourced limits as helper
+// text instead of being hidden. Kept pure + here (not inline JSX) so the
+// already-1200+-line dialog doesn't grow, and so these are unit-testable
+// without mounting it.
+
+/** Substitute the whole dialog with the upgrade dialog once the guest has
+ *  used every upload the server granted them. Never blocks a real user. */
+export function guestUploadBlocked(guest: { isGuest: boolean; canUpload: boolean }): boolean {
+  return guest.isGuest && !guest.canUpload;
+}
+
+/** Stems drop-zone helper line for a guest — server-sourced caps, never a
+ *  hardcoded number (the per-version stems limit, GuestStateDto). */
+export function formatGuestStemsHelp(stemsMaxFiles: number, stemsMaxMb: number): string {
+  return `Up to ${stemsMaxFiles} stems · ${stemsMaxMb} MB per track`;
+}
+
+/** Reference-track helper line for a guest — remaining slots, clamped at 0
+ *  (a guest can't go negative even if a race lets `used` exceed `max`). */
+export function formatGuestReferenceHelp(referencesMax: number, referencesUsed: number): string {
+  const left = Math.max(referencesMax - referencesUsed, 0);
+  return `${left} reference left`;
+}
