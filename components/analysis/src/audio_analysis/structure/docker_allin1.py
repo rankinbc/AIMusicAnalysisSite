@@ -35,6 +35,16 @@ DEFAULT_IMAGE = "allin1:latest"
 # so CPU runs complete; prod on GPU (~10-15 s) can lower it via ALLIN1_TIMEOUT.
 DEFAULT_TIMEOUT_S = 1800
 
+# G4 — the container, not the host VM, must be the thing that dies. allin1's
+# demucs separation step is memory-hungry and previously ran with NO cap: on
+# this dev box a single 9-minute track took the whole Docker/WSL VM down
+# three times. --memory == --memory-swap (not a higher swap ceiling) so the
+# container can't page itself to death and drag the VM with it; Docker just
+# OOM-kills the container (exit 137) instead. Env-tunable via
+# ALLIN1_MEMORY_LIMIT; "" or "0" disables the flags entirely (e.g. a
+# GPU/managed host where memory is already fenced another way).
+DEFAULT_MEMORY_LIMIT = "6g"
+
 
 def _env_truthy(name: str) -> bool:
     return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
@@ -48,6 +58,13 @@ def _env_int(name: str, default: int) -> int:
         return int(raw)
     except ValueError:
         return default
+
+
+def _env_str(name: str, default: str) -> str:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip()
 
 # Python run inside the container. Bypasses the image entrypoint so a CRLF /
 # shell quirk in entrypoint.sh can't break us. allin1 (and its demucs
@@ -128,6 +145,18 @@ class Allin1Unavailable(RuntimeError):
     """
 
 
+class Allin1OutOfMemory(RuntimeError):
+    """Raised when the memory-capped allin1 container was OOM-killed (G4).
+
+    A ``RuntimeError`` subclass on purpose: ``detect_structure_job``'s
+    existing failure handler already degrades arrangement detection to
+    "not assessed" for any ``RuntimeError`` and keeps the rest of the
+    analysis intact, so an OOM here needs no new caller-side handling — it
+    just needs to be distinguishable from a generic container failure in
+    logs/metrics.
+    """
+
+
 class DockerAllin1:
     """Run allin1 via ``docker run`` against the ``allin1:latest`` image."""
 
@@ -144,6 +173,9 @@ class DockerAllin1:
         self.use_gpu = _env_truthy("ALLIN1_USE_GPU") if use_gpu is None else use_gpu
         # Per-track analysis timeout (seconds). Env-tunable; see DEFAULT_TIMEOUT_S.
         self.timeout = timeout if timeout is not None else _env_int("ALLIN1_TIMEOUT", DEFAULT_TIMEOUT_S)
+        # G4 — container memory cap (see DEFAULT_MEMORY_LIMIT above). "" / "0"
+        # disables --memory/--memory-swap entirely.
+        self.memory_limit = _env_str("ALLIN1_MEMORY_LIMIT", DEFAULT_MEMORY_LIMIT)
 
     # -- availability probes ------------------------------------------------
     @staticmethod
@@ -198,6 +230,12 @@ class DockerAllin1:
         self.ensure_available()
 
         cmd = ["docker", "run", "--rm"]
+        if self.memory_limit and self.memory_limit != "0":
+            # --memory-swap == --memory (not omitted, not higher): the
+            # container gets no swap headroom, so it OOM-kills instead of
+            # paging the host VM to death (G4 — verified crashing this
+            # machine's Docker VM three times before this cap existed).
+            cmd += ["--memory", self.memory_limit, "--memory-swap", self.memory_limit]
         if self.use_gpu:
             cmd += ["--gpus", "all"]
         cmd += [
@@ -216,9 +254,18 @@ class DockerAllin1:
             raise Allin1Unavailable(f"Could not invoke docker: {exc}") from exc
 
         if proc.returncode != 0:
+            stderr = proc.stderr or ""
+            # exit 137 == 128 + SIGKILL, which is how Docker reports an
+            # OOM-killed container; some daemons/orchestrators also surface
+            # "OOMKilled"/"Killed" in stderr instead of (or alongside) 137.
+            if proc.returncode == 137 or "OOM" in stderr or "Killed" in stderr:
+                raise Allin1OutOfMemory(
+                    f"structure detection ran out of memory (limit "
+                    f"{self.memory_limit or 'none'})"
+                )
             raise RuntimeError(
                 f"allin1 container failed (exit {proc.returncode}): "
-                f"{proc.stderr.strip()[:500]}"
+                f"{stderr.strip()[:500]}"
             )
 
         try:
