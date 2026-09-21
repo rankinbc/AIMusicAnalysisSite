@@ -63,9 +63,14 @@ public sealed class CoachBriefTests(WebApplicationFactory<Program> factory)
     // Seeds a completed analysis for `userId`. `routingPlan: null` reproduces
     // the "triage hasn't run yet" 409 case; `demoVersion: true` seeds a
     // version whose FilePath starts with audio/demo/ (the skip case).
+    // Fix round 1 item 1: `degradationNotice` reproduces a TERMINALLY
+    // degraded triage — routing_plan stays null forever but the analysis
+    // is still "ready" (that's exactly the case the template-fallback
+    // brief exists for).
     private static async Task<Guid> SeedAnalysisAsync(
         WebApplicationFactory<Program> f, Guid userId,
-        string? routingPlan = "not-null", bool demoVersion = false)
+        string? routingPlan = "not-null", bool demoVersion = false,
+        string? degradationNotice = null)
     {
         using var scope = f.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -90,6 +95,7 @@ public sealed class CoachBriefTests(WebApplicationFactory<Program> factory)
             FinalJson = "{}",
             PhaseDurations = "{}",
             RoutingPlan = routingPlan == "not-null" ? DemoSeedMapping.EmptyRoutingPlanJson : routingPlan,
+            DegradationNotice = degradationNotice,
         };
         db.Analyses.Add(analysis);
         await db.SaveChangesAsync();
@@ -215,6 +221,39 @@ public sealed class CoachBriefTests(WebApplicationFactory<Program> factory)
             var briefAssistantCount = await db.CoachMessages.CountAsync(
                 m => m.ConversationId == conv.Id && m.Role == "assistant" && m.Mode == "brief");
             Assert.Equal(1, briefAssistantCount);
+            // Fix round 1 item 3a: the row-count assertion alone doesn't
+            // prove only one coach_reply was dispatched — assert the
+            // enqueue count too.
+            Assert.Single(queue.Calls);
+        }
+        finally { await CleanupUser(f, userId); }
+    }
+
+    // Fix round 1 item 1 (CRITICAL): a triage-degraded analysis — routing_plan
+    // stays permanently null, degradation_notice is set — must NOT 409
+    // forever. It is exactly the case the template-fallback brief
+    // (coach_actor.py _complete_with_template_brief) was built for.
+    [SkippableFact]
+    public async Task Degraded_Analysis_With_No_Routing_Plan_Returns_202_Created()
+    {
+        await TestDb.RequireAsync(factory);
+        var (f, queue) = BuildWithFakeQueue();
+        var (client, userId) = await RegisterRealUserAsync(f);
+        var analysisId = await SeedAnalysisAsync(
+            f, userId, routingPlan: null,
+            degradationNotice: "{\"reason\":\"tier_budget\",\"detail\":\"spent=$5.00 ceiling=$5.00\"}");
+
+        try
+        {
+            var resp = await client.PostAsync($"/api/coach/{analysisId}/brief", null);
+            Assert.Equal(HttpStatusCode.Accepted, resp.StatusCode);
+            var body = await resp.Content.ReadFromJsonAsync<CoachBriefResponse>();
+            Assert.Equal("created", body!.Status);
+            Assert.NotNull(body.MessageId);
+            Assert.Single(queue.Calls);
+            var call = queue.Calls.Single();
+            Assert.Equal(DramatiqTasks.CoachReply, call.Task);
+            Assert.Equal(3, call.Args.Length);
         }
         finally { await CleanupUser(f, userId); }
     }
@@ -376,5 +415,180 @@ public sealed class CoachBriefTests(WebApplicationFactory<Program> factory)
             await CleanupUser(f, otherId);
             await CleanupUser(f, ownerId);
         }
+    }
+
+    // ── Fix round 1 item 2 (IMPORTANT): a broken brief must not stick
+    // forever. `FindExistingBriefAsync` used to match role=assistant &&
+    // mode=brief regardless of status, so an `error` row (enqueue failed
+    // after commit) or a stuck `pending`/`streaming` row (worker lost the
+    // message) answered `exists` forever with nothing ever re-enqueued.
+
+    // error row → retried + one (more) enqueue.
+    [SkippableFact]
+    public async Task Error_Brief_Retries_And_Enqueues_Once_More()
+    {
+        await TestDb.RequireAsync(factory);
+        var (f, queue) = BuildWithFakeQueue();
+        var (client, userId) = await RegisterRealUserAsync(f);
+        var analysisId = await SeedAnalysisAsync(f, userId);
+
+        try
+        {
+            var first = await (await client.PostAsync($"/api/coach/{analysisId}/brief", null))
+                .Content.ReadFromJsonAsync<CoachBriefResponse>();
+            Assert.Single(queue.Calls);
+
+            using (var scope = f.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var row = await db.CoachMessages.SingleAsync(m => m.Id == first!.MessageId);
+                row.Status = "error";
+                row.Content = "The coach hit a transient error. Please try again.";
+                row.CompletedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync();
+            }
+
+            var resp = await client.PostAsync($"/api/coach/{analysisId}/brief", null);
+            Assert.Equal(HttpStatusCode.Accepted, resp.StatusCode);
+            var body = await resp.Content.ReadFromJsonAsync<CoachBriefResponse>();
+            Assert.Equal("retried", body!.Status);
+            Assert.Equal(first!.MessageId, body.MessageId); // same row, not a new one
+            Assert.Equal(2, queue.Calls.Count);
+
+            using (var scope = f.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var row = await db.CoachMessages.SingleAsync(m => m.Id == first.MessageId);
+                Assert.Equal("pending", row.Status);
+            }
+        }
+        finally { await CleanupUser(f, userId); }
+    }
+
+    // stale pending (older than the 120s staleness window) → retried.
+    [SkippableFact]
+    public async Task Stale_Pending_Brief_Retries()
+    {
+        await TestDb.RequireAsync(factory);
+        var (f, queue) = BuildWithFakeQueue();
+        var (client, userId) = await RegisterRealUserAsync(f);
+        var analysisId = await SeedAnalysisAsync(f, userId);
+
+        try
+        {
+            var first = await (await client.PostAsync($"/api/coach/{analysisId}/brief", null))
+                .Content.ReadFromJsonAsync<CoachBriefResponse>();
+
+            using (var scope = f.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var row = await db.CoachMessages.SingleAsync(m => m.Id == first!.MessageId);
+                Assert.Equal("pending", row.Status); // still pending — never got a worker
+                row.CreatedAt = DateTimeOffset.UtcNow.AddSeconds(-121);
+                await db.SaveChangesAsync();
+            }
+
+            var resp = await client.PostAsync($"/api/coach/{analysisId}/brief", null);
+            Assert.Equal(HttpStatusCode.Accepted, resp.StatusCode);
+            var body = await resp.Content.ReadFromJsonAsync<CoachBriefResponse>();
+            Assert.Equal("retried", body!.Status);
+            Assert.Equal(2, queue.Calls.Count);
+        }
+        finally { await CleanupUser(f, userId); }
+    }
+
+    // fresh pending (younger than the window) → exists, no enqueue.
+    [SkippableFact]
+    public async Task Fresh_Pending_Brief_Stays_Exists_With_No_Extra_Enqueue()
+    {
+        await TestDb.RequireAsync(factory);
+        var (f, queue) = BuildWithFakeQueue();
+        var (client, userId) = await RegisterRealUserAsync(f);
+        var analysisId = await SeedAnalysisAsync(f, userId);
+
+        try
+        {
+            var first = await (await client.PostAsync($"/api/coach/{analysisId}/brief", null))
+                .Content.ReadFromJsonAsync<CoachBriefResponse>();
+
+            var resp = await client.PostAsync($"/api/coach/{analysisId}/brief", null);
+            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+            var body = await resp.Content.ReadFromJsonAsync<CoachBriefResponse>();
+            Assert.Equal("exists", body!.Status);
+            Assert.Equal(first!.MessageId, body.MessageId);
+            Assert.Single(queue.Calls); // only the original create — no retry enqueue
+        }
+        finally { await CleanupUser(f, userId); }
+    }
+
+    // complete row → exists, no enqueue.
+    [SkippableFact]
+    public async Task Complete_Brief_Stays_Exists_With_No_Extra_Enqueue()
+    {
+        await TestDb.RequireAsync(factory);
+        var (f, queue) = BuildWithFakeQueue();
+        var (client, userId) = await RegisterRealUserAsync(f);
+        var analysisId = await SeedAnalysisAsync(f, userId);
+
+        try
+        {
+            var first = await (await client.PostAsync($"/api/coach/{analysisId}/brief", null))
+                .Content.ReadFromJsonAsync<CoachBriefResponse>();
+
+            using (var scope = f.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var row = await db.CoachMessages.SingleAsync(m => m.Id == first!.MessageId);
+                row.Status = "complete";
+                row.Content = "Here's your opening brief.";
+                row.CompletedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync();
+            }
+
+            var resp = await client.PostAsync($"/api/coach/{analysisId}/brief", null);
+            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+            var body = await resp.Content.ReadFromJsonAsync<CoachBriefResponse>();
+            Assert.Equal("exists", body!.Status);
+            Assert.Equal(first!.MessageId, body.MessageId);
+            Assert.Single(queue.Calls);
+        }
+        finally { await CleanupUser(f, userId); }
+    }
+
+    // Two parallel retries against the same broken (error) row must produce
+    // exactly ONE more enqueue — the conditional ExecuteUpdateAsync reset is
+    // the race guard (only the caller whose UPDATE affects exactly 1 row
+    // gets to enqueue).
+    [SkippableFact]
+    public async Task Two_Parallel_Retries_Enqueue_Exactly_Once()
+    {
+        await TestDb.RequireAsync(factory);
+        var (f, queue) = BuildWithFakeQueue();
+        var (client, userId) = await RegisterRealUserAsync(f);
+        var analysisId = await SeedAnalysisAsync(f, userId);
+
+        try
+        {
+            var first = await (await client.PostAsync($"/api/coach/{analysisId}/brief", null))
+                .Content.ReadFromJsonAsync<CoachBriefResponse>();
+
+            using (var scope = f.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var row = await db.CoachMessages.SingleAsync(m => m.Id == first!.MessageId);
+                row.Status = "error";
+                row.Content = "The coach hit a transient error. Please try again.";
+                row.CompletedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync();
+            }
+
+            var t1 = client.PostAsync($"/api/coach/{analysisId}/brief", null);
+            var t2 = client.PostAsync($"/api/coach/{analysisId}/brief", null);
+            await Task.WhenAll(t1, t2);
+
+            // 1 (original create) + exactly 1 (the winning retry).
+            Assert.Equal(2, queue.Calls.Count);
+        }
+        finally { await CleanupUser(f, userId); }
     }
 }

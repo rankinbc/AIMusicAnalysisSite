@@ -16,6 +16,13 @@ namespace Spectr.Bff.Endpoints;
 // point is a guest's first report gets the full product, coach included.
 public static class CoachBriefEndpoints
 {
+    // Fix round 1 item 2 (IMPORTANT): how long a `pending`/`streaming`
+    // assistant row can sit unresolved before a new POST treats it as
+    // broken (the worker lost the message) and re-enqueues rather than
+    // answering `exists` forever. An `error` row is always broken
+    // regardless of age (see the reset predicate below).
+    private const int StalenessWindowSeconds = 120;
+
     public static IEndpointRouteBuilder MapCoachBriefEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapGroup("/coach/{analysisId:guid}")
@@ -39,13 +46,16 @@ public static class CoachBriefEndpoints
 
         var analysis = await db.Analyses.AsNoTracking()
             .Where(a => a.Id == analysisId && a.UserId == userId)
-            .Select(a => new { a.Id, a.RoutingPlan, a.VersionId })
+            .Select(a => new { a.Id, a.RoutingPlan, a.DegradationNotice, a.VersionId })
             .FirstOrDefaultAsync(ct);
         if (analysis is null) return Results.NotFound();
 
-        // Triage hasn't produced a routing plan yet — nothing grounded to
-        // brief on. The frontend retries once the report finishes.
-        if (analysis.RoutingPlan is null)
+        // Fix round 1 item 1: "ready" means triage EITHER produced a
+        // routing plan OR terminally degraded — a degraded analysis never
+        // gets a routing plan, but it's a terminal state, not "still
+        // working". Same predicate VerdictEndpoints uses so the two never
+        // drift. The frontend retries once the report finishes.
+        if (!VerdictEndpoints.IsReadyForCoach(analysis.RoutingPlan, analysis.DegradationNotice))
         {
             return ErrorEnvelope.Build(
                 StatusCodes.Status409Conflict,
@@ -68,10 +78,75 @@ public static class CoachBriefEndpoints
 
         // Idempotent: a brief already exists (this call's own re-check, or a
         // concurrent request that already committed) — converge on it, never
-        // a second LLM call.
+        // a second LLM call. Fix round 1 item 2: UNLESS that existing brief
+        // is broken (enqueue failed after commit → `error`, or the worker
+        // lost the message → stuck `pending`/`streaming` past the
+        // staleness window) — then re-enqueue instead of answering `exists`
+        // forever.
         var existing = await FindExistingBriefAsync(db, conversation.Id, ct);
         if (existing is not null)
-            return Results.Ok(new CoachBriefResponse("exists", existing));
+        {
+            var cutoff = DateTimeOffset.UtcNow.AddSeconds(-StalenessWindowSeconds);
+            var isStalePending = existing.Status is "pending" or "streaming"
+                && existing.CreatedAt < cutoff;
+            var isBroken = existing.Status == "error" || isStalePending;
+
+            if (!isBroken)
+                return Results.Ok(new CoachBriefResponse("exists", existing.AssistantId));
+
+            // Race-safe reset: only the caller whose conditional
+            // ExecuteUpdateAsync affects exactly 1 row gets to re-enqueue.
+            // A concurrent winner flips status away from 'error' (or the
+            // staleness predicate stops matching once state's `pending`
+            // again without a stale CreatedAt to re-trip it), so a losing
+            // caller's UPDATE affects 0 rows and it just converges on
+            // `exists` — no double enqueue.
+            var resetCount = await db.CoachMessages
+                .Where(m => m.Id == existing.AssistantId
+                    && (m.Status == "error" || m.Status == "pending" || m.Status == "streaming")
+                    && (m.Status == "error" || m.CreatedAt < cutoff))
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(m => m.Status, "pending")
+                    .SetProperty(m => m.Content, string.Empty)
+                    .SetProperty(m => m.RefusalReason, (string?)null)
+                    .SetProperty(m => m.CompletedAt, (DateTimeOffset?)null), ct);
+
+            if (resetCount != 1)
+                return Results.Ok(new CoachBriefResponse("exists", existing.AssistantId));
+
+            try
+            {
+                await queue.EnqueueAsync(
+                    DramatiqTasks.CoachReply,
+                    new object[]
+                    {
+                        conversation.Id.ToString(),
+                        existing.UserId.ToString(),
+                        existing.AssistantId.ToString(),
+                    },
+                    DramatiqQueues.Coach,
+                    ct);
+            }
+            catch (Exception)
+            {
+                // Enqueue failed right after our own reset — mark it
+                // `error` again so the NEXT POST can retry rather than
+                // leaving it stuck `pending` with nothing behind it.
+                await db.CoachMessages.Where(m => m.Id == existing.AssistantId)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(m => m.Status, "error")
+                        .SetProperty(m => m.Content, "The coach hit a transient error. Please try again.")
+                        .SetProperty(m => m.CompletedAt, DateTimeOffset.UtcNow), ct);
+                return ErrorEnvelope.Build(
+                    StatusCodes.Status503ServiceUnavailable,
+                    "coach_queue_unavailable",
+                    "Coach queue is temporarily unavailable. Please try again.");
+            }
+
+            return Results.Json(
+                new CoachBriefResponse("retried", existing.AssistantId),
+                statusCode: StatusCodes.Status202Accepted);
+        }
 
         var now = DateTimeOffset.UtcNow;
         // The trigger row is a fixed, server-authored instruction — never
@@ -124,7 +199,7 @@ public static class CoachBriefEndpoints
             db.Entry(assistantRow).State = EntityState.Detached;
             var winner = await FindExistingBriefAsync(db, conversation.Id, ct);
             if (winner is null) throw;
-            return Results.Ok(new CoachBriefResponse("exists", winner));
+            return Results.Ok(new CoachBriefResponse("exists", winner.AssistantId));
         }
 
         try
@@ -157,11 +232,27 @@ public static class CoachBriefEndpoints
             statusCode: StatusCodes.Status202Accepted);
     }
 
-    private static async Task<Guid?> FindExistingBriefAsync(
+    // Fix round 1 item 2: carries enough to decide "broken" (Status,
+    // CreatedAt) and to re-enqueue against the SAME trigger pair (UserId)
+    // without a second lookup.
+    private sealed record ExistingBrief(Guid AssistantId, Guid UserId, string Status, DateTimeOffset CreatedAt);
+
+    private static async Task<ExistingBrief?> FindExistingBriefAsync(
         AppDbContext db, Guid conversationId, CancellationToken ct)
-        => await db.CoachMessages.AsNoTracking()
+    {
+        var assistant = await db.CoachMessages.AsNoTracking()
             .Where(m => m.ConversationId == conversationId
                 && m.Role == "assistant" && m.Mode == CoachBrief.Mode)
-            .Select(m => (Guid?)m.Id)
+            .Select(m => new { m.Id, m.Status, m.CreatedAt })
             .FirstOrDefaultAsync(ct);
+        if (assistant is null) return null;
+
+        var userId = await db.CoachMessages.AsNoTracking()
+            .Where(m => m.ConversationId == conversationId
+                && m.Role == "user" && m.Mode == CoachBrief.Mode)
+            .Select(m => m.Id)
+            .FirstOrDefaultAsync(ct);
+
+        return new ExistingBrief(assistant.Id, userId, assistant.Status, assistant.CreatedAt);
+    }
 }

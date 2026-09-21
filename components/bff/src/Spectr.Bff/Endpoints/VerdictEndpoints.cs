@@ -13,6 +13,16 @@ namespace Spectr.Bff.Endpoints;
 
 public static class VerdictEndpoints
 {
+    // Fix round 1 item 1 (CRITICAL): an analysis is "ready" once triage
+    // EITHER produced a routing plan OR terminally degraded (budget
+    // exhausted / LLM down) — a degraded analysis never gets a routing
+    // plan, but it IS a terminal state, not "still working". Shared with
+    // CoachBriefEndpoints so the two never drift: treating "no plan" alone
+    // as "not ready" 409s the coach brief forever for exactly the analyses
+    // the template-fallback brief exists to serve.
+    internal static bool IsReadyForCoach(string? routingPlan, string? degradationNotice)
+        => routingPlan is not null || degradationNotice is not null;
+
     public static IEndpointRouteBuilder MapVerdictEndpoints(this IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/reports/{jobId:guid}/verdicts").WithTags("verdicts").RequireAuthorization();
@@ -66,7 +76,7 @@ public static class VerdictEndpoints
         // terminal worker failures; this guards the crash-BEFORE-write loop the
         // notice can't catch. Spend throttle, not correctness — the throttle is
         // only stamped after a successful enqueue so a queue blip still retries.
-        if (analysisRow.RoutingPlan is null && analysisRow.DegradationNotice is null
+        if (!IsReadyForCoach(analysisRow.RoutingPlan, analysisRow.DegradationNotice)
             && !cache.TryGetValue($"triage:{analysisRow.Id}", out _))
         {
             try
