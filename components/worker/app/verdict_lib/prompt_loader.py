@@ -39,6 +39,7 @@ COACH_PROMPTS_DIR = Path(os.environ.get("COACH_PROMPTS_DIR") or _DEFAULT_COACH_D
 COACH_GROUNDED_FILENAME = "CoachGrounded"
 COACH_TEACH_FILENAME = "TeachCoach"
 COACH_CONCISE_STYLE_FILENAME = "ConciseStyle"
+COACH_BRIEF_FILENAME = "CoachOpeningBrief"
 
 
 SLUG_TO_FILENAME: dict[str, str] = {
@@ -337,6 +338,29 @@ def load_coach_concise_style() -> tuple[str, str]:
     if not path.exists():
         raise FileNotFoundError(f"coach concise style file not found: {path}")
     return parse_version_frontmatter(path.read_text(encoding="utf-8"))
+
+
+def load_coach_brief() -> tuple[str, str]:
+    """Returns ``(version, body)`` for the coach's opening-brief prompt
+    (task G3). Standalone prompt (same two-section sentinel wire format as
+    the other coach prompts, frontmatter shape copied from ConciseStyle.md;
+    no pin-table lookup). Raises :class:`FileNotFoundError` if missing — the
+    ``coach_reply`` actor catches it and writes an ``error`` status, same as
+    a missing grounded/teach file.
+    """
+    path = COACH_PROMPTS_DIR / f"{COACH_BRIEF_FILENAME}.md"
+    if not path.exists():
+        raise FileNotFoundError(f"coach brief prompt file not found: {path}")
+    return parse_version_frontmatter(path.read_text(encoding="utf-8"))
+
+
+def load_coach_brief_model() -> str | None:
+    """Optional ``model:`` pin from the brief prompt's frontmatter (NFR24).
+    ``None`` → caller uses the gateway's configured default."""
+    path = COACH_PROMPTS_DIR / f"{COACH_BRIEF_FILENAME}.md"
+    if not path.exists():
+        return None
+    return parse_model_frontmatter(path.read_text(encoding="utf-8"))
 
 
 # ── Coach-mix arbiter prompt ────────────────────────────────────────────────

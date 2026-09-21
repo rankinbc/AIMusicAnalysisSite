@@ -62,7 +62,10 @@ from .llm import gateway
 from .llm.gateway import LlmBudgetExceeded, LlmError
 from .verdict_lib.flatten_analysis import flatten
 from .verdict_lib.json_extraction import extract_json_object
+from .coach_lib.brief_template import build_template_brief
 from .verdict_lib.prompt_loader import (
+    load_coach_brief,
+    load_coach_brief_model,
     load_coach_concise_style,
     load_coach_grounded,
     load_coach_grounded_model,
@@ -234,6 +237,27 @@ def _mark_complete_partial(
         logger.exception(
             "mark_complete_partial failed for message %s", message_id,
         )
+
+
+def _complete_with_template_brief(
+    message_id: uuid.UUID, *, analysis_id: uuid.UUID,
+    user_message_id: uuid.UUID, publisher: CoachStreamPublisher,
+    llm_call_id: str | None = None,
+) -> None:
+    """Task G3 — brief mode never ends refused/error. A degraded analysis, a
+    budget refusal, or an LLM failure all fall back to a deterministic
+    template brief built from the rule-engine findings (never an error
+    bubble, never an empty message).
+    """
+    body = build_template_brief(_load_verdicts_for_bundle(analysis_id=analysis_id))
+    publisher.token(body)
+    publisher.done(evidence=[])
+    _mark_complete(
+        message_id,
+        payload=CoachReplyPayload(kind="answer", body=body, evidence=[]),
+        llm_call_id=llm_call_id,
+        user_message_id=user_message_id,
+    )
 
 
 # ── prompt assembly ────────────────────────────────────────────────────────
@@ -443,6 +467,16 @@ def coach_reply(
 
     # ── Phase A.1: degraded short-circuit ─────────────────────────────────
     if degradation_notice is not None:
+        # Task G3: the opening brief is never "coach offline" — a degraded
+        # analysis still has rule-engine findings to brief on.
+        if mode == "brief":
+            logger.info("coach_reply: brief mode on a degraded analysis — "
+                        "falling back to the template brief")
+            _complete_with_template_brief(
+                mid, analysis_id=analysis_id, user_message_id=uid_msg,
+                publisher=publisher,
+            )
+            return
         logger.info("coach_reply: analysis is degraded, short-circuiting")
         publisher.refusal(reason="coach_offline", body=COACH_OFFLINE_BODY)
         _mark_refused(mid, refusal_reason="coach_offline", body=COACH_OFFLINE_BODY,
@@ -523,6 +557,18 @@ def coach_reply(
             version = f"{version}+c{c_version}"
             model_pin = load_coach_grounded_model()
             prompt_slug = "coach_concise"
+        elif mode == "brief":
+            # Task G3: standalone prompt (own grounding + output-shape rules,
+            # same two-section sentinel wire format) — not a style overlay.
+            try:
+                version, system_body = load_coach_brief()
+            except FileNotFoundError:
+                logger.exception("coach_reply: brief prompt file missing")
+                publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
+                _mark_error(mid, user_message_id=uid_msg)
+                return
+            model_pin = load_coach_brief_model()
+            prompt_slug = "coach_brief"
         else:
             try:
                 version, system_body = load_coach_grounded()
@@ -562,6 +608,18 @@ def coach_reply(
                 elif ev.kind == "final":
                     final_event_result = ev.result
         except LlmBudgetExceeded as exc:
+            # Task G3: the brief never goes offline for a budget refusal —
+            # fall back to the deterministic template brief instead.
+            if mode == "brief":
+                logger.info(
+                    "coach_reply: brief mode hit budget/breaker (reason=%s) "
+                    "— falling back to the template brief", exc.reason,
+                )
+                _complete_with_template_brief(
+                    mid, analysis_id=analysis_id, user_message_id=uid_msg,
+                    publisher=publisher, llm_call_id=exc.llm_call_id,
+                )
+                return
             logger.info(
                 "coach_reply: budget/breaker hit (reason=%s) — refusing as offline",
                 exc.reason,
@@ -577,6 +635,17 @@ def coach_reply(
             )
             return
         except LlmError as exc:
+            # Task G3: same fallback for a generic LLM/gateway failure.
+            if mode == "brief":
+                logger.info(
+                    "coach_reply: brief mode hit an LLM error for %s — "
+                    "falling back to the template brief", assistant_message_id,
+                )
+                _complete_with_template_brief(
+                    mid, analysis_id=analysis_id, user_message_id=uid_msg,
+                    publisher=publisher, llm_call_id=exc.llm_call_id,
+                )
+                return
             # Story 1.5 code review E-M1: surface the error row's llm_call_id
             # so forensics can join the user-visible error to the metering row.
             logger.info("coach_reply: LLM call failed for %s: %s",
