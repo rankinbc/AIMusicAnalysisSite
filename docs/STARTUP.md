@@ -246,8 +246,7 @@ A reboot also clears the stray relay (like #2), but isn't required once
 everything points at IPv4.
 
 ### #2d Docker engine gone mid-session: `docker-desktop` WSL distro `Stopped`, Docker Desktop still open — restart Docker, no reboot
-Seen twice on 2026-09-20 (about 35 min apart, each time in the middle of a
-test run). Symptoms: everything that needs Postgres/Redis hangs or times out
+Seen THREE times on 2026-09-20 (21:13, 22:31, 23:04 local). Symptoms: everything that needs Postgres/Redis hangs or times out
 (`/healthz` never answers, `dotnet ef database update` → `Npgsql … timed out`,
 BFF tests mass-skip with "Postgres unreachable"); `docker.exe ps` hangs for
 minutes then fails with `… dockerDesktopLinuxEngine … EOF`; `wsl -l -v` shows
@@ -262,8 +261,25 @@ the whole WSL utility VM was torn down underneath Docker —
 `engine stopped unexpectedly` / `wsl-bootstrap: exit status 1`. Windows' Hyper-V
 logs show an ORDERLY pause + NIC delete at the same second and no crash event,
 no WSL package update and no WSLService restart. Nothing in this repo runs
-`wsl --shutdown`. Cause not identified — suspect another session on the machine
-issuing WSL commands; free RAM was fine (13 GB).
+`wsl --shutdown`.
+
+**Most likely cause (strong correlation, mechanism not proven): allin1 structure
+detection on a LONG track.** The engine had been up 12.5 h. The first death came
+6 minutes after a 9-minute MP3 was uploaded; that version had a second job stuck
+in `processing` at phase `Arrangement` = the `docker run allin1:latest` container
+(4 GB image, CPU, 30-minute timeout, **no `--memory` limit** —
+`audio_analysis/structure/docker_allin1.py`). It was re-run after each stack
+restart and the VM went down again 35 and 19 minutes later. After that job was
+marked `failed` the engine stayed up. Until the container gets a memory cap,
+treat "Docker died a few minutes after uploading a long track" as this, and
+before restarting the workers fail the stuck job so it cannot run again:
+```sql
+select id, status, current_phase from analysis_jobs where status = 'processing';
+update analysis_jobs set status = 'failed', error_code = 'structure_detection_killed_docker' where id = '<that id>';
+```
+(Also seen while diagnosing: BFF integration tests enqueue real
+`analyze_audio_job` messages into the dev Redis; the live worker dead-letters
+them — 475 had piled up in `dramatiq:analysis-free.XQ`. Harmless, but noisy.)
 
 **Fix (about 2 minutes, no reboot):**
 ```powershell
