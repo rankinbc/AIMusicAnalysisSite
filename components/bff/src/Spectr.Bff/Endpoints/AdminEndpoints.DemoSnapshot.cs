@@ -94,10 +94,16 @@ public static partial class AdminEndpoints
         // the honest statement of intent and doubles as a leak guard).
         var conversation = await db.Conversations.AsNoTracking()
             .FirstOrDefaultAsync(c => c.AnalysisId == analysis.Id && c.UserId == owner.Id, ct);
+        // Task G3: the brief's server-authored trigger row (role=user,
+        // mode=brief) is a hidden system prompt, never a producer message —
+        // excluded here too so it never reaches freeText.userMessages or the
+        // exported conversation.messages below.
         var messages = conversation is null
             ? []
             : await db.CoachMessages.AsNoTracking()
-                .Where(m => m.ConversationId == conversation.Id).OrderBy(m => m.CreatedAt).ToListAsync(ct);
+                .Where(m => m.ConversationId == conversation.Id)
+                .Where(m => !(m.Role == "user" && m.Mode == CoachBrief.Mode))
+                .OrderBy(m => m.CreatedAt).ToListAsync(ct);
         var rackPresets = await db.RackPresets.AsNoTracking()
             .Where(p => p.SongVersionId == version.Id).OrderBy(p => p.CreatedAt).ToListAsync(ct);
 
