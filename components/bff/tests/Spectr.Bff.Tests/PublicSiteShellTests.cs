@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc.Testing;
 using System.Net;
+using System.Net.Http.Headers;
+using System.Text.RegularExpressions;
 using Xunit;
 
 namespace Spectr.Bff.Tests;
@@ -60,5 +62,40 @@ public sealed class PublicSiteShellTests(WebApplicationFactory<Program> factory)
         Assert.Contains("<title>Pricing — SPECTR</title>", html);
         Assert.Contains("Free while we launch", html);
         Assert.DoesNotContain("per-release credits", html);
+    }
+
+    // Task P6 fix1 — every crawler shell, guarded. NoSocialSurfaceTests.cs
+    // owns a DB-gated ([SkippableFact]) version of this same idea but its
+    // hard-coded path list predates /trust/how-its-built (P6) and is
+    // owner-locked (solo-fork guard, do not edit there). This copy needs no
+    // DB, runs unconditionally, and enumerates every path this file already
+    // exercises above — ADD A NEW SHELL TO BOTH THE [InlineData] LIST ABOVE
+    // AND ShellPaths BELOW, or it silently goes unguarded.
+    private static readonly string[] ShellPaths =
+    [
+        "/", "/pricing", "/analyze",
+        "/trust/no-training", "/trust/results-forever", "/trust/privacy", "/trust/how-its-built",
+    ];
+
+    private static readonly Regex BannedWords = new(
+        "invite|follower|public profile|revocable|opt-in share|share links are|publish your|live room|listening room",
+        RegexOptions.IgnoreCase);
+
+    [Fact]
+    public async Task Every_Shell_Carries_No_Banned_Social_Words()
+    {
+        var client = _factory.CreateClient();
+
+        foreach (var path in ShellPaths)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, path);
+            request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)");
+            var resp = await client.SendAsync(request);
+
+            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+            var html = await resp.Content.ReadAsStringAsync();
+            var match = BannedWords.Match(html);
+            Assert.False(match.Success, $"{path} carries banned word '{match.Value}':\n{html}");
+        }
     }
 }

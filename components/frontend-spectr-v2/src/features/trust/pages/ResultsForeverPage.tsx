@@ -23,7 +23,7 @@ export function ResultsForeverPage() {
           subscription lapses, after you cancel, on the free tier. Cancelling costs you access
           to no report you already made.
         </li>
-        <li>No re-subscription is required to read, share, or export your past reports.</li>
+        <li>No re-subscription is required to read or export your past reports.</li>
       </ul>
       <h2>Uploaded files are different — here's the honest part</h2>
       <p>

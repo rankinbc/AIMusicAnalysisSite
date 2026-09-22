@@ -36,6 +36,10 @@ describe('trust pages (story 6.2 AC1/3/4)', () => {
     expect(html).toContain('remains intact'); // the report survives the file purge
     expect(html).toContain('project file'); // purge scope is wider than "raw audio"
     expect(html).toContain('no report you already made'); // cancel claim scoped to reports
+    // Solo fork — the product has no sharing feature; the pledge must not
+    // claim you can share past reports (P6 fix1 correction).
+    expect(html).toContain('No re-subscription is required to read or export your past reports.');
+    expect(html).not.toContain('read, share');
   });
 
   it('privacy defaults cover the shipped behaviors and disclaim legal-policy status', () => {
