@@ -15,7 +15,9 @@ namespace Spectr.Bff.Services;
 // (6) — a guest may re-analyze a version more times than they uploaded
 // versions. Stems and references get their own per-version/per-guest caps
 // below (CheckStemsAsync / CheckReferenceAsync).
-public sealed class GuestLimits(
+// Fix wave FW1 — partial: the fix-wave checks live in the GuestLimits.*.cs
+// partial files (this file is near the 500-line limit).
+public sealed partial class GuestLimits(
     AppDbContext db, EntitlementService ents, IRateLimiter limiter, IDistributedLock distLock,
     IConfiguration cfg, ILogger<GuestLimits> log)
 {

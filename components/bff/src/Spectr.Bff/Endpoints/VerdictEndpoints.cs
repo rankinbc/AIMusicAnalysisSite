@@ -178,6 +178,7 @@ public static class VerdictEndpoints
         ClaimsPrincipal user,
         AppDbContext db,
         IJobQueue queue,
+        GuestLimits guestLimits,
         CancellationToken ct)
     {
         if (!SpecialistCatalog.SlugSet.Contains(specialist))
@@ -196,12 +197,30 @@ public static class VerdictEndpoints
         if (exists)
             return Results.Conflict(new { error = "Specialist already has a verdict for this analysis. Dismiss it first to re-run.", status = "exists" });
 
-        await queue.EnqueueAsync(
-            DramatiqTasks.RunSpecialist,
-            new object[] { analysis.Id.ToString(), specialist, userId.ToString() },
-            // Fix round 1 item 1: guests ride the free lane.
-            GuestLimits.QueueFor(user, DramatiqQueues.AnalysisPaid), // story 2.5: interactive LLM work → W1
-            ct);
+        // Fix wave FW1 (C1) — per-(analysis, slug) in-flight dedupe for every
+        // caller, then the guest's run cap. A run already in flight answers
+        // the same 202 "queued" a fresh dispatch does, with nothing enqueued.
+        var claim = await guestLimits.ClaimSpecialistRunAsync(user, analysis.Id, specialist, ct);
+        if (claim.Error is not null) return claim.Error;
+
+        if (claim.Enqueue)
+        {
+            try
+            {
+                await queue.EnqueueAsync(
+                    DramatiqTasks.RunSpecialist,
+                    new object[] { analysis.Id.ToString(), specialist, userId.ToString() },
+                    // Fix round 1 item 1: guests ride the free lane.
+                    GuestLimits.QueueFor(user, DramatiqQueues.AnalysisPaid), // story 2.5: interactive LLM work → W1
+                    ct);
+            }
+            catch
+            {
+                // Never enqueued — free the marker so a retry can dispatch.
+                await guestLimits.ReleaseSpecialistRunAsync(analysis.Id, specialist, claim.InflightToken);
+                throw;
+            }
+        }
 
         return Results.Accepted(value: new RunSpecialistResponse("queued"));
     }
