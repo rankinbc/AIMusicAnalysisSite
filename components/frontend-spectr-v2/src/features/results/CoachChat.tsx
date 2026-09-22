@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import type { VerdictDto } from '../../api/types';
@@ -11,7 +10,7 @@ import { CoachThread } from './CoachThread';
 import { CoachComposer } from './CoachComposer';
 import { useCoachAriaLive } from './useCoachAriaLive';
 import { COACH_OFFLINE_COPY, useCoachSession } from './useCoachSession';
-import { coachConversationQueryKey, useCoachBrief } from './useCoachBrief';
+import { useCoachBrief } from './useCoachBrief';
 import s from './CoachChat.module.css';
 
 interface CoachChatProps {
@@ -122,7 +121,7 @@ export function CoachChat({
     send,
     handleStop,
     handleRetry,
-    refetchConversation,
+    followMessage,
   } = useCoachSession({
     analysisId,
     wireMode,
@@ -137,7 +136,11 @@ export function CoachChat({
   // Task G6 — the coach brief trigger. `caps !== null` is the
   // conversationLoaded signal (set the same tick as `turns` by
   // useCoachSession's hydration); `hasBrief` comes from the hydrated
-  // thread so a re-mount never re-asks.
+  // thread so a re-mount never re-asks. Fix round 1 (item 1) — the brief's
+  // messageId is handed straight to `followMessage`, which opens its SSE
+  // stream and shows it live instead of the old invalidate-a-signal-query
+  // indirection (which only ever refetched once, at t≈0, before the worker
+  // had written anything).
   const hasBrief = turns.some((t) => t.role === 'assistant' && t.isBrief === true);
   useCoachBrief({
     analysisId,
@@ -146,33 +149,8 @@ export function CoachChat({
     specialistsRan,
     conversationLoaded: caps !== null,
     hasBrief,
+    onMessageId: followMessage,
   });
-
-  // useCoachBrief invalidates ['coach-conversation', analysisId] on success.
-  // This tiny signal query has no network cost of its own (its queryFn is a
-  // local no-op) — it exists only so that invalidation has an ACTIVE query
-  // to refetch, which then re-runs refetchConversation() and pulls the
-  // brief into `turns` the same way the chat refreshes after a user sends a
-  // message.
-  const conversationSignal = useQuery({
-    queryKey: coachConversationQueryKey(analysisId),
-    queryFn: () => Date.now(),
-    enabled: Boolean(analysisId),
-    staleTime: Infinity,
-    gcTime: Infinity,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    retry: false,
-  });
-  const firstSignalRef = useRef(true);
-  useEffect(() => {
-    if (conversationSignal.data === undefined) return;
-    if (firstSignalRef.current) {
-      firstSignalRef.current = false;
-      return;
-    }
-    void refetchConversation();
-  }, [conversationSignal.data, refetchConversation]);
 
   // adhoc task (2026-09-19) — auto-scroll the thread to the latest message
   // on every turn change (send / stream token) AND whenever the dialog

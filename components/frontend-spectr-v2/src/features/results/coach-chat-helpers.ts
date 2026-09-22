@@ -2,7 +2,7 @@
 // so the component file stays under the CLAUDE.md ~500-line ceiling and
 // each helper is independently unit-testable.
 
-import type { CoachEvidenceDto } from '../../api/types';
+import type { CoachConversationDto, CoachEvidenceDto } from '../../api/types';
 
 export interface ChatTurn {
   role: 'user' | 'assistant';
@@ -36,6 +36,30 @@ export interface UnlockAction {
 
 /** Story 12.5: unlock intent → the SongHeader input key whose dialog serves
  *  it. Pure mapping so the chip routing is unit-testable. */
+// Task G6 fix round 1 — moved here (was useCoachSession.ts) so both the
+// hook's mount-time hydration effect AND useCoachBriefFollow.ts's
+// ensure/poll steps share one implementation instead of two copies.
+// Adds `isBrief`/`closingLine` so a brief message renders CoachBriefCta
+// once it lands.
+export function mapMessagesToTurns(messages: CoachConversationDto['messages']): ChatTurn[] {
+  return messages.map((m) => {
+    const turn: ChatTurn = {
+      role: m.role,
+      text: m.content,
+      finalized: m.status === 'complete' || m.status === 'refused',
+    };
+    if (m.evidence) turn.evidence = m.evidence;
+    if (m.mode === 'teach') turn.mode = 'teach';
+    if (m.isBrief) turn.isBrief = true;
+    if (typeof m.closingLine === 'string') turn.closingLine = m.closingLine;
+    if (m.status === 'refused') {
+      turn.refused = true;
+      if (m.refusalReason) turn.refusalReason = m.refusalReason;
+    }
+    return turn;
+  });
+}
+
 export function unlockIntentToInputKey(
   intent: 'add_stems' | 'add_reference',
 ): 'stems' | 'reference' {
@@ -93,6 +117,65 @@ export function finalizeLastAssistant(
   const refused = patch.refused ?? last.refused;
   if (refused !== undefined) next.refused = refused;
   return [...copy, next];
+}
+
+// Task G6 fix round 1 (item 1) — `appendToLastAssistant`/`finalizeLastAssistant`
+// above are UNCHANGED (byte-identical to before this round) because `send()`
+// depends on their exact field set and every existing coach test asserts
+// against it. The brief turn (`followMessage()` in useCoachSession.ts) can't
+// reuse them as-is: it isn't reliably "the last turn" (a user can start
+// chatting while the brief is still pending, appending new turns after it),
+// AND finalize must preserve `isBrief`/`closingLine`/`mode` — the two
+// functions above deliberately drop everything but the fields `send()`
+// needs. These are the general, predicate + full-field-preserving forms,
+// used ONLY by `followMessage()`.
+export function appendToTurnMatching(
+  turns: ChatTurn[],
+  predicate: (turn: ChatTurn, index: number) => boolean,
+  delta: string,
+): ChatTurn[] {
+  const idx = turns.findIndex(predicate);
+  if (idx === -1) return turns;
+  const target = turns[idx];
+  if (!target) return turns;
+  const copy = turns.slice();
+  copy[idx] = { ...target, text: target.text + delta };
+  return copy;
+}
+
+export function finalizeTurnMatching(
+  turns: ChatTurn[],
+  predicate: (turn: ChatTurn, index: number) => boolean,
+  patch: {
+    evidence?: CoachEvidenceDto[];
+    replaceText?: string;
+    refused?: boolean;
+    refusalReason?: string | null;
+  },
+): ChatTurn[] {
+  const idx = turns.findIndex(predicate);
+  if (idx === -1) return turns;
+  const target = turns[idx];
+  if (!target) return turns;
+  const next: ChatTurn = {
+    ...target,
+    text: patch.replaceText !== undefined ? patch.replaceText : target.text,
+    evidence: patch.evidence ?? target.evidence ?? null,
+    refusalReason: patch.refusalReason ?? target.refusalReason ?? null,
+    finalized: true,
+  };
+  const refused = patch.refused ?? target.refused;
+  if (refused !== undefined) next.refused = refused;
+  const copy = turns.slice();
+  copy[idx] = next;
+  return copy;
+}
+
+/** Task G6 fix round 1 — matches the once-per-conversation brief's assistant
+ *  turn. Safe as a sole identifier: the server enforces at most one brief
+ *  per conversation (`ux_coach_messages_brief`). */
+export function isBriefTurn(turn: ChatTurn): boolean {
+  return turn.role === 'assistant' && turn.isBrief === true;
 }
 
 export function trimEmptyPending(turns: ChatTurn[]): ChatTurn[] {

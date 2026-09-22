@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 
 import { getAccessToken } from '../../api/fetcher';
 
@@ -9,10 +8,13 @@ import { getAccessToken } from '../../api/fetcher';
 // when it is safe to ask, firing the POST at most once per analysisId
 // (StrictMode-safe via a ref latch), and backing off a bounded schedule on a
 // 409 `brief_not_ready`. It NEVER opens the per-message SSE stream itself
-// (G-D2) — the brief rides the same stream useCoachSession already owns;
-// this hook only invalidates the shared conversation query key so that
-// refetch picks the brief message up, the same way the chat refreshes after
-// a user sends a message.
+// (G-D2) — that stays useCoachSession's job (`followMessage`). Task G6 fix
+// round 1 (item 1): the old invalidateQueries → signal-query → refetch-once
+// indirection is gone. Whenever the POST resolves to `created`/`retried`/
+// `exists` (never `skipped`), this hook hands the messageId straight to the
+// caller's `onMessageId` callback (CoachChat wires it to
+// useCoachSession's `followMessage`), which opens the stream and applies
+// frames live instead of waiting for a reload.
 
 export interface ShouldRequestBriefArgs {
   triageDone: boolean;
@@ -29,13 +31,6 @@ export function shouldRequestBrief(a: ShouldRequestBriefArgs): boolean {
   if (!a.triageDone || !a.conversationLoaded) return false;
   if (a.specialistsSuggested > 0 && a.specialistsRan < a.specialistsSuggested) return false;
   return true;
-}
-
-/** Shared query key: useCoachBrief invalidates it on success; CoachChat
- *  mounts a small signal query under the same key so the invalidation has
- *  something active to refetch (see CoachChat.tsx). */
-export function coachConversationQueryKey(analysisId: string) {
-  return ['coach-conversation', analysisId] as const;
 }
 
 // Bounded backoff for 409 brief_not_ready: 5s, 10s, 20s, 40s, 45s — sums to
@@ -57,6 +52,12 @@ export interface UseCoachBriefArgs {
   specialistsRan: number;
   conversationLoaded: boolean;
   hasBrief: boolean;
+  /** Task G6 fix round 1 (item 1) — called with the brief's assistant
+   *  `messageId` whenever the POST resolves to `created`/`retried`/`exists`
+   *  (never for `skipped`). The caller (CoachChat, via
+   *  useCoachSession's `followMessage`) opens that message's SSE stream and
+   *  shows it live instead of waiting for a reload. */
+  onMessageId: (messageId: string) => void;
 }
 
 export function useCoachBrief({
@@ -66,8 +67,8 @@ export function useCoachBrief({
   specialistsRan,
   conversationLoaded,
   hasBrief,
+  onMessageId,
 }: UseCoachBriefArgs): void {
-  const qc = useQueryClient();
   const latchRef = useRef<Latch>({ analysisId: null, requested: false, settled: false, attempt: 0 });
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [tick, setTick] = useState(0);
@@ -133,15 +134,26 @@ export function useCoachBrief({
           return;
         }
 
-        const body = (await res.json().catch(() => null)) as { status?: string } | null;
+        const body = (await res.json().catch(() => null)) as
+          | { status?: string; messageId?: string | null }
+          | null;
         latch.settled = true;
         if (body?.status === 'skipped') return; // e.g. the seeded demo report — never retry
-        qc.invalidateQueries({ queryKey: coachConversationQueryKey(requestAnalysisId) });
+        if (body?.messageId) onMessageId(body.messageId);
       } catch {
         latch.settled = true; // network failure — silent, no retry
       }
     })();
-  }, [analysisId, triageDone, specialistsSuggested, specialistsRan, conversationLoaded, hasBrief, qc, tick]);
+  }, [
+    analysisId,
+    triageDone,
+    specialistsSuggested,
+    specialistsRan,
+    conversationLoaded,
+    hasBrief,
+    onMessageId,
+    tick,
+  ]);
 
   useEffect(
     () => () => {

@@ -10,15 +10,14 @@ import type {
   CoachConversationDto,
   CreateCoachMessageResponse,
 } from '../../api/types';
-import {
-  parseFrame,
-  extractErrorCode,
-  extractErrorMessage,
-} from './coach-stream-frames';
+import { extractErrorCode, extractErrorMessage } from './coach-stream-frames';
+import { readCoachStream } from './coach-stream-reader';
+import { useCoachBriefFollow } from './useCoachBriefFollow';
 import {
   appendToLastAssistant,
   finalizeLastAssistant,
   finalizeOrTrimOnAbort,
+  mapMessagesToTurns,
   trimEmptyPending,
   type ChatTurn,
 } from './coach-chat-helpers';
@@ -29,6 +28,11 @@ import {
 // streamStatus/caps, abortRef/sendingRef, the hydration + reset effects,
 // send/handleStop/handleRetry — same statements, same conditions, same
 // dependency arrays, only the file they live in changed.
+//
+// Task G6 fix round 1 — the opening brief's live-follow + poll-fallback
+// machinery (`followMessage`) now lives in useCoachBriefFollow.ts, for the
+// same line-budget reason. It shares `sendingRef`/`abortRef`/the turn
+// setters declared below.
 
 // Story 1.8 / AC6 + Dev Note 10 — copy lives in three places: this constant,
 // the BFF's CoachConversationEndpoints.cs:31-32, and the worker's
@@ -53,29 +57,6 @@ const OFFLINE_CODES = new Set<string>([
   'coach_queue_unavailable',
   'coach_stream_idle',
 ]);
-
-// Task G6 — pure mapper, shared by the mount-time hydration effect below and
-// `refetchConversation` (fired when useCoachBrief invalidates the shared
-// conversation query key). Adds `isBrief`/`closingLine` so a brief message
-// renders CoachBriefCta once it lands.
-function mapMessagesToTurns(messages: CoachConversationDto['messages']): ChatTurn[] {
-  return messages.map((m) => {
-    const turn: ChatTurn = {
-      role: m.role,
-      text: m.content,
-      finalized: m.status === 'complete' || m.status === 'refused',
-    };
-    if (m.evidence) turn.evidence = m.evidence;
-    if (m.mode === 'teach') turn.mode = 'teach';
-    if (m.isBrief) turn.isBrief = true;
-    if (typeof m.closingLine === 'string') turn.closingLine = m.closingLine;
-    if (m.status === 'refused') {
-      turn.refused = true;
-      if (m.refusalReason) turn.refusalReason = m.refusalReason;
-    }
-    return turn;
-  });
-}
 
 interface UseCoachSessionArgs {
   analysisId: string;
@@ -114,6 +95,20 @@ export function useCoachSession({
   // Code-review P3 — synchronous double-send guard. `streaming` state is
   // batched; rapid Enter+click could slip through the React-state check.
   const sendingRef = useRef<boolean>(false);
+
+  // Task G6 fix round 1 (item 1 + 2) — the brief lives on the SAME
+  // abortRef/sendingRef/turn-setters `send()` uses below (they never run
+  // concurrently), so its Stop-button + unmount-abort behaviour is
+  // identical to a normal reply's for free.
+  const { followMessage, drainQueuedBrief } = useCoachBriefFollow({
+    analysisId,
+    sendingRef,
+    abortRef,
+    setTurns,
+    setCaps,
+    setStreaming,
+    setStreamStatus,
+  });
 
   // Code-review P1 — unmount cleanup: abort in-flight fetch. Without this,
   // navigating away mid-stream leaks the SSE fetch (the BFF never receives
@@ -180,32 +175,6 @@ export function useCoachSession({
     })();
 
     return () => ac.abort();
-  }, [analysisId]);
-
-  // Task G6 — useCoachBrief invalidates the ['coach-conversation', analysisId]
-  // query key on success; CoachChat mounts a small signal query under that
-  // same key and calls this when it changes, so the brief message shows up
-  // the same way the chat refreshes after a user sends a message. Guarded by
-  // `sendingRef` so it can never clobber a live send mid-stream.
-  const refetchConversation = useCallback(async () => {
-    if (sendingRef.current) return;
-    const requestAnalysisId = analysisId;
-    try {
-      const token = getAccessToken();
-      const authHeaders: Record<string, string> = token
-        ? { Authorization: `Bearer ${token}` }
-        : {};
-      const res = await fetch(`/api/coach/${analysisId}/conversation`, { headers: authHeaders });
-      if (!res.ok) return;
-      const dto = (await res.json()) as CoachConversationDto;
-      if (requestAnalysisId !== analysisId) return;
-      setCaps(dto.caps);
-      if (dto.messages.length > 0) {
-        setTurns(mapMessagesToTurns(dto.messages));
-      }
-    } catch {
-      /* best-effort, same as the mount-time hydration above */
-    }
   }, [analysisId]);
 
   const handleStop = useCallback(() => {
@@ -314,90 +283,66 @@ export function useCoachSession({
       if (sendAnalysisId !== analysisId) return;
       setCaps(created.caps);
 
-      // ── Phase 2: open the SSE stream.
-      const streamRes = await fetch(
+      // ── Phase 2: open the SSE stream. Task G6 fix round 1 (item 1) — the
+      // read loop itself now lives in coach-stream-reader.ts (shared with
+      // useCoachBriefFollow's `followMessage`); every handler below
+      // reproduces EXACTLY what the inline loop used to do, so this is a
+      // mechanical extraction, not a behaviour change.
+      const result = await readCoachStream(
         `/api/coach/${analysisId}/messages/${messageId}/stream`,
+        authHeaders,
+        ac.signal,
         {
-          method: 'GET',
-          headers: { Accept: 'text/event-stream', ...authHeaders },
-          signal: ac.signal,
-        },
-      );
-
-      if (!streamRes.ok || !streamRes.body) {
-        // P7 — mirror the POST offline-code check on stream open.
-        const errBody = await streamRes.json().catch(() => null as unknown);
-        const code = extractErrorCode(errBody);
-        if (code && OFFLINE_CODES.has(code)) {
-          setOfflineState(true);
-          setTurns((t) => trimEmptyPending(t));
-          setStreamStatus(COACH_OFFLINE_COPY);
-          return;
-        }
-        throw new Error(`stream HTTP ${streamRes.status}`);
-      }
-
-      const reader = streamRes.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        let idx: number;
-        while ((idx = buffer.indexOf('\n\n')) >= 0) {
-          const frame = buffer.slice(0, idx);
-          buffer = buffer.slice(idx + 2);
-          const event = parseFrame(frame);
-          if (!event) continue;
-          if (event.kind === 'comment') continue;
-
-          if (event.kind === 'token') {
-            const text = event.payload.text.replace(/\\n/g, '\n');
+          onToken: (text) => {
             setTurns((t) => appendToLastAssistant(t, text));
             scheduleAriaLive(text);
-            continue;
-          }
-          if (event.kind === 'done') {
-            setTurns((t) => finalizeLastAssistant(t, { evidence: event.payload.evidence }));
+          },
+          onDone: (evidence) => {
+            setTurns((t) => finalizeLastAssistant(t, { evidence }));
             flushAriaLive();
             setStreamStatus('Coach finished responding.');
-            return;
-          }
-          if (event.kind === 'refusal') {
+          },
+          onRefusal: (reason, body) => {
             setTurns((t) =>
-              finalizeLastAssistant(t, {
-                replaceText: event.payload.body,
-                refused: true,
-                refusalReason: event.payload.reason,
-              }),
+              finalizeLastAssistant(t, { replaceText: body, refused: true, refusalReason: reason }),
             );
             flushAriaLive();
             setStreamStatus('Coach declined to answer.');
-            return;
-          }
-          if (event.kind === 'error') {
-            if (OFFLINE_CODES.has(event.payload.code)) {
+          },
+          onError: (code, message, atOpen) => {
+            // P7 — mirror the POST offline-code check on stream open.
+            if (OFFLINE_CODES.has(code)) {
               setOfflineState(true);
               setTurns((t) => trimEmptyPending(t));
               flushAriaLive();
               setStreamStatus(COACH_OFFLINE_COPY);
               return;
             }
+            if (atOpen) {
+              // Mirrors the pre-extraction behaviour exactly: a non-offline
+              // open failure is a hard error, not a turn-level refusal —
+              // throwing here propagates to the catch below (toast + trim),
+              // same as the original `throw new Error(...)` did.
+              throw new Error(message);
+            }
             setTurns((t) =>
-              finalizeLastAssistant(t, {
-                replaceText: event.payload.message,
-                refused: true,
-                refusalReason: event.payload.code,
-              }),
+              finalizeLastAssistant(t, { replaceText: message, refused: true, refusalReason: code }),
             );
             flushAriaLive();
             setStreamStatus('Coach stream error.');
-            return;
-          }
-        }
+          },
+        },
+      );
+
+      if (result === 'aborted') {
+        // P4 — finalize partial-text turns so EvidenceChips logic is
+        // consistent on subsequent sends. Empty pending turns are dropped.
+        setTurns((t) => finalizeOrTrimOnAbort(t));
       }
+      // 'done' | 'refusal' | 'error' | 'ended-without-terminal': every state
+      // change already happened synchronously inside the handlers above (or
+      // the frame loop simply exhausted without a terminal frame, which the
+      // original inline loop also left silently un-handled).
     } catch (err) {
       if ((err as Error)?.name === 'AbortError') {
         // P4 — finalize partial-text turns so EvidenceChips logic is
@@ -412,12 +357,17 @@ export function useCoachSession({
       abortRef.current = null;
       sendingRef.current = false;
       cancelAriaLiveTimer();
+      // Task G6 fix round 1 (item 2) — a brief that arrived mid-send is
+      // never dropped: resume following it now that `turns` is safe to
+      // touch again.
+      drainQueuedBrief();
     }
   }, [
     analysisId,
     cancelAriaLiveTimer,
     caps,
     clearInput,
+    drainQueuedBrief,
     flushAriaLive,
     input,
     offlineState,
@@ -437,6 +387,6 @@ export function useCoachSession({
     send,
     handleStop,
     handleRetry,
-    refetchConversation,
+    followMessage,
   };
 }

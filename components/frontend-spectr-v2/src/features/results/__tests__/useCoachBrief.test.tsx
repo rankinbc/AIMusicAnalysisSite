@@ -2,18 +2,17 @@
 // Task G6 — the coach brief trigger. `shouldRequestBrief` is the pure gate;
 // `useCoachBrief` fires POST /api/coach/{analysisId}/brief AT MOST ONCE per
 // report view (StrictMode-safe via a ref latch), backs off a bounded,
-// capped schedule on 409 `brief_not_ready`, and invalidates the shared
-// conversation query key on success so useCoachSession picks up the new
-// message the same way it refreshes after a user message. It must NEVER
-// open the per-message SSE stream itself (G-D2/G-D3 — that stays the sole
-// job of useCoachSession, reused for the brief too).
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+// capped schedule on 409 `brief_not_ready`. It must NEVER open the
+// per-message SSE stream itself (G-D2/G-D3 — that stays the sole job of
+// useCoachSession's `followMessage`, reused for the brief too). Fix round 1
+// (item 1) — on success it hands the messageId to `onMessageId` instead of
+// invalidating a query key; these tests were adapted for that (the trigger
+// bound itself — the actual thing under test — is unchanged).
 import { act, renderHook } from '@testing-library/react';
 import { StrictMode } from 'react';
-import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { coachConversationQueryKey, shouldRequestBrief, useCoachBrief } from '../useCoachBrief';
+import { shouldRequestBrief, useCoachBrief } from '../useCoachBrief';
 
 describe('shouldRequestBrief', () => {
   const base = {
@@ -51,15 +50,6 @@ describe('shouldRequestBrief', () => {
   });
 });
 
-function makeWrapper() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const invalidateSpy = vi.spyOn(qc, 'invalidateQueries');
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
-  );
-  return { wrapper, invalidateSpy };
-}
-
 const readyArgs = {
   triageDone: true,
   specialistsSuggested: 0,
@@ -74,15 +64,15 @@ describe('useCoachBrief', () => {
     vi.useRealTimers();
   });
 
-  it('fires the brief POST exactly once and invalidates the conversation query', async () => {
+  it('fires the brief POST exactly once and hands the messageId to onMessageId', async () => {
     const fetchMock: ReturnType<typeof vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>> = vi.fn(() =>
       Promise.resolve({ ok: true, status: 202, json: async () => ({ status: 'created', messageId: 'm1' }) } as Response),
     );
     vi.stubGlobal('fetch', fetchMock);
-    const { wrapper, invalidateSpy } = makeWrapper();
+    const onMessageId = vi.fn();
 
     await act(async () => {
-      renderHook(() => useCoachBrief({ analysisId: 'a1', ...readyArgs }), { wrapper });
+      renderHook(() => useCoachBrief({ analysisId: 'a1', ...readyArgs, onMessageId }));
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -90,7 +80,7 @@ describe('useCoachBrief', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/coach/a1/brief');
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: 'POST' });
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: coachConversationQueryKey('a1') });
+    expect(onMessageId).toHaveBeenCalledWith('m1');
     // G-D2 — never opens the per-message stream itself.
     expect(fetchMock.mock.calls.some((c) => String(c[0]).includes('/stream'))).toBe(false);
   });
@@ -98,14 +88,15 @@ describe('useCoachBrief', () => {
   it('never fires when analysisId is null', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-    const { wrapper } = makeWrapper();
+    const onMessageId = vi.fn();
 
     await act(async () => {
-      renderHook(() => useCoachBrief({ analysisId: null, ...readyArgs }), { wrapper });
+      renderHook(() => useCoachBrief({ analysisId: null, ...readyArgs, onMessageId }));
       await Promise.resolve();
     });
 
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(onMessageId).not.toHaveBeenCalled();
   });
 
   it('does not fire again across re-renders once requested', async () => {
@@ -113,11 +104,11 @@ describe('useCoachBrief', () => {
       Promise.resolve({ ok: true, status: 200, json: async () => ({ status: 'exists', messageId: 'm1' }) } as Response),
     );
     vi.stubGlobal('fetch', fetchMock);
-    const { wrapper } = makeWrapper();
+    const onMessageId = vi.fn();
 
     const { rerender } = renderHook(
-      (props: typeof readyArgs) => useCoachBrief({ analysisId: 'a1', ...props }),
-      { wrapper, initialProps: readyArgs },
+      (props: typeof readyArgs) => useCoachBrief({ analysisId: 'a1', ...props, onMessageId }),
+      { initialProps: readyArgs },
     );
     await act(async () => {
       await Promise.resolve();
@@ -134,11 +125,11 @@ describe('useCoachBrief', () => {
       Promise.resolve({ ok: true, status: 200, json: async () => ({ status: 'exists', messageId: 'm1' }) } as Response),
     );
     vi.stubGlobal('fetch', fetchMock);
-    const { wrapper } = makeWrapper();
+    const onMessageId = vi.fn();
 
     await act(async () => {
-      renderHook(() => useCoachBrief({ analysisId: 'a1', ...readyArgs }), {
-        wrapper: ({ children }) => <StrictMode>{wrapper({ children })}</StrictMode>,
+      renderHook(() => useCoachBrief({ analysisId: 'a1', ...readyArgs, onMessageId }), {
+        wrapper: ({ children }) => <StrictMode>{children}</StrictMode>,
       });
       await Promise.resolve();
       await Promise.resolve();
@@ -157,9 +148,9 @@ describe('useCoachBrief', () => {
       } as Response),
     );
     vi.stubGlobal('fetch', fetchMock);
-    const { wrapper } = makeWrapper();
+    const onMessageId = vi.fn();
 
-    renderHook(() => useCoachBrief({ analysisId: 'a1', ...readyArgs }), { wrapper });
+    renderHook(() => useCoachBrief({ analysisId: 'a1', ...readyArgs, onMessageId }));
     await act(async () => {
       await Promise.resolve();
     });
@@ -181,6 +172,7 @@ describe('useCoachBrief', () => {
       await vi.advanceTimersByTimeAsync(200_000);
     });
     expect(fetchMock).toHaveBeenCalledTimes(callsAfterBudget);
+    expect(onMessageId).not.toHaveBeenCalled();
   });
 
   it('never retries once the server answers skipped (the seeded demo report)', async () => {
@@ -189,15 +181,15 @@ describe('useCoachBrief', () => {
       Promise.resolve({ ok: true, status: 200, json: async () => ({ status: 'skipped', messageId: null } as unknown) } as Response),
     );
     vi.stubGlobal('fetch', fetchMock);
-    const { wrapper, invalidateSpy } = makeWrapper();
+    const onMessageId = vi.fn();
 
-    renderHook(() => useCoachBrief({ analysisId: 'a1', ...readyArgs }), { wrapper });
+    renderHook(() => useCoachBrief({ analysisId: 'a1', ...readyArgs, onMessageId }));
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(invalidateSpy).not.toHaveBeenCalled();
+    expect(onMessageId).not.toHaveBeenCalled();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(120_000);
@@ -208,9 +200,9 @@ describe('useCoachBrief', () => {
   it('does not fire when the conversation already carries a brief message', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-    const { wrapper } = makeWrapper();
+    const onMessageId = vi.fn();
 
-    renderHook(() => useCoachBrief({ analysisId: 'a1', ...readyArgs, hasBrief: true }), { wrapper });
+    renderHook(() => useCoachBrief({ analysisId: 'a1', ...readyArgs, hasBrief: true, onMessageId }));
     await act(async () => {
       await Promise.resolve();
     });

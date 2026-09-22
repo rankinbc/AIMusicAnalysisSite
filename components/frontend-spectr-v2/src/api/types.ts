@@ -1382,8 +1382,11 @@ export interface CoachMessageDto {
    *  (lesson grounded in the track) | "concise" (terse style overlay on the
    *  grounded prompt). Lets the UI badge teach answers durably across
    *  reloads ("concise" gets no badge). Optional — older payloads omit it
-   *  (treat as "qa"). */
-  mode?: 'qa' | 'teach' | 'concise';
+   *  (treat as "qa"). Task G6 fix round 1 (item 5): "brief" for the
+   *  once-per-conversation coach brief's trigger + assistant rows
+   *  (`CoachBrief.Mode` on the BFF) — `mapMessagesToTurns` keys off
+   *  `isBrief` for that case, not this field. */
+  mode?: 'qa' | 'teach' | 'concise' | 'brief';
   /** Task G6 — true for the once-per-conversation coach brief (BFF: POST
    *  /api/coach/{analysisId}/brief). */
   isBrief: boolean;
