@@ -22,8 +22,10 @@ describe('trust pages (story 6.2 AC1/3/4)', () => {
     expect(html).toContain('never sent to any LLM');
     expect(html).toContain('Anthropic API');
     expect(html).toContain('does not train');
-    // Shared-playback scoping — the pledge must not claim owner-only reads.
-    expect(html).toContain('anyone you explicitly share');
+    // Solo fork — the product has no sharing feature; the pledge must not
+    // claim shared-track reads (P6 correction of the P4-era copy).
+    expect(html).toContain('your own playback');
+    expect(html).not.toContain('share the track');
   });
 
   it('results-forever states the honest uploaded-files distinction', () => {

@@ -114,6 +114,7 @@ export function AnalyzePage() {
   usePageMeta(
     'Analyze your track free — SPECTR',
     'Drop a track, get a graded 7-phase mix analysis in minutes. No account, no forms — WAV, FLAC or MP3 up to 250 MB.',
+    { path: '/analyze' },
   );
 
   const auth = useAuth();

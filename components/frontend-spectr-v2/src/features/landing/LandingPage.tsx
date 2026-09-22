@@ -24,6 +24,7 @@ export function LandingPage() {
   usePageMeta(
     'SPECTR — AI mix analysis for producers',
     'Upload a track, get a graded 7-phase mix report with concrete fixes — loudness, low end, stereo image, arrangement — plus an AI coach that hears what you hear.',
+    { path: '/' },
   );
   // Story 6.5 — top of funnel (once per mount; no-op without a PostHog key).
   useEffect(() => { capture('landing_viewed'); }, []);

@@ -6,7 +6,7 @@ import { PublicChrome } from './PublicChrome';
 import s from './StatusScreen.module.css';
 
 export function NotFoundScreen() {
-  usePageMeta('Page not found — SPECTR');
+  usePageMeta('Page not found — SPECTR', undefined, { noindex: true });
   return (
     <>
       <PublicChrome />

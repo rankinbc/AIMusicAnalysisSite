@@ -38,24 +38,64 @@ function property(prop: string): () => HTMLMetaElement {
   };
 }
 
-export function usePageMeta(title: string, description?: string): void {
+function upsertLink(rel: string, href: string): () => void {
+  let link = document.head.querySelector<HTMLLinkElement>(`link[rel="${rel}"]`);
+  const created = !link;
+  const prev = link?.getAttribute('href') ?? null;
+  if (!link) {
+    link = document.createElement('link');
+    link.rel = rel;
+    document.head.appendChild(link);
+  }
+  link.setAttribute('href', href);
+  const el = link;
+  return () => {
+    if (created) el.remove();
+    else if (prev !== null) el.setAttribute('href', prev);
+  };
+}
+
+// P6 (link previews) — `path` emits a canonical link + og:url (crawlers on
+// the six indexable public pages); `noindex` emits `<meta name="robots"
+// content="noindex">` for pages like the 404 screen. Both are additive to
+// the existing title/description/OG behavior and restored on unmount.
+export interface PageMetaOptions {
+  path?: string;
+  noindex?: boolean;
+}
+
+export function usePageMeta(title: string, description?: string, opts?: PageMetaOptions): void {
+  const path = opts?.path;
+  const noindex = opts?.noindex === true;
   useEffect(() => {
     const prevTitle = document.title;
     document.title = title;
 
     const restores: Array<() => void> = [
       upsert('meta[property="og:title"]', property('og:title'), title),
+      upsert('meta[name="twitter:title"]', named('twitter:title'), title),
     ];
     if (description) {
       restores.push(
         upsert('meta[name="description"]', named('description'), description),
         upsert('meta[property="og:description"]', property('og:description'), description),
+        upsert('meta[name="twitter:description"]', named('twitter:description'), description),
       );
+    }
+    if (path) {
+      const url = `${window.location.origin}${path}`;
+      restores.push(
+        upsertLink('canonical', url),
+        upsert('meta[property="og:url"]', property('og:url'), url),
+      );
+    }
+    if (noindex) {
+      restores.push(upsert('meta[name="robots"]', named('robots'), 'noindex'));
     }
 
     return () => {
       document.title = prevTitle;
       for (const restore of restores) restore();
     };
-  }, [title, description]);
+  }, [title, description, path, noindex]);
 }

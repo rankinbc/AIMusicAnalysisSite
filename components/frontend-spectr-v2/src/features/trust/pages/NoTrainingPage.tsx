@@ -47,8 +47,7 @@ export function NoTrainingPage() {
       <h2>Where your audio actually lives</h2>
       <p>
         Uploaded audio is stored in SPECTR-controlled storage and read only by the analysis
-        pipeline and playback — yours, and anyone you explicitly share the track with. See the
-        privacy defaults page for retention specifics.
+        pipeline and your own playback. See the privacy defaults page for retention specifics.
       </p>
       <h2>Versioning</h2>
       <p>

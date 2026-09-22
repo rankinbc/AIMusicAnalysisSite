@@ -46,6 +46,13 @@ public static class PublicSiteEndpoints
             description: "Private-by-default library, no public pages or share links, anonymous analysis data purged after 72 hours, full export and deletion.",
             heading: "Privacy defaults",
             body: "Private by default. Nothing you upload is visible to anyone else. Export or delete everything, any time.")).AllowAnonymous().WithTags("public-site");
+        // Task P6 — the engineering page ("How SPECTR is built").
+        app.MapGet("/trust/how-its-built", (HttpContext c) => Shell(c,
+            path: "/trust/how-its-built",
+            title: "How SPECTR is built — SPECTR",
+            description: "The architecture, the decisions and the guard rails behind SPECTR — a .NET BFF, a Python analysis worker and a React audio workstation.",
+            heading: "How SPECTR is built",
+            body: "A .NET gateway, a Python analysis worker and a React audio workstation — with the numbers and the trade-offs.")).AllowAnonymous().WithTags("public-site");
         return app;
     }
 

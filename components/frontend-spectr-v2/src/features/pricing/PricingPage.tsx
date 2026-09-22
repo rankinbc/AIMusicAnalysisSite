@@ -101,6 +101,7 @@ export function PricingPage() {
   usePageMeta(
     'Pricing — SPECTR',
     'Free, Pro, and per-release credits. Honest billing, no asterisks — reports stay yours forever, even after you cancel.',
+    { path: '/pricing' },
   );
 
   if (state === 'loading') return <PricingLoadingView failed={false} />;

@@ -36,7 +36,7 @@ interface TrustPageProps {
 }
 
 export function TrustPage({ path, eyebrow, title, metaDescription, updated, children }: TrustPageProps) {
-  usePageMeta(`${title} — SPECTR`, metaDescription);
+  usePageMeta(`${title} — SPECTR`, metaDescription, { path });
   return (
     <div>
       <PublicChrome />
