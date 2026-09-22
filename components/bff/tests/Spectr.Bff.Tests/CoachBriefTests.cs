@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Spectr.Bff.DTOs;
+using Spectr.Bff.Endpoints;
 using Spectr.Bff.Services;
 using Spectr.Data;
 using Spectr.Data.Entities;
@@ -465,7 +466,9 @@ public sealed class CoachBriefTests(WebApplicationFactory<Program> factory)
         finally { await CleanupUser(f, userId); }
     }
 
-    // stale pending (older than the 120s staleness window) → retried.
+    // stale pending (older than the staleness window — 11 minutes at the
+    // current 600s window; derived from the constant, not a literal, so
+    // this stays correct if the window value changes again) → retried.
     [SkippableFact]
     public async Task Stale_Pending_Brief_Retries()
     {
@@ -484,7 +487,8 @@ public sealed class CoachBriefTests(WebApplicationFactory<Program> factory)
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                 var row = await db.CoachMessages.SingleAsync(m => m.Id == first!.MessageId);
                 Assert.Equal("pending", row.Status); // still pending — never got a worker
-                row.CreatedAt = DateTimeOffset.UtcNow.AddSeconds(-121);
+                row.CreatedAt = DateTimeOffset.UtcNow
+                    .AddSeconds(-(CoachBriefEndpoints.StalenessWindowSeconds + 60));
                 await db.SaveChangesAsync();
             }
 
@@ -493,6 +497,42 @@ public sealed class CoachBriefTests(WebApplicationFactory<Program> factory)
             var body = await resp.Content.ReadFromJsonAsync<CoachBriefResponse>();
             Assert.Equal("retried", body!.Status);
             Assert.Equal(2, queue.Calls.Count);
+        }
+        finally { await CleanupUser(f, userId); }
+    }
+
+    // A pending brief 3 minutes (180s) old: past the OLD 120s staleness
+    // window (would have been incorrectly `retried` before fix round 2
+    // item 2) but comfortably inside the NEW 600s window → stays `exists`,
+    // no enqueue. Deliberately a literal, not the constant — this test
+    // exists to pin the window's ABSOLUTE size, not move with it.
+    [SkippableFact]
+    public async Task Pending_Brief_Three_Minutes_Old_Stays_Exists_With_No_Extra_Enqueue()
+    {
+        await TestDb.RequireAsync(factory);
+        var (f, queue) = BuildWithFakeQueue();
+        var (client, userId) = await RegisterRealUserAsync(f);
+        var analysisId = await SeedAnalysisAsync(f, userId);
+
+        try
+        {
+            var first = await (await client.PostAsync($"/api/coach/{analysisId}/brief", null))
+                .Content.ReadFromJsonAsync<CoachBriefResponse>();
+
+            using (var scope = f.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var row = await db.CoachMessages.SingleAsync(m => m.Id == first!.MessageId);
+                row.CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-3);
+                await db.SaveChangesAsync();
+            }
+
+            var resp = await client.PostAsync($"/api/coach/{analysisId}/brief", null);
+            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+            var body = await resp.Content.ReadFromJsonAsync<CoachBriefResponse>();
+            Assert.Equal("exists", body!.Status);
+            Assert.Equal(first!.MessageId, body.MessageId);
+            Assert.Single(queue.Calls); // only the original create — no retry enqueue
         }
         finally { await CleanupUser(f, userId); }
     }
@@ -587,6 +627,108 @@ public sealed class CoachBriefTests(WebApplicationFactory<Program> factory)
             await Task.WhenAll(t1, t2);
 
             // 1 (original create) + exactly 1 (the winning retry).
+            Assert.Equal(2, queue.Calls.Count);
+        }
+        finally { await CleanupUser(f, userId); }
+    }
+
+    // Fix round 2 item 1: two (well, three counting the seeded row) PARALLEL
+    // retries against an already-STALE `pending` row must produce exactly
+    // ONE more enqueue. Before the fix, the reset's SET clause never
+    // advanced CreatedAt, so the staleness predicate stayed true for every
+    // racer even after the first one won — this reproduces deterministically
+    // (not just under true thread interleaving) because the bug is a logic
+    // bug in the WHERE predicate, not a timing window: even two SEQUENTIAL
+    // retries against a stale-pending row double-enqueue on the buggy code,
+    // so Task.WhenAll here is exercising the real concurrent path but isn't
+    // needed to make the assertion fail reliably. Also asserts the winning
+    // reset refreshed CreatedAt to "now" — that's what stops a THIRD retry
+    // from re-tripping the same stale window immediately after.
+    [SkippableFact]
+    public async Task Two_Parallel_Retries_On_Stale_Pending_Enqueue_Exactly_Once()
+    {
+        await TestDb.RequireAsync(factory);
+        var (f, queue) = BuildWithFakeQueue();
+        var (client, userId) = await RegisterRealUserAsync(f);
+        var analysisId = await SeedAnalysisAsync(f, userId);
+
+        try
+        {
+            var first = await (await client.PostAsync($"/api/coach/{analysisId}/brief", null))
+                .Content.ReadFromJsonAsync<CoachBriefResponse>();
+
+            var staleAt = DateTimeOffset.UtcNow
+                .AddSeconds(-(CoachBriefEndpoints.StalenessWindowSeconds + 60));
+            using (var scope = f.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var row = await db.CoachMessages.SingleAsync(m => m.Id == first!.MessageId);
+                Assert.Equal("pending", row.Status); // still pending — never got a worker
+                row.CreatedAt = staleAt;
+                await db.SaveChangesAsync();
+            }
+
+            var beforeRetries = DateTimeOffset.UtcNow;
+            var t1 = client.PostAsync($"/api/coach/{analysisId}/brief", null);
+            var t2 = client.PostAsync($"/api/coach/{analysisId}/brief", null);
+            await Task.WhenAll(t1, t2);
+
+            // 1 (original create) + exactly 1 (the winning retry) — never 2.
+            Assert.Equal(2, queue.Calls.Count);
+
+            using (var scope = f.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var row = await db.CoachMessages.SingleAsync(m => m.Id == first!.MessageId);
+                Assert.Equal("pending", row.Status);
+                // The winning reset must have refreshed CreatedAt off the
+                // stale timestamp — otherwise a third retry would re-trip
+                // the same stale window immediately.
+                Assert.True(row.CreatedAt >= beforeRetries.AddSeconds(-1));
+            }
+        }
+        finally { await CleanupUser(f, userId); }
+    }
+
+    // Fix round 2 item 1 (aged error variant): an `error` brief 11 minutes
+    // old (well past the staleness window), retried twice in parallel, must
+    // still enqueue exactly once. The error branch's race guard doesn't
+    // depend on CreatedAt directly (status flips away from 'error' on the
+    // winning reset, which alone stops a loser's WHERE from matching) — but
+    // before this fix an aged error row became, after the winning reset, a
+    // stale `pending` row with an untouched old CreatedAt, which re-opened
+    // exactly the same hole as the plain stale-pending case above. This
+    // confirms the added CreatedAt refresh keeps the aged-error path safe
+    // too.
+    [SkippableFact]
+    public async Task Stale_Error_Brief_Two_Parallel_Retries_Enqueue_Exactly_Once()
+    {
+        await TestDb.RequireAsync(factory);
+        var (f, queue) = BuildWithFakeQueue();
+        var (client, userId) = await RegisterRealUserAsync(f);
+        var analysisId = await SeedAnalysisAsync(f, userId);
+
+        try
+        {
+            var first = await (await client.PostAsync($"/api/coach/{analysisId}/brief", null))
+                .Content.ReadFromJsonAsync<CoachBriefResponse>();
+
+            using (var scope = f.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var row = await db.CoachMessages.SingleAsync(m => m.Id == first!.MessageId);
+                row.Status = "error";
+                row.Content = "The coach hit a transient error. Please try again.";
+                row.CompletedAt = DateTimeOffset.UtcNow;
+                row.CreatedAt = DateTimeOffset.UtcNow
+                    .AddSeconds(-(CoachBriefEndpoints.StalenessWindowSeconds + 60));
+                await db.SaveChangesAsync();
+            }
+
+            var t1 = client.PostAsync($"/api/coach/{analysisId}/brief", null);
+            var t2 = client.PostAsync($"/api/coach/{analysisId}/brief", null);
+            await Task.WhenAll(t1, t2);
+
             Assert.Equal(2, queue.Calls.Count);
         }
         finally { await CleanupUser(f, userId); }

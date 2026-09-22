@@ -21,7 +21,30 @@ public static class CoachBriefEndpoints
     // broken (the worker lost the message) and re-enqueues rather than
     // answering `exists` forever. An `error` row is always broken
     // regardless of age (see the reset predicate below).
-    private const int StalenessWindowSeconds = 120;
+    //
+    // Fix round 2 item 2: this MUST safely exceed the worst-case duration a
+    // LEGITIMATELY in-flight generation can take, not just equal the
+    // worker's inner call timeout — otherwise a retry can reset (and
+    // re-enqueue) a row that is still being generated, producing two
+    // concurrent `coach_reply` invocations against the same message id
+    // (double LLM spend + interleaved SSE token frames on one Redis
+    // channel). The worker-side numbers this must stay safely ahead of
+    // (components/worker/app/coach_actor.py — do not edit that file here,
+    // just keep this comment in sync with it):
+    //   - line 339: `time_limit=180_000` — 180s, the max wall-clock time
+    //     dramatiq allows ONE actor attempt before killing it.
+    //   - line 338: `max_retries=1` — dramatiq may run the actor a SECOND
+    //     time after the first attempt fails/times out, plus its own retry
+    //     backoff delay between attempts.
+    //   - line 609: `timeout_s=120` — the LLM call's own timeout, which is
+    //     WITHIN a single 180s attempt, so it never adds on top of it.
+    // Worst case a legitimate generation can take: 2 attempts x 180s = 360s,
+    // plus dramatiq's retry backoff margin. 600s (10 min) clears that with
+    // real headroom, unlike the old 120s value (equal to the inner
+    // timeout_s, zero margin). `internal` (not `private`) so
+    // Spectr.Bff.Tests can pin this exact value instead of a duplicated
+    // literal (InternalsVisibleTo("Spectr.Bff.Tests") in the csproj).
+    internal const int StalenessWindowSeconds = 600;
 
     public static IEndpointRouteBuilder MapCoachBriefEndpoints(this IEndpointRouteBuilder app)
     {
@@ -86,7 +109,8 @@ public static class CoachBriefEndpoints
         var existing = await FindExistingBriefAsync(db, conversation.Id, ct);
         if (existing is not null)
         {
-            var cutoff = DateTimeOffset.UtcNow.AddSeconds(-StalenessWindowSeconds);
+            var resetNow = DateTimeOffset.UtcNow;
+            var cutoff = resetNow.AddSeconds(-StalenessWindowSeconds);
             var isStalePending = existing.Status is "pending" or "streaming"
                 && existing.CreatedAt < cutoff;
             var isBroken = existing.Status == "error" || isStalePending;
@@ -94,13 +118,30 @@ public static class CoachBriefEndpoints
             if (!isBroken)
                 return Results.Ok(new CoachBriefResponse("exists", existing.AssistantId));
 
-            // Race-safe reset: only the caller whose conditional
-            // ExecuteUpdateAsync affects exactly 1 row gets to re-enqueue.
-            // A concurrent winner flips status away from 'error' (or the
-            // staleness predicate stops matching once state's `pending`
-            // again without a stale CreatedAt to re-trip it), so a losing
-            // caller's UPDATE affects 0 rows and it just converges on
-            // `exists` — no double enqueue.
+            // Fix round 2 item 1: race-safe reset. The conditional
+            // ExecuteUpdateAsync below is the ONLY race guard — only the
+            // caller whose UPDATE affects exactly 1 row gets to re-enqueue.
+            // For the `error` branch this was already correct on its own:
+            // the winner flips `status` away from 'error', so a loser's
+            // re-evaluated WHERE sees a non-error row and (given a fresh
+            // CreatedAt) matches 0 rows.
+            // For the `pending`/`streaming`-staleness branch this was NOT
+            // correct before this fix: the SET never advanced `CreatedAt`,
+            // so after the winning reset the row was STILL `status =
+            // 'pending'` with the SAME stale `CreatedAt` — a loser's
+            // re-evaluated WHERE matched again and it ALSO enqueued (and an
+            // aged `error` row had the identical problem one hop later,
+            // once the winner's reset turned it into a stale `pending`
+            // row). Fix: the SET must also refresh `CreatedAt` to `now` in
+            // the SAME statement. There's no separate "last enqueued at"
+            // column and we're not adding one — a brief's `CreatedAt` IS
+            // its "last enqueue" moment already (it's set to `now` on the
+            // initial create too, a few lines below this block), so
+            // reusing it here just keeps that invariant true across a
+            // reset. That's what makes the staleness predicate stop
+            // matching for every subsequent racer once one caller wins,
+            // and it's also what restarts the staleness clock for the next
+            // legitimate retry window.
             var resetCount = await db.CoachMessages
                 .Where(m => m.Id == existing.AssistantId
                     && (m.Status == "error" || m.Status == "pending" || m.Status == "streaming")
@@ -109,7 +150,8 @@ public static class CoachBriefEndpoints
                     .SetProperty(m => m.Status, "pending")
                     .SetProperty(m => m.Content, string.Empty)
                     .SetProperty(m => m.RefusalReason, (string?)null)
-                    .SetProperty(m => m.CompletedAt, (DateTimeOffset?)null), ct);
+                    .SetProperty(m => m.CompletedAt, (DateTimeOffset?)null)
+                    .SetProperty(m => m.CreatedAt, resetNow), ct);
 
             if (resetCount != 1)
                 return Results.Ok(new CoachBriefResponse("exists", existing.AssistantId));
