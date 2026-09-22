@@ -78,6 +78,30 @@ def _env_str(name: str, default: str) -> str:
 # byte count with an optional b/k/m/g suffix (case-insensitive).
 _MEMORY_LIMIT_RE = re.compile(r"^(\d+(?:\.\d+)?)([bkmgBKMG]?)$")
 
+# FW5 — minimum memory limit: 64 MiB in bytes (67,108,864 bytes).
+# Values below this cause docker to refuse or silently degrade.
+_MIN_MEMORY_BYTES = 64 * 1024 * 1024
+
+
+def _memory_to_bytes(value_str: str) -> int:
+    """Convert a memory string (e.g., '4m', '1g', '512m') to bytes.
+
+    Returns -1 if the string doesn't match the expected format.
+    """
+    match = _MEMORY_LIMIT_RE.match(value_str)
+    if not match:
+        return -1
+    num = float(match.group(1))
+    unit = match.group(2).lower() if match.group(2) else 'b'
+
+    multipliers = {
+        'b': 1,
+        'k': 1024,
+        'm': 1024 * 1024,
+        'g': 1024 * 1024 * 1024,
+    }
+    return int(num * multipliers[unit])
+
 
 def _validate_memory_limit(name: str, raw: str) -> str:
     """Validate/normalize an ``ALLIN1_MEMORY_LIMIT``-shaped value.
@@ -90,6 +114,10 @@ def _validate_memory_limit(name: str, raw: str) -> str:
     ``ERROR`` naming the variable and the bad value, and falls back to
     :data:`DEFAULT_MEMORY_LIMIT` — never to "no cap", and never lets a bad
     value reach docker.
+
+    Values below 64 MiB (FW5) are treated as malformed, as they cause docker
+    to refuse or silently degrade. They log an ``ERROR`` and fall back to
+    :data:`DEFAULT_MEMORY_LIMIT`.
 
     ``""``/``"0"`` remain the explicit, intentional "run uncapped" escape
     hatch (e.g. a GPU/managed host that fences memory another way) — but log
@@ -104,7 +132,16 @@ def _validate_memory_limit(name: str, raw: str) -> str:
         return ""
     match = _MEMORY_LIMIT_RE.match(raw)
     if match and float(match.group(1)) > 0:
-        return raw
+        bytes_value = _memory_to_bytes(raw)
+        if bytes_value >= _MIN_MEMORY_BYTES:
+            return raw
+        # Below minimum: treat as invalid
+        logger.error(
+            "%s=%r is below the minimum allowed memory (64 MiB) and would "
+            "cause docker to fail silently — falling back to the default cap %s",
+            name, raw, DEFAULT_MEMORY_LIMIT,
+        )
+        return DEFAULT_MEMORY_LIMIT
     logger.error(
         "%s=%r is not a valid docker memory size (expected an integer or "
         "decimal byte count with an optional b/k/m/g suffix, e.g. '3g', "

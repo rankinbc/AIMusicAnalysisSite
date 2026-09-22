@@ -102,3 +102,35 @@ def test_a_valid_limit_passes_through_verbatim(monkeypatch, tmp_path, valid_valu
     cmd = seen["cmd"]
     assert cmd[cmd.index("--memory") + 1] == valid_value
     assert cmd[cmd.index("--memory-swap") + 1] == valid_value
+
+
+# ── FW5 — a memory cap too small to run docker falls back to the default ──
+
+@pytest.mark.parametrize("tiny_value", ["1", "4m", "63m", "65535k"])
+def test_a_limit_below_64_mib_falls_back_to_the_default_and_logs_an_error(monkeypatch, tmp_path, caplog, tiny_value):
+    monkeypatch.setenv("ALLIN1_MEMORY_LIMIT", tiny_value)
+    with caplog.at_level(logging.ERROR, logger=mod.logger.name):
+        d, audio, seen = _runner(monkeypatch, tmp_path)
+        try:
+            d.analyze(audio)
+        except Exception:
+            pass
+    cmd = seen["cmd"]
+    assert cmd[cmd.index("--memory") + 1] == mod.DEFAULT_MEMORY_LIMIT
+    assert cmd[cmd.index("--memory-swap") + 1] == mod.DEFAULT_MEMORY_LIMIT
+    errors = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert errors, "a limit below 64 MiB must log a loud ERROR"
+    assert any("ALLIN1_MEMORY_LIMIT" in r.message and tiny_value in r.message for r in errors)
+
+
+@pytest.mark.parametrize("valid_high_value", ["64m", "65536k", "512m", "3g"])
+def test_a_limit_at_or_above_64_mib_passes_through_verbatim(monkeypatch, tmp_path, valid_high_value):
+    monkeypatch.setenv("ALLIN1_MEMORY_LIMIT", valid_high_value)
+    d, audio, seen = _runner(monkeypatch, tmp_path)
+    try:
+        d.analyze(audio)
+    except Exception:
+        pass
+    cmd = seen["cmd"]
+    assert cmd[cmd.index("--memory") + 1] == valid_high_value
+    assert cmd[cmd.index("--memory-swap") + 1] == valid_high_value
