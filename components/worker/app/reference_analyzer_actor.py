@@ -28,7 +28,7 @@ import dramatiq
 from aimusic_shared.models import ReferenceTrack
 from audio_analysis.phases import phase1_universal
 
-from . import object_store
+from . import object_store, source_validation
 from .db_sync import SessionFactory
 from .tasks_dramatiq import LOCAL_ROOT
 
@@ -57,6 +57,7 @@ def run_reference_analyzer(reference_id: str) -> None:
             if not file_path:
                 logger.warning("reference %s has no file_path", reference_id)
                 return
+            owner_user_id = ref.user_id
     except Exception:
         logger.exception("Phase A failed for reference=%s", reference_id)
         return
@@ -87,6 +88,22 @@ def run_reference_analyzer(reference_id: str) -> None:
 
     # ── C: run phase 1 ─────────────────────────────────────────────────────
     try:
+        # I6 — probe duration BEFORE phase1 decodes the whole file. Same
+        # guest-vs-real-user cap the mix already follows
+        # (source_validation.guest_max_seconds_for): a non-guest owner still
+        # gets the plain MAX_AUDIO_DURATION_SECONDS ceiling, never "no
+        # limit". A refusal (too long / bad content) reuses the SAME
+        # persisted-failure shape as any other phase1 failure below —
+        # analysis_status='failed' + analysis_error, analyzed=False, never
+        # raises (mirrors run_specialist's fail-marker contract). A
+        # probe-level ENVIRONMENT error (see
+        # source_validation._is_environment_error) is NOT wrapped as
+        # InvalidFileError — it propagates raw and lands in this same
+        # except arm, exactly like it would from phase1 itself; this actor
+        # has no retryable/permanent split to preserve (unlike
+        # analyze_audio_job for the mix), so there's nothing extra to do.
+        guest_max_seconds = source_validation.guest_max_seconds_for(owner_user_id)
+        source_validation.validate_source(local_path, max_seconds=guest_max_seconds)
         # Phase 1 expects a path string + optional progress callback.
         # defer_structure: none of the persisted reference metrics need the
         # allin1 structure pass — skipping it cuts ~7 min of Docker work.

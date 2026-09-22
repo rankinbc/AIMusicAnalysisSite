@@ -41,12 +41,16 @@ def _mk_user(factory, *, is_guest: bool) -> uuid.UUID:
 def test_lookup_is_guest_runs_the_real_query_against_a_seeded_session(db):
     """The real function (not the conftest.py stub), against a real sqlite
     session with seeded rows: is_guest=true -> True, is_guest=false -> False,
-    and an id with no matching row -> False (fail-open at the resolve_lane
-    layer covers lookup ERRORS; this covers a plain miss)."""
+    and an id with no matching row -> None (M7: ``is_guest`` is NOT NULL, so a
+    bare ``None`` from `.scalar()` is unambiguous for "no such row" — a purged
+    account. This is a distinct outcome from a lookup EXCEPTION, which still
+    fails open to the caller's default tier at the `resolve_lane` layer;
+    `None` instead routes to the guest lane — see M7 in
+    ``resolve_lane``/`lane.py`."""
     guest_id = _mk_user(db, is_guest=True)
     real_id = _mk_user(db, is_guest=False)
     unknown_id = uuid.uuid4()
 
     assert lane._lookup_is_guest(guest_id) is True
     assert lane._lookup_is_guest(real_id) is False
-    assert lane._lookup_is_guest(unknown_id) is False
+    assert lane._lookup_is_guest(unknown_id) is None

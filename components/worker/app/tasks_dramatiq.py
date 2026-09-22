@@ -280,6 +280,22 @@ def analyze_audio_job(job_id: str) -> None:
             reference_abs, f = object_store.resolve_local(reference_path, LOCAL_ROOT)
             if f is not None:
                 fetched.append(f)
+            # I6 — same length probe as the mix (guest_max_seconds resolved
+            # above), before phase 5 decodes the whole reference. Unlike the
+            # mix, a refused reference doesn't fail the job: it's dropped —
+            # same as if the version never had one — so the analysis simply
+            # runs without a reference comparison. bump_reference_id is
+            # cleared too so Phase C never bumps used_count for a reference
+            # this analysis didn't actually use.
+            try:
+                source_validation.validate_source(reference_abs, max_seconds=guest_max_seconds)
+            except source_validation.InvalidFileError as exc:
+                logger.warning(
+                    "analyze_audio_job: dropping reference job=%s (%s) — "
+                    "continuing without a reference comparison", job_id, exc,
+                )
+                reference_abs = None
+                bump_reference_id = None
         als_abs: str | None = None
         if als_file_path:
             als_abs, f = object_store.resolve_local(als_file_path, LOCAL_ROOT)
@@ -318,11 +334,40 @@ def analyze_audio_job(job_id: str) -> None:
                 for fut in as_completed(futures):
                     resolved_by_slot[futures[fut]] = fut.result()
 
+            # I6 — probe every resolved stem's duration BEFORE phase 4 can
+            # decode any of them (grouped mode sums a role's stems into one
+            # bus; per_stem mode decodes each individually — either way a
+            # full sf.read). Same guest_max_seconds cap the mix uses above.
+            # A stem that fails the probe is dropped — never decoded —
+            # rather than failing the whole job: phase4_stems already
+            # tolerates a partial/absent stem set on its own (grouped mode
+            # just sums whatever survives per role; an empty role is
+            # skipped below, and no stems at all is the same as the user
+            # never having uploaded any), so one bad stem can't crash the
+            # rest of the analysis.
+            for slot in list(resolved_by_slot):
+                local = resolved_by_slot[slot]
+                try:
+                    source_validation.validate_source(local, max_seconds=guest_max_seconds)
+                except source_validation.InvalidFileError as exc:
+                    role, i = slot
+                    logger.warning(
+                        "analyze_audio_job: dropping stem role=%s idx=%d job=%s (%s)",
+                        role, i, job_id, exc,
+                    )
+                    del resolved_by_slot[slot]
+
             resolved_stems = {}
             for role, entry in stem_paths.items():
                 keys = entry if isinstance(entry, list) else [entry]
-                out = [resolved_by_slot[(role, i)] for i in range(len(keys))]
-                resolved_stems[role] = out if isinstance(entry, list) else out[0]
+                out = [
+                    resolved_by_slot[(role, i)] for i in range(len(keys))
+                    if (role, i) in resolved_by_slot
+                ]
+                if out:
+                    resolved_stems[role] = out if isinstance(entry, list) else out[0]
+            if not resolved_stems:
+                resolved_stems = None
 
         logger.info("analyze_audio_job: pipeline begin job=%s file=%s", job_id, file_abs)
         pipeline_result = run_pipeline(
@@ -549,10 +594,12 @@ def classify_stems(version_id: str) -> None:
     """Audio-content classify each staged stem; write detected roles back to the version.
 
     Reads ``song_versions.stem_paths_raw`` (a list of staged-stem dicts), resolves
-    each ``path`` against LOCAL_ROOT, classifies by sound (import-light, no demucs),
-    and writes ``detected_role`` / ``confidence`` / ``evidence`` back so the BFF's
-    GET /stems poll can return proposals. Classification is best-effort per file
-    (failures map to role "other"), so every row always ends with a detected_role.
+    each ``path`` against LOCAL_ROOT, length-probes it (I6 — the guest cap or the
+    plain max, same rule the mix follows; never a full decode) and classifies by
+    sound (import-light, no demucs), then writes ``detected_role`` / ``confidence``
+    / ``evidence`` back so the BFF's GET /stems poll can return proposals.
+    Classification is best-effort per file (failures — including a length refusal —
+    map to role "other"), so every row always ends with a detected_role.
     """
     from audio_analysis.stems import classify_stems as classify_audio
 
@@ -569,6 +616,8 @@ def classify_stems(version_id: str) -> None:
         if not entries:
             logger.info("classify_stems: no staged stems for version=%s", version_id)
             return
+        song = s.get(Song, version.song_id)
+        owner_user_id = song.user_id if song is not None else None
 
     # Phase B — resolve (Story 3.2: presigned-staged stems are R2 keys;
     # local-first with S3 fetch fallback) + classify, outside any tx. The
@@ -584,13 +633,46 @@ def classify_stems(version_id: str) -> None:
         # On-disk paths are UUIDs; pass the authoritative export name so the classifier
         # can keyword-match (Kick/Snare/Bass/...) before falling back to audio content.
         names = [e.get("original_filename") or Path(e["path"]).name for e in entries]
-        proposals = classify_audio(abs_paths, names)
+
+        # I6 — probe every stem's duration BEFORE any of them reach the
+        # classifier (which does a full sf.read + windowed FFT per file).
+        # Same guest-vs-real-user cap the mix already follows
+        # (source_validation.guest_max_seconds_for): non-guests still get
+        # the plain MAX_AUDIO_DURATION_SECONDS ceiling, never "no limit". A
+        # stem that fails the probe (too long / bad content) is refused
+        # individually and never decoded — the same tolerance classify_one
+        # already gives an unreadable file (mapped to role "other" with an
+        # evidence string) — so one bad stem can't crash the whole batch or
+        # take the other stems down with it. A probe-level ENVIRONMENT error
+        # (see source_validation._is_environment_error) is NOT caught here —
+        # it propagates to the pre-existing hard-failure handler below, the
+        # same as any other unreadable-content exception already did.
+        guest_max_seconds = source_validation.guest_max_seconds_for(owner_user_id)
+        refused: dict[int, str] = {}
+        for idx, p in enumerate(abs_paths):
+            try:
+                source_validation.validate_source(p, max_seconds=guest_max_seconds)
+            except source_validation.InvalidFileError as exc:
+                refused[idx] = str(exc)
+
+        keep = [i for i in range(len(abs_paths)) if i not in refused]
+        proposals = (
+            classify_audio([abs_paths[i] for i in keep], [names[i] for i in keep])
+            if keep else []
+        )
+        prop_iter = iter(proposals)
         updated = []
-        for e, prop in zip(entries, proposals):
+        for idx, e in enumerate(entries):
             ne = dict(e)
-            ne["detected_role"] = prop.role.value
-            ne["confidence"] = round(float(prop.confidence), 3)
-            ne["evidence"] = prop.evidence
+            if idx in refused:
+                ne["detected_role"] = "other"
+                ne["confidence"] = 0.0
+                ne["evidence"] = refused[idx]
+            else:
+                prop = next(prop_iter)
+                ne["detected_role"] = prop.role.value
+                ne["confidence"] = round(float(prop.confidence), 3)
+                ne["evidence"] = prop.evidence
             updated.append(ne)
     except Exception:
         # E3.1 — a whole-actor crash (resolve/fetch/import failure) used to
