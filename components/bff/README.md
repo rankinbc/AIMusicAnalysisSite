@@ -348,7 +348,11 @@ lookup error. One guest upload charges ONE slot of `guest_uploads_max`
 (`Services/GuestLimits.Uploads.cs`, a removable Redis ledger): taken at
 `/uploads/init` (or around the proxy `POST /versions/`), claimed — not
 charged again — at `/uploads/complete`, and given back on `/uploads/abort`
-or when no version row lands.
+or when no version row lands. Count-based caps that parallel requests could
+overrun (guest coach messages) sit behind an atomic limiter as well, and an
+on-demand specialist run is never dispatched twice while one for the same
+(analysis, slug) is in flight — for every caller, not just guests
+(`Services/GuestLimits.Runs.cs`).
 
 `POST /api/auth/guest/convert` (`GuestConvertEndpoints.cs`) is the
 conversion moment: it upgrades the SAME `users` row in place (same id — the

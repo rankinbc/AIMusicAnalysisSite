@@ -1,9 +1,11 @@
 using System.Security.Claims;
 using Spectr.Bff.Auth;
+using Spectr.Bff.Endpoints;
 
 namespace Spectr.Bff.Services;
 
-// Fix wave FW1 (final review C1) — on-demand specialist runs.
+// Fix wave FW1 — on-demand specialist runs (final review C1) and guest coach
+// messages (final review I2).
 public sealed partial class GuestLimits
 {
     // Outcome of ClaimSpecialistRunAsync. Enqueue=false with Error=null means
@@ -106,6 +108,48 @@ public sealed partial class GuestLimits
         catch (Exception ex)
         {
             log.LogError(ex, "guest specialist-run limiter unavailable — failing CLOSED");
+            return DemoCapacityNeutral();
+        }
+        return null;
+    }
+
+    // Final review I2 — the race guard in front of the guest coach cap.
+    // CoachCapService's usage_events count stays the displayed, source-of-
+    // truth figure, but it is count-then-insert: N parallel POSTs all read
+    // "under the cap" and all enqueue coach_reply onto the one coach worker.
+    // This atomic window (same limit, window = the guest TTL) admits at most
+    // `coach_guest_messages` of them. Called for guests in PostMessage after
+    // the count check and BEFORE any row is written; fails CLOSED.
+    //
+    // No refund: past this point the only refusal is an enqueue failure, and
+    // that path KEEPS its usage_event (the turn is stamped, not deleted), so
+    // the source-of-truth count still includes it. Refunding here would put
+    // the window below that count and let a later burst overrun the cap.
+    public async Task<IResult?> CheckCoachMessageAsync(Guid userId, CancellationToken ct)
+    {
+        if (string.Equals(cfg["RateLimits:Enabled"], "false", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var key = $"guest_coach:{userId}";
+        try
+        {
+            var flags = await ents.GetFlagsAsync(ct);
+            var max = Flag(flags, "coach_guest_messages", 20);
+            var verdict = await limiter.CheckAsync(
+                key, key, "guest_coach", max,
+                TimeSpan.FromHours(Flag(flags, "guest_ttl_hours", 24)), ct);
+            // The exact refusal a guest over the count gets (same code,
+            // details grammar and copy), so the coach UI rolls the turn back
+            // and shows its cap state instead of an error.
+            if (!verdict.Allowed)
+                return ErrorEnvelope.Build(StatusCodes.Status403Forbidden, "coach_cap_reached",
+                    "Per-analysis follow-up limit reached.",
+                    new { used = max, limit = max, scope = CoachCapService.ScopeAnalysis });
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            log.LogError(ex, "guest coach-message limiter unavailable — failing CLOSED");
             return DemoCapacityNeutral();
         }
         return null;

@@ -70,6 +70,7 @@ public static class CoachConversationEndpoints
         IJobQueue queue,
         CoachCapService capService,
         EntitlementService ents,
+        GuestLimits guestLimits,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -127,6 +128,10 @@ public static class CoachConversationEndpoints
                     : "Per-analysis follow-up limit reached.",
                 new { used = capBefore.Used, limit = capBefore.Limit, scope = capBefore.Scope });
         }
+        // Fix wave FW1 (I2) — the count above is not atomic; this is the
+        // guests' race guard, taken before any row is written.
+        if (currentUser.IsGuest() && await guestLimits.CheckCoachMessageAsync(userId, ct) is { } overGuestCap)
+            return overGuestCap;
 
         // Get-or-create the conversation row. The unique constraint on
         // (analysis_id, user_id) means concurrent POSTs race-then-converge
