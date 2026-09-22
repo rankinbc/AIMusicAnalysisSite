@@ -470,6 +470,21 @@ interpreter), `TORCH_HOME=data/models` (model cache location),
 Dev conveniences already on in Development: `Auth:DevAutoVerify` (registration
 auto-verifies; verification links also print to the BFF console).
 
+**Guest demo sandbox (`/demo`).** Gated by the `demo_enabled` feature flag
+(seeded `false`; flip live in the `feature_flags` table, no restart —
+`docs/azure-deploy-remaining-work.md`, "Guest demo and guest uploads"). A dev
+snapshot lives at `<storage root>/audio/demo/snapshot/` (dev storage root
+resolves to repo `data/`, so `data/audio/demo/snapshot/snapshot.json` plus
+its per-export asset subdirectories) and is exported locally the same way as
+prod: `POST /api/admin/demo/snapshot {"versionId": "<id>", "reason": "..."}`
+with the `X-Admin-Key` header (`AdminEndpoints.cs`). Without a snapshot
+installed, a fresh registration/`/demo` falls back to the seeded sine-tone
+"Demo: Sample Report". The committed `components/worker/.env` defaults to
+`LLM_FAKE=0` (real Claude CLI replies); set `LLM_FAKE=1` in the shell BEFORE
+starting the worker to make the guest coach brief and the coach smokes free
+— dotenv does not override an env var already set, so an env var set in the
+launching shell wins over the `.env` file's `LLM_FAKE=0`.
+
 **MinIO / S3 is strictly optional.** Default is local-disk storage: with all
 `Storage__S3__*` unset the BFF answers 501 `presigned_unavailable` and the
 frontend transparently uses the proxy upload path. To exercise the presigned

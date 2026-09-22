@@ -22,7 +22,7 @@ Demo video: _coming soon_.
 - **Bulk stem upload with audio-content classification.** Up to 100 stems per version; roles (drums, bass, vocals, …) are detected from audio content, not filenames, then confirmed by the user. Grouped bus analysis by default, per-stem mode opt-in.
 - **Listen rack.** A Web Audio DSP chain wrapped around the original upload: 8-band EQ, compressor with makeup gain, parallel saturation, M/S width matrix, and pitch — with live FFT spectrum and L/R metering. Fixes carried over from the report can be toggled and A/B'd against the dry signal without leaving the browser.
 - **Audio-reactive visuals.** The Listen rack's player carries a music-reactive visual stage (spectrum, laser rig, strobe patterns, an auto-program that reacts to song intensity).
-- **Anonymous instant analysis.** A visitor can analyze one track without an account; registering claims the device's history server-side.
+- **Try it before you sign up.** A visitor can explore a finished demo report in one click, or drop their own track and get the full report and AI coach as a guest — no forms, every feature. Creating a free account keeps everything, in place, under the same login.
 - **Accounts and operations.** JWT auth with httpOnly refresh cookies, Stripe subscriptions and credit packs behind live feature flags, per-tier LLM budgets, retention sweeps, transactional email, and a worker-health dashboard.
 
 ## Architecture

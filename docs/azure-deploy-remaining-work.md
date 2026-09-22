@@ -85,3 +85,120 @@ Once Task 3 is done, you'll run one command from PowerShell that opens a secure 
 - `infra/compose.prod.yml` header comment still lists Stripe keys as required — stale doc line.
 - Legacy BFF endpoint `/api/coach/{jobId}/chat` calls a `claude` binary that doesn't exist in the container. It's unused by the app; delete it.
 - Phase 2 options: allin1 structure detection (D4), a Stripe test-mode billing showcase, and resizing to B-series if the support ticket is approved.
+
+---
+
+## 7. Guest demo and guest uploads
+
+Two guest flows are live on `solo`: the one-click `/demo` sandbox (a
+pre-analyzed sample report, no upload) and `/analyze` (a logged-out visitor
+drops their own track and gets the full product — report, coach, Listen
+rack — as a capped, 24-hour guest account). Both are gated so they can be
+turned on in production deliberately, not by accident.
+
+### Guest/demo feature flags
+
+All of these live in the `feature_flags` table and are live-tunable — an
+`UPDATE feature_flags SET value=... WHERE name=...` takes effect within 60 s
+(the same cache TTL every other flag in this app uses), no redeploy, no
+restart. **`demo_enabled` must stay `false` in production until a real
+snapshot is installed** (see below) — with it on and no snapshot, a fresh
+guest falls back to a generated sine-tone sample report instead of a real
+one.
+
+| Flag | Seeded default | What it bounds |
+|---|---|---|
+| `demo_enabled` | `false` | Whole `/demo` one-click sandbox, on/off |
+| `guest_ttl_hours` | `24` | How long a guest's account and data live before the nightly retention sweep removes them |
+| `demo_guests_per_ip_hourly` | `5` | New guest sandboxes minted, per IP, per hour |
+| `demo_guests_daily_cap` | `300` | New guest sandboxes minted globally, per day |
+| `guest_uploads_max` | `2` | Mix uploads one guest can make |
+| `guest_analyses_max` | `6` | Analyses (across all their uploads) one guest can dispatch |
+| `guest_analyses_per_hour` | `10` | Guest-lane analysis dispatch rate, global |
+| `guest_analyses_per_ip_hourly` | `2` | Analysis dispatch rate, per IP (checked before the global guest-lane limit above) |
+| `guest_stems_max_files` | `12` | Stem files one guest can stage per version |
+| `guest_stems_max_mb` | `300` | Total stem upload size (MB) per guest version |
+| `guest_references_max` | `1` | Reference tracks one guest can attach |
+| `guest_track_max_seconds` | `720` | Track duration (seconds) a guest can upload |
+| `guest_classify_max` | `6` | Stem-classification calls one guest can make |
+| `guest_ref_analyze_max` | `3` | Reference re-analyze calls one guest can make |
+| `guest_attachment_mints_max` | `30` | Presigned attachment URL mints one guest can request |
+| `guest_fix_racks_max` | `2` | Fix Rack (Coach Mix) generations one guest can request |
+| `coach_guest_messages` | `20` | Coach chat messages one guest can send |
+| `llm_budget_guest_usd` | `30` | Monthly USD LLM spend ceiling for the whole guest lane (separate from the free/pro/global budgets — a guest can never burn a real user's spend cap) |
+| `anon_sample_per_hour_global` | `20` | Legacy anon-funnel rate limit — candidate for removal alongside `/api/anon/*`, see `PRPs/deferred-work.md` |
+
+`guest_ttl_hours`, `guest_uploads_max`, and `llm_budget_guest_usd` were each
+seeded once and then advanced by a later guarded `UPDATE ... WHERE
+value = '<old default>'` (72→24, 1→2, 5→30) — that guard means an
+operator's own live tuning of these three is never silently overwritten by
+a future migration.
+
+### Guest lifetime
+
+A guest's account and everything it created live for `guest_ttl_hours` (24
+by default) from creation, then the nightly retention sweep removes them —
+so in practice a guest can outlive its stated TTL by up to a day, depending
+on when in the sweep window it was created.
+
+### Installing a real demo snapshot
+
+Do this in order:
+
+1. Analyze the chosen track in production, as a real (non-guest) account.
+2. Open its report once, so Triage runs and the analysis gets a routing
+   plan — the exporter refuses a version with no routing plan or a
+   degraded analysis.
+3. Re-do the source conversation with the coach on that analysis and let it
+   generate the opening brief, so the exported conversation's brief is the
+   good one (a fresh guest never gets a live brief from an exported
+   conversation — it's exported as an ordinary message).
+4. Export it:
+   ```bash
+   curl -X POST "https://<domain>/api/admin/demo/snapshot" \
+     -H "X-Admin-Key: $ADMIN_API_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{"versionId": "<the analyzed version id>", "reason": "install demo snapshot"}'
+   ```
+5. **Read the response's `freeText` before going live.** It lists every
+   user-authored string the export is about to ship to every visitor: the
+   song title, every rack preset name, and every message the owner typed to
+   the coach. Nothing in it is filtered — that's deliberate (it's exported
+   verbatim by design), so this is the one manual check that stands between
+   a private-sounding message and every future visitor reading it.
+6. Verify `/demo` in a private/incognito window.
+7. Flip `demo_enabled` to `true`.
+
+### Re-export retention
+
+A later re-export doesn't delete the previous export's audio and image
+assets immediately — a guest already mid-session against the old export
+keeps working against it for the rest of their guest lifetime. The old
+keys are staged in a manifest (`audio/demo/snapshot/retired.json`, next to
+`snapshot.json`) and only actually deleted by a *later* export, once they've
+sat past `guest_ttl_hours + 1 h`.
+
+### `ALLIN1_MEMORY_LIMIT`
+
+See "Sizing the structure-detection memory cap" in `docs/runbook.md` — same
+flag, same sizing rule of thumb, not duplicated here.
+
+### Structure detection does not run in production today
+
+The worker image installs no Docker CLI (`components/worker/Dockerfile`)
+and `infra/compose.prod.yml` mounts no `docker.sock` on either worker
+service, so the `allin1` structure-detection container cannot actually be
+launched from a production worker — every report's arrangement phase marks
+"Not assessed for this track" regardless of the `ALLIN1_MEMORY_LIMIT`
+setting above (which is still set defensively, for if/when prod ever gets
+Docker access — see D4 in section 2).
+
+### Before object storage (R2/S3) is enabled
+
+The presigned direct-upload path (stems/, .als/, reference attachments) is
+registered with the server only when the CLIENT calls back to confirm it —
+an abandoned presigned upload leaves an object in the bucket with no DB row
+pointing at it. Add a bucket lifecycle rule on those prefixes (expire
+untouched objects after a short window) before flipping on presigned
+uploads. Not urgent today: production still runs `Storage:LocalRoot` (local
+disk), so the presigned path is off and this doesn't yet apply.

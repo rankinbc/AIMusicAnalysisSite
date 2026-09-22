@@ -322,3 +322,35 @@ never recomputed. The same data is also embedded inside
 `verdicts_payload.routing_plan` so the v2 frontend can read it without a
 second query. Both copies stay in sync — `run_specialist` preserves the
 embedded routing_plan when merging piecewise verdicts.
+
+## Guest accounts and the demo
+
+A guest is a real `users` row, not a separate table: `is_guest`,
+`guest_expires_at`, `guest_device_id` (`Entities/User.cs`). `POST
+/api/auth/demo` (`DemoAuthEndpoints.cs`) mints one keyed off the
+`spectr_device` cookie, or resumes the existing guest for that device —
+fail-closed throughout (a flags-read failure, a rate-limiter outage, or an
+unexpected error during minting all refuse the request rather than letting
+one through unchecked). `/demo` seeds the guest's library from an
+operator-installed snapshot when one exists (`DemoSnapshotStore`), else
+falls back to a generated sine-tone sample report (`DemoSeeder.cs`).
+
+Every OTHER endpoint is default-deny to a guest principal: `GuestGuard`
+(`Auth/GuestGuard.cs`) blocks any mutating `/api` route unless it's marked
+`.AllowGuest()` / `.AllowGuestUpload()` or `[AllowAnonymous]` — a route added
+next month is closed to guests by construction, nobody has to remember to
+gate it. `GuestGuardInventoryTests.cs` freezes the live marker set, so
+opening or closing a route to guests requires a deliberate test edit, not
+just shipping the marker. `GuestLimits` (`Services/GuestLimits.cs`) enforces
+the guest's own quotas (uploads, analyses, coach messages, stems,
+references, …) against the `guest_*` feature flags and fails CLOSED on any
+lookup error.
+
+`POST /api/auth/guest/convert` (`GuestConvertEndpoints.cs`) is the
+conversion moment: it upgrades the SAME `users` row in place (same id — the
+guest's songs, analyses, coach conversation and rack presets are untouched),
+not a second account. `POST /api/coach/{analysisId}/brief`
+(`CoachBriefEndpoints.cs`) fires the coach's once-per-conversation opening
+brief; for a guest caller only, the read path (`GetConversation`) attaches a
+fixed closing line inviting them to convert — never stored on the message
+row itself, so a converted user and the demo snapshot exporter never see it.
