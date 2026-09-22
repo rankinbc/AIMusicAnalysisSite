@@ -344,7 +344,11 @@ opening or closing a route to guests requires a deliberate test edit, not
 just shipping the marker. `GuestLimits` (`Services/GuestLimits.cs`) enforces
 the guest's own quotas (uploads, analyses, coach messages, stems,
 references, …) against the `guest_*` feature flags and fails CLOSED on any
-lookup error.
+lookup error. One guest upload charges ONE slot of `guest_uploads_max`
+(`Services/GuestLimits.Uploads.cs`, a removable Redis ledger): taken at
+`/uploads/init` (or around the proxy `POST /versions/`), claimed — not
+charged again — at `/uploads/complete`, and given back on `/uploads/abort`
+or when no version row lands.
 
 `POST /api/auth/guest/convert` (`GuestConvertEndpoints.cs`) is the
 conversion moment: it upgrades the SAME `users` row in place (same id — the

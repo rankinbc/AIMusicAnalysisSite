@@ -29,8 +29,8 @@ public static class VersionEndpoints
         // Task G1 (ruling R7): a guest may delete their own version. WHY this
         // is still safe under the upload quota: a delete can lower the
         // version DB count, but the upload quota is enforced by the ATOMIC
-        // `guest_upload:{userId}` limiter (CheckUploadAsync) — a bucket that
-        // never resets on delete — plus the analysis count is append-only
+        // upload-slot ledger (GuestLimits.Uploads.cs, FW1) — a committed
+        // upload's slot is never refunded on delete — plus the analysis count is append-only
         // usage_events. Neither bound is reset by removing a row, so
         // delete+reupload cannot mint extra quota.
         g.MapDelete("/{versionId:guid}", Delete).AllowGuest();
@@ -355,6 +355,7 @@ public static class VersionEndpoints
             return ErrorEnvelope.Build(409, "song_name_conflict",
                 "A song with that name already exists. Pick it from the song list or rename.");
         }
+        GuestLimits.MarkUploadCommitted(httpCtx); // FW1 (I1): a guest keeps the slot the guard charged
 
         if (shouldAnalyze)
         {
@@ -1269,7 +1270,7 @@ public static class VersionEndpoints
         if (isGuest)
         {
             var g = await httpCtx.RequestServices.GetRequiredService<GuestLimits>()
-                .CheckAnalysisAsync(userId, httpCtx, ct);
+                .CheckAnalysisAsync(userId, versionId, httpCtx, ct);
             if (g is not null) return (Guid.Empty, g);
         }
 

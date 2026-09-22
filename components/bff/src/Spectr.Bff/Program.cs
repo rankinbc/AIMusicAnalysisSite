@@ -311,6 +311,9 @@ builder.Services.AddSingleton<IRateLimiter, RedisRateLimiter>();
 // serialising a single guest's stem-staging calls. See IDistributedLock.cs.
 builder.Services.AddSingleton<IDistributedLock, RedisDistributedLock>();
 
+// Fix wave FW1 (I1) — removable per-guest slot ledger (guest upload slots).
+builder.Services.AddSingleton<IGuestSlots, RedisGuestSlots>();
+
 // Listen V3 (PRP-1) — no-op generator seam for source=coach/analysis presets
 // (real impl is PRP-8; mirrors the PRP-0 sink convention).
 builder.Services.AddScoped<IPresetGenerator, NoOpPresetGenerator>();

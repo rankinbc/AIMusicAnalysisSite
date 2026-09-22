@@ -18,6 +18,16 @@ public sealed class GuestDenied
     private GuestDenied() { }
 }
 
+// Fix wave FW1 (I1) — marks an `.AllowGuestUpload()` route whose handler
+// charges (or claims) the guest's upload slot itself, so the guard must not
+// charge it a second time. Separate from GuestAllowed on purpose: the guard
+// inventory pins GuestAllowed.Quota, and these routes' quota is unchanged.
+public sealed class GuestUploadChargedInHandler
+{
+    public static readonly GuestUploadChargedInHandler Instance = new();
+    private GuestUploadChargedInHandler() { }
+}
+
 public static class GuestGuard
 {
     public static async ValueTask<object?> Filter(
@@ -43,6 +53,12 @@ public static class GuestGuard
             var limits = http.RequestServices.GetRequiredService<GuestLimits>();
             if (await limits.CheckUploadAsync(http.User.UserId(), http.RequestAborted) is { } denied)
                 return denied;
+            // Fix wave FW1 (I1) — CheckUploadAsync only pre-checks. The slot
+            // itself is charged ONCE per upload: inside the presigned
+            // /init + /complete handlers (only they know the upload's jobId),
+            // and here, around the handler, for every other upload route.
+            if (meta!.GetMetadata<GuestUploadChargedInHandler>() is null)
+                return await limits.ChargeUploadAroundAsync(http, () => next(ctx));
         }
 
         return await next(ctx);
@@ -60,6 +76,10 @@ public static class GuestGuard
     public static TBuilder AllowGuestUpload<TBuilder>(this TBuilder b)
         where TBuilder : IEndpointConventionBuilder
         => b.WithMetadata(new GuestAllowed(GuestQuota.Upload));
+
+    public static TBuilder ChargesGuestUploadInHandler<TBuilder>(this TBuilder b)
+        where TBuilder : IEndpointConventionBuilder
+        => b.WithMetadata(GuestUploadChargedInHandler.Instance);
 
     public static TBuilder DenyGuest<TBuilder>(this TBuilder b)
         where TBuilder : IEndpointConventionBuilder

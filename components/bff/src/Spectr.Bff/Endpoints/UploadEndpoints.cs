@@ -28,8 +28,10 @@ public static class UploadEndpoints
         var g = app.MapGroup("/uploads").WithTags("uploads").RequireAuthorization();
         // Task D6 (spec D4) — init/complete carry the guest's one-upload quota;
         // abort is allowed unconditionally (it never creates a version).
-        g.MapPost("/init", Init).AllowGuestUpload();
-        g.MapPost("/complete", Complete).AllowGuestUpload();
+        // Fix wave FW1 (I1) — the upload slot is charged ONCE, inside Init,
+        // and Complete only claims that same slot; abort refunds it.
+        g.MapPost("/init", Init).AllowGuestUpload().ChargesGuestUploadInHandler();
+        g.MapPost("/complete", Complete).AllowGuestUpload().ChargesGuestUploadInHandler();
         g.MapPost("/abort", Abort).AllowGuest();
         // Story 3.2 — single-PUT presign for attachments (stems/.als/reference).
         // Task G1 — guests may presign stems/.als/reference now too (caps
@@ -59,6 +61,7 @@ public static class UploadEndpoints
         IOptions<S3StorageOptions> s3Options,
         EntitlementService ents,
         IRateLimiter limiter,
+        GuestLimits guestLimits,
         HttpContext httpCtx,
         CancellationToken ct)
     {
@@ -128,6 +131,16 @@ public static class UploadEndpoints
         if (partCount > MaxParts)
             return Results.BadRequest(new { error = "File requires too many parts." });
 
+        // Fix wave FW1 (I1) — a guest's upload takes its slot HERE, keyed by
+        // this upload's jobId, and its analysis arms are evaluated and charged
+        // once — before any byte moves. The pending slot lapses on its own
+        // shortly after the part URLs expire.
+        var isGuest = currentUser.IsGuest();
+        if (isGuest && await guestLimits.BeginPresignedUploadAsync(
+                userId, jobId, httpCtx, TimeSpan.FromMinutes(s3Options.Value.UrlExpiryMinutes + 30), ct)
+            is { } guestRefused)
+            return guestRefused;
+
         // Story 12.3 (AC1) — S3 configured but unreachable (MinIO down) must be
         // a typed 503, never an unhandled 500: the client's proxy fallback keys
         // off init-stage 5xx. Catch broadly — connection failures, SDK errors,
@@ -144,6 +157,9 @@ public static class UploadEndpoints
         {
             httpCtx.RequestServices.GetRequiredService<ILoggerFactory>()
                 .CreateLogger("Uploads").LogError(ex, "Storage unreachable during /uploads/init.");
+            // No upload exists — the client falls back to the proxy path,
+            // which charges its own slot.
+            if (isGuest) await guestLimits.CancelPresignedUploadAsync(userId, jobId);
             return ErrorEnvelope.Build(503, "storage_unreachable",
                 "Upload storage is unreachable; falling back to standard upload.");
         }
@@ -162,6 +178,7 @@ public static class UploadEndpoints
         IJobQueue queue,
         EntitlementService ents,
         CreditLedgerService credits,
+        GuestLimits guestLimits,
         HttpContext httpCtx,
         CancellationToken ct)
     {
@@ -180,50 +197,74 @@ public static class UploadEndpoints
         if (body.Parts is null || body.Parts.Count == 0)
             return Results.BadRequest(new { error = "At least one part required." });
 
-        // Story 12.3 (AC1) — same typed 503 as /init, but NO fallback semantics:
-        // parts are already in the bucket (or lost), so the client must surface
-        // the error, never silently re-upload the file through the proxy. If the
-        // multipart actually completed before the failure, a retry mints a new
-        // jobId/key at /init and the abandoned object is retention-swept (3.4).
+        // Fix wave FW1 (I1) — a guest's /complete CLAIMS the slot its own
+        // /init charged for this jobId (no second charge). No such slot → the
+        // upload is refused before anything is finalized or created.
+        var isGuest = currentUser.IsGuest();
+        if (isGuest && await guestLimits.ClaimPresignedUploadAsync(userId, body.JobId, ct) is { } unclaimed)
+            return unclaimed;
+
+        Guid songGuid, versionId;
+        var committed = false;
         try
         {
-            await store.CompleteMultipartAsync(
-                body.Key, body.UploadId,
-                body.Parts.Select(p => new CompletedPart(p.PartNumber, p.ETag)).ToList(), ct);
+            // Story 12.3 (AC1) — same typed 503 as /init, but NO fallback semantics:
+            // parts are already in the bucket (or lost), so the client must surface
+            // the error, never silently re-upload the file through the proxy. If the
+            // multipart actually completed before the failure, a retry mints a new
+            // jobId/key at /init and the abandoned object is retention-swept (3.4).
+            try
+            {
+                await store.CompleteMultipartAsync(
+                    body.Key, body.UploadId,
+                    body.Parts.Select(p => new CompletedPart(p.PartNumber, p.ETag)).ToList(), ct);
 
-            // Belt-and-braces: the object must exist before we create DB rows.
-            if (!await store.ObjectExistsAsync(body.Key, ct))
-                return ErrorEnvelope.Build(502, "upload_not_found",
-                    "Finalized object not found in storage.");
+                // Belt-and-braces: the object must exist before we create DB rows.
+                if (!await store.ObjectExistsAsync(body.Key, ct))
+                    return ErrorEnvelope.Build(502, "upload_not_found",
+                        "Finalized object not found in storage.");
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                httpCtx.RequestServices.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("Uploads").LogError(ex, "Storage unreachable during /uploads/complete.");
+                return ErrorEnvelope.Build(503, "storage_unreachable",
+                    "Upload storage is unreachable; the upload could not be finalized. Please retry.");
+            }
+
+            (songGuid, var songErr) = await VersionEndpoints.ResolveOrCreateSongAsync(
+                db, userId, body.SongId, body.GenreHint, Path.GetFileName(body.Key), ct);
+            if (songErr is not null) return songErr;
+
+            versionId = await VersionEndpoints.InsertVersionRowAsync(db, songGuid, body.Key, ct);
+            try
+            {
+                await db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException ex) when (DbViolations.IsUniqueViolation(ex))
+            {
+                // Wave-2 (E3.2) — race-only residual after the auto-suffix probe.
+                // Do NOT delete the finalized object: the parts are the user's only
+                // copy and a retry mints a new jobId/key at /init; the zero-row
+                // orphan is retention-swept (matches the 12.3 note above).
+                return ErrorEnvelope.Build(409, "song_name_conflict",
+                    "A song with that name already exists. Pick it from the song list or rename.");
+            }
+            committed = true;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        finally
         {
-            httpCtx.RequestServices.GetRequiredService<ILoggerFactory>()
-                .CreateLogger("Uploads").LogError(ex, "Storage unreachable during /uploads/complete.");
-            return ErrorEnvelope.Build(503, "storage_unreachable",
-                "Upload storage is unreachable; the upload could not be finalized. Please retry.");
+            // FW1 (I1) — no version row committed: the claimed slot goes back
+            // (the client restarts from /init).
+            if (isGuest && !committed) await guestLimits.ReleaseClaimedUploadAsync(userId, body.JobId);
         }
 
-        var (songGuid, songErr) = await VersionEndpoints.ResolveOrCreateSongAsync(
-            db, userId, body.SongId, body.GenreHint, Path.GetFileName(body.Key), ct);
-        if (songErr is not null) return songErr;
+        // FW1 (I1) — /init already charged this upload's analysis arms; the
+        // version's first dispatch (below, or a later /analyze or
+        // /stems/confirm when analysis is deferred) spends that charge.
+        if (isGuest) await guestLimits.CreditPrechargedAnalysisAsync(userId, versionId);
 
-        var versionId = await VersionEndpoints.InsertVersionRowAsync(db, songGuid, body.Key, ct);
         var shouldAnalyze = body.Analyze ?? true;
-        try
-        {
-            await db.SaveChangesAsync(ct);
-        }
-        catch (DbUpdateException ex) when (DbViolations.IsUniqueViolation(ex))
-        {
-            // Wave-2 (E3.2) — race-only residual after the auto-suffix probe.
-            // Do NOT delete the finalized object: the parts are the user's only
-            // copy and a retry mints a new jobId/key at /init; the zero-row
-            // orphan is retention-swept (matches the 12.3 note above).
-            return ErrorEnvelope.Build(409, "song_name_conflict",
-                "A song with that name already exists. Pick it from the song list or rename.");
-        }
-
         if (shouldAnalyze)
         {
             var (jobId, err) = await VersionEndpoints.DispatchAnalysisAsync(
@@ -418,6 +459,7 @@ public static class UploadEndpoints
         AbortRequest body,
         ClaimsPrincipal currentUser,
         IMultipartObjectStore store,
+        GuestLimits guestLimits,
         CancellationToken ct)
     {
         if (!store.IsConfigured)
@@ -428,6 +470,13 @@ public static class UploadEndpoints
         if (string.IsNullOrWhiteSpace(body.Key) ||
             !body.Key.StartsWith($"audio/{userId}/", StringComparison.Ordinal))
             return Results.BadRequest(new { error = "Key does not match this user." });
+
+        // Fix wave FW1 (I1) — an aborted guest upload gives its PENDING slot
+        // back, before the storage abort (so it can no longer be completed).
+        // An upload already completed holds a `done` slot, which this never
+        // refunds.
+        if (currentUser.IsGuest() && JobIdFromSourceKey(body.Key) is Guid abortedJobId)
+            await guestLimits.CancelPresignedUploadAsync(userId, abortedJobId);
 
         await store.AbortMultipartAsync(body.Key, body.UploadId, ct);
         return Results.NoContent();

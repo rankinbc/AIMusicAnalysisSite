@@ -19,7 +19,7 @@ namespace Spectr.Bff.Services;
 // partial files (this file is near the 500-line limit).
 public sealed partial class GuestLimits(
     AppDbContext db, EntitlementService ents, IRateLimiter limiter, IDistributedLock distLock,
-    IConfiguration cfg, ILogger<GuestLimits> log)
+    IConfiguration cfg, ILogger<GuestLimits> log, IGuestSlots slots)
 {
     // Delegates to the single flag-parsing helper (GuestIdentity.Flag) so
     // every guest-flag read in the codebase agrees on missing/garbage → fallback.
@@ -39,46 +39,35 @@ public sealed partial class GuestLimits(
     // demo version lives under `audio/demo/` and is excluded, so it can never
     // consume the guest's one real upload.
     //
-    // Fix round 1 item 3 — the count-then-insert below is racy under N
-    // parallel `POST /api/versions/` (that route carries no rate limiter of
-    // its own), so N concurrent requests can all read "0 used" and all pass.
-    // The atomic limiter check IN FRONT closes the race: only the first `max`
-    // racing requests get past it, regardless of what the DB count reads.
-    // Fails CLOSED — a limiter outage must never let an unbounded number of
-    // parallel guest uploads through.
+    // Fix wave FW1 (I1) — a pre-check only: it CHARGES nothing. The atomic
+    // race guard is the upload-slot ledger (GuestLimits.Uploads.cs), charged
+    // once per upload — around the proxy handler by the guard, at
+    // /uploads/init for the presigned path. (It used to charge a limiter hit
+    // here, on BOTH /init and /complete, so one presigned upload spent two
+    // of the guest's slots.)
+    // Fix wave FW1 (M6) — flags and the DB count are read inside the try: a
+    // DB blip answers the friendly 503 (fail closed), never a raw 500.
     public async Task<IResult?> CheckUploadAsync(Guid userId, CancellationToken ct)
     {
-        var flags = await ents.GetFlagsAsync(ct);
-        var max = Flag(flags, "guest_uploads_max", 1);
-
-        if (!string.Equals(cfg["RateLimits:Enabled"], "false", StringComparison.OrdinalIgnoreCase))
+        try
         {
-            var key = $"guest_upload:{userId}";
-            try
-            {
-                var verdict = await limiter.CheckAsync(
-                    key, key, "guest_upload", max,
-                    TimeSpan.FromHours(Flag(flags, "guest_ttl_hours", 24)), ct);
-                if (!verdict.Allowed)
-                    return GuestGuard.Restricted("upload_limit",
-                        $"A guest session includes {max} uploads — create a free account to analyze more.");
-            }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception ex)
-            {
-                log.LogError(ex, "guest upload limiter unavailable — failing CLOSED");
-                return DemoCapacity();
-            }
+            var flags = await ents.GetFlagsAsync(ct);
+            var max = Flag(flags, "guest_uploads_max", 2);
+            var used = await db.SongVersions.CountAsync(v =>
+                !v.FilePath.StartsWith("audio/demo/")
+                && db.Songs.Any(s => s.Id == v.SongId && s.UserId == userId), ct);
+            return used >= max ? UploadLimit(max) : null;
         }
-
-        var used = await db.SongVersions.CountAsync(v =>
-            !v.FilePath.StartsWith("audio/demo/")
-            && db.Songs.Any(s => s.Id == v.SongId && s.UserId == userId), ct);
-        return used >= max
-            ? GuestGuard.Restricted("upload_limit",
-                $"A guest session includes {max} uploads — create a free account to analyze more.")
-            : null;
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            log.LogError(ex, "guest upload quota unreadable — failing CLOSED");
+            return DemoCapacity();
+        }
     }
+
+    private static IResult UploadLimit(int max) => GuestGuard.Restricted("upload_limit",
+        $"A guest session includes {max} uploads — create a free account to analyze more.");
 
     // Fix round 1 item 2 — called at the top of FixRackEndpoints.Generate for
     // guests only. usage_events can't record this attempt (the CHECK
@@ -120,24 +109,45 @@ public sealed partial class GuestLimits(
     // denied by the guard anyway), then (2) the GLOBAL guest-lane arm, which
     // FAILS CLOSED — a limiter/flag/DB failure here must never let an
     // unbounded number of guest analyses onto the single VM.
-    public async Task<IResult?> CheckAnalysisAsync(Guid userId, HttpContext http, CancellationToken ct)
+    public async Task<IResult?> CheckAnalysisAsync(Guid userId, Guid versionId, HttpContext http, CancellationToken ct)
     {
         var flags = await ents.GetFlagsAsync(ct);
-        // Task G1 — analyses are no longer 1:1 with uploads: a guest may
-        // re-analyze the same version (Reanalyze, stems confirm, .als
-        // attach) many times within their own analysis budget, independent
-        // of how many versions they uploaded. `guest_analyses_max` (6)
-        // replaces `guest_uploads_max` (2) as the source of this cap.
+        if (await AnalysisCountRefusalAsync(userId, flags, ct) is { } over) return over;
+
+        if (!RateLimitsEnabled) return null;
+
+        // Fix wave FW1 (I1) — a presigned upload already charged the per-IP
+        // and global arms at /uploads/init; the first dispatch for its
+        // version spends that charge instead of charging a second time.
+        if (await TryConsumePrechargedAnalysisAsync(userId, versionId)) return null;
+        return await ChargeAnalysisArmsAsync(flags, http, ct);
+    }
+
+    // Task G1 — analyses are no longer 1:1 with uploads: a guest may
+    // re-analyze the same version (Reanalyze, stems confirm, .als attach)
+    // many times within their own analysis budget, independent of how many
+    // versions they uploaded. `guest_analyses_max` (6) replaces
+    // `guest_uploads_max` (2) as the source of this cap.
+    private async Task<IResult?> AnalysisCountRefusalAsync(
+        Guid userId, Dictionary<string, string> flags, CancellationToken ct)
+    {
         var max = Flag(flags, "guest_analyses_max", 6);
         var used = await db.UsageEvents.CountAsync(
             e => e.UserId == userId && e.EventType == "analysis", ct);
-        if (used >= max)
-            return GuestGuard.Restricted("analysis_limit",
-                $"A guest session includes {max} analyses — create a free account to analyze more.");
+        return used >= max
+            ? GuestGuard.Restricted("analysis_limit",
+                $"A guest session includes {max} analyses — create a free account to analyze more.")
+            : null;
+    }
 
-        var rateLimitsEnabled = !string.Equals(cfg["RateLimits:Enabled"], "false", StringComparison.OrdinalIgnoreCase);
-        if (!rateLimitsEnabled) return null;
+    private bool RateLimitsEnabled
+        => !string.Equals(cfg["RateLimits:Enabled"], "false", StringComparison.OrdinalIgnoreCase);
 
+    // The per-IP and global guest-analysis arms (hourly windows), CHARGED:
+    // IRateLimiter records a hit on every allowed call.
+    private async Task<IResult?> ChargeAnalysisArmsAsync(
+        Dictionary<string, string> flags, HttpContext http, CancellationToken ct)
+    {
         // Fix round 1 item 4 — per-IP arm BEFORE the global arm: the global
         // "guest_analyses_per_hour" bucket has no per-IP dimension, so two
         // IPs each staying under it can still close the demo for everyone.
