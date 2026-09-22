@@ -192,8 +192,9 @@ public sealed class DemoSeeder(
             VersionId = version.Id,
             SongId = song.Id,
             SongName = song.Name,
-            FinalJson = doc.Analysis.FinalJson.ValueKind is JsonValueKind.Undefined
-                ? "{}" : doc.Analysis.FinalJson.GetRawText(),
+            FinalJson = DemoSeedMapping.NormalizeFinalJsonForSeed(
+                doc.Analysis.FinalJson.ValueKind is JsonValueKind.Undefined
+                    ? "{}" : doc.Analysis.FinalJson.GetRawText()),
             RoutingPlan = routingPlanJson,
             PipelineVersion = doc.Analysis.PipelineVersion,
             RuleEngineVersion = doc.Analysis.RuleEngineVersion,
@@ -355,7 +356,7 @@ public sealed class DemoSeeder(
             VersionId = version.Id,
             SongId = song.Id,
             SongName = DemoSongName,
-            FinalJson = finalJson,
+            FinalJson = DemoSeedMapping.NormalizeFinalJsonForSeed(finalJson),
             PhaseDurations = "{}",
             RoutingPlan = FallbackRoutingPlanJson,
             CreatedAt = DateTimeOffset.UtcNow,

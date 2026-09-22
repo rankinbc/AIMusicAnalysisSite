@@ -184,6 +184,31 @@ public sealed class DemoSnapshotExportTests(WebApplicationFactory<Program> facto
         Assert.Equal(HttpStatusCode.Conflict, r.StatusCode); Assert.Equal("snapshot_leak", await Code(r));
     }
 
+    // Task D12 — a source analysis whose phase 7 is still "pending"
+    // (background structure detection not yet finished) must not export that
+    // status verbatim: a demo seeded from this snapshot can never resolve
+    // it, so the written snapshot's finalJson must read "unavailable" at
+    // rest, same as the seed-time normalization applies to an operator's
+    // already-installed snapshot.
+    [SkippableFact]
+    public async Task Export_Normalizes_A_Pending_Arrangement_Status_In_FinalJson()
+    {
+        await TestDb.RequireAsync(factory); var f = Build(); var (versionId, analysisId, _, _) = await SeedAnalyzedAsync(f);
+        await SetAsync(f, analysisId, a => a.FinalJson =
+            "{\"phases\":[{\"phase\":7,\"data\":{\"arrangement_status\":\"pending\"}}]}");
+        var r = await Admin(f).PostAsJsonAsync("/api/admin/demo/snapshot", new { versionId, reason = "t" });
+        r.EnsureSuccessStatusCode();
+        var body = await r.Content.ReadFromJsonAsync<DemoSnapshotExportResponse>();
+
+        var (audioKey, imageKeys) = await ReadAssetKeysAsync(f, body!.SnapshotKey);
+        TrackAssets(audioKey, imageKeys);
+        var bytes = await ReadBytesAsync(f, body.SnapshotKey);
+        using var doc = JsonDocument.Parse(bytes);
+        var phase7 = doc.RootElement.GetProperty("analysis").GetProperty("finalJson")
+            .GetProperty("phases").EnumerateArray().Single(p => p.GetProperty("phase").GetInt32() == 7);
+        Assert.Equal("unavailable", phase7.GetProperty("data").GetProperty("arrangement_status").GetString());
+    }
+
     // ── Item 3 — reason is required, same convention as every other admin mutation ──
     [SkippableFact]
     public async Task Export_Requires_A_Reason()

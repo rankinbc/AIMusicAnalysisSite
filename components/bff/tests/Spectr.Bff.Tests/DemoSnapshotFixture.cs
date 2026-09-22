@@ -36,6 +36,12 @@ internal static class DemoSnapshotFixture
         "[{\"name\":\"Fix Rack\",\"source\":\"analysis\","
         + "\"chain\":{\"order\":[\"eq\"],\"modules\":{\"eq\":{\"enabled\":true}},\"masterBypass\":false},\"coachMeta\":null}]";
 
+    // Task D12 — the raw JSON fragment embedded as "analysis.finalJson".
+    // `SourceJob` is a const, so string-concatenating it into another const
+    // is itself a valid compile-time constant (usable as a default param).
+    public const string DefaultFinalJson =
+        "{\"grade\":\"C\",\"overall_score\":61,\"job_ref\":\"" + SourceJob + "\"}";
+
     private static string Lit(string? s) => s is null ? "null" : $"\"{s}\"";
 
     // NOTE (D3 deviation): the brief's snippet used a $$ raw-string prefix with
@@ -61,7 +67,8 @@ internal static class DemoSnapshotFixture
         string? waveformImageKey = null,
         string? waveformPeaksKey = null,
         string title = "Fixture Track",
-        string rackPresetsJson = DefaultRackPresetsJson)
+        string rackPresetsJson = DefaultRackPresetsJson,
+        string finalJson = DefaultFinalJson)
     {
         var routingPlanFragment = routingPlan is null ? "" : $"\"routingPlan\":{routingPlan},";
         return $$$"""
@@ -69,7 +76,7 @@ internal static class DemoSnapshotFixture
       "source":{"songId":"22222222-2222-2222-2222-222222222222","versionId":"{{{SourceVersion}}}","jobId":"{{{SourceJob}}}","analysisId":"44444444-4444-4444-4444-444444444444"},
       "song":{"title":"{{{title}}}","genreHint":"house"},
       "version":{"audioKey":"{{{audioKey}}}"},
-      "analysis":{"finalJson":{"grade":"C","overall_score":61,"job_ref":"{{{SourceJob}}}"},{{{routingPlanFragment}}}"pipelineVersion":"t","ruleEngineVersion":"t","validatorVersion":"t","promptSetVersion":"t","phaseDurations":{},
+      "analysis":{"finalJson":{{{finalJson}}},{{{routingPlanFragment}}}"pipelineVersion":"t","ruleEngineVersion":"t","validatorVersion":"t","promptSetVersion":"t","phaseDurations":{},
                   "stemMetrics":null,"spectrogramImageKey":{{{Lit(spectrogramImageKey)}}},"waveformImageKey":{{{Lit(waveformImageKey)}}},"waveformPeaksKey":{{{Lit(waveformPeaksKey)}}}},
       "verdicts":[
         {"id":"{{{SourceVerdict}}}","specialist":"low_end","promptVersion":"low_end@1.0.0","model":"fixture","severity":"moderate","category":"low_end",

@@ -135,6 +135,50 @@ public sealed class DemoSnapshotSeedTests(WebApplicationFactory<Program> factory
         }
     }
 
+    // Task D12 — a snapshot exported while the SOURCE analysis's phase 7 was
+    // still "pending" (background structure detection deferred) must never
+    // seed that lie into a demo that can never resolve it: nothing re-runs
+    // structure detection on a seeded copy, so a raw "pending" would show
+    // "Arrangement analysis running…" forever.
+    [SkippableFact]
+    public async Task Registration_Seeds_From_The_Snapshot_With_Arrangement_Status_Normalized()
+    {
+        await TestDb.RequireAsync(factory);
+        var dir = $"audio/demo/test-snapshots/{Guid.NewGuid():N}/";
+        var (f, _) = Build(dir + "snapshot.json");
+        const string pendingFinalJson =
+            "{\"phases\":[{\"phase\":7,\"data\":{\"arrangement_status\":\"pending\"}}]}";
+        using (var scope = f.Services.CreateScope())
+        {
+            var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
+            await storage.WriteAsync(dir + "source.wav", new MemoryStream(DemoSeeder.GenerateToneWav()), "audio/wav");
+            await storage.WriteAsync(dir + "snapshot.json",
+                new MemoryStream(Encoding.UTF8.GetBytes(
+                    DemoSnapshotFixture.Json(dir + "source.wav", finalJson: pendingFinalJson))), "application/json");
+        }
+        Guid userId = default;
+        try
+        {
+            var client = f.CreateClient();
+            string token;
+            (userId, token) = await TestAuth.RegisterAsync(client);
+            using var scope = f.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var analysis = await db.Analyses.AsNoTracking().SingleAsync(a => a.UserId == userId);
+            using var doc = JsonDocument.Parse(analysis.FinalJson);
+            var phase7 = doc.RootElement.GetProperty("phases").EnumerateArray()
+                .Single(p => p.GetProperty("phase").GetInt32() == 7);
+            Assert.Equal("unavailable", phase7.GetProperty("data").GetProperty("arrangement_status").GetString());
+        }
+        finally
+        {
+            using var scope = f.Services.CreateScope();
+            var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
+            await storage.DeleteAsync(dir + "snapshot.json"); await storage.DeleteAsync(dir + "source.wav");
+            await CleanupAsync(f, userId);
+        }
+    }
+
     // Fix-round-2 item 3: the "routing plan is missing/null/not-an-object"
     // family of cases moved to a parameterized theory in
     // DemoSnapshotHardeningTests.cs (Snapshot_With_An_Unusable_Routing_Plan_...).

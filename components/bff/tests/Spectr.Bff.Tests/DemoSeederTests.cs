@@ -90,6 +90,40 @@ public sealed class DemoSeederTests(WebApplicationFactory<Program> factory)
         }
     }
 
+    // Task D12 — the fallback (sine-tone) seed path must run its final_json
+    // through the same seed-time normalization as the snapshot path, so a
+    // future bundled sample asset carrying phase 7 arrangement_status:
+    // "pending" can never seed that unresolvable lie either.
+    [SkippableFact]
+    public async Task Fallback_Seed_Never_Carries_A_Pending_Arrangement_Status()
+    {
+        await TestDb.RequireAsync(_factory);
+
+        var client = _factory.CreateClient();
+        var (userId, _) = await TestAuth.RegisterAsync(client);
+        try
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var analysis = await db.Analyses.AsNoTracking().SingleAsync(a => a.UserId == userId);
+            using var doc = System.Text.Json.JsonDocument.Parse(analysis.FinalJson);
+            if (doc.RootElement.TryGetProperty("phases", out var phases))
+            {
+                foreach (var phase in phases.EnumerateArray())
+                {
+                    if (!phase.TryGetProperty("phase", out var phaseNum) || phaseNum.GetInt32() != 7) continue;
+                    if (!phase.TryGetProperty("data", out var data)) continue;
+                    if (!data.TryGetProperty("arrangement_status", out var status)) continue;
+                    Assert.NotEqual("pending", status.GetString());
+                }
+            }
+        }
+        finally
+        {
+            await CleanupAsync(userId);
+        }
+    }
+
     private sealed class ThrowingStorage : IFileStorage
     {
         public Task<Stream> OpenReadAsync(string key, CancellationToken ct = default) => throw new IOException("boom");

@@ -496,7 +496,14 @@ public static partial class AdminEndpoints
             ["version"] = new JsonObject { ["audioKey"] = audioKey },
             ["analysis"] = new JsonObject
             {
-                ["finalJson"] = ParseJson(analysis.FinalJson),
+                // Task D12: normalize a "pending" phase-7 arrangement status
+                // (background structure detection deferred at export time) to
+                // "unavailable" so a NEW export is clean at rest too — a
+                // seeded copy of THIS snapshot can never resolve "pending"
+                // itself. Same rewrite DemoSeeder applies at seed time; doing
+                // it here as well means an operator reading the exported
+                // JSON directly never sees the stale lie either.
+                ["finalJson"] = ParseJson(DemoSeedMapping.NormalizeFinalJsonForSeed(analysis.FinalJson)),
                 ["routingPlan"] = ParseJson(analysis.RoutingPlan!),
                 ["pipelineVersion"] = analysis.PipelineVersion,
                 ["ruleEngineVersion"] = analysis.RuleEngineVersion,
