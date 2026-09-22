@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 // verify-gate, dead-handoff, and dead-UI regressions together.
 //
 //   anon → / → LANDING PAGE (6.1) — CTA points at /analyze (6.3 anon funnel,
-//   covered by smoke-anon-funnel.spec.ts); this suite registers directly
+//   covered by smoke-guest-upload.spec.ts); this suite registers directly
 //   register a fresh account → /library (empty first-run state)
 //   + New song → NewSongDialog → UnifiedUploadDialog (mix only)
 //   Upload & analyze → /songs/$songId/results/$jobId
@@ -92,15 +92,30 @@ test('first-run: register → upload → report → listen', async ({ page }) =>
   // 3b. Story 12.5 dead-UI guard: the unwired global search box and the
   //     permanently-disabled Listen nav tab are GONE from the shell — while
   //     the LIVE nav tabs remain (guards against over-deletion too).
+  // G7b fix: commit b7278a4 (2026-09-19, "refactor(solo): remove feed,
+  // public profiles, mentions, notification bell and share/invite routes")
+  // stripped the Feed nav tab from `_app.tsx` (now just Report + Library —
+  // see the `<nav className={s.navTabs}>` block) as part of the solo-fork
+  // social strip; the old "Feed is visible" assertion below started failing
+  // then and was never updated. Flipped to a toHaveCount(0) guard, matching
+  // the Listen-tab pattern one line up, so a Feed tab reappearing is still
+  // caught.
   await expect(page.getByPlaceholder(/Search your tracks/)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Listen', exact: true })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Report', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Library', exact: true })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Feed', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Feed', exact: true })).toHaveCount(0);
 
   // 3c. Story 12.8: a fresh library is no longer empty — the seeded demo
   //     report replaces the 'starts here' zero state as the first-run view.
-  await expect(page.getByText('Demo: Sample Report')).toBeVisible();
+  // G7b fix: commit c1e7fcd (2026-09-20, "feat(bff): snapshot-driven demo
+  // seeding; fallback seed no longer fires paid triage") made the seeded
+  // song's title track-dependent (`DemoSongPrefix + doc.Song.Title` —
+  // DemoSeeder.cs SeedFromSnapshotAsync) once a real snapshot is installed,
+  // so the literal 'Demo: Sample Report' (only the sine-tone fallback's
+  // name) no longer matches. DemoSeeder.DemoSongPrefix ("Demo: ") is the
+  // actual invariant across both seed paths — match on that instead.
+  await expect(page.getByText(/^Demo: /)).toBeVisible();
 
   // 4. Two-dialog flow: + New song → name → Create song → upload dialog.
   await page.getByRole('button', { name: /\+ New song/ }).first().click();
