@@ -479,11 +479,18 @@ its per-export asset subdirectories) and is exported locally the same way as
 prod: `POST /api/admin/demo/snapshot {"versionId": "<id>", "reason": "..."}`
 with the `X-Admin-Key` header (`AdminEndpoints.cs`). Without a snapshot
 installed, a fresh registration/`/demo` falls back to the seeded sine-tone
-"Demo: Sample Report". The committed `components/worker/.env` defaults to
-`LLM_FAKE=0` (real Claude CLI replies); set `LLM_FAKE=1` in the shell BEFORE
-starting the worker to make the guest coach brief and the coach smokes free
-— dotenv does not override an env var already set, so an env var set in the
-launching shell wins over the `.env` file's `LLM_FAKE=0`.
+"Demo: Sample Report". The committed `components/worker/.env` sets
+`USE_CLAUDE_CLI=1` + `LLM_FAKE=0` (real Claude CLI replies). For free,
+deterministic smokes set BOTH `LLM_FAKE=1` AND `USE_CLAUDE_CLI=0` in the shell
+BEFORE running `./scripts/start-spectr.ps1` — `USE_CLAUDE_CLI` takes
+precedence over `LLM_FAKE` (`components/worker/app/llm/settings.py`), so
+`LLM_FAKE=1` alone still makes real CLI calls (confirmed 2026-09-22: the
+`llm_calls` table showed `model = claude-cli` rows). Env vars set in the
+launching shell reach the worker windows and win over the `.env` file
+(dotenv never overrides a variable already set). Check with
+`SELECT model FROM llm_calls ORDER BY created_at DESC LIMIT 5;` — fake mode
+writes no `claude-cli` rows. Restart without both variables to get real
+replies back.
 
 **MinIO / S3 is strictly optional.** Default is local-disk storage: with all
 `Storage__S3__*` unset the BFF answers 501 `presigned_unavailable` and the

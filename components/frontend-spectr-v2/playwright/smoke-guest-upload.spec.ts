@@ -62,6 +62,19 @@ test('a logged-out visitor uploads a track, gets a guest report + coach brief, a
   const songId = new URL(page.url()).pathname.match(/\/songs\/([^/]+)\//)?.[1];
   expect(songId, 'could not parse songId out of the results URL').toBeTruthy();
 
+  // A guest's own upload also gets the "Analysis complete" dialog (only the
+  // demo song suppresses it — analysis-complete-gate.ts), and it opens at a
+  // moment the page decides. A visitor closes it before acting on the brief,
+  // so the smoke closes it whenever it appears. (The handler keys on the
+  // dialog's Close button: the dialog root itself has no box of its own, so
+  // Playwright never reports the root as visible.)
+  const closeCompleteDialog = page
+    .getByRole('dialog', { name: 'Analysis' })
+    .getByRole('button', { name: 'Close' });
+  await page.addLocatorHandler(closeCompleteDialog, async (close) => {
+    await close.click();
+  });
+
   // 4. The report renders once the pipeline completes. Fail fast if the job
   //    errors instead of burning the full timeout.
   const report = page.getByTestId('report-view');
