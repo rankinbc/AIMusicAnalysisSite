@@ -193,12 +193,25 @@ launched from a production worker — every report's arrangement phase marks
 setting above (which is still set defensively, for if/when prod ever gets
 Docker access — see D4 in section 2).
 
-### Before object storage (R2/S3) is enabled
+### Presigned uploads are live from the first deploy — bound the orphans
 
-The presigned direct-upload path (stems/, .als/, reference attachments) is
-registered with the server only when the CLIENT calls back to confirm it —
-an abandoned presigned upload leaves an object in the bucket with no DB row
-pointing at it. Add a bucket lifecycle rule on those prefixes (expire
-untouched objects after a short window) before flipping on presigned
-uploads. Not urgent today: production still runs `Storage:LocalRoot` (local
-disk), so the presigned path is off and this doesn't yet apply.
+`infra/compose.prod.yml` requires `Storage__S3__ServiceUrl` (R2) at boot, and
+a configured `ServiceUrl` is what switches the presigned direct-upload path on
+(`S3StorageOptions.IsConfigured`). So presigned uploads (mix `audio/`, and the
+`stems/`, `als/`, `reference/` attachments) are ON in production from day one.
+An attachment is registered with the server only when the CLIENT calls back to
+confirm it, so an abandoned upload can leave bytes in the bucket that no DB row
+points at. Guests are bounded by the attachment-mint caps (`GuestLimits`), not
+by storage cleanup.
+
+Before launch:
+- Add an **abort-incomplete-multipart-upload** lifecycle rule to the bucket
+  (R2 supports this rule type; check whether the bucket already has a default
+  one). It only ever removes unfinished multipart uploads — never a completed
+  object — so it is safe under the "results forever" pledge.
+- Do **not** add an expiry rule on `stems/`, `als/` or `reference/`: confirmed
+  uploads live under the same prefixes, and a prefix expiry would delete users'
+  files (the launch checklist's "NO blanket lifecycle rule" still holds).
+  Completed-but-never-confirmed objects need a server-side orphan sweep (keys
+  with no DB row after N hours); that sweep is not built yet — see
+  `PRPs/deferred-work.md`.
