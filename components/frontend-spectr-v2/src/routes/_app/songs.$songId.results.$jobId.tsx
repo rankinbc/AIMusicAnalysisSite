@@ -22,6 +22,7 @@ import {
   isResultsTabKey,
   type ResultsTabKey,
 } from '../../features/results/results-tab-keys';
+import { resolveDemoWaitingLink, type ResultsStage } from './results-waiting-link';
 import s from './results.module.css';
 
 interface ResultsSearch {
@@ -29,6 +30,24 @@ interface ResultsSearch {
   // listen/reports/song-detail links) don't need to pass a tab. Absent ⇒ the
   // AI Coach tab. `?tab=findings` / `?tab=trackinfo` / etc. deep-link the rest.
   tab?: ResultsTabKey;
+}
+
+/** The waiting-link JSX in isolation — trivial to render-test without the
+ *  route's hook graph (`resolveDemoWaitingLink` above covers the decision;
+ *  this covers the actual markup/target). Exported for that test only,
+ *  same precedent as `VersionErrorShell` in listen-rack.$versionId.tsx. */
+export function DemoWaitingLink({ link }: { link: { songId: string; jobId: string } | null }) {
+  if (!link) return null;
+  return (
+    <p className={s.failFooter}>
+      <Link
+        to="/songs/$songId/results/$jobId"
+        params={{ songId: link.songId, jobId: link.jobId }}
+      >
+        Explore a finished report while yours is analyzing →
+      </Link>
+    </p>
+  );
 }
 
 export const Route = createFileRoute('/_app/songs/$songId/results/$jobId')({
@@ -48,6 +67,7 @@ function ResultsPage() {
   const job = useJob(jobId, { pollMs: 2000 });
   const isComplete = job.data?.status === 'complete';
   const isFinished = isComplete || job.data?.status === 'failed';
+  const isFailed = job.data?.status === 'failed';
 
   // Task G6 (item 3) — while a GUEST's own upload is analyzing, link to
   // their already-finished seeded demo report so the wait isn't empty. The
@@ -55,12 +75,18 @@ function ResultsPage() {
   // them from the library data the app already loads — never a new endpoint.
   const isGuest = useAuth().user?.isGuest === true;
   const librarySongs = useSongs(isGuest && !isFinished);
-  const demoSong = librarySongs.data?.find((sg) => sg.name.startsWith('Demo: '));
-  const demoReport =
-    demoSong?.latestResult != null
-      ? { songId: demoSong.id, jobId: demoSong.latestResult.jobId }
-      : null;
-  const isFailed = job.data?.status === 'failed';
+  const stage: ResultsStage = isComplete
+    ? 'complete'
+    : isFailed
+      ? 'failed'
+      : job.data?.status === 'awaiting_stem_mapping'
+        ? 'awaiting_stem_mapping'
+        : 'in_progress';
+  const demoReport = resolveDemoWaitingLink({
+    isGuest,
+    stage,
+    librarySongs: librarySongs.data,
+  });
   const results = useJobResults(jobId, isComplete);
 
   // Task G0 — the in-progress checklist must not claim stems/reference/.als
@@ -230,16 +256,7 @@ function ResultsPage() {
       {job.data && (
         <ProgressStoryline job={job.data} inputs={progressInputs} inputsLoading={inputsLoading} />
       )}
-      {isGuest && demoReport && (
-        <p className={s.failFooter}>
-          <Link
-            to="/songs/$songId/results/$jobId"
-            params={{ songId: demoReport.songId, jobId: demoReport.jobId }}
-          >
-            Explore a finished report while yours is analyzing →
-          </Link>
-        </p>
-      )}
+      <DemoWaitingLink link={demoReport} />
     </FrameWithBack>
   );
 }
