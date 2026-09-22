@@ -93,15 +93,17 @@ export function EngineeringPage() {
       </p>
 
       <h2>CI and security</h2>
-      {/* .github/workflows/ci.yml: 5 jobs total (secrets, bff, frontend,
-          python, deploy); deploy is gated `if: github.ref ==
+      {/* .github/workflows/ci.yml: 6 jobs total (secrets, bff, frontend,
+          public-smoke, python, deploy); deploy is gated `if: github.ref ==
           'refs/heads/solo' && github.event_name == 'push'` (~line 195), so
-          only the other 4 run on every push AND pull request; secrets job
-          uses fetch-depth:0 + sha256sum -c; deploy job builds images,
-          Trivy-scans with exit-code 1 on CRITICAL, scan runs BEFORE the
-          push. infra/deploy.sh: verify_health + auto-rollback. */}
+          only the other 5 run on every push AND pull request; secrets job
+          uses fetch-depth:0 + sha256sum -c; public-smoke (Task P10) runs a
+          backend-free Playwright smoke over every public page on desktop
+          and phone; deploy job builds images, Trivy-scans with exit-code 1
+          on CRITICAL, scan runs BEFORE the push. infra/deploy.sh:
+          verify_health + auto-rollback. */}
       <p>
-        Four checks run on every push and pull request; the deploy job runs only on pushes to the
+        Five checks run on every push and pull request; the deploy job runs only on pushes to the
         production branch. A secrets scan checks the full git history with a checksum-verified scanner.
         Separate jobs build and test the BFF, the frontend and the Python packages, with the integration
         suite running against real PostgreSQL and Redis, not mocks. Container images are scanned before

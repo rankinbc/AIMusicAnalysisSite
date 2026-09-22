@@ -159,6 +159,36 @@ jobs:
       - name: Unit tests
         run: npx vitest run
 
+  # Task P10 (public-surfaces-polish) — a SEPARATE, backend-free Playwright
+  # smoke over every public page (desktop + phone viewports). No Postgres/
+  # Redis/BFF service here: `vite preview` serves the static build and any
+  # `/api/*` call simply fails to connect, which the pages must already
+  # handle (a failed fetch must never throw). Gates the deploy job so a
+  # build whose public pages throw, lose their h1, or scroll sideways on a
+  # phone never ships.
+  public-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [frontend]
+    defaults:
+      run:
+        working-directory: components/frontend-spectr-v2
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: components/frontend-spectr-v2/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Build (static, no backend)
+        run: npx vite build
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+      - name: Public smoke (desktop + phone)
+        run: npx playwright test -c playwright.public.config.ts
+
   python:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -193,7 +223,7 @@ jobs:
   # the pipeline is green before a VPS exists.
   deploy:
     if: github.ref == 'refs/heads/solo' && github.event_name == 'push'
-    needs: [secrets, bff, frontend, python]
+    needs: [secrets, bff, frontend, python, public-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     # One deploy at a time, in order — concurrent solo merges must not

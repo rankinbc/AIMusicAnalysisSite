@@ -16,6 +16,7 @@
     "stats": "node scripts/site-stats.mjs",
     "test": "vitest",
     "test:e2e": "playwright test",
+    "test:public": "playwright test -c playwright.public.config.ts",
     "gen-types": "orval --config orval.config.ts"
   },
   "dependencies": {

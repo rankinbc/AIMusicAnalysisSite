@@ -61,8 +61,11 @@ describe('EngineeringPage', () => {
     // count must be gone and the exact corrected sentence must be present
     // (the unrelated "CI runs on every push →" source link is untouched).
     expect(html).not.toMatch(/five ci jobs?/i);
+    // Task P10 added the public-smoke job (6 jobs total; deploy still the
+    // only one gated to pushes on the production branch), so the count of
+    // checks that run on every push AND pull request went from four to five.
     expect(html).toContain(
-      'Four checks run on every push and pull request; the deploy job runs only on pushes to the production branch.',
+      'Five checks run on every push and pull request; the deploy job runs only on pushes to the production branch.',
     );
   });
 
