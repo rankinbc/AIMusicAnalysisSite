@@ -14,7 +14,7 @@ Paths: `FE` = `components/frontend-spectr-v2`, `BFF` = `components/bff/src/Spect
 
 ## Global Constraints
 
-- Worktree `C:/Users/badmin/projects/spectr-solo`, branch `solo`. Never touch `C:/Users/badmin/projects/AIMusicAnalysisSite` or `master`.
+- Worktree `<solo-worktree>`, branch `solo`. Never touch `<main-checkout>` or `master`.
 - Never stage `features/results/AnalysisCompleteModal.tsx`/`.module.css` (another session's uncommitted work).
 - Never edit `NoSocialSurfaceTests.cs`. The ONLY permitted edit to `src/routes/__tests__/no-social-surface.test.ts` is adding the single line for `trust.how-its-built.tsx` to `ALLOWED_ROUTE_FILES` (owner-approved 2026-09-20) — Task P4, nowhere else.
 - Generated sheets `features/results/redesign-v3-tabs.css` are do-not-edit (overrides go in hand-written sheets; `features/results/redesign.css` is imported nowhere — editing it does nothing).

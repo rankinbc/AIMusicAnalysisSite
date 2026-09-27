@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Work ONLY in `C:/Users/badmin/projects/spectr-solo` (branch `solo`). Never touch `C:/Users/badmin/projects/AIMusicAnalysisSite` or `master`.
+- Work ONLY in `<solo-worktree>` (branch `solo`). Never touch `<main-checkout>` or `master`.
 - Never stage `features/results/AnalysisCompleteModal.tsx`/`.module.css` (another session's uncommitted work).
 - Never edit `components/bff/tests/Spectr.Bff.Tests/NoSocialSurfaceTests.cs`. The ONLY permitted edit to `src/routes/__tests__/no-social-surface.test.ts` is adding the single line for `demo.tsx` to `ALLOWED_ROUTE_FILES` (owner-approved 2026-09-20).
 - Banned identifiers/phrases in shipped source: `isPublic`, `queueDepth|jobs? waiting|jobs? queued`, `shareToken`; BFF shell copy may not match `revocable|opt-in share|share links are|publish your|public profile|follower|live room|listening room|invite` (note the bare substring `invite`). UI copy never says "public", "shared", "people", "community", and never describes load ("busy", "too many visitors").

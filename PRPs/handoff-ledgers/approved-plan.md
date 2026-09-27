@@ -1,6 +1,6 @@
 # SPECTR first-impression plan — one-click demo, engineering page, public polish
 
-Worktree `C:/Users/badmin/projects/spectr-solo`, branch `solo`. Never touch the main checkout, `master`, or the other session's `AnalysisCompleteModal.*` edits.
+Worktree `<solo-worktree>`, branch `solo`. Never touch the main checkout, `master`, or the other session's `AnalysisCompleteModal.*` edits.
 
 ## Context
 
