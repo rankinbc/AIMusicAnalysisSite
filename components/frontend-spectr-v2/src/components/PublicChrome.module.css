@@ -6,7 +6,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px 24px;
+  /* Wide screens: line the logo and nav up with the 1200px content column. */
+  padding: 14px max(24px, calc((100% - 1200px) / 2 + 24px));
   backdrop-filter: blur(8px);
   background: color-mix(in srgb, var(--bg) 72%, transparent);
   border-bottom: 1px solid var(--border);
