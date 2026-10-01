@@ -7,7 +7,6 @@ import { PublicChrome } from '../../../components/PublicChrome';
 import { PricingPlansView } from '../../pricing/PricingPlansView';
 import { LandingPage } from '../LandingPage';
 import { SampleReportEmbed } from '../SampleReportEmbed';
-import { SAMPLE_REPORT } from '../sample-report';
 
 // Story 6.1 — static renders (the 6-1 idiom: plain <a> anchors so no
 // RouterProvider is needed; effects don't run, so no fetch fires).
@@ -45,26 +44,15 @@ describe('PublicChrome (story 6.1 AC3 — UX-DR6 slim chrome)', () => {
   });
 });
 
-describe('SampleReportEmbed (story 6.1 AC1 — UX-DR24 live sample, not a screenshot)', () => {
-  it('renders the real grade hero, metadata pills, and all findings', () => {
+describe('SampleReportEmbed shell (lazy body — see sample-report.test.tsx)', () => {
+  it('renders the frame, label and both CTAs without the lazy body', () => {
     const html = renderToStaticMarkup(<SampleReportEmbed />);
-    // The grade letter as element text (`>F<`), not a substring of other copy.
-    expect(html).toMatch(new RegExp(`>${SAMPLE_REPORT.grade}<`));
-    expect(html).toContain(`${SAMPLE_REPORT.bpm}`);
-    expect(html).toContain(SAMPLE_REPORT.detectedKey);
-    expect(html).toContain(SAMPLE_REPORT.lufs.toFixed(1));
-    for (const f of SAMPLE_REPORT.findings) {
-      expect(html).toContain(f.tag);
-    }
+    expect(html).toContain('Live sample report');
     expect(html).toContain('real pipeline output');
-    expect(html).toContain('Get yours free');
-  });
-
-  it('sample data stays honest — real trimmed values, not marketing numbers', () => {
-    // Pin the provenance: these values come from schemas/samples/sample1_8aeef3b4.json.
-    expect(SAMPLE_REPORT.grade).toBe('F');
-    expect(SAMPLE_REPORT.overallScore).toBe(42);
-    expect(SAMPLE_REPORT.findings).toHaveLength(3);
+    expect(html).toContain('href="/analyze"');
+    expect(html).toContain('Analyze my track free');
+    expect(html).toContain('href="/demo"');
+    expect(html).toContain('Explore the full demo');
   });
 });
 
