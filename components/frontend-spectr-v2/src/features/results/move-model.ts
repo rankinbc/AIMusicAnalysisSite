@@ -255,9 +255,10 @@ export function buildMoves(input: {
     ...(input.topFixes ?? []).map((t, i) => ruleFixToMove(t, i)),
     ...(input.coachedFixes ?? []).map((t, i) => ruleFixToMove(t, i, { coached: true })),
   ]);
-  // A fail-marker verdict ("Specialist failed") isn't a Move.
+  // A fail-marker verdict ("Specialist failed") isn't a Move, and neither is
+  // a win — it's something done right, so there is nothing to apply.
   const aiMoves = input.verdicts
-    .filter((v) => v.headline !== 'Specialist failed')
+    .filter((v) => v.headline !== 'Specialist failed' && v.severity !== 'win')
     .map(verdictToMove);
   return [...ruleMoves, ...aiMoves]
     .filter((m) => m.status !== 'dismissed')

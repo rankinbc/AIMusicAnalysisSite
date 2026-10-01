@@ -122,8 +122,9 @@ export function FixBoard({
     }
     // Actions: findings with a live move (dismissed drop out of buildMoves),
     // plus checked fix-less findings as notes.
+    // Wins never appear here — there is nothing to act on.
     return findings
-      .filter((v) => !v.userState.dismissed)
+      .filter((v) => !v.userState.dismissed && v.severity !== 'win')
       .map((v) => ({ v, move: moveFor(v), isNote: false, depth: 0 }))
       .filter((r) => r.move != null || checkedNoteIds.has(r.v.id))
       .map((r) => (r.move ? r : { ...r, isNote: true }))
@@ -394,6 +395,7 @@ function BoardRow({
   const findingsMode = mode === 'findings';
   const dismissed = v.userState.dismissed;
   const group = groupForVerdict(v);
+  const win = v.severity === 'win';
   // Applied to the apply controls only — an inert element still needs to say
   // so, and stay out of the tab order, not just look dim.
   const lock = applyLocked ? { 'aria-disabled': true, tabIndex: -1 } : {};
@@ -402,7 +404,7 @@ function BoardRow({
       type="button"
       className={
         `fb-row${selected ? ' on' : ''}${committed ? ' added' : ''}` +
-        `${dismissed ? ' ignored' : ''}${depth > 0 ? ' nested' : ''}`
+        `${dismissed ? ' ignored' : ''}${depth > 0 ? ' nested' : ''}${win ? ' win' : ''}`
       }
       style={{ ['--sev' as string]: severityColor(v.severity) }}
       onClick={onSelect}
@@ -416,7 +418,7 @@ function BoardRow({
             {group}
           </span>
           {move && move.hasParams ? ` · ${move.scope}` : ''}
-          {!move ? (findingsMode ? ' · observation' : ' · note · manual move') : ''}
+          {!move && !win ? (findingsMode ? ' · observation' : ' · note · manual move') : ''}
           {dismissed ? ' · ignored' : ''}
         </span>
       </span>
@@ -438,7 +440,7 @@ function BoardRow({
                   : 'A suggested fix is available — check to queue it'}
               </span>
             </span>
-          ) : surface === 'report' ? (
+          ) : surface === 'report' && !win ? (
             <span
               className={`fr-ckbox off gloss${noted ? ' on' : ''}`}
               role="button"
