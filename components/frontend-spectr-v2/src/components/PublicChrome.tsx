@@ -20,8 +20,11 @@ export function PublicChrome() {
   const authed = Boolean(useOptionalAuth()?.user);
   return (
     <header className={s.chrome}>
-      <a href="/" className={s.brand}>
-        SPEC<span className={s.brandAccent}>TR</span>
+      <a href="/" className={s.brand} aria-label="SPECTR — AI Music Analysis, home">
+        <span className={s.brandWord}>
+          SPEC<span className={s.brandAccent}>TR</span>
+        </span>
+        <span className={s.brandCaption}>AI Music Analysis</span>
       </a>
       <nav className={s.nav}>
         {/* Task P3 — secondary links; hidden below 480px (MANDATORY 390px

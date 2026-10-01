@@ -13,12 +13,31 @@
 }
 
 .brand {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.brandWord {
   font-family: 'Syne', sans-serif;
   font-weight: 800;
   font-size: 18px;
+  line-height: 1;
   letter-spacing: 0.14em;
-  color: var(--text);
-  text-decoration: none;
+}
+
+/* Same caption as the in-app top bar (_appLayout .brandCaption). */
+.brandCaption {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 8px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.18em;
+  color: var(--muted);
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .brandAccent {
