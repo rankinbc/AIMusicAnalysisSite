@@ -4,7 +4,7 @@
 //
 // v4: left group = trackinfo · project (disabled w/o .als) · stems (disabled
 // w/o stems) · reference (hidden w/o data) · notes · debug(dev); right-aligned
-// hot group = coach ("Findings") · actions · dawplan.
+// hot group = analysis · coach ("Findings") · actions · dawplan.
 import { describe, expect, it } from 'vitest';
 import { buildResultsTabs } from '../results-tabs-model';
 
@@ -22,15 +22,39 @@ const base = {
 describe('buildResultsTabs', () => {
   it('excludes the Debug tab when not a dev build', () => {
     const ids = buildResultsTabs(base, false).map((t) => t.id);
-    expect(ids).toEqual(['trackinfo', 'project', 'stems', 'notes', 'coach', 'actions', 'dawplan']);
+    expect(ids).toEqual([
+      'trackinfo',
+      'project',
+      'stems',
+      'notes',
+      'analysis',
+      'coach',
+      'actions',
+      'dawplan',
+    ]);
   });
 
   it('includes the Debug tab in dev builds (last of the left group)', () => {
     const tabs = buildResultsTabs(base, true);
     const ids = tabs.map((t) => t.id);
     expect(ids).toContain('debug');
-    // Debug sits before the hot group, which is always the trailing trio.
-    expect(ids.slice(-4)).toEqual(['debug', 'coach', 'actions', 'dawplan']);
+    // Debug sits before the hot group, which is always the trailing four.
+    expect(ids.slice(-5)).toEqual(['debug', 'analysis', 'coach', 'actions', 'dawplan']);
+  });
+
+  it('places Analysis directly left of Findings as the first hot tab', () => {
+    const tabs = buildResultsTabs(base, false);
+    const ids = tabs.map((t) => t.id);
+    expect(ids.indexOf('analysis')).toBe(ids.indexOf('coach') - 1);
+    expect(tabs.find((t) => t.hot)?.id).toBe('analysis');
+    expect(tabs.find((t) => t.id === 'analysis')?.label).toBe('Analysis');
+  });
+
+  it('flags only the Analysis tab busy while work is in progress', () => {
+    const idle = buildResultsTabs(base, false);
+    expect(idle.some((t) => t.busy)).toBe(false);
+    const busy = buildResultsTabs({ ...base, analysisBusy: true }, false);
+    expect(busy.filter((t) => t.busy).map((t) => t.id)).toEqual(['analysis']);
   });
 
   it('renders Project/Stems disabled-with-tooltip when their inputs are absent', () => {
@@ -54,13 +78,13 @@ describe('buildResultsTabs', () => {
     expect(tabs.map((t) => t.id)).toContain('reference');
   });
 
-  it('marks the hot trio and badges Findings/Actions/Plan counts', () => {
+  it('marks the hot group and badges Findings/Actions/Plan counts', () => {
     const tabs = buildResultsTabs(
       { ...base, findingCount: 4, actionableCount: 2, planLogCount: 5, noteCount: 7 },
       false,
     );
     const hot = tabs.filter((t) => t.hot).map((t) => t.id);
-    expect(hot).toEqual(['coach', 'actions', 'dawplan']);
+    expect(hot).toEqual(['analysis', 'coach', 'actions', 'dawplan']);
     expect(tabs.find((t) => t.id === 'coach')?.badge).toBe(4);
     expect(tabs.find((t) => t.id === 'coach')?.alert).toBe(true);
     expect(tabs.find((t) => t.id === 'actions')?.badge).toBe(2);

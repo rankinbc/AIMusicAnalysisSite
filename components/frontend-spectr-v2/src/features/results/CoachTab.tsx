@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { toast } from 'sonner';
 
 import { useRunSpecialist, useVerdicts } from '../../api/hooks';
@@ -30,6 +31,10 @@ interface CoachTabProps {
   credits: number | null;
   /** v4 "Ask the coach about this" — threaded down to CoachChat. */
   askSeed?: { text: string; nonce: number } | null;
+  /** Specialists kicked off whose verdicts haven't landed yet. Lifted to
+   *  ReportView so the Analysis tab can show them as in progress. */
+  optimisticRunning: ReadonlySet<string>;
+  setOptimisticRunning: Dispatch<SetStateAction<ReadonlySet<string>>>;
 }
 
 /** The hero-row Coach card (prototype `.coach-wrap`): grounded chat + the two
@@ -49,10 +54,9 @@ export function CoachTab({
   onUnlockAction,
   credits,
   askSeed,
+  optimisticRunning,
+  setOptimisticRunning,
 }: CoachTabProps) {
-  const [optimisticRunning, setOptimisticRunning] = useState<ReadonlySet<string>>(
-    () => new Set<string>(),
-  );
   const [specOpen, setSpecOpen] = useState(false);
   const [cmOpen, setCmOpen] = useState(false);
 
@@ -68,7 +72,7 @@ export function CoachTab({
       for (const slug of prev) if (!ran.has(slug)) next.add(slug);
       return next.size === prev.size ? prev : next;
     });
-  }, [data]);
+  }, [data, setOptimisticRunning]);
 
   const ranSlugs = useMemo(
     () => new Set((data?.specialists ?? []).filter((sp) => sp.status !== 'idle').map((sp) => sp.slug)),
@@ -104,7 +108,7 @@ export function CoachTab({
         toast.error(err instanceof Error ? err.message : 'Could not start specialist');
       }
     },
-    [run],
+    [run, setOptimisticRunning],
   );
 
   // Auto-run the Triage-suggested specialists on the initial view so the
@@ -122,7 +126,7 @@ export function CoachTab({
         });
       });
     },
-    [run],
+    [run, setOptimisticRunning],
   );
   useEffect(() => {
     const plan = data?.routingPlan;

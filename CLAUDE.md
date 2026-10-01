@@ -131,7 +131,7 @@ AIMusicAnalysisSite/
 
 ### frontend-spectr-v2 (NEW — PRIMARY frontend)
 
-**Purpose**: React 19 + Vite 6 + TypeScript strict SPA. Auth, library (grid card view + filter pills + VersionArc per song), song detail (cover hero + ProgressTimeline + VersionList + CompareDialog version-delta), results page (SongHeader with add-input chips + ResultsTabs: AI Coach (CoachChat + Specialist roster + Fix Rack) / Findings / Project (or ProjectUnlock with .als upload CTA) / Reference / Track Info / Debug (dev builds only)), Listen rack page (`features/listen-rack/` — rack + visuals + rail; the Web Audio DSP engine `useAudioGraph` still lives in `features/listen/`).
+**Purpose**: React 19 + Vite 6 + TypeScript strict SPA. Auth, library (grid card view + filter pills + VersionArc per song), song detail (cover hero + ProgressTimeline + VersionList + CompareDialog version-delta), results page (hero row = SongHeader with add-input chips + CoachTab card (CoachChat + Specialists modal); ResultsTabs left group = Track Analysis / Project (disabled until an .als) / Stems (disabled until stems) / Reference (when present) / Notes / Debug (dev builds only), right-aligned group = Analysis (run overview: inputs, modules, specialists with per-finding severity meters, top 3 tips, in-progress work) / Findings (id `coach`) / Actions / Improvement Plan), Listen rack page (`features/listen-rack/` — rack + visuals + rail; the Web Audio DSP engine `useAudioGraph` still lives in `features/listen/`).
 **Inputs**: BFF `/api/*` REST + a couple of SSE endpoints
 **Outputs**: browser
 **How to run**: `cd components/frontend-spectr-v2 && npm run dev` (Vite dev server on port 5174, proxies `/api/*` to BFF on `:5000`)

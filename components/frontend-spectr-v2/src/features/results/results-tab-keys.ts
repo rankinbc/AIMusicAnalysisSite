@@ -11,8 +11,13 @@
 // key (back-compat: `findings` deep-links coerce to it in ReportView); new keys
 // `actions` (fix-first board), `stems`, `notes` (feedback), `dawplan`
 // (Improvement Plan).
+//
+// 2026-09-21: `analysis` is revived as a run overview (inputs, modules,
+// specialists + finding counts, top tips, in-progress work) sitting just left
+// of Findings. Old `?tab=analysis` deep-links land on it.
 
 export type ResultsTabKey =
+  | 'analysis'
   | 'coach'
   | 'findings'
   | 'actions'
@@ -25,6 +30,7 @@ export type ResultsTabKey =
   | 'debug';
 
 export const RESULTS_TAB_KEYS: readonly ResultsTabKey[] = [
+  'analysis',
   'coach',
   'findings',
   'actions',

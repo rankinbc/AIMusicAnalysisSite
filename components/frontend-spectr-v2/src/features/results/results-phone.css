@@ -1,0 +1,79 @@
+/* Task P8 — phone fixes: mobile override for the Reference tab's "plain
+ * delta rows" (phase5.deltas / per_stem_reference_deltas — see the comment
+ * directly above `.rd-row` in the generated sheet). Hand-written; imported
+ * once as a global side-effect import (never edit the generated sheet).
+ *
+ * Overrides redesign-v3-tabs.css:924 (`.rdx .rd-row` — six FIXED pixel
+ * tracks: 170px 118px 150px 96px 66px 46px, ~646px of columns before the
+ * 16px×5 column gaps) and :925 (`.rdx .rd-row.stem` — seven tracks, same
+ * idea). Both sum to roughly double a 390px viewport's available width
+ * (~342px inside the report's page/tab gutters, measured live — see the
+ * task report), so at that width the fixed tracks would overflow the row
+ * container and clip/overlap rather than reflow.
+ *
+ * Below 640px this switches each row to a named-area grid keyed to the
+ * SAME child classnames the generated sheet already styles (.rd-label /
+ * .rd-you / .rd-ref / .rd-delta / .rd-interp / .rd-tier): the label (+ the
+ * stem-tier dot, stem rows only) gets its own full-width line, the three
+ * short mono reads share a row of flexible thirds, and the free-text
+ * interpretation wraps on its own line instead of ellipsing. `minmax(0, …)`
+ * columns mean no track can be forced wider than the row by its content,
+ * so nothing can overlap regardless of actual label/interp text length.
+ *
+ * Verified via a DOM-injected row of these same classes (no live report in
+ * this app state renders .rd-row yet — ReferenceTab.tsx's current markup
+ * uses .ref-gap/.rg-*; .rd-* is the documented anatomy for when phase5
+ * plain-delta rows are wired to it, and this rule is ready the moment they
+ * are) — measurements are in the task report.
+ *
+ * Specificity: every selector here is prefixed with the real ancestor
+ * `html` (e.g. `html .rdx .rd-row`), which is strictly HIGHER specificity
+ * than the generated rule's `.rdx .rd-row` (two classes + one element beats
+ * two classes alone) — the override wins regardless of CSS import order,
+ * with no `!important` and no touching the generated file. */
+@media (max-width: 640px) {
+  html .rdx .rd-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-areas:
+      'label label label'
+      'you ref delta'
+      'interp interp interp';
+    column-gap: 10px;
+    row-gap: 6px;
+    padding: 10px 12px;
+  }
+  html .rdx .rd-row.stem {
+    grid-template-columns: 14px repeat(3, minmax(0, 1fr));
+    grid-template-areas:
+      'tier label label label'
+      '. you ref delta'
+      'interp interp interp interp';
+  }
+  html .rdx .rd-tier {
+    grid-area: tier;
+    align-self: start;
+    margin-top: 4px;
+  }
+  html .rdx .rd-label {
+    grid-area: label;
+    white-space: normal;
+  }
+  html .rdx .rd-you {
+    grid-area: you;
+    text-align: left;
+  }
+  html .rdx .rd-ref {
+    grid-area: ref;
+    text-align: left;
+  }
+  html .rdx .rd-delta {
+    grid-area: delta;
+    text-align: left;
+  }
+  html .rdx .rd-interp {
+    grid-area: interp;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+}

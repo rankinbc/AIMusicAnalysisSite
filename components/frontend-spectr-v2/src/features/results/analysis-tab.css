@@ -1,0 +1,138 @@
+/* Analysis tab (AnalysisTab.tsx) + the tab-label busy meter (ResultsTabs.tsx).
+   Every selector is `.rdx .ax-*` (specificity 0,2,0) on purpose: the scoped
+   reset `.rdx * { margin:0; padding:0 }` (redesign-v3.css) ties single-class
+   rules and wins on source order — a CSS module here would lose all spacing.
+   Tokens only (the .rdx palette), no raw hex. */
+
+.rdx .ax { container-type: inline-size; }
+
+/* ── Still working ─────────────────────────────────────────────────── */
+.rdx .ax-live {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px;
+  padding: 10px 14px; margin-bottom: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  border-radius: var(--radius);
+  background: var(--accent-dim);
+  font-size: 12.5px;
+}
+.rdx .ax-live-t { font-weight: 700; color: var(--text); }
+.rdx .ax-live-list { display: flex; flex-wrap: wrap; gap: 4px 14px; list-style: none; color: var(--text-2); }
+.rdx .ax-live-list li + li::before { content: ''; display: inline-block; width: 3px; height: 3px; margin: 0 10px 2px 0; border-radius: 50%; background: var(--muted); vertical-align: middle; }
+
+/* ── Start here (top tips) ─────────────────────────────────────────── */
+.rdx .ax-tips { margin-bottom: 12px; }
+.rdx .ax-tiplist { list-style: none; }
+.rdx .ax-tip {
+  display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline;
+  padding: 12px 14px;
+}
+.rdx .ax-tip + .ax-tip { border-top: 1px solid var(--border); }
+.rdx .ax-tipn { font-size: 17px; font-weight: 600; line-height: 1; color: var(--sev, var(--accent)); }
+.rdx .ax-tipt { font-size: 13.5px; font-weight: 650; color: var(--text); letter-spacing: -0.01em; line-height: 1.35; }
+.rdx .ax-tipd { font-size: 12.5px; color: var(--text-2); line-height: 1.55; margin-top: 4px; max-width: 72ch; text-wrap: pretty; }
+.rdx .ax-tipc { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+/* ── Grid: specialists right, inputs + modules left (stacks narrow) ── */
+.rdx .ax-grid {
+  display: grid; gap: 12px; align-items: start;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  grid-template-areas: 'in spec' 'mod spec';
+}
+.rdx .ax-specs { grid-area: spec; }
+.rdx .ax-inputs { grid-area: in; }
+.rdx .ax-modules { grid-area: mod; }
+@container (max-width: 900px) {
+  .rdx .ax-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: 'spec' 'in' 'mod'; }
+}
+
+.rdx .ax-speclist,
+.rdx .ax-inlist,
+.rdx .ax-modlist { list-style: none; }
+.rdx .ax-note { padding: 10px 14px 12px; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--hairline); }
+
+/* ── Specialists ───────────────────────────────────────────────────── */
+.rdx .ax-spec {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 3px 12px;
+  padding: 9px 14px;
+}
+.rdx .ax-spec + .ax-spec { border-top: 1px solid var(--hairline); }
+.rdx .ax-spec-name { display: inline-flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; font-weight: 600; color: var(--text); }
+.rdx .ax-gdot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--gc, var(--accent)); }
+.rdx .ax-spec.builtin .ax-gdot { border-radius: 2px; background: var(--text-2); }
+.rdx .ax-spec.no-findings .ax-spec-name,
+.rdx .ax-spec.needs-stems .ax-spec-name { color: var(--text-2); }
+.rdx .ax-spec-val { display: inline-flex; align-items: center; gap: 10px; justify-self: end; }
+.rdx .ax-count { min-width: 2ch; text-align: right; font-size: 12px; font-weight: 600; color: var(--text); }
+.rdx .ax-quiet { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--muted); }
+.rdx .ax-live-val { gap: 7px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--accent); }
+.rdx .ax-sugg {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--violet);
+  padding: 2px 8px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--violet) 38%, transparent);
+}
+.rdx .ax-focus {
+  grid-column: 1 / -1; padding-left: 15px;
+  font-size: 11.5px; line-height: 1.45; color: var(--muted);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* The finding meter — one LED per finding, tinted by its severity. */
+.rdx .ax-meter { display: inline-flex; align-items: center; gap: 2px; }
+.rdx .ax-meter i {
+  display: block; width: 5px; height: 12px; border-radius: 1.5px;
+  background: var(--c); box-shadow: 0 0 6px -1px var(--c);
+}
+.rdx .ax-meter-more { margin-left: 2px; font-size: 11px; font-weight: 700; color: var(--muted); }
+
+/* ── What went in (patch-bay jacks) ────────────────────────────────── */
+.rdx .ax-in {
+  display: grid; grid-template-columns: 12px 116px minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  padding: 9px 14px; font-size: 12.5px;
+}
+.rdx .ax-in + .ax-in { border-top: 1px solid var(--hairline); }
+.rdx .ax-jack { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--border-3); }
+.rdx .ax-in.analyzed .ax-jack {
+  border-color: var(--accent); background: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 8px -1px var(--accent);
+}
+.rdx .ax-in.attached .ax-jack { border-color: var(--violet); }
+.rdx .ax-in.failed .ax-jack { border-color: var(--red); background: var(--red); }
+.rdx .ax-in-k { font-weight: 600; color: var(--text); }
+.rdx .ax-in-v { min-width: 0; color: var(--text-2); overflow-wrap: anywhere; }
+.rdx .ax-in.missing .ax-in-k,
+.rdx .ax-in.missing .ax-in-v { color: var(--muted); }
+.rdx .ax-in.failed .ax-in-v { color: var(--red); }
+.rdx .ax-add {
+  font: inherit; font-size: 11.5px; font-weight: 600; color: var(--accent);
+  padding: 3px 11px; border-radius: 6px; cursor: pointer; background: transparent;
+  border: 1px solid color-mix(in srgb, var(--accent) 36%, transparent);
+}
+.rdx .ax-add:hover { background: var(--accent-dim); }
+.rdx .ax-add:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@container (max-width: 520px) {
+  .rdx .ax-in { grid-template-columns: 12px minmax(0, 1fr) auto; }
+  .rdx .ax-in-v { grid-column: 2 / 3; grid-row: 2; font-size: 12px; }
+}
+
+/* ── What ran (pipeline modules) ───────────────────────────────────── */
+.rdx .ax-mod {
+  display: grid; grid-template-columns: 18px minmax(96px, max-content) minmax(0, 1fr); align-items: center; gap: 10px;
+  padding: 7px 14px; font-size: 12.5px;
+}
+.rdx .ax-mod + .ax-mod { border-top: 1px solid var(--hairline); }
+.rdx .ax-mod-st {
+  width: 17px; height: 17px; border-radius: 50%; display: grid; place-items: center;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
+}
+.rdx .ax-mod.ok .ax-mod-st { color: var(--accent); background: var(--accent-dim); }
+.rdx .ax-mod.skipped .ax-mod-st { color: var(--muted); background: var(--hairline); }
+.rdx .ax-mod.failed .ax-mod-st { color: var(--red); background: color-mix(in srgb, var(--red) 14%, transparent); }
+.rdx .ax-mod-k { font-weight: 600; color: var(--text); white-space: nowrap; }
+.rdx .ax-mod.skipped .ax-mod-k { color: var(--muted); }
+.rdx .ax-mod-v { min-width: 0; font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rdx .ax-mod.failed .ax-mod-v { color: var(--red); }
+.rdx .ax-mod.running .ax-mod-v { color: var(--accent); }
+
+/* ── Tab label busy meter ──────────────────────────────────────────── */
+.rdx .rtab .rtab-busy { height: 10px; }
+.rdx .rtab .rtab-busy i { width: 2px; }

@@ -13,7 +13,9 @@ describe('isResultsTabKey', () => {
   it('rejects unknown / non-string values', () => {
     // v4 revived 'actions' as the fix-first board and added stems/notes/dawplan.
     expect(isResultsTabKey('actions')).toBe(true);
-    expect(isResultsTabKey('analysis')).toBe(false); // old key, folded into debug
+    // 'analysis' was folded into debug, then revived as the run-overview tab.
+    expect(isResultsTabKey('analysis')).toBe(true);
+    expect(isResultsTabKey('files')).toBe(false); // retired, folded into the uploads sidebar
     expect(isResultsTabKey('nope')).toBe(false);
     expect(isResultsTabKey('')).toBe(false);
     expect(isResultsTabKey(undefined)).toBe(false);

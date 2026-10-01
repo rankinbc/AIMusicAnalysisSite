@@ -10,9 +10,10 @@ interface ResultsTabsProps extends BuildTabsOpts {
 }
 
 // Glyphs stand in for the prototype's inline SVG icons; styling comes from the
-// scoped `.rtab` rules in redesign.css. v4: disabled tabs render with a tooltip
-// instead of being hidden; the hot group (Findings/Actions/Improvement Plan) is
-// pushed right and tinted.
+// scoped `.rtab` rules in redesign-v3.css / redesign-v3-tabs.css. v4: disabled
+// tabs render with a tooltip instead of being hidden; the hot group
+// (Analysis/Findings/Actions/Improvement Plan) is pushed right and tinted. A
+// `busy` tab shows a live meter (styled in analysis-tab.css).
 export function ResultsTabs({ current, onChange, ...opts }: ResultsTabsProps) {
   const tabs = buildResultsTabs(opts, import.meta.env.DEV);
   const firstHot = tabs.find((t) => t.hot)?.id;
@@ -42,6 +43,16 @@ export function ResultsTabs({ current, onChange, ...opts }: ResultsTabsProps) {
               <Icon name={t.icon} size={15} />
             </span>
             {t.label}
+            {t.busy && (
+              <>
+                <span className="eqdots rtab-busy" aria-hidden>
+                  <i />
+                  <i />
+                  <i />
+                </span>
+                <span className="sr-only">in progress</span>
+              </>
+            )}
             {t.badge != null && <span className="rtab-badge">{t.badge}</span>}
           </button>
         );

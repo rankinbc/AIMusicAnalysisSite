@@ -4,6 +4,9 @@
  * 35% when paused. Ported from the design handoff (lr-stage.jsx → LightShow). */
 import { useEffect, useRef } from 'react';
 
+import { useMinWidth } from '../../hooks/useMinWidth';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
+
 export function LightShow({ playing, intensity = 1, show, gridHue = 168, gridIntensity = 50 }: {
   playing: boolean; intensity?: number; show: boolean;
   /** Floor grid hue (0-360) + intensity (0-100; 50 = classic, 0 = hidden). */
@@ -12,8 +15,18 @@ export function LightShow({ playing, intensity = 1, show, gridHue = 168, gridInt
   const cv = useRef<HTMLCanvasElement | null>(null);
   const pr = useRef({ playing, intensity, gridHue, gridIntensity });
   pr.current = { playing, intensity, gridHue, gridIntensity };
+  // Task P8 — phone fixes: this canvas is a full-viewport fixed layer that
+  // sits BEHIND the desktop-only rack card (see ListenRackPage's
+  // `.lr-desktop-only` / `.lr-desktop-notice` swap). Below 1024px the rack
+  // itself is hidden and replaced by the notice card, so a visitor on a
+  // phone was still paying for a rAF loop + canvas paint they could never
+  // see. `desktop` gates that entirely; `reduce` (existing prefers-reduced-
+  // motion handling) still applies on top for desktop visitors.
+  const desktop = useMinWidth(1024);
+  const reduce = useReducedMotion();
+  const active = show && desktop;
   useEffect(() => {
-    if (!show) return undefined;
+    if (!active) return undefined;
     const c = cv.current;
     const ctx = c?.getContext('2d');
     if (!c || !ctx) return undefined;
@@ -114,10 +127,15 @@ export function LightShow({ playing, intensity = 1, show, gridHue = 168, gridInt
       });
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = 'source-over';
-      raf = requestAnimationFrame(draw);
+      if (!reduce) raf = requestAnimationFrame(draw);
     };
+    if (reduce) {
+      draw(); // one static frame; redraw on resize so it never stretches
+      window.addEventListener('resize', draw);
+      return () => window.removeEventListener('resize', draw);
+    }
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [show]);
-  return show ? <canvas className="lr-bgfx" ref={cv} /> : null;
+  }, [active, reduce]);
+  return active ? <canvas className="lr-bgfx" ref={cv} /> : null;
 }

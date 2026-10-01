@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { toast } from 'sonner';
 
@@ -6,6 +7,8 @@ import { ApiError } from '../../api/fetcher';
 import { extractApiError } from '../../api/error-utils';
 import { useAuth } from '../../auth/AuthContext';
 import {
+  ARRANGEMENT_MAX_POLLS,
+  TRIAGE_MAX_POLLS,
   useApplyVerdict,
   useDismissVerdict,
   useEntitlements,
@@ -37,6 +40,8 @@ import { AnalysisCompleteModal } from './AnalysisCompleteModal';
 import { DegradationBanner } from './DegradationBanner';
 import { LlmDegradationNotice } from './LlmDegradationNotice';
 import { CoachTab } from './CoachTab';
+import { AnalysisTab } from './AnalysisTab';
+import { buildInProgress, isArrangementPending } from './analysis-tab-model';
 import { ExportModal } from './ExportModal';
 import { ProjectTab } from './ProjectTab';
 import { ProjectUnlock } from './ProjectUnlock';
@@ -124,12 +129,21 @@ export function ReportView({
   const hasStems = (phase4?.stems as { status?: string } | undefined)?.status === 'ok';
 
   // Verdicts are the AI-Move source + CoachChat grounding. Shared query cache
-  // (keyed by jobId) — single fetch.
-  const emptySetRef = useRef<ReadonlySet<string>>(new Set<string>());
+  // (keyed by jobId) — single fetch. Specialists kicked off from the Coach card
+  // are tracked here (not in CoachTab) so the Analysis tab can show them as in
+  // progress; the server never reports "running" itself.
+  const [runningSlugs, setRunningSlugs] = useState<ReadonlySet<string>>(() => new Set<string>());
   const { data: verdictsData } = useVerdicts(jobId, {
     enabled: true,
-    optimisticRunning: emptySetRef.current,
+    optimisticRunning: runningSlugs,
   });
+  // Read at render — every refetch re-renders its observer, so these are
+  // current. They bound the Analysis tab's "Still working" claims to the
+  // window in which polling can still clear them.
+  const queryClient = useQueryClient();
+  const verdictsUpdates = queryClient.getQueryState(['verdicts', jobId])?.dataUpdateCount ?? 0;
+  const resultsState = queryClient.getQueryState(['jobs', jobId, 'results']);
+  const resultsPolls = (resultsState?.dataUpdateCount ?? 0) + (resultsState?.errorUpdateCount ?? 0);
   const verdicts = useMemo(() => verdictsData?.verdicts ?? [], [verdictsData]);
 
   const moves = useMemo(
@@ -143,20 +157,25 @@ export function ReportView({
   const { data: notesData } = useNotes(versionId ?? '');
   const noteCount = notesData?.length ?? 0;
 
-  // Which inputs the analysis ran on — drives the header chips.
+  // Which inputs the analysis ran on — drives the header chips. The phase
+  // fallbacks must read a real status: the pipeline always writes
+  // `phase4.stems = {}` and a phase-8 row, so `Boolean(phase4?.stems)` /
+  // `Boolean(phase8)` claimed stems + .als on every mix-only job (and let
+  // CoachTab auto-run stem-only specialists with no stems).
   const { data: filesData } = useVersionFiles(versionId ?? '');
+  const alsAnalyzed = fj.phases?.find((p) => p.phase === 8)?.status === 'ok';
   const inputs: SongHeaderInputs = useMemo(() => {
     const files = filesData?.files ?? [];
     return {
       mix: files.some((f) => f.type === 'mix') || files.length === 0,
-      stems: files.some((f) => f.type === 'stem') || Boolean(phase4?.stems),
-      als: files.some((f) => f.type === 'als') || Boolean(phase8),
+      stems: files.some((f) => f.type === 'stem') || hasStems,
+      als: files.some((f) => f.type === 'als') || alsAnalyzed,
       reference:
         files.some((f) => f.type === 'reference') ||
         Boolean(phase6?.gaps) ||
         phase5?.status === 'ok',
     };
-  }, [filesData, phase4, phase8, phase6, phase5]);
+  }, [filesData, hasStems, alsAnalyzed, phase6, phase5]);
 
   // ── Committed ("Added to Listen") moves — lifted here so both the Coach tab
   // (move toggles) and the sidebar (Fixes for Listen queue) stay in sync. ──
@@ -290,6 +309,22 @@ export function ReportView({
   // Coach Mix generation lifted here so the trigger (Coach header) and the
   // compiled preset row (Send-to-Listen) share one state machine.
   const fixRack = useFixRackGeneration(jobId);
+
+  // Analysis tab "Still working" list + the tab-label busy meter. Triage and
+  // section detection only count while their query is still polling — past
+  // the cap nothing would ever clear the indicator.
+  const triagePending =
+    verdictsData != null &&
+    verdictsData.routingPlan == null &&
+    verdictsData.degradation == null &&
+    verdictsUpdates < TRIAGE_MAX_POLLS;
+  const inProgress = buildInProgress({
+    triagePending,
+    running: runningSlugs,
+    arrangementPending: isArrangementPending(fj) && resultsPolls < ARRANGEMENT_MAX_POLLS,
+    coachMixCompiling: fixRack.phase === 'generating',
+  });
+
   const [exportOpen, setExportOpen] = useState(false);
   // v4: the ExportModal's config drives the emitted file (same generator as
   // its live preview).
@@ -477,6 +512,8 @@ export function ReportView({
                 onUnlockAction={onUnlockAction}
                 credits={null}
                 askSeed={askSeed}
+                optimisticRunning={runningSlugs}
+                setOptimisticRunning={setRunningSlugs}
               />
             </div>
 
@@ -508,7 +545,22 @@ export function ReportView({
               noteCount={noteCount}
               actionableCount={actionableCount}
               planLogCount={planLogCount}
+              analysisBusy={inProgress.length > 0}
             />
+
+            {/* Run overview: inputs, modules, specialists, top tips, live work. */}
+            {tab === 'analysis' && (
+              <AnalysisTab
+                fj={fj}
+                songName={trackName}
+                files={filesData?.files}
+                verdictsData={verdictsData}
+                runningSlugs={runningSlugs}
+                hasStems={hasStems}
+                inProgress={inProgress}
+                onAddInputs={onAddInputs}
+              />
+            )}
 
             {/* Findings board (diagnosis-first; the Coach-labeled first tab). */}
             {tab === 'coach' && (

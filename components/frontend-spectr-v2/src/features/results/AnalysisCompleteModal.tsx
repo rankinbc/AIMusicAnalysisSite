@@ -3,8 +3,10 @@
 // finalJson + the Triage routing plan. Two states: running + complete.
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import type { FinalJson, RoutingPlanDto } from '../../api/types';
+import { Coach } from '../../ui/Coach';
 import { GenreCorrectChip } from './GenreCorrectChip';
 import {
   GROUP_COLORS,
@@ -149,7 +151,10 @@ export function AnalysisCompleteModal(props: Props) {
   const C = 2 * Math.PI * R; // 414.7
   const pct = running ? Math.max(0.02, Math.min(1, running.pct)) : 0;
 
-  return (
+  // Portaled to <body>: ReportView mounts this inside `.rdx`, whose scoped reset
+  // (`.rdx * { margin:0; padding:0 }`) ties this module's single-class rules on
+  // specificity and wins on source order — stripping every padding/margin here.
+  return createPortal(
     <div className={s.root} role="dialog" aria-modal="true" aria-label="Analysis">
       <div className={s.backdrop} onClick={onClose} />
       <div className={s.stage}>
@@ -204,7 +209,7 @@ export function AnalysisCompleteModal(props: Props) {
                 {/* Coach hero */}
                 <div className={s.coachHero}>
                   <span className={s.chAv}>
-                    <Sparkle />
+                    <Coach size={40} glow={false} />
                   </span>
                   <div className={s.chTx}>
                     <div className={s.chName}>
@@ -322,7 +327,8 @@ export function AnalysisCompleteModal(props: Props) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

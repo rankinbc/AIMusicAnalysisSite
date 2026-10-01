@@ -42,6 +42,13 @@ public interface IMultipartObjectStore
     // contentType sets a Content-Type override (attachments were PUT without one,
     // so the stored type is octet-stream — the override keeps players honest).
     string PresignGetUrl(string key, string? downloadName = null, string? contentType = null);
+
+    // I5 (final fix wave FW2) — server-side read of an object's bytes. Every
+    // other member here is presign-only (the browser talks to R2 directly);
+    // this one backs the demo snapshot exporter, which must read a
+    // production mix that lives ONLY in R2 (presigned direct upload never
+    // touches local disk) and re-host its bytes at a local snapshot key.
+    Task<Stream> OpenReadAsync(string key, CancellationToken ct = default);
 }
 
 public sealed record PresignedPart(int PartNumber, string Url);
@@ -207,8 +214,62 @@ internal sealed class S3ObjectStore : IMultipartObjectStore, IDisposable
         }
     }
 
+    public async Task<Stream> OpenReadAsync(string key, CancellationToken ct = default)
+    {
+        var response = await _client.Value.GetObjectAsync(new GetObjectRequest
+        {
+            BucketName = _opts.Bucket,
+            Key = key,
+        }, ct);
+        // The response object owns the underlying HTTP stream/connection —
+        // wrap it so disposing the returned Stream disposes BOTH (the raw
+        // ResponseStream and the GetObjectResponse itself), rather than
+        // leaking the response object or requiring every caller to know
+        // about the SDK's two-object lifetime.
+        return new S3ObjectReadStream(response);
+    }
+
     public void Dispose()
     {
         if (_client.IsValueCreated) _client.Value.Dispose();
+    }
+
+    // Thin pass-through Stream that disposes the owning GetObjectResponse
+    // (and its ResponseStream) together, so IMultipartObjectStore.OpenReadAsync
+    // callers can `await using` the returned Stream exactly like
+    // IFileStorage.OpenReadAsync and never touch the AWS SDK response type.
+    private sealed class S3ObjectReadStream(GetObjectResponse response) : Stream
+    {
+        private readonly Stream _inner = response.ResponseStream;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => response.ContentLength;
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush() => _inner.Flush();
+        public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            => _inner.ReadAsync(buffer, offset, count, cancellationToken);
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            => _inner.ReadAsync(buffer, cancellationToken);
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _inner.Dispose();
+                response.Dispose();
+            }
+            base.Dispose(disposing);
+        }
     }
 }

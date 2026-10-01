@@ -13,8 +13,10 @@ export interface TabDef {
   /** v4: rendered but non-clickable, with a tooltip explaining how to unlock. */
   disabled?: boolean;
   tooltip?: string;
-  /** v4: right-aligned "hot" group (Findings · Actions · Improvement Plan). */
+  /** v4: right-aligned "hot" group (Analysis · Findings · Actions · Improvement Plan). */
   hot?: boolean;
+  /** Something behind this tab is still running — the label shows a live meter. */
+  busy?: boolean;
 }
 
 export interface BuildTabsOpts {
@@ -27,6 +29,8 @@ export interface BuildTabsOpts {
   noteCount: number;
   actionableCount: number;
   planLogCount: number;
+  /** Triage / a specialist / section detection / fix rack is still working. */
+  analysisBusy?: boolean;
 }
 
 /** Pure tab-list assembly — exported so the DEV-false shape (Debug hidden in
@@ -34,8 +38,8 @@ export interface BuildTabsOpts {
  *
  *  v4 layout: left group = Track Analysis · Project (disabled w/ tooltip when
  *  no .als) · Stems (disabled when no stems) · Reference (hidden when absent) ·
- *  Notes · Debug (dev). Right-aligned hot group = Findings (id `coach`,
- *  back-compat) · Actions · Improvement Plan (id `dawplan`). */
+ *  Notes · Debug (dev). Right-aligned hot group = Analysis (run overview) ·
+ *  Findings (id `coach`, back-compat) · Actions · Improvement Plan (id `dawplan`). */
 export function buildResultsTabs(opts: BuildTabsOpts, isDev: boolean): TabDef[] {
   const {
     findingCount,
@@ -46,6 +50,7 @@ export function buildResultsTabs(opts: BuildTabsOpts, isDev: boolean): TabDef[] 
     noteCount,
     actionableCount,
     planLogCount,
+    analysisBusy = false,
   } = opts;
   return [
     { id: 'trackinfo', label: 'Track Analysis', icon: 'chart' },
@@ -78,6 +83,7 @@ export function buildResultsTabs(opts: BuildTabsOpts, isDev: boolean): TabDef[] 
     // Story 12.5: raw pipeline I/O is a developer surface — dev builds only.
     ...(isDev ? [{ id: 'debug' as const, label: 'Debug', icon: 'sliders' as const }] : []),
     // ── Right-aligned hot group ──
+    { id: 'analysis', label: 'Analysis', icon: 'pulse', hot: true, busy: analysisBusy },
     {
       id: 'coach',
       label: 'Findings',

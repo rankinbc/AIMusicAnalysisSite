@@ -129,6 +129,34 @@
 .songSub .sep {
   opacity: 0.45;
 }
+/* GenreCorrectChip uses the global `.chip` classes, styled only under `.rdx`
+   (redesign-v3.css). The modal is portaled out of `.rdx`, so mirror them here. */
+.songSub :global(.chip) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.songSub :global(.chip-group) {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+.songSub :global(.chip.add) {
+  opacity: 0.7;
+  cursor: pointer;
+}
+.songSub :global(.chip.add:hover) {
+  color: var(--text-2);
+  opacity: 1;
+}
+.songSub :global(.chip.add .pl) {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-weight: 700;
+}
 .xBtn {
   width: 34px;
   height: 34px;
@@ -375,8 +403,12 @@
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg, var(--cyan), var(--violet));
-  color: var(--ink-on-accent);
+  /* Dark disc + cyan→violet ring: the Coach helmet carries its own neon, so the
+     old solid gradient fill would wash it out. */
+  border: 1.5px solid transparent;
+  background:
+    linear-gradient(var(--bg), var(--bg)) padding-box,
+    linear-gradient(135deg, var(--cyan), var(--violet)) border-box;
   box-shadow: 0 0 22px rgba(167, 139, 250, 0.4);
   position: relative;
   z-index: 1;

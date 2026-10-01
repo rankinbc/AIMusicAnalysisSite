@@ -17,6 +17,11 @@ import { capture } from '../../lib/analytics';
 import { setCorrelation } from '../../lib/sentry';
 import { ProgressStoryline } from '../../features/results/ProgressStoryline';
 import { ReportView } from '../../features/results/ReportView';
+// Task P8 — phone fixes: mobile `.rd-row` override. Imported here (a global
+// side-effect import works the same from any module that renders the
+// report) rather than from ReportView.tsx, which another session has
+// uncommitted changes in — see task-P8-report.md.
+import '../../features/results/results-phone.css';
 import {
   DEFAULT_RESULTS_TAB,
   isResultsTabKey,

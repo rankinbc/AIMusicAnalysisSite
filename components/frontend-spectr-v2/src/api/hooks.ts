@@ -548,6 +548,11 @@ function isArrangementPending(results: JobResultsDto | undefined): boolean {
   return phase7?.arrangement_status === 'pending';
 }
 
+/** Report refetches (8 s apart, ~10 min) spent waiting for the background
+ *  arrangement score. Exported so "detecting sections" UI stops claiming
+ *  progress once polling has given up. */
+export const ARRANGEMENT_MAX_POLLS = 75;
+
 export function useJobResults(jobId: string, enabled: boolean) {
   return useQuery<JobResultsDto>({
     queryKey: ['jobs', jobId, 'results'],
@@ -562,7 +567,7 @@ export function useJobResults(jobId: string, enabled: boolean) {
     refetchInterval: terminalPoll<JobResultsDto>({
       pollMs: 8000,
       active: isArrangementPending,
-      maxPolls: 75,
+      maxPolls: ARRANGEMENT_MAX_POLLS,
     }),
   });
 }
@@ -621,6 +626,11 @@ export type { UploadResponse };
 
 // ── Verdicts ────────────────────────────────────────────────────────────────
 
+/** How many verdict refetches useVerdicts spends waiting for Triage's routing
+ *  plan (3 s apart, ~75 s). Exported so "triage in progress" UI stops claiming
+ *  progress once polling has given up. */
+export const TRIAGE_MAX_POLLS = 25;
+
 interface UseVerdictsOptions {
   /** Slugs the user clicked but for which the BFF hasn't yet returned a
    *  cached/failed status. The hook polls every 3 s while this is non-empty. */
@@ -646,7 +656,7 @@ export function useVerdicts(jobId: string, opts: UseVerdictsOptions) {
       if (opts.optimisticRunning.size > 0) return 3000;
       const d = query.state.data;
       const triagePending = d != null && d.routingPlan == null && d.degradation == null;
-      if (triagePending && query.state.dataUpdateCount < 25) return 3000;
+      if (triagePending && query.state.dataUpdateCount < TRIAGE_MAX_POLLS) return 3000;
       return false;
     },
     retry: false,
