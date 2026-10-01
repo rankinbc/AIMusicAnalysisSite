@@ -27,14 +27,30 @@ export interface CreateCheckoutSessionResponse {
   sessionId: string;
 }
 
+export interface CreditPack {
+  credits: number;
+  cents: number;
+}
+
+/** Credit economy — credits per paid action + monthly Pro allowances. */
+export interface CreditCosts {
+  analysis: number;
+  specialist: number;
+  coachMessage: number;
+  coachMix: number;
+  signupGrant: number;
+  proAnalysesMonthly: number;
+  proCoachMonthly: number;
+}
+
 /** Story 2.1 — GET /api/billing/plans display values (integer cents).
  *  Story 2.3 — adds credit-pack cents so the BuyCreditsCard renders
  *  prices via formatCents (AR39 no-literals lint). */
 export interface PlansResponse {
   proMonthlyCents: number;
   proAnnualCents: number;
-  creditPack5Cents: number;
-  creditPack10Cents: number;
+  /** Credit economy — the buyable packs (credits + price in cents). */
+  creditPacks: CreditPack[];
   currency: string;
   /** Task P2 (public-surfaces-polish D6) — true/false only when the server
    *  resolved it; null/absent means "unknown", which logged-out callers
@@ -44,6 +60,9 @@ export interface PlansResponse {
    *  verifies its email (`signup_bonus_credits` flag). Present only when
    *  credits are ON and the bonus is > 0; never hardcode the number. */
   signupBonusCredits?: number | null;
+  /** Credit economy — server price list (credits per action). Null when
+   *  credits are off. Never hardcode these. */
+  costs?: CreditCosts | null;
 }
 
 /** Story 2.2 — GET /api/billing/me summary for the Billing page. */
@@ -135,6 +154,14 @@ export interface EntitlementsDto {
    *  frontend hides billing/tier UI (buy-credits, upgrade CTAs, tier chips,
    *  usage meters). Optional: older payloads omit it ⇒ treat as enabled. */
   creditsEnabled?: boolean;
+  /** Credit economy — current credit balance. */
+  creditBalance?: number;
+  /** Credit economy — true once the user has ever paid (pack or Pro). */
+  isPaying?: boolean;
+  /** Credit economy — Pro monthly analyses allowance (null when not Pro). */
+  proAnalysesLimit?: number | null;
+  /** Credit economy — Pro analyses used this calendar month. */
+  proAnalysesUsed?: number;
 }
 
 /** Story 2.8 — GET /api/me/honest-math. The 90-day "credits vs Pro"

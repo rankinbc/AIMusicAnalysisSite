@@ -16,8 +16,12 @@ vi.mock('@tanstack/react-query', () => ({
     data: {
       proMonthlyCents: 1299,
       proAnnualCents: 9900,
-      creditPack5Cents: 1900,
-      creditPack10Cents: 3500,
+      creditPacks: [
+        { credits: 500, cents: 700 },
+        { credits: 1500, cents: 1800 },
+        { credits: 5000, cents: 5500 },
+      ],
+      costs: { analysis: 100, specialist: 15, coachMessage: 5, coachMix: 5, signupGrant: 500, proAnalysesMonthly: 15, proCoachMonthly: 300 },
       currency: 'USD',
     },
     isLoading: false,
@@ -27,30 +31,33 @@ vi.mock('@tanstack/react-query', () => ({
 import { BuyCreditsCard } from '../BuyCreditsCard';
 
 describe('BuyCreditsCard (story 2.3 / Task 10)', () => {
-  it('renders both pack-size options with formatted prices', () => {
+  it('renders every pack with formatted prices', () => {
     const html = renderToStaticMarkup(<BuyCreditsCard />);
-    expect(html).toContain('5 credits');
-    expect(html).toContain('10 credits');
-    expect(html).toContain('$19.00');
-    expect(html).toContain('$35.00');
+    expect(html).toContain('500 credits');
+    expect(html).toContain('1,500 credits');
+    expect(html).toContain('5,000 credits');
+    expect(html).toContain('$7.00');
+    expect(html).toContain('$18.00');
+    expect(html).toContain('$55.00');
   });
 
-  it('renders exactly two radio options (5 + 10)', () => {
+  it('renders exactly three radio options (500 + 1500 + 5000)', () => {
     const html = renderToStaticMarkup(<BuyCreditsCard />);
     const radios = [...html.matchAll(/role="radio"/g)];
-    expect(radios.length).toBe(2);
-    expect(html).toContain('data-value="5"');
-    expect(html).toContain('data-value="10"');
+    expect(radios.length).toBe(3);
+    expect(html).toContain('data-value="500"');
+    expect(html).toContain('data-value="1500"');
+    expect(html).toContain('data-value="5000"');
   });
 
   it('renders a primary .btn.primary buy button', () => {
     const html = renderToStaticMarkup(<BuyCreditsCard />);
     // The pending state defaults to false → label includes the
-    // selected pack (default 5).
+    // first pack (default 500).
     const buttons = [...html.matchAll(/<button\b[^>]*>[\s\S]*?<\/button>/g)]
       .map((m) => m[0]);
     const primary = buttons.find(
-      (b) => b.includes('Buy 5 credits') || b.includes('Buy 10 credits'),
+      (b) => b.includes('Buy 500 credits'),
     );
     expect(primary, 'Buy {pack} credits button must be present').toBeDefined();
     const classMatch = primary!.match(/class="([^"]*)"/);

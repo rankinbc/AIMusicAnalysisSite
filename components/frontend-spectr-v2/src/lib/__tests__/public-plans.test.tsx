@@ -5,7 +5,7 @@ import type { PlansResponse } from '../../api/types';
 import { PricingLink } from '../../components/PricingLink';
 import { loadPublicPlans, resetPublicPlansForTests, useCreditsEnabled } from '../public-plans';
 const plans = (over: Partial<PlansResponse> = {}): PlansResponse => ({
-  proMonthlyCents: 100, proAnnualCents: 1000, creditPack5Cents: 500, creditPack10Cents: 900, currency: 'USD', ...over,
+  proMonthlyCents: 100, proAnnualCents: 1000, creditPacks: [], currency: 'USD', ...over,
 });
 const ok = (body: unknown) => () => Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
 describe('public plans', () => {

@@ -39,15 +39,9 @@ interface UpgradeSheetProps {
   onWaitNextMonth?: () => void;
 }
 
-const PRO_FEATURES = [
-  'Unlimited analyses',
-  'All verdicts',
-  'Stems + .als',
-  'Coach pool',
-  'Version history',
-];
+const PRO_FEATURES = ['All verdicts', 'Stems + .als', 'Coach pool', 'Version history'];
 
-const CREDIT_FEATURES = ['Full analysis, à la carte', 'No subscription'];
+const CREDIT_FEATURES = ['Never expire', 'Pay as you go'];
 
 export function UpgradeSheet({
   open,
@@ -99,10 +93,26 @@ export function UpgradeSheet({
     </>
   );
 
+  const proFeatures = [
+    p?.costs ? `${p.costs.proAnalysesMonthly} analyses / month` : 'Monthly analyses',
+    ...PRO_FEATURES,
+  ];
+
+  const packs = p?.creditPacks ?? [];
   const creditPrice = (
-    <span className={s.creditPrice}>
-      {p ? `${formatCents(p.creditPack5Cents, currency)} · 5-pack` : '5-pack'}
-    </span>
+    <div className={s.packs} role="group" aria-label="Credit packs">
+      {packs.map((pk) => (
+        <button
+          key={pk.credits}
+          type="button"
+          className="btn sm"
+          disabled={pending !== null}
+          onClick={() => void start({ type: 'credits', packSize: pk.credits })}
+        >
+          {`${pk.credits.toLocaleString()} credits · ${formatCents(pk.cents, currency)}`}
+        </button>
+      ))}
+    </div>
   );
 
   return (
@@ -134,7 +144,7 @@ export function UpgradeSheet({
               tier="pro"
               title="Pro"
               priceNode={proPrice}
-              features={PRO_FEATURES}
+              features={proFeatures}
               ctaLabel="Subscribe"
               onCta={() => void start({ type: 'subscription', cadence })}
               ctaPending={pending === cadence}
@@ -146,9 +156,6 @@ export function UpgradeSheet({
               priceNode={creditPrice}
               features={CREDIT_FEATURES}
               footnote="No subscription, never expire."
-              ctaLabel="Buy credits"
-              onCta={() => void start({ type: 'credits', packSize: 5 })}
-              ctaPending={pending === 'credits'}
             />
           </div>
 

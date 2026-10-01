@@ -200,7 +200,7 @@ describe('register — sign-up bonus line', () => {
   });
 
   it('signupBonusFrom only yields a number when credits are on and the bonus is positive', () => {
-    const base = { proMonthlyCents: 0, proAnnualCents: 0, creditPack5Cents: 0, creditPack10Cents: 0, currency: 'usd' };
+    const base = { proMonthlyCents: 0, proAnnualCents: 0, creditPacks: [], currency: 'usd' };
     expect(signupBonusFrom({ ...base, creditsEnabled: true, signupBonusCredits: 750 })).toBe(750);
     expect(signupBonusFrom({ ...base, creditsEnabled: false, signupBonusCredits: 750 })).toBeNull();
     expect(signupBonusFrom({ ...base, creditsEnabled: null, signupBonusCredits: 750 })).toBeNull();

@@ -25,7 +25,7 @@ import { isStripeHostedUrl } from './stripe-url';
 
 export type CheckoutKind =
   | { type: 'subscription'; cadence: 'monthly' | 'annual' }
-  | { type: 'credits'; packSize: 5 | 10 };
+  | { type: 'credits'; packSize: number };
 
 type PendingLabel = 'monthly' | 'annual' | 'credits' | null;
 
