@@ -302,3 +302,24 @@ def test_user_spend_aggregation_failure_fails_open(configure, monkeypatch):
     budget.reset_breaker_state()
     monkeypatch.setattr(budget, "_ceiling_override", lambda _flag_name: None)
     assert budget._aggregate_user_spend("not-a-uuid") == Decimal("0")
+
+
+def test_credits_tier_has_its_own_ceiling():
+    from decimal import Decimal
+
+    from app.llm.settings import LlmSettings
+
+    s = LlmSettings(llm_budget_credits_usd=Decimal("42"), llm_budget_global_usd=Decimal("1000"))
+    assert s.tier_ceiling("credits") == Decimal("42")
+
+
+def test_credits_flag_overrides_budget_ceiling(monkeypatch):
+    from decimal import Decimal
+
+    from app.llm import budget
+    from app.llm.settings import LlmSettings
+
+    seen = []
+    monkeypatch.setattr(budget, "_ceiling_override", lambda n: (seen.append(n), Decimal("7"))[1])
+    assert budget._tier_ceiling("credits", LlmSettings()) == Decimal("7")
+    assert seen == ["llm_budget_credits_usd"]

@@ -44,6 +44,7 @@ from . import auto_notes, obs
 from .db_sync import SessionFactory
 from .llm import gateway
 from .llm.gateway import LlmBudgetExceeded, LlmError
+from .llm.job_tier import tier_for_analysis
 from .verdict_lib.degraded import (
     run_rule_engine_for_analysis,
     write_degradation_notice,
@@ -93,6 +94,7 @@ def run_triage(analysis_id: str) -> None:
                 return
             raw_final = analysis.final_json
             caller_id = analysis.user_id  # for the metering row
+            tier = tier_for_analysis(s, analysis)  # real billing lane (None → default)
             # cross-lane trace stitch (getattr: test stubs omit the column)
             obs.set_tag("job_id", getattr(analysis, "job_id", None))
             # Phase C2 (tasks_dramatiq.py) runs the rule engine unconditionally
@@ -142,6 +144,7 @@ def run_triage(analysis_id: str) -> None:
             prompt_version=triage_version,
             model=load_triage_model(),  # None → gateway default
             user_id=caller_id,
+            tier=tier,
             correlation_id=analysis_id,
             timeout_s=120,
         )
