@@ -348,9 +348,22 @@ path>/data` before launching the BFF (the BFF reads NO `.env`, per section 7 —
 env var only) and set `STORAGE_LOCAL_ROOT` in the worktree's
 `components/worker/.env` to the same path. Editable Python installs
 (`pip install -e components/shared`, `pip install -e components/analysis`)
-bind to the checkout they were run from — reinstall them from inside the
-worktree before running its worker, or it will import the main checkout's
-package instead.
+bind ONE checkout machine-wide — whichever ran `pip install -e` last. Do NOT
+re-run `pip install -e` from a worktree to "fix" that: it silently rebinds
+every other checkout's (and other sessions') worker to yours. Instead the
+launcher puts the launching checkout's `components/shared` and
+`components/analysis/src` first on `PYTHONPATH` for the worker windows and the
+import pre-flight (PYTHONPATH wins over editable installs), and prints the
+path it used. A worker started by hand needs the same:
+`$env:PYTHONPATH = "<checkout>\components\shared;<checkout>\components\analysis\src"`.
+Symptom of getting it wrong (seen 2026-10-01): the worker imports another
+checkout's `aimusic_shared`, missing that branch's new columns — e.g. every
+LLM call logs "metering write failed" for absent `llm_calls` cache-token
+columns. Check with
+`python -c "import aimusic_shared, audio_analysis; print(aimusic_shared.__file__, audio_analysis.__file__)"`.
+Caveat: the workerdash restart button / watchdog launch workers through
+`worker_ctl.py`, which does not set this PYTHONPATH — restart a worktree's
+worker with the launcher.
 
 ### #3 Half-dead worker: heartbeat fresh, queue not draining
 The dramatiq worker is TWO processes: a master (`python -m dramatiq …`) and a
