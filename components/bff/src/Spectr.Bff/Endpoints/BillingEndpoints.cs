@@ -102,6 +102,16 @@ public static class BillingEndpoints
                 prices.CoachMix, prices.SignupGrant, prices.ProAnalysesMonthly, proCoach)));
     }
 
+    // Stripe stores a failed request's result under its idempotency key and
+    // replays it, so a key that stays constant for an hour turns one transient
+    // failure (e.g. a config error) into an hour-long outage for that user and
+    // pack. One-minute buckets still dedupe a double-submit within seconds
+    // while letting a retry after a failure (or fix) get a fresh key. Smallest
+    // option: no client contract change; double-charge safety is the ledger's
+    // credits_purchase:{eventId} key, not this one.
+    internal static string CheckoutAttemptBucket(TimeProvider clock) =>
+        (clock.GetUtcNow().ToUnixTimeSeconds() / 60).ToString();
+
     // ── POST /checkout/subscription ─────────────────────────────────────────
 
     private static async Task<IResult> PostCheckoutSubscription(
@@ -110,6 +120,7 @@ public static class BillingEndpoints
         AppDbContext db,
         IOptions<StripeOptions> stripeOpts,
         IStripeCheckoutClient stripeClient,
+        TimeProvider clock,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -197,11 +208,13 @@ public static class BillingEndpoints
         }
 
         // review-fix P1 — idempotency key on session creation too. A
-        // user+cadence-stable key means a retry returns the SAME session
-        // URL; the user gets one checkout, not two. Salting with
+        // user+cadence key means a network double-submit returns the SAME
+        // session URL; the user gets one checkout, not two. Salting with
         // `priceId` lets a user start monthly, cancel, then start annual
-        // without colliding.
-        var sessionIdempotencyKey = $"session:{userId:N}:{priceId}";
+        // without colliding. The one-minute bucket (see CheckoutAttemptBucket)
+        // stops Stripe replaying a FAILED attempt's stored result for good.
+        var sessionIdempotencyKey =
+            $"session:{userId:N}:{priceId}:{CheckoutAttemptBucket(clock)}";
         var session = await stripeClient.CreateCheckoutSessionAsync(
             new SessionCreateOptions
             {
@@ -665,6 +678,7 @@ public static class BillingEndpoints
         IOptions<StripeOptions> stripeOpts,
         IOptions<PricingDisplayOptions> display,
         IStripeCheckoutClient stripeClient,
+        TimeProvider clock,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -729,16 +743,13 @@ public static class BillingEndpoints
             }
         }
 
-        // Review-fix P2-C — hourly bucket instead of daily so the user can
-        // buy the same pack size more than once per calendar day. The daily
-        // bucket caused Stripe to return a cached completed session on the
-        // second same-day same-pack call. The ledger partial-unique index
+        // Review-fix P2-C — short time bucket so the user can buy the same
+        // pack size more than once per day. The ledger partial-unique index
         // (idempotency_key = "credits_purchase:{stripeEventId}") is the
-        // canonical financial guard; this key only dedupes network retries
-        // within the same hour window.
-        var hourBucket = DateTimeOffset.UtcNow.ToString("yyyyMMddHH");
+        // canonical financial guard; this key only dedupes network
+        // double-submits (see CheckoutAttemptBucket).
         var sessionIdempotencyKey =
-            $"credits_session:{userId:N}:{body.PackSize}:{hourBucket}";
+            $"credits_session:{userId:N}:{body.PackSize}:{CheckoutAttemptBucket(clock)}";
 
         var session = await stripeClient.CreateCheckoutSessionAsync(
             new SessionCreateOptions

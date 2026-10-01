@@ -67,6 +67,14 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
         }
     }
 
+
+    // Settable clock so a test can cross a checkout idempotency-key bucket.
+    private sealed class MutableClock(DateTimeOffset now) : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = now;
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
     private (WebApplicationFactory<Program> Factory, RecordingStripeClient Stripe)
         BuildWithFakeStripe(bool configured = true)
     {
@@ -236,6 +244,36 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
                 "/api/billing/checkout/subscription",
                 new CreateCheckoutSessionRequest("annual"));
             Assert.NotEqual(monthlyKey, fake.LastSessionIdempotencyKey);
+        }
+        finally { await CleanupUser(factory, userId); }
+    }
+
+    [SkippableFact]
+    public async Task Post_Checkout_Idempotency_Key_Changes_Across_Time_Buckets()
+    {
+        await TestDb.RequireAsync(_factory);
+
+        var (f0, fake) = BuildWithFakeStripe();
+        var clock = new MutableClock(new DateTimeOffset(2026, 10, 1, 12, 0, 5, TimeSpan.Zero));
+        var factory = f0.WithWebHostBuilder(b => b.ConfigureTestServices(services =>
+        {
+            services.RemoveAll(typeof(TimeProvider));
+            services.AddSingleton<TimeProvider>(clock);
+        }));
+        var (client, userId) = await SeedAuthed(factory, "billing-bucket");
+        try
+        {
+            var req = new CreateCheckoutSessionRequest("monthly");
+            await client.PostAsJsonAsync("/api/billing/checkout/subscription", req);
+            var first = fake.LastSessionIdempotencyKey;
+
+            clock.Now = clock.Now.AddSeconds(10);
+            await client.PostAsJsonAsync("/api/billing/checkout/subscription", req);
+            Assert.Equal(first, fake.LastSessionIdempotencyKey);
+
+            clock.Now = clock.Now.AddMinutes(2);
+            await client.PostAsJsonAsync("/api/billing/checkout/subscription", req);
+            Assert.NotEqual(first, fake.LastSessionIdempotencyKey);
         }
         finally { await CleanupUser(factory, userId); }
     }
