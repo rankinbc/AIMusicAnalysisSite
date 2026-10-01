@@ -60,7 +60,7 @@ export const CLOSER_PARTS: LinePart[] = [
   'You can also dig deeper with more AI specialists or talk to me about the mix. ',
   'Let’s go to the ',
   { link: 'Full Report' },
-  ' and get started.',
+  ' and determine how we can improve this mix.',
 ];
 
 export interface NarrationInput {

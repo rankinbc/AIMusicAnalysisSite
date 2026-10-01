@@ -1,18 +1,21 @@
 // The analysis page's live findings list (right column, under the AI
-// specialists): the static analysis' (rule-engine) findings, to read while
-// the run finishes. It re-derives from the verdicts poll, so rows appear as
-// they land, ordered by severity then priority. (Each AI specialist lists its
-// own findings in its coach-chat message instead.) A row is the report's
+// specialists): the static analysis' (rule-engine) findings plus each AI
+// specialist's as it settles, to read while the run finishes. It re-derives
+// from the verdicts poll, so rows appear as they land, ordered by severity
+// then priority (helpers/liveFindings.listFindings). A row is the report's
 // finding card in miniature — severity badge (same `--sev-*` tokens),
-// headline, area — and expands to the explanation. The report's Findings tab
+// headline, source (the area for rule rows; the specialist with its tint and
+// bot head for specialist rows) — and expands to the explanation. The report's Findings tab
 // styles live under `.rdx`, which this portalled page is outside of, so the
 // look is a CSS module here.
 
 import { useMemo, useState } from 'react';
 
 import type { VerdictDto } from '../../api/types';
-import { findingArea, findingDetail, ruleFindings } from './helpers/liveFindings';
+import { SpecialistHead } from './AnalysisCompleteStage';
+import { findingDetail, findingSource, listFindings, type ListFinding } from './helpers/liveFindings';
 import { severityColor, severityLabel } from './helpers/severity';
+import { groupColor } from './helpers/specialists';
 import s from './LiveFindingsList.module.css';
 
 const cx = (...c: Array<string | false | undefined>) => c.filter(Boolean).join(' ');
@@ -22,7 +25,30 @@ function sevTitle(sev: string): string {
   return label.charAt(0).toUpperCase() + label.slice(1).toLowerCase();
 }
 
-function FindingRow({ v }: { v: VerdictDto }) {
+function SourceLabel({ v }: { v: VerdictDto }) {
+  const src = findingSource(v);
+  if (src.kind === 'rules') {
+    return (
+      <span className={s.src} data-testid="lf-source" data-source="rules">
+        {src.label}
+      </span>
+    );
+  }
+  return (
+    <span
+      className={cx(s.src, s.spec)}
+      style={{ color: groupColor(src.group) }}
+      data-testid="lf-source"
+      data-source="specialist"
+    >
+      <SpecialistHead row={src} size={16} />
+      {src.label}
+    </span>
+  );
+}
+
+function FindingRow({ f }: { f: ListFinding }) {
+  const { v, refines } = f;
   const [open, setOpen] = useState(false);
   const detail = findingDetail(v);
   const panelId = `lf-detail-${v.id}`;
@@ -43,9 +69,7 @@ function FindingRow({ v }: { v: VerdictDto }) {
       >
         <span className={s.sev}>{sevTitle(String(v.severity))}</span>
         <span className={s.head}>{v.headline}</span>
-        <span className={s.src} data-testid="lf-source">
-          {findingArea(v)}
-        </span>
+        <SourceLabel v={v} />
         <span className={s.chev} aria-hidden>
           ▾
         </span>
@@ -68,6 +92,11 @@ function FindingRow({ v }: { v: VerdictDto }) {
               {detail.metric && <span className={s.metric}>{detail.metric}</span>}
             </>
           )}
+          {refines && (
+            <p className={s.refines} data-testid="lf-refines">
+              Refines the measured finding “{refines.headline}”.
+            </p>
+          )}
         </div>
       )}
     </li>
@@ -75,7 +104,7 @@ function FindingRow({ v }: { v: VerdictDto }) {
 }
 
 export function LiveFindingsList({ verdicts }: { verdicts: readonly VerdictDto[] | undefined }) {
-  const list = useMemo(() => ruleFindings(verdicts), [verdicts]);
+  const list = useMemo(() => listFindings(verdicts), [verdicts]);
   return (
     <section className={s.wrap} data-testid="lf-list" aria-label="Findings">
       <div className={s.label}>
@@ -89,8 +118,8 @@ export function LiveFindingsList({ verdicts }: { verdicts: readonly VerdictDto[]
         </div>
       ) : (
         <ul className={s.list}>
-          {list.map((v) => (
-            <FindingRow key={v.id} v={v} />
+          {list.map((f) => (
+            <FindingRow key={f.v.id} f={f} />
           ))}
         </ul>
       )}
