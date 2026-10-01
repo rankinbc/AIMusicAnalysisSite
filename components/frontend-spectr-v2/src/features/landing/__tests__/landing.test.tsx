@@ -6,6 +6,7 @@ import type { AuthedUser } from '../../../api/types';
 import { PublicChrome } from '../../../components/PublicChrome';
 import { PricingPlansView } from '../../pricing/PricingPlansView';
 import { COACH_LINE, HERO_FINDING, HERO_FIX } from '../LandingHero';
+import { HERO_LISTEN } from '../hero-content';
 import { describeOp } from '../sample/sample-model';
 import type { VerdictDspOp } from '../../../api/types';
 import { LandingPage } from '../LandingPage';
@@ -137,6 +138,29 @@ describe('Landing hero (two-column redesign + the Coach)', () => {
     // Both faces are server-rendered (no layout jump, crawlers see both).
     for (const step of HERO_FIX.steps) expect(html).toContain(step);
     expect(html).toContain('The fix');
+  });
+});
+
+describe('Landing hero — "Hear it" face (Listen rack + presets)', () => {
+  const html = renderToStaticMarkup(<LandingPage />);
+
+  it('stacks real suggested fixes from the sample report into one preset', () => {
+    expect(HERO_LISTEN.fixes.length).toBeGreaterThanOrEqual(2);
+    for (const f of HERO_LISTEN.fixes) {
+      const match = SAMPLE_FINDINGS.find((x) => x.verdict.headline === f.headline);
+      expect(match, f.headline).toBeDefined();
+      const fix = match?.verdict.fix as { dsp_chain: VerdictDspOp[]; ableton_hint?: { device?: string } } | null;
+      expect(fix?.dsp_chain.length).toBeGreaterThan(0);
+      expect(fix?.ableton_hint?.device).toBe(f.device);
+    }
+  });
+
+  it('renders the third tab and its copy server-side', () => {
+    expect(html).toContain('Hear it');
+    expect(html).toContain('Listen rack');
+    expect(html).toContain('them into a preset, and A/B it');
+    expect(html).toContain(HERO_LISTEN.preset);
+    expect((html.match(/role="tab"/g) ?? []).length).toBe(3);
   });
 });
 

@@ -39,3 +39,18 @@ export const HERO_FIX: {
   outcome:
     'Sub-bass becomes felt rather than dominating, mix gains 3-4 dB headroom, low end translates to small speakers.',
 };
+
+/** The "Hear it" face: three of the sample report's suggested fixes, stacked
+ *  into one Listen-rack preset. Headlines + devices are the fixture's verbatim
+ *  (asserted in landing.test.tsx); `does` is a short gloss of each dsp_chain. */
+export const HERO_LISTEN: {
+  preset: string;
+  fixes: readonly { headline: string; device: string; does: string }[];
+} = {
+  preset: 'Low end + mud + width',
+  fixes: [
+    { headline: 'Excessive sub-bass energy overwhelming the mix', device: 'EQ Eight', does: 'HP 30 Hz · −3 dB @ 40 Hz' },
+    { headline: 'Low-mid mud zone congestion (250-500Hz)', device: 'EQ Eight', does: '−3 dB @ 300 Hz · −2 dB @ 400 Hz' },
+    { headline: 'Mix is too narrow — sounds flat and unprofessional', device: 'Utility', does: 'Width 130%' },
+  ],
+};

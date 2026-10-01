@@ -24,7 +24,7 @@
 .tabs {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
 .tab {
@@ -39,6 +39,7 @@
   font: inherit;
   font-size: 11.5px;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
   transition: color 300ms ease, background 300ms ease, border-color 300ms ease;
 }
@@ -60,6 +61,19 @@
   color: var(--cyan);
   border-color: color-mix(in srgb, var(--cyan) 45%, transparent);
   background: color-mix(in srgb, var(--cyan) 10%, transparent);
+}
+
+.tab[data-kind='listen'][aria-selected='true'] {
+  color: var(--violet);
+  border-color: color-mix(in srgb, var(--violet) 45%, transparent);
+  background: color-mix(in srgb, var(--violet) 10%, transparent);
+}
+
+.card[data-face='listen'] {
+  border-color: color-mix(in srgb, var(--violet) 45%, transparent);
+  box-shadow:
+    0 24px 60px -24px rgba(0, 0, 0, 0.9),
+    0 0 32px -8px color-mix(in srgb, var(--violet) 35%, transparent);
 }
 
 .tab[aria-selected='true'] .tabDot {
@@ -199,7 +213,7 @@
   width: 100%;
   transform: scaleX(0);
   transform-origin: left center;
-  background: linear-gradient(90deg, var(--sev-moderate), var(--cyan));
+  background: linear-gradient(90deg, var(--sev-moderate), var(--cyan), var(--violet));
 }
 
 /* ── motion ───────────────────────────────────────────────────────────── */
@@ -251,6 +265,7 @@
   }
   .card[data-face='fix']::after { animation: sweepA 900ms ease-out; }
   .card[data-face='finding']::after { animation: sweepB 900ms ease-out; }
+  .card[data-face='listen']::after { animation: sweepA2 900ms ease-out; }
 
   .bar[data-running='true'] {
     animation: fill 4500ms linear both;
@@ -262,8 +277,12 @@
   to { opacity: 1; transform: none; }
 }
 
-/* Two identical keyframes so switching faces restarts the sweep. */
+/* Identical keyframes per face so switching faces restarts the sweep. */
 @keyframes sweepA {
+  from { transform: translateX(-120%); }
+  to { transform: translateX(120%); }
+}
+@keyframes sweepA2 {
   from { transform: translateX(-120%); }
   to { transform: translateX(120%); }
 }

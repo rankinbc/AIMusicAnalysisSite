@@ -1,22 +1,31 @@
-/* The hero's product hint: one real finding from the sample report, which
- * alternates with the fix SPECTR suggested for it — the "it doesn't just tell
- * you what's wrong, it helps you fix it" pitch in one card. Both faces are
- * always in the DOM (crawlers, tests, no layout jump); the inactive one is
- * aria-hidden. Auto-advances every CYCLE_MS, pauses on hover/focus, and never
- * auto-advances under prefers-reduced-motion (the tabs still switch it). */
-import { useEffect, useState } from 'react';
+/* The hero's product hint: one real finding from the sample report → the fix
+ * SPECTR suggested for it → hearing fixes on your own track in the Listen
+ * rack — the "it doesn't just tell you what's wrong, it helps you fix it"
+ * pitch in one card. All faces are always in the DOM (crawlers, tests, no
+ * layout jump); inactive ones are aria-hidden. Auto-advances per face
+ * (CYCLE_MS), pauses on hover/focus, and never auto-advances under
+ * prefers-reduced-motion (the tabs still switch it). */
+import { Fragment, useEffect, useState } from 'react';
 
 import { EqDevice } from './EqDevice';
+import { HeroListenFace } from './HeroListenFace';
 import { HERO_FINDING, HERO_FIX } from './hero-content';
 import s from './HeroFindingCard.module.css';
 
-const CYCLE_MS = 4500;
+// The Hear-it face runs its A/B loop twice before moving on.
+const CYCLE_MS = { finding: 4500, fix: 4500, listen: 5200 } as const;
+type Face = keyof typeof CYCLE_MS;
+const NEXT: Record<Face, Face> = { finding: 'fix', fix: 'listen', listen: 'finding' };
+const TABS: { face: Face; label: string }[] = [
+  { face: 'finding', label: 'Finding' },
+  { face: 'fix', label: 'The fix' },
+  { face: 'listen', label: 'Hear it' },
+];
 
 // Evidence bar scale (dB): wide enough to show both rows' value and target.
 const EV_MIN = -36;
 const EV_MAX = -12;
 const evPct = (db: number) => ((Math.min(EV_MAX, Math.max(EV_MIN, db)) - EV_MIN) / (EV_MAX - EV_MIN)) * 100;
-type Face = 'finding' | 'fix';
 
 export function HeroFindingCard({ className }: { className?: string }) {
   const [face, setFace] = useState<Face>('finding');
@@ -30,7 +39,7 @@ export function HeroFindingCard({ className }: { className?: string }) {
 
   useEffect(() => {
     if (!autoplay || paused) return;
-    const t = window.setTimeout(() => setFace((f) => (f === 'finding' ? 'fix' : 'finding')), CYCLE_MS);
+    const t = window.setTimeout(() => setFace((f) => NEXT[f]), CYCLE_MS[face]);
     return () => window.clearTimeout(t);
   }, [face, autoplay, paused]);
 
@@ -41,41 +50,36 @@ export function HeroFindingCard({ className }: { className?: string }) {
       className={`${className ?? ''} ${s.card}`}
       data-face={face}
       role="group"
-      aria-label="A finding from the sample report, and the fix SPECTR suggested"
+      aria-label="A finding from the sample report, the fix SPECTR suggested, and hearing it on your track"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onFocus={() => setPaused(true)}
       onBlur={() => setPaused(false)}
     >
       <div className={s.top}>
-        <div className={s.tabs} role="tablist" aria-label="Finding or fix">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={face === 'finding'}
-            className={s.tab}
-            data-kind="finding"
-            onClick={() => setFace('finding')}
-          >
-            <span className={s.tabDot} aria-hidden="true" />
-            Finding
-          </button>
-          <span className={s.arrow} aria-hidden="true">
-            →
-          </span>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={face === 'fix'}
-            className={s.tab}
-            data-kind="fix"
-            onClick={() => setFace('fix')}
-          >
-            <span className={s.tabDot} aria-hidden="true" />
-            The fix
-          </button>
+        <div className={s.tabs} role="tablist" aria-label="Finding, fix, or hear it">
+          {TABS.map((tab, i) => (
+            <Fragment key={tab.face}>
+              {i > 0 && (
+                <span className={s.arrow} aria-hidden="true">
+                  →
+                </span>
+              )}
+              <button
+                type="button"
+                role="tab"
+                aria-selected={face === tab.face}
+                className={s.tab}
+                data-kind={tab.face}
+                onClick={() => setFace(tab.face)}
+              >
+                <span className={s.tabDot} aria-hidden="true" />
+                {tab.label}
+              </button>
+            </Fragment>
+          ))}
         </div>
-        <span className={s.src}>from the sample report</span>
+        <span className={s.src}>sample report</span>
       </div>
 
       <div className={s.faces}>
@@ -120,10 +124,18 @@ export function HeroFindingCard({ className }: { className?: string }) {
             <span className={s.outcomeLabel}>Expected result</span> {HERO_FIX.outcome}
           </p>
         </div>
+
+        <div className={s.face} data-active={face === 'listen'} aria-hidden={face !== 'listen'}>
+          <HeroListenFace />
+          <p className={s.outcome}>
+            <span className={s.outcomeLabel}>Hear it first</span> Play suggested fixes on your own track, stack
+            them into a preset, and A/B it before you change your project.
+          </p>
+        </div>
       </div>
 
       <div className={s.progress} aria-hidden="true">
-        <span key={face} className={s.bar} data-running={running} />
+        <span key={face} className={s.bar} data-running={running} style={{ animationDuration: `${CYCLE_MS[face]}ms` }} />
       </div>
     </div>
   );
