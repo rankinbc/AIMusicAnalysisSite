@@ -326,6 +326,35 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
     }
 
     [SkippableFact]
+    public async Task Complete_NamesTheNewSongAfterTheUploadedFile_NotTheStorageKey()
+    {
+        // The storage key always ends in "source.<ext>", so every presigned
+        // upload without a song_id was named "source".
+        await TestDb.RequireAsync(_factory);
+
+        var (client, _, _, f) = NewClient();
+        var (userId, token) = await TestAuth.RegisterAsync(client);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var jobId = Guid.NewGuid();
+        var resp = await client.PostAsJsonAsync("/api/uploads/complete", new
+        {
+            jobId,
+            key = $"audio/{userId}/{jobId}/source.wav",
+            uploadId = "upload-abc",
+            parts = new[] { new { partNumber = 1, eTag = "\"etag1\"" } },
+            fileName = "Late Night Bounce v3.wav",
+        });
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<UploadEndpoints.CompleteResponse>();
+
+        using var scope = f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var song = await db.Songs.AsNoTracking().SingleAsync(s => s.Id == body!.SongId);
+        Assert.Equal("Late Night Bounce v3", song.Name);
+    }
+
+    [SkippableFact]
     public async Task Complete_AnalyzeFalse_NoDispatch()
     {
         await TestDb.RequireAsync(_factory);

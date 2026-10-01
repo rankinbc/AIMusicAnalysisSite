@@ -48,7 +48,10 @@ public static class UploadEndpoints
     public sealed record CompletePartDto(int PartNumber, string ETag);
     public sealed record CompleteRequest(
         Guid JobId, string Key, string UploadId, List<CompletePartDto> Parts,
-        string? SongId, string? GenreHint, bool? Analyze);
+        string? SongId, string? GenreHint, bool? Analyze,
+        // The user's original file name — names a NEW song. Optional for
+        // older clients; the storage key ("…/source.wav") is the fallback.
+        string? FileName = null);
     public sealed record CompleteResponse(Guid SongId, Guid VersionId, Guid? JobId);
 
     public sealed record AbortRequest(string Key, string UploadId);
@@ -233,7 +236,8 @@ public static class UploadEndpoints
             }
 
             (songGuid, var songErr) = await VersionEndpoints.ResolveOrCreateSongAsync(
-                db, userId, body.SongId, body.GenreHint, Path.GetFileName(body.Key), ct);
+                db, userId, body.SongId, body.GenreHint,
+                string.IsNullOrWhiteSpace(body.FileName) ? Path.GetFileName(body.Key) : Path.GetFileName(body.FileName), ct);
             if (songErr is not null) return songErr;
 
             versionId = await VersionEndpoints.InsertVersionRowAsync(db, songGuid, body.Key, ct);

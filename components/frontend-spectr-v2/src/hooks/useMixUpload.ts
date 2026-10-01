@@ -111,6 +111,8 @@ export function useMixUpload() {
             songId: fields.song_id ?? null,
             genreHint: fields.genre_hint ?? null,
             analyze: fields.analyze ?? null,
+            // Names a new song after the user's file, not the storage key.
+            fileName: file.name,
           },
         });
         setState((s) => ({ ...s, isUploading: false, progress: 1 }));
