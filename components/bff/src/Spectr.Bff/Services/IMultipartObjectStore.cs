@@ -42,6 +42,13 @@ public interface IMultipartObjectStore
     // contentType sets a Content-Type override (attachments were PUT without one,
     // so the stored type is octet-stream — the override keeps players honest).
     string PresignGetUrl(string key, string? downloadName = null, string? contentType = null);
+
+    // Fix wave FW2 (final review I5) — a server-side read of an object's
+    // bytes. Every other member is presign-only (the browser talks to R2
+    // directly); the demo snapshot exporter needs this because a production
+    // mix lives ONLY in R2. The returned stream is self-contained (the caller
+    // disposes it; no SDK response to manage).
+    Task<Stream> OpenReadAsync(string key, CancellationToken ct = default);
 }
 
 public sealed record PresignedPart(int PartNumber, string Url);
@@ -204,6 +211,33 @@ internal sealed class S3ObjectStore : IMultipartObjectStore, IDisposable
         catch (AmazonS3Exception e) when (e.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
             return null;
+        }
+    }
+
+    // Buffers the object into a delete-on-close temp file, then releases the
+    // SDK response (and its pooled HTTP connection) before returning — the
+    // caller gets an ordinary seekable stream with one owner. Only the
+    // admin-only demo exporter calls this, so the temp-disk cost is fine.
+    public async Task<Stream> OpenReadAsync(string key, CancellationToken ct = default)
+    {
+        var tmp = new FileStream(Path.GetTempFileName(), FileMode.Create, FileAccess.ReadWrite,
+            FileShare.None, 81920, FileOptions.DeleteOnClose | FileOptions.Asynchronous);
+        try
+        {
+            using var response = await _client.Value.GetObjectAsync(new GetObjectRequest
+            {
+                BucketName = _opts.Bucket,
+                Key = key,
+            }, ct);
+            await using (var body = response.ResponseStream)
+                await body.CopyToAsync(tmp, ct);
+            tmp.Position = 0;
+            return tmp;
+        }
+        catch
+        {
+            await tmp.DisposeAsync();
+            throw;
         }
     }
 

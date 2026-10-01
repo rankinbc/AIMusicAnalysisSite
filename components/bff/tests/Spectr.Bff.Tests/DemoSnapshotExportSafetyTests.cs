@@ -183,6 +183,14 @@ public sealed class DemoSnapshotExportSafetyTests(WebApplicationFactory<Program>
             var aged = "[{\"keys\":[\"" + audioKeyA + "\"],\"retiredAt\":\""
                 + DateTimeOffset.UtcNow.AddHours(-(24 + 2)).ToString("O") + "\"}]";
             await storage.WriteAsync(manifestKey, new MemoryStream(Encoding.UTF8.GetBytes(aged)), "application/json");
+
+            // FW2 (I4): the account registered while A was live was seeded
+            // FROM A, and a referenced key is (rightly) never retired — see
+            // DemoSnapshotProductionTests. This test is about an UNREFERENCED
+            // expired key, so drop that reference first (as a purge would).
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.SongVersions.Where(v => v.FilePath == audioKeyA)
+                .ExecuteUpdateAsync(u => u.SetProperty(v => v.FilePath, "audio/demo/source.wav"));
         }
 
         // A third export runs the sweep again.

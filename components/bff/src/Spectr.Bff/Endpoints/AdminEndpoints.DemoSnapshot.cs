@@ -49,7 +49,7 @@ public static partial class AdminEndpoints
         new() { WriteIndented = false, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     private static async Task<IResult> PostDemoSnapshot(
-        DemoSnapshotExportRequest req, AppDbContext db, IFileStorage storage,
+        DemoSnapshotExportRequest req, AppDbContext db, IFileStorage storage, IMultipartObjectStore objectStore,
         DemoSnapshotStore snapshotStore, EntitlementService ents, IConfiguration config, HttpContext httpCtx,
         CancellationToken ct)
     {
@@ -138,21 +138,22 @@ public static partial class AdminEndpoints
         // (DirectoryNotFoundException on local disk, since the source
         // directory itself doesn't exist). Checked before any write — same
         // refusal code as the other "not ready to export" guards above.
-        if (!await storage.ExistsAsync(version.FilePath, ct))
+        // FW2 (I5): a production mix lives only in R2 — local first, then R2.
+        if (!await DemoSnapshotSources.ExistsAsync(storage, objectStore, version.FilePath, ct))
             return ErrorEnvelope.Build(409, "snapshot_not_ready",
                 "That version's audio file could not be found in storage — check the upload before exporting.");
 
         try
         {
-            await CopyAsync(storage, version.FilePath, audioKey, AudioContentType(ext), ct);
+            await DemoSnapshotSources.CopyToLocalAsync(storage, objectStore, version.FilePath, audioKey, AudioContentType(ext), ct);
             writtenKeys.Add(audioKey);
 
             string? spectrogramKey = null, waveformKey = null, peaksKey = null;
-            if (await CopyIfPresentAsync(storage, analysis.SpectrogramImagePath, exportDir + "spectrogram.webp", "image/webp", ct))
+            if (await DemoSnapshotSources.CopyToLocalIfPresentAsync(storage, objectStore, analysis.SpectrogramImagePath, exportDir + "spectrogram.webp", "image/webp", ct))
             { spectrogramKey = exportDir + "spectrogram.webp"; writtenKeys.Add(spectrogramKey); }
-            if (await CopyIfPresentAsync(storage, analysis.WaveformImagePath, exportDir + "waveform.webp", "image/webp", ct))
+            if (await DemoSnapshotSources.CopyToLocalIfPresentAsync(storage, objectStore, analysis.WaveformImagePath, exportDir + "waveform.webp", "image/webp", ct))
             { waveformKey = exportDir + "waveform.webp"; writtenKeys.Add(waveformKey); }
-            if (await CopyIfPresentAsync(storage, analysis.WaveformPeaksPath, exportDir + "peaks.json", "application/json", ct))
+            if (await DemoSnapshotSources.CopyToLocalIfPresentAsync(storage, objectStore, analysis.WaveformPeaksPath, exportDir + "peaks.json", "application/json", ct))
             { peaksKey = exportDir + "peaks.json"; writtenKeys.Add(peaksKey); }
 
             var docJson = BuildSnapshotDocument(
@@ -208,7 +209,7 @@ public static partial class AdminEndpoints
             // here is logged and swallowed; it must never turn a successful
             // export into an error response.
             var logger = httpCtx.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Admin");
-            await RetireOldAssetsAsync(storage, ents, logger, dir, snapshotKey, exportDir, previousAssetKeys, ct);
+            await RetireOldAssetsAsync(db, storage, ents, logger, dir, snapshotKey, exportDir, previousAssetKeys, ct);
 
             var freeText = new DemoSnapshotFreeText(
                 song.Name,
@@ -240,11 +241,12 @@ public static partial class AdminEndpoints
 
     // Fix-round-2 item (a) — every hold must pass before a key read from an
     // untrusted OLD snapshot.json is ever deleted.
-    private static bool IsRetireableAssetKey(string key, string dir, string snapshotKey, string exportDir)
+    internal static bool IsRetireableAssetKey(string key, string dir, string snapshotKey, string exportDir)
     {
         if (!DemoSnapshotStore.IsSharedKey(key)) return false;
         if (!key.StartsWith(dir, StringComparison.Ordinal)) return false;
         if (key == snapshotKey) return false;
+        if (key == dir + "retired.json") return false; // FW2: never the retirement manifest itself
         if (key.StartsWith(exportDir, StringComparison.Ordinal)) return false; // never the NEW export's own assets
         return true;
     }
@@ -279,7 +281,7 @@ public static partial class AdminEndpoints
     // of the cutoff math — production callers omit it (defaults to
     // DateTimeOffset.UtcNow).
     private static async Task RetireOldAssetsAsync(
-        IFileStorage storage, EntitlementService ents, ILogger logger,
+        AppDbContext db, IFileStorage storage, EntitlementService ents, ILogger logger,
         string dir, string snapshotKey, string exportDir, List<string> previousAssetKeys,
         CancellationToken ct, DateTimeOffset? now = null)
     {
@@ -305,15 +307,25 @@ public static partial class AdminEndpoints
             }
             var cutoff = resolvedNow - TimeSpan.FromHours(ttlHours + 1);
 
+            // FW2 (I4): a key a row still references (a registered or
+            // converted account seeded from that export — they never expire)
+            // is never deleted; it stays staged with its original retiredAt
+            // so every later export re-checks it. A failed lookup throws to
+            // the catch below: nothing is deleted this round.
+            var expiredKeys = entries.Where(e => e.RetiredAt < cutoff).SelectMany(e => e.Keys).ToList();
+            var stillUsed = await DemoSnapshotAssetRefs.ReferencedAsync(db, expiredKeys, ct);
+
             var remaining = new List<RetiredManifestEntry>();
             foreach (var entry in entries)
             {
                 if (entry.RetiredAt >= cutoff) { remaining.Add(entry); continue; }
-                // Expired — best-effort delete through the same ownership
-                // guard as fix-round-2. The entry is dropped either way
-                // (never retried): a rejected/failed key is logged, not
-                // re-staged.
-                foreach (var key in entry.Keys)
+                var kept = entry.Keys.Where(stillUsed.Contains).ToList();
+                if (kept.Count > 0) remaining.Add(new RetiredManifestEntry { Keys = kept, RetiredAt = entry.RetiredAt });
+                // Expired and unreferenced — best-effort delete through the
+                // same ownership guard as fix-round-2. Such a key is dropped
+                // either way (never retried): a rejected/failed key is
+                // logged, not re-staged.
+                foreach (var key in entry.Keys.Where(k => !stillUsed.Contains(k)))
                 {
                     if (!IsRetireableAssetKey(key, dir, snapshotKey, exportDir))
                     {
@@ -439,22 +451,6 @@ public static partial class AdminEndpoints
         ".mp3" => "audio/mpeg",
         _ => "application/octet-stream",
     };
-
-    private static async Task CopyAsync(
-        IFileStorage storage, string sourceKey, string destKey, string contentType, CancellationToken ct)
-    {
-        await using var stream = await storage.OpenReadAsync(sourceKey, ct);
-        await storage.WriteAsync(destKey, stream, contentType, ct);
-    }
-
-    private static async Task<bool> CopyIfPresentAsync(
-        IFileStorage storage, string? sourceKey, string destKey, string contentType, CancellationToken ct)
-    {
-        if (string.IsNullOrEmpty(sourceKey)) return false;
-        if (!await storage.ExistsAsync(sourceKey, ct)) return false;
-        await CopyAsync(storage, sourceKey, destKey, contentType, ct);
-        return true;
-    }
 
     // §6/§6.1 leak guard: the owner's Guid in both hyphenated ("D") and bare
     // ("N") forms, plus their email, case-insensitive — finalJson or coach
