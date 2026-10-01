@@ -128,10 +128,10 @@ describe('HowItWorksPage (/trust/how-its-built)', () => {
     const ex = buildExamples();
     expect(ex).toHaveLength(4);
     expect(ex.map((e) => e.verdict.headline)).toEqual([
-      'Excessive sub-bass energy overwhelming the mix',
-      'Mix is too narrow — sounds flat and unprofessional',
-      'Air band severely deficient — missing trance shimmer and sparkle',
-      'Sub-30 Hz rumble wasting headroom',
+      'Excessive sub-bass will overwhelm small speakers',
+      'Missing air and sparkle (6-20kHz band very low)',
+      'Master pushed too hot (-8.9 LUFS, peaks over)',
+      'Master output clipping detected — 92 hard-clipped samples',
     ]);
     expect(ex.filter((e) => e.isRule)).toHaveLength(1);
     for (const e of ex) {
@@ -145,9 +145,9 @@ describe('HowItWorksPage (/trust/how-its-built)', () => {
         expect(r.bar.max).toBeGreaterThanOrEqual(Math.max(r.bar.hi, r.bar.value));
       }
     }
-    expect(ex[0].evidence[0]).toMatchObject({ measured: '−18.3 dB', expected: '−30.0 dB … −24.0 dB', out: 'above' });
-    expect(ex[0].steps).toEqual(['High-pass at 30 Hz, 24 dB/oct', 'EQ bell −3 dB at 40 Hz, Q 1']);
-    expect(ex[3].evidence[0]).toMatchObject({ measured: '39%', expected: 'under 35%', out: 'above' });
+    expect(ex[0].evidence[0]).toMatchObject({ measured: '−20.0 dB', expected: '−30.0 dB … −24.0 dB', out: 'above' });
+    expect(ex[0].steps).toEqual(['High-pass at 35 Hz, 24 dB/oct', 'EQ bell −2 dB at 50 Hz, Q 1.2']);
+    expect(ex[2].evidence[0]).toMatchObject({ measured: '−8.9 LUFS', expected: '−17.0 LUFS … −11.0 LUFS', out: 'above' });
     expect(html.match(/data-testid="example-card"/g) ?? []).toHaveLength(4);
   });
 
@@ -158,13 +158,13 @@ describe('HowItWorksPage (/trust/how-its-built)', () => {
   it('never names the demo song or its artist', () => {
     const { container } = render(<HowItWorksPage />);
     for (const text of [html, container.textContent ?? '']) {
-      expect(text).not.toMatch(/Magnetic Fields|Artifact303/i);
+      expect(text).not.toMatch(/Magnetic Fields|Artifact303|Velda|Melodic Mind/i);
     }
   });
 
   it('credits the demo track', () => {
     expect(html).toContain(
-      'Examples from SPECTR’s analysis of the demo track (1:14 excerpt), used only as a demo.',
+      'Examples from SPECTR’s analysis of the demo track (1:20 excerpt), used only as a demo.',
     );
   });
 
@@ -193,10 +193,10 @@ describe('HowItWorksPage (/trust/how-its-built)', () => {
       const plain = section.replace(/&#x27;/g, "'").replace(/’/g, "'");
       expect(plain).toContain(COACH_INTRO.replace(/’/g, "'"));
       expect(section).toContain(DEMO_QUESTION);
-      expect(DEMO_ANSWER).toMatch(/^Widen your supersaws using mid-side EQ/);
+      expect(DEMO_ANSWER).toMatch(/^Sweep a parametric EQ through 200–500 Hz/);
       expect(plain).toContain(DEMO_ANSWER.replace(/’/g, "'"));
       expect(section).toContain('From the demo track');
-      expect(DEMO_EVIDENCE.map((e) => e.label)).toEqual(['Correlation 0.72', 'Width 14%', 'Width consistency 38%']);
+      expect(DEMO_EVIDENCE.map((e) => e.label)).toEqual(['Low-mid 7.9 dB above mid', 'Low-mid −36.4 dB', 'Mid −44.3 dB']);
       for (const e of DEMO_EVIDENCE) expect(section).toContain(e.label);
     });
 

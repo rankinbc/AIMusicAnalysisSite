@@ -23,27 +23,17 @@ interface ExampleSpec {
   theme: string;
   /** Evidence rows to show (metric path → number format), in this order.
    *  Rows without a measured value and an expected range are never shown. */
-  metrics?: Record<string, MetricFmt>;
+  metrics: Record<string, MetricFmt>;
 }
 
-// A varied set: low end, stereo image, tonal balance, and one finding from
-// the deterministic rule engine.
+// A varied set: low end, tonal balance, loudness (from the deterministic rule
+// engine) and clipping. Only rows with a defensible expected range are shown.
 const SPECS: readonly ExampleSpec[] = [
   {
-    specialist: 'low_end',
-    leadMetric: 'phase1.bands.sub_bass',
+    specialist: 'loudness',
+    leadMetric: 'phase1.sub_30_energy',
     theme: 'Low end',
-    metrics: { 'phase1.bands.sub_bass': { unit: ' dB', digits: 1 }, 'phase1.bands.bass': { unit: ' dB', digits: 1 } },
-  },
-  {
-    specialist: 'stereo_phase',
-    leadMetric: 'phase1.stereo_correlation',
-    theme: 'Stereo image',
-    metrics: {
-      'phase1.stereo_width': { unit: '', digits: 2 },
-      'phase1.stereo_correlation': { unit: '', digits: 2 },
-      'phase9.spatial.width_consistency': { unit: '', digits: 0 },
-    },
+    metrics: { 'phase1.bands.sub_bass': { unit: ' dB', digits: 1 } },
   },
   {
     specialist: 'frequency_balance',
@@ -51,14 +41,19 @@ const SPECS: readonly ExampleSpec[] = [
     theme: 'Tonal balance',
     metrics: { 'phase1.bands.air': { unit: ' dB', digits: 1 } },
   },
-  { specialist: 'rule_engine.sub_rumble', leadMetric: 'phase1.sub_30_energy', theme: 'Headroom' },
+  {
+    specialist: 'rule_engine.hot_master',
+    leadMetric: 'phase1.lufs',
+    theme: 'Loudness',
+    metrics: { 'phase1.lufs': { unit: ' LUFS', digits: 1 }, 'phase1.true_peak_db': { unit: ' dBTP', digits: 1 } },
+  },
+  {
+    specialist: 'dynamics',
+    leadMetric: 'phase1.clipping_detected',
+    theme: 'Clipping',
+    metrics: { 'phase1.true_peak_db': { unit: ' dBTP', digits: 1 } },
+  },
 ];
-
-// worker/app/verdict_lib/rule_engine.py sub_rumble: fires when energy below
-// 30 Hz is >= 35% of the 20-200 Hz band (flagged `suspected` — a provisional
-// threshold pending a measured corpus). The rule's evidence row carries the
-// share only in its label ("39% of low band"), so it is parsed from there.
-const SUB_RUMBLE_THRESHOLD_PCT = 35;
 
 export interface EvidenceView {
   label: string;
@@ -127,21 +122,6 @@ function specEvidence(v: VerdictDto, metrics: Record<string, MetricFmt>): Eviden
   return out;
 }
 
-function ruleEvidence(v: VerdictDto): EvidenceView[] {
-  const m = /(\d+(?:\.\d+)?)%/.exec(v.metricLine ?? '');
-  if (!m) return [];
-  const pct = Number(m[1]);
-  return [
-    {
-      label: 'Energy below 30 Hz, as a fraction of the 20–200 Hz band',
-      measured: `${pct}%`,
-      expected: `under ${SUB_RUMBLE_THRESHOLD_PCT}%`,
-      bar: { min: 0, max: 100, lo: 0, hi: SUB_RUMBLE_THRESHOLD_PCT, value: pct },
-      out: outOf(0, SUB_RUMBLE_THRESHOLD_PCT, pct),
-    },
-  ];
-}
-
 function opKey(v: VerdictDto): string | null {
   const op = v.fix?.dsp_chain?.[0];
   if (!op) return null;
@@ -188,7 +168,7 @@ export function buildExamples(all: readonly SampleFinding[] = SAMPLE_FINDINGS): 
       raisedBy: raisedBy(v.specialist),
       isRule,
       priority: v.priorityScore,
-      evidence: spec.metrics ? specEvidence(v, spec.metrics) : ruleEvidence(v),
+      evidence: specEvidence(v, spec.metrics),
       why: v.whyItMatters?.trim() || null,
       target: capitalise(v.fix?.target?.name ?? 'master'),
       steps: (v.fix?.dsp_chain ?? []).map(describeOp),

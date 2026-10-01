@@ -59,42 +59,42 @@ describe('"Take it back to your DAW" (/trust/how-its-built)', () => {
 
   // Values hand-copied from the production Coach Mix snapshot (see daw-chain.ts).
   it('pins the chain to the snapshot values and to the demo data where they overlap', () => {
-    expect(DEMO_CHAIN_RAW).toEqual({ highPassHz: 30, limiterCeilingDb: -1, trimDb: -1.76, measuredLufs: -12.2, crestFactorDb: 10.4 });
-    expect(DEMO_EQ_BANDS).toEqual([{ n: 1, type: 'high_pass', freqHz: 30, slopeDb: 12 }]);
-    // The rumble fix in the demo report is the same 30 Hz high-pass, on EQ Eight.
-    const rumble = SAMPLE_FINDINGS.find((f) => f.verdict.problemId === 'low_end.sub_rumble.0')!;
-    expect(rumble.verdict.fix?.dsp_chain?.[0]).toMatchObject({ type: 'high_pass', params: { frequency_hz: DEMO_CHAIN_RAW.highPassHz } });
+    expect(DEMO_CHAIN_RAW).toEqual({ eqFreqHz: 300, limiterCeilingDb: -1, trimDb: -5.13, measuredLufs: -8.9, crestFactorDb: 10.1 });
+    expect(DEMO_EQ_BANDS).toEqual([{ n: 1, type: 'bell', freqHz: 300, gainDb: -3.96, q: 1 }]);
+    // The mud cut in the demo report is the same −3.96 dB bell at 300 Hz.
+    const mud = SAMPLE_FINDINGS.find((f) => f.verdict.specialist === 'rule_engine.mud_buildup')!;
+    expect(mud.verdict.fix?.dsp_chain?.[0]).toMatchObject({ type: 'peaking_eq', params: { frequency_hz: DEMO_CHAIN_RAW.eqFreqHz } });
+    expect(Math.round(Number(mud.verdict.fix?.dsp_chain?.[0]?.params?.gain_db) * 100) / 100).toBe(-3.96);
     const hintDevices = SAMPLE_FINDINGS.map((f) => (f.verdict.fix?.ableton_hint as { device?: string } | null | undefined)?.device);
-    for (const d of ['EQ Eight', 'Utility', DEMO_DROPPED.device]) expect(hintDevices).toContain(d);
+    for (const d of ['EQ Eight', 'Limiter']) expect(hintDevices).toContain(d);
     // Measured loudness / crest quoted on the cards match the demo report.
     expect(SAMPLE_META.lufs).toBe(DEMO_CHAIN_RAW.measuredLufs);
     expect(SAMPLE_META.crestFactorDb).toBe(DEMO_CHAIN_RAW.crestFactorDb);
-    expect(DEMO_CHAIN.find((d) => d.id === 'trim')!.why).toContain('−12.2 LUFS');
+    expect(DEMO_CHAIN.find((d) => d.id === 'trim')!.why).toContain('−8.9 LUFS');
     expect(Math.round((DEMO_CHAIN_RAW.measuredLufs + DEMO_CHAIN_RAW.trimDb) * 10) / 10).toBe(-14);
   });
 
   it('shows the move the Coach Mix weighed and left out', () => {
     expect(section).toContain('data-device="dropped"');
     expect(section).toContain(DEMO_DROPPED.device);
-    expect(section).toContain('10.4 dB crest factor');
+    expect(section).toContain('10.1 dB crest factor');
   });
 
   it('draws the EQ card with the computed EQ device', () => {
     const { container } = render(<HowItWorksPage />);
     const eq = container.querySelector('[data-testid="daw-plan"] [data-device="eq"]')!;
     expect(eq.querySelector('svg path')).toBeTruthy();
-    expect(eq.textContent).toContain('High-pass');
-    expect(eq.textContent).toContain('12 dB/oct');
+    expect(eq.textContent).toContain('300 Hz');
   });
 
   it('shows an excerpt produced by the real DAW Plan export generator', () => {
     const md = buildPlanExcerpt();
     expect(md.startsWith('# Mixing plan — Demo track')).toBe(true);
     expect(md).toContain('## Moves · by signal chain');
-    expect(md).toContain('1. [ ] **Excessive sub-bass energy overwhelming the mix** (Master)');
-    expect(md).toContain('high_pass: `q=0.70, slope_db=24, frequency_hz=30`');
-    expect(md).toContain('peaking_eq: `q=1, gain_db=-3, frequency_hz=40`');
-    expect(md).toContain('stereo_width: `width_pct=130`');
+    expect(md).toContain('1. [ ] **Excessive sub-bass will overwhelm small speakers** (Master)');
+    expect(md).toContain('high_pass: `q=0.71, slope_db=24, frequency_hz=35`');
+    expect(md).toContain('peaking_eq: `q=1.20, gain_db=-2, frequency_hz=50`');
+    expect(md).toContain('high_shelf: `q=0.70, gain_db=3, frequency_hz=10000`');
     expect(md).not.toContain('Streaming targets');
     const { container } = render(<HowItWorksPage />);
     expect(container.querySelector('[data-testid="daw-plan-excerpt"]')!.textContent).toBe(md);
