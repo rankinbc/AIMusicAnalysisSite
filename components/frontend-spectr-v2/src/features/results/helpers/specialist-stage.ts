@@ -77,7 +77,12 @@ export function deriveSpecialistStage(input: SpecialistStageInput): SpecialistSt
     };
     if (state === 'done') {
       row.findings = verdicts.filter(
-        (v) => v.specialist === entry.name && v.headline !== FAIL_MARKER_HEADLINE,
+        // Rule-engine Problems share the specialist slug — count only the
+        // specialist's own (LLM) verdicts.
+        (v) =>
+          v.specialist === entry.name &&
+          v.source === 'llm_identifier' &&
+          v.headline !== FAIL_MARKER_HEADLINE,
       ).length;
     }
     rows.push(row);

@@ -1,6 +1,5 @@
-// The "AI specialists" stage of the Analysis Complete modal: the coach's
-// narration line (chips per specialist with live state) and the stage's
-// per-specialist rows. Pure presentation over deriveSpecialistStage() — the
+// The "AI specialists" stage of the Analysis Complete modal: the stage's
+// per-specialist rows (the coach's narration lives in AnalysisCompleteCoach). Pure presentation over deriveSpecialistStage() — the
 // runs themselves are dispatched and polled by useSpecialistRuns in ReportView.
 
 import { GROUP_COLORS } from './helpers/analysisModalData';
@@ -21,54 +20,11 @@ function fmtElapsed(ms: number): string {
   return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 }
 
-function RowGlyph({ state }: { state: StageRow['state'] }) {
+export function RowGlyph({ state }: { state: StageRow['state'] }) {
   if (state === 'running') return <span className={s.spin} />;
   if (state === 'done') return <>✓</>;
   if (state === 'failed') return <>!</>;
   return <span className={s.queuedDot} />;
-}
-
-/** Coach narration under his summary — what he's doing with the specialists. */
-export function CoachStageLine({ stage }: { stage: SpecialistStage }) {
-  if (!stage.planReady) {
-    return (
-      <span className={s.chPicking}>
-        <span className={s.spin} aria-hidden />
-        Picking which specialists to consult…
-      </span>
-    );
-  }
-  if (stage.total === 0) {
-    return (
-      <span className={s.chNextLbl}>No specialist deep-dive needed — the full report has the whole picture.</span>
-    );
-  }
-  return (
-    <>
-      <span className={s.chNextLbl}>
-        {stage.complete
-          ? 'My specialists are done — here’s the full picture'
-          : 'I’m consulting with these specialists…'}
-      </span>
-      {stage.rows.map((r) => {
-        const g = GROUP_COLORS[r.group];
-        return (
-          <span
-            key={r.slug}
-            className={cx(s.specChip, s[`chip_${r.state}`])}
-            style={{ color: g.c, borderColor: g.d, background: g.d }}
-            title={r.focus}
-            data-state={r.state}
-          >
-            <span className={cx(s.chipGlyph, s[r.state])} aria-hidden>
-              <RowGlyph state={r.state} />
-            </span>
-            {r.label}
-          </span>
-        );
-      })}
-    </>
-  );
 }
 
 /** Final pipeline stage: one row per specialist, all running side by side. */

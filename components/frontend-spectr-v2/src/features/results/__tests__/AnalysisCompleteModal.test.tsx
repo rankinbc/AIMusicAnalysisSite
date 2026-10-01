@@ -135,7 +135,7 @@ describe('AnalysisCompleteModal', () => {
   describe('AI specialists stage', () => {
     it('before triage: coach is picking, CTA disabled, no stage rows', () => {
       renderModal();
-      expect(screen.getByTestId('acm-coach-next').textContent).toContain(
+      expect(screen.getByTestId('acm-coach-log').textContent).toContain(
         'Picking which specialists to consult…',
       );
       expect(screen.getByTestId('coach-mascot').getAttribute('data-thinking')).toBe('true');
@@ -150,7 +150,7 @@ describe('AnalysisCompleteModal', () => {
       expect(rows.map((r) => r.getAttribute('data-state'))).toEqual(['running', 'running', 'running']);
       expect(within(rows[0]!).getByText('Stereo Phase')).toBeTruthy();
       const next = screen.getByTestId('acm-coach-next');
-      expect(next.textContent).toContain('I’m consulting with these specialists…');
+      expect(screen.getByTestId('acm-coach-log').textContent).toContain('I’m bringing in 3 specialists');
       expect(within(next).getByText('Low End')).toBeTruthy();
       expect(screen.getByTestId('coach-mascot').getAttribute('data-thinking')).toBe('true');
       expect(cta().disabled).toBe(true);
@@ -172,7 +172,7 @@ describe('AnalysisCompleteModal', () => {
       const { props } = renderModal(allSettled);
       expect(cta().disabled).toBe(false);
       expect(cta().textContent).toContain('Open full report');
-      expect(screen.getByTestId('acm-coach-next').textContent).toContain('My specialists are done');
+      expect(screen.getByTestId('acm-coach-log').textContent).toContain('That’s everyone.');
       expect(screen.getByTestId('coach-mascot').getAttribute('data-thinking')).toBe('false');
       expect(screen.getByTestId('acm-ai-block').textContent).toContain('AI specialists complete');
       fireEvent.click(cta());
@@ -219,6 +219,95 @@ describe('AnalysisCompleteModal', () => {
         vi.advanceTimersByTime(7000);
       });
       expect(screen.getByText('Open report now')).toBeTruthy();
+    });
+  });
+
+  describe('narrating coach', () => {
+    const ids = () =>
+      screen.getAllByTestId('acm-coach-line').map((l) => l.getAttribute('data-line-id'));
+    const ruleVerdict = {
+      specialist: 'rule_engine.low_mid',
+      headline: 'Low-mid buildup',
+      severity: 'severe',
+      source: 'rule_engine',
+      priorityScore: 100,
+    } as unknown as VerdictDto;
+
+    it('appends lines in sequence: static → pending → plan → one back → all done', () => {
+      const base: Partial<Props> = { verdicts: [ruleVerdict] };
+      const { rerender, props } = renderModal(base);
+      const rr = (over: Partial<Props>) => rerender(<AnalysisCompleteModal {...props} {...over} />);
+
+      // Static done + triage pending.
+      expect(ids()).toEqual(['static', 'big-one', 'picking']);
+      expect(screen.getByTestId('acm-coach-log').textContent).toContain('−9.1 LUFS');
+      expect(screen.getByTestId('acm-coach-log').textContent).toContain('The big one: Low-mid buildup');
+
+      // Plan arrives: picking is replaced by the plan + per-specialist reasons.
+      rr({ ...allRunning, verdicts: [ruleVerdict] });
+      const all = () => screen.getByTestId('acm-coach-log').textContent ?? '';
+      expect(all()).toContain('I’m bringing in 3 specialists');
+      expect(all()).not.toContain('Picking which specialists');
+
+      // Loudness comes back first — its line appends at the bottom.
+      rr({
+        routingPlan: plan,
+        specialistStatuses: [st('stereo_phase', 'idle'), st('low_end', 'idle'), st('loudness', 'cached')],
+        runningSlugs: new Set(['stereo_phase', 'low_end']),
+        verdicts: [ruleVerdict, verdict('loudness')],
+      });
+      expect(ids().at(-1)).toBe('back:loudness');
+      expect(all()).toContain('Loudness is back: 1 finding');
+
+      // Then Stereo Phase, then Low End fails → all settled.
+      rr({
+        routingPlan: plan,
+        specialistStatuses: [st('stereo_phase', 'cached'), st('low_end', 'idle'), st('loudness', 'cached')],
+        runningSlugs: new Set(['low_end']),
+        verdicts: [ruleVerdict, verdict('loudness'), verdict('stereo_phase')],
+      });
+      rr({
+        routingPlan: plan,
+        specialistStatuses: [st('stereo_phase', 'cached'), st('low_end', 'failed'), st('loudness', 'cached')],
+        runningSlugs: new Set(),
+        verdicts: [ruleVerdict, verdict('loudness'), verdict('stereo_phase')],
+      });
+      expect(ids().slice(-4)).toEqual(['back:loudness', 'back:stereo_phase', 'back:low_end', 'all-done']);
+      expect(all()).toContain('Low End couldn’t finish');
+      // Only the newest line is emphasised.
+      const lines = screen.getAllByTestId('acm-coach-line');
+      expect(lines.filter((l) => /newest/.test(l.className))).toHaveLength(1);
+      expect(lines.at(-1)!.className).toMatch(/newest/);
+    });
+
+    it('caps the visible log and expands the earlier lines on demand', () => {
+      renderModal(allSettled);
+      // static, plan, 3 reasons, 3 back, all-done = 9 lines; 5 visible.
+      expect(screen.getAllByTestId('acm-coach-line')).toHaveLength(5);
+      fireEvent.click(screen.getByText('4 earlier'));
+      expect(screen.getAllByTestId('acm-coach-line')).toHaveLength(9);
+    });
+
+    it('a specialist chip shows its full Triage reason on focus', async () => {
+      // Radix positions the tooltip with floating-ui, which needs ResizeObserver.
+      vi.stubGlobal(
+        'ResizeObserver',
+        class {
+          observe() {}
+          unobserve() {}
+          disconnect() {}
+        },
+      );
+      renderModal(allRunning);
+      const chip = within(screen.getByTestId('acm-coach-next')).getByRole('button', {
+        name: /Low End: why I picked/,
+      });
+      act(() => {
+        chip.focus();
+      });
+      const tips = await screen.findAllByRole('tooltip');
+      expect(tips.some((t) => (t.textContent ?? '').includes('sub buildup'))).toBe(true);
+      vi.unstubAllGlobals();
     });
   });
 

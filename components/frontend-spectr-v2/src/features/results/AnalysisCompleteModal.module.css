@@ -346,7 +346,7 @@
   display: flex;
   align-items: flex-start;
   gap: 14px;
-  padding: 14px 16px;
+  padding: 11px 16px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--violet-line);
   background: linear-gradient(135deg, var(--cyan-dim), var(--violet-dim));
@@ -392,43 +392,120 @@
   color: var(--violet);
   font-weight: 700;
 }
-.chMsg {
-  font-size: 13px;
-  line-height: 1.55;
+/* running log — newest emphasised, older dimmed, fixed max height */
+.chLog {
+  list-style: none;
+  margin: 3px 0 0;
+  padding: 0;
+  max-height: 104px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  scrollbar-width: thin;
+}
+.chLine {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-2);
+  opacity: 0.62;
+  animation: lineIn 0.35s ease-out;
+}
+.chLine.newest {
+  opacity: 1;
   color: var(--text);
-  margin-top: 4px;
-  text-wrap: pretty;
+  font-size: 13px;
+}
+.chLine b {
+  color: var(--text);
+  font-weight: 650;
+}
+.chLine.newest b {
+  color: var(--cyan);
+}
+.chLine i {
+  font-style: italic;
+  color: var(--text-2);
+}
+.chLine.tone_warn b {
+  color: var(--orange);
+}
+.chLine.tone_done.newest {
+  color: var(--cyan);
+}
+.chLine .spin {
+  align-self: center;
+}
+@keyframes lineIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.logMore {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.logMore:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
 }
 .chNext {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  margin-top: 10px;
-}
-.chNextLbl {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-2);
-  margin-right: 4px;
+  margin-top: 6px;
 }
 .specChip {
+  font-family: inherit;
   font-size: 11.5px;
   font-weight: 650;
   padding: 3px 10px;
   border-radius: 999px;
   border: 1px solid var(--border-2);
   white-space: nowrap;
+  cursor: help;
 }
-.chPicking {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--mono);
-  font-size: 11px;
+.specChip[data-state='open'],
+.specChip:hover {
+  filter: brightness(1.2);
+}
+
+/* why-chip tooltip — portalled to <body>, so tokens only (no .root vars) */
+.whyTip {
+  z-index: 1100;
+  max-width: 360px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-2);
+  background: var(--card-2);
   color: var(--text-2);
+  font-family: 'Syne', system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+  box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.7);
+}
+.whyTipHd {
+  display: block;
+  margin-bottom: 4px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--violet);
+}
+.whyTipArrow {
+  fill: var(--card-2);
 }
 
 /* ── Step results ─────────────────────────────────────────────────────── */

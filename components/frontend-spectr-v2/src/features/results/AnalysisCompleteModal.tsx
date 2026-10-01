@@ -23,13 +23,13 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import type { FinalJson, RoutingPlanDto, SpecialistStatus, VerdictDto } from '../../api/types';
-import { Coach } from '../../ui/Coach';
 import { GenreCorrectChip } from './GenreCorrectChip';
 import { CostTag } from '../billing/CostTag';
-import { CoachStageLine, SpecialistStageSection } from './AnalysisCompleteStage';
+import { CoachNarrator } from './AnalysisCompleteCoach';
+import { SpecialistStageSection } from './AnalysisCompleteStage';
+import { narrate } from './helpers/coachNarration';
 import { deriveSpecialistStage } from './helpers/specialist-stage';
 import {
-  coachMessage,
   deriveInputs,
   derivePhaseRows,
   inputsSummary,
@@ -88,19 +88,6 @@ function stepValues(p: PhaseRow): KvPair[] {
     ? pick.map((k) => p.kv.find((x) => x.k === k)).filter((x): x is KvPair => Boolean(x))
     : p.kv.slice(0, KV_MAX);
   return kv.map((x) => ({ ...x, k: KV_SHORT[x.k] ?? x.k }));
-}
-
-// The coach's static-analysis summary: his brief when the pipeline wrote one,
-// otherwise composed from the headline measurements shown below it.
-function staticSummary(fj: FinalJson, rows: PhaseRow[]): string {
-  const hasBrief =
-    Boolean((fj.coach_intro ?? '').trim()) ||
-    (fj.coached_fixes ?? []).some((x) => typeof x === 'string' && x.trim());
-  if (hasBrief) return coachMessage(fj);
-  const ok = rows.filter((r) => (r.status === 'ok' || r.status === 'warn') && !r.pending && r.detail);
-  if (!ok.length) return coachMessage(fj);
-  const parts = ok.slice(0, 3).map((r) => `${r.short.toLowerCase()}: ${r.detail}`);
-  return `From the static pass — ${parts.join('; ')}.`;
 }
 
 export interface RunningState {
@@ -169,6 +156,28 @@ export function AnalysisCompleteModal(props: Props) {
     sequential: props.sequential,
   });
   const sequential = props.sequential ?? false;
+
+  // Arrival order of settled specialists, so the coach's "X is back" lines
+  // append in the order they actually came back.
+  const [settleOrder, setSettleOrder] = useState<string[]>([]);
+  const settledKey = stage.rows
+    .filter((r) => r.state === 'done' || r.state === 'failed')
+    .map((r) => r.slug)
+    .join(',');
+  useEffect(() => {
+    if (!settledKey) return;
+    setSettleOrder((prev) => {
+      const add = settledKey.split(',').filter((slug) => !prev.includes(slug));
+      return add.length ? [...prev, ...add] : prev;
+    });
+  }, [settledKey]);
+  const coachLines = narrate({
+    fj,
+    verdicts: props.verdicts,
+    routingPlan: props.routingPlan,
+    stage,
+    settleOrder,
+  });
 
   // Stage clock + safety valve. `now` only ticks while the stage is live.
   const [mountedAt] = useState(() => Date.now());
@@ -250,22 +259,8 @@ export function AnalysisCompleteModal(props: Props) {
               <RunView running={running!} R={R} C={C} pct={pct} />
             ) : (
               <>
-                {/* Coach: what he knows from the static pass + who he'll consult next */}
-                <div className={s.coachHero} data-testid="acm-coach">
-                  <span className={s.chAv}>
-                    <Coach size={46} thinking={!stage.complete} />
-                  </span>
-                  <div className={s.chTx}>
-                    <div className={s.chName}>
-                      <span>{fj.coach_name || 'Nova'}</span>
-                      <span className={s.chRole}>your AI coach</span>
-                    </div>
-                    <div className={s.chMsg}>{staticSummary(fj, phaseRows)}</div>
-                    <div className={s.chNext} data-testid="acm-coach-next">
-                      <CoachStageLine stage={stage} />
-                    </div>
-                  </div>
-                </div>
+                {/* Coach: a running log of what he knows and what he's doing */}
+                <CoachNarrator name={fj.coach_name || 'Nova'} lines={coachLines} stage={stage} />
 
                 {/* Every step's measured results, readable without clicking */}
                 <div className={s.sectionLabel}>

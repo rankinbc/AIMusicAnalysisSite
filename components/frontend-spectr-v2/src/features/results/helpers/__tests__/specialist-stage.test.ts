@@ -60,6 +60,18 @@ describe('deriveSpecialistStage', () => {
     expect(st.complete).toBe(true);
   });
 
+  it('does not count rule-engine Problems that share the specialist slug as findings', () => {
+    const rule = { specialist: 'low_end', headline: 'Low-end buildup', source: 'rule_engine' } as unknown as VerdictDto;
+    const st = deriveSpecialistStage({
+      routingPlan: plan(['low_end']),
+      specialists: [{ slug: 'low_end', status: 'cached' }],
+      running: new Set(),
+      verdicts: [rule, rule, llm('low_end')],
+      hasStems: false,
+    });
+    expect(st.rows[0]!.findings).toBe(1);
+  });
+
   it('an empty plan is complete immediately', () => {
     const st = deriveSpecialistStage({
       routingPlan: plan([]),
