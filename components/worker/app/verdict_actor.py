@@ -42,7 +42,7 @@ from .verdict_lib.degraded import (
 )
 from .verdict_lib.dsp_normalize import normalize_dsp_op
 from .verdict_lib.flatten_analysis import flatten
-from .verdict_lib.input_grounding import build_specialist_user_message
+from .verdict_lib.input_grounding import build_analysis_context, build_specialist_task
 from .verdict_lib.json_extraction import extract_json_object
 from .verdict_lib.prompt_loader import load_prompt, load_prompt_model
 from .verdict_lib.validator import validate_verdict
@@ -245,7 +245,10 @@ def run_specialist(analysis_id: str, slug: str, user_id: str) -> None:
     # The gateway owns transport retries + model fallback; the two-attempt
     # loop here is only for a malformed-JSON re-prompt (RETRY_SUFFIX), which
     # is distinct from a transport failure.
-    user_msg = build_specialist_user_message(flattened, focus="")
+    # Prompt caching: the analysis rides in a cached system block shared with
+    # triage and the other specialists; the user turn is just the task.
+    analysis_context = build_analysis_context(flattened)
+    user_msg = build_specialist_task(focus="")
     pinned_model = load_prompt_model(slug)  # None → gateway default
     try:
         caller_id: uuid.UUID | None = uuid.UUID(user_id)
@@ -262,6 +265,7 @@ def run_specialist(analysis_id: str, slug: str, user_id: str) -> None:
             result = gateway.complete_sync(
                 system=prompt_body,
                 user=msg,
+                cached_context=analysis_context,
                 purpose="specialist",
                 prompt_slug=slug,
                 prompt_version=prompt_version,

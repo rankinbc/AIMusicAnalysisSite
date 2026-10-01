@@ -634,6 +634,9 @@ def coach_reply(
                 correlation_id=str(cid),
                 timeout_s=120,
                 cancel_check=cancel_check,
+                # Prompt caching: the coach prompt is identical across turns of
+                # a conversation, so follow-ups re-read it at 0.1x.
+                cache_system=True,
             ):
                 if ev.kind == "delta":
                     prose_chunk = splitter.feed(ev.text)

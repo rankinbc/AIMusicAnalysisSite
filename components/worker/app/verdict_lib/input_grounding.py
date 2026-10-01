@@ -203,3 +203,49 @@ def build_triage_user_message(
         f"```json\n{json.dumps(payload, indent=2, default=str)}\n```\n\n"
         "Return only the routing-plan JSON object."
     )
+
+
+# ── Prompt-cached layout (2026-10-01) ───────────────────────────────────────
+# The live actors send the analysis as a shared, cache-controlled system block
+# AHEAD of each prompt's own instructions, and only a short task in the user
+# turn. The cache key is an exact-bytes prefix, so this block must be
+# byte-identical for every call about one analysis (triage, each specialist,
+# identifiers): it depends on the flattened analysis ONLY — never on the
+# specialist, focus, attempt, or rule-engine findings.
+
+def build_analysis_context(analysis: dict[str, Any]) -> str:
+    """The shared, cacheable analysis block (grounding + .als map + JSON)."""
+    return (
+        "=== ANALYSIS UNDER REVIEW (the mix you are working on) ===\n\n"
+        f"{grounding_preamble(analysis)}\n"
+        f"{als_grounding_block(analysis)}"
+        f"```json\n{json.dumps(analysis, indent=2, default=str)}\n```\n\n"
+        "=== YOUR INSTRUCTIONS FOLLOW ==="
+    )
+
+
+def build_specialist_task(focus: str) -> str:
+    """Specialist user turn when the analysis rides in the cached context."""
+    return (
+        "Analyze the mix in the ANALYSIS UNDER REVIEW block. "
+        f"Triage focus: {focus}\n\n"
+        "Return only the verdicts JSON object as specified in your instructions."
+    )
+
+
+def build_triage_task(rule_verdicts: list[Any] | None = None) -> str:
+    """Triage user turn: the rule-engine findings (per-call, so NOT cached)."""
+    rule_summary = [
+        {
+            "specialist": "rule_engine",
+            "category": v.category,
+            "severity": v.severity,
+            "headline": v.headline,
+        }
+        for v in (rule_verdicts or [])
+    ]
+    return (
+        "Triage the mix in the ANALYSIS UNDER REVIEW block.\n\n"
+        f"```json\n{json.dumps({'rule_engine_findings': rule_summary}, indent=2, default=str)}\n```\n\n"
+        "Return only the routing-plan JSON object."
+    )

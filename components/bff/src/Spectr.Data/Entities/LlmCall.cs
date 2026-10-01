@@ -41,6 +41,15 @@ public sealed class LlmCall
     [Column("output_tokens")]
     public int OutputTokens { get; set; }
 
+    // Prompt caching (2026-10-01): InputTokens is the UNCACHED input only.
+    // Cache writes bill at 1.25x the input rate, reads at 0.1x; the worker
+    // prices all three into CostUsd.
+    [Column("cache_creation_input_tokens")]
+    public int CacheCreationInputTokens { get; set; }
+
+    [Column("cache_read_input_tokens")]
+    public int CacheReadInputTokens { get; set; }
+
     [Column("cost_usd", TypeName = "numeric(12,6)")]
     public decimal CostUsd { get; set; }
 

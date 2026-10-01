@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .flatten_analysis import flatten
-from .input_grounding import build_specialist_user_message
+from .input_grounding import build_analysis_context, build_specialist_task
 from .json_extraction import extract_json_object
 from .prompt_loader import load_identifier_prompt, load_identifier_prompt_model
 from .validator import validate_verdict
@@ -163,6 +163,9 @@ def run_llm_identifiers_for_analysis(
         except (ValueError, TypeError, AttributeError):
             caller_id = None
 
+        # Built once: every identifier call on this analysis shares the cached
+        # analysis block (prompt caching), so it must be byte-identical.
+        analysis_context = build_analysis_context(flattened)
         written = 0
         for spec in specs:
             slug = spec.slug
@@ -171,7 +174,7 @@ def run_llm_identifiers_for_analysis(
             except (KeyError, FileNotFoundError) as exc:
                 logger.warning("identifier prompt missing %s: %s", slug, exc)
                 continue
-            user_msg = build_specialist_user_message(flattened, focus="")
+            user_msg = build_specialist_task(focus="")
             pinned = load_identifier_prompt_model(slug)
             # Full LLM-routing record for the run trace (input payload now; the
             # output payload is filled in on each outcome below).
@@ -181,11 +184,13 @@ def run_llm_identifiers_for_analysis(
                     "model": pinned or "(gateway default)",
                     "prompt_slug": slug, "prompt_version": version,
                     "system": body, "user": user_msg,
+                    "cached_context": analysis_context,
                 },
             }
             try:
                 result = gateway.complete_sync(
-                    system=body, user=user_msg, purpose="identifier",
+                    system=body, user=user_msg, cached_context=analysis_context,
+                    purpose="identifier",
                     prompt_slug=slug, prompt_version=version, model=pinned,
                     user_id=caller_id, tier=tier, correlation_id=str(aid),
                     timeout_s=120,

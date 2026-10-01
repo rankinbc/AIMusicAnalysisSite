@@ -1,5 +1,5 @@
 ---
-version: 2.1.0
+version: 2.2.0
 ---
 
 # Mix Triage Router
@@ -98,7 +98,7 @@ phase4.clashes[]:
 
 ## Rule-Engine Findings (already confirmed)
 
-The user message JSON includes a top-level `rule_engine_findings` array —
+Your input includes a `rule_engine_findings` JSON array —
 deterministic findings a separate rule engine already computed and confirmed
 against measured values, each with `specialist: "rule_engine"`, `category`,
 `severity`, and `headline`. These are NOT candidates to re-derive or
@@ -560,7 +560,7 @@ any of those three — they have nothing to operate on.
 ## ALS-aware specialists (route ONLY when an .als project is present)
 
 When an Ableton `.als` project was provided, `phase8.tracks` is a non-empty list
-and the user message contains an authoritative `ABLETON PROJECT MAP` of every track
+and your input contains an authoritative `ABLETON PROJECT MAP` of every track
 name and its devices:
 - Route `device_chain` so the user gets project-specific, track/device-named advice
   (e.g. "On 'TRITON Pad', tame the Auto Filter resonance ~250 Hz") instead of

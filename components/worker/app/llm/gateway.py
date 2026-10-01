@@ -10,7 +10,12 @@ through :func:`complete` / :func:`complete_sync`:
 * retried under an explicit policy with model fallback (AC5/AC6),
 * fakeable (AR41: ``LLM_FAKE=1`` → canned replay, zero spend),
 * budgeted with per-tier monthly ceilings + a global circuit breaker that
-  trip ``LlmBudgetExceeded`` PRE-call, un-metered (story 1.4 / AR8).
+  trip ``LlmBudgetExceeded`` PRE-call, un-metered (story 1.4 / AR8),
+* prompt-cached (2026-10-01): ``cached_context`` is sent as the FIRST system
+  block with a cache breakpoint, so every call about the same analysis
+  (triage, each specialist, identifiers) re-reads it at 0.1x instead of
+  paying full price for the same JSON again. ``cache_system`` adds a
+  breakpoint on the instructions block (coach turns reuse one prompt).
 """
 from __future__ import annotations
 
@@ -26,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 import anthropic
+from anthropic.types import TextBlockParam
 
 from aimusic_shared.verdicts.ulid_helpers import new_llm_call_id
 
@@ -62,6 +68,7 @@ __all__ = [
     "complete",
     "complete_sync",
     "record_llm_call",
+    "system_param",
     "stream_complete_sync",
 ]
 
@@ -102,6 +109,59 @@ class GatewayResult:
     # for success/fake; un-set (``None``) is reserved for budget-exhausted
     # raises (no row written) where ``GatewayResult`` is never returned.
     llm_call_id: str | None = None
+    # Prompt-cache usage. ``input_tokens`` above is the UNCACHED input only.
+    cache_creation_input_tokens: int = 0
+    cache_read_input_tokens: int = 0
+
+
+# ── prompt caching: request shape ───────────────────────────────────────────
+
+def system_param(
+    system: str, cached_context: str | None = None, cache_system: bool = False,
+) -> str | list[TextBlockParam]:
+    """Build the ``system=`` argument.
+
+    Render order is system -> messages and the cache key is an exact-bytes
+    prefix, so the content shared ACROSS calls (the analysis context) must
+    come first and the per-call instructions after it. With neither option
+    the plain string is returned unchanged (byte-identical legacy request).
+    """
+    if not cached_context and not cache_system:
+        return system
+    # "ephemeral" = the 5-min TTL, priced in pricing.py.
+    blocks: list[TextBlockParam] = []
+    if cached_context:
+        blocks.append({
+            "type": "text", "text": cached_context, "cache_control": {"type": "ephemeral"},
+        })
+    instructions: TextBlockParam = {"type": "text", "text": system}
+    if cache_system:
+        instructions["cache_control"] = {"type": "ephemeral"}
+    blocks.append(instructions)
+    return blocks
+
+
+def flat_system(system: str, cached_context: str | None) -> str:
+    """Single-string system for transports without content blocks (the dev
+    CLI path). Same order as :func:`system_param`."""
+    return f"{cached_context}\n\n{system}" if cached_context else system
+
+
+def _usage_int(usage: Any, field: str) -> int:
+    """Token count off an SDK ``usage`` object; anything non-int -> 0 so a
+    missing/odd field can never skip the metering row."""
+    v = getattr(usage, field, 0) if usage is not None else 0
+    return v if isinstance(v, int) and not isinstance(v, bool) else 0
+
+
+def usage_counts(usage: Any) -> tuple[int, int, int, int]:
+    """``(input, output, cache_creation, cache_read)`` from an SDK usage."""
+    return (
+        _usage_int(usage, "input_tokens"),
+        _usage_int(usage, "output_tokens"),
+        _usage_int(usage, "cache_creation_input_tokens"),
+        _usage_int(usage, "cache_read_input_tokens"),
+    )
 
 
 # ── anthropic client (lazy, cached) ─────────────────────────────────────────
@@ -171,6 +231,8 @@ def record_llm_call(
     outcome: str,
     correlation_id: str | None,
     row_id: str | None = None,
+    cache_creation_input_tokens: int = 0,
+    cache_read_input_tokens: int = 0,
 ) -> str:
     """Write one ``llm_calls`` row. Best-effort: a metering failure is logged
     and swallowed — the call already happened, so it must still be observable
@@ -208,6 +270,8 @@ def record_llm_call(
             model=model,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            cache_creation_input_tokens=cache_creation_input_tokens,
+            cache_read_input_tokens=cache_read_input_tokens,
             cost_usd=cost_usd,
             price_table_version=PRICE_TABLE_VERSION,
             latency_ms=latency_ms,
@@ -234,10 +298,11 @@ def _extract_text(message: Any) -> str:
 
 
 async def _call_once(
-    client: anthropic.AsyncAnthropic, *, model: str, system: str, user: str,
+    client: anthropic.AsyncAnthropic, *, model: str,
+    system: str | list[TextBlockParam], user: str,
     max_tokens: int, timeout_s: int,
-) -> tuple[str, int, int]:
-    """One SDK call. Returns ``(text, input_tokens, output_tokens)``.
+) -> tuple[str, tuple[int, int, int, int]]:
+    """One SDK call. Returns ``(text, usage_counts)`` - see :func:`usage_counts`.
     Translates anthropic exceptions into gateway exceptions (retryable vs not).
     """
     try:
@@ -261,7 +326,7 @@ async def _call_once(
         # Any other SDK error (e.g. response-validation) — non-retryable, but
         # still translated so it can never escape the gateway unmetered.
         raise LlmInvocationError(str(e)) from e
-    return _extract_text(msg), msg.usage.input_tokens, msg.usage.output_tokens
+    return _extract_text(msg), usage_counts(msg.usage)
 
 
 # ── public API ──────────────────────────────────────────────────────────────
@@ -279,10 +344,15 @@ async def complete(
     correlation_id: str | None = None,
     max_tokens: int = 16000,  # truncated JSON = a silent failed verdict; billed per token used, not per cap
     timeout_s: int | None = None,
+    cached_context: str | None = None,
+    cache_system: bool = False,
 ) -> GatewayResult:
     """Run one metered LLM call. Records exactly one ``llm_calls`` row on every
     return path (success, fake, error). Raises :class:`LlmInvocationError` on
     retry exhaustion or a non-retryable provider error.
+
+    ``cached_context`` / ``cache_system``: prompt caching - see
+    :func:`system_param`.
     """
     settings = get_llm_settings()
     timeout_s = settings.llm_timeout_s if timeout_s is None else timeout_s
@@ -300,7 +370,7 @@ async def complete(
     if settings.use_claude_cli:
         # DEV-ONLY subscription path — shells out to the local `claude` CLI.
         result = await _cli_result(
-            system=system, user=user, purpose=purpose, prompt_slug=prompt_slug,
+            system=flat_system(system, cached_context), user=user, purpose=purpose, prompt_slug=prompt_slug,
             prompt_version=prompt_version, user_id=user_id, tier=effective_tier,
             correlation_id=correlation_id,
             timeout_s=settings.llm_timeout_s if timeout_s is None else timeout_s,
@@ -325,6 +395,7 @@ async def complete(
     t0 = time.monotonic()
     last_exc: Exception | None = None
     last_model = primary
+    sys_param = system_param(system, cached_context, cache_system)
 
     async with _acquire(g_sem, c_sem, purpose):
         client = _get_client()
@@ -334,8 +405,8 @@ async def complete(
                 give_up = False
                 for retry in range(settings.llm_max_retries + 1):
                     try:
-                        text, in_tok, out_tok = await _call_once(
-                            client, model=attempt_model, system=system,
+                        text, (in_tok, out_tok, cw_tok, cr_tok) = await _call_once(
+                            client, model=attempt_model, system=sys_param,
                             user=user, max_tokens=max_tokens, timeout_s=timeout_s,
                         )
                     except _RETRYABLE as e:
@@ -354,19 +425,23 @@ async def complete(
                         break
                     # success
                     latency_ms = int((time.monotonic() - t0) * 1000)
-                    cost = _safe_cost(attempt_model, in_tok, out_tok)
+                    cost = _safe_cost(attempt_model, in_tok, out_tok, cw_tok, cr_tok)
                     call_id = record_llm_call(
                         user_id=user_id, tier=effective_tier, purpose=purpose,
                         prompt_slug=prompt_slug, prompt_version=prompt_version,
                         model=attempt_model, input_tokens=in_tok,
                         output_tokens=out_tok, cost_usd=cost, latency_ms=latency_ms,
                         outcome="ok", correlation_id=correlation_id,
+                        cache_creation_input_tokens=cw_tok,
+                        cache_read_input_tokens=cr_tok,
                     )
                     _budget.record_outcome(outcome="ok")
                     return GatewayResult(
                         text=text, model=attempt_model, input_tokens=in_tok,
                         output_tokens=out_tok, cost_usd=cost, outcome="ok",
                         latency_ms=latency_ms, llm_call_id=call_id,
+                        cache_creation_input_tokens=cw_tok,
+                        cache_read_input_tokens=cr_tok,
                     )
                 if give_up:
                     break  # non-retryable / unexpected → no fallback attempt
@@ -395,11 +470,17 @@ async def complete(
     raise err from last_exc
 
 
-def _safe_cost(model: str, input_tokens: Any, output_tokens: Any) -> Decimal:
+def _safe_cost(
+    model: str, input_tokens: Any, output_tokens: Any,
+    cache_creation_input_tokens: Any = 0, cache_read_input_tokens: Any = 0,
+) -> Decimal:
     """Cost from the price table, defended against malformed token counts so a
     weird ``usage`` shape can never skip the metering row."""
     try:
-        return compute_cost_usd(model, max(0, int(input_tokens)), max(0, int(output_tokens)))
+        return compute_cost_usd(
+            model, max(0, int(input_tokens)), max(0, int(output_tokens)),
+            max(0, int(cache_creation_input_tokens)), max(0, int(cache_read_input_tokens)),
+        )
     except Exception:  # noqa: BLE001
         logger.warning("cost computation failed for model %r — recording 0", model)
         return Decimal("0")

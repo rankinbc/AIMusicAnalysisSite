@@ -49,7 +49,7 @@ from .verdict_lib.degraded import (
     write_degradation_notice,
 )
 from .verdict_lib.flatten_analysis import flatten
-from .verdict_lib.input_grounding import build_triage_user_message
+from .verdict_lib.input_grounding import build_analysis_context, build_triage_task
 from .verdict_lib.json_extraction import extract_json_object
 from .verdict_lib.prompt_loader import load_triage, load_triage_model
 
@@ -118,6 +118,9 @@ def run_triage(analysis_id: str) -> None:
         return
 
     flattened = flatten(raw_final if isinstance(raw_final, dict) else {})
+    # Same stamp as verdict_actor so the cached analysis context is
+    # byte-identical between triage and every specialist (prompt caching).
+    flattened["track_id"] = str(aid)  # == str(analysis.id), as verdict_actor stamps
 
     # ── C: load prompt ─────────────────────────────────────────────────────
     try:
@@ -127,11 +130,13 @@ def run_triage(analysis_id: str) -> None:
         return
 
     # ── D: LLM call (via the metered gateway) ──────────────────────────────
-    user_msg = build_triage_user_message(flattened, rule_rows)
     try:
         result = gateway.complete_sync(
             system=prompt_body,
-            user=user_msg,
+            user=build_triage_task(rule_rows),
+            # Shared across triage + every specialist on this analysis: the
+            # first call writes the cache, the rest read it at 0.1x.
+            cached_context=build_analysis_context(flattened),
             purpose="triage",
             prompt_slug="triage",
             prompt_version=triage_version,

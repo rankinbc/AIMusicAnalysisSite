@@ -633,6 +633,15 @@ class LlmCall(Base):
     model: Mapped[str] = mapped_column("model", String(60), nullable=False)
     input_tokens: Mapped[int] = mapped_column("input_tokens", Integer, nullable=False, default=0)
     output_tokens: Mapped[int] = mapped_column("output_tokens", Integer, nullable=False, default=0)
+    # Prompt caching (2026-10-01): ``input_tokens`` is the UNCACHED input only;
+    # cache writes (1.25x) and reads (0.1x) are counted here and priced into
+    # ``cost_usd`` by the gateway.
+    cache_creation_input_tokens: Mapped[int] = mapped_column(
+        "cache_creation_input_tokens", Integer, nullable=False, default=0, server_default="0"
+    )
+    cache_read_input_tokens: Mapped[int] = mapped_column(
+        "cache_read_input_tokens", Integer, nullable=False, default=0, server_default="0"
+    )
     cost_usd: Mapped[Any] = mapped_column("cost_usd", Numeric(12, 6), nullable=False, default=0)
     price_table_version: Mapped[Optional[str]] = mapped_column(
         "price_table_version", String(20), nullable=True

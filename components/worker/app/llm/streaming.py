@@ -47,6 +47,7 @@ from decimal import Decimal
 from typing import Any, Callable, Iterator, Literal
 
 import anthropic
+from anthropic.types import TextBlockParam
 
 from aimusic_shared.verdicts.ulid_helpers import new_llm_call_id
 
@@ -104,6 +105,8 @@ class GatewayResultLike:
     outcome: str
     latency_ms: int
     llm_call_id: str | None = None
+    cache_creation_input_tokens: int = 0
+    cache_read_input_tokens: int = 0
 
 
 # ── public API ──────────────────────────────────────────────────────────────
@@ -122,6 +125,8 @@ def stream_complete_sync(
     max_tokens: int = 16000,  # truncated JSON = a silent failed verdict; billed per token used, not per cap
     timeout_s: int | None = None,
     cancel_check: Callable[[], bool] | None = None,
+    cached_context: str | None = None,
+    cache_system: bool = False,
 ) -> Iterator[GatewayStreamEvent]:
     """Synchronous streaming wrapper. Yields ``delta`` events while the
     model writes, then one terminal ``final`` event carrying the
@@ -144,7 +149,12 @@ def stream_complete_sync(
     The ``cancel_check`` closure is polled between consumer yields. When
     it returns ``True`` the producer's stream is closed cleanly and the
     iterator terminates with a ``final`` event.
+
+    ``cached_context`` / ``cache_system``: prompt caching - same semantics
+    as :func:`gateway.complete` (see ``gateway.system_param``).
     """
+    from .gateway import flat_system, system_param  # noqa: PLC0415 — late import to avoid cycle
+
     settings = get_llm_settings()
     timeout_s = settings.llm_timeout_s if timeout_s is None else timeout_s
     from . import lane as _lane  # noqa: PLC0415 — deliberate lazy, next to the budget import
@@ -162,7 +172,7 @@ def stream_complete_sync(
         # behave normally. Not for production (see settings.use_claude_cli).
         try:
             yield from _cli_stream(
-                system=system, user=user, purpose=purpose,
+                system=flat_system(system, cached_context), user=user, purpose=purpose,
                 prompt_slug=prompt_slug, prompt_version=prompt_version,
                 user_id=user_id, tier=effective_tier,
                 correlation_id=correlation_id, timeout_s=timeout_s,
@@ -200,7 +210,8 @@ def stream_complete_sync(
         give_up = False
         for retry in range(settings.llm_max_retries + 1):
             gen = _stream_attempt(
-                system=system, user=user, model=attempt_model,
+                system=system_param(system, cached_context, cache_system),
+                user=user, model=attempt_model,
                 purpose=purpose, prompt_slug=prompt_slug,
                 prompt_version=prompt_version, user_id=user_id,
                 tier=effective_tier, correlation_id=correlation_id,
@@ -378,7 +389,7 @@ _DELTA, _FINAL, _ERROR, _DONE = "delta", "final", "error", "done"
 
 
 def _stream_attempt(
-    *, system: str, user: str, model: str,
+    *, system: str | list[TextBlockParam], user: str, model: str,
     purpose: str, prompt_slug: str | None, prompt_version: str | None,
     user_id: Any | None, tier: str | None, correlation_id: str | None,
     max_tokens: int, timeout_s: int,
@@ -405,7 +416,7 @@ def _stream_attempt(
         partial-persist via the standard ``saw_sentinel=False`` branch.
     """
     from .gateway import (  # noqa: PLC0415 — late import to avoid cycle
-        _acquire, _safe_cost, record_llm_call,
+        _acquire, _safe_cost, record_llm_call, usage_counts,
     )
 
     # Pre-allocate the metering row id so the trailing ``final`` event can
@@ -451,9 +462,7 @@ def _stream_attempt(
                         else:
                             snapshot = await stream.get_final_message()
                         usage = getattr(snapshot, "usage", None) if snapshot else None
-                        in_tok = getattr(usage, "input_tokens", 0) or 0
-                        out_tok = getattr(usage, "output_tokens", 0) or 0
-                        out_q.put((_FINAL, (in_tok, out_tok)))
+                        out_q.put((_FINAL, usage_counts(usage)))
                 except (anthropic.APITimeoutError, anthropic.APIConnectionError) as e:
                     out_q.put((_ERROR, LlmTimeoutError(str(e))))
                 except anthropic.RateLimitError as e:
@@ -486,6 +495,8 @@ def _stream_attempt(
     accumulated: list[str] = []
     in_tok = 0
     out_tok = 0
+    cw_tok = 0
+    cr_tok = 0
     err: Exception | None = None
     saw_any_delta = False
 
@@ -499,7 +510,7 @@ def _stream_attempt(
                 if cancel_check is not None and cancel_check():
                     cancel_event.set()
             elif kind == _FINAL:
-                in_tok, out_tok = payload
+                in_tok, out_tok, cw_tok, cr_tok = payload
             elif kind == _ERROR:
                 err = payload
             elif kind == _DONE:
@@ -525,7 +536,7 @@ def _stream_attempt(
     # final event's ``outcome="error"`` instead of swallowing silently —
     # the breaker counts it (P3 wrapper inspects the trailing event) and
     # the error is logged.
-    cost = _safe_cost(model, in_tok, out_tok)
+    cost = _safe_cost(model, in_tok, out_tok, cw_tok, cr_tok)
     outcome = "error" if err is not None else "ok"
     if err is not None:
         logger.warning(
@@ -538,6 +549,7 @@ def _stream_attempt(
         model=model, input_tokens=in_tok, output_tokens=out_tok,
         cost_usd=cost, latency_ms=latency_ms,
         outcome=outcome, correlation_id=correlation_id, row_id=call_id,
+        cache_creation_input_tokens=cw_tok, cache_read_input_tokens=cr_tok,
     )
 
     yield GatewayStreamEvent(
@@ -547,6 +559,7 @@ def _stream_attempt(
             input_tokens=in_tok, output_tokens=out_tok,
             cost_usd=cost, outcome=outcome, latency_ms=latency_ms,
             llm_call_id=call_id,
+            cache_creation_input_tokens=cw_tok, cache_read_input_tokens=cr_tok,
         ),
     )
 
