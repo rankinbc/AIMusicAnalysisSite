@@ -1,0 +1,209 @@
+/* The analysis page's live findings list. A compact port of the report's
+   finding card (`.rdx .finding` / `.sev-badge` in redesign-v3-tabs.css), which
+   is scoped to `.rdx` — this page is portalled outside it. Tokens only; each
+   row's severity colour comes in as `--sev` (severityColor). */
+
+.wrap {
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  /* Fill what the steps + specialists leave; never shrink below a readable
+     window. The list scrolls inside it, so the dock never moves. */
+  flex: 1 1 0;
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+}
+
+.label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 8px;
+  flex-shrink: 0;
+}
+.line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.count {
+  letter-spacing: 0.06em;
+}
+
+.empty {
+  flex: 1 1 auto;
+  display: grid;
+  place-items: center;
+  min-height: 120px;
+  padding: 16px;
+  border: 1px dashed var(--border-2);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 0 4px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--sev);
+  border-radius: var(--radius-sm);
+  background: var(--card-2);
+}
+.row.open {
+  border-color: var(--border-2);
+  border-left-color: var(--sev);
+}
+
+.rowHd {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-areas: 'sev head src chev';
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rowHd:hover .head {
+  color: var(--text);
+}
+.rowHd:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
+}
+
+.sev {
+  grid-area: sev;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border-radius: 5px;
+  color: var(--sev);
+  background: color-mix(in srgb, var(--sev) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sev) 32%, transparent);
+  min-width: 64px;
+  text-align: center;
+}
+
+.head {
+  grid-area: head;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  line-height: 1.35;
+}
+
+.src {
+  grid-area: src;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.chev {
+  grid-area: chev;
+  font-size: 10px;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+.row.open .chev {
+  transform: rotate(180deg);
+}
+
+.detail {
+  padding: 0 12px 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.detail p {
+  margin: 0;
+  text-wrap: pretty;
+}
+.why {
+  color: var(--muted);
+}
+.whyK {
+  display: block;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.metric {
+  align-self: flex-start;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-2);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-2);
+  background: var(--bg);
+}
+.none {
+  color: var(--muted);
+}
+
+/* Narrow: the work column stops scrolling on its own (the body scrolls), so
+   the list gets a fixed window instead of filling the column. */
+@container (max-width: 760px) {
+  .wrap {
+    flex: 0 0 auto;
+    min-height: 0;
+  }
+  .list {
+    max-height: 360px;
+  }
+}
+@container (max-width: 620px) {
+  .rowHd {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'sev src chev'
+      'head head head';
+    row-gap: 6px;
+  }
+  .src {
+    justify-self: start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chev {
+    transition: none;
+  }
+}

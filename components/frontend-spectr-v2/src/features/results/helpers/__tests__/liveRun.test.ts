@@ -106,6 +106,11 @@ describe('small helpers', () => {
     expect(fmtSeconds(3)).toBe('3.0s');
     expect(fmtSeconds(65)).toBe('1m 05s');
     expect(fmtSeconds(undefined)).toBe('');
+    // Sub-50 ms phases (stored rounded to 0.01 s) read "<0.1s", never "0.0s".
+    expect(fmtSeconds(0)).toBe('<0.1s');
+    expect(fmtSeconds(0.03)).toBe('<0.1s');
+    expect(fmtSeconds(0.06)).toBe('0.1s');
+    expect(fmtSeconds(Number.NaN)).toBe('');
     expect(fmtElapsed(12_900)).toBe('12s');
     expect(fmtElapsed(125_000)).toBe('2m 05s');
   });

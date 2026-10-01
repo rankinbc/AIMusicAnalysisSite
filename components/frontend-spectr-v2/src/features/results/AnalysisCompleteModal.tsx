@@ -7,7 +7,8 @@
 //   the left (he narrates every result as it lands, then consults the AI
 //   specialists, who report back in their own voice), the pipeline steps on
 //   the right (waiting → running → ✓ with values + duration), then the AI
-//   specialists stage → PINNED dock (status + the primary CTA).
+//   specialists stage and the live findings list → PINNED dock (status + the
+//   primary CTA, greyed until the report is ready).
 // The chat log is append-only and kept per job (useLiveNarration), so the
 // remount at the hand-off continues the same conversation.
 //
@@ -31,6 +32,7 @@ import { GenreCorrectChip } from './GenreCorrectChip';
 import { CoachChatFeed } from './AnalysisCompleteCoach';
 import { AnalysisDock } from './AnalysisDock';
 import { AnalysisStepList } from './AnalysisStepList';
+import { LiveFindingsList } from './LiveFindingsList';
 import { SpecialistStageSection } from './AnalysisCompleteStage';
 import { narrate, type ChatMessage } from './helpers/coachNarration';
 import { waitContext } from './helpers/coachWaitLines';
@@ -79,7 +81,6 @@ interface Props {
   dockExtra?: ReactNode;
   onClose: () => void;
   onViewReport: () => void;
-  onReanalyze?: (() => void) | undefined;
 }
 
 /** No routing plan after this long → offer "Open report now". */
@@ -240,6 +241,7 @@ export function AnalysisCompleteModal(props: Props) {
                 initialIds={chat.initialIds}
                 stage={stage}
                 busy={busy}
+                onOpenReport={props.onViewReport}
               />
             </div>
             <div className={s.workCol}>
@@ -254,6 +256,7 @@ export function AnalysisCompleteModal(props: Props) {
               {stage.planReady && stage.total > 0 && (
                 <SpecialistStageSection stage={stage} elapsedMs={elapsedMs} sequential={sequential} />
               )}
+              <LiveFindingsList verdicts={props.verdicts} />
             </div>
           </div>
 
@@ -266,7 +269,6 @@ export function AnalysisCompleteModal(props: Props) {
             extra={complete ? undefined : props.dockExtra}
             onClose={onClose}
             onViewReport={props.onViewReport}
-            onReanalyze={props.onReanalyze}
           />
         </div>
       </div>

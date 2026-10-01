@@ -77,7 +77,6 @@ function renderModal(over: Partial<Props> = {}) {
     songName: 'Neon Meridian',
     onClose: vi.fn(),
     onViewReport: vi.fn(),
-    onReanalyze: vi.fn(),
     ...over,
   };
   const utils = render(<AnalysisCompleteModal {...props} />);
@@ -170,7 +169,8 @@ describe('AnalysisCompleteModal (complete)', () => {
       expect(headerMascot().getAttribute('data-thinking')).toBe('true');
       expect(screen.queryByTestId('acm-specialists')).toBeNull();
       expect(cta().disabled).toBe(true);
-      expect(cta().textContent).toContain('Picking specialists');
+      expect(cta().getAttribute('data-ready')).toBe('false');
+      expect(cta().textContent).toContain('Open full report');
     });
 
     it('all running: one row each with its own tinted robot head; coach brings them in', () => {
@@ -185,7 +185,7 @@ describe('AnalysisCompleteModal (complete)', () => {
       // Chips carry the bots too.
       expect(within(screen.getByTestId('acm-coach-next')).getAllByTestId('spec-bot')).toHaveLength(3);
       expect(cta().disabled).toBe(true);
-      expect(cta().textContent).toContain('Consulting specialists… (0/3)');
+      expect(screen.getByTestId('acm-ai-block').textContent).toContain('AI specialists 0/3');
       expect(screen.getByTestId('acm-ai-block').textContent).toContain('running in parallel');
     });
 
@@ -196,14 +196,15 @@ describe('AnalysisCompleteModal (complete)', () => {
       expect(rows[0]!.textContent).toContain('3 findings');
       expect(rows[1]!.textContent).toContain('didn’t finish');
       expect(cta().disabled).toBe(true);
-      expect(cta().textContent).toContain('(2/3)');
+      expect(screen.getByTestId('acm-ai-block').textContent).toContain('AI specialists 2/3');
     });
 
     it('all settled (one failed): CTA enabled, coach done, mascot calm', () => {
       const { props } = renderModal(allSettled);
       expect(cta().disabled).toBe(false);
+      expect(cta().getAttribute('data-ready')).toBe('true');
       expect(cta().textContent).toContain('Open full report');
-      expect(chatText()).toContain('That’s everyone.');
+      expect(chatText()).toContain('Let’s go to the Full Report and get started.');
       expect(headerMascot().getAttribute('data-thinking')).toBe('false');
       expect(screen.getByTestId('acm-ai-block').textContent).toContain('AI specialists complete');
       fireEvent.click(cta());
@@ -295,7 +296,8 @@ describe('AnalysisCompleteModal (complete)', () => {
       expect(last.getAttribute('data-speaker')).toBe('loudness');
       expect(within(last).getByTestId('spec-bot').getAttribute('data-label')).toBe('Loudness');
       expect(last.textContent).toContain('Loudness');
-      expect(last.textContent).toContain('I found 1 issue. Top: “Too quiet for club play”');
+      expect(last.textContent).toContain('I found 1 issue:');
+      expect(within(last).getByTestId('acm-chat-items').textContent).toContain('Too quiet for club play');
 
       // Then Stereo Phase, then Low End fails → all settled.
       rr({
@@ -344,9 +346,11 @@ describe('AnalysisCompleteModal (complete)', () => {
     });
   });
 
-  it('Re-analyze stays available', () => {
-    const { props } = renderModal(allRunning);
-    fireEvent.click(screen.getByText(/Re-analyze/));
-    expect(props.onReanalyze).toHaveBeenCalledTimes(1);
+  it('has no Re-analyze button, ready or not', () => {
+    renderModal(allRunning);
+    expect(screen.queryByText(/Re-analyze/)).toBeNull();
+    cleanup();
+    renderModal(allSettled);
+    expect(screen.queryByText(/Re-analyze/)).toBeNull();
   });
 });

@@ -110,7 +110,7 @@ describe('live analysis page', () => {
     expect(screen.getByTestId('acm-coach-log').textContent).toContain('Let’s take a look at your mix.');
     expect(screen.getByTestId('acm-chat-typing')).toBeTruthy();
     expect(cta().disabled).toBe(true);
-    expect(cta().textContent).toContain('Analyzing…');
+    expect(cta().getAttribute('data-ready')).toBe('false');
     fireEvent.click(screen.getByText('Run in background'));
     expect(onLeave).toHaveBeenCalledTimes(1);
   });

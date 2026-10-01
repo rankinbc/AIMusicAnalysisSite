@@ -173,6 +173,13 @@
   min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
+  /* Column so the findings list (last) can fill what's left and scroll on
+     its own. */
+  display: flex;
+  flex-direction: column;
+}
+.workCol > * {
+  flex-shrink: 0;
 }
 .workCol > .sectionLabel:first-child {
   margin-top: 0;
@@ -647,20 +654,19 @@
   color: var(--muted);
 }
 
-/* gated CTA + safety valve */
+/* gated CTA + safety valve: greyed and inert until the report is ready */
 .btn:disabled,
 .btn:disabled:hover {
-  cursor: progress;
+  cursor: not-allowed;
   filter: none;
 }
-.btn.primary:disabled {
-  background: rgba(0, 229, 176, 0.12);
-  color: var(--cyan);
-  box-shadow: 0 0 0 1px rgba(0, 229, 176, 0.3);
-}
-.btn .spin {
-  width: 13px;
-  height: 13px;
+.btn.primary:disabled,
+.btn.primary:disabled:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  border-color: var(--border);
+  box-shadow: none;
+  opacity: 0.7;
 }
 .valve {
   font-size: 12px;

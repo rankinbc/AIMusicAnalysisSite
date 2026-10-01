@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import type { FinalJson, RoutingPlanDto, VerdictDto } from '../../../../api/types';
 import {
+  CLOSER_ID,
+  ITEMS_MAX,
   REASON_MAX,
   messageText,
   narrate,
@@ -156,7 +158,7 @@ describe('narrate — triage, plan, specialists', () => {
     expect(byId(run({ routingPlan: plan('No skips here.'), stage: s1 }), 'skip')).toBeUndefined();
   });
 
-  it('each specialist reports back in its own voice: issue count + top headline (bug A shape)', () => {
+  it('each specialist reports back in its own voice: issue count + its findings listed (bug A shape)', () => {
     const ls = run({
       verdicts: [
         v('low_end', 'Sub too hot', 'moderate'),
@@ -170,24 +172,68 @@ describe('narrate — triage, plan, specialists', () => {
     });
     const back = byId(ls, 'back:low_end')!;
     expect(back.speaker).toEqual({ kind: 'specialist', slug: 'low_end', label: 'Low End', group: 'Spectrum' });
-    expect(messageText(back)).toBe('I found 2 issues. Top: “Mud at 300 Hz”');
+    expect(messageText(back)).toBe('I found 2 issues:');
+    // Its findings, most severe first; fail-marker and rule-engine rows excluded.
+    expect(back.items).toEqual([
+      { severity: 'severe', text: 'Mud at 300 Hz' },
+      { severity: 'moderate', text: 'Sub too hot' },
+    ]);
+    expect(back.more).toBeUndefined();
     expect(txt(ls, 'back:loudness')).toBe('I couldn’t finish — you can re-run me from the full report.');
     expect(byId(ls, 'back:loudness')).toMatchObject({ tone: 'warn', speaker: { kind: 'specialist' } });
     expect(txt(ls, 'back:stereo')).toBe('I found no issues — this part of your mix holds up.');
-    expect(ls.at(-1)).toMatchObject({ id: 'all-done', speaker: { kind: 'coach' } });
+    expect(byId(ls, 'back:stereo')!.items).toBeUndefined();
+    expect(ls.at(-1)).toMatchObject({ id: CLOSER_ID, speaker: { kind: 'coach' } });
+  });
+
+  it('a long list is capped at ITEMS_MAX with "+N more"; dismissed findings are left out', () => {
+    const many = Array.from({ length: ITEMS_MAX + 3 }, (_, i) => ({
+      ...v('low_end', `Issue ${i}`, 'minor'),
+      priorityScore: 100 - i,
+    })) as VerdictDto[];
+    const dismissed = { ...v('low_end', 'Hidden', 'critical'), userState: { dismissed: true } } as unknown as VerdictDto;
+    const ls = run({
+      verdicts: [...many, dismissed],
+      routingPlan: plan(),
+      stage: stage([row('low_end', 'Low End', 'done', '', ITEMS_MAX + 4)]),
+    });
+    const back = byId(ls, 'back:low_end')!;
+    expect(messageText(back)).toBe(`I found ${ITEMS_MAX + 3} issues:`);
+    expect(back.items!.map((i) => i.text)).toEqual(['Issue 0', 'Issue 1', 'Issue 2', 'Issue 3', 'Issue 4']);
+    expect(back.more).toBe(3);
+  });
+
+  it('a done specialist whose verdict rows haven’t landed yet: count only, no dangling colon', () => {
+    const ls = run({ routingPlan: plan(), stage: stage([row('low_end', 'Low End', 'done', '', 2)]) });
+    expect(txt(ls, 'back:low_end')).toBe('I found 2 issues.');
+    expect(byId(ls, 'back:low_end')!.items).toBeUndefined();
+  });
+
+  it('the closing line links to the full report and is the last message', () => {
+    const ls = run({ routingPlan: plan(), stage: stage([row('a', 'A', 'done', '', 0)]) });
+    const closer = ls.at(-1)!;
+    expect(closer.id).toBe(CLOSER_ID);
+    expect(messageText(closer)).toBe(
+      'We have a good enough analysis to get started. Let’s view the full report. You can also dig deeper with more AI specialists or talk to me about the mix. Let’s go to the Full Report and get started.',
+    );
+    expect(closer.parts).toContainEqual({ link: 'Full Report' });
   });
 
   it('specialists report back in arrival order (settleOrder), not priority order', () => {
     const s = stage([row('a', 'A', 'done', '', 0), row('b', 'B', 'done', '', 0), row('c', 'C', 'running')]);
     const ls = run({ routingPlan: plan(), stage: s, settleOrder: ['b', 'a'] });
     expect(ls.filter((l) => l.id.startsWith('back:')).map((l) => l.id)).toEqual(['back:b', 'back:a']);
-    expect(byId(ls, 'all-done')).toBeUndefined();
+    expect(byId(ls, CLOSER_ID)).toBeUndefined();
   });
 
-  it('a zero-specialist plan says so and has no all-done line', () => {
+  it('a zero-specialist plan says so and closes straight away', () => {
     const ls = run({ routingPlan: plan(), stage: stage([]) });
     expect(txt(ls, 'plan')).toContain('No specialist deep-dive needed');
-    expect(byId(ls, 'all-done')).toBeUndefined();
+    expect(ls.at(-1)!.id).toBe(CLOSER_ID);
+  });
+
+  it('no closing line before the specialist plan is in', () => {
+    expect(byId(run(), CLOSER_ID)).toBeUndefined();
   });
 
   it('is stable: the same state yields the same messages', () => {

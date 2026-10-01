@@ -220,9 +220,12 @@ export function buildLiveSteps({ job, fj, inputs = {} }: LiveStepsInput): LiveSt
   return [...steps.filter((s) => s.state !== 'skipped'), ...steps.filter((s) => s.state === 'skipped')];
 }
 
-/** "54.4s" / "3.2s" / "1m 05s" — '' when unknown. */
+/** "54.4s" / "3.2s" / "1m 05s" — '<0.1s' for real sub-50 ms phases (the
+ *  pipeline rounds wall time to 0.01 s, so fast phases store 0.0–0.04, which
+ *  would otherwise read as "0.0s") — '' when unknown. */
 export function fmtSeconds(sec: number | undefined): string {
   if (!isNum(sec) || sec < 0) return '';
+  if (sec < 0.05) return '<0.1s';
   if (sec < 60) return `${sec.toFixed(1)}s`;
   const m = Math.floor(sec / 60);
   return `${m}m ${String(Math.round(sec % 60)).padStart(2, '0')}s`;
