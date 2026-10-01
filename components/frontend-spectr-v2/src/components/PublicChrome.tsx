@@ -12,13 +12,17 @@
  * Plain <a> navigation on purpose: funnel pages are entry points where a full
  * page load is fine, and plain anchors keep this component static-render
  * testable without a RouterProvider. */
+import { QueryClientContext, useQuery } from '@tanstack/react-query';
+import { useContext } from 'react';
+
 import { useOptionalAuth } from '../auth/AuthContext';
+import { guestHasOwnUploads, guestStateQueryOptions } from '../features/demo/useGuestState';
 import { SpectrLogo } from '../ui/SpectrLogo';
 import { PricingLink } from './PricingLink';
 import s from './PublicChrome.module.css';
 
 export function PublicChrome() {
-  // A guest has no library, so they get the anonymous chrome.
+  // A guest gets the anonymous chrome (+ Library once they've uploaded).
   const user = useOptionalAuth()?.user;
   const authed = Boolean(user && !user.isGuest);
   return (
@@ -37,6 +41,7 @@ export function PublicChrome() {
           <a href="/library" className="btn primary sm">Open library</a>
         ) : (
           <>
+            {user?.isGuest && <GuestLibraryLink />}
             <a href="/login" className={s.navLink}>Sign in</a>
             {/* Story 6.3 — the anon instant-analysis funnel is live. */}
             <a href="/analyze" className="btn primary sm">Analyze free</a>
@@ -45,4 +50,18 @@ export function PublicChrome() {
       </nav>
     </header>
   );
+}
+
+/** Owner ruling 2026-10-01 — a guest who has uploaded a track of their own
+ *  (the seeded demo doesn't count) gets a Library link; same rule as the
+ *  /library route guard. Renders nothing without a QueryClient (static
+ *  renders of public pages mount no provider). */
+function GuestLibraryLink() {
+  return useContext(QueryClientContext) ? <GuestLibraryLinkInner /> : null;
+}
+
+function GuestLibraryLinkInner() {
+  const { data } = useQuery(guestStateQueryOptions);
+  if (!guestHasOwnUploads(data)) return null;
+  return <a href="/library" className={s.navLink}>Library</a>;
 }

@@ -559,17 +559,6 @@ export function ReportView({
             {/* Actions board (fix-first). */}
             {tab === 'actions' && (
               <div className="tabbody fade-up">
-                <ActionsBar
-                  versionId={versionId}
-                  trackName={trackName}
-                  committed={committed}
-                  coachMixReady={fixRack.rack != null}
-                  coachMixGenerating={fixRack.phase === 'generating'}
-                  onGenerateCoachMix={fixRack.generate}
-                  onLogPlan={logPlan}
-                />
-                {/* The answer before the working — what the queue compiles to. */}
-                <MergedChainPanel committed={committed} />
                 <FixBoard
                   mode="actions"
                   verdicts={verdicts}
@@ -579,6 +568,22 @@ export function ReportView({
                   checkedNoteIds={checkedNoteIds}
                   onToggleNote={toggleNote}
                   focusId={boardFocus?.mode === 'actions' ? boardFocus.id : null}
+                  // Queue summary + toolbar sit UNDER the list so the Actions
+                  // list and the fix detail both start at the top (owner ask).
+                  listFooter={
+                    <>
+                      <MergedChainPanel committed={committed} />
+                      <ActionsBar
+                        versionId={versionId}
+                        trackName={trackName}
+                        committed={committed}
+                        coachMixReady={fixRack.rack != null}
+                        coachMixGenerating={fixRack.phase === 'generating'}
+                        onGenerateCoachMix={fixRack.generate}
+                        onLogPlan={logPlan}
+                      />
+                    </>
+                  }
                   onConsumeFocus={consumeFocus}
                   onShowFix={onShowFix}
                   onShowFinding={onShowFinding}

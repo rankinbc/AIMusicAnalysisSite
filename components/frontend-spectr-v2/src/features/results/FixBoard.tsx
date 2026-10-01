@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import type { VerdictDto } from '../../api/types';
 import { Icon } from './Icon';
@@ -62,6 +62,11 @@ interface FixBoardProps {
   /** Report-only: "N specialists run" chip in the Findings header that opens
    *  the Specialist Team modal at its "Already run" list. Omit to hide it. */
   specialistsRun?: { count: number; onOpen: () => void } | undefined;
+  /** Rendered inside the list column, BELOW the rows (report Actions tab: the
+   *  queue summary + Try Fixes / Create Preset / Coach Mix). It lives here, not
+   *  above the board, so the list and the detail both start at the top of the
+   *  section. Omit it (Findings, Listen) and nothing renders. */
+  listFooter?: ReactNode | undefined;
 }
 
 interface Row {
@@ -92,6 +97,7 @@ export function FixBoard({
   seek,
   applyLocked,
   specialistsRun,
+  listFooter,
 }: FixBoardProps) {
   const findingsMode = mode === 'findings';
   const findings = useMemo(
@@ -258,12 +264,14 @@ export function FixBoard({
             <span className="t">{findingsMode ? 'Findings' : 'Actions'}</span>
             {findingsMode && specialistsRun && <SpecialistsRunChip {...specialistsRun} />}
           </span>
+          {/* Title row: "Actions · Select all"; the filters wrap to one row
+              beneath it instead of stacking three deep in the 276px column. */}
+          {!findingsMode && (
+            <button type="button" className="fpill selall" onClick={onSelectAll}>
+              {allSelected ? 'Clear all' : 'Select all'}
+            </button>
+          )}
           <div className="fb-filters">
-            {!findingsMode && (
-              <button type="button" className="fpill selall" onClick={onSelectAll}>
-                {allSelected ? 'Clear all' : 'Select all'}
-              </button>
-            )}
             <FixBoardFilters
               filters={filters}
               onChange={setFilters}
@@ -342,6 +350,7 @@ export function FixBoard({
             })
           )}
         </div>
+        {listFooter != null && <div className="fb-lfoot">{listFooter}</div>}
       </div>
 
       {findingsMode ? (

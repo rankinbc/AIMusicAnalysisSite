@@ -8,7 +8,8 @@ import { Icon } from './Icon';
 import type { Move } from './move-model';
 import { deviceOf } from './fix-board-helpers';
 
-// Actions-tab toolbar (v4): Try Fixes · Create Preset · Coach Mix. Every action
+// Actions-tab toolbar (v4): Try Fixes · Create Preset · Coach Mix. Rendered
+// in the board's list footer, under the Actions list. Every action
 // logs to the Improvement-Plan log (localStorage — stub policy). The queue
 // itself is already in localStorage via ReportView's listenFixes effect, so
 // "Try Fixes" is a plain navigate.
@@ -65,13 +66,9 @@ export function ActionsBar({
   };
 
   return (
+    // Buttons only — the "N queued" count lives on the MergedChainPanel line
+    // right above this bar (both sit under the Actions list).
     <div className="ab-bar">
-      <span className="ab-note mono">
-        {committed.length > 0
-          ? `${committed.length} queued`
-          : 'queue fixes to unlock these'}
-      </span>
-      <span className="fbd-spacer" />
       <button
         type="button"
         className="fbd-ask gloss"

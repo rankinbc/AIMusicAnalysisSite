@@ -9,7 +9,6 @@ import { PublicChrome } from '../../components/PublicChrome';
 import { PublicFooter } from '../../components/PublicFooter';
 import { capture } from '../../lib/analytics';
 import { usePageMeta } from '../../lib/usePageMeta';
-import { LandingResumeSlot } from '../anon-analyze/LandingResumeSlot';
 import { LandingFeatures } from './LandingFeatures';
 import { LandingHero } from './LandingHero';
 import s from './landing.module.css';
@@ -28,10 +27,9 @@ export function LandingPage() {
       <PublicChrome />
 
       <main className={s.main}>
-        {/* Story 6.4 — returning-visitor resume card (renders only when a
-            device has an unclaimed job; null in SSR/static render). */}
-        <LandingResumeSlot />
-
+        {/* Owner ruling 2026-10-01: no "Welcome back" resume card for a
+            returning guest — a guest who has uploaded gets a Library link in
+            the header instead (PublicChrome). */}
         <LandingHero />
 
         <LandingFeatures />

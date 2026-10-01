@@ -5,18 +5,17 @@ import type { EqBand } from './eq-response';
  * chunk has a CI size budget. landing.test.tsx asserts both objects still
  * match the fixture, so they can't drift from the real demo analysis. */
 
-/** Excerpt of SAMPLE_FINDINGS[0] (verdict `sample-03`) + its corroboration. */
+/** Excerpt of the sample report's sub-bass finding (loudness specialist) +
+ *  the second specialist that flagged the same problem. Picked over the
+ *  top-ranked finding because its fix is an EQ move the card can draw. */
 export const HERO_FINDING = {
   category: 'Low end',
   severity: 'moderate',
-  headline: 'Excessive sub-bass energy overwhelming the mix',
-  measure: 'Sub-bass −18.3 dBFS, 12 dB above the bass band',
-  alsoFlagged: 'Inverted low-end balance — sub louder than bass fundamental',
-  /** The verdict's first two evidence rows (value vs genre-expected range, dB). */
-  evidence: [
-    { label: 'Sub-bass · 20–60 Hz', value: -18.3, range: [-30, -24] },
-    { label: 'Bass · 60–250 Hz', value: -30.0, range: [-24, -18] },
-  ],
+  headline: 'Excessive sub-bass will overwhelm small speakers',
+  measure: 'Sub-bass −20.0 dBFS, 24.9% of the energy sits below 30 Hz',
+  alsoFlagged: 'Excessive sub-bass dominates entire frequency spectrum',
+  /** The verdict's dB evidence row (value vs genre-expected range, dB). */
+  evidence: [{ label: 'Sub-bass · 20–60 Hz', value: -20.0, range: [-30, -24] }],
 } as const;
 
 /** The same verdict's suggested fix: its dsp_chain as describeOp() prints
@@ -30,14 +29,14 @@ export const HERO_FIX: {
 } = {
   target: 'Master',
   device: 'EQ Eight',
-  steps: ['High-pass at 30 Hz, 24 dB/oct', 'EQ bell −3 dB at 40 Hz, Q 1'],
+  steps: ['High-pass at 35 Hz, 24 dB/oct', 'EQ bell −2 dB at 50 Hz, Q 1.2'],
   /** The same two ops as EQ bands, for the EqDevice curve + readout. */
   bands: [
-    { n: 1, type: 'high_pass', freqHz: 30, slopeDb: 24 },
-    { n: 2, type: 'bell', freqHz: 40, gainDb: -3, q: 1 },
+    { n: 1, type: 'high_pass', freqHz: 35, slopeDb: 24 },
+    { n: 2, type: 'bell', freqHz: 50, gainDb: -2, q: 1.2 },
   ],
   outcome:
-    'Sub-bass becomes felt rather than dominating, mix gains 3-4 dB headroom, low end translates to small speakers.',
+    'Sub-bass tightens up. Mix translates cleanly to phone/laptop speakers without distortion. Kick remains powerful but controlled.',
 };
 
 /** The "Hear it" face: three of the sample report's suggested fixes, stacked
@@ -47,10 +46,10 @@ export const HERO_LISTEN: {
   preset: string;
   fixes: readonly { headline: string; device: string; does: string }[];
 } = {
-  preset: 'Low end + mud + width',
+  preset: 'Low end + air',
   fixes: [
-    { headline: 'Excessive sub-bass energy overwhelming the mix', device: 'EQ Eight', does: 'HP 30 Hz · −3 dB @ 40 Hz' },
-    { headline: 'Low-mid mud zone congestion (250-500Hz)', device: 'EQ Eight', does: '−3 dB @ 300 Hz · −2 dB @ 400 Hz' },
-    { headline: 'Mix is too narrow — sounds flat and unprofessional', device: 'Utility', does: 'Width 130%' },
+    { headline: 'Excessive sub-bass will overwhelm small speakers', device: 'EQ Eight', does: 'HP 35 Hz · −2 dB @ 50 Hz' },
+    { headline: 'Bass band overpowering mid frequencies', device: 'EQ Eight', does: '−4 dB @ 100 Hz · −3 dB @ 150 Hz' },
+    { headline: 'Missing air and sparkle (6-20kHz band very low)', device: 'EQ Eight', does: 'High shelf +3 dB @ 10 kHz' },
   ],
 };

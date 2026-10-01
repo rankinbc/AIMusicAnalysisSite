@@ -2,8 +2,21 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
+  /* Centered with side padding: on wide pages the four groups otherwise run
+     edge to edge. Phones keep the shell's own gutter (no extra inset), so
+     the 390px two-column wrap below still fits. */
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1120px;
+  margin-inline: auto;
   padding-top: 24px;
   border-top: 1px solid var(--border);
+}
+
+@media (min-width: 768px) {
+  .footer {
+    padding-inline: 48px;
+  }
 }
 
 /* 390px live check: minmax(150px, 1fr) wraps 4 groups into 2 columns inside

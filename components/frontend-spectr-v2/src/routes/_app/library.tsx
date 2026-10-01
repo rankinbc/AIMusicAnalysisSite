@@ -2,14 +2,16 @@ import { createFileRoute, redirect } from '@tanstack/react-router';
 import { useState } from 'react';
 
 import { SongsLibrarySection } from '../../features/library/SongsLibrarySection';
+import { guestMayOpenLibrary } from '../../features/library/library-guard';
 import { ReferenceLibrarySection } from '../../features/references/ReferenceLibrarySection';
 import s from './library.module.css';
 
 export const Route = createFileRoute('/_app/library')({
-  // Owner ruling 2026-10-01: guests (demo / guest upload) have no library or
-  // reports — send them to the landing page.
-  beforeLoad: ({ context }) => {
-    if (context.auth.user?.isGuest) throw redirect({ to: '/' });
+  // Owner ruling 2026-10-01: a guest gets the library only once they have
+  // uploaded a track of their own (the seeded demo song doesn't count) —
+  // otherwise back to the landing page. See library-guard.ts.
+  beforeLoad: async ({ context }) => {
+    if (!(await guestMayOpenLibrary(context))) throw redirect({ to: '/' });
   },
   component: LibraryPage,
 });

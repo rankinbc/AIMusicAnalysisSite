@@ -326,7 +326,48 @@
 }
 
 /* ── motion: one entrance, then a quiet idle ─────────────────────────── */
+/* Entrance choreography: the pitch column rises in line by line (a soft
+   blur-to-sharp lift), the headline catches one green light sweep, then the
+   Coach's stage blooms in and the Coach speaks, and the finding card lands
+   last. Everything settles to the static layout — nothing here is needed to
+   read the page, so reduced-motion visitors get it all at rest. */
 @media (prefers-reduced-motion: no-preference) {
+  .title,
+  .subtitle,
+  .ctaRow,
+  .demoCard,
+  .more {
+    animation: riseIn 760ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .title { animation-delay: 60ms; }
+  .subtitle { animation-delay: 200ms; }
+  .ctaRow { animation-delay: 330ms; }
+  .demoCard { animation-delay: 460ms; }
+  .more { animation-delay: 580ms; }
+
+  /* One light sweep across the headline, ending on the plain text colour. */
+  .title {
+    background: linear-gradient(
+      100deg,
+      var(--text) 0%,
+      var(--text) 42%,
+      var(--green) 50%,
+      var(--text) 58%,
+      var(--text) 100%
+    );
+    background-size: 260% 100%;
+    background-position: 100% 0;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation:
+      riseIn 760ms cubic-bezier(0.22, 1, 0.36, 1) 60ms both,
+      titleSweep 1600ms cubic-bezier(0.45, 0, 0.2, 1) 700ms both;
+  }
+
+  .stage {
+    animation: stageBloom 900ms cubic-bezier(0.22, 1, 0.36, 1) 180ms both;
+  }
   .coach {
     animation:
       coachFloat 6s ease-in-out infinite,
@@ -334,11 +375,31 @@
   }
   .bubble {
     transform-origin: 64px 100%;
-    animation: bubbleIn 520ms cubic-bezier(0.2, 0.9, 0.3, 1.2) 350ms both;
+    animation: bubbleIn 520ms cubic-bezier(0.2, 0.9, 0.3, 1.2) 650ms both;
   }
   .finding {
-    animation: findingIn 600ms cubic-bezier(0.2, 0.8, 0.2, 1) 700ms both;
+    animation: findingIn 700ms cubic-bezier(0.2, 0.8, 0.2, 1) 950ms both;
   }
+}
+
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(18px); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+
+@keyframes titleSweep {
+  from { background-position: 100% 0; }
+  to { background-position: 0% 0; }
+}
+
+@keyframes stageBloom {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+    box-shadow: 0 0 0 0 rgba(0, 229, 176, 0);
+  }
+  60% { box-shadow: 0 0 60px -10px rgba(0, 229, 176, 0.35); }
+  to { opacity: 1; transform: none; }
 }
 
 @keyframes coachFloat {
@@ -357,7 +418,7 @@
 }
 
 @keyframes findingIn {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; transform: translateY(16px); filter: blur(4px); }
   to { opacity: 1; transform: none; }
 }
 

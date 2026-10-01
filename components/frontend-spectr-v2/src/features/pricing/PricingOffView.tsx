@@ -6,7 +6,10 @@ import { PublicChrome } from '../../components/PublicChrome';
 import { PublicFooter } from '../../components/PublicFooter';
 import s from './pricing.module.css';
 
-export function PricingOffView() {
+/** `guestSignupHref` is set for a GUEST viewer (owner ruling 2026-10-01):
+ *  the analyze/demo CTAs make no sense for someone already in the sandbox,
+ *  so the row becomes the one guest → account sign-up CTA instead. */
+export function PricingOffView({ guestSignupHref }: { guestSignupHref?: string | undefined } = {}) {
   return (
     <>
     <PublicChrome />
@@ -22,12 +25,20 @@ export function PricingOffView() {
       <div className={s.offCtaRow}>
         {/* Task P3 — the shared footer's Product group repeats these labels;
             testids disambiguate the page's own CTA row for tests. */}
-        <a href="/analyze" className="btn primary" data-testid="pricing-off-analyze-cta">
-          Analyze a track
-        </a>
-        <a href="/demo" className="btn ghost" data-testid="pricing-off-demo-cta">
-          Explore the demo
-        </a>
+        {guestSignupHref ? (
+          <a href={guestSignupHref} className="btn primary" data-testid="pricing-off-signup-cta">
+            Create a free account
+          </a>
+        ) : (
+          <>
+            <a href="/analyze" className="btn primary" data-testid="pricing-off-analyze-cta">
+              Analyze a track
+            </a>
+            <a href="/demo" className="btn ghost" data-testid="pricing-off-demo-cta">
+              Explore the demo
+            </a>
+          </>
+        )}
       </div>
 
       <PublicFooter />

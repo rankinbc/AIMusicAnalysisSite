@@ -1,6 +1,9 @@
 /* "What you get" — the six-item glowing feature list: a 2-column grid below
  * the hero, compact type (owner ruling 2026-10-01). */
+import type { CSSProperties } from 'react';
+
 import s from './LandingFeatures.module.css';
+import { useRevealOnScroll } from './useRevealOnScroll';
 
 // Ordered as the producer's loop: diagnose → understand → fix → hear → apply →
 // prove. Every claim maps to a shipped surface. Copy rules (e515995): the coach
@@ -17,12 +20,19 @@ const FEATURES = [
 ];
 
 export function LandingFeatures({ className }: { className?: string }) {
+  const { ref, revealed } = useRevealOnScroll<HTMLElement>();
   return (
-    <section className={`${className ?? ''} ${s.features}`} aria-labelledby="landing-features-title">
+    <section
+      ref={ref}
+      className={`${className ?? ''} ${s.features}`}
+      aria-labelledby="landing-features-title"
+      data-revealed={revealed}
+    >
       <h2 id="landing-features-title" className={`label ${s.featuresLabel}`}>What you get</h2>
       <ul className={s.featureList}>
-        {FEATURES.map((f) => (
-          <li key={f.head} className={s.feature}>
+        {FEATURES.map((f, i) => (
+          // --i staggers each item's entrance (dynamic, so inline).
+          <li key={f.head} className={s.feature} style={{ '--i': i } as CSSProperties}>
             <span className={s.featureHead}>{f.head}</span>
             <span className={s.featureBody}>{f.body}</span>
           </li>

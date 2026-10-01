@@ -132,26 +132,28 @@ describe('Landing hero (two-column redesign + the Coach)', () => {
     expect(html).toContain('Reads your report');
   });
 
+  const hero = SAMPLE_FINDINGS.find((f) => f.verdict.headline === HERO_FINDING.headline);
+
   it('shows a finding that matches the real sample report fixture', () => {
-    const first = SAMPLE_FINDINGS[0];
-    expect(first).toBeDefined();
-    if (!first) return;
-    expect(HERO_FINDING.headline).toBe(first.verdict.headline);
-    expect(HERO_FINDING.severity).toBe(first.verdict.severity);
-    expect(first.verdict.summary).toContain('-18.3 dBFS');
-    expect(first.verdict.summary).toContain('12 dB louder than bass band');
-    expect(first.corroboratedBy.map((c) => c.headline)).toContain(HERO_FINDING.alsoFlagged);
+    expect(hero).toBeDefined();
+    if (!hero) return;
+    expect(HERO_FINDING.severity).toBe(hero.verdict.severity);
+    expect(hero.verdict.summary).toContain('-19.98 dBFS');
+    expect(hero.verdict.summary).toContain('24.9%');
+    // "Also flagged" is a second specialist's independent finding in the same report.
+    const also = SAMPLE_FINDINGS.find((f) => f.verdict.headline === HERO_FINDING.alsoFlagged);
+    expect(also).toBeDefined();
+    expect(also?.verdict.specialist).not.toBe(hero.verdict.specialist);
     expect(html).toContain(HERO_FINDING.headline);
-    // Evidence bars use the verdict's real first two evidence rows.
-    const ev = first.verdict.evidence as { value: number; expected_range: [number, number] }[];
-    HERO_FINDING.evidence.forEach((e, i) => {
-      expect(e.value).toBeCloseTo(ev[i]!.value, 1);
-      expect([...e.range]).toEqual(ev[i]!.expected_range);
-    });
+    // Evidence bars use the verdict's real dB evidence rows.
+    const ev = hero.verdict.evidence as { metric: string; value: number; expected_range: [number, number] }[];
+    const subBass = ev.find((r) => r.metric === 'phase1.bands.sub_bass')!;
+    expect(HERO_FINDING.evidence[0].value).toBeCloseTo(subBass.value, 1);
+    expect([...HERO_FINDING.evidence[0].range]).toEqual(subBass.expected_range);
   });
 
   it('alternates the finding with the real suggested fix for it', () => {
-    const fix = SAMPLE_FINDINGS[0]?.verdict.fix as
+    const fix = hero?.verdict.fix as
       | { dsp_chain: VerdictDspOp[]; expected_outcome: string; ableton_hint?: { device?: string } }
       | null
       | undefined;

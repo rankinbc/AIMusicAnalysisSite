@@ -17,21 +17,44 @@ import { useAuth } from '../../auth/AuthContext';
  * query nobody writes to" bug twice already; see MEMORY.md
  * never-stale-query-client-writes.
  */
+/** Shared by the hook and the /library route guard (which fetches it via
+ *  `queryClient.fetchQuery` in beforeLoad) — one key, one cache entry. */
+// A plain object (not `queryOptions(...)`): several tests mock
+// @tanstack/react-query wholesale, and a module-scope call would need every
+// one of those mocks to provide it.
+export const guestStateQueryOptions = {
+  queryKey: ['me', 'guest'] as const,
+  queryFn: () => fetcher<GuestStateDto>({ url: '/me/guest', method: 'GET' }),
+  staleTime: 30_000,
+  retry: false as const,
+};
+
+/**
+ * Owner ruling 2026-10-01 — a guest may use the library once they have
+ * uploaded a track of their OWN. The seeded demo song doesn't count: the
+ * server's `uploadsUsed` already excludes it (it counts the guest's
+ * song_versions whose file_path is NOT under `audio/demo/` — see
+ * GuestLimits.GetStateAsync), so this is just `uploadsUsed > 0`. Unknown
+ * state (loading / failed fetch) ⇒ false: the library stays closed rather
+ * than flashing open.
+ */
+export function guestHasOwnUploads(state: GuestStateDto | undefined): boolean {
+  return (state?.uploadsUsed ?? 0) > 0;
+}
+
 export function useGuestState(): {
   isGuest: boolean;
   canUpload: boolean;
+  /** Guest-only meaning: has uploaded their own track, so the library
+   *  (route + nav entry) is open to them. Always false for a real user —
+   *  callers gate real users on `!isGuest`, not this. */
+  hasOwnUploads: boolean;
   state: GuestStateDto | undefined;
 } {
   const { user } = useAuth();
   const isGuest = user?.isGuest === true;
 
-  const query = useQuery<GuestStateDto>({
-    queryKey: ['me', 'guest'],
-    queryFn: () => fetcher<GuestStateDto>({ url: '/me/guest', method: 'GET' }),
-    enabled: isGuest,
-    staleTime: 30_000,
-    retry: false,
-  });
+  const query = useQuery({ ...guestStateQueryOptions, enabled: isGuest });
 
   const state = query.data;
   // Optimistic true while loading/unresolved: the server is the real gate
@@ -39,7 +62,7 @@ export function useGuestState(): {
   // must never itself block the upload form.
   const canUpload = state ? state.uploadsUsed < state.uploadsMax : true;
 
-  return { isGuest, canUpload, state };
+  return { isGuest, canUpload, hasOwnUploads: isGuest && guestHasOwnUploads(state), state };
 }
 
 /**

@@ -381,6 +381,11 @@
 .rdx .fb-prio-l { font-size:8.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); white-space:nowrap; }
 .rdx .fb-prio input[type="range"] { width:96px; accent-color:var(--accent); height:14px; }
 .rdx .fb-prio-v { font-size:10px; font-weight:700; color:var(--accent); min-width:34px; text-align:right; }
+.rdx .fb-list:not(.wide) .fb-filters { flex-basis:100%; }
+.rdx .fb-list:not(.wide) .fb-prio { gap:5px; padding:3px 7px; }
+.rdx .fb-list:not(.wide) .fb-prio input[type="range"] { width:48px; }
+.rdx .fb-list:not(.wide) .fb-prio-v { min-width:28px; }
+.rdx .fb-lh > .fpill.selall { padding:4px 8px; font-size:10.5px; }
 .rdx .fpill.selall { color:var(--accent); border-color:rgba(0,229,176,.3); }
 .rdx .fpill.selall:hover { background:rgba(0,229,176,.08); }
 .rdx .fb-filterdd { position:relative; }
@@ -1291,32 +1296,42 @@
 .rdx .ip-moment .t { color:var(--accent); font-size:10px; flex-shrink:0; }
 .rdx .ip-moment .l { color:var(--muted); font-size:10px; flex-shrink:0; }
 .rdx .ip-moment .h { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.rdx .ab-bar { display:flex; align-items:center; gap:9px; margin-top:14px; padding:9px 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface-2); flex-wrap:wrap; }
-.rdx .ab-note { font-size:9.5px; color:var(--muted); }
+.rdx .ab-bar { display:flex; align-items:center; gap:6px; padding:8px 10px 10px; flex-wrap:wrap; }
+.rdx .ab-bar .fbd-ask { flex:1 1 auto; justify-content:center; padding:5px 8px; font-size:11px; gap:5px; }
 
 /* v4 — export preview is the generator output verbatim */
 .rdx .gp-doc-pre { margin:0; font-family:'JetBrains Mono',monospace; font-size:10.5px; line-height:1.65; color:var(--text-2); white-space:pre-wrap; word-break:break-word; }
 
-/* v4 — "What this adds up to": the merged chain, above the Actions queue */
-.rdx .mc-panel { margin-top:14px; padding:11px 12px 9px; border:1px solid var(--border); border-radius:10px; background:var(--surface-2); }
-.rdx .mc-hd { display:flex; align-items:baseline; gap:10px; margin-bottom:8px; }
-.rdx .mc-t { font-size:11.5px; font-weight:600; color:var(--text-1); }
-.rdx .mc-count { font-size:9.5px; color:var(--muted); margin-left:auto; }
-.rdx .mc-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:5px; }
-.rdx .mc-dev { border:1px solid var(--border); border-radius:8px; background:rgba(255,255,255,.015); overflow:hidden; }
+/* v4 — "What this adds up to": the merged chain as a one-line strip in the
+   Actions list footer (expandable). The list + detail start at the top. */
+.rdx .fb-lfoot { border-top:1px solid var(--border); background:var(--surface-2); }
+.rdx .mc-panel { padding:8px 10px 0; }
+.rdx .mc-line { margin:0; padding:2px 0; font-size:10px; color:var(--muted); }
+.rdx .mc-hd { display:flex; align-items:center; gap:8px; width:100%; min-width:0; text-align:left; padding:4px 6px; margin:0 -6px; border:0; border-radius:6px; background:none; cursor:pointer; color:var(--text-2); }
+.rdx .mc-hd:hover { background:var(--card-hover); }
+.rdx .mc-hd svg { flex-shrink:0; color:var(--muted); transition:transform .15s ease; }
+.rdx .mc-panel.open .mc-hd svg { transform:rotate(180deg); }
+.rdx .mc-count { font-size:10px; font-weight:700; color:var(--accent); flex-shrink:0; }
+.rdx .mc-devs { flex:1; min-width:0; font-size:10.5px; color:var(--text-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rdx .mc-body { padding:6px 0 2px; }
+.rdx .mc-t { display:flex; align-items:baseline; gap:8px; margin-bottom:6px; font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+.rdx .mc-sub { margin-left:auto; font-size:9.5px; letter-spacing:0; text-transform:none; }
+.rdx .mc-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; }
+.rdx .mc-dev { border:1px solid var(--border); border-radius:7px; background:rgba(255,255,255,.015); overflow:hidden; }
 .rdx .mc-dev.open { background:var(--card-hover); }
-.rdx .mc-devhd { display:flex; align-items:center; gap:10px; width:100%; text-align:left; padding:7px 10px; background:none; border:0; cursor:pointer; color:var(--text-2); }
+.rdx .mc-devhd { display:flex; flex-wrap:wrap; align-items:center; gap:2px 8px; width:100%; text-align:left; padding:6px 8px; background:none; border:0; cursor:pointer; color:var(--text-2); }
 .rdx .mc-devhd:hover { background:var(--card-hover); }
 .rdx .mc-devhd svg { flex-shrink:0; color:var(--muted); transition:transform .15s ease; }
 .rdx .mc-dev.open .mc-devhd svg { transform:rotate(180deg); }
-.rdx .mc-dl { font-size:10px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); flex-shrink:0; min-width:82px; }
-.rdx .mc-ds { flex:1; min-width:0; font-size:11.5px; color:var(--text-1); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rdx .mc-dl { flex:1; font-size:9.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); }
+.rdx .mc-ds { flex-basis:100%; min-width:0; font-size:10.5px; color:var(--text-1); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rdx .mc-dev.open .mc-ds { white-space:normal; }
 .rdx .mc-dn { font-size:9.5px; color:var(--muted); flex-shrink:0; }
-.rdx .mc-src { list-style:none; margin:0; padding:2px 10px 8px 92px; display:flex; flex-direction:column; gap:4px; }
-.rdx .mc-src li { display:flex; align-items:baseline; gap:10px; font-size:11px; color:var(--text-2); }
-.rdx .mc-src .h { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.rdx .mc-src .a { font-size:10px; color:var(--muted); flex-shrink:0; }
-.rdx .mc-dec { margin-top:8px; padding-top:7px; border-top:1px solid var(--border); }
+.rdx .mc-src { list-style:none; margin:0; padding:0 8px 7px; display:flex; flex-direction:column; gap:4px; }
+.rdx .mc-src li { display:flex; flex-direction:column; gap:1px; font-size:10.5px; color:var(--text-2); }
+.rdx .mc-src .h { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rdx .mc-src .a { font-size:9.5px; color:var(--muted); }
+.rdx .mc-dec { margin-top:6px; padding-top:6px; border-top:1px solid var(--border); }
 .rdx .mc-dect { display:inline-flex; align-items:center; gap:5px; background:none; border:0; padding:0; cursor:pointer; font-size:9.5px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
 .rdx .mc-dect:hover { color:var(--text-2); }
 .rdx .mc-decl { list-style:none; margin:6px 0 0; padding:0; display:flex; flex-direction:column; gap:4px; }
