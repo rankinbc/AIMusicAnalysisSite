@@ -5,7 +5,9 @@ import { AuthContext } from '../../../auth/AuthContext';
 import type { AuthedUser } from '../../../api/types';
 import { PublicChrome } from '../../../components/PublicChrome';
 import { PricingPlansView } from '../../pricing/PricingPlansView';
-import { COACH_LINE, HERO_FINDING } from '../LandingHero';
+import { COACH_LINE, HERO_FINDING, HERO_FIX } from '../LandingHero';
+import { describeOp } from '../sample/sample-model';
+import type { VerdictDspOp } from '../../../api/types';
 import { LandingPage } from '../LandingPage';
 import { SAMPLE_FINDINGS } from '../sample/sample-data';
 import { SampleReportEmbed } from '../SampleReportEmbed';
@@ -127,6 +129,21 @@ describe('Landing hero (two-column redesign + the Coach)', () => {
     expect(first.verdict.summary).toContain('12 dB louder than bass band');
     expect(first.corroboratedBy.map((c) => c.headline)).toContain(HERO_FINDING.alsoFlagged);
     expect(html).toContain(HERO_FINDING.headline);
+  });
+
+  it('alternates the finding with the real suggested fix for it', () => {
+    const fix = SAMPLE_FINDINGS[0]?.verdict.fix as
+      | { dsp_chain: VerdictDspOp[]; expected_outcome: string; ableton_hint?: { device?: string } }
+      | null
+      | undefined;
+    expect(fix).toBeTruthy();
+    if (!fix) return;
+    expect([...HERO_FIX.steps]).toEqual(fix.dsp_chain.map(describeOp));
+    expect(HERO_FIX.outcome).toBe(fix.expected_outcome);
+    expect(HERO_FIX.device).toBe(fix.ableton_hint?.device);
+    // Both faces are server-rendered (no layout jump, crawlers see both).
+    for (const step of HERO_FIX.steps) expect(html).toContain(step);
+    expect(html).toContain('The fix');
   });
 });
 

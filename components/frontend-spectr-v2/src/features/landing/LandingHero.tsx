@@ -1,6 +1,6 @@
 /* Landing hero — two columns on desktop: the pitch + both CTAs on the left,
  * the Coach (the app's mascot) introducing himself on the right, with one
- * real finding from the sample report as a quiet product hint. Phone
+ * real finding from the sample report that alternates with its suggested fix. Phone
  * stacks pitch → CTA → Coach → demo callout so the headline and primary
  * CTA stay above the fold.
  *
@@ -10,16 +10,11 @@
  * matches sample-data.ts, so it can't drift from the real report. */
 import { Coach } from '../../ui/Coach';
 import { capture } from '../../lib/analytics';
+import { HeroFindingCard } from './HeroFindingCard';
 import s from './LandingHero.module.css';
 
-/** Excerpt of SAMPLE_FINDINGS[0] (verdict `sample-03`) + its corroboration. */
-export const HERO_FINDING = {
-  category: 'Low end',
-  severity: 'moderate',
-  headline: 'Excessive sub-bass energy overwhelming the mix',
-  measure: 'Sub-bass −18.3 dBFS, 12 dB above the bass band',
-  alsoFlagged: 'Inverted low-end balance — sub louder than bass fundamental',
-} as const;
+// Re-exported: tests and other modules import them from here.
+export { HERO_FINDING, HERO_FIX } from './hero-content';
 
 export const COACH_LINE = "I'm the Coach. I'll help you get your mix where you want it to be.";
 
@@ -84,19 +79,7 @@ export function LandingHero() {
           </p>
         </div>
 
-        <div className={s.finding} role="group" aria-label="A finding from the sample report">
-          <div className={s.findingMeta}>
-            <span className={s.sevDot} aria-hidden="true" />
-            <span>{HERO_FINDING.category}</span>
-            <span className={s.findingSev}>{HERO_FINDING.severity}</span>
-            <span className={s.findingSrc}>from the sample report</span>
-          </div>
-          <p className={s.findingHead}>{HERO_FINDING.headline}</p>
-          <p className={`mono ${s.findingMeasure}`}>{HERO_FINDING.measure}</p>
-          <p className={s.findingAlso}>
-            Corroborated by a second check: {HERO_FINDING.alsoFlagged.toLowerCase()}
-          </p>
-        </div>
+        <HeroFindingCard className={s.finding} />
       </figure>
     </section>
   );
