@@ -75,7 +75,6 @@ function renderModal(over: Partial<Props> = {}) {
     fj,
     jobId: 'job-1',
     songName: 'Neon Meridian',
-    onClose: vi.fn(),
     onViewReport: vi.fn(),
     ...over,
   };

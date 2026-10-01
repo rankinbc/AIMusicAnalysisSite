@@ -15,15 +15,13 @@ interface LiveAnalysisViewProps {
   job: JobStatusDto;
   songName?: string | undefined;
   inputs?: LiveInputs | undefined;
-  /** Leave the page — the analysis keeps running server-side. */
-  onLeave: () => void;
   /** Extra dock content (e.g. a guest's demo-report link). */
   dockExtra?: ReactNode;
 }
 
 const noop = () => {};
 
-export function LiveAnalysisView({ jobId, job, songName, inputs, onLeave, dockExtra }: LiveAnalysisViewProps) {
+export function LiveAnalysisView({ jobId, job, songName, inputs, dockExtra }: LiveAnalysisViewProps) {
   return (
     <AnalysisCompleteModal
       jobId={jobId}
@@ -31,7 +29,6 @@ export function LiveAnalysisView({ jobId, job, songName, inputs, onLeave, dockEx
       inputs={inputs}
       songName={songName}
       dockExtra={dockExtra}
-      onClose={onLeave}
       // The CTA stays disabled until ReportView takes over with the results.
       onViewReport={noop}
     />

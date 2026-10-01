@@ -739,7 +739,6 @@ export function ReportView({
           runningSlugs={specialistRuns.running}
           verdicts={verdictsData?.verdicts}
           hasStems={inputs.stems}
-          onClose={dismissModal}
           onViewReport={dismissModal}
         />
       )}

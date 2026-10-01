@@ -66,7 +66,7 @@ const dismissed = vd({ headline: 'Dismissed one', severity: 'critical', userStat
 const specFinding = vd({ specialist: 'low_end', headline: 'Sub too hot', severity: 'severe', priorityScore: 120 });
 
 type Props = Parameters<typeof AnalysisCompleteModal>[0];
-const base: Props = { fj: fjPending, jobId: 'job-f', songName: 'Neon Meridian', onClose: vi.fn(), onViewReport: vi.fn() };
+const base: Props = { fj: fjPending, jobId: 'job-f', songName: 'Neon Meridian', onViewReport: vi.fn() };
 
 function renderPage(over: Partial<Props> = {}) {
   const props = { ...base, onViewReport: vi.fn(), ...over };

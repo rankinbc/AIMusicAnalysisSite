@@ -45,3 +45,40 @@
 .logo[data-size='lg'] .caption {
   font-size: 10px;
 }
+
+/* Hero lockup (live analysis page): the header's proportions — word
+   letter-spacing 0.24em, caption 0.18em mono (em-relative, so they scale
+   with the type) — at roughly 2.4x. */
+.logo[data-size='xl'] {
+  gap: 16px;
+}
+
+.logo[data-size='xl'] .text {
+  gap: 7px;
+}
+
+.logo[data-size='xl'] .word {
+  font-size: 36px;
+}
+
+.logo[data-size='xl'] .caption {
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .logo[data-size='xl'] {
+    gap: 12px;
+  }
+
+  .logo[data-size='xl'] .text {
+    gap: 5px;
+  }
+
+  .logo[data-size='xl'] .word {
+    font-size: 28px;
+  }
+
+  .logo[data-size='xl'] .caption {
+    font-size: 10px;
+  }
+}

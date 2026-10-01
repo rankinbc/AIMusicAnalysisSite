@@ -262,7 +262,6 @@ function ResultsPage() {
           job={job.data}
           songName={songName}
           inputs={liveInputs}
-          onLeave={() => void navigate({ to: '/songs/$songId', params: { songId } })}
           dockExtra={demoReport ? <DemoWaitingLink link={demoReport} /> : undefined}
         />
       ) : (

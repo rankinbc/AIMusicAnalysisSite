@@ -18,9 +18,11 @@
 }
 
 /* ── Backdrop + stage ─────────────────────────────────────────────────── */
+/* Both start below the app top bar so the site header stays usable — the
+   page has no close button, so the header is one of the ways out. */
 .backdrop {
   position: fixed;
-  inset: 0;
+  inset: var(--topnav-h) 0 0;
   overflow: hidden;
   z-index: 1000;
   background:
@@ -38,18 +40,35 @@
 }
 .stage {
   position: fixed;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 24px 16px;
+  inset: var(--topnav-h) 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 18px 16px 24px;
   z-index: 1001;
+}
+
+/* The SPECTR hero lockup above the box. Never shrinks — the box gives up
+   height instead (its body already scrolls), so the dock stays on screen. */
+.brand {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+}
+@media (max-height: 800px) {
+  .stage {
+    gap: 10px;
+    padding-top: 12px;
+    padding-bottom: 16px;
+  }
 }
 
 /* ── Modal shell ──────────────────────────────────────────────────────── */
 .modal {
   width: min(1040px, 100%);
-  max-height: calc(100vh - 48px);
-  max-height: calc(100dvh - 48px);
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background:
@@ -131,29 +150,13 @@
 .songSub .sep {
   opacity: 0.45;
 }
-.xBtn {
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  border-radius: 9px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.02);
-  color: var(--muted);
-  transition: all 0.15s ease;
-}
-.xBtn:hover {
-  color: var(--text);
-  border-color: var(--border-2);
-  background: var(--card-hover);
-}
 
 /* Body: the chat (its own scroller) beside the steps column (its own
    scroller); header and dock never move. The shell has a fixed height so the
-   page doesn't grow and jump as results fill in. */
+   page doesn't grow and jump as results fill in: it asks for 860px and gives
+   up whatever the stage (viewport minus top bar, logo, gutters) can't fit. */
 .modal {
-  height: min(860px, calc(100dvh - 48px));
+  flex: 0 1 860px;
 }
 .modalBody {
   flex: 1 1 auto;
