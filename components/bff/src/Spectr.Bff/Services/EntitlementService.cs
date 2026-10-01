@@ -84,6 +84,10 @@ public class EntitlementService(
     public bool CreditsEnabled(Dictionary<string, string> flags)
         => CreditsEnabled(config, flags);
 
+    // Credit economy — the resolved price list (config → flag → default).
+    public async Task<CreditPrices> GetPricesAsync(CancellationToken ct)
+        => CreditPricing.Resolve(config, await GetFlagsAsync(ct));
+
     private async Task<EntitlementsDto> ComputeAsync(Guid userId, CancellationToken ct)
     {
         // 0. Credit-system kill switch (credits_enabled=false): everyone is
@@ -117,7 +121,8 @@ public class EntitlementService(
                 Coach: new CoachCapsDto(
                     0, int.MaxValue, false, CoachCapService.ScopeUnlimited, null),
                 AnalysesResetsAt: null,
-                CreditsEnabled: false);
+                CreditsEnabled: false,
+                IsPaying: true);
         }
 
         // 1. Subscription status
@@ -135,6 +140,11 @@ public class EntitlementService(
             .AsNoTracking()
             .Where(e => e.UserId == userId)
             .SumAsync(e => (int?)e.Amount, ct) ?? 0;
+
+        var prices = CreditPricing.Resolve(config, flagMap);
+        var hasPurchased = await db.CreditLedger.AsNoTracking()
+            .AnyAsync(e => e.UserId == userId && e.Reason == "purchase", ct);
+        int CreditAnalyses(int bal) => prices.Analysis == 0 ? bal : bal / prices.Analysis;
 
         // 3. Period usage (analyses this calendar month). Story 3.2 (AR16):
         // an invalid_file failure must not consume the free monthly cap —
@@ -166,7 +176,8 @@ public class EntitlementService(
             var coach = await CoachCapService.ResolveProPoolAsync(
                 db, flagMap, userId, billingPeriod, ct);
             return new EntitlementsDto(
-                AnalysesRemaining: null,
+                // Monthly allowance first, then credits at the analysis price.
+                AnalysesRemaining: Math.Max(0, prices.ProAnalysesMonthly - usedThisPeriod) + CreditAnalyses(balance),
                 CoachRemaining: Math.Max(0, coach.Limit - coach.Used),
                 StemsEnabled: true,
                 AlsEnabled: true,
@@ -175,13 +186,17 @@ public class EntitlementService(
                 Tier: "pro",
                 Coach: new CoachCapsDto(
                     coach.Used, coach.Limit, coach.CapReached, coach.Scope, coach.ResetsAt),
-                AnalysesResetsAt: null);
+                AnalysesResetsAt: null,
+                CreditBalance: balance,
+                IsPaying: true,
+                ProAnalysesLimit: prices.ProAnalysesMonthly,
+                ProAnalysesUsed: usedThisPeriod);
         }
 
         if (balance >= 1)
         {
             return new EntitlementsDto(
-                AnalysesRemaining: balance,
+                AnalysesRemaining: CreditAnalyses(balance),
                 CoachRemaining: int.MaxValue,
                 StemsEnabled: true,
                 AlsEnabled: true,
@@ -190,7 +205,9 @@ public class EntitlementService(
                 Tier: "credits",
                 Coach: new CoachCapsDto(
                     0, int.MaxValue, false, CoachCapService.ScopeUnlimited, null),
-                AnalysesResetsAt: null);
+                AnalysesResetsAt: null,
+                CreditBalance: balance,
+                IsPaying: hasPurchased);
         }
 
         // free tier
@@ -211,7 +228,9 @@ public class EntitlementService(
             Coach: new CoachCapsDto(
                 0, coachFreeCap, false, CoachCapService.ScopeAnalysis, null),
             // Free analyses reset on the YYYY-MM billing-period boundary.
-            AnalysesResetsAt: CoachCapService.FirstOfNextMonthUtc());
+            AnalysesResetsAt: CoachCapService.FirstOfNextMonthUtc(),
+            CreditBalance: balance,
+            IsPaying: hasPurchased);
     }
 
     private static int GetFlag(Dictionary<string, string> flags, string key, int fallback)

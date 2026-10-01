@@ -1,0 +1,141 @@
+// components/bff/tests/Spectr.Bff.Tests/DispatchCreditChargeTests.cs
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Spectr.Bff.Services;
+using Spectr.Data;
+using Spectr.Data.Entities;
+using System.Net;
+using System.Net.Http.Headers;
+using Xunit;
+
+namespace Spectr.Bff.Tests;
+
+public sealed class DispatchCreditChargeTests(WebApplicationFactory<Program> baseFactory)
+    : IClassFixture<WebApplicationFactory<Program>>
+{
+    private WebApplicationFactory<Program> Factory(bool creditsOn = true) => baseFactory.WithWebHostBuilder(b =>
+        b.UseSetting("Credits:Prices:Analysis", "100").UseSetting("Credits:ProAnalysesMonthly", "15")
+         .UseSetting("Credits:Enabled", creditsOn ? "true" : "false")
+         .UseSetting("RateLimits:Enabled", "false"));
+
+    private static async Task<(HttpClient C, Guid Uid, Guid VersionId)> SeedAsync(
+        WebApplicationFactory<Program> f, int grant, bool purchase = false, bool verified = true, bool pro = false, int proUsed = 0)
+    {
+        var client = f.CreateClient();
+        var (uid, token) = await TestAuth.RegisterAsync(client);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        using var scope = f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var svc = scope.ServiceProvider.GetRequiredService<CreditLedgerService>();
+        // Dev auto-verify makes registered users verified already; the unverified
+        // cases null it out explicitly (the access token stays valid).
+        await db.Users.Where(u => u.Id == uid).ExecuteUpdateAsync(s => s.SetProperty(
+            u => u.EmailVerifiedAt, verified ? DateTimeOffset.UtcNow : (DateTimeOffset?)null));
+        if (pro)
+            db.Subscriptions.Add(new Subscription { UserId = uid, Status = "active", StripeCustomerId = $"cus_{uid:N}", StripeSubscriptionId = $"sub_{uid:N}", PriceId = "price_test" });
+        if (proUsed > 0)
+        {
+            for (var i = 0; i < proUsed; i++)
+                db.UsageEvents.Add(new UsageEvent { UserId = uid, EventType = "analysis", BillingPeriod = DateTimeOffset.UtcNow.ToString("yyyy-MM"), Reference = Guid.NewGuid().ToString() });
+        }
+        await db.SaveChangesAsync();
+        if (grant > 0) await svc.GrantSignupBonusAsync(uid, grant, CancellationToken.None);
+        if (purchase) await svc.PurchaseAsync(uid, 500, $"pi_{uid:N}", $"credits_purchase:t_{uid:N}", CancellationToken.None);
+        scope.ServiceProvider.GetRequiredService<EntitlementService>().InvalidateAsync(uid);
+        var (_, versionId) = await TestSeed.SongWithVersionAsync(f, uid);
+        return (client, uid, versionId);
+    }
+
+    private static async Task<int> BalanceAsync(WebApplicationFactory<Program> f, Guid uid)
+    {
+        using var scope = f.Services.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<CreditLedgerService>().GetBalanceAsync(uid, CancellationToken.None);
+    }
+
+    [SkippableFact]
+    public async Task Analysis_Charges_The_Analysis_Price()
+    {
+        var f = Factory();
+        await TestDb.RequireAsync(f);
+        var (c, uid, vid) = await SeedAsync(f, grant: 500);
+        var resp = await c.PostAsync($"/api/versions/{vid}/analyze", null);
+        Assert.Equal(HttpStatusCode.Accepted, resp.StatusCode);
+        Assert.Equal(400, await BalanceAsync(f, uid));
+    }
+
+    [SkippableFact]
+    public async Task Balance_Below_Price_Returns_402_Insufficient_Credits()
+    {
+        var f = Factory();
+        await TestDb.RequireAsync(f);
+        var (c, uid, vid) = await SeedAsync(f, grant: 40);
+        var resp = await c.PostAsync($"/api/versions/{vid}/analyze", null);
+        await TestContract.AssertEnvelopeAsync(resp, HttpStatusCode.PaymentRequired, "insufficient_credits");
+        Assert.Equal(40, await BalanceAsync(f, uid));
+    }
+
+    [SkippableFact]
+    public async Task Grant_Only_Unverified_User_Hits_Verify_Gate_And_Is_Not_Charged()
+    {
+        var f = Factory();
+        await TestDb.RequireAsync(f);
+        // The registration-time demo job already counts as the user's "one
+        // analysis", so the very first real dispatch of an unverified
+        // grant-only account is gated (grant != paying).
+        var (c, uid, vid) = await SeedAsync(f, grant: 500, verified: false);
+        var resp = await c.PostAsync($"/api/versions/{vid}/analyze", null);
+        await TestContract.AssertEnvelopeAsync(resp, HttpStatusCode.Forbidden, "email_verification_required");
+        Assert.Equal(500, await BalanceAsync(f, uid));
+    }
+
+    [SkippableFact]
+    public async Task Purchaser_Skips_Verify_Gate()
+    {
+        var f = Factory();
+        await TestDb.RequireAsync(f);
+        var (c, _, vid) = await SeedAsync(f, grant: 0, purchase: true, verified: false);
+        Assert.Equal(HttpStatusCode.Accepted, (await c.PostAsync($"/api/versions/{vid}/analyze", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, (await c.PostAsync($"/api/versions/{vid}/analyze", null)).StatusCode);
+    }
+
+    [SkippableFact]
+    public async Task Pro_Within_Allowance_Charges_No_Credits()
+    {
+        var f = Factory();
+        await TestDb.RequireAsync(f);
+        var (c, uid, vid) = await SeedAsync(f, grant: 100, pro: true, proUsed: 3);
+        Assert.Equal(HttpStatusCode.Accepted, (await c.PostAsync($"/api/versions/{vid}/analyze", null)).StatusCode);
+        Assert.Equal(100, await BalanceAsync(f, uid));
+    }
+
+    [SkippableFact]
+    public async Task Pro_Past_Allowance_Overflows_To_Credits()
+    {
+        var f = Factory();
+        await TestDb.RequireAsync(f);
+        var (c, uid, vid) = await SeedAsync(f, grant: 100, pro: true, proUsed: 15);
+        Assert.Equal(HttpStatusCode.Accepted, (await c.PostAsync($"/api/versions/{vid}/analyze", null)).StatusCode);
+        Assert.Equal(0, await BalanceAsync(f, uid));
+    }
+
+    [SkippableFact]
+    public async Task Pro_Past_Allowance_Without_Credits_Returns_402()
+    {
+        var f = Factory();
+        await TestDb.RequireAsync(f);
+        var (c, _, vid) = await SeedAsync(f, grant: 0, pro: true, proUsed: 15);
+        await TestContract.AssertEnvelopeAsync(
+            await c.PostAsync($"/api/versions/{vid}/analyze", null), HttpStatusCode.PaymentRequired, "insufficient_credits");
+    }
+
+    [SkippableFact]
+    public async Task Kill_Switch_Off_Charges_Nothing()
+    {
+        var f = Factory(creditsOn: false);
+        await TestDb.RequireAsync(f);
+        var (c, uid, vid) = await SeedAsync(f, grant: 500);
+        Assert.Equal(HttpStatusCode.Accepted, (await c.PostAsync($"/api/versions/{vid}/analyze", null)).StatusCode);
+        Assert.Equal(500, await BalanceAsync(f, uid));
+    }
+}

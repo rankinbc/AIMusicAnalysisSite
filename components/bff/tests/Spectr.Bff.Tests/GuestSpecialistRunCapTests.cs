@@ -83,6 +83,8 @@ public sealed class GuestSpecialistRunCapTests(WebApplicationFactory<Program> fa
         {
             b.UseSetting("Demo:Enabled", "true");
             b.UseSetting("Demo:SnapshotKey", "");
+            // These tests pin the dedupe/cap seam, not billing: keep real users uncharged.
+            b.UseSetting("Credits:Enabled", "false");
             if (rateLimits) b.UseSetting("RateLimits:Enabled", "true");
             b.ConfigureTestServices(s =>
             {

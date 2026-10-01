@@ -212,7 +212,7 @@ public sealed class EntitlementServiceTests
         finally { await CleanupAsync(userId); }
     }
 
-    // ── Case (d) Pro active → remaining = null (unlimited) ──────────────────
+    // ── Case (d) Pro active → remaining = monthly allowance + credit analyses ──────────────────
     [SkippableFact]
     public async Task Pro_Active_NullRemaining()
     {
@@ -236,7 +236,8 @@ public sealed class EntitlementServiceTests
             var svc = await NewServiceAsync(scope);
             var ent = await svc.ForAsync(userId, CancellationToken.None);
             Assert.Equal("pro", ent.Tier);
-            Assert.Null(ent.AnalysesRemaining);
+            // Credit economy: Pro has a monthly allowance (default 15) + credits.
+            Assert.Equal(15, ent.AnalysesRemaining);
             Assert.Null(ent.HistoryDepth);
             Assert.True(ent.StemsEnabled);
             // Story 2.8 — pro coach pool is pooled monthly with a reset instant;

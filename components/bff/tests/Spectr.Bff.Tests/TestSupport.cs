@@ -42,6 +42,9 @@ internal static class TestProcessBaseline
     internal static void PinCreditsEnabled()
     {
         Environment.SetEnvironmentVariable("Credits__Enabled", "true");
+        // Existing tests were written for a 1-credit analysis; credit-economy
+        // tests opt in to real prices via UseSetting.
+        Environment.SetEnvironmentVariable("Credits__Prices__Analysis", "1");
         Environment.SetEnvironmentVariable("Demo__SnapshotKey", "");
         Environment.SetEnvironmentVariable("Admin__ApiKey", "");
     }
@@ -275,4 +278,21 @@ public static class TestSeed
 
         return (songId, versionAId, versionBId);
     }
+}
+
+/// <summary>Verdict row builders for tests that need worker-written rows.</summary>
+public static class TestVerdicts
+{
+    /// <summary>The sentinel row the worker writes when a specialist run fails.</summary>
+    public static Spectr.Data.Entities.Verdict FailMarker(Guid analysisId, string slug) => new()
+    {
+        Id = $"vrd_{Guid.NewGuid():N}"[..30],
+        AnalysisId = analysisId,
+        Specialist = slug,
+        PromptVersion = $"{slug}@0.0.0",
+        Model = "test",
+        Severity = "minor",
+        Category = "dynamics",
+        Headline = "Specialist failed",
+    };
 }

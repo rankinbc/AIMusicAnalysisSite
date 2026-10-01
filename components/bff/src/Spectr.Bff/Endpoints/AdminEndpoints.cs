@@ -52,9 +52,15 @@ public static partial class AdminEndpoints
         admin.MapPut("/prompts/{slug}", PutPromptPin);
         admin.MapGet("/audit", GetAudit);
         admin.MapPost("/demo/snapshot", PostDemoSnapshot); // Task D4 — AdminEndpoints.DemoSnapshot.cs
+        admin.MapPost("/credits/backfill-signup-bonus", PostBackfillSignupBonus);
     }
 
     // ── AC1 — the billing/webhook trail for refund decisions ────────────────
+    // Credit economy rollout — grant the sign-up bonus to verified accounts that
+    // predate it. Idempotent (ledger key), so safe to re-run.
+    private static async Task<IResult> PostBackfillSignupBonus(SignupBonusBackfill backfill, CancellationToken ct)
+        => Results.Ok(new { granted = await backfill.RunAsync(ct) });
+
     private static async Task<IResult> GetBillingTrail(
         string idOrEmail, AppDbContext db, CancellationToken ct)
     {

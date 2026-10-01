@@ -47,6 +47,7 @@ public static class VerdictEndpoints
         AppDbContext db,
         IJobQueue queue,
         IMemoryCache cache,
+        CreditLedgerService credits,
         CancellationToken ct)
     {
         var userId = user.UserId();
@@ -120,6 +121,15 @@ public static class VerdictEndpoints
             .Select(r => r.Verdict.Specialist)
             .ToHashSet(StringComparer.Ordinal);
 
+        // Credit economy — a specialist that ended as a fail-marker gets its
+        // credits back (no-op when it was never charged; idempotent per slug).
+        foreach (var failedSlug in failedSlugs)
+        {
+            await credits.RefundChargeAsync(userId,
+                $"specialist:{analysisRow.Id}:{failedSlug}",
+                $"reversal:specialist:{analysisRow.Id}:{failedSlug}", ct);
+        }
+
         var statuses = SpecialistCatalog.Slugs
             .Select(slug => new SpecialistStatus(
                 slug,
@@ -179,6 +189,8 @@ public static class VerdictEndpoints
         AppDbContext db,
         IJobQueue queue,
         GuestLimits guestLimits,
+        EntitlementService ents,
+        CreditLedgerService credits,
         CancellationToken ct)
     {
         if (!SpecialistCatalog.SlugSet.Contains(specialist))
@@ -188,7 +200,7 @@ public static class VerdictEndpoints
 
         var analysis = await db.Analyses.AsNoTracking()
             .Where(a => a.JobId == jobId && a.UserId == userId)
-            .Select(a => new { a.Id })
+            .Select(a => new { a.Id, a.RoutingPlan })
             .FirstOrDefaultAsync(ct);
         if (analysis is null) return Results.NotFound();
 
@@ -196,6 +208,37 @@ public static class VerdictEndpoints
             .AnyAsync(v => v.AnalysisId == analysis.Id && v.Specialist == specialist, ct);
         if (exists)
             return Results.Conflict(new { error = "Specialist already has a verdict for this analysis. Dismiss it first to re-run.", status = "exists" });
+
+        // Credit economy — the analysis price already covers the specialists
+        // triage routed; any other specialist costs credits (Pro: included).
+        var charged = false;
+        if (!user.IsGuest())
+        {
+            var flags = await ents.GetFlagsAsync(ct);
+            if (ents.CreditsEnabled(flags))
+            {
+                var ent = await ents.ForAsync(userId, ct);
+                var routed = ParseRoutingPlan(analysis.RoutingPlan)?.SpecialistsToRun
+                    .Any(e => string.Equals(e.Name, specialist, StringComparison.Ordinal)) ?? false;
+                if (ent.Tier != "pro" && !routed)
+                {
+                    var price = (await ents.GetPricesAsync(ct)).Specialist;
+                    try
+                    {
+                        charged = await credits.ChargeAsync(userId, price,
+                            $"specialist:{analysis.Id}:{specialist}",
+                            $"spend:specialist:{analysis.Id}:{specialist}", null, ct) is not null;
+                        ents.InvalidateAsync(userId);
+                    }
+                    catch (InsufficientCreditsException ex)
+                    {
+                        return ErrorEnvelope.Build(402, "insufficient_credits",
+                            "Not enough credits to run this specialist.",
+                            new { required = ex.Required, balance = ex.CurrentBalance });
+                    }
+                }
+            }
+        }
 
         // Fix wave FW1 (C1) — per-(analysis, slug) in-flight dedupe for every
         // caller, then the guest's run cap. A run already in flight answers
@@ -218,6 +261,9 @@ public static class VerdictEndpoints
             {
                 // Never enqueued — free the marker so a retry can dispatch.
                 await guestLimits.ReleaseSpecialistRunAsync(analysis.Id, specialist, claim.InflightToken);
+                if (charged)
+                    await credits.RefundChargeAsync(userId, $"specialist:{analysis.Id}:{specialist}",
+                        $"reversal:specialist:{analysis.Id}:{specialist}", ct);
                 throw;
             }
         }

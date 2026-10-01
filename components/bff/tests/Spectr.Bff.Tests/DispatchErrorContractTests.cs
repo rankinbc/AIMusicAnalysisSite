@@ -22,7 +22,11 @@ namespace Spectr.Bff.Tests;
 public sealed class DispatchErrorContractTests(WebApplicationFactory<Program> factory)
     : IClassFixture<WebApplicationFactory<Program>>
 {
-    private readonly WebApplicationFactory<Program> _factory = factory;
+    // Analysis price pinned to 1 so the story-2.3 race test's balance-1 user is
+    // genuinely "credits tier with 1 analysis" at check time (price 100 would
+    // be caught by the entitlement gate before the charge race).
+    private readonly WebApplicationFactory<Program> _factory =
+        factory.WithWebHostBuilder(b => b.UseSetting("Credits:Prices:Analysis", "1"));
 
     // Story 12.7: envelope assertion promoted to TestContract.AssertEnvelopeAsync
     // so the rate_limited / disposable-cap sites assert the same shape.
@@ -126,7 +130,7 @@ public sealed class DispatchErrorContractTests(WebApplicationFactory<Program> fa
     }
 
     [SkippableFact]
-    public async Task Insufficient_Credits_Race_409_Carries_Machine_Code()
+    public async Task Insufficient_Credits_Race_402_Carries_Machine_Code()
     {
         await TestDb.RequireAsync(_factory);
 
@@ -155,7 +159,7 @@ public sealed class DispatchErrorContractTests(WebApplicationFactory<Program> fa
             }
 
             var resp = await client.PostAsync($"/api/versions/{versionId}/analyze", null);
-            await AssertEnvelopeAsync(resp, HttpStatusCode.Conflict, "insufficient_credits");
+            await AssertEnvelopeAsync(resp, HttpStatusCode.PaymentRequired, "insufficient_credits");
         }
         finally
         {

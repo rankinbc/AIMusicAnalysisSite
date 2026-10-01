@@ -288,6 +288,7 @@ builder.Services.AddScoped<SubscriptionMirrorService>();
 // (spend; story 2.4 DispatchAnalysisAsync), and the GET /jobs/{id} read
 // path (lazy reversal on invalid_file).
 builder.Services.AddScoped<CreditLedgerService>();
+builder.Services.AddScoped<SignupBonusBackfill>(); // one-time operator backfill of the sign-up bonus
 
 // Story 2.4 — entitlement resolver + in-process cache.
 // IMemoryCache is process-local; EntitlementService caches per-user

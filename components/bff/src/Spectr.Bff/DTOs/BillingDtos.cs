@@ -128,7 +128,13 @@ public sealed record EntitlementsDto(
     // credits_enabled feature flag mirror. When false the credit system is
     // switched off — everyone resolves as premium/unlimited — and the frontend
     // hides billing/tier UI (buy-credits, upgrade CTAs, tier chips, meters).
-    bool CreditsEnabled = true);
+    bool CreditsEnabled = true,
+    // Credit economy — balance + who has actually paid (Pro or >=1 purchase).
+    // IsPaying gates the abuse arms: a signup-grant-only account is NOT paying.
+    int CreditBalance = 0,
+    bool IsPaying = false,
+    int? ProAnalysesLimit = null,
+    int ProAnalysesUsed = 0);
 
 // ── Story 2.8 — usage-page honest math ───────────────────────────────
 /// <summary>

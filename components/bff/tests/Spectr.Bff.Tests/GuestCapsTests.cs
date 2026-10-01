@@ -91,6 +91,9 @@ public sealed class GuestCapsTests(WebApplicationFactory<Program> factory)
         {
             b.UseSetting("Demo:Enabled", "true");
             b.UseSetting("Demo:SnapshotKey", "");
+            // These tests pin queue routing / guest caps, not billing — keep the
+            // credit economy off so a grant-less real user isn't 402'd.
+            b.UseSetting("Credits:Enabled", "false");
             if (rateLimits) b.UseSetting("RateLimits:Enabled", "true");
             b.ConfigureTestServices(s =>
             {

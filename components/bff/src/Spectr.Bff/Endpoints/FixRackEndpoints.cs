@@ -24,7 +24,8 @@ public static class FixRackEndpoints
     // POST /api/reports/{jobId}/fix-rack — enqueue rack generation.
     private static async Task<IResult> Generate(
         Guid jobId, ClaimsPrincipal user, AppDbContext db, IJobQueue queue,
-        EntitlementService ents, GuestLimits guestLimits, CancellationToken ct)
+        EntitlementService ents, GuestLimits guestLimits, CreditLedgerService credits,
+        CancellationToken ct)
     {
         var userId = user.UserId();
 
@@ -56,12 +57,44 @@ public static class FixRackEndpoints
         }
         var tier = entitlements.Tier; // "pro" | "credits" | "free"
 
-        await queue.EnqueueAsync(
-            DramatiqTasks.GenerateFixRack,
-            new object[] { analysis.Id.ToString(), userId.ToString(), tier },
-            // Fix round 1 item 1: guests ride the free lane.
-            GuestLimits.QueueFor(user, DramatiqQueues.AnalysisPaid), // story 2.5: secondary op → W1
-            ct);
+        // Credit economy — each Coach Mix generation costs credits (Pro: included).
+        var flags = await ents.GetFlagsAsync(ct);
+        var requestId = Guid.NewGuid();
+        var charged = false;
+        if (!user.IsGuest() && ents.CreditsEnabled(flags) && tier != "pro")
+        {
+            var price = (await ents.GetPricesAsync(ct)).CoachMix;
+            try
+            {
+                charged = await credits.ChargeAsync(userId, price,
+                    $"coachmix:{analysis.Id}:{requestId}", $"spend:coachmix:{requestId}", null, ct) is not null;
+                ents.InvalidateAsync(userId);
+            }
+            catch (InsufficientCreditsException ex)
+            {
+                return ErrorEnvelope.Build(402, "insufficient_credits",
+                    "Not enough credits for a Coach Mix.",
+                    new { required = ex.Required, balance = ex.CurrentBalance });
+            }
+        }
+
+        try
+        {
+            await queue.EnqueueAsync(
+                DramatiqTasks.GenerateFixRack,
+                new object[] { analysis.Id.ToString(), userId.ToString(), tier },
+                // Fix round 1 item 1: guests ride the free lane.
+                GuestLimits.QueueFor(user, DramatiqQueues.AnalysisPaid), // story 2.5: secondary op → W1
+                ct);
+        }
+        catch
+        {
+            // Never queued — give the credits back (degraded racks are NOT refunded).
+            if (charged)
+                await credits.RefundChargeAsync(userId, $"coachmix:{analysis.Id}:{requestId}",
+                    $"reversal:coachmix:{requestId}", ct);
+            throw;
+        }
 
         return Results.Accepted(value: new { status = "queued" });
     }
