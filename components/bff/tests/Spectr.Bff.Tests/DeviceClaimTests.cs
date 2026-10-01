@@ -250,6 +250,10 @@ public sealed class DeviceClaimTests(WebApplicationFactory<Program> factory)
                 await db.SaveChangesAsync();
                 await db.Users.Where(u => u.Id == userId).ExecuteUpdateAsync(
                     s => s.SetProperty(u => u.EmailVerifiedAt, (DateTimeOffset?)null));
+                // Funded (a grant is not a purchase, so the gate still applies):
+                // with credits on a 0-balance user gets 402 before the verify gate.
+                await scope.ServiceProvider.GetRequiredService<CreditLedgerService>()
+                    .GrantSignupBonusAsync(userId, 100_000, CancellationToken.None);
             }
 
             // Unverified + prior job → 403 with the envelope.
