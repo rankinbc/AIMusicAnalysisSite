@@ -230,6 +230,10 @@ summary:focus-visible,
   color: var(--text-2);
   transition: all 0.15s ease;
 }
+/* Anchors styled as buttons (public CTAs) must not inherit the UA link underline. */
+a.btn {
+  text-decoration: none;
+}
 .btn:hover {
   background: var(--card-hover);
   color: var(--text);

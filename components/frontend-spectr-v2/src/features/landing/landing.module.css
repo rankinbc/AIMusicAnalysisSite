@@ -3,7 +3,7 @@
 }
 
 .main {
-  max-width: 1040px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 0 24px 64px;
   display: flex;
@@ -11,94 +11,8 @@
   gap: 48px;
 }
 
-/* ── hero ────────────────────────────────────────────────────────────── */
-.hero {
-  padding-top: 72px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 16px;
-}
-
-.title {
-  font-family: 'Syne', sans-serif;
-  font-size: clamp(30px, 5vw, 52px);
-  font-weight: 800;
-  line-height: 1.12;
-  max-width: 820px;
-  margin: 0;
-}
-
-.titleAccent {
-  color: var(--cyan);
-}
-
-.subtitle {
-  color: var(--text-2);
-  font-size: 16px;
-  line-height: 1.55;
-  max-width: 620px;
-  margin: 0;
-}
-
-.ctaRow {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-top: 8px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.ctaHint {
-  font-size: 10.5px;
-  color: var(--muted);
-  letter-spacing: 0.08em;
-}
-
-/* ── guest-demo callout (under the hero CTA) ─────────────────────────── */
-.demoCard {
-  margin-top: 10px;
-  width: 100%;
-  max-width: 640px;
-  display: flex;
-  align-items: center;
-  gap: 14px 20px;
-  padding: 16px 18px 16px 20px;
-  text-align: left;
-  border-radius: var(--radius);
-  border: 1px solid rgba(167, 139, 250, 0.42);
-  background:
-    radial-gradient(140% 160% at 0% 0%, rgba(167, 139, 250, 0.16), transparent 55%),
-    var(--card);
-  box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.08), 0 18px 48px -24px rgba(167, 139, 250, 0.6);
-}
-
-.demoCopy {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.demoEyebrow {
-  font-size: 10.5px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--violet);
-  font-weight: 700;
-}
-
-.demoText {
-  margin: 0;
-  font-size: 13.5px;
-  line-height: 1.5;
-  color: var(--text);
-}
-
-/* Shared by the hero callout and the sample-report CTA row: the demo is
+/* The sample-report CTA row's demo button (the hero has its own copy in
+   LandingHero.module.css): the demo is
    the second action, but it must never read as a muted ghost link. */
 .demoBtn {
   flex-shrink: 0;
@@ -116,14 +30,6 @@
   color: var(--text);
   background: rgba(167, 139, 250, 0.22);
   border-color: var(--violet);
-}
-
-@media (max-width: 560px) {
-  .demoCard {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 16px;
-  }
 }
 
 /* ── sample report embed ─────────────────────────────────────────────── */
@@ -221,10 +127,3 @@
 
 /* Task P3 — the ad-hoc footer (.footer/.footerLink/.footerNote) was replaced
    by the shared <PublicFooter /> (src/components/PublicFooter.module.css). */
-
-/* The hero's primary action sits a size above the default .btn so the
-   highlighted demo callout below it never out-weighs it. */
-.ctaRow > a {
-  font-size: 14px;
-  padding: 11px 22px;
-}

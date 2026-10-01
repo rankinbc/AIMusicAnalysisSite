@@ -11,6 +11,7 @@ import { PublicFooter } from '../../components/PublicFooter';
 import { capture } from '../../lib/analytics';
 import { usePageMeta } from '../../lib/usePageMeta';
 import { LandingResumeSlot } from '../anon-analyze/LandingResumeSlot';
+import { LandingHero } from './LandingHero';
 import { SampleReportEmbed } from './SampleReportEmbed';
 import s from './landing.module.css';
 
@@ -39,44 +40,7 @@ export function LandingPage() {
             device has an unclaimed job; null in SSR/static render). */}
         <LandingResumeSlot />
 
-        <section className={s.hero}>
-          <span className="label">AI Music Analysis</span>
-          <h1 className={s.title}>
-            Know exactly what&rsquo;s wrong with your mix<span className={s.titleAccent}> — before anyone else hears it.</span>
-          </h1>
-          <p className={s.subtitle}>
-            Upload a track and get a graded report across loudness, low end, stereo image and
-            tonal balance — with concrete fixes you can hear, not vibes.
-          </p>
-          <div className={s.ctaRow}>
-            {/* Story 6.3 — straight into the anon instant-analysis funnel. */}
-            <a href="/analyze" className="btn primary" data-testid="landing-cta">
-              Analyze my track free
-            </a>
-          </div>
-          <p className={`mono ${s.ctaHint}`}>WAV · FLAC · MP3 · no account needed for the first one</p>
-
-          {/* The guest demo (task P3) needs no upload and no account — it gets
-              its own highlighted card so a visitor without a track in hand
-              still has an obvious next step. */}
-          <div className={s.demoCard}>
-            <div className={s.demoCopy}>
-              <span className={`mono ${s.demoEyebrow}`}>No track handy?</span>
-              <p className={s.demoText}>
-                Open the results of a real sample analysis and try every feature — findings, fix plan,
-                AI coach and the Listen rack. No signup.
-              </p>
-            </div>
-            <a
-              href="/demo"
-              className={`btn ${s.demoBtn}`}
-              data-testid="landing-demo-cta"
-              onClick={() => capture('demo_cta_clicked', { source: 'landing' })}
-            >
-              Explore the demo →
-            </a>
-          </div>
-        </section>
+        <LandingHero />
 
         <SampleReportEmbed />
 

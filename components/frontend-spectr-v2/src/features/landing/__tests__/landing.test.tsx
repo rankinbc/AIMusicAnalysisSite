@@ -5,7 +5,9 @@ import { AuthContext } from '../../../auth/AuthContext';
 import type { AuthedUser } from '../../../api/types';
 import { PublicChrome } from '../../../components/PublicChrome';
 import { PricingPlansView } from '../../pricing/PricingPlansView';
+import { COACH_LINE, HERO_FINDING } from '../LandingHero';
 import { LandingPage } from '../LandingPage';
+import { SAMPLE_FINDINGS } from '../sample/sample-data';
 import { SampleReportEmbed } from '../SampleReportEmbed';
 
 // Story 6.1 — static renders (the 6-1 idiom: plain <a> anchors so no
@@ -89,6 +91,42 @@ describe('LandingPage (story 6.1 AC1)', () => {
     expect(html).toContain('No signup.');
     // The primary upload CTA still comes first.
     expect(html.indexOf('data-testid="landing-cta"')).toBeLessThan(html.indexOf('data-testid="landing-demo-cta"'));
+  });
+});
+
+describe('Landing hero (two-column redesign + the Coach)', () => {
+  const html = renderToStaticMarkup(<LandingPage />);
+
+  it('renders exactly one h1 with the headline', () => {
+    expect((html.match(/<h1[\s>]/g) ?? []).length).toBe(1);
+    expect(html).toContain('wrong with your mix before anyone else hears it.');
+  });
+
+  it('points the primary CTA at /analyze and the demo CTA at /demo', () => {
+    expect(html).toMatch(/<a href="\/analyze"[^>]*data-testid="landing-cta"/);
+    expect(html).toMatch(/<a href="\/demo"[^>]*data-testid="landing-demo-cta"/);
+  });
+
+  it('introduces the Coach with his line as real text and a decorative avatar', () => {
+    expect(COACH_LINE).toBe("I'm the Coach. I'll help you get your mix where you want it to be.");
+    expect(html).toContain('data-testid="landing-coach"');
+    // Static markup escapes the apostrophes.
+    expect(html).toContain('the Coach. I&#x27;ll help you get your mix where you want it to be.');
+    expect(html).toMatch(/aria-hidden="true"><svg[^>]*aria-label="The Coach"/);
+    // Truthful framing: the coach reasons over the report, he does not "hear" audio.
+    expect(html).toContain('Reads your report');
+  });
+
+  it('shows a finding that matches the real sample report fixture', () => {
+    const first = SAMPLE_FINDINGS[0];
+    expect(first).toBeDefined();
+    if (!first) return;
+    expect(HERO_FINDING.headline).toBe(first.verdict.headline);
+    expect(HERO_FINDING.severity).toBe(first.verdict.severity);
+    expect(first.verdict.summary).toContain('-18.3 dBFS');
+    expect(first.verdict.summary).toContain('12 dB louder than bass band');
+    expect(first.corroboratedBy.map((c) => c.headline)).toContain(HERO_FINDING.alsoFlagged);
+    expect(html).toContain(HERO_FINDING.headline);
   });
 });
 

@@ -1,0 +1,102 @@
+/* Landing hero — two columns on desktop: the pitch + both CTAs on the left,
+ * the Coach (the app's mascot) introducing himself on the right, with one
+ * real finding from the sample report as a quiet product hint. Phone
+ * stacks pitch → CTA → Coach → demo callout so the headline and primary
+ * CTA stay above the fold.
+ *
+ * Kept LEAN for the landing entry chunk: the Coach is a small inline SVG
+ * from ui/, and the finding below is a hand-copied excerpt (NOT an import
+ * of the 40 kB generated fixture). landing.test.tsx asserts it still
+ * matches sample-data.ts, so it can't drift from the real report. */
+import { Coach } from '../../ui/Coach';
+import { capture } from '../../lib/analytics';
+import s from './LandingHero.module.css';
+
+/** Excerpt of SAMPLE_FINDINGS[0] (verdict `sample-03`) + its corroboration. */
+export const HERO_FINDING = {
+  category: 'Low end',
+  severity: 'moderate',
+  headline: 'Excessive sub-bass energy overwhelming the mix',
+  measure: 'Sub-bass −18.3 dBFS, 12 dB above the bass band',
+  alsoFlagged: 'Inverted low-end balance — sub louder than bass fundamental',
+} as const;
+
+export const COACH_LINE = "I'm the Coach. I'll help you get your mix where you want it to be.";
+
+export function LandingHero() {
+  return (
+    <section className={s.hero} aria-labelledby="landing-title">
+      <div className={s.copy}>
+        <h1 id="landing-title" className={s.title}>
+          Know what&rsquo;s wrong with your mix before anyone else hears it.
+        </h1>
+        <p className={s.subtitle}>
+          Upload a track and get a graded report on loudness, low end, stereo image and tonal
+          balance, with the measurements behind every finding and concrete fixes to try tonight.
+        </p>
+        <div className={s.ctaRow}>
+          {/* Story 6.3 — straight into the anon instant-analysis funnel. */}
+          <a href="/analyze" className={`btn primary ${s.primaryBtn}`} data-testid="landing-cta">
+            Analyze my track free
+          </a>
+          <p className={s.ctaHint}>
+            WAV, FLAC or MP3.
+            <br />
+            Your first analysis needs no account.
+          </p>
+        </div>
+      </div>
+
+      {/* The guest demo (task P3) needs no upload and no account — it keeps
+          its own highlighted callout so a visitor without a track in hand
+          still has an obvious next step. */}
+      <div className={s.demoCard}>
+        <div className={s.demoCopy}>
+          <p className={s.demoHead}>No track handy?</p>
+          <p className={s.demoText}>
+            Open the results of a real sample analysis and try every feature — findings, fix plan,
+            AI coach and the Listen rack. No signup.
+          </p>
+        </div>
+        <a
+          href="/demo"
+          className={`btn ${s.demoBtn}`}
+          data-testid="landing-demo-cta"
+          onClick={() => capture('demo_cta_clicked', { source: 'landing' })}
+        >
+          Explore the demo →
+        </a>
+      </div>
+
+      <figure className={s.stage} data-testid="landing-coach">
+        <blockquote className={s.bubble}>
+          <p className={s.bubbleText}>{COACH_LINE}</p>
+        </blockquote>
+        <div className={s.coachRow}>
+          <div className={s.coach} aria-hidden="true">
+            <Coach size={148} glow={false} />
+          </div>
+          <p className={s.caption}>
+            <span className={s.captionName}>The Coach</span>
+            Reads your report&rsquo;s measurements and walks you through every fix, one
+            question at a time.
+          </p>
+        </div>
+
+        <div className={s.finding} role="group" aria-label="A finding from the sample report">
+          <div className={s.findingMeta}>
+            <span className={s.sevDot} aria-hidden="true" />
+            <span>{HERO_FINDING.category}</span>
+            <span className={s.findingSev}>{HERO_FINDING.severity}</span>
+            <span className={s.findingSrc}>from the sample report</span>
+          </div>
+          <p className={s.findingHead}>{HERO_FINDING.headline}</p>
+          <p className={`mono ${s.findingMeasure}`}>{HERO_FINDING.measure}</p>
+          <p className={s.findingAlso}>
+            Corroborated by a second check: {HERO_FINDING.alsoFlagged.toLowerCase()}
+          </p>
+        </div>
+      </figure>
+    </section>
+  );
+}
