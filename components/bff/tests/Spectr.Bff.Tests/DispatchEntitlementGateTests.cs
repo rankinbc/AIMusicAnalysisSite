@@ -114,56 +114,26 @@ public sealed class DispatchEntitlementGateTests(WebApplicationFactory<Program> 
         await db.SaveChangesAsync();
     }
 
-    // ── (a) Free user, 2 used → succeeds, tier=free on job, usage_event created ─
+    // ── (a) 0-balance user, no usage → 402 insufficient_credits, NOT a free analysis ─
+    // Spec 3.3: with credits on, every non-Pro real user is tier "credits" —
+    // the legacy free allotment no longer applies at any balance.
     [SkippableFact]
-    public async Task FreeUser_2Used_Succeeds_TierFree_UsageCreated()
+    public async Task ZeroBalanceUser_NoUsage_402_NoFreeAnalysis()
     {
         await TestDb.RequireAsync(_factory);
         var (client, queue) = NewClient();
-        var (_, userId) = await AuthAsync(client, "gate-a");
-        await SeedUsageAsync(userId, 2);
+        await AuthAsync(client, "gate-a");
         var versionId = await CreateVersionAsync(client);
 
         var resp = await client.PostAsync($"/api/versions/{versionId}/analyze", null);
-        Assert.Equal(HttpStatusCode.Accepted, resp.StatusCode);
-        Assert.Single(queue.Calls);
-        Assert.Equal(DramatiqTasks.AnalyzeAudioJob, queue.Calls.First());
-
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var job = await db.AnalysisJobs.AsNoTracking()
-            .FirstOrDefaultAsync(j => j.VersionId == versionId);
-        Assert.NotNull(job);
-        Assert.Equal("free", job!.Tier);
-        Assert.Equal("pending", job.Status);
-
-        var period = DateTimeOffset.UtcNow.ToString("yyyy-MM");
-        var usageCount = await db.UsageEvents.CountAsync(
-            e => e.UserId == userId && e.EventType == "analysis" && e.BillingPeriod == period);
-        Assert.Equal(3, usageCount); // 2 seeded + 1 created by dispatch
-    }
-
-    // ── (b) Free user, 3 used → 409 entitlement_exhausted, no rows inserted ──
-    [SkippableFact]
-    public async Task FreeUser_3Used_409EntitlementExhausted_NoRowsInserted()
-    {
-        await TestDb.RequireAsync(_factory);
-        var (client, queue) = NewClient();
-        var (_, userId) = await AuthAsync(client, "gate-b");
-        await SeedUsageAsync(userId, 3);
-        var versionId = await CreateVersionAsync(client);
-
-        var resp = await client.PostAsync($"/api/versions/{versionId}/analyze", null);
-        Assert.Equal(HttpStatusCode.Conflict, resp.StatusCode);
-
+        Assert.Equal(HttpStatusCode.PaymentRequired, resp.StatusCode);
         var body = await resp.Content.ReadFromJsonAsync<ErrorEnvelopeBody>();
-        Assert.Equal("entitlement_exhausted", body?.Error?.Code);
+        Assert.Equal("insufficient_credits", body?.Error?.Code);
         Assert.Empty(queue.Calls);
 
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var jobCount = await db.AnalysisJobs.CountAsync(j => j.VersionId == versionId);
-        Assert.Equal(0, jobCount);
+        Assert.Equal(0, await db.AnalysisJobs.CountAsync(j => j.VersionId == versionId));
     }
 
     // ── (c) Credits balance=1 → succeeds, tier=credits, ledger -1, usage row ─
@@ -201,23 +171,22 @@ public sealed class DispatchEntitlementGateTests(WebApplicationFactory<Program> 
         Assert.Equal(1, usageCount);
     }
 
-    // ── (d) Credits balance=0 (user exhausted credits + free cap) → 409 ──────
+    // ── (d) Credits balance=0 with prior usage → still 402 (no free-cap fallback) ─
     [SkippableFact]
-    public async Task CreditsBalance0_FreeCap_409()
+    public async Task CreditsBalance0_402_InsufficientCredits()
     {
         await TestDb.RequireAsync(_factory);
         var (client, queue) = NewClient();
         var (_, userId) = await AuthAsync(client, "gate-d");
-        // No credits (balance = 0) + 3 free analyses used → free tier exhausted.
         await SeedUsageAsync(userId, 3);
         var versionId = await CreateVersionAsync(client);
 
         var resp = await client.PostAsync($"/api/versions/{versionId}/analyze", null);
-        Assert.Equal(HttpStatusCode.Conflict, resp.StatusCode);
+        Assert.Equal(HttpStatusCode.PaymentRequired, resp.StatusCode);
         Assert.Empty(queue.Calls);
 
         var body = await resp.Content.ReadFromJsonAsync<ErrorEnvelopeBody>();
-        Assert.Equal("entitlement_exhausted", body?.Error?.Code);
+        Assert.Equal("insufficient_credits", body?.Error?.Code);
     }
 
     // ── (e) Pro always succeeds regardless of usage count ────────────────────

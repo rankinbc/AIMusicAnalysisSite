@@ -68,25 +68,28 @@ public sealed class CreditLedgerService(
         Guid userId, Guid jobId, string billingPeriod, CancellationToken ct)
         => (await ChargeAsync(userId, 1, jobId.ToString(), null, "analysis", ct, billingPeriod))!;
 
+    private const int MaxChargeAttempts = 4;
+
     // Debit `amount` credits (+ an optional usage_events row) in one serializable
     // transaction. Idempotent on `idempotencyKey`: a replay returns null and
     // charges nothing (the caller proceeds — it was already paid). Throws
-    // InsufficientCreditsException when balance < amount. Retries ONCE on 40001.
+    // InsufficientCreditsException when balance < amount. Retries on 40001 (a few
+    // concurrent charges by one user serialize behind each other).
     public async Task<CreditLedgerEntry?> ChargeAsync(
         Guid userId, int amount, string reference, string? idempotencyKey,
         string? usageEventType, CancellationToken ct, string? billingPeriod = null)
     {
         if (amount < 0) throw new ArgumentOutOfRangeException(nameof(amount));
         if (amount == 0) return null;
-        for (var attempt = 0; attempt < 2; attempt++)
+        for (var attempt = 0; attempt < MaxChargeAttempts; attempt++)
         {
             try
             {
                 return await ChargeOnceAsync(userId, amount, reference, idempotencyKey, usageEventType, billingPeriod, ct);
             }
-            catch (Exception ex) when (IsSerializationFailure(ex) && attempt == 0)
+            catch (Exception ex) when (IsSerializationFailure(ex) && attempt < MaxChargeAttempts - 1)
             {
-                logger.LogWarning("Charge serialization conflict — retrying once. user={UserId}, ref={Ref}", userId, reference);
+                logger.LogWarning("Charge serialization conflict — retrying. user={UserId}, ref={Ref}", userId, reference);
                 db.ChangeTracker.Clear();
             }
         }

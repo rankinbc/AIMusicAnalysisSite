@@ -92,7 +92,8 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
     };
 
     private static async Task<(HttpClient Client, Guid UserId, Guid AnalysisId)> SeedAuthedUserAndAnalysis(
-        WebApplicationFactory<Program> factory, string emailPrefix, string? degradationNotice = null)
+        WebApplicationFactory<Program> factory, string emailPrefix, string? degradationNotice = null,
+        bool fund = true)
     {
         var client = factory.CreateClient();
         var email = $"{emailPrefix}+{Guid.NewGuid():N}@spectr.test";
@@ -117,6 +118,9 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
             await db.SaveChangesAsync();
             analysisId = analysis.Id;
         }
+        // Credits on ⇒ a real user is tier "credits" and each coach message is
+        // charged (spec 3.3) — fund the happy-path users.
+        if (fund) await TestCredits.GrantAsync(factory, userId);
         return (client, userId, analysisId);
     }
 
@@ -417,122 +421,33 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
         }
     }
 
-    // ── Story 12.6 (AC5): refused turns don't count against the free cap ────
+    // ── Spec 3.3: no free per-analysis cap for real users under credits ─────
 
     [SkippableFact]
-    public async Task Refused_Turn_Does_Not_Count_Against_Free_Cap()
+    public async Task Post_ZeroBalance_Returns_402_InsufficientCredits_And_Does_Not_Enqueue()
     {
-        // The worker stamps the USER row's RefusalReason when its turn ends
-        // refused; the free-cap count read-side-excludes stamped rows — so a
-        // user whose question the coach couldn't answer gets that turn back.
+        // The legacy free follow-up allotment (3 per analysis, then 403
+        // coach_cap_reached) no longer applies: a 0-balance real user is tier
+        // "credits" and gets the buy-sheet 402. Zero side-effects on refusal.
         await TestDb.RequireAsync(_factory);
 
         var (factory, queue) = BuildWithFakeQueue();
-        var (client, userId, analysisId) = await SeedAuthedUserAndAnalysis(factory, "coach-refund");
+        var (client, userId, analysisId) = await SeedAuthedUserAndAnalysis(factory, "coach-zero", fund: false);
 
         try
         {
-            for (var i = 1; i <= 3; i++)
-            {
-                var ok = await client.PostAsJsonAsync(
-                    $"/api/coach/{analysisId}/messages",
-                    new CreateCoachMessageRequest($"Q{i}"));
-                Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
-            }
-
-            // Simulate the worker refusing turn 2: stamp its USER row (the
-            // worker isn't running under the fake queue). Content-keyed —
-            // CreatedAt ordering can tie under rapid POSTs.
-            using (var scope = factory.Services.CreateScope())
-            {
-                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                var conv = await db.Conversations.SingleAsync(c => c.UserId == userId);
-                var secondUser = await db.CoachMessages
-                    .SingleAsync(m => m.ConversationId == conv.Id
-                        && m.Role == "user" && m.Content == "Q2");
-                secondUser.RefusalReason = "missing_data";
-                await db.SaveChangesAsync();
-            }
-
-            // The cap has headroom again — the 4th POST succeeds and reports
-            // used=3 AFTER this send (2 counted priors + this one).
-            var resp = await client.PostAsJsonAsync(
-                $"/api/coach/{analysisId}/messages",
-                new CreateCoachMessageRequest("Q4 — the refused turn gave me this one back"));
-            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-            var body = await resp.Content.ReadFromJsonAsync<CreateCoachMessageResponse>();
-            Assert.NotNull(body);
-            Assert.Equal(3, body!.Caps.Used);
-            Assert.True(body.Caps.CapReached); // back at the limit
-            Assert.Equal(4, queue.Calls.Count);
-
-            // …and the cap still ENFORCES after the refund: a 5th POST 403s.
-            var over = await client.PostAsJsonAsync(
-                $"/api/coach/{analysisId}/messages",
-                new CreateCoachMessageRequest("Q5 — over the refunded line"));
-            Assert.Equal(HttpStatusCode.Forbidden, over.StatusCode);
-            Assert.Equal(4, queue.Calls.Count); // no enqueue for the refused POST
-        }
-        finally
-        {
-            await CleanupUser(factory, userId);
-        }
-    }
-
-    // ── Story 1.9: Per-Analysis Coach Caps (AC1-4) ───────────────────────────
-
-    [SkippableFact]
-    public async Task Post_AtCapLimit_Returns_403_CoachCapReached_And_Does_Not_Enqueue()
-    {
-        // AC1: server rejects further messages with `coach_cap_reached`.
-        // AC4: source-of-truth is COUNT user messages on the conversation.
-        // Regression guard: NO new coach_messages row, NO actor enqueue.
-        await TestDb.RequireAsync(_factory);
-
-        var (factory, queue) = BuildWithFakeQueue();
-        var (client, userId, analysisId) = await SeedAuthedUserAndAnalysis(factory, "coach-cap");
-
-        try
-        {
-            // Send three (the default FreeFollowups cap). Each one should
-            // succeed and return an incrementing `used` field.
-            for (var i = 1; i <= 3; i++)
-            {
-                var ok = await client.PostAsJsonAsync(
-                    $"/api/coach/{analysisId}/messages",
-                    new CreateCoachMessageRequest($"Q{i}"));
-                Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
-                var body = await ok.Content.ReadFromJsonAsync<CreateCoachMessageResponse>();
-                Assert.NotNull(body);
-                Assert.Equal(i, body!.Caps.Used);
-                Assert.Equal(3, body.Caps.Limit);
-                Assert.Equal(i == 3, body.Caps.CapReached);
-            }
-
-            // The fourth POST must refuse with coach_cap_reached.
             var refused = await client.PostAsJsonAsync(
                 $"/api/coach/{analysisId}/messages",
-                new CreateCoachMessageRequest("Q4 — over the line"));
-            Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
-            var refusedBody = await refused.Content.ReadAsStringAsync();
-            using (var doc = JsonDocument.Parse(refusedBody))
-            {
-                var err = doc.RootElement.GetProperty("error");
-                Assert.Equal("coach_cap_reached", err.GetProperty("code").GetString());
-                var details = err.GetProperty("details");
-                Assert.Equal(3, details.GetProperty("used").GetInt32());
-                Assert.Equal(3, details.GetProperty("limit").GetInt32());
-            }
+                new CreateCoachMessageRequest("Q1"));
+            Assert.Equal(HttpStatusCode.PaymentRequired, refused.StatusCode);
+            using (var doc = JsonDocument.Parse(await refused.Content.ReadAsStringAsync()))
+                Assert.Equal("insufficient_credits",
+                    doc.RootElement.GetProperty("error").GetProperty("code").GetString());
 
-            // Zero side-effects on refusal: still 3 user rows + 3 assistant
-            // rows + 3 enqueues — nothing from the refused Q4.
             using var scope = factory.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var conv = await db.Conversations.SingleAsync(c => c.UserId == userId);
-            var userMsgs = await db.CoachMessages
-                .CountAsync(m => m.ConversationId == conv.Id && m.Role == "user");
-            Assert.Equal(3, userMsgs);
-            Assert.Equal(3, queue.Calls.Count);
+            Assert.False(await db.Conversations.AnyAsync(c => c.UserId == userId));
+            Assert.Empty(queue.Calls);
         }
         finally
         {
@@ -541,53 +456,10 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
     }
 
     [SkippableFact]
-    public async Task Post_OneBelowLimit_Succeeds_And_Reports_CapReached_True()
+    public async Task Get_Conversation_Caps_Are_Unlimited_For_Credits_Tier()
     {
-        // AC2 sanity case: at used = limit - 1 the POST goes through and the
-        // returned caps shows CapReached = false (still room for one more);
-        // the NEXT POST should flip CapReached = true in the response.
-        await TestDb.RequireAsync(_factory);
-
-        var (factory, _) = BuildWithFakeQueue();
-        var (client, userId, analysisId) = await SeedAuthedUserAndAnalysis(factory, "coach-belowcap");
-
-        try
-        {
-            var first = await client.PostAsJsonAsync(
-                $"/api/coach/{analysisId}/messages",
-                new CreateCoachMessageRequest("Q1"));
-            Assert.Equal(HttpStatusCode.OK, first.StatusCode);
-            var firstBody = await first.Content.ReadFromJsonAsync<CreateCoachMessageResponse>();
-            Assert.Equal(1, firstBody!.Caps.Used);
-            Assert.False(firstBody.Caps.CapReached);
-
-            var second = await client.PostAsJsonAsync(
-                $"/api/coach/{analysisId}/messages",
-                new CreateCoachMessageRequest("Q2"));
-            Assert.Equal(HttpStatusCode.OK, second.StatusCode);
-            var secondBody = await second.Content.ReadFromJsonAsync<CreateCoachMessageResponse>();
-            Assert.Equal(2, secondBody!.Caps.Used);
-            Assert.False(secondBody.Caps.CapReached);  // 2 of 3, not yet capped.
-
-            var third = await client.PostAsJsonAsync(
-                $"/api/coach/{analysisId}/messages",
-                new CreateCoachMessageRequest("Q3"));
-            Assert.Equal(HttpStatusCode.OK, third.StatusCode);
-            var thirdBody = await third.Content.ReadFromJsonAsync<CreateCoachMessageResponse>();
-            Assert.Equal(3, thirdBody!.Caps.Used);
-            Assert.True(thirdBody.Caps.CapReached);  // 3 of 3, capped.
-        }
-        finally
-        {
-            await CleanupUser(factory, userId);
-        }
-    }
-
-    [SkippableFact]
-    public async Task Get_Conversation_Includes_Caps_Field_Reflecting_User_Message_Count()
-    {
-        // AC2 + AC4: the GET DTO must surface caps so the frontend can render
-        // the chip + gate state on first paint without a separate roundtrip.
+        // AC2 + AC4: the GET DTO surfaces caps so the frontend can render the
+        // gate state on first paint. Credits tier ⇒ unlimited scope, never reached.
         await TestDb.RequireAsync(_factory);
 
         var (factory, _) = BuildWithFakeQueue();
@@ -595,26 +467,20 @@ public sealed class CoachConversationEndpointsTests(WebApplicationFactory<Progra
 
         try
         {
-            // Empty state: caps present, 0 of 3.
             var empty = await client.GetAsync($"/api/coach/{analysisId}/conversation");
             var emptyBody = await empty.Content.ReadFromJsonAsync<CoachConversationDto>();
             Assert.NotNull(emptyBody);
             Assert.Equal(0, emptyBody!.Caps.Used);
-            Assert.Equal(3, emptyBody.Caps.Limit);
+            Assert.Equal("unlimited", emptyBody.Caps.Scope);
             Assert.False(emptyBody.Caps.CapReached);
 
-            // After two POSTs: caps reflects 2 of 3.
             await client.PostAsJsonAsync(
                 $"/api/coach/{analysisId}/messages",
                 new CreateCoachMessageRequest("Q1"));
-            await client.PostAsJsonAsync(
-                $"/api/coach/{analysisId}/messages",
-                new CreateCoachMessageRequest("Q2"));
 
             var hydrated = await client.GetAsync($"/api/coach/{analysisId}/conversation");
             var hydratedBody = await hydrated.Content.ReadFromJsonAsync<CoachConversationDto>();
-            Assert.Equal(2, hydratedBody!.Caps.Used);
-            Assert.Equal(3, hydratedBody.Caps.Limit);
+            Assert.Equal("unlimited", hydratedBody!.Caps.Scope);
             Assert.False(hydratedBody.Caps.CapReached);
         }
         finally

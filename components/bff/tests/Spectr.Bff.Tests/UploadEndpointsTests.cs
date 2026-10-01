@@ -201,8 +201,9 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
         await TestDb.RequireAsync(_factory);
 
         var (client, _) = NewThrowingStoreClient();
-        var (_, token) = await TestAuth.RegisterAsync(client);
+        var (uid, token) = await TestAuth.RegisterAsync(client);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        await TestCredits.GrantAsync(_factory, uid);
 
         var resp = await client.PostAsJsonAsync("/api/uploads/init",
             new { fileName = "track.wav", fileSize = 1024L });
@@ -258,6 +259,7 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
         var (client, store, _, _) = NewClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        await TestCredits.GrantAsync(_factory, userId);
 
         var fileSize = 40L * 1024 * 1024; // 40 MiB → 3 parts at 16 MiB
         var resp = await client.PostAsJsonAsync("/api/uploads/init",
@@ -298,6 +300,7 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
         var (client, store, queue, f) = NewClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        await TestCredits.GrantAsync(f, userId);
 
         var jobId = Guid.NewGuid();
         var key = $"audio/{userId}/{jobId}/source.wav";
@@ -335,6 +338,7 @@ public sealed class UploadEndpointsTests(WebApplicationFactory<Program> factory)
         var (client, _, _, f) = NewClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        await TestCredits.GrantAsync(f, userId);
 
         var jobId = Guid.NewGuid();
         var resp = await client.PostAsJsonAsync("/api/uploads/complete", new

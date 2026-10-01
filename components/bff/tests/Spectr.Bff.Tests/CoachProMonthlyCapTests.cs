@@ -265,20 +265,21 @@ public sealed class CoachProMonthlyCapTests(WebApplicationFactory<Program> facto
         Assert.Equal(0, await db.Conversations.CountAsync(c => c.UserId == userId));
     }
 
-    // ── AC2: free-tier cap derives from the resolver and is per-analysis ─────
+    // ── Spec 3.3: a plain (0-balance) real user is tier "credits" — unlimited
+    // coach COUNT scope (spend is gated per message by credits, not a cap).
     [SkippableFact]
-    public async Task FreeUser_Conversation_Reports_AnalysisScope_From_Resolver()
+    public async Task PlainUser_Conversation_Reports_UnlimitedScope_From_Resolver()
     {
         await TestDb.RequireAsync(_factory);
         var (f, client) = NewClient();
-        var (userId, _) = await AuthAsync(client, "coachfree-scope");
+        var (userId, _) = await AuthAsync(client, "coachplain-scope");
         var analysisId = await SeedAnalysisAsync(userId);
 
         var resp = await client.GetAsync($"/api/coach/{analysisId}/conversation");
         var body = await resp.Content.ReadFromJsonAsync<CoachConversationDto>();
         Assert.NotNull(body);
-        Assert.Equal("analysis", body!.Caps.Scope);
-        Assert.Equal(3, body.Caps.Limit);    // coach_free_followups flag (seeded 3)
+        Assert.Equal("unlimited", body!.Caps.Scope);
+        Assert.False(body.Caps.CapReached);
         Assert.Null(body.Caps.ResetsAt);
     }
 }

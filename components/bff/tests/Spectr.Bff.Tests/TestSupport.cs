@@ -296,3 +296,21 @@ public static class TestVerdicts
         Headline = "Specialist failed",
     };
 }
+
+/// <summary>
+/// With credits on, every non-Pro real user is tier "credits" (spec 3.3), so
+/// a 0-balance user is refused paid work with 402. Tests that exercise the
+/// happy path of a paid surface fund the user with a signup-style grant
+/// (not a "purchase", so IsPaying stays false and the abuse arms still apply).
+/// </summary>
+public static class TestCredits
+{
+    public static async Task GrantAsync<TProgram>(
+        WebApplicationFactory<TProgram> factory, Guid userId, int amount = 100_000)
+        where TProgram : class
+    {
+        using var scope = factory.Services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<Spectr.Bff.Services.CreditLedgerService>()
+            .GrantSignupBonusAsync(userId, amount, CancellationToken.None);
+    }
+}

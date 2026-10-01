@@ -104,20 +104,6 @@ public sealed class DispatchQueueRoutingTests(WebApplicationFactory<Program> fac
         return entry;
     }
 
-    // ── (1) Free user (0 used) → analysis-free ───────────────────────────────
-    [SkippableFact]
-    public async Task FreeUser_RoutesToAnalysisFree()
-    {
-        await TestDb.RequireAsync(_factory);
-        var (client, queue) = NewClient();
-        await AuthAsync(client, "route-free");
-        var versionId = await CreateVersionAsync(client);
-
-        var (task, q) = await DispatchAndCapture(client, queue, versionId);
-        Assert.Equal(DramatiqTasks.AnalyzeAudioJob, task);
-        Assert.Equal(DramatiqQueues.AnalysisFree, q);
-    }
-
     // ── (2) Credits user (balance ≥ 1) → analysis-paid ───────────────────────
     [SkippableFact]
     public async Task CreditsUser_RoutesToAnalysisPaid()

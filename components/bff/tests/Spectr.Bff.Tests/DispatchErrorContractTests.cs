@@ -76,6 +76,10 @@ public sealed class DispatchErrorContractTests(WebApplicationFactory<Program> fa
                 // the unverified path.
                 await db.Users.Where(u => u.Id == userId).ExecuteUpdateAsync(
                     s => s.SetProperty(u => u.EmailVerifiedAt, (DateTimeOffset?)null));
+                // Funded (grant ≠ purchase ⇒ not "paying"): with credits on a
+                // 0-balance user is refused 402 before the verify gate runs.
+                await scope.ServiceProvider.GetRequiredService<CreditLedgerService>()
+                    .GrantSignupBonusAsync(userId, 100_000, CancellationToken.None);
             }
 
             var resp = await client.PostAsync($"/api/versions/{versionId}/analyze", null);
@@ -88,40 +92,18 @@ public sealed class DispatchErrorContractTests(WebApplicationFactory<Program> fa
     }
 
     [SkippableFact]
-    public async Task Free_Cap_Exhaustion_409_Carries_Machine_Code()
+    public async Task Zero_Balance_402_Carries_Machine_Code_Not_Free_Cap()
     {
         await TestDb.RequireAsync(_factory);
 
+        // Spec 3.3: with credits on there is no free allotment for real users —
+        // a 0-balance user gets the buy-sheet 402, never the legacy 409.
         var (userId, client) = await RegisterVerifiedAsync();
         var (songId, versionId) = await TestSeed.SongWithVersionAsync(_factory, userId);
         try
         {
-            using (var scope = _factory.Services.CreateScope())
-            {
-                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                var ents = scope.ServiceProvider.GetRequiredService<EntitlementService>();
-                // Auto-verify may be off in some configs — verified is a
-                // precondition here (we want the CAP arm, not the gate).
-                await db.Users.Where(u => u.Id == userId).ExecuteUpdateAsync(
-                    s => s.SetProperty(u => u.EmailVerifiedAt, DateTimeOffset.UtcNow));
-                // Burn the whole free cap (flag-driven; default 3).
-                var flags = await ents.GetFlagsAsync(CancellationToken.None);
-                var cap = flags.TryGetValue("free_analyses_per_month", out var v)
-                    && int.TryParse(v, out var n) && n > 0 ? n : 3;
-                var period = DateTimeOffset.UtcNow.ToString("yyyy-MM");
-                for (var i = 0; i < cap; i++)
-                    db.UsageEvents.Add(new UsageEvent
-                    {
-                        UserId = userId,
-                        EventType = "analysis",
-                        BillingPeriod = period,
-                        OccurredAt = DateTimeOffset.UtcNow,
-                    });
-                await db.SaveChangesAsync();
-            }
-
             var resp = await client.PostAsync($"/api/versions/{versionId}/analyze", null);
-            await AssertEnvelopeAsync(resp, HttpStatusCode.Conflict, "entitlement_exhausted");
+            await AssertEnvelopeAsync(resp, HttpStatusCode.PaymentRequired, "insufficient_credits");
         }
         finally
         {

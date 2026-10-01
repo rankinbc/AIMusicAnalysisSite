@@ -139,9 +139,12 @@ public sealed class AbuseContainmentTests(WebApplicationFactory<Program> factory
                     OccurredAt = DateTimeOffset.UtcNow,
                 });
                 await db.SaveChangesAsync();
+                // Credits on ⇒ real users are tier "credits": fund the account
+                // (a grant is not a purchase, so the abuse arms still apply).
+                await TestCredits.GrantAsync(_factory, userId);
             }
 
-            // The NORMAL free cap (3) still has room; the disposable cap (1)
+            // The normal per-account cap still has room; the disposable cap (1)
             // does not — dispatch refuses.
             var resp = await client.PostAsync($"/api/versions/{versionId}/analyze", null);
             // Story 12.7 (AC3): full envelope contract for the disposable-cap
@@ -202,6 +205,9 @@ public sealed class AbuseContainmentTests(WebApplicationFactory<Program> factory
                     OccurredAt = DateTimeOffset.UtcNow,
                 });
                 await db.SaveChangesAsync();
+                // Credits on ⇒ real users are tier "credits": fund the account
+                // (a grant is not a purchase, so the abuse arms still apply).
+                await TestCredits.GrantAsync(_factory, userId);
             }
 
             var resp = await client.PostAsync($"/api/versions/{versionId}/analyze", null);
@@ -288,6 +294,7 @@ public sealed class AbuseContainmentTests(WebApplicationFactory<Program> factory
                     await db.Users.Where(u => u.Id == userId).ExecuteUpdateAsync(
                         s => s.SetProperty(u => u.EmailVerifiedAt, DateTimeOffset.UtcNow));
                 }
+                await TestCredits.GrantAsync(f, userId);
                 var (songId, versionId) = await TestSeed.SongWithVersionAsync(f, userId);
                 cleanupSongs.Add(songId);
 
