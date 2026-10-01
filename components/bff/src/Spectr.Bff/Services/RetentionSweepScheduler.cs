@@ -113,8 +113,12 @@ internal sealed class RetentionSweepScheduler(
 
         // Task D7 (spec D8) — guest sandboxes cannot self-delete (POST
         // /api/me/delete is guard-denied for guests, Auth/GuestGuard.cs);
-        // this nightly pass is the ONLY path off an expired guest row. A
-        // warning-pass or sweep-enqueue failure above must never block it.
+        // this nightly pass is the ONLY path off an expired guest row. It
+        // runs AFTER the sweep enqueue and the warning pass, so an exception
+        // in either skips the guest purge for that night (the next nightly
+        // tick runs it again). Deliberate (FW2 / final review M1): the purge
+        // enqueues its own storage cleanup on the same broker, so the outage
+        // that failed the sweep enqueue would fail the purge the same way.
         await PurgeExpiredGuestsAsync(DateTimeOffset.UtcNow, onlyUserIds: null, ct);
     }
 
