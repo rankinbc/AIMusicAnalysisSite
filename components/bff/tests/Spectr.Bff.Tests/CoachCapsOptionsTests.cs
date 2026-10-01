@@ -57,8 +57,11 @@ public sealed class CoachCapsOptionsTests
         // When SPECTR_REQUIRE_STRIPE=1 and any of the four Stripe keys
         // are missing, host.StartAsync must throw OptionsValidationException
         // (not surface the failure lazily at first IOptions<T>.Value access).
-        Environment.SetEnvironmentVariable("SPECTR_REQUIRE_STRIPE", "1");
-        try
+        // The flag is a LOCAL, not the process env var: setting
+        // SPECTR_REQUIRE_STRIPE process-wide raced every parallel test that
+        // boots the real Program (CI flake: OptionsValidationException in
+        // unrelated tests).
+        const bool requireStripe = true;
         {
             var hostBuilder = Host.CreateDefaultBuilder()
                 .ConfigureAppConfiguration(cfg =>
@@ -73,9 +76,6 @@ public sealed class CoachCapsOptionsTests
                 })
                 .ConfigureServices((ctx, services) =>
                 {
-                    var requireStripe = string.Equals(
-                        Environment.GetEnvironmentVariable("SPECTR_REQUIRE_STRIPE"),
-                        "1", StringComparison.Ordinal);
                     services.AddOptions<Spectr.Bff.Options.StripeOptions>()
                         .Bind(ctx.Configuration.GetSection(
                             Spectr.Bff.Options.StripeOptions.SectionName))
@@ -94,10 +94,6 @@ public sealed class CoachCapsOptionsTests
             Assert.Contains("Stripe configuration", ex.Message);
             await host.StopAsync();
         }
-        finally
-        {
-            Environment.SetEnvironmentVariable("SPECTR_REQUIRE_STRIPE", null);
-        }
     }
 
     [Fact]
@@ -106,7 +102,7 @@ public sealed class CoachCapsOptionsTests
         // The dev default: SPECTR_REQUIRE_STRIPE unset; the host MUST boot
         // even with all four Stripe fields empty. The checkout endpoint
         // will return stripe_not_configured (503) at request time instead.
-        Environment.SetEnvironmentVariable("SPECTR_REQUIRE_STRIPE", null);
+        const bool requireStripe = false;
 
         var hostBuilder = Host.CreateDefaultBuilder()
             .ConfigureAppConfiguration(cfg =>
@@ -118,9 +114,6 @@ public sealed class CoachCapsOptionsTests
             })
             .ConfigureServices((ctx, services) =>
             {
-                var requireStripe = string.Equals(
-                    Environment.GetEnvironmentVariable("SPECTR_REQUIRE_STRIPE"),
-                    "1", StringComparison.Ordinal);
                 services.AddOptions<Spectr.Bff.Options.StripeOptions>()
                     .Bind(ctx.Configuration.GetSection(
                         Spectr.Bff.Options.StripeOptions.SectionName))
