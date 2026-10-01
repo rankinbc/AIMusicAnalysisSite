@@ -10,7 +10,9 @@
 
 **Spec:** `PRPs/credit-economy.md` (owner-approved 2026-10-01).
 
-**Worktree / branch:** `C:\Users\badmin\projects\spectr-credits` on `feat/credit-economy`.
+**Worktree / branch:** `C:\Users\badmin\projects\spectr-credits` on `feat/credit-economy` (rebased onto `origin/solo` @ d1ac5d5).
+
+**Amendment (2026-10-01, after rebase):** `solo` commit a28aa1f already shipped verify-before-sign-in AND a 500-credit sign-up bonus: flag `signup_bonus_credits` (seeded 500), ledger reason `signup_bonus`, `CreditLedgerService.GrantSignupBonusAsync(userId, amount, ct)` (idempotency key `signup_bonus:{userId:N}`, granted on email-verification activation), and `PlansResponse.SignupBonusCredits`. This plan REUSES that: no `grant` ledger reason, no `credit_signup_grant` flag, no `GrantAsync`; Task 9 is reduced to a backfill for pre-existing verified accounts.
 
 ## Global Constraints
 
@@ -49,12 +51,11 @@ Frontend gates: `cd components/frontend-spectr-v2 && npx tsc -b && npm run lint 
 
 ---
 
-### Task 1: Price list, `grant` ledger reason, and flag seeds
+### Task 1: Price list and price flag seeds
 
 **Files:**
 - Create: `components/bff/src/Spectr.Bff/Services/CreditPricing.cs`
 - Modify: `components/bff/src/Spectr.Bff/Services/EntitlementService.cs` (add `GetPricesAsync`)
-- Modify: `components/bff/src/Spectr.Data/AppDbContext.cs:211-213` (reason CHECK adds `'grant'`)
 - Create: migration `CreditEconomy` (scaffolded) in `components/bff/src/Spectr.Data/Migrations/`
 - Modify: `components/bff/tests/Spectr.Bff.Tests/TestSupport.cs` (`TestProcessBaseline`)
 - Test: `components/bff/tests/Spectr.Bff.Tests/CreditPricingTests.cs`
@@ -62,6 +63,7 @@ Frontend gates: `cd components/frontend-spectr-v2 && npx tsc -b && npm run lint 
 **Interfaces:**
 - Produces: `record CreditPrices(int Analysis, int Specialist, int CoachMessage, int CoachMix, int SignupGrant, int ProAnalysesMonthly)`; `static CreditPrices CreditPricing.Resolve(IConfiguration, IReadOnlyDictionary<string,string>)`; `CreditPricing.Defaults`; `Task<CreditPrices> EntitlementService.GetPricesAsync(CancellationToken)`.
 - Config keys (each overrides its flag): `Credits:Prices:Analysis|Specialist|CoachMessage|CoachMix`, `Credits:SignupGrant`, `Credits:ProAnalysesMonthly`.
+- `SignupGrant` resolves from solo's EXISTING flag `signup_bonus_credits` (use `CreditLedgerService.SignupBonusFlag`), display only — the actual grant stays in solo's verify flow.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -94,7 +96,7 @@ public sealed class CreditPricingTests
         {
             ["credit_cost_analysis"] = "80",
             ["credit_cost_specialist"] = "12",
-            ["credit_signup_grant"] = "300",
+            ["signup_bonus_credits"] = "300",
         };
         var p = CreditPricing.Resolve(Cfg(("Credits:Prices:Analysis", "1")), flags);
         Assert.Equal(1, p.Analysis);        // config wins
@@ -159,7 +161,7 @@ public static class CreditPricing
         Specialist: Get(config, flags, "Credits:Prices:Specialist", "credit_cost_specialist", Defaults.Specialist),
         CoachMessage: Get(config, flags, "Credits:Prices:CoachMessage", "credit_cost_coach_message", Defaults.CoachMessage),
         CoachMix: Get(config, flags, "Credits:Prices:CoachMix", "credit_cost_coach_mix", Defaults.CoachMix),
-        SignupGrant: Get(config, flags, "Credits:SignupGrant", "credit_signup_grant", Defaults.SignupGrant),
+        SignupGrant: Get(config, flags, "Credits:SignupGrant", CreditLedgerService.SignupBonusFlag, Defaults.SignupGrant),
         ProAnalysesMonthly: Get(config, flags, "Credits:ProAnalysesMonthly", "pro_analyses_monthly", Defaults.ProAnalysesMonthly));
 
     private static int Get(
@@ -189,43 +191,34 @@ Add to `EntitlementService` (after the `CreditsEnabled` instance overload):
 Run: `cd components/bff && dotnet test tests/Spectr.Bff.Tests --filter "FullyQualifiedName~CreditPricingTests"`
 Expected: PASS (6 tests).
 
-- [ ] **Step 5: Add `grant` to the ledger reason CHECK and scaffold the migration**
+- [ ] **Step 5: Seed the price flags (empty migration + SQL)**
 
-In `AppDbContext.cs` replace the reason constraint string:
-
-```csharp
-        builder.Entity<CreditLedgerEntry>().ToTable(t => t.HasCheckConstraint(
-            "ck_credit_ledger_reason",
-            "\"reason\" IN ('purchase','spend','reversal','adjustment','grant')"));
-```
-
-Run: `cd components/bff && dotnet ef migrations add CreditEconomy --project src/Spectr.Data --startup-project src/Spectr.Bff`
-Expected: a migration whose `Up` drops + re-adds `ck_credit_ledger_reason`. Append the flag seeds to the END of `Up` and their removal to the END of `Down`:
+Run: `cd components/bff && dotnet ef migrations add SeedCreditPriceFlags --project src/Spectr.Data --startup-project src/Spectr.Bff`
+Expected: an EMPTY migration (no model changes — if it contains anything else, stop: the model snapshot is out of sync). Put this in `Up`:
 
 ```csharp
             // Credit economy (PRPs/credit-economy.md) — live price list. ON CONFLICT
-            // keeps an operator's already-tuned value on re-run.
+            // keeps an operator's already-tuned value on re-run. (The sign-up grant
+            // already lives in `signup_bonus_credits`, seeded by AddSignupBonusCredits.)
             migrationBuilder.Sql(@"
                 INSERT INTO feature_flags (name, value, updated_at) VALUES
                   ('credit_cost_analysis', '100', now()),
                   ('credit_cost_specialist', '15', now()),
                   ('credit_cost_coach_message', '5', now()),
                   ('credit_cost_coach_mix', '5', now()),
-                  ('credit_signup_grant', '500', now()),
                   ('pro_analyses_monthly', '15', now()),
                   ('llm_budget_credits_usd', '100', now())
                 ON CONFLICT (name) DO NOTHING;");
 ```
 
+and in `Down`:
+
 ```csharp
             migrationBuilder.Sql(@"
                 DELETE FROM feature_flags WHERE name IN (
                   'credit_cost_analysis','credit_cost_specialist','credit_cost_coach_message',
-                  'credit_cost_coach_mix','credit_signup_grant','pro_analyses_monthly',
-                  'llm_budget_credits_usd');");
+                  'credit_cost_coach_mix','pro_analyses_monthly','llm_budget_credits_usd');");
 ```
-
-Verify the seed column names against an existing seed first: `grep -n "INSERT INTO feature_flags" src/Spectr.Data/Migrations/20260723180200_AddCreditsEnabledFlag.cs` — use exactly the columns it uses.
 
 - [ ] **Step 6: Pin legacy-compatible values for the existing suite**
 
@@ -233,8 +226,9 @@ In `TestSupport.cs` `TestProcessBaseline.PinCreditsEnabled()` add (and extend it
 
 ```csharp
         Environment.SetEnvironmentVariable("Credits__Prices__Analysis", "1");
-        Environment.SetEnvironmentVariable("Credits__SignupGrant", "0");
 ```
+
+(Do NOT pin the sign-up bonus — solo's verify flow already owns it and its tests.)
 
 - [ ] **Step 7: Apply migration to dev DB and run the whole BFF suite**
 
@@ -245,12 +239,12 @@ Expected: all pass, 0 unexpected skips.
 
 ```bash
 git add components/bff
-git commit -m "feat(credits): price list (config>flag>default), grant ledger reason, flag seeds"
+git commit -m "feat(credits): price list (config>flag>default) + price flag seeds"
 ```
 
 ---
 
-### Task 2: Generalised ledger — charge any amount, grant, refund a charge
+### Task 2: Generalised ledger — charge any amount, refund a charge
 
 **Files:**
 - Modify: `components/bff/src/Spectr.Bff/Services/CreditLedgerService.cs`
@@ -261,7 +255,6 @@ git commit -m "feat(credits): price list (config>flag>default), grant ledger rea
 - Consumes: nothing new.
 - Produces:
   - `Task<CreditLedgerEntry?> ChargeAsync(Guid userId, int amount, string reference, string? idempotencyKey, string? usageEventType, CancellationToken ct)` — returns the spend row; returns `null` when `idempotencyKey` was already used (already charged — caller proceeds, no second charge); throws `InsufficientCreditsException` (now with `Required`) when balance < amount. `amount == 0` → returns `null` without writing.
-  - `Task<CreditLedgerEntry?> GrantAsync(Guid userId, int amount, string reference, string idempotencyKey, CancellationToken ct)` — `+amount` row, reason `grant`; `null` on duplicate key or `amount <= 0`.
   - `Task<CreditLedgerEntry?> RefundChargeAsync(Guid userId, string reference, string refundKey, CancellationToken ct)` — sums this user's `spend` rows with `Reference == reference`; none → `null`; else inserts `+|sum|` reason `reversal` with `refundKey`; duplicate key → `null`.
   - Existing `SpendAsync(userId, jobId, billingPeriod)` and `ReverseAsync(userId, jobId, reasonCode)` keep their signatures and become wrappers (`ChargeAsync(userId, 1, jobId.ToString(), null, "analysis")` / `RefundChargeAsync(userId, jobId.ToString(), $"reversal:{jobId}")`).
 
@@ -291,7 +284,7 @@ public sealed class CreditLedgerChargeTests(WebApplicationFactory<Program> facto
         db.Users.Add(user);
         await db.SaveChangesAsync();
         if (balance > 0)
-            await svc.GrantAsync(user.Id, balance, "seed", $"grant:seed:{user.Id}", CancellationToken.None);
+            await svc.GrantSignupBonusAsync(user.Id, balance, CancellationToken.None);
         return (scope, svc, db, user.Id);
     }
 
@@ -380,28 +373,13 @@ public sealed class CreditLedgerChargeTests(WebApplicationFactory<Program> facto
         }
         finally { await CleanupAsync(db, uid); scope.Dispose(); }
     }
-
-    [SkippableFact]
-    public async Task Grant_Is_Idempotent_And_Zero_Is_NoOp()
-    {
-        await TestDb.RequireAsync(factory);
-        var (scope, svc, db, uid) = await SeedAsync(0);
-        try
-        {
-            Assert.Null(await svc.GrantAsync(uid, 0, "signup", "grant:zero", CancellationToken.None));
-            Assert.NotNull(await svc.GrantAsync(uid, 500, "signup", $"grant:signup:{uid}", CancellationToken.None));
-            Assert.Null(await svc.GrantAsync(uid, 500, "signup", $"grant:signup:{uid}", CancellationToken.None));
-            Assert.Equal(500, await svc.GetBalanceAsync(uid, CancellationToken.None));
-        }
-        finally { await CleanupAsync(db, uid); scope.Dispose(); }
-    }
 }
 ```
 
 - [ ] **Step 2: Run to verify failure**
 
 Run: `dotnet test tests/Spectr.Bff.Tests --filter "FullyQualifiedName~CreditLedgerChargeTests"`
-Expected: build FAIL — `ChargeAsync`, `GrantAsync`, `RefundChargeAsync`, `Required` missing.
+Expected: build FAIL — `ChargeAsync`, `RefundChargeAsync`, `Required` missing.
 
 - [ ] **Step 3: Implement**
 
@@ -416,7 +394,7 @@ public sealed class InsufficientCreditsException(int currentBalance, int require
 }
 ```
 
-In `CreditLedgerService`: update the header comment's key list (`spend → "spend:<kind>:<ref>" (optional)`, `grant → "grant:signup:<userId>"`, `reversal → "reversal:<ref>"`), then replace `SpendAsync`/`SpendOnceAsync`/`ReverseAsync` with:
+In `CreditLedgerService`: update the header comment's key list (`spend → "spend:<kind>:<ref>" (optional)`, `reversal → "reversal:<ref>"`; the sign-up bonus keeps its own `signup_bonus:<id>` key), then replace `SpendAsync`/`SpendOnceAsync`/`ReverseAsync` with:
 
 ```csharp
     // Legacy analysis spend (1 credit, no key) — kept for existing callers/tests.
@@ -499,12 +477,6 @@ In `CreditLedgerService`: update the header comment's key list (`spend → "spen
         return spend;
     }
 
-    public Task<CreditLedgerEntry?> GrantAsync(
-        Guid userId, int amount, string reference, string idempotencyKey, CancellationToken ct)
-        => amount <= 0
-            ? Task.FromResult<CreditLedgerEntry?>(null)
-            : InsertKeyedAsync(userId, amount, "grant", reference, idempotencyKey, ct);
-
     // Legacy job reversal — now refunds whatever that job actually spent.
     public Task<CreditLedgerEntry?> ReverseAsync(
         Guid userId, Guid jobId, string reasonCode, CancellationToken ct)
@@ -556,7 +528,7 @@ Expected: PASS — new tests plus the existing ledger/reversal tests (reversal o
 
 ```bash
 git add components/bff
-git commit -m "feat(credits): ledger charges any amount idempotently, grants, refunds exact charge"
+git commit -m "feat(credits): ledger charges any amount idempotently, refunds exact charge"
 ```
 
 ---
@@ -606,7 +578,7 @@ public sealed class EntitlementsCreditFieldsTests(WebApplicationFactory<Program>
         if (pro)
             db.Subscriptions.Add(new Subscription { UserId = uid, Status = "active", StripeSubscriptionId = $"sub_{uid:N}" });
         await db.SaveChangesAsync();
-        if (grant > 0) await svc.GrantAsync(uid, grant, "signup", $"grant:signup:{uid}", CancellationToken.None);
+        if (grant > 0) await svc.GrantSignupBonusAsync(uid, grant, CancellationToken.None);
         if (purchase) await svc.PurchaseAsync(uid, 500, $"pi_{uid:N}", $"credits_purchase:t_{uid:N}", CancellationToken.None);
         return uid;
     }
@@ -774,7 +746,7 @@ public sealed class DispatchCreditChargeTests(WebApplicationFactory<Program> bas
         var svc = scope.ServiceProvider.GetRequiredService<CreditLedgerService>();
         if (verified)
             await db.Users.Where(u => u.Id == uid).ExecuteUpdateAsync(s => s.SetProperty(u => u.EmailVerifiedAt, DateTimeOffset.UtcNow));
-        if (grant > 0) await svc.GrantAsync(uid, grant, "signup", $"grant:signup:{uid}", CancellationToken.None);
+        if (grant > 0) await svc.GrantSignupBonusAsync(uid, grant, CancellationToken.None);
         if (purchase) await svc.PurchaseAsync(uid, 500, $"pi_{uid:N}", $"credits_purchase:t_{uid:N}", CancellationToken.None);
         scope.ServiceProvider.GetRequiredService<EntitlementService>().InvalidateAsync(uid);
         var (_, versionId) = await TestSeed.SongWithVersionAsync(f, uid);
@@ -970,7 +942,7 @@ git commit -m "feat(credits): charge the analysis price at dispatch; Pro allowan
                 });
                 await db.SaveChangesAsync();
                 var svc = scope.ServiceProvider.GetRequiredService<CreditLedgerService>();
-                await svc.GrantAsync(userId, 500, "seed", $"grant:seed:{userId}", CancellationToken.None);
+                await svc.GrantSignupBonusAsync(userId, 500, CancellationToken.None);
                 await svc.ChargeAsync(userId, 100, jobId.ToString(), $"spend:analysis:{jobId}", "analysis", CancellationToken.None);
             }
 
@@ -1087,7 +1059,7 @@ public sealed class SpecialistChargeTests(WebApplicationFactory<Program> baseFac
         });
         await db.SaveChangesAsync();
         await scope.ServiceProvider.GetRequiredService<CreditLedgerService>()
-            .GrantAsync(uid, grant, "signup", $"grant:signup:{uid}", CancellationToken.None);
+            .GrantSignupBonusAsync(uid, grant, CancellationToken.None);
         return (client, uid, jobId, analysisId);
     }
 
@@ -1430,23 +1402,24 @@ git commit -m "feat(credits): Coach Mix costs credits (Pro included), refunded i
 
 ---
 
-### Task 9: Signup grant (register + guest conversion) and the one-time backfill
+### Task 9: Backfill the sign-up bonus for accounts that predate it
+
+`solo` already grants `signup_bonus_credits` (500) on email-verification activation via `CreditLedgerService.GrantSignupBonusAsync` (key `signup_bonus:{userId:N}`), including guest conversion. Accounts verified BEFORE that shipped got nothing. This task adds the one-time operator backfill only.
 
 **Files:**
-- Modify: `components/bff/src/Spectr.Bff/Endpoints/AuthEndpoints.cs` (`Register`, right after the user `SaveChangesAsync` ~L221)
-- Modify: `components/bff/src/Spectr.Bff/Endpoints/GuestConvertEndpoints.cs` (before the final `return Results.Ok(new AuthResponse(` ~L196)
-- Create: `components/bff/src/Spectr.Bff/Services/SignupGrantService.cs`
-- Modify: `components/bff/src/Spectr.Bff/Endpoints/AdminEndpoints.cs` (map `POST /credits/backfill-signup-grant`)
+- Create: `components/bff/src/Spectr.Bff/Services/SignupBonusBackfill.cs`
+- Modify: `components/bff/src/Spectr.Bff/Endpoints/AdminEndpoints.cs` (map `POST /credits/backfill-signup-bonus`)
 - Modify: DI registration file (find with `grep -rn "AddScoped<CreditLedgerService>" components/bff/src`)
-- Test: `components/bff/tests/Spectr.Bff.Tests/SignupGrantTests.cs`
+- Test: `components/bff/tests/Spectr.Bff.Tests/SignupBonusBackfillTests.cs`
 
 **Interfaces:**
-- Produces: `SignupGrantService.GrantAsync(Guid userId, CancellationToken)` → `Task<bool>` (true when credits were added); `SignupGrantService.BackfillAsync(CancellationToken)` → `Task<int>` (users granted). Key `grant:signup:{userId}`. No-op when credits off, user is a guest, or grant = 0.
+- Consumes: `CreditLedgerService.GrantSignupBonusAsync(Guid, int, CancellationToken) -> Task<bool>`, `CreditLedgerService.SignupBonusFlag`, `CreditLedgerService.SignupBonusKey(Guid)`, `EntitlementService.GetFlagsAsync/CreditsEnabled/GetPricesAsync` (`SignupGrant` = the bonus amount).
+- Produces: `SignupBonusBackfill.RunAsync(CancellationToken) -> Task<int>` (users granted). Grants ONLY active, non-guest, non-banned users with `EmailVerifiedAt != null` and no `signup_bonus:{id:N}` ledger row. No-op (returns 0) when credits are off or the bonus is 0.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```csharp
-// components/bff/tests/Spectr.Bff.Tests/SignupGrantTests.cs
+// components/bff/tests/Spectr.Bff.Tests/SignupBonusBackfillTests.cs
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -1457,139 +1430,135 @@ using Xunit;
 
 namespace Spectr.Bff.Tests;
 
-public sealed class SignupGrantTests(WebApplicationFactory<Program> baseFactory)
+public sealed class SignupBonusBackfillTests(WebApplicationFactory<Program> baseFactory)
     : IClassFixture<WebApplicationFactory<Program>>
 {
-    private WebApplicationFactory<Program> F(string grant = "500", string enabled = "true") =>
+    private WebApplicationFactory<Program> F(string enabled = "true") =>
         baseFactory.WithWebHostBuilder(b => b
-            .UseSetting("Credits:SignupGrant", grant)
+            .UseSetting("Credits:SignupGrant", "500")
             .UseSetting("Credits:Enabled", enabled));
 
-    private static async Task<int> BalanceAsync(WebApplicationFactory<Program> f, Guid uid)
+    private static async Task<Guid> SeedUserAsync(AppDbContext db, bool verified, bool guest = false)
     {
-        using var scope = f.Services.CreateScope();
-        return await scope.ServiceProvider.GetRequiredService<CreditLedgerService>().GetBalanceAsync(uid, CancellationToken.None);
+        var id = Guid.NewGuid();
+        db.Users.Add(new User
+        {
+            Id = id, Email = $"bf+{id:N}@spectr.test", HashedPassword = "x",
+            EmailVerifiedAt = verified ? DateTimeOffset.UtcNow : null, IsGuest = guest,
+        });
+        await db.SaveChangesAsync();
+        return id;
     }
 
+    private static Task<int> BalanceAsync(IServiceProvider sp, Guid uid)
+        => sp.GetRequiredService<CreditLedgerService>().GetBalanceAsync(uid, CancellationToken.None);
+
     [SkippableFact]
-    public async Task Register_Grants_500_Once()
+    public async Task Backfill_Grants_Verified_Users_Once_And_Skips_Unverified_And_Guests()
     {
         var f = F();
         await TestDb.RequireAsync(f);
-        var (uid, _) = await TestAuth.RegisterAsync(f.CreateClient());
-        Assert.Equal(500, await BalanceAsync(f, uid));
         using var scope = f.Services.CreateScope();
-        Assert.False(await scope.ServiceProvider.GetRequiredService<SignupGrantService>().GrantAsync(uid, CancellationToken.None));
-        Assert.Equal(500, await BalanceAsync(f, uid));
+        var sp = scope.ServiceProvider;
+        var db = sp.GetRequiredService<AppDbContext>();
+        var verified = await SeedUserAsync(db, verified: true);
+        var pending = await SeedUserAsync(db, verified: false);
+        var guest = await SeedUserAsync(db, verified: true, guest: true);
+        var already = await SeedUserAsync(db, verified: true);
+        await sp.GetRequiredService<CreditLedgerService>().GrantSignupBonusAsync(already, 500, CancellationToken.None);
+        try
+        {
+            var svc = sp.GetRequiredService<SignupBonusBackfill>();
+            Assert.True(await svc.RunAsync(CancellationToken.None) >= 1);
+            await svc.RunAsync(CancellationToken.None); // second run: no double grant
+
+            Assert.Equal(500, await BalanceAsync(sp, verified));
+            Assert.Equal(0, await BalanceAsync(sp, pending));
+            Assert.Equal(0, await BalanceAsync(sp, guest));
+            Assert.Equal(500, await BalanceAsync(sp, already));
+        }
+        finally
+        {
+            await TestAuth.AllowPurgeAsync(db);
+            var ids = new[] { verified, pending, guest, already };
+            await db.CreditLedger.Where(e => ids.Contains(e.UserId)).ExecuteDeleteAsync();
+            await db.Users.Where(u => ids.Contains(u.Id)).ExecuteDeleteAsync();
+        }
     }
 
     [SkippableFact]
-    public async Task Register_With_Credits_Off_Grants_Nothing()
+    public async Task Backfill_Is_A_NoOp_When_Credits_Are_Off()
     {
         var f = F(enabled: "false");
         await TestDb.RequireAsync(f);
-        var (uid, _) = await TestAuth.RegisterAsync(f.CreateClient());
-        Assert.Equal(0, await BalanceAsync(f, uid));
-    }
-
-    [SkippableFact]
-    public async Task Backfill_Grants_Existing_Users_Once_And_Skips_Guests()
-    {
-        var f = F();
-        await TestDb.RequireAsync(f);
-        Guid oldUser, guest;
-        using (var scope = f.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            oldUser = Guid.NewGuid();
-            guest = Guid.NewGuid();
-            db.Users.Add(new User { Id = oldUser, Email = $"old+{oldUser:N}@spectr.test", HashedPassword = "x" });
-            db.Users.Add(new User { Id = guest, Email = $"guest+{guest:N}@spectr.test", HashedPassword = "x", IsGuest = true });
-            await db.SaveChangesAsync();
-            var svc = scope.ServiceProvider.GetRequiredService<SignupGrantService>();
-            Assert.True(await svc.BackfillAsync(CancellationToken.None) >= 1);
-            await svc.BackfillAsync(CancellationToken.None); // second run: no double grant
-        }
-        Assert.Equal(500, await BalanceAsync(f, oldUser));
-        Assert.Equal(0, await BalanceAsync(f, guest));
+        using var scope = f.Services.CreateScope();
+        Assert.Equal(0, await scope.ServiceProvider.GetRequiredService<SignupBonusBackfill>().RunAsync(CancellationToken.None));
     }
 }
 ```
 
-Guest emails must pass `GuestIdentity.IsGuestEmail` rules if the entity validates them — check `GuestIdentity` before seeding; if it requires a pattern, use it. Add cleanup for created users/ledger rows (pattern from Task 2).
+Before seeding, read `components/bff/src/Spectr.Data/Entities/User.cs` for required members, and whether the guest email must match `GuestIdentity` rules (if so, build the guest email with that helper). NOTE: the first test grants to EVERY eligible user in the shared dev DB that lacks a bonus — that is what the backfill does in production too. If that is unacceptable for the shared DB, scope the test with a factory-level setting instead: add an optional `Credits:BackfillEmailSuffix` config filter honoured ONLY by `RunAsync` (e.g. `@spectr.test`) — and do NOT add it otherwise.
 
-- [ ] **Step 2: Run to verify failure** — `--filter "FullyQualifiedName~SignupGrantTests"`. Expected: build FAIL (`SignupGrantService` missing).
+- [ ] **Step 2: Run to verify failure** — `--filter "FullyQualifiedName~SignupBonusBackfillTests"`. Expected: build FAIL (`SignupBonusBackfill` missing).
 
 - [ ] **Step 3: Implement**
 
 ```csharp
-// components/bff/src/Spectr.Bff/Services/SignupGrantService.cs
+// components/bff/src/Spectr.Bff/Services/SignupBonusBackfill.cs
 using Microsoft.EntityFrameworkCore;
 using Spectr.Data;
 
 namespace Spectr.Bff.Services;
 
-// Credit economy — the free trial is a one-time credit grant (default 500),
-// written when an account is created and back-filled once for accounts that
-// predate the credit switch-on. Idempotent per user via "grant:signup:{id}".
-public sealed class SignupGrantService(
-    AppDbContext db, EntitlementService ents, CreditLedgerService credits, ILogger<SignupGrantService> logger)
+// Credit economy rollout — accounts verified before the sign-up bonus shipped
+// (a28aa1f) never received it. One operator-triggered, idempotent pass grants
+// them the same bonus through the same key, so a re-run (or a user who
+// verifies concurrently) can never be granted twice.
+public sealed class SignupBonusBackfill(
+    AppDbContext db, EntitlementService ents, CreditLedgerService credits, ILogger<SignupBonusBackfill> logger)
 {
-    public async Task<bool> GrantAsync(Guid userId, CancellationToken ct)
+    public async Task<int> RunAsync(CancellationToken ct)
     {
         var flags = await ents.GetFlagsAsync(ct);
-        if (!ents.CreditsEnabled(flags)) return false;
+        if (!ents.CreditsEnabled(flags)) return 0;
         var amount = (await ents.GetPricesAsync(ct)).SignupGrant;
-        if (amount <= 0) return false;
-        var isGuest = await db.Users.AsNoTracking().Where(u => u.Id == userId).Select(u => u.IsGuest).FirstOrDefaultAsync(ct);
-        if (isGuest) return false;
-        var entry = await credits.GrantAsync(userId, amount, "signup", $"grant:signup:{userId}", ct);
-        if (entry is not null) ents.InvalidateAsync(userId);
-        return entry is not null;
-    }
+        if (amount <= 0) return 0;
 
-    public async Task<int> BackfillAsync(CancellationToken ct)
-    {
-        var ids = await db.Users.AsNoTracking()
-            .Where(u => !u.IsGuest
-                && !db.CreditLedger.Any(e => e.UserId == u.Id && e.IdempotencyKey == "grant:signup:" + u.Id.ToString()))
+        var candidates = await db.Users.AsNoTracking()
+            .Where(u => !u.IsGuest && u.IsActive && u.BannedAt == null && u.EmailVerifiedAt != null)
             .Select(u => u.Id)
             .ToListAsync(ct);
         var granted = 0;
-        foreach (var id in ids)
-            if (await GrantAsync(id, ct)) granted++;
-        logger.LogInformation("Signup-grant backfill: {Granted} of {Candidates} users granted", granted, ids.Count);
+        foreach (var id in candidates)
+        {
+            if (await credits.GrantSignupBonusAsync(id, amount, ct))
+            {
+                ents.InvalidateAsync(id);
+                granted++;
+            }
+        }
+        logger.LogInformation("Sign-up bonus backfill: granted {Granted} of {Candidates}", granted, candidates.Count);
         return granted;
     }
 }
 ```
 
-Register `builder.Services.AddScoped<SignupGrantService>();` next to `CreditLedgerService`. In `Register`, after `await db.SaveChangesAsync(ct);` (user insert) add a `SignupGrantService signupGrant` parameter and:
+(`GrantSignupBonusAsync` is ON CONFLICT DO NOTHING on the key, so already-granted users return false — no pre-filter query needed. Confirm `IsActive`/`BannedAt` exist on `User`; drop any that don't.)
+
+Register `builder.Services.AddScoped<SignupBonusBackfill>();` next to `CreditLedgerService`. Admin: in `MapAdminEndpoints` add `admin.MapPost("/credits/backfill-signup-bonus", PostBackfillSignupBonus);` and:
 
 ```csharp
-        // Credit economy — the free trial: a one-time credit grant (no-op when
-        // credits are off). Best-effort: a ledger hiccup must not fail signup;
-        // the admin backfill catches anyone missed.
-        try { await signupGrant.GrantAsync(user.Id, ct); }
-        catch (Exception ex) { loggerFactory.CreateLogger("Auth").LogError(ex, "Signup grant failed for {UserId}", user.Id); }
+    private static async Task<IResult> PostBackfillSignupBonus(SignupBonusBackfill backfill, CancellationToken ct)
+        => Results.Ok(new { granted = await backfill.RunAsync(ct) });
 ```
 
-Same call (same try/catch) in `GuestConvertEndpoints` just before the final `return Results.Ok(new AuthResponse(`, using the converted user's id (after the conversion has cleared `IsGuest`, so `GrantAsync` sees a real user — verify by reading the lines above that return).
-
-Admin: in `MapAdminEndpoints` add `admin.MapPost("/credits/backfill-signup-grant", PostBackfillSignupGrant);` and:
-
-```csharp
-    private static async Task<IResult> PostBackfillSignupGrant(SignupGrantService grants, CancellationToken ct)
-        => Results.Ok(new { granted = await grants.BackfillAsync(ct) });
-```
-
-- [ ] **Step 4: Run tests** — `--filter "FullyQualifiedName~SignupGrantTests|FullyQualifiedName~Auth|FullyQualifiedName~GuestConvert|FullyQualifiedName~Admin"`. Expected: PASS (the baseline pins grant 0, so other register-based tests are unaffected).
+- [ ] **Step 4: Run tests** — `--filter "FullyQualifiedName~SignupBonusBackfillTests|FullyQualifiedName~Admin"`. Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add components/bff
-git commit -m "feat(credits): 500-credit signup grant (register + guest convert) and admin backfill"
+git commit -m "feat(credits): admin backfill of the sign-up bonus for pre-existing verified accounts"
 ```
 
 ---
@@ -2417,10 +2386,10 @@ git commit -m "feat(credits-fe): cost labels on analyze/specialist/coach/Coach M
 `CLAUDE.md` bff section — replace the sentence "credits = unlimited" in the coach-caps bullet and add a bullet:
 
 ```markdown
-- **Credit economy (PRPs/credit-economy.md, 2026-10)**: prices live in `feature_flags` (`credit_cost_*`, `credit_signup_grant`, `pro_analyses_monthly`) resolved by `CreditPricing` (config `Credits:Prices:*` → flag → default) and served on `GET /api/billing/plans` (`costs`). Charges go through `CreditLedgerService.ChargeAsync` with idempotency keys (`spend:analysis:{jobId}`, `spend:specialist:{analysisId}:{slug}`, `spend:coach:{messageId}`, `spend:coachmix:{requestId}`); refunds via `RefundChargeAsync` (exact amount). Triage-routed specialists are included in the analysis price. Pro = 15 analyses + 300 coach msgs/month, then credits. Abuse arms + verify gate key on `EntitlementsDto.IsPaying` (Pro or ≥1 purchase), NOT tier — a signup-grant-only account is not paying. Test suite pins `Credits__Prices__Analysis=1` and `Credits__SignupGrant=0` (`TestProcessBaseline`); credit-economy tests opt in via `UseSetting`.
+- **Credit economy (PRPs/credit-economy.md, 2026-10)**: prices live in `feature_flags` (`credit_cost_*`, `pro_analyses_monthly`) resolved by `CreditPricing` (config `Credits:Prices:*` → flag → default) and served on `GET /api/billing/plans` (`costs`). Charges go through `CreditLedgerService.ChargeAsync` with idempotency keys (`spend:analysis:{jobId}`, `spend:specialist:{analysisId}:{slug}`, `spend:coach:{messageId}`, `spend:coachmix:{requestId}`); refunds via `RefundChargeAsync` (exact amount). Triage-routed specialists are included in the analysis price. Pro = 15 analyses + 300 coach msgs/month, then credits. Abuse arms + verify gate key on `EntitlementsDto.IsPaying` (Pro or ≥1 purchase), NOT tier — a signup-grant-only account is not paying. Test suite pins `Credits__Prices__Analysis=1` (`TestProcessBaseline`); credit-economy tests opt in via `UseSetting`.
 ```
 
-`docs/runbook.md` — add "Turning credits on": (1) create three one-time Stripe Prices (500 / $7, 1,500 / $18, 5,000 / $55), set `STRIPE_PRICE_CREDITS_500|1500|5000` in the prod env, deploy; (2) raise `LLM_BUDGET_GLOBAL_USD` (prod default is $10/month) and confirm `llm_budget_credits_usd`; (3) `UPDATE feature_flags SET value='0' WHERE name IN ('free_analyses_per_month','coach_free_followups');` (the signup grant replaces the free allowance) and `UPDATE feature_flags SET value='true' WHERE name='credits_enabled';` (≤ 60 s); (4) `curl -X POST -H "X-Admin-Key: $ADMIN_API_KEY" https://<host>/api/admin/credits/backfill-signup-grant` (check the admin header name in `AdminAuth`); (5) watch `llm_calls` cost per analysis for a week and retune `credit_cost_*`.
+`docs/runbook.md` — add "Turning credits on": (1) create three one-time Stripe Prices (500 / $7, 1,500 / $18, 5,000 / $55), set `STRIPE_PRICE_CREDITS_500|1500|5000` in the prod env, deploy; (2) raise `LLM_BUDGET_GLOBAL_USD` (prod default is $10/month) and confirm `llm_budget_credits_usd`; (3) `UPDATE feature_flags SET value='0' WHERE name IN ('free_analyses_per_month','coach_free_followups');` (the sign-up bonus replaces the free allowance) and `UPDATE feature_flags SET value='true' WHERE name='credits_enabled';` (≤ 60 s); (4) `curl -X POST -H "X-Admin-Key: $ADMIN_API_KEY" https://<host>/api/admin/credits/backfill-signup-bonus` (check the admin header name in `AdminAuth`); (5) watch `llm_calls` cost per analysis for a week and retune `credit_cost_*`.
 
 - [ ] **Step 4: Full gates**
 
