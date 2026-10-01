@@ -48,17 +48,23 @@ def test_docker_exe_rejects_zero_byte_stub(tmp_path, monkeypatch):
 
 
 # ── Worker pool split (docs/STARTUP.md problem #3b) ─────────────────────────
-# One worker = one thread and Dramatiq has no cross-queue priority, so an
-# all-queues worker parks every coach reply behind whatever batch job is
-# running. The dashboard's restart must keep the coach-only pool, not
-# silently collapse back to a single all-queues worker.
+# Dramatiq has no cross-queue priority, so an all-queues worker parks every
+# coach reply / triage behind whatever batch job is running. The dashboard's
+# restart must keep the interactive `coach ai` pool, not silently collapse
+# back to a single all-queues worker.
 
-def test_worker_pools_cover_every_queue_once_and_coach_is_alone():
+def test_worker_pools_cover_every_queue_once_and_interactive_pool_is_separate():
     from workerdash import wire, worker_ctl
     pools = worker_ctl.WORKER_POOLS
-    assert ("coach",) in pools
+    assert ("coach", "ai") in pools
     flat = [q for pool in pools for q in pool]
     assert sorted(flat) == sorted(wire.QUEUES)
+
+
+def test_only_the_interactive_pool_gets_extra_threads():
+    from workerdash import worker_ctl
+    assert worker_ctl.pool_threads(("coach", "ai")) > 1
+    assert worker_ctl.pool_threads(("analysis-paid", "analysis-free", "maintenance")) == 1
 
 
 def test_restart_launches_one_worker_per_pool(tmp_path, monkeypatch):
@@ -68,8 +74,12 @@ def test_restart_launches_one_worker_per_pool(tmp_path, monkeypatch):
     assert worker_ctl.restart(str(tmp_path)) == {"ok": True}
     launches = [s for s in scripts if "--queues" in s]
     assert len(launches) == len(worker_ctl.WORKER_POOLS)
-    assert any(s.rstrip('"').endswith("--queues coach") for s in launches)
+    assert any(s.rstrip('"').endswith("--queues coach ai") for s in launches)
     assert not any("coach" in s and "analysis-paid" in s for s in launches)
+    interactive = next(s for s in launches if "--queues coach ai" in s)
+    batch = next(s for s in launches if "analysis-paid" in s)
+    assert f"--threads {worker_ctl.INTERACTIVE_THREADS} " in interactive
+    assert "--threads 1 " in batch
 
 
 def test_probe_flags_a_missing_fork_even_when_another_worker_is_whole(monkeypatch):

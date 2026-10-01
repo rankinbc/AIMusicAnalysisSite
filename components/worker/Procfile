@@ -1,15 +1,20 @@
 # v2 entrypoint — dramatiq replaces celery.
-# concurrency=1 always: Demucs is memory-heavy AND the LLM gateway builds its
-# async client per call/loop — multiple threads sharing a process would reuse a
-# client across event loops. Pin a single worker (CLAUDE.md worker gotcha).
+# --processes 1 always: Demucs/librosa analysis is memory-heavy. Threads stay
+# at 1 HERE because this single all-queues dev entry runs batch DSP; the
+# interactive pool (`coach ai` — I/O-bound LLM actors) is the one that runs
+# several threads (scripts/start-spectr.ps1, infra/compose.prod.yml
+# WORKER_THREADS). The LLM gateway builds a fresh client per call and keeps
+# its semaphores thread-local, so multi-threading that pool is safe.
 #
-# Queues (AR23, story 2.5): one dev worker drains ALL four queues, so dev
-# behavior is functionally identical to prod (every message gets processed by
-# one process). The W1/W2 split lives in docker/docker-compose.prod.yml.
-#   analysis-paid : pro/credits analysis + all 5 auxiliary actors
+# Queues (AR23, story 2.5 + interactive AI lane): one dev worker drains ALL
+# five queues, so every message gets processed by one process. The pool
+# split lives in scripts/start-spectr.ps1 (dev) / infra/compose.prod.yml.
+#   ai            : run_triage, run_specialist, generate_fix_rack (interactive LLM)
+#   analysis-paid : pro/credits analysis + batch auxiliaries (rerun_phase,
+#                   run_reference_analyzer, classify_stems, detect_structure_job)
 #   analysis-free : free/anon analysis (sole declarer = analyze_audio_job)
 #   coach         : coach_reply
-#   maintenance   : sweep_retention (story 3.4); Epic 4 adds send_email
+#   maintenance   : sweep_retention (story 3.4), send_email, delete_account_data
 # `default` is dropped — no producer remains after story 2.5. If you run against
 # a long-lived dev Redis that may hold stray `default` messages, append `default`.
-worker: python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues coach analysis-paid analysis-free maintenance
+worker: python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues coach ai analysis-paid analysis-free maintenance

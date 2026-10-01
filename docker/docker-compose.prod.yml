@@ -8,8 +8,10 @@
 # This overlay proves the AR23 queue split (FR34): two dedicated worker pools so
 # the high-volume free-analysis flood (W2) can never starve paid/credit jobs (W1).
 #
-#   W1 worker-paid : coach, analysis-paid   (paid analysis + coach + all 5 auxiliary actors)
+#   W1 worker-paid : coach, ai, analysis-paid   (coach + interactive LLM lane + paid analysis/auxiliaries)
 #   W2 worker-free : analysis-free, maintenance
+# (infra/compose.prod.yml is the real prod topology: interactive `coach ai`
+# pool with 4 threads + one batch pool — see docs/STARTUP.md #3b.)
 #
 # The single dev `worker` service from docker-compose.yml is moved to the
 # `dev-only` profile here so it does NOT start under the prod overlay (only
@@ -42,7 +44,7 @@ services:
     build:
       context: ../components
       dockerfile: worker/Dockerfile
-    command: python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues coach analysis-paid
+    command: python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues coach ai analysis-paid
     depends_on:
       postgres: { condition: service_healthy }
       redis:    { condition: service_healthy }

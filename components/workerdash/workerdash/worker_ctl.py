@@ -22,21 +22,32 @@ Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
   Stop-Process -Force
 """
 
-# Dev mirrors the prod pool split (infra/compose.prod.yml, STARTUP.md #3b): a
-# coach-ONLY worker plus a batch worker. One worker is one thread and Dramatiq
-# has no cross-queue priority, so a single all-queues worker parks every coach
-# reply (~20 s of work) behind whatever batch job is running (a 10-minute
-# analysis, an allin1 structure run, 40-90 s specialists).
+# Dev mirrors the prod pool split (infra/compose.prod.yml, STARTUP.md #3b): an
+# INTERACTIVE worker (`coach ai` — coach replies, Triage, specialists, Coach
+# Mix) plus a batch worker. Dramatiq has no cross-queue priority, so a single
+# one-thread all-queues worker parks every coach reply / triage behind
+# whatever batch job is running (a 10-minute analysis, an allin1 structure
+# run). The interactive actors are I/O-bound LLM calls, so that pool runs
+# several threads (a coach reply never waits behind a 60 s specialist); the
+# batch pool stays at one (Demucs/librosa memory profile).
 WORKER_POOLS: tuple[tuple[str, ...], ...] = (
-    ("coach",),
+    ("coach", "ai"),
     ("analysis-paid", "analysis-free", "maintenance"),
 )
+INTERACTIVE_THREADS = 4
+
+
+def pool_threads(pool: tuple[str, ...]) -> int:
+    """Dramatiq --threads for a pool: several for the interactive (`ai`)
+    pool, ONE for anything that can run batch DSP."""
+    return INTERACTIVE_THREADS if "ai" in pool else 1
+
 
 _LAUNCH_PS = (
     "Start-Process powershell -WindowStyle Minimized -ArgumentList "
     "'-NoExit','-Command',"
     "\"Set-Location '{worker_dir}'; python -m dramatiq app.dramatiq_app "
-    "--processes 1 --threads 1 "
+    "--processes 1 --threads {threads} "
     "--queues {queues}\""
 )
 
@@ -115,7 +126,8 @@ def restart(worker_dir: str) -> dict:
     try:
         _ps(_KILL_PS)
         for pool in WORKER_POOLS:
-            _ps(_LAUNCH_PS.format(worker_dir=worker_dir, queues=" ".join(pool)))
+            _ps(_LAUNCH_PS.format(worker_dir=worker_dir, queues=" ".join(pool),
+                                  threads=pool_threads(pool)))
         return {"ok": True}
     except Exception as e:
         return {"ok": False, "error": str(e)}

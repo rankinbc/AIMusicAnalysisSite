@@ -2,7 +2,8 @@ namespace Spectr.Bff.Services;
 
 // Canonical dramatiq queue names — must match @dramatiq.actor(queue_name=...)
 // declarations in the Python worker. Story 1.5 introduced `coach`; story 2.5
-// adds the AR23 split queues `analysis-paid`, `analysis-free`, `maintenance`.
+// adds the AR23 split queues `analysis-paid`, `analysis-free`, `maintenance`;
+// the interactive AI lane adds `ai`.
 public static class DramatiqQueues
 {
     // Legacy/back-compat only. After story 2.5 NO live enqueue targets `default`
@@ -11,10 +12,16 @@ public static class DramatiqQueues
     public const string Default = "default";
     public const string Coach = "coach";
 
-    // AR23 production topology (story 2.5):
-    //   W1 (worker-paid) consumes: coach, analysis-paid
-    //   W2 (worker-free) consumes: analysis-free, maintenance
+    // Production topology (infra/compose.prod.yml, STARTUP.md #3b):
+    //   worker-paid (interactive, WORKER_THREADS=4) consumes: coach, ai
+    //   worker-free (batch, 1 thread) consumes: analysis-paid, analysis-free, maintenance
     public const string AnalysisPaid = "analysis-paid";
     public const string AnalysisFree = "analysis-free";
     public const string Maintenance = "maintenance";
+
+    // Interactive LLM actors the user is waiting on — run_triage,
+    // run_specialist, generate_fix_rack. Its own lane so Triage never queues
+    // behind a multi-minute analyze_audio_job / allin1 structure run on the
+    // one-thread batch worker. Guests are NOT routed here (GuestLimits.QueueFor).
+    public const string Ai = "ai";
 }

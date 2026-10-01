@@ -46,6 +46,7 @@ public sealed class DeployTopologyTests(WebApplicationFactory<Program> factory)
         if (redis.IsConnected)
         {
             Assert.Contains("queue=\"analysis-paid\"", body);
+            Assert.Contains("queue=\"ai\"", body); // interactive AI lane
         }
     }
 

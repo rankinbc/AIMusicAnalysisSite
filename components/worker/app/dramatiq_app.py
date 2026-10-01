@@ -97,6 +97,19 @@ _install_runlog(broker, RunLogMiddleware(
 # resolving even if the actor import order changes.
 broker.declare_queue("maintenance")
 
+# Interactive AI lane: run_triage, run_specialist and generate_fix_rack
+# declare `ai` so they never queue behind batch DSP (a multi-minute
+# analyze_audio_job / allin1 structure run) on the batch worker. The
+# interactive pool consumes `coach ai` with several threads — those actors are
+# I/O-bound LLM calls (STARTUP.md #3b). Declared explicitly for the same
+# import-order reason as `maintenance`. `analysis-paid` is declared too:
+# run_triage/run_specialist/generate_fix_rack messages enqueued there BEFORE
+# the move still dispatch by actor_name, so the batch pool keeps a consumer on
+# that queue that drains them (rerun_phase etc. declare it today; this keeps
+# that true even if they move later).
+broker.declare_queue("ai")
+broker.declare_queue("analysis-paid")
+
 # Story 4.2 review — prod email gate, WORKER side. The BFF's
 # SPECTR_REQUIRE_EMAIL check validates the BFF's Resend options, but the
 # component that actually SENDS is this worker via RESEND_API_KEY. Without

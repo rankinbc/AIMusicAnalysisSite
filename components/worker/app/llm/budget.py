@@ -6,8 +6,9 @@ Two independent guards, both PRE-call, both raising :class:`LlmBudgetExceeded`:
    calendar month, ``outcome="ok"`` only) compared to the per-tier limit
    from :class:`LlmSettings`. A separate global ceiling defends the operator
    across all tiers.
-2. **Circuit breaker** — in-process state (workers run ``concurrency=1`` per
-   CLAUDE.md). Opens after ``llm_circuit_breaker_threshold`` consecutive
+2. **Circuit breaker** — in-process state, shared by every thread of the
+   worker (the interactive pool runs ``--threads N``; mutations take
+   ``_breaker_lock``). Opens after ``llm_circuit_breaker_threshold`` consecutive
    ``error`` outcomes; stays open for ``llm_circuit_breaker_cooldown_s``.
    The first call after cooldown is a "probe" (bypasses the open check) — it
    closes the breaker on success or re-opens it on failure. Recovery is
@@ -22,6 +23,7 @@ still defends against actual provider outages.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 import uuid
 from dataclasses import dataclass
@@ -53,6 +55,10 @@ class _BreakerState:
 
 
 _breaker = _BreakerState()
+# The interactive pool (`coach ai`) runs several threads, each finishing LLM
+# calls concurrently — serialize the read-modify-write so a probe / error
+# streak can't be lost to an interleaving. Never held across an LLM call.
+_breaker_lock = threading.Lock()
 
 
 def reset_breaker_state() -> None:
@@ -66,35 +72,38 @@ def _breaker_open() -> bool:
     window). Side-effect: clears ``opened_at`` and flips ``in_probe`` once
     the cooldown elapses so the next call can probe."""
     settings = get_llm_settings()
-    if _breaker.opened_at is None:
-        return False
-    elapsed = time.monotonic() - _breaker.opened_at
-    if elapsed >= settings.llm_circuit_breaker_cooldown_s:
-        # Cooldown elapsed → let one call through as a probe.
-        _breaker.in_probe = True
-        _breaker.opened_at = None
-        return False
-    return True
+    with _breaker_lock:
+        if _breaker.opened_at is None:
+            return False
+        elapsed = time.monotonic() - _breaker.opened_at
+        if elapsed >= settings.llm_circuit_breaker_cooldown_s:
+            # Cooldown elapsed → let one call through as a probe.
+            _breaker.in_probe = True
+            _breaker.opened_at = None
+            return False
+        return True
 
 
 def record_outcome(*, outcome: str) -> None:
     """Advance the breaker state after a call returns. Called by the gateway
     on every success or final-error return path (fake-mode included)."""
     if outcome == "ok":
-        _breaker.consecutive_errors = 0
-        _breaker.opened_at = None
-        _breaker.in_probe = False
+        with _breaker_lock:
+            _breaker.consecutive_errors = 0
+            _breaker.opened_at = None
+            _breaker.in_probe = False
         return
     if outcome == "error":
         settings = get_llm_settings()
-        _breaker.consecutive_errors += 1
-        if _breaker.in_probe:
-            # Probe failed → re-open with a fresh cooldown window.
-            _breaker.in_probe = False
-            _breaker.opened_at = time.monotonic()
-            return
-        if _breaker.consecutive_errors >= settings.llm_circuit_breaker_threshold:
-            _breaker.opened_at = time.monotonic()
+        with _breaker_lock:
+            _breaker.consecutive_errors += 1
+            if _breaker.in_probe:
+                # Probe failed → re-open with a fresh cooldown window.
+                _breaker.in_probe = False
+                _breaker.opened_at = time.monotonic()
+                return
+            if _breaker.consecutive_errors >= settings.llm_circuit_breaker_threshold:
+                _breaker.opened_at = time.monotonic()
 
 
 # ── monthly tier-spend aggregation (lazy DB, fail-open) ─────────────────────

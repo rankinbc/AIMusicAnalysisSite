@@ -32,7 +32,10 @@ _TTL_S = 60.0
 # Monotonic clock indirection — overridable in tests.
 _now = time.monotonic
 
-# Module-level cache (workers run concurrency=1, so a plain dict is safe).
+# Module-level cache. The interactive pool runs several threads; a refresh
+# REBINDS ``_cache`` to a fresh dict (never mutates it in place), and a name
+# rebind is atomic under the GIL, so readers always see a whole snapshot —
+# at worst two threads both reload inside one TTL tick (harmless).
 _cache: dict[str, str] = {}
 _loaded_at: float | None = None
 
