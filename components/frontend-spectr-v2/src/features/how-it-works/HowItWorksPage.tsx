@@ -14,50 +14,51 @@ import { DawPlanSection } from './DawPlanSection';
 import { ExampleFindings } from './ExampleFindings';
 import { DIFFERENTIATORS, KIND_LABEL, STAGES } from './pipeline';
 import { PipelineDiagram } from './PipelineDiagram';
+import { SectionCarousel } from './SectionCarousel';
+import type { CarouselSection } from './SectionCarousel';
 import s from './how-it-works.module.css';
 
 // Steps are numbered continuously across stages; each stage's <ol> starts
 // where the previous one ended.
 const STAGE_OFFSETS = STAGES.map((_, i) => STAGES.slice(0, i).reduce((n, st) => n + st.steps.length, 0));
 
-export function HowItWorksPage() {
-  // Once per mount, no-op without a PostHog key. The event name predates
-  // this page's rewrite and is kept so the funnel history stays continuous.
-  useEffect(() => {
-    capture('engineering_viewed');
-  }, []);
-
+function PipelineSection() {
   return (
-    <TrustPage
-      path="/trust/how-its-built"
-      eyebrow="How it works"
-      wide
-      title="How SPECTR works"
-      metaDescription="From upload to a mix plan: SPECTR measures your track, flags problems with genre-relative rules and AI specialists, checks every finding against the measurements, and lets you hear the fixes in your browser."
-    >
-      <p className={s.lead}>
-        Most online mix checkers give you a score and a list of problems &mdash; and leave the fixing
-        to you. SPECTR doesn&rsquo;t stop there. It measures your track, pinpoints what&rsquo;s holding it
-        back, and then works with you to fix it: a prioritised plan with exact settings, every fix
-        playable on your own track before you touch your DAW, and a Coach that knows your mix.
-      </p>
-
+    <>
       <h2>The analysis pipeline</h2>
       <p>
         Your track goes through twelve measurement modules, two lanes of diagnosis —
         fixed rules and AI specialists — and a validator, before anything is shown to you.
       </p>
       <PipelineDiagram />
+    </>
+  );
+}
 
+function FindingsSection() {
+  return (
+    <>
       <h2>What it finds — and what it tells you to do</h2>
       <p>
         Four real findings from the demo analysis. Each one cites the measurements behind it, explains why
         it matters, and comes with a fix you can dial in.
       </p>
       <ExampleFindings />
+    </>
+  );
+}
 
+function CoachSection() {
+  return (
+    <>
       <CoachShowcase />
+    </>
+  );
+}
 
+function PlanSection() {
+  return (
+    <>
       <h2>From upload to a plan</h2>
       <div className={s.pipeline}>
         {STAGES.map((stage, si) => (
@@ -87,7 +88,13 @@ export function HowItWorksPage() {
           </section>
         ))}
       </div>
+    </>
+  );
+}
 
+function DiffSection() {
+  return (
+    <>
       <h2>What makes it different</h2>
       <div className={s.diffGrid}>
         {DIFFERENTIATORS.map((d) => (
@@ -97,8 +104,44 @@ export function HowItWorksPage() {
           </div>
         ))}
       </div>
+    </>
+  );
+}
 
-      <DawPlanSection />
+// Carousel order = the page's reading order. Dwell scales with how much
+// there is to take in.
+const SECTIONS: readonly CarouselSection[] = [
+  { id: 'pipeline', label: 'Pipeline', dwellMs: 12_000, content: <PipelineSection /> },
+  { id: 'findings', label: 'Findings', dwellMs: 16_000, content: <FindingsSection /> },
+  { id: 'coach', label: 'The Coach', dwellMs: 14_000, content: <CoachSection /> },
+  { id: 'steps', label: 'Upload to plan', dwellMs: 16_000, content: <PlanSection /> },
+  { id: 'different', label: 'Why it’s different', dwellMs: 12_000, content: <DiffSection /> },
+  { id: 'daw', label: 'To your DAW', dwellMs: 14_000, content: <DawPlanSection /> },
+];
+
+export function HowItWorksPage() {
+  // Once per mount, no-op without a PostHog key. The event name predates
+  // this page's rewrite and is kept so the funnel history stays continuous.
+  useEffect(() => {
+    capture('engineering_viewed');
+  }, []);
+
+  return (
+    <TrustPage
+      path="/trust/how-its-built"
+      eyebrow="How it works"
+      wide
+      title="How SPECTR works"
+      metaDescription="From upload to a mix plan: SPECTR measures your track, flags problems with genre-relative rules and AI specialists, checks every finding against the measurements, and lets you hear the fixes in your browser."
+    >
+      <p className={s.lead}>
+        Most online mix checkers give you a score and a list of problems &mdash; and leave the fixing
+        to you. SPECTR doesn&rsquo;t stop there. It measures your track, pinpoints what&rsquo;s holding it
+        back, and then works with you to fix it: a prioritised plan with exact settings, every fix
+        playable on your own track before you touch your DAW, and a Coach that knows your mix.
+      </p>
+
+      <SectionCarousel label="How SPECTR works, section by section" sections={SECTIONS} />
 
       <div className={`card ${s.cta}`}>
         <h2 className={s.ctaTitle}>See it for yourself</h2>
