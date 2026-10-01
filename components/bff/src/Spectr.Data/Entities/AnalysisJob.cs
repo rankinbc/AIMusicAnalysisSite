@@ -42,6 +42,14 @@ public sealed class AnalysisJob
     [Column("phase_pct")]
     public double PhasePct { get; set; }
 
+    // Live analysis page — per-phase partial results the worker merges in as
+    // each phase lands (phase slice + duration, early phase-1 sub-results,
+    // the running phase's start time). Best-effort and display-only: the
+    // canonical result is still analyses.final_json. Null until the worker
+    // writes the first slice (and for jobs that predate the column).
+    [Column("partial_json", TypeName = "jsonb")]
+    public string? PartialJson { get; set; }
+
     // Reference saved-library entry used (if any). Drives reference_tracks.used_count.
     [Column("reference_id")]
     public Guid? ReferenceId { get; set; }

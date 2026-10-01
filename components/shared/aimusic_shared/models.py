@@ -230,6 +230,10 @@ class AnalysisJob(Base):
     status: Mapped[str] = mapped_column("status", String(32), nullable=False, default=JOB_STATUS_PENDING)
     current_phase: Mapped[str] = mapped_column("current_phase", String(64), nullable=False, default="")
     phase_pct: Mapped[float] = mapped_column("phase_pct", Float, nullable=False, default=0.0)
+    # Live analysis page — mirror of EF AnalysisJob.PartialJson (migration
+    # AddAnalysisJobPartialJson). Per-phase partial results merged in by
+    # analyze_audio_job as each phase lands; best-effort, display-only.
+    partial_json: Mapped[Optional[Any]] = mapped_column("partial_json", JSONB, nullable=True)
     reference_id: Mapped[Optional[uuid.UUID]] = mapped_column("reference_id", UUID(as_uuid=True), nullable=True)
     task_id: Mapped[Optional[str]] = mapped_column("task_id", String(255), nullable=True)
     # Story 2.4: tier ("free" | "pro" | "credits") stamped by the BFF at dispatch

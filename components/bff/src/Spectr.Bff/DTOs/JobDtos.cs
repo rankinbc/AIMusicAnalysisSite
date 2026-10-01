@@ -13,7 +13,12 @@ public sealed record JobStatusDto(
     DateTimeOffset DispatchedAt,
     DateTimeOffset? StartedAt,
     DateTimeOffset? CompletedAt,
-    DateTimeOffset? FailedAt);
+    DateTimeOffset? FailedAt,
+    // Live analysis page — the worker's per-phase partial results
+    // (analysis_jobs.partial_json): { phases: { "<n>": { name, status,
+    // seconds, data } }, early: { "1": {...} }, running: {...} }. Null until
+    // the first phase lands / for older jobs. Display-only.
+    JsonElement? Partial = null);
 
 public sealed record JobResultsDto(
     Guid JobId,

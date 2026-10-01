@@ -297,6 +297,7 @@ public static class JobEndpoints
                 j.StartedAt,
                 j.CompletedAt,
                 j.FailedAt,
+                j.PartialJson,
                 SongId = (Guid?)db.SongVersions
                     .Where(v => v.Id == j.VersionId)
                     .Select(v => (Guid?)v.SongId)
@@ -336,7 +337,24 @@ public static class JobEndpoints
             row.DispatchedAt,
             row.StartedAt,
             row.CompletedAt,
-            row.FailedAt));
+            row.FailedAt,
+            ParsePartial(row.PartialJson)));
+    }
+
+    // partial_json is best-effort, worker-written display data — a corrupt
+    // value must never 500 the job poll the whole live page hangs off.
+    internal static JsonElement? ParsePartial(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(raw);
+            return doc.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     // Story 2.3 — concrete marker for ILogger<T> category. Surfaces as
