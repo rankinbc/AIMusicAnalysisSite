@@ -743,6 +743,32 @@ export interface JobStatusDto {
   startedAt: string | null;
   completedAt: string | null;
   failedAt: string | null;
+  /** Live analysis page — the worker's per-phase partial results
+   *  (analysis_jobs.partial_json). Null until the first phase lands and for
+   *  jobs that predate it; absent on older BFFs. Display-only. */
+  partial?: JobPartial | null | undefined;
+}
+
+/** One finished phase in `JobStatusDto.partial` (worker live_partial.py). */
+export interface JobPartialPhase {
+  name?: string;
+  status?: string;
+  /** Wall time the phase took. */
+  seconds?: number;
+  /** Slimmed copy of the phase's final_json `data` (heavy series dropped). */
+  data?: unknown;
+  error?: string | null;
+}
+
+export interface JobPartial {
+  v?: number | undefined;
+  /** Keyed by phase number ("1".."9"). */
+  phases?: Record<string, JobPartialPhase> | undefined;
+  /** Interim sub-results of a still-running phase — phase 1's LUFS, true
+   *  peak, tempo and key land here as each is computed. */
+  early?: Record<string, Record<string, unknown>> | undefined;
+  /** The phase the worker started most recently (ISO `started_at`). */
+  running?: { phase: number; name?: string; started_at?: string } | null | undefined;
 }
 
 export interface JobSummaryDto {
@@ -1197,6 +1223,8 @@ export interface PhaseResult<TData = unknown> {
   status: 'ok' | 'skipped' | 'failed' | string;
   error?: string | null;
   data?: TData;
+  /** Wall time the phase took (pipeline ≥ 2.2.0). */
+  duration_s?: number;
 }
 
 export interface FinalJson {
@@ -1208,6 +1236,8 @@ export interface FinalJson {
   coached_fixes?: string[];
   top_fixes?: string[];
   phases?: PhaseResult[];
+  /** { "<phase>": seconds } — mirrors each phase's duration_s. */
+  phase_durations?: Record<string, number>;
 }
 
 /** Runtime guard. Pipeline failures may leave `finalJson` as something other

@@ -1,19 +1,15 @@
-// The "AI specialists" stage of the Analysis Complete modal: the stage's
-// per-specialist rows (the coach's narration lives in AnalysisCompleteCoach). Pure presentation over deriveSpecialistStage() — the
-// runs themselves are dispatched and polled by useSpecialistRuns in ReportView.
+// The "AI specialists" stage of the analysis page: one row per routed
+// specialist, each with its own tinted robot head (the shared SpecialistBot,
+// in the roster's per-group colour). Pure presentation over
+// deriveSpecialistStage() — the runs themselves are dispatched and polled by
+// useSpecialistRuns in ReportView.
 
-import { GROUP_COLORS } from './helpers/analysisModalData';
+import { SpecialistBot } from '../../ui/SpecialistBot';
+import { groupColor } from './helpers/specialists';
 import { findingsLabel, type SpecialistStage, type StageRow } from './helpers/specialist-stage';
 import s from './AnalysisCompleteModal.module.css';
 
 const cx = (...c: Array<string | false | undefined>) => c.filter(Boolean).join(' ');
-
-const STATE_TAG: Record<StageRow['state'], string> = {
-  queued: 'queued',
-  running: 'running',
-  done: 'done',
-  failed: 'failed',
-};
 
 function fmtElapsed(ms: number): string {
   const sec = Math.max(0, Math.floor(ms / 1000));
@@ -25,6 +21,12 @@ export function RowGlyph({ state }: { state: StageRow['state'] }) {
   if (state === 'done') return <>✓</>;
   if (state === 'failed') return <>!</>;
   return <span className={s.queuedDot} />;
+}
+
+/** A specialist's robot head in its roster colour (SpecialistTeamModal tints
+ *  each specialist by its group via groupColor — same here). */
+export function SpecialistHead({ row, size = 22 }: { row: Pick<StageRow, 'group' | 'label'>; size?: number }) {
+  return <SpecialistBot size={size} color={groupColor(row.group)} glow={false} label={row.label} />;
 }
 
 /** Final pipeline stage: one row per specialist, all running side by side. */
@@ -54,7 +56,6 @@ export function SpecialistStageSection({
       </div>
       <ul className={s.specRows} data-testid="acm-specialists">
         {stage.rows.map((r) => {
-          const g = GROUP_COLORS[r.group];
           const result =
             r.state === 'done'
               ? findingsLabel(r.findings)
@@ -65,16 +66,18 @@ export function SpecialistStageSection({
                   : 'waiting its turn';
           return (
             <li key={r.slug} className={cx(s.specRow, s[`row_${r.state}`])} data-state={r.state}>
-              <span className={cx(s.stepStat, s[r.state])} aria-hidden>
-                <RowGlyph state={r.state} />
+              <span className={s.specBot} aria-hidden data-testid="acm-spec-bot">
+                <SpecialistHead row={r} />
               </span>
-              <span className={s.specName} style={{ color: g.c }}>
+              <span className={s.specName} style={{ color: groupColor(r.group) }}>
                 {r.label}
               </span>
               <span className={s.specResult} title={r.focus}>
                 {result}
               </span>
-              <span className={cx(s.stepTag, s[r.state])}>{STATE_TAG[r.state]}</span>
+              <span className={cx(s.stepStat, s[r.state])} aria-hidden>
+                <RowGlyph state={r.state} />
+              </span>
             </li>
           );
         })}
