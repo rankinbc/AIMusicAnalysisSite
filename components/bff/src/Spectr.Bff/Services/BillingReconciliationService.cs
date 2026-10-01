@@ -170,9 +170,7 @@ internal sealed class BillingReconciliationService(
         {
             (PriceId: opts.PriceProMonthly,     DisplayCents: display.ProMonthlyCents),
             (PriceId: opts.PriceProAnnual,       DisplayCents: display.ProAnnualCents),
-            (PriceId: opts.PriceCreditPack5,     DisplayCents: display.CreditPack5Cents),
-            (PriceId: opts.PriceCreditPack10,    DisplayCents: display.CreditPack10Cents),
-        };
+        }.Concat(display.CreditPacks.Select(p => (PriceId: opts.PriceForPack(p.Credits), DisplayCents: p.Cents)));
 
         foreach (var (priceId, displayCents) in pairs)
         {

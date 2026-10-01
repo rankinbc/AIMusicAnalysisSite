@@ -283,8 +283,9 @@ ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value;
 
 **Config keys (story 2.3 — deferred until live Stripe account is ready):**
 ```bash
-dotnet user-secrets set Stripe:PriceCreditPack5  price_<5-pack-price-id>
-dotnet user-secrets set Stripe:PriceCreditPack10 price_<10-pack-price-id>
+dotnet user-secrets set Stripe:CreditPackPrices:500  price_<500-pack-price-id>
+dotnet user-secrets set Stripe:CreditPackPrices:1500 price_<1500-pack-price-id>
+dotnet user-secrets set Stripe:CreditPackPrices:5000 price_<5000-pack-price-id>
 ```
 Without these keys, `POST /billing/checkout/credits` returns
 `{ error: { code: "stripe_not_configured" } }` (503).
