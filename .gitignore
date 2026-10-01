@@ -143,3 +143,6 @@ components/workerdash/.cache/
 
 # BMad workflow tool output (generated session artifacts; keepers get archived to docs/archive/)
 _bmad-output/
+
+# Session hand-off notes (written by /handoff) — local only, never committed
+HANDOFF.md
