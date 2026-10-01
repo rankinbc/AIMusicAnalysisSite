@@ -28,11 +28,17 @@ on:
   pull_request:
     paths-ignore:
       - "PRPs/**"
+  # Deploys are ON DEMAND (owner ruling 2026-10-01): a push to solo only runs
+  # the gates; `gh workflow run ci --ref solo` runs the gates AND deploys.
+  # Batching changes this way stops every push from restarting a deploy.
+  workflow_dispatch:
 
 # One run per ref: an open PR makes every push fire push + pull_request
 # events; superseded runs are cancelled instead of stacking.
+# The event name is in the group so a later push (gates only) never cancels
+# an in-flight manual deploy run.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -222,7 +228,7 @@ jobs:
   # The SSH step skips gracefully when the VPS secrets aren't configured, so
   # the pipeline is green before a VPS exists.
   deploy:
-    if: github.ref == 'refs/heads/solo' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/solo' && github.event_name == 'workflow_dispatch'
     needs: [secrets, bff, frontend, python, public-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 45
