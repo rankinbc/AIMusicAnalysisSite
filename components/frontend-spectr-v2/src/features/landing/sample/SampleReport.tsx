@@ -51,7 +51,8 @@ export default function SampleReport() {
       <header className={s.head}>
         <div className={s.titleBlock}>
           <h3 className={s.track}>
-            {m.title} <span className={s.artist}>— {m.artist}</span>
+            {m.title}
+            {m.artist && <span className={s.artist}>— {m.artist}</span>}
           </h3>
           <div className={`mono ${s.trackMeta}`}>
             {m.genre && <span>{m.genre.replace(/_/g, ' ')}</span>}

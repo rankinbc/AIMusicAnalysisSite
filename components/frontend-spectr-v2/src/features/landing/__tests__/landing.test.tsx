@@ -48,7 +48,7 @@ describe('SampleReportEmbed shell (lazy body — see sample-report.test.tsx)', (
   it('renders the frame, label and both CTAs without the lazy body', () => {
     const html = renderToStaticMarkup(<SampleReportEmbed />);
     expect(html).toContain('Live sample report');
-    expect(html).toContain('real pipeline output');
+    expect(html).toContain('real analyzer output');
     expect(html).toContain('href="/analyze"');
     expect(html).toContain('Analyze my track free');
     expect(html).toContain('href="/demo"');

@@ -15,7 +15,7 @@ export function SampleReportEmbed() {
     <section className={`card ${s.embed}`} aria-label="Sample report">
       <div className={s.embedHead}>
         <span className="label">Live sample report</span>
-        <span className={`mono ${s.embedNote}`}>real pipeline output · not a mock-up</span>
+        <span className={`mono ${s.embedNote}`}>sample track · real analyzer output, curated</span>
       </div>
 
       <Suspense

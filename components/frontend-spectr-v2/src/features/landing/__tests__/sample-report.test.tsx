@@ -13,9 +13,9 @@ const issues = SAMPLE_FINDINGS.filter((f) => !isWin(f));
 const wins = SAMPLE_FINDINGS.filter(isWin);
 
 describe('sample fixture (generated from the demo snapshot)', () => {
-  it('is the real Magnetic Fields report, not a toy', () => {
-    expect(SAMPLE_META.title).toBe('Magnetic Fields');
-    expect(SAMPLE_META.artist).toBe('Artifact303');
+  it('is the curated demo report (real analyzer output), not a toy', () => {
+    expect(SAMPLE_META.title).toBe('Neon Meridian');
+    expect(SAMPLE_META.artist).toBeNull();
     expect(issues.length).toBeGreaterThanOrEqual(10);
     expect(wins.length).toBeGreaterThan(0);
     expect(planSteps(SAMPLE_FINDINGS).length).toBeGreaterThanOrEqual(5);
