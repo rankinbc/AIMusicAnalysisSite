@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { ARCH_TITLE, DEPLOY_CHAIN } from '../ArchitectureDiagram';
+import { COACH_INTRO, DEMO_ANSWER, DEMO_EVIDENCE, DEMO_QUESTION } from '../coach-showcase-content';
 import { buildExamples } from '../examples-model';
 import { HowItWorksPage } from '../HowItWorksPage';
 import { DIFFERENTIATORS, STAGES } from '../pipeline';
@@ -36,6 +37,7 @@ describe('HowItWorksPage (/trust/how-its-built)', () => {
       'How SPECTR works',
       'The analysis pipeline',
       'What it finds — and what it tells you to do',
+      'Meet the Coach',
       'From upload to a plan',
       'Under the hood',
       'What makes it different',
@@ -83,7 +85,8 @@ describe('HowItWorksPage (/trust/how-its-built)', () => {
 
   it('renders both diagrams as accessible images, in wide and narrow layouts', () => {
     const { container } = render(<HowItWorksPage />);
-    const imgs = [...container.querySelectorAll('svg[role="img"]')];
+    // The Coach avatar in the chat showcase sits inside aria-hidden.
+    const imgs = [...container.querySelectorAll('svg[role="img"]')].filter((i) => !i.closest('[aria-hidden="true"]'));
     expect(imgs.map((i) => i.getAttribute('aria-label'))).toEqual([
       PIPELINE_TITLE,
       PIPELINE_TITLE,
@@ -160,6 +163,57 @@ describe('HowItWorksPage (/trust/how-its-built)', () => {
 
   it("stays clear of the guard suite's banned phrases", () => {
     expect(html).not.toMatch(/jobs? waiting|jobs? queued|queueDepth|\bfollowers\b|isPublic|\bshare\b|community/i);
+  });
+
+  describe('Meet the Coach showcase', () => {
+    const start = html.indexOf('data-testid="coach-showcase"');
+    const section = html.slice(start, html.indexOf('From upload to a plan'));
+
+    it('sits after the worked examples and right before "From upload to a plan"', () => {
+      expect(start).toBeGreaterThan(html.indexOf('data-testid="example-findings"'));
+      expect(start).toBeLessThan(html.indexOf('From upload to a plan'));
+      expect(section).toContain('Meet the Coach');
+      expect(section).toContain('AI coach');
+    });
+
+    it('describes the coach truthfully: report-grounded, three modes, no audio', () => {
+      for (const t of ['measurements and findings', 'Concise, Normal or Teach', 'not the audio']) {
+        expect(section).toContain(t);
+      }
+    });
+
+    it("shows the coach's intro and the real demo exchange with its evidence chips", () => {
+      const plain = section.replace(/&#x27;/g, "'").replace(/’/g, "'");
+      expect(plain).toContain(COACH_INTRO.replace(/’/g, "'"));
+      expect(section).toContain(DEMO_QUESTION);
+      expect(DEMO_ANSWER).toMatch(/^Widen your supersaws using mid-side EQ/);
+      expect(plain).toContain(DEMO_ANSWER.replace(/’/g, "'"));
+      expect(section).toContain('From the demo track');
+      expect(DEMO_EVIDENCE.map((e) => e.label)).toEqual(['Correlation 0.72', 'Width 14%', 'Width consistency 38%']);
+      for (const e of DEMO_EVIDENCE) expect(section).toContain(e.label);
+    });
+
+    it('is a replica of the real panel: header, modes, role labels, composer, meta line', () => {
+      for (const t of ['Ask the Coach', 'Concise', 'Normal', 'Teach', 'I know everything about this song.', 'Coach Mix', 'Specialists', '>You<', '>Coach<', 'Ask the coach about this mix…', 'grounded']) {
+        expect(section).toContain(t);
+      }
+    });
+
+    it('links to the demo and offers no textbox that accepts input', () => {
+      expect(section).toMatch(/<a href="\/demo"[^>]*data-testid="hiw-coach-demo-cta"/);
+      expect(section).toContain('Chat with the Coach in the demo');
+      const { container } = render(<HowItWorksPage />);
+      const panel = container.querySelector('[data-testid="coach-showcase"]')!;
+      expect(panel.querySelectorAll('input, textarea, [contenteditable], [role="textbox"]')).toHaveLength(0);
+      expect(panel.querySelectorAll('button')).toHaveLength(0);
+    });
+
+    it('renders every message visibly when it cannot animate (no IntersectionObserver)', () => {
+      const { container } = render(<HowItWorksPage />);
+      const panel = container.querySelector('[data-testid="coach-showcase"]')!;
+      expect(panel.querySelectorAll('[data-hidden]')).toHaveLength(0);
+      expect(panel.textContent).toContain(DEMO_QUESTION);
+    });
   });
 
   it('has exactly one h1', () => {

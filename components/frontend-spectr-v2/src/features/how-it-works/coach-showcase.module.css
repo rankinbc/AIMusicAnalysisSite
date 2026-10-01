@@ -1,0 +1,343 @@
+/* "Meet the Coach" — a replica of the report page's coach panel
+   (redesign-v3-tabs.css `.coach-hd` / `.coach-body` / `.coach-thread` /
+   `.cmsg` / `.coach-input` / `.coach-cap`), scaled up a little for reading
+   on a marketing page. Those `.rdx` globals only load with the results
+   page, so the look is copied here, tokens only. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.section h2 {
+  margin: 0;
+}
+
+.section .eyebrow {
+  margin: 0 0 -8px;
+  color: var(--cyan);
+}
+
+.panel {
+  --accent: var(--cyan);
+  margin: 6px 0 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius);
+  box-shadow:
+    0 0 0 1px rgba(0, 229, 176, 0.14),
+    0 24px 60px -28px rgba(0, 229, 176, 0.35);
+}
+
+/* ── header ─────────────────────────────────────────────────────────── */
+.avatar {
+  flex-shrink: 0;
+  display: flex;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius) var(--radius) 0 0;
+  border: 1px solid var(--border-2);
+  border-bottom: none;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.035));
+}
+
+.headBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.headKey {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.led {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan);
+}
+
+.headLab {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  font-weight: 600;
+}
+
+.modes {
+  display: inline-flex;
+  gap: 1px;
+  margin-left: 8px;
+  border: 1px solid var(--border-2);
+  border-radius: 7px;
+  padding: 1px;
+}
+
+.mode {
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--muted);
+  padding: 2px 8px;
+  border-radius: 5px;
+}
+
+.mode[data-on='true'] {
+  color: var(--cyan);
+  background: var(--cyan-dim);
+}
+
+.headSub {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.actions {
+  display: flex;
+  gap: 7px;
+  flex-shrink: 0;
+}
+
+.mixBtn,
+.specBtn {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  padding: 5px 9px;
+  border-radius: 7px;
+  white-space: nowrap;
+}
+
+.mixBtn {
+  border: 1px solid rgba(0, 229, 176, 0.34);
+  background: rgba(0, 229, 176, 0.08);
+  color: var(--cyan);
+}
+
+.specBtn {
+  border: 1px solid rgba(167, 139, 250, 0.34);
+  background: rgba(167, 139, 250, 0.08);
+  color: var(--violet);
+}
+
+/* ── body + thread ──────────────────────────────────────────────────── */
+.body {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-2);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.thread {
+  margin: 10px 10px 0;
+  padding: 14px;
+  border-radius: 9px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.msg {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  max-width: 88%;
+  transition:
+    opacity 0.35s ease,
+    transform 0.35s ease;
+}
+
+.msg[data-role='user'] {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.msg[data-hidden='true'],
+.divider[data-hidden='true'] {
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.role {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.bub {
+  font-size: 13px;
+  line-height: 1.55;
+  padding: 10px 13px;
+  border-radius: 12px;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.msg[data-role='bot'] .bub,
+.typing .bub {
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+
+.msg[data-role='user'] .bub {
+  background: rgba(0, 229, 176, 0.1);
+  border: 1px solid rgba(0, 229, 176, 0.25);
+  border-bottom-right-radius: 4px;
+}
+
+.bub strong {
+  color: var(--cyan);
+  font-weight: 600;
+}
+
+/* Evidence chips: the results page's `.rdx .pill` look (squared, mono),
+   not the rounded global pill EvidenceChips renders by default. */
+.chips :global(.pill) {
+  font-size: 11px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  border-color: var(--border-2);
+  background: var(--bg-2);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+/* Dots stand in the slot of the hidden message they announce, so the
+   panel height never jumps. */
+.typing {
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: visible;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  transition: opacity 0.35s ease;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ── composer (a link to the demo, not an input) ────────────────────── */
+.composer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 10px 0;
+  text-decoration: none;
+  border-radius: 9px;
+}
+
+.composer:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+.fakeInput {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  background: var(--bg);
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+  transition: border-color 0.15s ease;
+}
+
+.composer:hover .fakeInput {
+  border-color: rgba(0, 229, 176, 0.4);
+}
+
+.send {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  height: 34px;
+  padding: 0 13px;
+  border-radius: 8px;
+  background: var(--cyan);
+  color: var(--ink-on-accent);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.composer:hover .send {
+  background: var(--accent-bright);
+}
+
+.cap {
+  font-size: 9.5px;
+  color: var(--muted);
+  padding: 6px 12px 10px;
+}
+
+@media (max-width: 560px) {
+  .actions {
+    display: none;
+  }
+  .msg {
+    max-width: 100%;
+  }
+  .thread {
+    padding: 10px;
+  }
+  /* Too narrow for a readable fake input: the button takes the row. */
+  .fakeInput {
+    display: none;
+  }
+  .send {
+    flex: 1;
+    justify-content: center;
+  }
+}

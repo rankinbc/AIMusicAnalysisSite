@@ -1,5 +1,5 @@
 // /trust/how-its-built — the "how it works" page: the pipeline diagram, worked
-// examples from the real demo analysis, the step-by-step flow from upload to
+// examples from the real demo analysis, a replica of the coach chat, the step-by-step flow from upload to
 // a plan, the system architecture, what sets SPECTR apart from score-and-tips
 // mix checkers, and the two funnel CTAs. Copy lives in
 // pipeline.ts, where every entry cites the code that backs it. Lives in
@@ -10,6 +10,7 @@ import { useEffect } from 'react';
 import { capture } from '../../lib/analytics';
 import { TrustPage } from '../trust/TrustPage';
 import { ArchitectureDiagram } from './ArchitectureDiagram';
+import { CoachShowcase } from './CoachShowcase';
 import { ExampleFindings } from './ExampleFindings';
 import { DIFFERENTIATORS, KIND_LABEL, STAGES } from './pipeline';
 import { PipelineDiagram } from './PipelineDiagram';
@@ -52,6 +53,8 @@ export function HowItWorksPage() {
         it matters, and comes with a fix you can dial in.
       </p>
       <ExampleFindings />
+
+      <CoachShowcase />
 
       <h2>From upload to a plan</h2>
       <div className={s.pipeline}>
