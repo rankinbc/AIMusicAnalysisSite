@@ -65,11 +65,7 @@ export function LandingHero() {
       </div>
 
       <div className={s.more}>
-        <a href="/trust/how-its-built" className={`btn ghost sm ${s.hiwBtn}`} data-testid="landing-hiw-cta">
-          How it works →
-        </a>
-
-        {/* Sign-up sits last: the pitch, the try-it paths, then "keep it". */}
+        {/* The try-it paths, then "keep it" (sign up), then learn more. */}
         <div className={s.signup}>
           <p className={s.signupText}>
             <span className={s.signupHead}>Working on your own mixes?</span>
@@ -86,6 +82,10 @@ export function LandingHero() {
             </a>
           </div>
         </div>
+
+        <a href="/trust/how-its-built" className="btn ghost sm" data-testid="landing-hiw-cta">
+          How it works →
+        </a>
       </div>
 
       <figure className={s.stage} data-testid="landing-coach">

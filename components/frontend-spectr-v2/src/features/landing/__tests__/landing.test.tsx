@@ -109,11 +109,11 @@ describe('Landing hero (two-column redesign + the Coach)', () => {
     expect(html).toContain('wrong with your mix. Fix it.');
   });
 
-  it('offers How it works and a sign-up under the demo card, in that order', () => {
+  it('offers a sign-up, then How it works, under the demo card', () => {
     expect(html).toMatch(/<a href="\/trust\/how-its-built"[^>]*data-testid="landing-hiw-cta"/);
     expect(html).toMatch(/<a href="\/register"[^>]*data-testid="landing-signup-cta"/);
     expect(html.indexOf('landing-demo-cta')).toBeLessThan(html.indexOf('landing-hiw-cta'));
-    expect(html.indexOf('landing-hiw-cta')).toBeLessThan(html.indexOf('landing-signup-cta'));
+    expect(html.indexOf('landing-signup-cta')).toBeLessThan(html.indexOf('landing-hiw-cta'));
     expect(html).not.toContain('landing-login-cta');
   });
 
