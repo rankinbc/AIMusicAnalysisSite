@@ -16,10 +16,46 @@
   padding-bottom: 24px;
 }
 
-.hiwBtn {
+.more {
   grid-area: hiw;
-  justify-self: start;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 28px;
   margin-top: -20px;
+}
+
+.signup {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 18px;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--cyan) 22%, transparent);
+  background: color-mix(in srgb, var(--cyan) 5%, transparent);
+}
+
+.signupBtns {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+.signupText {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.signupHead {
+  font-weight: 700;
+  color: var(--text);
 }
 
 .copy {

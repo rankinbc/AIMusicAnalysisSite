@@ -79,7 +79,8 @@ type EventName =
   | 'guest_upload_started' // props: { job_id } — the guest's /analyze upload dispatched
   | 'guest_converted' // a guest submitted the register form (POST /auth/guest/convert)
   // ── Task G6 — the coach brief's account-creation CTA. ──
-  | 'guest_signup_clicked'; // the "Create free account" link under the brief was clicked
+  | 'guest_signup_clicked' // the "Create free account" link under the brief was clicked
+  | 'signup_cta_clicked'; // props: { source } — a public-page "Sign up" button
 
 export function capture(event: EventName, props?: Record<string, unknown>): void {
   run((p) => {

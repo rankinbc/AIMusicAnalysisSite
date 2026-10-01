@@ -77,7 +77,7 @@ describe('LandingPage (story 6.1 AC1)', () => {
     expect(html).not.toContain('Live sample report');
     expect(html).toContain('What you get');
     expect(html).toContain('From problem to exact fix');
-    expect(html).toContain('Prove it got better');
+    expect(html).toContain('Maintain your library');
     // The old 3-card honesty strip was removed from the landing page.
     expect(html).not.toContain('Reports stay yours forever');
     expect(html).toContain('href="/login"');
@@ -107,6 +107,14 @@ describe('Landing hero (two-column redesign + the Coach)', () => {
   it('renders exactly one h1 with the headline', () => {
     expect((html.match(/<h1[\s>]/g) ?? []).length).toBe(1);
     expect(html).toContain('wrong with your mix. Fix it.');
+  });
+
+  it('offers How it works and a sign-up under the demo card, in that order', () => {
+    expect(html).toMatch(/<a href="\/trust\/how-its-built"[^>]*data-testid="landing-hiw-cta"/);
+    expect(html).toMatch(/<a href="\/register"[^>]*data-testid="landing-signup-cta"/);
+    expect(html.indexOf('landing-demo-cta')).toBeLessThan(html.indexOf('landing-hiw-cta'));
+    expect(html.indexOf('landing-hiw-cta')).toBeLessThan(html.indexOf('landing-signup-cta'));
+    expect(html).toMatch(/<a href="\/login"[^>]*data-testid="landing-login-cta"/);
   });
 
   it('points the primary CTA at /analyze and the demo CTA at /demo', () => {

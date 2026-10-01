@@ -12,8 +12,8 @@ const FEATURES = [
   { head: 'An AI coach that knows your report', body: 'Ask anything in plain language. Every answer points to your measured numbers, not generic advice.' },
   { head: 'From problem to exact fix', body: 'Every finding comes with a specific move: processor, frequency and amount, on the right track and section. Ranked, so you know where to start.' },
   { head: 'Hear the fix before you commit', body: 'Audition the suggested fix chain against your original mix in real time, right in the browser.' },
-  { head: 'Follow along in your DAW', body: 'Dial in concrete settings step by step and check off each fix as you apply it.' },
-  { head: 'Prove it got better', body: 'Every bounce of a song lives on one timeline. Compare any two versions side by side and see whether the changes actually helped.' },
+  { head: 'Create a plan to take back to your DAW', body: 'Dial in concrete settings step by step and check off each fix as you apply it.' },
+  { head: 'Maintain your library', body: 'Keep your tracks organized and versioned. Compare versions side by side to make sure the changes actually helped.' },
 ];
 
 export function LandingFeatures({ className }: { className?: string }) {

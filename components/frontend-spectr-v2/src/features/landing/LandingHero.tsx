@@ -64,9 +64,32 @@ export function LandingHero() {
         </a>
       </div>
 
-      <a href="/trust/how-its-built" className={`btn ghost sm ${s.hiwBtn}`} data-testid="landing-hiw-cta">
-        How it works →
-      </a>
+      <div className={s.more}>
+        <a href="/trust/how-its-built" className={`btn ghost sm ${s.hiwBtn}`} data-testid="landing-hiw-cta">
+          How it works →
+        </a>
+
+        {/* Sign-up sits last: the pitch, the try-it paths, then "keep it". */}
+        <div className={s.signup}>
+          <p className={s.signupText}>
+            <span className={s.signupHead}>Working on your own mixes?</span>
+            A free account keeps every track, version and report in your library.
+          </p>
+          <div className={s.signupBtns}>
+            <a
+              href="/register"
+              className="btn primary sm"
+              data-testid="landing-signup-cta"
+              onClick={() => capture('signup_cta_clicked', { source: 'landing_hero' })}
+            >
+              Sign up free
+            </a>
+            <a href="/login" className="btn ghost sm" data-testid="landing-login-cta">
+              Log in
+            </a>
+          </div>
+        </div>
+      </div>
 
       <figure className={s.stage} data-testid="landing-coach">
         <blockquote className={s.bubble}>
