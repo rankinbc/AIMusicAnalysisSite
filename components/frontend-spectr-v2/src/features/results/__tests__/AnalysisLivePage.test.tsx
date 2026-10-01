@@ -5,7 +5,7 @@
 // all as an append-only chat (with "still working" lines in long quiet
 // stretches), and no jump at the hand-off: ReportView's complete page
 // continues the same conversation.
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../GenreCorrectChip', () => ({ GenreCorrectChip: () => <span>Correct</span> }));
@@ -49,15 +49,11 @@ const step = (phase: number) => steps().find((r) => r.getAttribute('data-phase')
 const chatIds = () => screen.getAllByTestId('acm-chat-msg').map((m) => m.getAttribute('data-msg-id'));
 const cta = () => screen.getByTestId('acm-cta') as HTMLButtonElement;
 
-function renderLive(j: JobStatusDto, onLeave = vi.fn()) {
-  const utils = render(
-    <LiveAnalysisView jobId="job-live" job={j} songName="Neon Meridian" inputs={inputs} onLeave={onLeave} />,
-  );
+function renderLive(j: JobStatusDto) {
+  const utils = render(<LiveAnalysisView jobId="job-live" job={j} songName="Neon Meridian" inputs={inputs} />);
   const update = (next: JobStatusDto) =>
-    utils.rerender(
-      <LiveAnalysisView jobId="job-live" job={next} songName="Neon Meridian" inputs={inputs} onLeave={onLeave} />,
-    );
-  return { ...utils, update, onLeave };
+    utils.rerender(<LiveAnalysisView jobId="job-live" job={next} songName="Neon Meridian" inputs={inputs} />);
+  return { ...utils, update };
 }
 
 // The poll sequence of one real run, phase by phase.
@@ -99,8 +95,8 @@ describe('live analysis page', () => {
   });
 
   it('shows the full page as soon as the job exists (pending) — no separate progress view', () => {
-    const { onLeave } = renderLive(job('pending'));
-    expect(screen.getByRole('dialog', { name: 'Analysis' })).toBeTruthy();
+    renderLive(job('pending'));
+    expect(screen.getByRole('region', { name: 'Analysis' })).toBeTruthy();
     expect(screen.getByTestId('acm-overline').textContent).toBe('Analyzing…');
     expect(screen.queryByText('Analysis in progress')).toBeNull();
     expect(steps().map((r) => r.getAttribute('data-status'))).toEqual([
@@ -111,8 +107,6 @@ describe('live analysis page', () => {
     expect(screen.getByTestId('acm-chat-typing')).toBeTruthy();
     expect(cta().disabled).toBe(true);
     expect(cta().getAttribute('data-ready')).toBe('false');
-    fireEvent.click(screen.getByText('Run in background'));
-    expect(onLeave).toHaveBeenCalledTimes(1);
   });
 
   it('steps go waiting → running (values filling in, live clock) → ✓ with their duration', () => {
@@ -185,7 +179,6 @@ describe('live analysis page', () => {
         jobId="job-live"
         fj={fj}
         songName="Neon Meridian"
-        onClose={vi.fn()}
         onViewReport={vi.fn()}
       />,
     );

@@ -1,8 +1,8 @@
 // The analysis page's pinned dock: two-stage status (static analysis → AI
 // specialists) plus the actions. It lives outside the scrolling body so the
 // next action is always visible. While the job runs the primary CTA is a
-// greyed-out "Open full report" and the secondary action leaves the page (the
-// job keeps running server-side). The CTA turns primary once the report is
+// greyed-out "Open full report" (no secondary "leave" action — the site header
+// and the back button are the way out; the job keeps running server-side). The CTA turns primary once the report is
 // ready — static analysis complete AND every routed specialist settled (a
 // still-pending arrangement never blocks it) — the same moment the coach's
 // closing line links to the report. A safety valve opens if triage or a run
@@ -31,11 +31,10 @@ interface DockProps {
   valveOpen: boolean;
   /** Extra live-state content (e.g. the guest's demo-report link). */
   extra?: ReactNode;
-  onClose: () => void;
   onViewReport: () => void;
 }
 
-export function AnalysisDock({ status, steps, stage, sequential, valveOpen, extra, onClose, onViewReport }: DockProps) {
+export function AnalysisDock({ status, steps, stage, sequential, valveOpen, extra, onViewReport }: DockProps) {
   const complete = status === 'complete';
   const runnable = steps.filter((p) => p.state !== 'skipped');
   const ran = steps.filter((p) => p.state !== 'skipped' && p.state !== 'waiting' && p.state !== 'running');
@@ -99,16 +98,9 @@ export function AnalysisDock({ status, steps, stage, sequential, valveOpen, extr
         {extra}
       </div>
       <div className={s.actions}>
-        {complete ? (
-          valveOpen &&
-          !ctaReady && (
-            <button type="button" className={s.valve} onClick={onViewReport}>
-              Open report now
-            </button>
-          )
-        ) : (
-          <button type="button" className={s.btn} onClick={onClose}>
-            Run in background
+        {complete && valveOpen && !ctaReady && (
+          <button type="button" className={s.valve} onClick={onViewReport}>
+            Open report now
           </button>
         )}
         <button

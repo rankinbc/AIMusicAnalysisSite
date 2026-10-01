@@ -47,6 +47,10 @@
   --space-5:    20px;
   --space-6:    24px;
 
+  /* In-app top bar height (_appLayout .topnav). Full-page overlays that must
+     leave the site header usable (the live analysis page) start below it. */
+  --topnav-h:   56px;
+
   /* Severity (for verdict cards) */
   --sev-critical: var(--red);
   --sev-severe:   var(--orange);

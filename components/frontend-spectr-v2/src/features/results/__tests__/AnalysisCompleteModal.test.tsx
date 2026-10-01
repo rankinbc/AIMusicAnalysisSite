@@ -76,7 +76,6 @@ function renderModal(over: Partial<Props> = {}) {
     fj,
     jobId: 'job-1',
     songName: 'Neon Meridian',
-    onClose: vi.fn(),
     onViewReport: vi.fn(),
     ...over,
   };
@@ -359,15 +358,16 @@ describe('AnalysisCompleteModal (complete)', () => {
 describe('AnalysisCompleteModal Esc with a sheet on top', () => {
   afterEach(cleanup);
 
-  it('Esc alone closes the modal', () => {
-    const { props } = renderModal();
+  // The page has no close affordance (owner, 2026-10-01): Esc never dismisses it.
+  it('Esc alone does not dismiss the page', () => {
+    renderModal();
     fireEvent.keyDown(document.body, { key: 'Escape' });
-    expect(props.onClose).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: /open full report/i })).toBeTruthy();
   });
 
   it('Esc closes only the Radix sheet above it (the buy sheet), never the modal underneath', () => {
     const onSheet = vi.fn();
-    const { props } = renderModal();
+    renderModal();
     render(
       <Dialog.Root open onOpenChange={onSheet}>
         <Dialog.Portal>
@@ -379,6 +379,6 @@ describe('AnalysisCompleteModal Esc with a sheet on top', () => {
     );
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
     expect(onSheet).toHaveBeenCalledWith(false);
-    expect(props.onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /open full report/i, hidden: true })).toBeTruthy();
   });
 });

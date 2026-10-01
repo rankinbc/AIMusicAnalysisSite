@@ -4,10 +4,14 @@
 import { BrandMark } from './BrandMark';
 import s from './SpectrLogo.module.css';
 
-export function SpectrLogo({ size = 'sm' }: { size?: 'sm' | 'lg' }) {
+const MARK_PX = { sm: 22, lg: 34, xl: 48 } as const;
+
+/* `xl` is the hero size above the live analysis page — same lockup, same
+ * type treatment, scaled up (see SpectrLogo.module.css). */
+export function SpectrLogo({ size = 'sm' }: { size?: 'sm' | 'lg' | 'xl' }) {
   return (
     <span className={s.logo} data-size={size}>
-      <BrandMark size={size === 'lg' ? 34 : 22} glow />
+      <BrandMark size={MARK_PX[size]} glow />
       <span className={s.text}>
         <span className={s.word}>SPECTR</span>
         <span className={s.caption}>AI Music Analysis</span>

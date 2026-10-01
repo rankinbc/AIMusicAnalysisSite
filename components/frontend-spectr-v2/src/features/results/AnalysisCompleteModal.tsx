@@ -16,6 +16,13 @@
 // whose `.rdx * { margin:0; padding:0 }` reset ties on specificity with every
 // CSS-module class here and wins or loses on stylesheet order. The page is a
 // fixed overlay, so escaping the subtree changes nothing but that.
+//
+// No close affordance (owner ruling 2026-10-01): no "×", no Esc, no backdrop
+// click, no "Run in background". The overlay starts BELOW the app top bar
+// (--topnav-h) so the site header stays visible and usable — that, the
+// browser's back button and "Open full report" are the ways out, and none of
+// them leaves the page half-dismissed. Hence role="region", not an aria-modal
+// dialog: the rest of the app is deliberately still reachable.
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -28,11 +35,15 @@ import type {
   SpecialistStatus,
   VerdictDto,
 } from '../../api/types';
+import { SpectrLogo } from '../../ui/SpectrLogo';
 import { GenreCorrectChip } from './GenreCorrectChip';
 import { CoachChatFeed } from './AnalysisCompleteCoach';
 import { AnalysisDock } from './AnalysisDock';
 import { AnalysisStepList } from './AnalysisStepList';
 import { LiveFindingsList } from './LiveFindingsList';
+import { LiveListenBackdrop } from './LiveListenBackdrop';
+import { LiveTransport } from './LiveTransport';
+import { useLivePlayer } from './livePlayerContext';
 import { SpecialistStageSection } from './AnalysisCompleteStage';
 import { narrate, type ChatMessage } from './helpers/coachNarration';
 import { waitContext } from './helpers/coachWaitLines';
@@ -49,12 +60,6 @@ import {
 } from './helpers/liveRun';
 import { useLiveNarration } from './useLiveNarration';
 import s from './AnalysisCompleteModal.module.css';
-
-const CloseIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
-    <path d="M18 6 6 18M6 6l12 12" />
-  </svg>
-);
 
 interface Props {
   jobId: string;
@@ -79,7 +84,6 @@ interface Props {
   sequential?: boolean | undefined;
   /** Extra dock content while the job runs (e.g. a guest's demo link). */
   dockExtra?: ReactNode;
-  onClose: () => void;
   onViewReport: () => void;
 }
 
@@ -96,21 +100,17 @@ function fmtDur(sec?: number): string {
 }
 
 export function AnalysisCompleteModal(props: Props) {
-  const { fj, job, onClose } = props;
+  const { fj, job } = props;
   const status = runStatus(job, fj);
   const complete = status === 'complete';
 
-  // Esc to close — unless a Radix layer above us (the buy-credits sheet,
-  // the guest upgrade dialog) already consumed this Esc: Radix handles it in
-  // a document capture listener and preventDefault()s it, so the sheet
-  // closes and this modal stays open underneath.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !e.defaultPrevented) onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  // Listen while it analyzes (the results route's LivePlayerProvider; absent
+  // for jobs with no version → no transport, no backdrop). Registering keeps
+  // the music going across the live → report hand-off and stops it once no
+  // analysis page is showing the controls.
+  const player = useLivePlayer();
+  const attachPlayer = player?.attach;
+  useEffect(() => attachPlayer?.(), [attachPlayer]);
 
   const source = liveFinalJson(job, fj);
   const p1 = phase1Values(source, job?.partial);
@@ -190,10 +190,14 @@ export function AnalysisCompleteModal(props: Props) {
   const elapsedMs = planSeenAt === null || stage.complete ? null : Math.max(0, now - planSeenAt);
 
   const page = (
-    <div className={s.root} role="dialog" aria-modal="true" aria-label="Analysis">
-      <div className={s.backdrop} onClick={onClose} />
+    <div className={s.root} role="region" aria-label="Analysis">
+      <div className={s.backdrop} />
+      {player && <LiveListenBackdrop playing={player.playing} getAnalyser={player.getAnalyser} />}
       <div className={s.stage}>
-        <div className={s.modal} onClick={(e) => e.stopPropagation()} data-status={status}>
+        <div className={s.brand} data-testid="acm-brand">
+          <SpectrLogo size="xl" />
+        </div>
+        <div className={s.modal} data-status={status}>
           {/* Header */}
           <div className={s.modalHd}>
             <div className={s.hdMain}>
@@ -230,9 +234,7 @@ export function AnalysisCompleteModal(props: Props) {
                 )}
               </div>
             </div>
-            <button className={s.xBtn} aria-label="Close" onClick={onClose}>
-              <CloseIcon />
-            </button>
+            {player && <LiveTransport player={player} fallbackDurationSec={durationSec} />}
           </div>
 
           {/* Body: chat | steps + specialists */}
@@ -270,7 +272,6 @@ export function AnalysisCompleteModal(props: Props) {
             sequential={sequential}
             valveOpen={valveOpen}
             extra={complete ? undefined : props.dockExtra}
-            onClose={onClose}
             onViewReport={props.onViewReport}
           />
         </div>
