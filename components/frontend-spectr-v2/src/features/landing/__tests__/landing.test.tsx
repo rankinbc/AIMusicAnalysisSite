@@ -81,6 +81,15 @@ describe('LandingPage (story 6.1 AC1)', () => {
     expect(html).not.toContain('See pricing');
     expect((html.match(/href="\/demo"/g) ?? []).length).toBeGreaterThanOrEqual(1);
   });
+
+  it('gives the demo its own highlighted callout explaining what it is', () => {
+    expect(html).toContain('No track handy?');
+    expect(html).toContain('real sample analysis');
+    expect(html).toContain('findings, fix plan, AI coach and the Listen rack');
+    expect(html).toContain('No signup.');
+    // The primary upload CTA still comes first.
+    expect(html.indexOf('data-testid="landing-cta"')).toBeLessThan(html.indexOf('data-testid="landing-demo-cta"'));
+  });
 });
 
 describe('PricingPlansView (story 6.1 AC2 — UX-DR25 polish)', () => {

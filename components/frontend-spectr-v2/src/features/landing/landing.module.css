@@ -57,6 +57,75 @@
   letter-spacing: 0.08em;
 }
 
+/* ── guest-demo callout (under the hero CTA) ─────────────────────────── */
+.demoCard {
+  margin-top: 10px;
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  align-items: center;
+  gap: 14px 20px;
+  padding: 16px 18px 16px 20px;
+  text-align: left;
+  border-radius: var(--radius);
+  border: 1px solid rgba(167, 139, 250, 0.42);
+  background:
+    radial-gradient(140% 160% at 0% 0%, rgba(167, 139, 250, 0.16), transparent 55%),
+    var(--card);
+  box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.08), 0 18px 48px -24px rgba(167, 139, 250, 0.6);
+}
+
+.demoCopy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.demoEyebrow {
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--violet);
+  font-weight: 700;
+}
+
+.demoText {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+/* Shared by the hero callout and the sample-report CTA row: the demo is
+   the second action, but it must never read as a muted ghost link. */
+.demoBtn {
+  flex-shrink: 0;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 10px 16px;
+  color: var(--violet);
+  background: var(--violet-dim);
+  border-color: rgba(167, 139, 250, 0.6);
+  box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.18), 0 8px 24px -10px rgba(167, 139, 250, 0.75);
+}
+
+.demoBtn:hover {
+  color: var(--text);
+  background: rgba(167, 139, 250, 0.22);
+  border-color: var(--violet);
+}
+
+@media (max-width: 560px) {
+  .demoCard {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 16px;
+  }
+}
+
 /* ── sample report embed ─────────────────────────────────────────────── */
 .embed {
   padding: 22px 26px 22px;
@@ -152,3 +221,10 @@
 
 /* Task P3 — the ad-hoc footer (.footer/.footerLink/.footerNote) was replaced
    by the shared <PublicFooter /> (src/components/PublicFooter.module.css). */
+
+/* The hero's primary action sits a size above the default .btn so the
+   highlighted demo callout below it never out-weighs it. */
+.ctaRow > a {
+  font-size: 14px;
+  padding: 11px 22px;
+}

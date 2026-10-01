@@ -53,17 +53,29 @@ export function LandingPage() {
             <a href="/analyze" className="btn primary" data-testid="landing-cta">
               Analyze my track free
             </a>
-            {/* Task P3 — the guest demo needs no upload and no account. */}
+          </div>
+          <p className={`mono ${s.ctaHint}`}>WAV · FLAC · MP3 · no account needed for the first one</p>
+
+          {/* The guest demo (task P3) needs no upload and no account — it gets
+              its own highlighted card so a visitor without a track in hand
+              still has an obvious next step. */}
+          <div className={s.demoCard}>
+            <div className={s.demoCopy}>
+              <span className={`mono ${s.demoEyebrow}`}>No track handy?</span>
+              <p className={s.demoText}>
+                Open the results of a real sample analysis and try every feature — findings, fix plan,
+                AI coach and the Listen rack. No signup.
+              </p>
+            </div>
             <a
               href="/demo"
-              className="btn ghost"
+              className={`btn ${s.demoBtn}`}
               data-testid="landing-demo-cta"
               onClick={() => capture('demo_cta_clicked', { source: 'landing' })}
             >
-              Explore the demo
+              Explore the demo →
             </a>
           </div>
-          <p className={`mono ${s.ctaHint}`}>WAV · FLAC · MP3 · no account needed for the first one</p>
         </section>
 
         <SampleReportEmbed />

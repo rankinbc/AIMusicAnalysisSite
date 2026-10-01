@@ -31,7 +31,8 @@ export function SampleReportEmbed() {
       <div className={s.embedCtas}>
         <p className={s.embedCaption}>
           This is what every upload gets: findings with the measurements behind them, and a fix
-          plan you can act on tonight.
+          plan you can act on tonight. The full demo lets you click through all of it — coach and
+          Listen rack included, no signup.
         </p>
         <div className={s.embedBtns}>
           <a href="/analyze" className="btn primary" data-testid="sample-cta">
@@ -39,10 +40,10 @@ export function SampleReportEmbed() {
           </a>
           <a
             href="/demo"
-            className="btn ghost"
+            className={`btn ${s.demoBtn}`}
             onClick={() => capture('demo_cta_clicked', { source: 'landing_sample' })}
           >
-            Explore the full demo
+            Explore the full demo →
           </a>
         </div>
       </div>
