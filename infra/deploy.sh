@@ -30,6 +30,7 @@ write_state() { printf 'CURRENT_TAG=%s\nPREVIOUS_TAG=%s\n' "$1" "$2" > "$STATE_F
 
 apply_tag() {
   local tag="$1"
+  ACTIVE_TAG="$tag"   # verify_health's compose exec must interpolate the same IMAGE_TAG
   echo "==> deploying image tag: $tag"
   IMAGE_TAG="$tag" $COMPOSE pull
   IMAGE_TAG="$tag" $COMPOSE up -d --remove-orphans
@@ -42,7 +43,9 @@ verify_health() {
   # positive. `exec` needs no TLS, no DNS, no published port.
   echo "==> waiting for bff /healthz (${HEALTH_RETRIES}x5s budget)"
   for _ in $(seq 1 "$HEALTH_RETRIES"); do
-    if $COMPOSE exec -T bff curl -fsS --max-time 5 http://localhost:5000/healthz 2>/dev/null \
+    # IMAGE_TAG is required (`:?`) at interpolation time even for `exec` —
+    # without it compose errors out and the check can never pass.
+    if IMAGE_TAG="${ACTIVE_TAG:?}" $COMPOSE exec -T bff curl -fsS --max-time 5 http://localhost:5000/healthz 2>/dev/null \
         | grep -q '"status":"ok"'; then
       echo "==> healthy"
       return 0
