@@ -3,17 +3,35 @@
 Living index of every PRP and what state it's in. Companion to `README.md` (which
 explains the *system*); this file tracks the *contents*.
 
-**Last reviewed:** 2026-06-27 (housekeeping executed: 5 shipped PRPs archived, 3 story
+**Last reviewed:** 2026-10-01 (archive pass: 26 shipped/superseded entries moved — see "Changes this review (2026-10-01)"). Previous: 2026-06-27 (housekeeping executed: 5 shipped PRPs archived, 3 story
 headers + identify-solve header reconciled to code-truth; **2nd pass same day: 7-doc
 results-redesign cluster archived after the redesign landed + verified**; **3rd pass:
 Epic 5 close-out sprint + story 5.6 shipped; Epic 11 Social sprint planned**)
-**Snapshot:** 80 archived · 22 sprint stories · 30 root `.md` (incl README/STATUS)
+**Snapshot:** 118 archive entries · 53 sprint stories · 22 root `.md` (incl README/STATUS)
 
 Buckets:
 - **REFERENCE** — north-star / contract docs that stay at root permanently
 - **IN-PROGRESS** — actively being implemented (or in review)
 - **FUTURE** — backlog, briefing, or research; not started
 - **ARCHIVE CANDIDATE** — work shipped; should move to `archive/<YYYY-MM-DD>_<slug>.md`
+
+---
+
+## Changes this review (2026-10-01)
+
+Verified against `components/` and git history on `develop` (11542c7). Moved to `archive/`:
+
+- `3-1-r2-presigned-upload-briefing.md` → `2026-07-02_*` (story 3.1 shipped, 927557e)
+- `reference-profiles-backend.md` → `2026-06-26_*` (3966f0a; batch/bulk-analyze/aggregate + phase-6 `reference_profile`)
+- `problem-engine-mixcoach-rules.md` + `problem-engine-build-brief.md` → `2026-07-23_*` (Slice 1 live; named follow-ons are separate plans)
+- `results-page-v3-port.md` → `2026-07-28_*` (merged 5138c47)
+- `song-page-console-redesign.md` + `-build-1-bff.md` + `-build-2-frontend.md` → `2026-09-14_*` (merged 2e62ca4)
+- `solo-fork-strip-social.md` → `2026-09-19_*` (pairs with the already-archived plan)
+- `guest-demo-sandbox.md` + `-plan.md`, `guest-first-upload.md` + `-plan.md`, `public-surfaces-polish.md` + `-plan.md`, `handoff-ledgers/` → `2026-09-30_*` (first-impression work, merged to release 2964684)
+- `azure-deploy-spectr.md` → `2026-09-30_*` (spectrmix.com live; CI deploy 8d270bb)
+- `credit-economy.md` + `credit-economy-plan.md` → `2026-10-01_*` (merged 438cd7a)
+- `listen-findings-in-stage.md` → `2026-10-01_*` (spec; plan archived 2026-09-20; D6 amendment shipped d5336d7)
+- `worker-run-logs-and-crash-forensics.md` → `2026-10-01_*` (merged 5c5dd27)
 
 ---
 
@@ -69,8 +87,6 @@ maintained — no action.
 
 | File | Real status |
 |---|---|
-| `problem-engine-mixcoach-rules.md` | Engine LIVE on every analysis; **~40 of ~43 IDENTIFY rules implemented** — 30 `@single` (incl. `tempo_octave_error`, 2026-07-23) + 9 `@composite` in `verdict_lib/`. **Legacy flat `@rule` registry RETIRED 2026-07-23** (v3 closeout — `archive/2026-07-23_v3-analysis-closeout.md`); `evaluate_problems` is the sole rule path, lint/inspector read `_SINGLES`. Remaining: a few datapoint-gated rules. |
-| `reference-profiles-backend.md` | Persistence fields exist (`ReferenceSet.profile_json/fingerprint`, `ReferenceTrack.analysis_status`); aggregation + endpoints incomplete. |
 | `listen-v3-bookmark-ui.md` | Backend done (`BookmarkEndpoints.cs`); frontend **partial** — hooks shipped (`features/listen/useBookmarks.ts`, `useBookmarkSignal.ts`) but the **`BookmarksPanel.tsx` rail + timeline markers are unbuilt** (verified 2026-06-27). |
 
 ### Epic 11 — SPECTR Social (sprint planned 2026-06-27)
@@ -92,7 +108,6 @@ Redesign landed and verified against code; all 7 docs moved to `archive/2026-06-
 ### Reference doc kept at root
 | File | Note |
 |---|---|
-| `problem-engine-build-brief.md` | Autonomous build brief that drove the (now-shipped) engine. Consumed; safe to archive next pass, kept for now as the "how it was built" record. |
 
 ---
 
@@ -100,7 +115,6 @@ Redesign landed and verified against code; all 7 docs moved to `archive/2026-06-
 
 | File | Note |
 |---|---|
-| `3-1-r2-presigned-upload-briefing.md` | Epic 3; "BRIEFING / REVIEW ONLY, no code written, Epic 3 still backlog" |
 | `surface-latent-analysis-datapoints.md` | NOT-STARTED — datapoints computed internally in `phase1_universal.py` but never surfaced into `final_json` / the contract. |
 | `rule-tempo-octave-error.md` | NOT-STARTED — `tempo_octave_error` rule not registered in `rule_engine.py`. |
 | `listen-v3-game-plan-comparison.md` | NOT-STARTED (upstream seam shipped) |

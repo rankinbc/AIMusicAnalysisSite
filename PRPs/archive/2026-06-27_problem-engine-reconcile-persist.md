@@ -442,7 +442,7 @@ git commit -m "docs(rules): mark two-pass Problem engine live + persisted"
 
 ## Self-Review
 
-**1. Spec coverage** (problem-list-persistence, from `problem-engine-mixcoach-rules.md` §Out-of-Scope #3):
+**1. Spec coverage** (problem-list-persistence, from `2026-07-23_problem-engine-mixcoach-rules.md` §Out-of-Scope #3):
 - Extend `verdicts` table + EF entity + ORM + DTO with `problem_id`/`source`/`data_tier`/`fixable`/`suspected`/`kind`/`where`(/`refines`): Tasks 1-3, 6. ✓
 - Promote engine to the live path persisting the de-suppressed list: Task 5 (degraded) + Task 7 (healthy, gated). ✓
 - `refines` audit column for the refiner round-trip (#4): included in the 8. ✓

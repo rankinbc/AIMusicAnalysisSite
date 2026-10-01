@@ -17,7 +17,7 @@
 
 **The design (what to build):**
 1. `PRPs/identify-solve-architecture.md` — the locked architecture. Read §1 (what already exists), §3 (the `Verdict`/Finding contract), §7 (severity), §8 (persistence — extend in place).
-2. `PRPs/problem-engine-mixcoach-rules.md` — **the integration plan you are executing.** Tiered rules, two-pass engine, suppression, genre-aware thresholds, TDD task-by-task. Your work IS this plan.
+2. `PRPs/archive/2026-07-23_problem-engine-mixcoach-rules.md` — **the integration plan you are executing.** Tiered rules, two-pass engine, suppression, genre-aware thresholds, TDD task-by-task. Your work IS this plan.
 3. `components/worker/app/verdict_lib/config/genre-config.md` + `genre-profiles.json` + `rule-bindings.json` — genre thresholds + rule→profile wiring.
 4. `PRPs/identifiers/composite-refiner.md`, `router.md`, `worked-example-refinement.md` — the refine-mode identifier + the 4-stage router (later slices; read for context).
 
@@ -49,7 +49,7 @@ The **router** (`PRPs/identifiers/router.md`) is genuinely net-new — but it co
 
 ## 2. Scope — what "done" contains (this slice)
 
-Execute `PRPs/problem-engine-mixcoach-rules.md` in its task order. Each task is done only when its tests pass (§4). Concretely:
+Execute `PRPs/archive/2026-07-23_problem-engine-mixcoach-rules.md` in its task order. Each task is done only when its tests pass (§4). Concretely:
 
 1. **Extend `Verdict`** with the Problem fields (plan Task 1) — optional + defaulted, so existing constructors/persistence are unaffected.
 2. **`genre_config.py` loader** over the committed config files (plan Task 2).

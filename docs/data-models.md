@@ -4,7 +4,7 @@ One document for the whole shared database (deviation from per-part naming is in
 
 **Canonical source**: the EF Core 10 entities in `components/bff/src/Spectr.Data/Entities/*.cs` + `components/bff/src/Spectr.Data/AppDbContext.cs`. The Python worker uses a hand-maintained SQLAlchemy mirror (`components/shared/aimusic_shared/models.py`) covering the 22 tables the worker touches; cross-language drift is caught by fixture-roundtrip tests. Never define ORM models in the worker directly — extend the EF entity first, migrate, then mirror.
 
-Snake_case table/column names throughout. 33 tables total (down from 41 — the `RemoveSocial` migration dropped `listening_sessions`, `control_grants`, `invites`, `share_settings`, `follow_relations`, `suggestions`, `track_comments`, `track_bookmarks`; see `PRPs/solo-fork-strip-social.md`).
+Snake_case table/column names throughout. 33 tables total (down from 41 — the `RemoveSocial` migration dropped `listening_sessions`, `control_grants`, `invites`, `share_settings`, `follow_relations`, `suggestions`, `track_comments`, `track_bookmarks`; see `PRPs/archive/2026-09-19_solo-fork-strip-social.md`).
 
 ## Entity Catalog
 
@@ -53,7 +53,7 @@ Snake_case table/column names throughout. 33 tables total (down from 41 — the 
 | `viz_presets` | `VizPreset.cs` | User-scoped visualizer presets |
 | `session_notes` | `SessionNote.cs` | Timestamped listening notes per `(version_id, user_id)` |
 
-`listening_sessions` (live Room) and `control_grants` (rack/visuals control handoff) were dropped by `RemoveSocial` — there is no live-room feature any more (see `PRPs/solo-fork-strip-social.md`).
+`listening_sessions` (live Room) and `control_grants` (rack/visuals control handoff) were dropped by `RemoveSocial` — there is no live-room feature any more (see `PRPs/archive/2026-09-19_solo-fork-strip-social.md`).
 
 ### Notifications
 

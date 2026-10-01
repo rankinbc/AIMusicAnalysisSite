@@ -69,7 +69,7 @@ Entry points: library "+ New song", song detail "+ Add version", shell "+ Upload
 - **Library** (`/library`): Songs/References tabs; header "Your library — 24
   songs · 43 versions"; sort (recent/name/versions), grid/list toggle, filter
   pills (All/Archived), "+ New song". Every song is private to its owner —
-  there is no visibility/sharing state (solo fork, `PRPs/solo-fork-strip-social.md`).
+  there is no visibility/sharing state (solo fork, `PRPs/archive/2026-09-19_solo-fork-strip-social.md`).
 - Song cards are dense: current version, inline play button, song link, genre
   chip, per-version mini-list, "Analysis Results" button.
 - **Song detail** (`/songs/{id}`): header (genre, grade, current version) +
@@ -119,7 +119,7 @@ those inputs exist) / **Debug** (dev builds).
   toggle); tool tabs **RACK / VISUALS / STEMS**; right rail **Coach / Plan /
   Stats / Notes** + "Ask about your mix…" box. The rack is always editable —
   there is no read-only/room-guest mode (solo fork removed live listening
-  rooms and the WORK/VIEW/ROOM mode switch, `PRPs/solo-fork-strip-social.md`).
+  rooms and the WORK/VIEW/ROOM mode switch, `PRPs/archive/2026-09-19_solo-fork-strip-social.md`).
 - The Plan tab receives fixes queued on the results page ("Fixes applied: N —
   reset" chip); rack modules apply the DSP chain live (Web Audio graph).
 - Desktop-first: below 1024 px the page shows a "Desktop tool" notice and

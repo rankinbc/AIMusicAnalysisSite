@@ -8,7 +8,7 @@
 
 **Tech Stack:** ASP.NET Core .NET 10 minimal API + EF Core 10/Npgsql (BFF), Python dramatiq worker, React 19 + TS strict + TanStack Query (frontend), Stripe Checkout.
 
-**Spec:** `PRPs/credit-economy.md` (owner-approved 2026-10-01).
+**Spec:** `PRPs/archive/2026-10-01_credit-economy.md` (owner-approved 2026-10-01).
 
 **Worktree / branch:** `C:\Users\badmin\projects\spectr-credits` on `feat/credit-economy` (rebased onto `origin/solo` @ d1ac5d5).
 
@@ -135,7 +135,7 @@ Expected: build FAIL — `CreditPricing` / `CreditPrices` not defined.
 // components/bff/src/Spectr.Bff/Services/CreditPricing.cs
 namespace Spectr.Bff.Services;
 
-// Credit economy (PRPs/credit-economy.md) — the ONE price list. Enforcement
+// Credit economy (PRPs/archive/2026-10-01_credit-economy.md) — the ONE price list. Enforcement
 // (every charge site) and display (GET /api/billing/plans) both read this, so a
 // label can never disagree with the charge. Units are credits; ~1 credit ≈ 1¢
 // of Claude cost. Live-tunable via feature_flags (60 s cache, no redeploy).
@@ -197,7 +197,7 @@ Run: `cd components/bff && dotnet ef migrations add SeedCreditPriceFlags --proje
 Expected: an EMPTY migration (no model changes — if it contains anything else, stop: the model snapshot is out of sync). Put this in `Up`:
 
 ```csharp
-            // Credit economy (PRPs/credit-economy.md) — live price list. ON CONFLICT
+            // Credit economy (PRPs/archive/2026-10-01_credit-economy.md) — live price list. ON CONFLICT
             // keeps an operator's already-tuned value on re-run. (The sign-up grant
             // already lives in `signup_bonus_credits`, seeded by AddSignupBonusCredits.)
             migrationBuilder.Sql(@"
@@ -1778,7 +1778,7 @@ Expected: FAIL — module `app.llm.job_tier` missing; `credits` falls through to
 # components/worker/app/llm/job_tier.py
 """Resolve the billing tier an LLM call should be metered under.
 
-Credit economy (PRPs/credit-economy.md 3.8): triage/specialist/coach calls
+Credit economy (PRPs/archive/2026-10-01_credit-economy.md 3.8): triage/specialist/coach calls
 used to pass no tier, so all spend landed in the FREE lane's ceiling — a few
 paying users would trip it and take the coach offline for everyone. The tier
 the BFF stamped on the analysis job is the authoritative answer.
@@ -1940,7 +1940,7 @@ import { ApiError } from '../../api/fetcher';
 import { extractApiError } from '../../api/error-utils';
 import type { CreditCosts, EntitlementsDto, PlansResponse } from '../../api/types';
 
-// Credit economy (PRPs/credit-economy.md) — what an action costs THIS user,
+// Credit economy (PRPs/archive/2026-10-01_credit-economy.md) — what an action costs THIS user,
 // derived from the server price list + their entitlements. Labels only:
 // callers show `label`, and route an unaffordable click to the buy sheet.
 
@@ -2386,7 +2386,7 @@ git commit -m "feat(credits-fe): cost labels on analyze/specialist/coach/Coach M
 `CLAUDE.md` bff section — replace the sentence "credits = unlimited" in the coach-caps bullet and add a bullet:
 
 ```markdown
-- **Credit economy (PRPs/credit-economy.md, 2026-10)**: prices live in `feature_flags` (`credit_cost_*`, `pro_analyses_monthly`) resolved by `CreditPricing` (config `Credits:Prices:*` → flag → default) and served on `GET /api/billing/plans` (`costs`). Charges go through `CreditLedgerService.ChargeAsync` with idempotency keys (`spend:analysis:{jobId}`, `spend:specialist:{analysisId}:{slug}`, `spend:coach:{messageId}`, `spend:coachmix:{requestId}`); refunds via `RefundChargeAsync` (exact amount). Triage-routed specialists are included in the analysis price. Pro = 15 analyses + 300 coach msgs/month, then credits. Abuse arms + verify gate key on `EntitlementsDto.IsPaying` (Pro or ≥1 purchase), NOT tier — a signup-grant-only account is not paying. Test suite pins `Credits__Prices__Analysis=1` (`TestProcessBaseline`); credit-economy tests opt in via `UseSetting`.
+- **Credit economy (PRPs/archive/2026-10-01_credit-economy.md, 2026-10)**: prices live in `feature_flags` (`credit_cost_*`, `pro_analyses_monthly`) resolved by `CreditPricing` (config `Credits:Prices:*` → flag → default) and served on `GET /api/billing/plans` (`costs`). Charges go through `CreditLedgerService.ChargeAsync` with idempotency keys (`spend:analysis:{jobId}`, `spend:specialist:{analysisId}:{slug}`, `spend:coach:{messageId}`, `spend:coachmix:{requestId}`); refunds via `RefundChargeAsync` (exact amount). Triage-routed specialists are included in the analysis price. Pro = 15 analyses + 300 coach msgs/month, then credits. Abuse arms + verify gate key on `EntitlementsDto.IsPaying` (Pro or ≥1 purchase), NOT tier — a signup-grant-only account is not paying. Test suite pins `Credits__Prices__Analysis=1` (`TestProcessBaseline`); credit-economy tests opt in via `UseSetting`.
 ```
 
 `docs/runbook.md` — add "Turning credits on": (1) create three one-time Stripe Prices (500 / $7, 1,500 / $18, 5,000 / $55), set `STRIPE_PRICE_CREDITS_500|1500|5000` in the prod env, deploy; (2) raise `LLM_BUDGET_GLOBAL_USD` (prod default is $10/month) and confirm `llm_budget_credits_usd`; (3) `UPDATE feature_flags SET value='0' WHERE name IN ('free_analyses_per_month','coach_free_followups');` (the sign-up bonus replaces the free allowance) and `UPDATE feature_flags SET value='true' WHERE name='credits_enabled';` (≤ 60 s); (4) `curl -X POST -H "X-Admin-Key: $ADMIN_API_KEY" https://<host>/api/admin/credits/backfill-signup-bonus` (check the admin header name in `AdminAuth`); (5) watch `llm_calls` cost per analysis for a week and retune `credit_cost_*`.

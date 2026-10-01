@@ -8,7 +8,7 @@
 
 **Tech Stack:** ASP.NET Core .NET 10 + EF Core 10 + xUnit (`components/bff`); React 19 + Vite 6 + TypeScript strict + TanStack Router/Query + vitest + Testing Library (`components/frontend-spectr-v2`); Playwright MCP browser tools for the live pass.
 
-**Spec:** `PRPs/listen-findings-in-stage.md` — read it first, in full. This plan argues from it; where they disagree the spec wins and the plan gets fixed. Spec decisions are cited inline as **D1**…**D12**.
+**Spec:** `PRPs/archive/2026-10-01_listen-findings-in-stage.md` — read it first, in full. This plan argues from it; where they disagree the spec wins and the plan gets fixed. Spec decisions are cited inline as **D1**…**D12**.
 
 ## Global Constraints
 

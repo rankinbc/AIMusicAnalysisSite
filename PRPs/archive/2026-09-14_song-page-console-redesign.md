@@ -8,8 +8,8 @@ clicking a song in the Library)
 into §3.3 / §3.5 / §5 below (inline `ComparePanel`, custom grade-free `ScoreTrendCard`).
 The game-plan view (§3.7) is the one piece NOT in the delivered design — add it during build.
 **Companion build plans (written 2026-06-28):**
-`song-page-console-build-1-bff.md` (BFF: per-version metrics + rating + compare-notes) →
-`song-page-console-build-2-frontend.md` (frontend: port the design into `features/song/`).
+`2026-09-14_song-page-console-build-1-bff.md` (BFF: per-version metrics + rating + compare-notes) →
+`2026-09-14_song-page-console-build-2-frontend.md` (frontend: port the design into `features/song/`).
 Build BFF first; the frontend degrades gracefully without it.
 
 ---

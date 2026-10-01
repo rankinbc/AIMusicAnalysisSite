@@ -8,7 +8,7 @@
 
 **Tech Stack:** ASP.NET Core .NET 10 minimal API + EF Core 10/Npgsql + xUnit (`components/bff`); Python dramatiq worker + pytest (`components/worker`); SQLAlchemy mirror (`components/shared`); React 19 + TanStack Router/Query + vitest (`components/frontend-spectr-v2`).
 
-**Spec:** `PRPs/guest-demo-sandbox.md` (binding; D1–D11, §4 flags, §5 contracts, §6 snapshot format).
+**Spec:** `PRPs/archive/2026-09-30_guest-demo-sandbox.md` (binding; D1–D11, §4 flags, §5 contracts, §6 snapshot format).
 
 ## Global Constraints
 

@@ -76,7 +76,7 @@ The `spectr-llm-budget-80` alert fires at 80% of
 ## Turning credits on (credit economy rollout)
 
 Credits are seeded OFF (`credits_enabled='false'`: everyone premium, no
-charges, no labels). To launch the economy (prices: PRPs/credit-economy.md):
+charges, no labels). To launch the economy (prices: PRPs/archive/2026-10-01_credit-economy.md):
 
 0. **Pre-flip: convert legacy balances.** Before this economy, one credit was
    one analysis (packs of 5 and 10). Now an analysis costs 100 credits, so any
@@ -209,7 +209,7 @@ Sizing rule of thumb: ≤ 40% of host RAM, and never more than host RAM minus
 `docs/azure-deploy-remaining-work.md`) the "minus 4 GB" rule computes to zero
 (it assumes a host bigger than 4 GB), so the 40% ceiling (~1.6 GB) governs;
 `1g` was chosen because the idle stack plus one ordinary analysis already use
-roughly 3 GB of the 4 GB total (`PRPs/azure-deploy-spectr.md`), leaving little
+roughly 3 GB of the 4 GB total (`PRPs/archive/2026-09-30_azure-deploy-spectr.md`), leaving little
 room for anything else. As of this writing the prod worker image has no
 `docker` CLI installed and this compose mounts no `docker.sock`
 (`components/worker/Dockerfile`), so the container cannot actually launch in

@@ -1,6 +1,6 @@
-# SDD ledger — plan: PRPs/guest-demo-sandbox-plan.md
+# SDD ledger — plan: PRPs/archive/2026-09-30_guest-demo-sandbox-plan.md
 
-Spec: PRPs/guest-demo-sandbox.md. Controller ledger with owner decisions: .superpowers/sdd/first-impression-ledger.md
+Spec: PRPs/archive/2026-09-30_guest-demo-sandbox.md. Controller ledger with owner decisions: .superpowers/sdd/first-impression-ledger.md
 Briefs are cut by line range (plan header + Global Constraints, then the task block) when scripts/task-brief cannot parse the heading.
 
 ## Rulings accepted from the plan-writing fork (2026-09-20)

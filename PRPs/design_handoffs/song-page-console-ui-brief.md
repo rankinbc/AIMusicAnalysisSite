@@ -2,7 +2,7 @@
 
 **Project:** spectr-frontend-v2 (your synced SPECTR design system)
 **Screen:** the page a producer lands on after clicking a song in their Library
-**Companion engineering spec:** `PRPs/song-page-console-redesign.md` (data + build
+**Companion engineering spec:** `PRPs/archive/2026-09-14_song-page-console-redesign.md` (data + build
 detail — you don't need it; this brief is self-contained for design)
 
 ---

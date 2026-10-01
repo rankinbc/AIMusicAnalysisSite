@@ -220,7 +220,7 @@ migrate forward; historical migrations stay as-is.
 - **One commit on `master`** (needs Brian's explicit go-ahead at execution
   time): disable its deploy job, so a stray push to `master` can never deploy
   the social build over the solo site.
-- `PRPs/azure-deploy-spectr.md`, `docs/azure-deploy-remaining-work.md`,
+- `PRPs/archive/2026-09-30_azure-deploy-spectr.md`, `docs/azure-deploy-remaining-work.md`,
   `docs/launch-checklist.md`: deploy branch = `solo`; remove the "share links
   must work" constraint, the `/r/<token>` crawler check, and the share step of
   the Task 10 walkthrough.

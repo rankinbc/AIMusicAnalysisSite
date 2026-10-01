@@ -69,7 +69,7 @@ Features (axes): scalars **LUFS · True Peak · Dynamic Range · Stereo Width ·
 
 - Choosing/switching the comparison target from the tab (read-only; set upstream).
 - The References **library** + profile **detail** views (`references-ui-requirements.md`).
-- Backend / phase-6 wiring (`reference-profiles-backend.md`).
+- Backend / phase-6 wiring (`2026-06-26_reference-profiles-backend.md`).
 - The detected-genre gap (lives in General Stats / Track Info).
 
 ## 8. Open / awaiting

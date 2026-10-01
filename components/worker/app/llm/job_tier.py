@@ -1,6 +1,6 @@
 """Resolve the billing tier an LLM call should be metered under.
 
-Credit economy (PRPs/credit-economy.md 3.8): triage/specialist/coach calls
+Credit economy (PRPs/archive/2026-10-01_credit-economy.md 3.8): triage/specialist/coach calls
 used to pass no tier, so all spend landed in the FREE lane's ceiling - a few
 paying users would trip it and take the coach offline for everyone. The tier
 the BFF stamped on the analysis job is the authoritative answer.

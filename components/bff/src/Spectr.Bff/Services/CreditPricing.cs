@@ -1,6 +1,6 @@
 namespace Spectr.Bff.Services;
 
-// Credit economy (PRPs/credit-economy.md) — the ONE price list. Enforcement
+// Credit economy (PRPs/archive/2026-10-01_credit-economy.md) — the ONE price list. Enforcement
 // (every charge site) and display (GET /api/billing/plans) both read this, so a
 // label can never disagree with the charge. Units are credits; ~1 credit ≈ 1¢
 // of Claude cost. Live-tunable via feature_flags (60 s cache, no redeploy).

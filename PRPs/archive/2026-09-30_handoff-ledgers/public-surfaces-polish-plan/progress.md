@@ -1,6 +1,6 @@
-# SDD ledger — plan: PRPs/public-surfaces-polish-plan.md
+# SDD ledger — plan: PRPs/archive/2026-09-30_public-surfaces-polish-plan.md
 
-Spec: PRPs/public-surfaces-polish.md. Controller ledger with owner decisions: .superpowers/sdd/first-impression-ledger.md
+Spec: PRPs/archive/2026-09-30_public-surfaces-polish.md. Controller ledger with owner decisions: .superpowers/sdd/first-impression-ledger.md
 Note: task headings are "Task P<n>" so scripts/task-brief cannot parse them — briefs are cut by line range (header lines 1-31 + the task block).
 
 ## Log

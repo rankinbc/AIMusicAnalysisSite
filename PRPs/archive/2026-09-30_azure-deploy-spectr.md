@@ -46,7 +46,7 @@
 ## Global Constraints
 
 - No feature removed beyond D6. Coach chat, specialists, verdicts, Fix Rack, stems stage/classify/confirm, Listen rack DSP, anon funnel, email verification must all work on the live site.
-- Public surface is single-user — see `PRPs/solo-fork-strip-social.md`.
+- Public surface is single-user — see `PRPs/archive/2026-09-19_solo-fork-strip-social.md`.
 - Reuse `infra/*` unchanged except the three edits in Task 1. All prod config = env vars in `/opt/spectr/.env`, chmod 600 (AR31). No secrets in git, ever.
 - Images: `ghcr.io/rankinbc/spectr-{bff,worker,web}` pinned by commit SHA, deployed only via `/opt/spectr/deploy.sh` (never `docker compose up` by hand against `:latest`).
 - EF Core migrations apply automatically at BFF boot (`Migrations__ApplyAtBoot=true`, advisory-lock serialized). No manual migration step, no Alembic (frozen legacy).
