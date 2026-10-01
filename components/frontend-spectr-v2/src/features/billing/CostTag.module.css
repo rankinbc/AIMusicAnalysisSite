@@ -1,13 +1,31 @@
+/* A self-contained dark pill so the cost stays legible on ANY host — the
+   cyan primary buttons (where cyan text vanished) as well as dark cards. */
 .tag {
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border: 1px solid var(--cyan);
+  border-radius: 999px;
+  background: var(--bg);
   color: var(--cyan);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
   white-space: nowrap;
 }
 
+/* Inside ReportView the `.rdx *` reset would zero the pill's padding. */
+:global(.rdx) .tag {
+  padding: 1px 7px;
+}
+
 .tag[data-included='true'] {
+  border-color: var(--border-2);
   color: var(--text-2);
 }
 
 .tag[data-short='true'] {
+  border-color: var(--sev-warning);
   color: var(--sev-warning);
 }

@@ -94,8 +94,8 @@ charges, no labels). To launch the economy (prices: PRPs/credit-economy.md):
    compensating, keyed `adjustment` ledger entry of `balance * 99` credits
    (the ledger is append-only — never UPDATE). If it returns nothing,
    there is nothing to convert.
-1. Stripe Dashboard: create three one-time USD Prices — 500 credits / $7,
-   1,500 / $18, 5,000 / $55. Set `STRIPE_PRICE_CREDITS_500`,
+1. Stripe Dashboard: create three one-time USD Prices — 500 credits / $4,
+   1,500 / $10, 5,000 / $30. Set `STRIPE_PRICE_CREDITS_500`,
    `STRIPE_PRICE_CREDITS_1500`, `STRIPE_PRICE_CREDITS_5000` in the prod
    `.env` (compose maps them to `Stripe__CreditPackPrices__*`), then
    `./deploy.sh redeploy`.

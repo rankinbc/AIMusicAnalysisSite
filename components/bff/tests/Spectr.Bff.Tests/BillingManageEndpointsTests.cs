@@ -198,7 +198,7 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
             Assert.Equal("monthly", body.Cadence);
             Assert.False(body.CancelAtPeriodEnd);
             Assert.NotNull(body.NextChargeAt);
-            Assert.Equal(1299, body.NextChargeCents);
+            Assert.Equal(799, body.NextChargeCents);
             Assert.Equal("USD", body.Currency);
         }
         finally { await CleanupAsync(f, userId); }
@@ -483,7 +483,7 @@ public sealed class BillingManageEndpointsTests(WebApplicationFactory<Program> f
             Assert.Equal("annual", body!.Cadence);
             // The projected response reflects the new price → new
             // monthly-cents = annual price.
-            Assert.Equal(9900, body.NextChargeCents);
+            Assert.Equal(7900, body.NextChargeCents);
         }
         finally { await CleanupAsync(f, userId); }
     }

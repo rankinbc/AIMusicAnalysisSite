@@ -19,8 +19,8 @@ public sealed class PricingDisplayOptions
     // currency literal would be a copy-paste trap if these definitions
     // ever migrate to a non-Options file (the price-literal lint exempts
     // *Options.cs and would suddenly fire elsewhere).
-    public int ProMonthlyCents { get; init; } = 1299;
-    public int ProAnnualCents { get; init; } = 9900;
+    public int ProMonthlyCents { get; init; } = 799;
+    public int ProAnnualCents { get; init; } = 7900;
     // Credit economy (2026-10-01) — one-time credit packs (display cents). The
     // BILLED amount is the Stripe Price in StripeOptions.CreditPackPrices[credits];
     // BillingReconciliationService alerts on drift.
@@ -32,9 +32,9 @@ public sealed class PricingDisplayOptions
 
     public static readonly IReadOnlyList<CreditPackOption> DefaultCreditPacks =
     [
-        new() { Credits = 500, Cents = 700 },
-        new() { Credits = 1500, Cents = 1800 },
-        new() { Credits = 5000, Cents = 5500 },
+        new() { Credits = 500, Cents = 400 },
+        new() { Credits = 1500, Cents = 1000 },
+        new() { Credits = 5000, Cents = 3000 },
     ];
 
     // Configured packs REPLACE the defaults; none configured ⇒ the defaults.
