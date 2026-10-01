@@ -73,6 +73,33 @@ The `spectr-llm-budget-80` alert fires at 80% of
    copy. Nothing to restart; service resumes when the month rolls or the
    ceiling rises.
 
+## Turning credits on (credit economy rollout)
+
+Credits are seeded OFF (`credits_enabled='false'`: everyone premium, no
+charges, no labels). To launch the economy (prices: PRPs/credit-economy.md):
+
+1. Stripe Dashboard: create three one-time USD Prices — 500 credits / $7,
+   1,500 / $18, 5,000 / $55. Set `STRIPE_PRICE_CREDITS_500`,
+   `STRIPE_PRICE_CREDITS_1500`, `STRIPE_PRICE_CREDITS_5000` in the prod
+   `.env` (compose maps them to `Stripe__CreditPackPrices__*`), then
+   `./deploy.sh redeploy`.
+2. Raise `LLM_BUDGET_GLOBAL_USD` / the `llm_budget_global_usd` flag (prod
+   default is $10/month; see "LLM budget breach") and confirm
+   `llm_budget_credits_usd` is set.
+3. Flip the flags (BFF cache <= 60 s, no restart). The sign-up bonus replaces
+   the free allowance:
+   ```sql
+   UPDATE feature_flags SET value='0' WHERE name IN ('free_analyses_per_month','coach_free_followups');
+   UPDATE feature_flags SET value='true' WHERE name='credits_enabled';
+   ```
+4. Grant the sign-up bonus to already-verified accounts (idempotent, safe to
+   re-run; header per "Admin surface"):
+   `curl -X POST -H "X-Admin-Key: $ADMIN_API_KEY" https://<host>/api/admin/credits/backfill-signup-bonus`
+5. Watch `llm_calls` cost per analysis for a week and retune the
+   `credit_cost_*` flags.
+
+Kill switch back: `UPDATE feature_flags SET value='false' WHERE name='credits_enabled';`
+
 ## Prompt rollback (story 1.1 mechanism / 10.5 writer)
 
 No deploy, effective ≤60 s (worker pin TTL):
