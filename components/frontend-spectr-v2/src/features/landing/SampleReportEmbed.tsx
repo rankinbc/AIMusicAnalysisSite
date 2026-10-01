@@ -1,56 +1,51 @@
-/* Story 6.1 (UX-DR24) — the landing's live sample report: REAL report
- * components (GradeHero revived from the results feature) fed with real
- * trimmed pipeline output. Explicitly not a screenshot. */
-import { GLOSSARY } from '../results/glossary-terms';
-import { GradeHero } from '../results/GradeHero';
-import { Pill } from '../../ui/Pill';
-import { SAMPLE_REPORT } from './sample-report';
+/* Landing page live sample report shell. The report body (SampleReport) is
+ * lazy-loaded: it pulls the results-page stylesheets and the generated
+ * fixture, none of which belong in the landing entry chunk. The frame, label
+ * and CTAs render immediately (and under static render, where the lazy body
+ * shows its fallback). */
+import { lazy, Suspense } from 'react';
+
+import { capture } from '../../lib/analytics';
 import s from './landing.module.css';
 
-const LUFS_DEFINITION = GLOSSARY.find(([term]) => term === 'LUFS')![1];
+const SampleReport = lazy(() => import('./sample/SampleReport'));
 
 export function SampleReportEmbed() {
-  const r = SAMPLE_REPORT;
   return (
     <section className={`card ${s.embed}`} aria-label="Sample report">
       <div className={s.embedHead}>
         <span className="label">Live sample report</span>
-        <span className={`mono ${s.embedNote}`}>real pipeline output · rough mix on purpose</span>
+        <span className={`mono ${s.embedNote}`}>real pipeline output · not a mock-up</span>
       </div>
 
-      <div className={s.embedBody}>
-        <p className={s.plainSummary}>{r.plainSummary}</p>
+      <Suspense
+        fallback={
+          <div className={s.embedLoading} aria-hidden>
+            Loading the sample report…
+          </div>
+        }
+      >
+        <SampleReport />
+      </Suspense>
 
-        <GradeHero grade={r.grade} score={r.overallScore} danceability={r.danceability} />
-
-        <div className={s.embedMeta}>
-          <Pill><span className="mono">{r.bpm}</span> BPM</Pill>
-          <Pill><span className="mono">{r.detectedKey}</span></Pill>
-          <Pill><span className="mono">{r.lufs.toFixed(1)}</span> LUFS</Pill>
-        </div>
-
-        <p className={s.gloss}>
-          <span className="mono">LUFS</span> — {LUFS_DEFINITION}
+      <div className={s.embedCtas}>
+        <p className={s.embedCaption}>
+          This is what every upload gets: findings with the measurements behind them, and a fix
+          plan you can act on tonight.
         </p>
-
-        <ul className={s.findings}>
-          {r.findings.map((f) => (
-            <li key={f.tag} className={s.finding}>
-              <span className={`mono ${s.findingTag}`}>{f.tag}</span>
-              <span className={s.findingText}>{f.text}</span>
-              <span className={s.findingPlain}>
-                <span className={`mono ${s.plainTag}`}>In plain English</span> {f.plain}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <div className={s.embedBtns}>
+          <a href="/analyze" className="btn primary" data-testid="sample-cta">
+            Analyze my track free
+          </a>
+          <a
+            href="/demo"
+            className="btn ghost"
+            onClick={() => capture('demo_cta_clicked', { source: 'landing_sample' })}
+          >
+            Explore the full demo
+          </a>
+        </div>
       </div>
-
-      <p className={s.embedCaption}>
-        This is a real report from a real rough mix — SPECTR doesn&rsquo;t flatter.{' '}
-        <a href="/register">Get yours free →</a>{' · '}
-        <a href="/demo">See a full report in the demo →</a>
-      </p>
     </section>
   );
 }

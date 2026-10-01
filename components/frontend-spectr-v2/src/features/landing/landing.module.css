@@ -59,7 +59,10 @@
 
 /* ── sample report embed ─────────────────────────────────────────────── */
 .embed {
-  padding: 22px 26px 18px;
+  padding: 22px 26px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
 .embedHead {
@@ -75,109 +78,51 @@
   color: var(--muted);
 }
 
-.embedBody {
+/* Reserves roughly the report's first screen so the lazy body doesn't
+   shove the page around when it lands. */
+.embedLoading {
+  min-height: 640px;
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 8px 40px;
-  align-items: start;
-  margin-top: 10px;
-}
-
-.plainSummary {
-  grid-column: 1 / -1;
-  margin: 0 0 4px;
-  color: var(--text-2);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.embedMeta {
-  grid-column: 1;
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.gloss {
-  grid-column: 1;
-  margin: 0;
-  max-width: 220px;
-  color: var(--text-2);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.findings {
-  grid-column: 2;
-  grid-row: 2 / span 3;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.finding {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  column-gap: 12px;
-  row-gap: 6px;
-  padding: 10px 12px;
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--violet);
-}
-
-.findingTag {
-  align-self: baseline;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: var(--violet);
-  white-space: nowrap;
-}
-
-.findingText {
-  font-size: 12.5px;
-  color: var(--text-2);
-  line-height: 1.5;
-}
-
-.findingPlain {
-  grid-column: 1 / -1;
-  color: var(--text-2);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.plainTag {
-  margin-right: 4px;
+  place-items: center;
   color: var(--muted);
-  font-size: 9px;
-  letter-spacing: 0.08em;
+  font-size: 12px;
+}
+
+.embedCtas {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px 24px;
+  flex-wrap: wrap;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
 }
 
 .embedCaption {
-  margin: 14px 0 0;
-  font-size: 12px;
-  color: var(--muted);
+  margin: 0;
+  max-width: 460px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
 }
 
-.embedCaption a {
-  color: var(--cyan);
-  text-decoration: none;
+.embedBtns {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-@media (max-width: 720px) {
-  .embedBody {
-    grid-template-columns: 1fr;
+@media (max-width: 640px) {
+  .embed {
+    padding: 18px 14px 18px;
   }
-  .findings {
-    grid-column: 1;
-    grid-row: auto;
+  .embedBtns {
+    width: 100%;
+  }
+  .embedBtns > a {
+    flex: 1 1 100%;
+    justify-content: center;
+    text-align: center;
   }
 }
 

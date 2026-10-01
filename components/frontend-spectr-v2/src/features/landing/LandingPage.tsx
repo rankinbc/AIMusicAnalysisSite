@@ -1,8 +1,9 @@
 /* Story 6.1 (FR40) — the public landing page at `/`. One-scroll pitch:
  * hero + live sample report + honesty strip + footer. Anonymous only — the
  * root route's beforeLoad redirects authed users to /library. Keep this
- * chunk LEAN (AC4 LCP): ui primitives + GradeHero only, nothing that pulls
- * wavesurfer/recharts/listen-rack. */
+ * chunk LEAN (AC4 LCP): ui primitives only, nothing that pulls
+ * wavesurfer/recharts/listen-rack. The sample report body is lazy-loaded by
+ * SampleReportEmbed. */
 import { useEffect } from 'react';
 
 import { PublicChrome } from '../../components/PublicChrome';
