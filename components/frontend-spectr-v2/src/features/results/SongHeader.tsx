@@ -21,6 +21,8 @@ interface SongHeaderProps {
   jobId?: string | undefined;
   versionLabel: string | null;
   trackName: string;
+  /** The song's description — e.g. a demo track's artist credit. Optional. */
+  description?: string | null | undefined;
   genre: string | null | undefined;
   durationSeconds: number | null | undefined;
   inputs: SongHeaderInputs;
@@ -48,6 +50,7 @@ export function SongHeader({
   jobId,
   versionLabel,
   trackName,
+  description,
   genre,
   inputs,
   onAddInputs,
@@ -79,6 +82,7 @@ export function SongHeader({
               </span>
             )}
           </div>
+          {description && <p className="rh-desc">{description}</p>}
 
           <div className="rh-chips">
             <span className="rh-chips-label">Analyzed from</span>

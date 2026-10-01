@@ -1,3 +1,4 @@
+import { analyzedInputs } from './helpers/analyzed-inputs';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { toast } from 'sonner';
@@ -12,6 +13,7 @@ import {
   useFeedbackVerdict,
   useNotes,
   useReanalyzeVersion,
+  useSong,
   useVerdicts,
   useVersionFiles,
 } from '../../api/hooks';
@@ -108,6 +110,7 @@ export function ReportView({
   const phase9 = pickPhaseData<Phase9Data>(fj, 9);
 
   const trackName = results.songName ?? 'Untitled';
+  const { data: song } = useSong(songId);
   const jobId = results.jobId;
   const versionId = results.versionId ?? null;
 
@@ -147,18 +150,14 @@ export function ReportView({
 
   // Which inputs the analysis ran on — drives the header chips.
   const { data: filesData } = useVersionFiles(versionId ?? '');
-  const inputs: SongHeaderInputs = useMemo(() => {
-    const files = filesData?.files ?? [];
-    return {
-      mix: files.some((f) => f.type === 'mix') || files.length === 0,
-      stems: files.some((f) => f.type === 'stem') || Boolean(phase4?.stems),
-      als: files.some((f) => f.type === 'als') || Boolean(phase8),
-      reference:
-        files.some((f) => f.type === 'reference') ||
-        Boolean(phase6?.gaps) ||
-        phase5?.status === 'ok',
-    };
-  }, [filesData, phase4, phase8, phase6, phase5]);
+  const inputs: SongHeaderInputs = useMemo(
+    () =>
+      analyzedInputs(
+        filesData?.files ?? [],
+        isFinalJson(results.finalJson) ? results.finalJson : undefined,
+      ),
+    [filesData, results.finalJson],
+  );
 
   // ── Committed ("Added to Listen") moves — lifted here so both the Coach tab
   // (move toggles) and the sidebar (Fixes for Listen queue) stay in sync. ──
@@ -449,6 +448,7 @@ export function ReportView({
                     (results.versionNumber != null ? `v${results.versionNumber}` : null)
                   }
                   trackName={trackName}
+                  description={song?.description}
                   genre={phase2?.genre}
                   durationSeconds={phase1?.duration_seconds}
                   inputs={inputs}
