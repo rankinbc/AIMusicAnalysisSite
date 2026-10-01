@@ -122,7 +122,7 @@ describe('How it works carousel', () => {
 
   it('tabs every main section in page order, keeping header, intro and CTA outside it', () => {
     const tabs = [...html.matchAll(/role="tab"[^>]*data-tab="([^"]+)"/g)].map((m) => m[1]);
-    expect(tabs).toEqual(['pipeline', 'findings', 'coach', 'steps', 'different', 'daw']);
+    expect(tabs).toEqual(['pipeline', 'findings', 'coach', 'steps', 'listen', 'different', 'daw']);
     const start = html.indexOf('data-testid="hiw-carousel"');
     expect(html.indexOf('<h1')).toBeLessThan(start);
     expect(html.indexOf('score and a list of problems')).toBeLessThan(start);

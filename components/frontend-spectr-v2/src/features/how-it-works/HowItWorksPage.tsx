@@ -12,6 +12,7 @@ import { TrustPage } from '../trust/TrustPage';
 import { CoachShowcase } from './CoachShowcase';
 import { DawPlanSection } from './DawPlanSection';
 import { ExampleFindings } from './ExampleFindings';
+import { ListenSection } from './ListenSection';
 import { DIFFERENTIATORS, KIND_LABEL, STAGES } from './pipeline';
 import { PipelineDiagram } from './PipelineDiagram';
 import { SectionCarousel } from './SectionCarousel';
@@ -115,6 +116,7 @@ const SECTIONS: readonly CarouselSection[] = [
   { id: 'findings', label: 'Findings', dwellMs: 16_000, content: <FindingsSection /> },
   { id: 'coach', label: 'The Coach', dwellMs: 14_000, content: <CoachSection /> },
   { id: 'steps', label: 'Upload to plan', dwellMs: 16_000, content: <PlanSection /> },
+  { id: 'listen', label: 'Hear it', dwellMs: 14_000, content: <ListenSection /> },
   { id: 'different', label: 'Why it’s different', dwellMs: 12_000, content: <DiffSection /> },
   { id: 'daw', label: 'To your DAW', dwellMs: 14_000, content: <DawPlanSection /> },
 ];
