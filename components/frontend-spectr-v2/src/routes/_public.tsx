@@ -1,5 +1,6 @@
 import { Outlet, createFileRoute } from '@tanstack/react-router';
 
+import { SpectrLogo } from '../ui/SpectrLogo';
 import s from './_public/_publicLayout.module.css';
 
 // Anonymous layout: login, register, password reset/verify. No Topnav / no
@@ -14,9 +15,9 @@ function PublicLayout() {
   return (
     <div className={s.shell}>
       <div className={s.column}>
-        <div className={s.brand}>
-          SPEC<span className={s.brandAccent}>TR</span>
-        </div>
+        <a href="/" className={s.brand} aria-label="SPECTR — AI Music Analysis, home">
+          <SpectrLogo size="lg" />
+        </a>
         <Outlet />
       </div>
     </div>

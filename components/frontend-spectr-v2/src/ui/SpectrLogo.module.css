@@ -1,0 +1,47 @@
+/* Mirrors the original in-app top-bar lockup (_appLayout .brand). */
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  user-select: none;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1;
+}
+
+.word {
+  font-weight: 800;
+  letter-spacing: 0.24em;
+  font-size: 15px;
+}
+
+.caption {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  color: var(--muted);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.logo[data-size='lg'] {
+  gap: 14px;
+}
+
+.logo[data-size='lg'] .text {
+  gap: 4px;
+}
+
+.logo[data-size='lg'] .word {
+  font-size: 24px;
+}
+
+.logo[data-size='lg'] .caption {
+  font-size: 10px;
+}

@@ -21,7 +21,7 @@ import { GuestShell } from '../features/demo/GuestShell';
 import { useGuestState } from '../features/demo/useGuestState';
 import { AppWorkerHealthNotice } from '../features/health/AppWorkerHealthNotice';
 import { DevHealthDot } from '../features/health/DevHealthDot';
-import { BrandMark } from '../ui/BrandMark';
+import { SpectrLogo } from '../ui/SpectrLogo';
 import { UsageMeter } from '../components/UsageMeter';
 import { VerifyEmailBanner } from '../components/VerifyEmailBanner';
 import s from './_app/_appLayout.module.css';
@@ -157,11 +157,7 @@ function AppLayout() {
     <div className={s.shell}>
       <header className={s.topnav}>
         <Link to="/library" className={s.brand} aria-label="SPECTR — your library">
-          <BrandMark size={22} glow />
-          <div className={s.brandText}>
-            <span>SPECTR</span>
-            <span className={s.brandCaption}>AI Music Analysis</span>
-          </div>
+          <SpectrLogo />
         </Link>
 
         <nav className={s.navTabs}>

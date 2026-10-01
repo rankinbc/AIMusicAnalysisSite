@@ -33,22 +33,6 @@
   text-decoration: none;
 }
 
-.brandText {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  line-height: 1;
-}
-
-.brandCaption {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 8px;
-  font-weight: 500;
-  letter-spacing: 0.18em;
-  color: var(--muted);
-  text-transform: uppercase;
-}
-
 .navTabs {
   display: flex;
   gap: 2px;

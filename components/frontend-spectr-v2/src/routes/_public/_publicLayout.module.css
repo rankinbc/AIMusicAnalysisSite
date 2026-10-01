@@ -20,14 +20,6 @@
 }
 
 .brand {
-  text-align: center;
-  font-size: 32px;
-  font-weight: 800;
-  letter-spacing: 0.18em;
-  color: var(--text);
-  text-shadow: 0 0 32px var(--cyan-glow);
-}
-
-.brandAccent {
-  color: var(--cyan);
+  align-self: center;
+  text-decoration: none;
 }

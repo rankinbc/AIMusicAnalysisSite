@@ -15,9 +15,6 @@
 
 .brand {
   display: inline-flex;
-  flex-direction: column;
-  gap: 3px;
-  color: var(--text);
   text-decoration: none;
 }
 

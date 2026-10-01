@@ -13,6 +13,7 @@
  * page load is fine, and plain anchors keep this component static-render
  * testable without a RouterProvider. */
 import { useOptionalAuth } from '../auth/AuthContext';
+import { SpectrLogo } from '../ui/SpectrLogo';
 import { PricingLink } from './PricingLink';
 import s from './PublicChrome.module.css';
 
@@ -21,10 +22,7 @@ export function PublicChrome() {
   return (
     <header className={s.chrome}>
       <a href="/" className={s.brand} aria-label="SPECTR — AI Music Analysis, home">
-        <span className={s.brandWord}>
-          SPEC<span className={s.brandAccent}>TR</span>
-        </span>
-        <span className={s.brandCaption}>AI Music Analysis</span>
+        <SpectrLogo />
       </a>
       <nav className={s.nav}>
         {/* Task P3 — secondary links; hidden below 480px (MANDATORY 390px
