@@ -77,6 +77,28 @@
   .feature::before { animation: none; }
 }
 
+/* Scroll reveal: the label, then each item rises in, staggered left-to-right
+   and down the grid as the section enters the viewport (once). Reduced-motion
+   visitors see the list at rest. */
+@media (prefers-reduced-motion: no-preference) {
+  .features[data-revealed='false'] .featuresLabel,
+  .features[data-revealed='false'] .feature {
+    opacity: 0;
+  }
+  .features[data-revealed='true'] .featuresLabel {
+    animation: featureRise 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .features[data-revealed='true'] .feature {
+    animation: featureRise 800ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: calc(120ms + var(--i, 0) * 90ms);
+  }
+}
+
+@keyframes featureRise {
+  from { opacity: 0; transform: translateY(22px); filter: blur(5px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+
 @media (max-width: 720px) {
   .featureList {
     grid-template-columns: 1fr;
