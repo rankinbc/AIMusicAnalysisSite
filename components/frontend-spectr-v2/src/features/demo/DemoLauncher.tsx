@@ -42,6 +42,7 @@ export function DemoLauncher() {
   const router = useRouter();
   const startedRef = useRef(false);
   const [failed, setFailed] = useState(false);
+  const [failCode, setFailCode] = useState<string>('unknown');
   const headingRef = useRef<HTMLHeadingElement>(null);
   // Item 3 (fix round 2): the 15s bound races the UI, not the real request —
   // startDemo() itself keeps running after we've shown the failure card.
@@ -107,6 +108,7 @@ export function DemoLauncher() {
             : err instanceof ApiError
               ? extractApiError(err.body).code ?? 'unknown'
               : 'unknown';
+        setFailCode(code);
         capture('demo_start_failed', { code });
       }
     };
@@ -125,7 +127,9 @@ export function DemoLauncher() {
       <section className={`card ${s.card}`} role="alert">
         <span className="label">Demo</span>
         <h2 ref={headingRef} tabIndex={-1} className={s.line}>
-          The demo is taking a break — analyze your own track instead.
+          {failCode === 'rate_limited'
+            ? 'You’ve opened the demo several times this hour — give it a few minutes, or analyze your own track.'
+            : 'The demo is taking a break — analyze your own track instead.'}
         </h2>
         <div className={s.actions}>
           <a href="/analyze" className="btn primary">

@@ -122,6 +122,18 @@ describe('DemoLauncher', () => {
     expect(capture).toHaveBeenCalledWith('demo_start_failed', { code: 'demo_capacity' });
   });
 
+  it('a per-visitor rate limit says so instead of "taking a break"', async () => {
+    auth = {
+      isLoading: false,
+      user: null,
+      startDemo: vi.fn().mockRejectedValue(new ApiError(429, { error: { code: 'rate_limited' } })),
+    };
+    render(<DemoLauncher />);
+    expect(await screen.findByText(/opened the demo several times this hour/i)).toBeTruthy();
+    expect(screen.queryByText(/taking a break/i)).toBeNull();
+    expect(capture).toHaveBeenCalledWith('demo_start_failed', { code: 'rate_limited' });
+  });
+
   // Item 4a — a stalled POST must not leave "Setting up your demo…" forever.
   it('times out after 15s and shows the failure card with code "timeout"', async () => {
     vi.useFakeTimers();
