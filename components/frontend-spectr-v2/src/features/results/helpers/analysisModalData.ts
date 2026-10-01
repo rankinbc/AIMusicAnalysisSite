@@ -50,6 +50,10 @@ export interface PhaseRow {
   /** Background work for this phase is still in flight (e.g. phase-7
    *  structure detection) — rendered with a spinner instead of a ✓. */
   pending?: boolean;
+  /** Ran, but its background work settled without a result (phase-7
+   *  structure detection unavailable/failed) — a terminal "couldn't", never
+   *  a spinner. */
+  unavailable?: boolean;
 }
 
 export interface InputRow {
@@ -281,14 +285,15 @@ function summarize(fj: FinalJson, p: PhaseResult): PhaseRow {
       // E5.1: the background structure job has its own lifecycle — an eternal
       // "analyzing…" is a lie once the worker marked it failed.
       if (d.arrangement_status === 'pending') {
-        row.detail = 'Arrangement analysis running…';
+        row.detail = 'Detecting structure in the background…';
         row.pending = true;
         row.note =
           'Structure detection runs in the background — the score fills in when it lands.';
         break;
       }
       if (d.arrangement_status === 'failed') {
-        row.detail = 'Arrangement analysis failed';
+        row.detail = 'Couldn’t detect structure';
+        row.unavailable = true;
         row.note = d.arrangement_error
           ? `The background structure job failed (${d.arrangement_error}). The rest of the report is unaffected — re-analyze to try again.`
           : 'The background structure job failed. The rest of the report is unaffected — re-analyze to try again.';
@@ -298,8 +303,12 @@ function summarize(fj: FinalJson, p: PhaseResult): PhaseRow {
       // production tracks land here), never a missing-data default. Match
       // the "not assessed" idiom used elsewhere (TrackInfoTab) — no letter
       // grade or N/A pill for this phase.
+      // Owner fix (live page): say what happened — structure detection ran
+      // and came back empty — instead of a bare "not assessed".
       if (d.arrangement_status === 'unavailable') {
-        row.detail = 'Not assessed for this track';
+        row.detail = 'Couldn’t detect structure';
+        row.unavailable = true;
+        row.note = 'Structure detection couldn’t map this track’s sections, so the arrangement isn’t graded.';
         row.kv = [];
         break;
       }
