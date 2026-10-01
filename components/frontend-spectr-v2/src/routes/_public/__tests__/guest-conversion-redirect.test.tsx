@@ -73,6 +73,7 @@ interface MockAuthState {
   login: ReturnType<typeof vi.fn>;
   devLogin: ReturnType<typeof vi.fn>;
   user: { isGuest?: boolean } | null;
+  isLoading?: boolean;
 }
 let authState: MockAuthState;
 
@@ -121,6 +122,18 @@ describe('register.tsx — guest conversion fallback routes off-URL (item 3)', (
     // The exact assertion the brief calls for: the navigate call carries no
     // `search`/`email` at all — the relay module carried it instead.
     expect(peekPendingLoginEmail()).toBe('me@example.com');
+  });
+});
+
+describe('register.tsx — no submit while the session is still loading (final review)', () => {
+  it('does not create a second account for a guest whose session has not hydrated yet', () => {
+    const register = vi.fn();
+    authState = { register, convertGuest: vi.fn(), login: vi.fn(), devLogin: vi.fn(), user: null, isLoading: true };
+    render(<RegisterPage />);
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'me@example.com' } });
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'password123' } });
+    fireEvent.click(screen.getByRole('button'));
+    expect(register).not.toHaveBeenCalled();
   });
 });
 

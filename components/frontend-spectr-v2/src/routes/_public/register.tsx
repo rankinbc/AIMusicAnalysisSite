@@ -24,7 +24,7 @@ export const Route = createFileRoute('/_public/register')({
 });
 
 export function RegisterPage() {
-  const { register, convertGuest, user } = useAuth();
+  const { register, convertGuest, user, isLoading } = useAuth();
   const navigate = useNavigate();
   const { next } = Route.useSearch();
   const isGuest = user?.isGuest === true;
@@ -35,6 +35,10 @@ export function RegisterPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    // Final review: until the boot refresh settles we cannot know whether
+    // this visitor is a guest (convert in place) or new (register) — a
+    // submit now would create a SECOND account and strand the guest's work.
+    if (isLoading) return;
     setError(null);
     if (password.length < 8) {
       setError('Password must be at least 8 characters.');
@@ -109,7 +113,7 @@ export function RegisterPage() {
         {error && <p className={f.error}>{error}</p>}
         <button
           type="submit"
-          disabled={pending}
+          disabled={pending || isLoading}
           className={`${f.button} ${f.buttonPrimary} ${s.submit}`}
         >
           {pending ? 'Creating…' : 'Create account'}
