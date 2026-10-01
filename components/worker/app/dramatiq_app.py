@@ -108,6 +108,12 @@ broker.declare_queue("maintenance")
 # that queue that drains them (rerun_phase etc. declare it today; this keeps
 # that true even if they move later).
 broker.declare_queue("ai")
+# `ai-guest`: the demo guests' copy of the same three actors (BFF
+# GuestLimits.AiQueueFor). No actor declares it — dispatch is by actor_name —
+# so it MUST be declared here or the small guest-AI worker's
+# `--queues ai-guest` whitelist attaches no consumer and guest triage is
+# orphaned. Prod runs it as its own one-thread worker (worker-guest-ai).
+broker.declare_queue("ai-guest")
 broker.declare_queue("analysis-paid")
 
 # Story 4.2 review — prod email gate, WORKER side. The BFF's

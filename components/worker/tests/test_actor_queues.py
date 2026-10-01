@@ -88,6 +88,7 @@ def test_ai_and_legacy_paid_queues_are_declared():
     by actor_name and are drained by the batch pool's analysis-paid consumer."""
     declared = coach_reply.broker.get_declared_queues()
     assert "ai" in declared
+    assert "ai-guest" in declared
     assert "analysis-paid" in declared
 
 

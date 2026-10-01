@@ -13,7 +13,7 @@ alert.
    Heartbeat stale = the worker POOL is down; depth climbing with a fresh
    heartbeat = jobs are slow, not stuck.
 2. Worker down? `docker compose -f compose.prod.yml logs --tail 100
-   worker-paid worker-free` → `./deploy.sh redeploy` restarts the stack.
+   worker-paid worker-free worker-guest-ai` → `./deploy.sh redeploy` restarts the stack.
    Queued jobs SURVIVE (redis AOF; NFR16) and resume on restart.
 3. Single stuck job: the reaper (3.5) auto-fails jobs whose worker
    heartbeat went stale (`error_code=worker_unavailable`). Credits are

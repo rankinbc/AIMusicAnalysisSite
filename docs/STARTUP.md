@@ -127,7 +127,7 @@ $env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run
 # 4. Workers — TWO terminals, same split as prod (problem #3b). Always pass the
 #    full flags; short forms drop the queue set.
 cd components/worker
-python -m dramatiq app.dramatiq_app --processes 1 --threads 4 --queues coach ai
+python -m dramatiq app.dramatiq_app --processes 1 --threads 4 --queues coach ai ai-guest
 #    ...and in a second terminal:
 cd components/worker
 python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues analysis-paid analysis-free maintenance
@@ -192,7 +192,7 @@ Do all of these before declaring success — several failure modes look "up":
 3. **Workers**: there are TWO windows (`SPECTR Worker - interactive` and
    `SPECTR Worker - analysis`). In each, find the single `Boot config:` line —
    check redis host:port, the queues (the line lists every DECLARED queue; the
-   window title + `--queues` decide what it consumes: `coach ai` in one;
+   window title + `--queues` decide what it consumes: `coach ai ai-guest` in one;
    `analysis-paid`, `analysis-free`, `maintenance` in the other), and `storage_root=` (must be
    the repo `data/` path — NEVER `/data` on a native run, problem #7). Process
    check: 2 dramatiq masters + 2 `--multiprocessing-fork` children.
@@ -379,7 +379,7 @@ hit Triage after the coach got its own worker (seen 2026-10-01): `run_triage`,
 `run_specialist` and `generate_fix_rack` were on `analysis-paid`, drained by the
 batch worker, so opening a report right after an analysis showed no
 recommended specialists and none auto-ran until the allin1 run finished.
-**Fix (current topology)**: an INTERACTIVE worker consuming `coach ai` with 4
+**Fix (current topology)**: an INTERACTIVE worker consuming `coach ai ai-guest` with 4
 threads, plus a one-thread batch worker on `analysis-paid analysis-free
 maintenance`. `ai` carries run_triage / run_specialist / generate_fix_rack —
 I/O-bound LLM calls, no DSP — so threads let a coach reply run alongside a
@@ -387,8 +387,11 @@ I/O-bound LLM calls, no DSP — so threads let a coach reply run alongside a
 thread-local and its circuit breaker is locked; DB sessions are per call).
 Prod: `worker-paid` = `WORKER_QUEUES "coach ai"` + `WORKER_THREADS 4`;
 `worker-free` = the batch set + `WORKER_THREADS 1` (infra/compose.prod.yml).
-Guests' AI work is routed to `analysis-free` (`GuestLimits.QueueFor`) so demo
-traffic never takes the interactive threads. The launcher, the workerdash
+Guests' AI work is routed to its own `ai-guest` lane (`GuestLimits.AiQueueFor`)
+so demo traffic never takes the interactive threads nor waits behind batch
+work: prod runs it as a separate one-thread service `worker-guest-ai`
+(`WORKER_QUEUES "ai-guest"`, `WORKER_THREADS 1`); dev folds it into the
+interactive worker (no 4th window). The launcher, the workerdash
 restart button and the watchdog all launch this split (`WORKER_POOLS` /
 `pool_threads` in `components/workerdash/workerdash/worker_ctl.py`). Never
 "simplify" back to one all-queues worker, and never raise `--threads` on the
@@ -551,6 +554,6 @@ testing the proxy path, not the presigned one.
 
 Not covered here — see `docs/runbook.md` (`./deploy.sh <sha>` / `redeploy` /
 `rollback`, `infra/compose.prod.yml`, boot-time EF migrations, two-pool worker
-topology W1 `worker-paid` / W2 `worker-free`). Note `docker/docker-compose.prod.yml`
+topology W1 `worker-paid` / W2 `worker-free` / W3 `worker-guest-ai`). Note `docker/docker-compose.prod.yml`
 is only a DEV prod-parity overlay for the queue split — the real prod stack is
 `infra/compose.prod.yml`.

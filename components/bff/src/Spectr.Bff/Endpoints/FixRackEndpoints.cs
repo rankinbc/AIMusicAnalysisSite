@@ -124,7 +124,7 @@ public static class FixRackEndpoints
                 DramatiqTasks.GenerateFixRack,
                 new object[] { analysis.Id.ToString(), userId.ToString(), tier },
                 // Fix round 1 item 1: guests ride the free lane.
-                GuestLimits.QueueFor(user, DramatiqQueues.Ai), // interactive LLM lane — never behind batch DSP
+                GuestLimits.AiQueueFor(user), // interactive LLM lane (guests: ai-guest) — never behind batch DSP
                 ct);
         }
         catch

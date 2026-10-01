@@ -11,7 +11,7 @@ import time
 import uuid
 
 NAMESPACE = "dramatiq"
-QUEUES = ["ai", "analysis-paid", "analysis-free", "coach", "maintenance"]
+QUEUES = ["ai", "ai-guest", "analysis-paid", "analysis-free", "coach", "maintenance"]
 
 
 def queue_key(queue: str) -> str:

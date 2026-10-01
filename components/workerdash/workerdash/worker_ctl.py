@@ -23,15 +23,16 @@ Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
 """
 
 # Dev mirrors the prod pool split (infra/compose.prod.yml, STARTUP.md #3b): an
-# INTERACTIVE worker (`coach ai` — coach replies, Triage, specialists, Coach
+# INTERACTIVE worker (`coach ai ai-guest` — coach replies, Triage, specialists, Coach
 # Mix) plus a batch worker. Dramatiq has no cross-queue priority, so a single
 # one-thread all-queues worker parks every coach reply / triage behind
 # whatever batch job is running (a 10-minute analysis, an allin1 structure
 # run). The interactive actors are I/O-bound LLM calls, so that pool runs
 # several threads (a coach reply never waits behind a 60 s specialist); the
-# batch pool stays at one (Demucs/librosa memory profile).
+# batch pool stays at one (Demucs/librosa memory profile). Prod runs `ai-guest`
+# as its own one-thread worker (worker-guest-ai); dev folds it in here.
 WORKER_POOLS: tuple[tuple[str, ...], ...] = (
-    ("coach", "ai"),
+    ("coach", "ai", "ai-guest"),
     ("analysis-paid", "analysis-free", "maintenance"),
 )
 INTERACTIVE_THREADS = 4
