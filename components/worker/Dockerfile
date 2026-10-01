@@ -44,7 +44,7 @@ HEALTHCHECK --interval=60s --timeout=10s --start-period=60s --retries=3 \
 
 ENV PYTHONUNBUFFERED=1 \
     TORCH_HOME=/data/models \
-    WORKER_QUEUES="coach ai analysis-paid analysis-free maintenance"     WORKER_THREADS=1
+    WORKER_QUEUES="coach ai ai-guest analysis-paid analysis-free maintenance"     WORKER_THREADS=1
 
 # Mirrors the Procfile: single process (Demucs memory profile) — prod scales
 # by POOLS (W1/W2 services). WORKER_THREADS defaults to 1 for the batch pool;

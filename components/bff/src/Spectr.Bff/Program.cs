@@ -669,7 +669,7 @@ Metrics.DefaultRegistry.AddBeforeCollectCallback(async ct =>
     {
         var redisConn = app.Services.GetRequiredService<IConnectionMultiplexer>();
         var rdb = redisConn.GetDatabase();
-        foreach (var q in new[] { "coach", "ai", "analysis-paid", "analysis-free", "maintenance" })
+        foreach (var q in new[] { "coach", "ai", "ai-guest", "analysis-paid", "analysis-free", "maintenance" })
         {
             // .DQ carries retried/delayed messages — a retry storm must not
             // read as an empty queue (review).

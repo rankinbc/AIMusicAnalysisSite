@@ -86,11 +86,13 @@ $PythonExe = if ($env:SPECTR_PYTHON) { $env:SPECTR_PYTHON }
 # interactive actors are I/O-bound LLM calls, so that worker runs several
 # threads (a coach reply never waits behind a 60 s specialist); the batch
 # worker stays at ONE thread (Demucs/librosa memory profile).
-# See docs/STARTUP.md problem #3b.
+# Prod splits guests' AI lane (`ai-guest`) into its own one-thread
+# worker-guest-ai; a dev box doesn't need a 4th window, so the interactive
+# worker consumes it too. See docs/STARTUP.md problem #3b.
 $InteractiveThreads = 4
 $WorkerBase = "& `"$PythonExe`" -m dramatiq app.dramatiq_app --processes 1"
 $WorkerPools = [ordered]@{
-    'SPECTR Worker - interactive' = "$WorkerBase --threads $InteractiveThreads --queues coach ai"
+    'SPECTR Worker - interactive' = "$WorkerBase --threads $InteractiveThreads --queues coach ai ai-guest"
     'SPECTR Worker - analysis'    = "$WorkerBase --threads 1 --queues analysis-paid analysis-free maintenance"
 }
 

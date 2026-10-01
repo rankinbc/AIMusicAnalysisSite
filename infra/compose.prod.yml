@@ -179,8 +179,9 @@ services:
       # Keeping analysis-paid here also drains any run_triage / run_specialist /
       # generate_fix_rack messages enqueued there before the `ai` lane deploy
       # (dispatch is by actor_name). Guests' AI work rides analysis-free here
-      # (GuestLimits.QueueFor) so demo traffic never takes the interactive
-      # pool's threads. One thread: Demucs/librosa memory profile.
+      # (GuestLimits.QueueFor); guests' interactive AI work has its own lane,
+      # `ai-guest` (worker-guest-ai below). One thread: Demucs/librosa memory
+      # profile.
       WORKER_QUEUES: "analysis-paid analysis-free maintenance"
       WORKER_THREADS: "1"
       # G4 fix1 #3 — worker-free is the ONLY service that can ever run
@@ -200,6 +201,25 @@ services:
       # host RAM" rule of thumb, since idle stack + one ordinary analysis
       # already use roughly 3 GB of the 4 GB total per PRPs/azure-deploy-spectr.md.
       ALLIN1_MEMORY_LIMIT: ${ALLIN1_MEMORY_LIMIT:-1g}
+    volumes:
+      - /opt/spectr/data:/data
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  # W3 — guest AI pool: the `ai-guest` lane (demo guests' Triage, specialists,
+  # Coach Mix). One thread, own process: guest AI never takes real users'
+  # `ai` threads (worker-paid) and never waits behind batch analysis
+  # (worker-free). I/O-bound LLM calls only — NEVER put a DSP queue here.
+  # Same image + env anchor as worker-paid; queues/threads overridden.
+  worker-guest-ai:
+    image: ghcr.io/rankinbc/spectr-worker:${IMAGE_TAG:?}
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      <<: *worker-env
+      WORKER_QUEUES: "ai-guest"
+      WORKER_THREADS: "1"
     volumes:
       - /opt/spectr/data:/data
     depends_on:

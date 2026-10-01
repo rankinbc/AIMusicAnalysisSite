@@ -115,5 +115,5 @@ def test_watchdog_relaunches_one_logged_worker_per_pool(tmp_path, monkeypatch):
                         lambda args, **kw: calls.append(args[-1]))
     watchdog.launch_worker_logged(str(tmp_path), str(tmp_path / "logs"))
     assert len(calls) == len(worker_ctl.WORKER_POOLS)
-    assert any("'--queues','coach','ai'" in c and "analysis-paid" not in c for c in calls)
+    assert any("'--queues','coach','ai','ai-guest'" in c and "analysis-paid" not in c for c in calls)
     assert any("'--threads','1'" in c and "analysis-paid" in c for c in calls)

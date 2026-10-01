@@ -10,6 +10,7 @@
 # five queues, so every message gets processed by one process. The pool
 # split lives in scripts/start-spectr.ps1 (dev) / infra/compose.prod.yml.
 #   ai            : run_triage, run_specialist, generate_fix_rack (interactive LLM)
+#   ai-guest      : the same three actors, enqueued for demo guests (own pool in prod)
 #   analysis-paid : pro/credits analysis + batch auxiliaries (rerun_phase,
 #                   run_reference_analyzer, classify_stems, detect_structure_job)
 #   analysis-free : free/anon analysis (sole declarer = analyze_audio_job)
@@ -17,4 +18,4 @@
 #   maintenance   : sweep_retention (story 3.4), send_email, delete_account_data
 # `default` is dropped — no producer remains after story 2.5. If you run against
 # a long-lived dev Redis that may hold stray `default` messages, append `default`.
-worker: python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues coach ai analysis-paid analysis-free maintenance
+worker: python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues coach ai ai-guest analysis-paid analysis-free maintenance

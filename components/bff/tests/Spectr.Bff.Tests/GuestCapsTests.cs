@@ -18,7 +18,7 @@ using Xunit;
 namespace Spectr.Bff.Tests;
 
 // Task D6 fix round 1 (Opus review of commit 0b63dfe), items 1-4 + migration:
-// guest LLM work rides the free lane, the fix-rack generation cap, the
+// guest LLM work rides the ai-guest lane, the fix-rack generation cap, the
 // upload-quota race backstop, and the per-IP analysis arm. Shares the
 // "DemoAuth" collection with the other demo-auth suites — they all
 // read/count the SHARED users.is_guest rows and must not run in parallel.
@@ -178,10 +178,10 @@ public sealed class GuestCapsTests(WebApplicationFactory<Program> factory)
     private static Task CleanupAsync(WebApplicationFactory<Program> f, params Guid[] userIds) =>
         DemoAuthEndpointsTests.CleanupAsync(f, userIds);
 
-    // ── item 1: guest LLM work rides the free lane ──────────────────────────
+    // ── item 1: guest LLM work rides the ai-guest lane ──────────────────────────
 
     [SkippableFact]
-    public async Task Guest_LLM_Work_Enqueues_On_Analysis_Free_Real_User_Unchanged()
+    public async Task Guest_LLM_Work_Enqueues_On_Ai_Guest_Real_User_Unchanged()
     {
         await TestDb.RequireAsync(factory);
         var queue = new RecordingQueue();
@@ -208,7 +208,7 @@ public sealed class GuestCapsTests(WebApplicationFactory<Program> factory)
             Assert.Equal(HttpStatusCode.OK, list.StatusCode);
 
             Assert.Equal(3, queue.Sent.Count);
-            Assert.All(queue.Sent, s => Assert.Equal(DramatiqQueues.AnalysisFree, s.Queue));
+            Assert.All(queue.Sent, s => Assert.Equal(DramatiqQueues.AiGuest, s.Queue));
             Assert.Contains(queue.Sent, s => s.Task == DramatiqTasks.GenerateFixRack);
             Assert.Contains(queue.Sent, s => s.Task == DramatiqTasks.RunSpecialist);
             Assert.Contains(queue.Sent, s => s.Task == DramatiqTasks.RunTriage);

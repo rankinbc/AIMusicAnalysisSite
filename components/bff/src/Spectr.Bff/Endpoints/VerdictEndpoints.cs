@@ -86,7 +86,7 @@ public static class VerdictEndpoints
                     DramatiqTasks.RunTriage,
                     new object[] { analysisRow.Id.ToString() },
                     // Fix round 1 item 1: guests ride the free lane.
-                    GuestLimits.QueueFor(user, DramatiqQueues.Ai), // interactive LLM lane — never behind batch DSP
+                    GuestLimits.AiQueueFor(user), // interactive LLM lane (guests: ai-guest) — never behind batch DSP
                     ct);
                 cache.Set($"triage:{analysisRow.Id}", true, TimeSpan.FromMinutes(10));
             }
@@ -254,7 +254,7 @@ public static class VerdictEndpoints
                     DramatiqTasks.RunSpecialist,
                     new object[] { analysis.Id.ToString(), specialist, userId.ToString() },
                     // Fix round 1 item 1: guests ride the free lane.
-                    GuestLimits.QueueFor(user, DramatiqQueues.Ai), // interactive LLM lane — never behind batch DSP
+                    GuestLimits.AiQueueFor(user), // interactive LLM lane (guests: ai-guest) — never behind batch DSP
                     ct);
             }
             catch

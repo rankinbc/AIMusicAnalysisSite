@@ -35,10 +35,16 @@ public sealed partial class GuestLimits(
     // unaffected (defaultQueue passes through unchanged).
     // Interactive AI lane decision: guests stay OFF `ai` — that pool serves
     // real users' coach replies + Triage, and demo traffic must never take
-    // its threads. A guest's AI work keeps the pre-lane trade-off: it may
-    // queue behind batch DSP on the free/batch pool.
+    // its threads. Guest *analysis* work (QueueFor) rides the free lane.
     public static string QueueFor(ClaimsPrincipal user, string defaultQueue)
         => user.IsGuest() ? DramatiqQueues.AnalysisFree : defaultQueue;
+
+    // Guest INTERACTIVE AI work (triage, specialists, Coach Mix) rides its own
+    // `ai-guest` lane — a small one-thread worker (worker-guest-ai) — so it
+    // neither takes real users' `ai` threads nor waits behind multi-minute
+    // batch analyses on the free lane. Real users pass through to `ai`.
+    public static string AiQueueFor(ClaimsPrincipal user)
+        => user.IsGuest() ? DramatiqQueues.AiGuest : DramatiqQueues.Ai;
 
     // Checked by the guard for `.AllowGuestUpload()` routes, BEFORE the
     // handler runs. Counts versions the guest actually uploaded — the seeded
