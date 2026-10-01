@@ -24,7 +24,7 @@ const HONESTY_POINTS = [
 export function LandingPage() {
   usePageMeta(
     'SPECTR — AI mix analysis for producers',
-    'Upload a track, get a graded 7-phase mix report with concrete fixes — loudness, low end, stereo image, arrangement — plus an AI coach that hears what you hear.',
+    'Upload a track, get a graded mix report with concrete fixes — loudness, low end, stereo image, tonal balance — plus an AI coach that knows your report.',
     { path: '/' },
   );
   // Story 6.5 — top of funnel (once per mount; no-op without a PostHog key).
@@ -46,7 +46,7 @@ export function LandingPage() {
           </h1>
           <p className={s.subtitle}>
             Upload a track and get a graded report across loudness, low end, stereo image and
-            arrangement — with concrete fixes you can hear, not vibes.
+            tonal balance — with concrete fixes you can hear, not vibes.
           </p>
           <div className={s.ctaRow}>
             {/* Story 6.3 — straight into the anon instant-analysis funnel. */}

@@ -21,9 +21,9 @@ export function PublicFooter({ currentPath }: { currentPath?: string } = {}) {
           <PricingLink className={s.link} />
         </nav>
 
-        <nav aria-label="Engineering" className={s.group}>
-          <span className="label">Engineering</span>
-          <a href="/trust/how-its-built" className={s.link}>How it&rsquo;s built</a>
+        <nav aria-label="Learn" className={s.group}>
+          <span className="label">Learn</span>
+          <a href="/trust/how-its-built" className={s.link}>How it works</a>
         </nav>
 
         <nav aria-label="Trust" className={s.group}>

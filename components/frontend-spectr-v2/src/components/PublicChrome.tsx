@@ -1,5 +1,5 @@
 /* Story 6.1 (UX-DR6) — the slim public chrome for funnel pages (landing,
- * pricing, trust). Brand + How it's built + Pricing + Sign in + "Analyze
+ * pricing, trust). Brand + How it works + Pricing + Sign in + "Analyze
  * free" CTA. Sticky and transparent over the body atmosphere. NOT for auth
  * pages — those keep the narrow _public column.
  *
@@ -30,7 +30,7 @@ export function PublicChrome() {
         {/* Task P3 — secondary links; hidden below 480px (MANDATORY 390px
             one-row requirement) so the logo, Sign in and the primary CTA
             never clip or wrap. */}
-        <a href="/trust/how-its-built" className={`${s.navLink} ${s.navOptional}`}>How it&rsquo;s built</a>
+        <a href="/trust/how-its-built" className={`${s.navLink} ${s.navOptional}`}>How it works</a>
         {/* Task P2 (D6) — hidden until the server says credits are on. */}
         <PricingLink className={`${s.navLink} ${s.navOptional}`} />
         {authed ? (

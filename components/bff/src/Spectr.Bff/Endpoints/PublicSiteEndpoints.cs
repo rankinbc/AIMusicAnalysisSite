@@ -63,9 +63,9 @@ public static class PublicSiteEndpoints
             path: "/",
             title: "SPECTR — AI mix analysis for producers",
             description: "Upload a track, get a graded 7-phase mix report with concrete fixes — " +
-                         "loudness, low end, stereo image, arrangement — plus an AI coach that hears what you hear.",
+                         "loudness, low end, stereo image, tonal balance — plus an AI coach that knows your report.",
             heading: "Know exactly what's wrong with your mix",
-            body: "A graded report across loudness, low end, stereo image and arrangement — with concrete fixes you can hear.");
+            body: "A graded report across loudness, low end, stereo image and tonal balance — with concrete fixes you can hear.");
 
     // Task P2 (public-surfaces-polish D6/D7) — the crawler shell tells the
     // same truth the SPA does: when credits are off, don't advertise plans
