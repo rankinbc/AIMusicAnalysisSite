@@ -256,18 +256,18 @@ public static partial class AuthEndpoints
         return generic;
     }
 
-    // Sign-up bonus size from the `signup_bonus_credits` flag (60 s cache).
-    // 0 / missing / unparseable / flag-read failure = no grant. Deliberately
-    // NOT gated on credits_enabled: the credits sit in the ledger and simply
-    // don't matter while the kill switch has everyone on premium.
+    // Sign-up bonus size = CreditPrices.SignupGrant — the same resolution the
+    // pricing page shows (Credits:SignupGrant config → `signup_bonus_credits`
+    // flag → default), so the advertised and granted amounts can't drift.
+    // 0 / flag-read failure = no grant. Deliberately NOT gated on
+    // credits_enabled: the credits sit in the ledger and simply don't matter
+    // while the kill switch has everyone on premium.
     internal static async Task<int> SignupBonusAmountAsync(
         EntitlementService entitlements, ILoggerFactory lf, CancellationToken ct)
     {
         try
         {
-            var flags = await entitlements.GetFlagsAsync(ct);
-            return flags.TryGetValue(CreditLedgerService.SignupBonusFlag, out var v)
-                && int.TryParse(v, out var n) && n > 0 ? n : 0;
+            return (await entitlements.GetPricesAsync(ct)).SignupGrant;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

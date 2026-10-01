@@ -43,7 +43,7 @@ public sealed class VerifyBeforeSignInTests(WebApplicationFactory<Program> facto
     }
 
     private (WebApplicationFactory<Program> F, RecordingEmailSender Email) Build(
-        bool rateLimits = false, string? creditsEnabled = null)
+        bool rateLimits = false, string? creditsEnabled = null, string? signupGrant = null)
     {
         var email = new RecordingEmailSender();
         var f = factory.WithWebHostBuilder(b =>
@@ -53,6 +53,7 @@ public sealed class VerifyBeforeSignInTests(WebApplicationFactory<Program> facto
             b.UseSetting("Demo:SnapshotKey", "");
             b.UseSetting("RateLimits:Enabled", rateLimits ? "true" : "false");
             if (creditsEnabled is not null) b.UseSetting("Credits:Enabled", creditsEnabled);
+            if (signupGrant is not null) b.UseSetting("Credits:SignupGrant", signupGrant);
             b.ConfigureTestServices(s =>
             {
                 s.RemoveAll(typeof(IEmailSender));
@@ -97,8 +98,8 @@ public sealed class VerifyBeforeSignInTests(WebApplicationFactory<Program> facto
     private static async Task<int> ExpectedBonusAsync(WebApplicationFactory<Program> f)
     {
         using var scope = f.Services.CreateScope();
-        var flags = await scope.ServiceProvider.GetRequiredService<EntitlementService>().GetFlagsAsync(default);
-        return flags.TryGetValue(CreditLedgerService.SignupBonusFlag, out var v) && int.TryParse(v, out var n) && n > 0 ? n : 0;
+        // Same resolution the grant AND the pricing page use (CreditPrices).
+        return (await scope.ServiceProvider.GetRequiredService<EntitlementService>().GetPricesAsync(default)).SignupGrant;
     }
 
     // Pins the bonus size for one factory by overriding its 60 s flag cache
@@ -322,6 +323,34 @@ public sealed class VerifyBeforeSignInTests(WebApplicationFactory<Program> facto
             Assert.Equal(HttpStatusCode.OK,
                 (await client.PostAsJsonAsync("/api/auth/verify-email", new { token = TokenFrom(mail, email) })).StatusCode);
             Assert.Equal(0, await BonusRowsAsync(f, id));
+        }
+        finally { await CleanupAsync(f, id); f.Dispose(); }
+    }
+
+    // The granted amount and the advertised one (GET /api/billing/plans
+    // costs.signupGrant + signupBonusCredits) come from one setting.
+    [SkippableFact]
+    public async Task The_Granted_Bonus_Matches_The_Advertised_Signup_Grant()
+    {
+        await TestDb.RequireAsync(factory);
+        var (f, mail) = Build(signupGrant: "321");
+        Guid id = default;
+        try
+        {
+            var client = f.CreateClient();
+            var plans = await client.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/billing/plans");
+            Assert.Equal(321, plans.GetProperty("costs").GetProperty("signupGrant").GetInt32());
+            Assert.Equal(321, plans.GetProperty("signupBonusCredits").GetInt32());
+
+            var email = NewEmail("grantsrc");
+            await RegisterAsync(client, email);
+            id = await UserIdAsync(f, email);
+            Assert.Equal(HttpStatusCode.OK,
+                (await client.PostAsJsonAsync("/api/auth/verify-email", new { token = TokenFrom(mail, email) })).StatusCode);
+            using var scope = f.Services.CreateScope();
+            var row = await scope.ServiceProvider.GetRequiredService<AppDbContext>().CreditLedger
+                .SingleAsync(e => e.UserId == id && e.Reason == CreditLedgerService.ReasonSignupBonus);
+            Assert.Equal(321, row.Amount);
         }
         finally { await CleanupAsync(f, id); f.Dispose(); }
     }
