@@ -1,0 +1,13 @@
+.tag {
+  font-size: 11px;
+  color: var(--cyan);
+  white-space: nowrap;
+}
+
+.tag[data-included='true'] {
+  color: var(--text-2);
+}
+
+.tag[data-short='true'] {
+  color: var(--sev-warning);
+}

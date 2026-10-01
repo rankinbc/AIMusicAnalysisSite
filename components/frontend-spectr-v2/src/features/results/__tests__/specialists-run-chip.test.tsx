@@ -9,6 +9,13 @@ import { FixBoard } from '../FixBoard';
 import { SpecialistTeamModal } from '../SpecialistTeamModal';
 import { buildMoves } from '../move-model';
 
+// CostTag reads plans/entitlements; credits off => no label, behaviour unchanged.
+vi.mock('../../../api/hooks', async (orig) => ({
+  ...(await orig<typeof import('../../../api/hooks')>()),
+  usePlans: () => ({ data: undefined }),
+  useEntitlements: () => ({ data: undefined }),
+}));
+
 afterEach(cleanup);
 
 const VERDICT: VerdictDto = {
@@ -177,7 +184,7 @@ describe('SpecialistTeamModal tabs', () => {
     const onRun = renderRoster();
     fireEvent.click(tab(/^Dynamics/));
     fireEvent.click(screen.getByRole('button', { name: /^Dynamics.*Not run yet/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Run · 1 cr/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Run/ }));
     expect(onRun).toHaveBeenCalledWith('dynamics');
   });
 });

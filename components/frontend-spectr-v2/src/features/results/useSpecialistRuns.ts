@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { useRunSpecialist, useVerdicts } from '../../api/hooks';
+import { useBuyCredits } from '../billing/BuyCreditsProvider';
+import { isOutOfCredits } from '../billing/credits';
 import type { VerdictsListResponse } from '../../api/types';
 import { SPECIALIST_CATALOG } from './helpers/specialists';
 import {
@@ -42,6 +44,7 @@ export function useSpecialistRuns({ jobId, analysisId, hasStems }: Options): Spe
   const pollSet = useMemo<ReadonlySet<string>>(() => new Set(dispatched.keys()), [dispatched]);
   const { data } = useVerdicts(jobId, { optimisticRunning: pollSet, enabled: true });
   const run = useRunSpecialist(jobId);
+  const buyCredits = useBuyCredits();
 
   const running = useMemo(
     () => activeRunningSlugs(dispatched, data?.specialists, clock),
@@ -93,16 +96,23 @@ export function useSpecialistRuns({ jobId, analysisId, hasStems }: Options): Spe
   }, []);
 
   const runSpecialist = useCallback(
-    async (slug: string) => {
+    async (slug: string): Promise<void> => {
       markDispatched(slug);
       try {
         await run.mutateAsync(slug);
       } catch (err) {
         unmark(slug);
+        if (isOutOfCredits(err)) {
+          buyCredits.open({
+            title: 'Not enough credits',
+            onBought: () => void runSpecialist(slug),
+          });
+          return;
+        }
         toast.error(err instanceof Error ? err.message : 'Could not start specialist');
       }
     },
-    [run, markDispatched, unmark],
+    [run, markDispatched, unmark, buyCredits],
   );
 
   // Auto-run the Triage-suggested specialists on the initial view so the

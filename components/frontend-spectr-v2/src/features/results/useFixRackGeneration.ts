@@ -4,6 +4,8 @@ import { toast } from 'sonner';
 
 import { useFixRack, useGenerateFixRack } from '../../api/hooks';
 import type { FixRackDto } from '../../api/types';
+import { useBuyCredits } from '../billing/BuyCreditsProvider';
+import { isOutOfCredits } from '../billing/credits';
 
 export type FixRackGenPhase = 'idle' | 'generating' | 'error' | 'timeout';
 
@@ -25,6 +27,7 @@ export function useFixRackGeneration(jobId: string): {
 } {
   const qc = useQueryClient();
   const gen = useGenerateFixRack(jobId);
+  const buyCredits = useBuyCredits();
   const [phase, setPhase] = useState<FixRackGenPhase>('idle');
   const fixRack = useFixRack(jobId, phase === 'generating');
   const rack = fixRack.data ?? null;
@@ -37,11 +40,16 @@ export function useFixRackGeneration(jobId: string): {
     setPhase('generating');
     gen.mutate(undefined, {
       onError: (err) => {
+        if (isOutOfCredits(err)) {
+          setPhase('idle');
+          buyCredits.open({ title: 'Not enough credits', onBought: () => generate() });
+          return;
+        }
         setPhase('error');
         toast.error(err.message);
       },
     });
-  }, [qc, gen, jobId]);
+  }, [qc, gen, jobId, buyCredits]);
 
   // Timeout watchdog: while waiting on the worker with nothing to show, arm a
   // single timer; a rack arriving (or a phase change) disarms it.

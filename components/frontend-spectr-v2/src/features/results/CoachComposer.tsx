@@ -1,8 +1,10 @@
 import type { ChangeEvent, KeyboardEvent, Ref } from 'react';
 
 import type { CoachCapsDto } from '../../api/types';
+import { usePaidAction } from '../billing/CostTag';
 import { Icon } from './Icon';
 import { CoachGateInline } from './CoachGateInline';
+import s from './CoachComposer.module.css';
 
 // adhoc-coachchat-split (2026-09-19) — the gate/cap branch (CoachGateInline),
 // the input + send/stop button, and the coach-cap line, extracted verbatim
@@ -33,6 +35,8 @@ export function CoachComposer({
   specialistsRan,
   specialistsSuggested,
 }: CoachComposerProps) {
+  const { cost, guard } = usePaidAction('coachMessage');
+  const guardedSend = () => guard(send);
   return (
     <>
       {caps?.capReached && !streaming ? (
@@ -49,7 +53,7 @@ export function CoachComposer({
             onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
               if (e.key === 'Enter' && !streaming) {
                 e.preventDefault();
-                send();
+                guardedSend();
               }
             }}
             disabled={offlineState}
@@ -68,7 +72,7 @@ export function CoachComposer({
             <button
               type="button"
               className="send"
-              onClick={send}
+              onClick={guardedSend}
               disabled={!input.trim() || offlineState}
               aria-label="Send question"
             >
@@ -77,6 +81,9 @@ export function CoachComposer({
           )}
         </div>
       )}
+      {cost && !cost.included && !(caps?.capReached && !streaming) ? (
+        <p className={s.costHint}>{cost.credits} ◆ per message</p>
+      ) : null}
 
       <div className="coach-cap">
         grounded

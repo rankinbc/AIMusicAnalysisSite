@@ -127,6 +127,7 @@ export function CoachChat({
     wireMode,
     input,
     clearInput,
+    setInput,
     scheduleAriaLive,
     flushAriaLive,
     resetAriaLive,

@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 
 import type { FinalJson, RoutingPlanDto } from '../../api/types';
 import { GenreCorrectChip } from './GenreCorrectChip';
+import { CostTag } from '../billing/CostTag';
 import {
   GROUP_COLORS,
   coachMessage,
@@ -312,7 +313,7 @@ export function AnalysisCompleteModal(props: Props) {
                   )}
                 </div>
                 <button className={s.btn} onClick={onReanalyze}>
-                  ↺ Re-analyze
+                  ↺ Re-analyze <CostTag action="analysis" />
                 </button>
                 <button className={cx(s.btn, s.primary)} onClick={onViewReport}>
                   View full report <ArrowRight />
