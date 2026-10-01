@@ -14,7 +14,7 @@ committed fixes into an audible mastering chain, and a Listen page that plays
 the track through a real-time Web Audio DSP rack (EQ, compressor, saturation,
 M/S width, pitch). An anonymous funnel offers the first analysis with no
 account; registration claims it. Tiers: free / pro / credits (Stripe). Single-user
-tool — no sharing, no profiles, no rooms; see `PRPs/solo-fork-strip-social.md`.
+tool — no sharing, no profiles, no rooms; see `PRPs/archive/2026-09-19_solo-fork-strip-social.md`.
 
 ## Repository structure
 

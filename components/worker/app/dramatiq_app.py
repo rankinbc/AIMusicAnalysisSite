@@ -73,7 +73,7 @@ from . import send_email_actor  # noqa: E402,F401  (story 4.2 — send_email)
 from . import account_deletion_actor  # noqa: E402,F401  (story 4.6 — delete_account_data)
 
 # Per-run log files + crash forensics + give-up hooks
-# (PRPs/worker-run-logs-and-crash-forensics.md). Installed FIRST in the
+# (PRPs/archive/2026-10-01_worker-run-logs-and-crash-forensics.md). Installed FIRST in the
 # middleware list; the hooks import the actor modules, so this follows them.
 import sys as _sys  # noqa: E402
 

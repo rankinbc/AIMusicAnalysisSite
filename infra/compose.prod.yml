@@ -199,7 +199,7 @@ services:
       # documented VM (Standard_D2als_v7, 2 vCPU / 4 GB, 2 GB swap — see
       # docs/azure-deploy-remaining-work.md): well under the usual "<=40% of
       # host RAM" rule of thumb, since idle stack + one ordinary analysis
-      # already use roughly 3 GB of the 4 GB total per PRPs/azure-deploy-spectr.md.
+      # already use roughly 3 GB of the 4 GB total per PRPs/archive/2026-09-30_azure-deploy-spectr.md.
       ALLIN1_MEMORY_LIMIT: ${ALLIN1_MEMORY_LIMIT:-1g}
     volumes:
       - /opt/spectr/data:/data

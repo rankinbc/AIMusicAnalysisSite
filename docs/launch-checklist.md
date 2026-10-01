@@ -3,7 +3,7 @@
 The go/no-go gate document. Every box gets a date + initials when executed
 on the REAL production environment. Nothing ships to paying users with an
 unchecked box in "Blocking". Public surface is single-user — see
-`PRPs/solo-fork-strip-social.md`.
+`PRPs/archive/2026-09-19_solo-fork-strip-social.md`.
 
 ## Blocking gates
 

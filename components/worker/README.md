@@ -84,7 +84,7 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up
 
 ## Run logs + crash forensics
 
-`app/runlog/` (PRP `PRPs/worker-run-logs-and-crash-forensics.md`):
+`app/runlog/` (PRP `PRPs/archive/2026-10-01_worker-run-logs-and-crash-forensics.md`):
 `RunLogMiddleware` (first in the middleware list) writes one log file per
 message attempt, points `faulthandler` at it, sweeps runs killed by a dead
 process (`status=died`) at boot, and skips messages that keep killing the

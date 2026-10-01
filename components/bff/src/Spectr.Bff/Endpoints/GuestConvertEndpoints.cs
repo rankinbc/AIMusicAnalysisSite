@@ -12,7 +12,7 @@ namespace Spectr.Bff.Endpoints;
 // Task G2 (spec G-D4) — POST /api/auth/guest/convert: a guest who registers
 // keeps the SAME users row (same id — songs, analyses, coach conversation,
 // rack presets are all untouched). This is the product's conversion moment
-// (PRPs/guest-first-upload.md): "Create a free account and let's save our
+// (PRPs/archive/2026-09-30_guest-first-upload.md): "Create a free account and let's save our
 // progress" must be literally true.
 //
 // Deliberately reuses AuthEndpoints.Register's building blocks — rate

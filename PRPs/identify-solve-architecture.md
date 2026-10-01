@@ -15,7 +15,7 @@
 > `@single`/`@composite` in `verdict_lib/`, the 8 Problem columns on `Verdict.cs`, worker
 > mappers + BFF DTO) and the SOLVE tier shipped (`worker/app/solve_lib/` + `fix_rack_actor.py`
 > + `FixRackEndpoints.cs` + `FixRackPanel.tsx`). Keep this doc as the canonical reference for
-> the two-tier design; the build brief it drove (`PRPs/problem-engine-build-brief.md`) is now
+> the two-tier design; the build brief it drove (`PRPs/archive/2026-07-23_problem-engine-build-brief.md`) is now
 > consumed. Remaining follow-on: retire the legacy flat `@rule` registry.
 > Branch: `ai-analysis-v2`. Date: 2026-06-25 (reconciled same day).
 
@@ -24,7 +24,7 @@
 ## Build status — reconciliation (2026-06-25, same day)
 
 This document is **locked** and is the architecture the team builds against —
-`PRPs/problem-engine-build-brief.md` cites it as the source of truth (§1, §3, §7, §8).
+`PRPs/archive/2026-07-23_problem-engine-build-brief.md` cites it as the source of truth (§1, §3, §7, §8).
 Reconciled the same day, after the IDENTIFY tier was implemented in parallel (commits
 `49822d9..51eb1a5`):
 
@@ -34,7 +34,7 @@ Reconciled the same day, after the IDENTIFY tier was implemented in parallel (co
   `config/{genre-profiles.json,rule-bindings.json}`, the `Verdict` Problem-fields
   (`problem_id/kind/source/data_tier/fixable/suspected/where/refines`), new phase1 metrics
   (`channel_balance/key_estimate/loudness_timeline/sub_30_energy`), and a full test suite.
-  Canonical plan: **`PRPs/problem-engine-mixcoach-rules.md`**.
+  Canonical plan: **`PRPs/archive/2026-07-23_problem-engine-mixcoach-rules.md`**.
 - **SOLVE / router / preset-compiler — PLANNED (net-new, later slices).** See
   `PRPs/identifiers/{router,preset-compiler,composite-refiner,worked-example-refinement}.md`.
   The router (Reconcile → Route → Fan-out → Merge) and preset-compiler (fixes → `rack-preset.json`)

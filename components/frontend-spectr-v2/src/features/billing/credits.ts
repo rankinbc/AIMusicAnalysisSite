@@ -2,7 +2,7 @@ import { extractApiError } from '../../api/error-utils';
 import { ApiError } from '../../api/fetcher';
 import type { CreditCosts, EntitlementsDto, PlansResponse } from '../../api/types';
 
-// Credit economy (PRPs/credit-economy.md) — what an action costs THIS user,
+// Credit economy (PRPs/archive/2026-10-01_credit-economy.md) — what an action costs THIS user,
 // derived from the server price list + their entitlements. Labels only:
 // callers show `label`, and route an unaffordable click to the buy sheet.
 

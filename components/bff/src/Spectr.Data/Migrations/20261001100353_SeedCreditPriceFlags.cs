@@ -10,7 +10,7 @@ namespace Spectr.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Credit economy (PRPs/credit-economy.md) — live price list. ON CONFLICT
+            // Credit economy (PRPs/archive/2026-10-01_credit-economy.md) — live price list. ON CONFLICT
             // keeps an operator's already-tuned value on re-run. (The sign-up grant
             // already lives in `signup_bonus_credits`, seeded by AddSignupBonusCredits.)
             migrationBuilder.Sql(@"

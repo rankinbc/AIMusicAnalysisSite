@@ -107,5 +107,5 @@ Existing fields you'll also use: `severity` (`critical|severe|moderate|minor|win
 ## 8. Reference (deeper context)
 
 - `PRPs/problem-engine-reconcile-persist.md` — how the fields flow DB → BFF → frontend.
-- `PRPs/problem-engine-mixcoach-rules.md` — the rule catalog (which problems exist, per tier/genre).
+- `PRPs/archive/2026-07-23_problem-engine-mixcoach-rules.md` — the rule catalog (which problems exist, per tier/genre).
 - `CLAUDE.md` → worker "Two-pass Problem engine" note — the engine + persistence summary.

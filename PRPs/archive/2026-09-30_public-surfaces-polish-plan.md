@@ -8,7 +8,7 @@
 
 **Tech Stack:** React 19, Vite 6, TS strict (`verbatimModuleSyntax`, `exactOptionalPropertyTypes`), TanStack Router file routes, CSS Modules + `src/styles/tokens.css`, vitest + Testing Library, Playwright; ASP.NET Core .NET 10 minimal API + xUnit; Caddy; docker compose.
 
-**Spec:** `PRPs/public-surfaces-polish.md` (binding — decisions D1–D16, page outline §3, counting rules §3.3, live checks §4).
+**Spec:** `PRPs/archive/2026-09-30_public-surfaces-polish.md` (binding — decisions D1–D16, page outline §3, counting rules §3.3, live checks §4).
 
 Paths: `FE` = `components/frontend-spectr-v2`, `BFF` = `components/bff/src/Spectr.Bff`, `BFFT` = `components/bff/tests/Spectr.Bff.Tests`.
 
@@ -25,7 +25,7 @@ Paths: `FE` = `components/frontend-spectr-v2`, `BFF` = `components/bff/src/Spect
 - Brace `beforeEach(() => { mock.mockReset(); })` — an unbraced hook returns the mock and vitest calls it as teardown.
 - jsdom has no layout: every CSS/layout claim is measured in Chrome at 390 px and 1440 px (spec §4) and the numbers go in the task report.
 - Commits end with `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`. Stage by path. Never `--no-verify`. Never push. Foreground test runs only. Implementers never dispatch subagents.
-- **Order:** P1, P2, P5 → *(sibling plan `PRPs/guest-demo-sandbox-plan.md` through D9 — `/demo` exists)* → P3 → P4 → P6 → P8 → P7 → P9 → P10. Controller: no push between P3 and P4.
+- **Order:** P1, P2, P5 → *(sibling plan `PRPs/archive/2026-09-30_guest-demo-sandbox-plan.md` through D9 — `/demo` exists)* → P3 → P4 → P6 → P8 → P7 → P9 → P10. Controller: no push between P3 and P4.
 
 ---
 

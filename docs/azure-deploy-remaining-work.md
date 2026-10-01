@@ -1,8 +1,8 @@
 # SPECTR on Azure — What's Done, What's Left
 
-_Status as of 2026-09-14. Full technical plan: `PRPs/azure-deploy-spectr.md`. Work branch: `infra/azure-deploy`._
+_Status as of 2026-09-14. Full technical plan: `PRPs/archive/2026-09-30_azure-deploy-spectr.md`. Work branch: `infra/azure-deploy`._
 
-**Goal:** the full SPECTR product (analysis, AI Coach chat, specialists, stems, Listen rack, anonymous try-it flow, email, dashboards, backups, CI/CD) live at a real domain on one Azure VM, for ~$46/mo steady-state. Public surface is single-user — see `PRPs/solo-fork-strip-social.md`.
+**Goal:** the full SPECTR product (analysis, AI Coach chat, specialists, stems, Listen rack, anonymous try-it flow, email, dashboards, backups, CI/CD) live at a real domain on one Azure VM, for ~$46/mo steady-state. Public surface is single-user — see `PRPs/archive/2026-09-19_solo-fork-strip-social.md`.
 
 ---
 
@@ -11,7 +11,7 @@ _Status as of 2026-09-14. Full technical plan: `PRPs/azure-deploy-spectr.md`. Wo
 ### Done
 | What | Details |
 |---|---|
-| Deployment plan | `PRPs/azure-deploy-spectr.md` — architecture, decisions, all tasks |
+| Deployment plan | `PRPs/archive/2026-09-30_azure-deploy-spectr.md` — architecture, decisions, all tasks |
 | Production compose fixes (Task 1) | Commit `83292dc`, reviewed clean. Fixes the anonymous-upload storage bug, makes Stripe optional at boot, caps LLM spend ($10/mo), gives the AI Coach its own worker so chat never waits behind an analysis |
 | Azure VM (Task 2) | `spectr-vm` — Standard_D2als_v7 (2 vCPU / 4 GB), Ubuntu 24.04, **centralus**, public IP **`<vm-public-ip>`** (`az vm list-ip-addresses -g spectr-rg -o table`), resource group `spectr-rg`. Ports 80/443 open. SSH key: `~/.ssh/spectr_azure` |
 | Domain research | **spectrmix.com** recommended (available, ~$11/yr). Runner-up: usespectr.com |
@@ -63,7 +63,7 @@ Listed in order; each line notes what it waits on.
 |---|---|---|
 | Task 3 — VM bootstrap | Install Docker + compose, 2 GB swap, `/opt/spectr` folders, copy infra files to the server | D1 (reliable SSH) |
 | Task 6.5 — CI green | Finish the CSS lint fix, run every frontend check, review the diff | Nothing (running now) |
-| Commit plan updates | Commit the pending `PRPs/azure-deploy-spectr.md` edits | Task 6.5 finishing (avoid clashing commits) |
+| Commit plan updates | Commit the pending `PRPs/archive/2026-09-30_azure-deploy-spectr.md` edits | Task 6.5 finishing (avoid clashing commits) |
 | Task 5 — DNS | A record `<domain>` → `<vm-public-ip>`; `www` CNAME → apex; **Cloudflare proxy OFF** (grey cloud) | Domain purchase (you can add these two records yourself in 1 minute) |
 | Task 6 — Server secrets file | Create `/opt/spectr/.env` (chmod 600) with generated keys + your secrets | Section 3 items |
 | Task 7 — First deploy | Merge to solo → CI builds + scans + pushes images → run `deploy.sh <sha>` on the VM → verify `https://<domain>/healthz` and that workers are processing jobs | D5, Tasks 3/5/6/6.5, GitHub token |

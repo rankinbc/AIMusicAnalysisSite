@@ -22,8 +22,8 @@ Covers items 1, 2, 3, 5, 6, 7 from the review (item 4, hero motion, is out).
 
 Two PRPs written to `PRPs/` first (spec + plan each, per project convention), then **subagent-driven development** as for the Listen feature: one implementer at a time in the worktree, fresh reviewer per task, ledger with rulings, a whole-branch review on the most capable model, one fix wave, live browser pass (desktop + 390 px), push, CI. All gates after every edit (BFF `dotnet test --artifacts-path …`, pytest with 127.0.0.1 overrides, frontend tsc/lint/lint:css/lint:focus/build/vitest).
 
-- `PRPs/guest-demo-sandbox.md` (+`-plan.md`) — workstream D
-- `PRPs/public-surfaces-polish.md` (+`-plan.md`) — workstream P
+- `PRPs/archive/2026-09-30_guest-demo-sandbox.md` (+`-plan.md`) — workstream D
+- `PRPs/archive/2026-09-30_public-surfaces-polish.md` (+`-plan.md`) — workstream P
 
 ## Workstream D — guest demo sandbox
 

@@ -11,7 +11,7 @@ description: |
 
 ---
 
-> ARCHIVED 2026-09-19 — removed on the solo fork (PRPs/solo-fork-strip-social.md): the
+> ARCHIVED 2026-09-19 — removed on the solo fork (PRPs/archive/2026-09-19_solo-fork-strip-social.md): the
 > `source=reviewer` (accepted reviewer suggestion, PRP-3/`FeedbackEndpoints`) and
 > `source=recap` (Room recap publish, PRP-4/`RoomEndpoints`) drains described below no longer
 > exist — `FeedbackEndpoints`, `RoomEndpoints`, and `IGamePlanSink`'s only two callers are deleted.

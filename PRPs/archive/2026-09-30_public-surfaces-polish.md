@@ -1,10 +1,10 @@
 # Public surfaces polish — design spec (Workstream P)
 
-_Status: binding design authority for `PRPs/public-surfaces-polish-plan.md`._
+_Status: binding design authority for `PRPs/archive/2026-09-30_public-surfaces-polish-plan.md`._
 _Written 2026-09-20 against `solo` @ `915732d`. Every code claim below was
 re-verified in the working tree; where the planning reports disagree with the
 code, the code wins and the disagreement is listed in §6._
-_Sibling workstream: `PRPs/guest-demo-sandbox.md` (the one-click guest demo,
+_Sibling workstream: `PRPs/archive/2026-09-30_guest-demo-sandbox.md` (the one-click guest demo,
 route `/demo`). This spec links TO `/demo`; it never implements it._
 
 ---

@@ -2,7 +2,7 @@
 
 **Branch:** `ai-analysis-v2`
 **Status:** ready to execute
-**Related:** [[identify-solve-architecture]], `PRPs/identify-solve-architecture.md`, `PRPs/identifiers/{router,preset-compiler}.md`, `PRPs/problem-engine-mixcoach-rules.md`
+**Related:** [[identify-solve-architecture]], `PRPs/identify-solve-architecture.md`, `PRPs/identifiers/{router,preset-compiler}.md`, `PRPs/archive/2026-07-23_problem-engine-mixcoach-rules.md`
 
 ---
 

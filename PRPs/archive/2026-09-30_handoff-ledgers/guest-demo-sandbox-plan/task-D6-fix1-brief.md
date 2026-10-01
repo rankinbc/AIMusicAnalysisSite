@@ -1,6 +1,6 @@
 # Task D6 — fix round 1 (from the Opus review of commit 0b63dfe)
 
-The original task brief is `task-D6-brief.md` (same folder); the spec is `PRPs/guest-demo-sandbox.md` (D3, D4, D5, D7, §7). The review CONFIRMED the guard is sound: the filter wraps every nested `/api` group, guest marking survives the fail-open auth path, every analysis entry point is covered, the quota cannot be reset or forged, specialists are one-shot per slug, the coach cap is 20 LIFETIME. What follows is what it required. BFF only (`components/bff`). Do NOT edit `components/worker`.
+The original task brief is `task-D6-brief.md` (same folder); the spec is `PRPs/archive/2026-09-30_guest-demo-sandbox.md` (D3, D4, D5, D7, §7). The review CONFIRMED the guard is sound: the filter wraps every nested `/api` group, guest marking survives the fail-open auth path, every analysis entry point is covered, the quota cannot be reset or forged, specialists are one-shot per slug, the coach cap is 20 LIFETIME. What follows is what it required. BFF only (`components/bff`). Do NOT edit `components/worker`.
 
 Already known from the previous (exhausted) implementer — it made NO edits:
 - Hard-coded `DramatiqQueues.AnalysisPaid`: `Endpoints/VerdictEndpoints.cs` ~line 77 (lazy `run_triage`) and ~line 191 (`RunSpecialist`); `Endpoints/FixRackEndpoints.cs` ~line 54 (`Generate`). All three handlers already receive the `ClaimsPrincipal`, so `user.IsGuest()` is available.

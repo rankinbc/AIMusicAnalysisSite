@@ -1,7 +1,7 @@
 # Controller ledger — "first impression" work (user: plan items 1,2,3,5,6,7; then "continue")
 
 Worktree `<solo-worktree>`, branch `solo`. Trust this file + `git log` over memory.
-Approved plan (source of truth for scope/order): `PRPs/handoff-ledgers/approved-plan.md`.
+Approved plan (source of truth for scope/order): `PRPs/archive/2026-09-30_handoff-ledgers/approved-plan.md`.
 
 ## Owner decisions (2026-09-20, via AskUserQuestion — binding)
 - Demo model: PER-VISITOR SANDBOX (instant guest account; purged later). NOT a shared/read-only account.
@@ -21,8 +21,8 @@ Approved plan (source of truth for scope/order): `PRPs/handoff-ledgers/approved-
 - Layout/CSS claims are verified by MEASURING in a real browser (jsdom has no layout). Persistence claims are verified with a CLIENT-SIDE round trip, not just a reload.
 
 ## Plans
-- D — `PRPs/guest-demo-sandbox.md` + `-plan.md` (tasks D1–D11) — being written by a fork.
-- P — `PRPs/public-surfaces-polish.md` + `-plan.md` (tasks P1–P10) — being written by a fork.
+- D — `PRPs/archive/2026-09-30_guest-demo-sandbox.md` + `-plan.md` (tasks D1–D11) — being written by a fork.
+- P — `PRPs/archive/2026-09-30_public-surfaces-polish.md` + `-plan.md` (tasks P1–P10) — being written by a fork.
 
 ## Execution order
 1. P1, P2, P5 → 2. D1–D7 → 3. D9, D10, D8 → 4. P3 → P4 → P6 → 5. P8, P7, P9, P10, D11 → 6. whole-branch review (most capable model) → ONE fix wave → live pass (desktop + 390 px) → push → CI.

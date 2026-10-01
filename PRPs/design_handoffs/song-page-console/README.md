@@ -3,7 +3,7 @@
 ## Overview
 The redesigned **song page** (`/_app/songs/$songId`) — a producer's focused **version‑management console** for one song: audition & A/B two versions by ear, see the mix‑score trend, manage versions, record a personal opinion, and route out to the heavy Listen/Report surfaces.
 
-This implements `PRPs/song-page-console-redesign.md` (§1–§9) **plus** three UI additions made during design that need backend support (see **Backend / Data needs** below).
+This implements `PRPs/archive/2026-09-14_song-page-console-redesign.md` (§1–§9) **plus** three UI additions made during design that need backend support (see **Backend / Data needs** below).
 
 ## About the design files
 The file in this bundle — `SongPageConsole.dc.html` — is a **design reference**, not production code to copy. It's a SPECTR "Design Component": static markup + a small logic class, built **on top of the real shipped design system** (`window.SpectrUI.*`, the global utility classes, and the `tokens/` CSS variables from `spectr-frontend-v2/src/ui`).

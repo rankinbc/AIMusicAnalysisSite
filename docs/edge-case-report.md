@@ -230,7 +230,7 @@
 - **Trigger:** any `PUT /rack/draft`, `POST /rack/presets`, `/viz/presets` save fails (dead 401, version deleted, 500).
 - **Currently:** `useUpsertRackDraft`/`useSaveRackPreset` have no `onError` (`useRackPresets.ts:97-104,125-130`); call sites add none (`ListenRackPage.tsx:537-543,560-566,592-595` — import toasts only success/parse). The user believes drafts/presets are saving.
 
-> Superseded 2026-09-19 — this surface was removed on the solo fork (PRPs/solo-fork-strip-social.md).
+> Superseded 2026-09-19 — this surface was removed on the solo fork (PRPs/archive/2026-09-19_solo-fork-strip-social.md).
 > Applies to every finding from here through E7.7 (live rooms, then sharing/reviewer/notifications).
 
 ### E6.8 — "Start live room" refusal is silent 🔴 High
@@ -265,7 +265,7 @@
 
 ## Journey 7 — Sharing & social
 
-> Superseded 2026-09-19 — this surface was removed on the solo fork (PRPs/solo-fork-strip-social.md).
+> Superseded 2026-09-19 — this surface was removed on the solo fork (PRPs/archive/2026-09-19_solo-fork-strip-social.md).
 
 ### E7.1 — The entire version-share/invite owner flow has no UI; invite links dead-end 🔴 High
 - **Trigger:** owner wants to mint/rotate/revoke a `/v/{token}` link or invite a reviewer.

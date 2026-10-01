@@ -1,6 +1,6 @@
 """Verdict carries the Problem-record fields (IDENTIFY tier) — additive +
 defaulted so every existing constructor and persistence path is unaffected.
-See PRPs/identify-solve-architecture.md §3 and PRPs/problem-engine-mixcoach-rules.md.
+See PRPs/identify-solve-architecture.md §3 and PRPs/archive/2026-07-23_problem-engine-mixcoach-rules.md.
 """
 from __future__ import annotations
 

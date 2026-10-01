@@ -5,7 +5,7 @@ using Microsoft.Extensions.Caching.Memory;
 namespace Spectr.Bff.Services;
 
 // D6 — track-agnostic demo snapshot: an operator-installed export of ONE
-// real analyzed version (PRPs/guest-demo-sandbox.md §6). DemoSeeder seeds
+// real analyzed version (PRPs/archive/2026-09-30_guest-demo-sandbox.md §6). DemoSeeder seeds
 // from this when present, else falls back to the sine-tone seed. See
 // DemoSnapshotStore below for the load/validate/cache contract and
 // DemoSnapshotTemplate for the id-remapping (the non-obvious part).

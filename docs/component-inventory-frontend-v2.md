@@ -68,7 +68,7 @@ Room/share/reviewer primitives (`BookmarksRail`, `AnonReviewerSurface`, `Produce
 `SuggestionCard`, and the `useRoomSession`/`useRoomStream`/`useRoomActions`/`useComments`/
 `useBookmarks`/`useBookmarkSignal`/`useSuggestions`/`useInvites`/`useVersionAccess`/
 `useVersionShare`/`useAnonFeedback` hooks) were removed on the solo fork — see
-`PRPs/solo-fork-strip-social.md`.
+`PRPs/archive/2026-09-19_solo-fork-strip-social.md`.
 
 | Component | File | Purpose |
 | --- | --- | --- |
@@ -85,7 +85,7 @@ Live-room orchestration (`useRoomOrchestration`, `useMockRoomOrchestration`, `ro
 role/capability seam (`access`, `capabilities`, `identity`) were removed on the solo fork — the
 rack has no read-only/guest mode any more, it is always owner-editable. `rail.tsx` (the old
 Coach/Plan/People/Chat/Stats/Notes right rail) was replaced by `NotesSidebar.tsx` (notes only).
-See `PRPs/solo-fork-strip-social.md`.
+See `PRPs/archive/2026-09-19_solo-fork-strip-social.md`.
 
 | Component | File | Purpose |
 | --- | --- | --- |
@@ -198,7 +198,7 @@ See `PRPs/solo-fork-strip-social.md`.
 | Category | Count |
 | --- | --- |
 | Route files (`routes/`) | 26 (3 layouts, 23 pages incl. 1 dev-only) |
-| Feature folders (`features/`) | 14: account, anon-analyze, auth, billing, health, landing, library, listen, listen-rack, references, results, song, trust, upload. `feed`, `mentions`, `notifications`, `profiles` were removed on the solo fork (`PRPs/solo-fork-strip-social.md`); `song` is new since this table was generated. |
+| Feature folders (`features/`) | 14: account, anon-analyze, auth, billing, health, landing, library, listen, listen-rack, references, results, song, trust, upload. `feed`, `mentions`, `notifications`, `profiles` were removed on the solo fork (`PRPs/archive/2026-09-19_solo-fork-strip-social.md`); `song` is new since this table was generated. |
 | Shared components (`components/`) | 19 |
 | UI primitives (`ui/`) | 10 |
 | Shell/entry (`main.tsx`, `auth/AuthContext.tsx`) | 2 |

@@ -1,7 +1,7 @@
 # Guest-first upload — design spec
 
-_Status: binding design authority for `PRPs/guest-first-upload-plan.md`. Extends
-(and in four places supersedes) `PRPs/guest-demo-sandbox.md`._
+_Status: binding design authority for `PRPs/archive/2026-09-30_guest-first-upload-plan.md`. Extends
+(and in four places supersedes) `PRPs/archive/2026-09-30_guest-demo-sandbox.md`._
 _Written 2026-09-21 against `solo` @ `8586956`. Every claim about existing code
 was re-verified in the working tree (`BFF` = `components/bff/src/Spectr.Bff`,
 `FE` = `components/frontend-spectr-v2/src`, `WK` = `components/worker/app`).
@@ -262,7 +262,7 @@ Removing the anon endpoints; a server-side "all specialists finished" signal;
 email-first conversion ("magic link"); migrating an existing 72-hour guest to 24
 hours (rows keep the expiry they were minted with); GPU structure detection.
 
-## 7. Supersedes in `PRPs/guest-demo-sandbox.md`
+## 7. Supersedes in `PRPs/archive/2026-09-30_guest-demo-sandbox.md`
 
 O4 / D5 ("ONE track, mix only") → G-D5. D10 ("after the one upload is used…",
 mix-only upload dialog for guests) → G-D5 + plan §"Amendments". D11 ("use ours"

@@ -14,7 +14,7 @@ real-time Web Audio DSP rack ("Listen"). The app also carries the commercial sur
 Stripe billing, credits, entitlement gating) and an anonymous instant-analysis funnel at
 `/analyze` that converts to registration by "claiming" the device-scoped report. It is a
 single-user product — no sharing, no public pages, no profiles, no rooms (see
-`PRPs/solo-fork-strip-social.md`).
+`PRPs/archive/2026-09-19_solo-fork-strip-social.md`).
 
 It is a Vite-built React 19 SPA that talks exclusively to the .NET BFF (`components/bff`) over
 `/api/*` (Vite dev proxy to `localhost:5000`), with SSE for streaming (coach replies) and XHR for

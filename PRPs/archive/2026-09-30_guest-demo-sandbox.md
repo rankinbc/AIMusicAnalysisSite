@@ -1,6 +1,6 @@
 # Guest demo sandbox — design spec
 
-_Status: binding design authority for `PRPs/guest-demo-sandbox-plan.md`._
+_Status: binding design authority for `PRPs/archive/2026-09-30_guest-demo-sandbox-plan.md`._
 _Written 2026-09-20 against `solo` @ `915732d`. Every claim about existing code
 below was re-verified in the working tree (paths are relative to the repo root;
 `BFF` = `components/bff/src/Spectr.Bff`, `FE` = `components/frontend-spectr-v2/src`,
@@ -43,7 +43,7 @@ Also wanted: "No track handy? Use ours" on the anonymous `/analyze` funnel.
   sine (`DemoSeeder.cs:128-153`); the report is a bundled
   `DemoAssets/demo-final-json.json` (`:159-180`). The solo-fork spec explicitly
   keeps "the demo-song seeder" and states "the anon funnel and per-user demo
-  song reveal nothing" (`PRPs/solo-fork-strip-social.md:30,57`).
+  song reveal nothing" (`PRPs/archive/2026-09-19_solo-fork-strip-social.md:30,57`).
 - **The seed writes no `RoutingPlan`** (`DemoSeeder.cs:72-83`), and a plain
   `GET /api/reports/{jobId}/verdicts` lazily enqueues paid LLM triage when
   `RoutingPlan is null && DegradationNotice is null`
@@ -455,7 +455,7 @@ The SEEDER is the last line of defence; it does not trust the snapshot:
 
 ## 7. Security & abuse
 
-- **Solo principle** (`PRPs/solo-fork-strip-social.md:10-16`): "Nothing in the
+- **Solo principle** (`PRPs/archive/2026-09-19_solo-fork-strip-social.md:10-16`): "Nothing in the
   product may show, imply, or let a visitor infer that other users exist." Every
   guest owns private COPIES; nothing a guest does is visible to anyone else;
   there is no shared account, no public report, no share link (D2 of that spec

@@ -17,7 +17,7 @@ Roughly 140 mapped routes across 23 endpoint files, ~35 service classes, 3 proje
 project (~56 test classes). A legacy FastAPI service (`components/api/`) still exists but is
 being phased out; nothing here depends on it.
 
-> Removed on the solo fork (`PRPs/solo-fork-strip-social.md`): version sharing and live listening
+> Removed on the solo fork (`PRPs/archive/2026-09-19_solo-fork-strip-social.md`): version sharing and live listening
 > rooms (`RoomBus`, `AccessService`, `ShareTokenResolver`/`SessionTokenResolver`/`ResourceTokenAuth`,
 > the `/api/v/{token}` and `/api/sessions/{id}` routes), and public profiles/follows/feed/
 > notifications (`HandleSeeder`, `MentionParser`, `TableNotificationSink`/`INotificationSink`,

@@ -8,7 +8,7 @@
 
 **Tech Stack:** ASP.NET Core .NET 10 + EF Core 10 + xUnit (`components/bff`); React 19 + Vite 6 + TS strict + TanStack Router + vitest (`components/frontend-spectr-v2`); Python 3.11 dramatiq worker + SQLAlchemy mirror (`components/worker`, `components/shared`); Caddy + GitHub Actions (`infra/`, `.github/`).
 
-**Spec:** `PRPs/solo-fork-strip-social.md` — read it first. This plan argues from it; where they disagree the spec wins and the plan gets fixed.
+**Spec:** `PRPs/archive/2026-09-19_solo-fork-strip-social.md` — read it first. This plan argues from it; where they disagree the spec wins and the plan gets fixed.
 
 ## Global Constraints
 
@@ -812,18 +812,18 @@ cd components/bff && dotnet ef database update --project src/Spectr.Data --start
 
 ### Task 15: Infra + CI
 
-**Files:** `infra/Caddyfile`, `.github/workflows/ci.yml`, `PRPs/azure-deploy-spectr.md`, `docs/azure-deploy-remaining-work.md`, `docs/launch-checklist.md`
+**Files:** `infra/Caddyfile`, `.github/workflows/ci.yml`, `PRPs/archive/2026-09-30_azure-deploy-spectr.md`, `docs/azure-deploy-remaining-work.md`, `docs/launch-checklist.md`
 
 - [ ] **Step 1:** `infra/Caddyfile` — delete the `@share_bots { path /r/* … }` matcher and its `handle @share_bots { … }` block (L18-24) and any comment referring to it (the 6.1/6.2 comment says "unlike @share_bots" — reword).
 - [ ] **Step 2:** `ci.yml` deploy job: `if: github.ref == 'refs/heads/solo' && github.event_name == 'push'`; update the "master-only" comments above it to say `solo`.
-- [ ] **Step 3:** Azure plan + status doc + launch checklist: deploy branch is `solo`; delete the "share links must all work on the live site" constraint, the `curl -A discordbot https://<domain>/r/<token>` check, and "→ share link" from the Task 10 walkthrough; add one line: "Public surface is single-user — see `PRPs/solo-fork-strip-social.md`."
+- [ ] **Step 3:** Azure plan + status doc + launch checklist: deploy branch is `solo`; delete the "share links must all work on the live site" constraint, the `curl -A discordbot https://<domain>/r/<token>` check, and "→ share link" from the Task 10 walkthrough; add one line: "Public surface is single-user — see `PRPs/archive/2026-09-19_solo-fork-strip-social.md`."
 - [ ] **Step 4:** validate Caddy syntax if docker is available: `"$DOCKER_EXE" run --rm -v "$PWD/infra/Caddyfile:/etc/caddy/Caddyfile" caddy:2 caddy validate --config /etc/caddy/Caddyfile` (needs `SPECTR_DOMAIN`-style env the file expects — pass `-e` as the file header documents). Commit `chore(solo): deploy from solo; remove share crawler route`.
 
 ### Task 16: Docs
 
 **Files:** `CLAUDE.md`, `README.md`, `docs/project-overview.md`, `docs/architecture-frontend-v2.md`, `docs/architecture-worker.md`, `docs/data-models.md`, `docs/api-contracts-bff.md`, `docs/index.md`, `PRPs/` (archive moves)
 
-- [ ] **Step 1: `CLAUDE.md`** — first paragraph: add "Single-user tool: there is no sharing, no profiles, no rooms — see `PRPs/solo-fork-strip-social.md`. `solo` is the main development + deploy branch; `master` is the frozen archive of the social build." Remove from the BFF key-routes list anything deleted; fix the frontend purpose line (no "share"); worker actor roster loses `synthesize_recap`; remove the `room_hosting_enabled` mentions.
+- [ ] **Step 1: `CLAUDE.md`** — first paragraph: add "Single-user tool: there is no sharing, no profiles, no rooms — see `PRPs/archive/2026-09-19_solo-fork-strip-social.md`. `solo` is the main development + deploy branch; `master` is the frozen archive of the social build." Remove from the BFF key-routes list anything deleted; fix the frontend purpose line (no "share"); worker actor roster loses `synthesize_recap`; remove the `room_hosting_enabled` mentions.
 - [ ] **Step 2: `README.md` + `docs/*`** — delete every rooms/sharing/feed/profile statement (`README.md` ~L212 "share links"; `project-overview.md` L15; `architecture-frontend-v2.md` L15/L154/L223; `architecture-worker.md` L13; `data-models.md` L55 + the dropped tables/columns; `api-contracts-bff.md` L249 room SSE + all removed endpoints). Do not add marketing copy.
 - [ ] **Step 3: Archive** —
 
@@ -832,7 +832,7 @@ cd <solo-worktree> && mkdir -p PRPs/archive/2026-09-19_social-epic
 git mv PRPs/product-brief-spectr-room-2026-06-17.md PRPs/spectr-flywheel.md PRPs/async-social-core-design.md PRPs/listen-v3-notifications.md PRPs/listen-v3-bookmark-ui.md PRPs/archive/2026-09-19_social-epic/
 git mv PRPs/stories/7-1* PRPs/stories/7-2* PRPs/stories/7-3* PRPs/stories/7-4* PRPs/stories/11-* PRPs/archive/2026-09-19_social-epic/
 ```
-(`ls` first; move only what exists.) In `PRPs/epics.md` add under the Epic 11 and Epic 7 headings: `> ARCHIVED 2026-09-19 — removed on the solo fork (PRPs/solo-fork-strip-social.md).` Trim the room/reviewer drains from `PRPs/listen-v3-game-plan-comparison.md` with the same one-line note. Update `docs/index.md`.
+(`ls` first; move only what exists.) In `PRPs/epics.md` add under the Epic 11 and Epic 7 headings: `> ARCHIVED 2026-09-19 — removed on the solo fork (PRPs/archive/2026-09-19_solo-fork-strip-social.md).` Trim the room/reviewer drains from `PRPs/listen-v3-game-plan-comparison.md` with the same one-line note. Update `docs/index.md`.
 - [ ] **Step 4:** commit `docs(solo): describe the single-user product; archive the social epic`.
 
 ---

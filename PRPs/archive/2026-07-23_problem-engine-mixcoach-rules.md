@@ -946,7 +946,7 @@ These are **named, sequenced** follow-ons — each a separate plan producing wor
 
 ## Execution Handoff
 
-Plan complete and saved to `PRPs/problem-engine-mixcoach-rules.md`. Two execution options:
+Plan complete and saved to `PRPs/archive/2026-07-23_problem-engine-mixcoach-rules.md`. Two execution options:
 
 **1. Subagent-Driven (recommended)** — dispatch a fresh subagent per task, review between tasks, fast iteration.
 
