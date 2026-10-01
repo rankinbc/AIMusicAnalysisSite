@@ -17,6 +17,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { capture } from '../../lib/analytics';
 import { setCorrelation } from '../../lib/sentry';
 import { LiveAnalysisView } from '../../features/results/LiveAnalysisView';
+import { LivePlayerProvider } from '../../features/results/LivePlayerProvider';
 import { ReportView } from '../../features/results/ReportView';
 import {
   DEFAULT_RESULTS_TAB,
@@ -57,7 +58,20 @@ export const Route = createFileRoute('/_app/songs/$songId/results/$jobId')({
   component: ResultsPage,
 });
 
+// The "listen while it analyzes" player sits ABOVE both the live view and
+// ReportView so the music carries across the hand-off between them; it's torn
+// down when the route unmounts. Jobs without a version get no player.
 function ResultsPage() {
+  const { jobId } = Route.useParams();
+  const job = useJob(jobId, { pollMs: 2000 });
+  return (
+    <LivePlayerProvider versionId={job.data?.versionId}>
+      <ResultsContent />
+    </LivePlayerProvider>
+  );
+}
+
+function ResultsContent() {
   const { songId, jobId } = Route.useParams();
   const { tab } = Route.useSearch();
   const activeTab: ResultsTabKey = tab ?? DEFAULT_RESULTS_TAB;

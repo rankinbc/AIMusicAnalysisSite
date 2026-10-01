@@ -65,6 +65,36 @@
   }
 }
 
+/* ── Listening backdrop (LiveListenBackdrop) ─────────────────────────────
+   The Listen page's floor grid + smoke + bloom while the mix plays. Same
+   layer as the backdrop (later in the DOM, so above it) and under the stage
+   (1001): never above the box, and far below the buy sheet / toasts. Kept
+   dim so the box — which has its own opaque background — always reads. */
+.listenBg {
+  position: fixed;
+  inset: var(--topnav-h) 0 0;
+  z-index: 1000;
+  pointer-events: none;
+  opacity: 0.6;
+  transition: opacity 0.7s ease;
+  animation: listenIn 0.7s ease backwards;
+}
+.listenBg[data-on='false'] {
+  opacity: 0;
+}
+@keyframes listenIn {
+  from {
+    opacity: 0;
+  }
+}
+.listenGrid {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 /* ── Modal shell ──────────────────────────────────────────────────────── */
 .modal {
   width: min(1040px, 100%);
@@ -149,6 +179,62 @@
 }
 .songSub .sep {
   opacity: 0.45;
+}
+
+/* Header transport: play/pause the uploaded mix + elapsed / duration. */
+.transport {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  align-self: center;
+}
+.transportTime {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.transportTotal {
+  color: var(--muted);
+}
+.playBtn {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 229, 176, 0.45);
+  background: var(--cyan-dim);
+  color: var(--cyan);
+  box-shadow: 0 0 18px -6px var(--cyan-glow);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.playBtn:hover:not(:disabled) {
+  background: rgba(0, 229, 176, 0.18);
+  box-shadow: 0 0 22px -4px var(--cyan-glow);
+}
+.playBtn[data-playing='true'],
+.playBtn[data-playing='true']:hover:not(:disabled) {
+  background: linear-gradient(180deg, var(--cyan-2), var(--cyan));
+  color: var(--ink-on-accent-2);
+  border-color: transparent;
+}
+.playBtn[data-playing='true']:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+.playBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  box-shadow: none;
+}
+.playBtn:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
 }
 
 /* Body: the chat (its own scroller) beside the steps column (its own
@@ -710,9 +796,17 @@
   .inputsSum {
     display: none;
   }
+  /* Phone: the button alone, so the song title keeps the room. */
+  .transportTime {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .listenBg {
+    animation: none;
+    transition: none;
+  }
   .live .d,
   .spin {
     animation: none;

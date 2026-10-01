@@ -41,6 +41,9 @@ import { CoachChatFeed } from './AnalysisCompleteCoach';
 import { AnalysisDock } from './AnalysisDock';
 import { AnalysisStepList } from './AnalysisStepList';
 import { LiveFindingsList } from './LiveFindingsList';
+import { LiveListenBackdrop } from './LiveListenBackdrop';
+import { LiveTransport } from './LiveTransport';
+import { useLivePlayer } from './livePlayerContext';
 import { SpecialistStageSection } from './AnalysisCompleteStage';
 import { narrate, type ChatMessage } from './helpers/coachNarration';
 import { waitContext } from './helpers/coachWaitLines';
@@ -100,6 +103,14 @@ export function AnalysisCompleteModal(props: Props) {
   const { fj, job } = props;
   const status = runStatus(job, fj);
   const complete = status === 'complete';
+
+  // Listen while it analyzes (the results route's LivePlayerProvider; absent
+  // for jobs with no version → no transport, no backdrop). Registering keeps
+  // the music going across the live → report hand-off and stops it once no
+  // analysis page is showing the controls.
+  const player = useLivePlayer();
+  const attachPlayer = player?.attach;
+  useEffect(() => attachPlayer?.(), [attachPlayer]);
 
   const source = liveFinalJson(job, fj);
   const p1 = phase1Values(source, job?.partial);
@@ -181,6 +192,7 @@ export function AnalysisCompleteModal(props: Props) {
   const page = (
     <div className={s.root} role="region" aria-label="Analysis">
       <div className={s.backdrop} />
+      {player && <LiveListenBackdrop playing={player.playing} getAnalyser={player.getAnalyser} />}
       <div className={s.stage}>
         <div className={s.brand} data-testid="acm-brand">
           <SpectrLogo size="xl" />
@@ -222,6 +234,7 @@ export function AnalysisCompleteModal(props: Props) {
                 )}
               </div>
             </div>
+            {player && <LiveTransport player={player} fallbackDurationSec={durationSec} />}
           </div>
 
           {/* Body: chat | steps + specialists */}

@@ -38,10 +38,13 @@ const fj = {
   ],
 } as unknown as FinalJson;
 
-const plan = {
-  specialists: [{ slug: 'low_end', focus: 'sub' }],
-} as unknown as RoutingPlanDto;
-const specRunning = [{ slug: 'low_end', status: 'idle' }] as unknown as SpecialistStatus[];
+const plan: RoutingPlanDto = {
+  specialistsToRun: [{ name: 'low_end', priority: 1, focus: 'sub buildup' }],
+  skip: [],
+  rationale: '',
+  estimatedTotalTokens: 0,
+};
+const specRunning: SpecialistStatus[] = [{ slug: 'low_end', status: 'idle' }];
 
 type Props = Parameters<typeof AnalysisCompleteModal>[0];
 
@@ -61,7 +64,7 @@ const states: Array<[string, () => Props]> = [
   ],
   [
     'finished',
-    () => ({ jobId: 'job-chrome', fj, songName: 'Neon Meridian', routingPlan: { specialists: [] } as unknown as RoutingPlanDto, onViewReport: vi.fn() }),
+    () => ({ jobId: 'job-chrome', fj, songName: 'Neon Meridian', routingPlan: { ...plan, specialistsToRun: [] }, onViewReport: vi.fn() }),
   ],
 ];
 
