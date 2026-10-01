@@ -161,7 +161,7 @@ SerilogRequestLogging → HttpMetrics → CORS → Authentication → Authorizat
   StaleJobReaper, RetentionSweepScheduler, LifecycleEmailScheduler. Plus `BootMigrator.cs`
   (migrations at boot under advisory lock when `Migrations:ApplyAtBoot=true`).
 - **Other seams**: `HonestMathService` (usage page math), `ReferenceProfileAggregator`
-  (fingerprint-cached reference-set aggregate), `DemoSeeder` (first-run demo report), `AppUrls`,
+  (fingerprint-cached reference-set aggregate), `DemoSeeder` (guest-only demo report — `POST /api/auth/demo`; registration no longer seeds it), `AppUrls`,
   `UlidGen`, `AnonReportProjection` (reduced public projection).
 
 ## Job Dispatch and Tier Routing

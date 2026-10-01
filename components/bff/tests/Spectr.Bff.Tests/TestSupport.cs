@@ -198,6 +198,23 @@ public static class TestAuth
         if (auth is null) throw new InvalidOperationException("Register returned null body.");
         return (auth.User.Id, auth.AccessToken);
     }
+
+    /// <summary>
+    /// Registers a fresh account, then seeds the demo song into it EXPLICITLY
+    /// via <see cref="Spectr.Bff.Services.DemoSeeder"/>. Registration itself no
+    /// longer seeds a demo (owner decision 2026-10: the demo is guest-only) —
+    /// this is purely a fixture for the seeder/snapshot/export suites, which
+    /// exercise the seeder against any user id.
+    /// </summary>
+    public static async Task<(Guid UserId, string Token)> RegisterWithDemoAsync<TProgram>(
+        WebApplicationFactory<TProgram> factory, HttpClient client)
+        where TProgram : class
+    {
+        var (userId, token) = await RegisterAsync(client);
+        using var scope = factory.Services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<Spectr.Bff.Services.DemoSeeder>().SeedAsync(userId);
+        return (userId, token);
+    }
 }
 
 public static class TestSeed

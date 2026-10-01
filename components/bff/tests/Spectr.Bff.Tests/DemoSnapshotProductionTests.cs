@@ -139,7 +139,7 @@ public sealed class DemoSnapshotProductionTests(WebApplicationFactory<Program> f
         await TestDb.RequireAsync(factory);
         var f = Build(new InMemoryObjectStore());
         var client = f.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
-        var (userId, token) = await TestAuth.RegisterAsync(client);
+        var (userId, token) = await TestAuth.RegisterWithDemoAsync(f, client);
         _userIds.Add(userId);
         Guid versionId;
         using (var scope = f.Services.CreateScope())
@@ -174,7 +174,7 @@ public sealed class DemoSnapshotProductionTests(WebApplicationFactory<Program> f
 
         // A permanent account registers while A is live — seeded from A.
         var client = f.CreateClient();
-        var (accountId, token) = await TestAuth.RegisterAsync(client);
+        var (accountId, token) = await TestAuth.RegisterWithDemoAsync(f, client);
         _userIds.Add(accountId);
         Guid accountVersion;
         using (var scope = f.Services.CreateScope())

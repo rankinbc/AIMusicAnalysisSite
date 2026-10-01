@@ -155,7 +155,6 @@ public static partial class AuthEndpoints
         PasswordHasher hasher,
         JwtTokenService jwt,
         RefreshTokenService refresh,
-        DemoSeeder demoSeeder,
         AuthTokenService authTokens,
         IEmailSender email,
         IConfiguration cfg,
@@ -319,13 +318,12 @@ public static partial class AuthEndpoints
         if (hasDeviceCookie)
             DeviceService.ClearCookie(resp);
 
-        // Story 12.8 (AC1) — first-run demo report, BEST-EFFORT: a clearly
-        // labeled sample report so the new library has something to explore
-        // before the user's first analysis. Never fails registration
-        // (DemoSeeder swallows internally; same contract as the claim above).
-        // CancellationToken.None: the user exists — a client disconnect must
-        // not leave a permanently demo-less account (no re-seed path exists).
-        await demoSeeder.SeedAsync(user.Id, CancellationToken.None);
+        // Story 12.8 (AC1) first-run demo report — RETIRED for registered
+        // accounts (owner decision 2026-10): the seeded demo song is for
+        // GUESTS only (POST /api/auth/demo, DemoAuthEndpoints -> IGuestSeeder).
+        // A new account starts with an empty library and the upload CTA.
+        // Existing registered libraries were cleaned by migration
+        // RemoveDemoFromRegisteredLibraries (Spectr.Data.DemoLibraryCleanup).
 
         // Story 4.3 (AC1) — verification email, BEST-EFFORT: an email-path
         // failure (Redis down, template bug) must never fail registration;

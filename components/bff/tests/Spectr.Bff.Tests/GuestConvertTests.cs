@@ -117,6 +117,8 @@ public sealed class GuestConvertTests(WebApplicationFactory<Program> factory)
         {
             var (client, demo) = await StartGuestAsync(f);
             userId = demo.User.Id;
+            // The guest's OWN work (an upload of theirs) — must survive.
+            var (ownSongId, _) = await TestSeed.SongWithVersionAsync(f, userId);
             var email = $"convert+{Guid.NewGuid():N}@spectr.test";
             var oldToken = client.DefaultRequestHeaders.Authorization!.Parameter!;
 
@@ -137,7 +139,16 @@ public sealed class GuestConvertTests(WebApplicationFactory<Program> factory)
                 // (Development), so the SAME stamping register does applies
                 // to a conversion too.
                 Assert.NotNull(u.EmailVerifiedAt);
-                Assert.True(await db.Songs.AnyAsync(s => s.UserId == u.Id && s.Id == demo.Demo.SongId)); // work kept
+                Assert.True(await db.Songs.AnyAsync(s => s.UserId == u.Id && s.Id == ownSongId)); // work kept
+                // Owner decision 2026-10 — the demo is guest-only: the
+                // converted (now registered) library no longer carries it …
+                Assert.False(await db.Songs.AnyAsync(s => s.Id == demo.Demo.SongId));
+                Assert.False(await db.SongVersions.AnyAsync(v => v.Id == demo.Demo.VersionId));
+                Assert.False(await db.AnalysisJobs.AnyAsync(j => j.Id == demo.Demo.JobId));
+                Assert.False(await db.Analyses.AnyAsync(a => a.JobId == demo.Demo.JobId));
+                // … while the shared demo audio other guests play is untouched.
+                Assert.True(await scope.ServiceProvider.GetRequiredService<IFileStorage>()
+                    .ExistsAsync(DemoSeeder.DemoAudioKey));
                 Assert.Equal(1, await db.AuditLogs.CountAsync(a => a.Target == u.Id.ToString() && a.Action == "guest_converted"));
                 Assert.Equal(1, await db.RefreshTokens.CountAsync(t => t.UserId == u.Id));               // old guest row gone
             }

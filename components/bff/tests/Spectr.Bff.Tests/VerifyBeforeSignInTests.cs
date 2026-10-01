@@ -474,6 +474,7 @@ public sealed class VerifyBeforeSignInTests(WebApplicationFactory<Program> facto
         {
             var (client, demo) = await StartGuestAsync(f);
             id = demo.User.Id;
+            var (ownSongId, _) = await TestSeed.SongWithVersionAsync(f, id); // the guest's own work
             var email = NewEmail("guest");
 
             var resp = await client.PostAsJsonAsync("/api/auth/guest/convert", new { email, password = Password });
@@ -519,7 +520,10 @@ public sealed class VerifyBeforeSignInTests(WebApplicationFactory<Program> facto
                 Assert.False(u.IsGuest); Assert.Null(u.GuestExpiresAt);
                 Assert.NotNull(u.EmailVerifiedAt);
                 Assert.Null(u.PendingEmail); Assert.Null(u.PendingPasswordHash);
-                Assert.True(await db.Songs.AnyAsync(s => s.UserId == id && s.Id == demo.Demo.SongId)); // work kept
+                Assert.True(await db.Songs.AnyAsync(s => s.UserId == id && s.Id == ownSongId)); // work kept
+                // The demo is guest-only (2026-10): gone once the account is real.
+                Assert.False(await db.Songs.AnyAsync(s => s.Id == demo.Demo.SongId));
+                Assert.False(await db.Analyses.AnyAsync(a => a.JobId == demo.Demo.JobId));
                 Assert.Equal(1, await db.AuditLogs.CountAsync(a => a.Target == id.ToString() && a.Action == "guest_converted"));
             }
             Assert.Equal(expectedBonus > 0 ? 1 : 0, await BonusRowsAsync(f, id));

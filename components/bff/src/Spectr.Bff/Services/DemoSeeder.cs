@@ -5,9 +5,11 @@ using Spectr.Data.Entities;
 
 namespace Spectr.Bff.Services;
 
-// Story 12.8 (AC1) — first-run demo: a clearly-labeled sample report seeded
-// into every NEW account's library so a full report is explorable in seconds,
-// before the user's own first analysis lands.
+// Story 12.8 (AC1) — the demo: a clearly-labeled sample report so a full
+// report is explorable in seconds. GUEST-ONLY since 2026-10 (owner decision):
+// seeded through the IGuestSeeder seam by POST /api/auth/demo; registration
+// no longer seeds it, and a guest -> account conversion removes it
+// (Spectr.Data.DemoLibraryCleanup). The class itself is user-agnostic.
 //
 // Design (scouted): every library/report/audio query is strictly user-scoped,
 // so the demo is COPY-PER-USER rows. Only the audio object is shared — all
@@ -15,7 +17,7 @@ namespace Spectr.Bff.Services;
 // ride the version row, not the blob). HONESTY RULE: the name/description say
 // this is SAMPLE data — the report showcases the UI (a deliberately rough
 // mix, grade F, so there are real findings to explore); it is not an analysis
-// of the tone. Best-effort: seeding must never fail registration.
+// of the tone. Best-effort: seeding must never fail the calling request.
 //
 // D6 (2026-09-20) — track-agnostic snapshot seeding: when an operator has
 // installed a real analyzed-version export (DemoSnapshotStore), seed a full
@@ -94,7 +96,7 @@ public sealed class DemoSeeder(
         }
         catch (Exception ex)
         {
-            // Never fail registration for a demo (device-claim precedent).
+            // Never fail the calling request (guest sign-in) for a demo.
             // CRITICAL (review P2): drop any tracked-but-unsaved demo entities —
             // the scoped DbContext is shared with the rest of the Register
             // request, and a poisoned tracker would make the NEXT SaveChanges

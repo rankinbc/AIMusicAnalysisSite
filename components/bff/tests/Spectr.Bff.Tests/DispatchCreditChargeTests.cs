@@ -82,10 +82,21 @@ public sealed class DispatchCreditChargeTests(WebApplicationFactory<Program> bas
     {
         var f = Factory();
         await TestDb.RequireAsync(f);
-        // The registration-time demo job already counts as the user's "one
-        // analysis", so the very first real dispatch of an unverified
-        // grant-only account is gated (grant != paying).
+        // The user already spent their ONE unverified analysis (registration
+        // no longer seeds a demo job that used to count as it — 2026-10), so
+        // the next dispatch of an unverified grant-only account is gated
+        // (grant != paying).
         var (c, uid, vid) = await SeedAsync(f, grant: 500, verified: false);
+        using (var scope = f.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.AnalysisJobs.Add(new AnalysisJob
+            {
+                UserId = uid, VersionId = vid, Status = "complete",
+                DispatchedAt = DateTimeOffset.UtcNow, CompletedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
         var resp = await c.PostAsync($"/api/versions/{vid}/analyze", null);
         await TestContract.AssertEnvelopeAsync(resp, HttpStatusCode.Forbidden, "email_verification_required");
         Assert.Equal(500, await BalanceAsync(f, uid));

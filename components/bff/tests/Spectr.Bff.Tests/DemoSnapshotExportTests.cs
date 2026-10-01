@@ -88,7 +88,9 @@ public sealed class DemoSnapshotExportTests(WebApplicationFactory<Program> facto
         await db.SaveChangesAsync();
     }
 
-    // Registers a fresh user (triggering DemoSeeder.SeedAsync — since
+    // Registers a fresh user and seeds a demo for it explicitly
+    // (TestAuth.RegisterWithDemoAsync — registration itself no longer seeds;
+    // the demo is guest-only since 2026-10). Since
     // Demo:SnapshotKey points at a not-yet-written key in this test's own
     // directory, that seed falls back to the sine-tone report, which after
     // D3 already carries a non-null routing plan) and returns the seeded
@@ -99,7 +101,7 @@ public sealed class DemoSnapshotExportTests(WebApplicationFactory<Program> facto
     internal static async Task<(Guid VersionId, Guid AnalysisId, Guid UserId, string Email)> SeedAnalyzedAsync(
         WebApplicationFactory<Program> f, List<Guid> userIds, List<Guid> versionIds)
     {
-        var (userId, _) = await TestAuth.RegisterAsync(f.CreateClient());
+        var (userId, _) = await TestAuth.RegisterWithDemoAsync(f, f.CreateClient());
         userIds.Add(userId);
         using var scope = f.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -351,7 +353,7 @@ public sealed class DemoSnapshotExportTests(WebApplicationFactory<Program> facto
         Assert.Equal(beforeBytes, await ReadBytesAsync(f, snapshotKey)); // pointer document byte-for-byte unchanged
 
         // A NEW account still seeds correctly from the untouched live snapshot.
-        var (newUserId, _) = await TestAuth.RegisterAsync(f.CreateClient());
+        var (newUserId, _) = await TestAuth.RegisterWithDemoAsync(f, f.CreateClient());
         _userIds.Add(newUserId);
         using var scope2 = f.Services.CreateScope();
         var seeder = scope2.ServiceProvider.GetRequiredService<DemoSeeder>();
@@ -497,7 +499,7 @@ public sealed class DemoSnapshotExportTests(WebApplicationFactory<Program> facto
         TrackAssets(audioKey, imageKeys);
         Assert.Equal(3, imageKeys.Count);
 
-        var (newUserId, _) = await TestAuth.RegisterAsync(f.CreateClient());
+        var (newUserId, _) = await TestAuth.RegisterWithDemoAsync(f, f.CreateClient());
         _userIds.Add(newUserId);
         using var scope2 = f.Services.CreateScope();
         var db2 = scope2.ServiceProvider.GetRequiredService<AppDbContext>();

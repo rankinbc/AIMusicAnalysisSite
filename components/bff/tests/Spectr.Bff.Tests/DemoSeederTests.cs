@@ -12,21 +12,50 @@ using Xunit;
 
 namespace Spectr.Bff.Tests;
 
-// Story 12.8 (AC1) — first-run demo seed: a new account's library carries the
-// labeled sample report immediately; seeding is idempotent and can never fail
-// registration.
+// Story 12.8 (AC1) — the demo seed: a labeled sample report; seeding is
+// idempotent and never throws. Owner decision 2026-10: the demo is GUEST-only
+// — registration no longer seeds it (guests get it via POST /api/auth/demo).
+// These tests seed explicitly through the seeder (TestAuth.RegisterWithDemoAsync).
 public sealed class DemoSeederTests(WebApplicationFactory<Program> factory)
     : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly WebApplicationFactory<Program> _factory = factory;
 
     [SkippableFact]
-    public async Task Register_Seeds_A_Labeled_Demo_Report_With_Summary()
+    public async Task Register_Does_Not_Seed_A_Demo_Song()
     {
         await TestDb.RequireAsync(_factory);
 
         var client = _factory.CreateClient();
         var (userId, token) = await TestAuth.RegisterAsync(client);
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        try
+        {
+            var songs = await client.GetFromJsonAsync<List<SongDto>>(
+                "/api/songs/?include=versions,latest_result&include_archived=true");
+            Assert.NotNull(songs);
+            Assert.Empty(songs!); // a new account starts with an empty library
+
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            Assert.False(await db.Songs.AnyAsync(s => s.UserId == userId));
+            Assert.False(await db.Analyses.AnyAsync(a => a.UserId == userId));
+            Assert.False(await db.AnalysisJobs.AnyAsync(j => j.UserId == userId));
+        }
+        finally
+        {
+            await CleanupAsync(userId);
+        }
+    }
+
+    [SkippableFact]
+    public async Task Seeded_Demo_Is_A_Labeled_Report_With_Summary_That_Streams()
+    {
+        await TestDb.RequireAsync(_factory);
+
+        var client = _factory.CreateClient();
+        var (userId, token) = await TestAuth.RegisterWithDemoAsync(_factory, client);
         client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
@@ -72,7 +101,7 @@ public sealed class DemoSeederTests(WebApplicationFactory<Program> factory)
         await TestDb.RequireAsync(_factory);
 
         var client = _factory.CreateClient();
-        var (userId, _) = await TestAuth.RegisterAsync(client);
+        var (userId, _) = await TestAuth.RegisterWithDemoAsync(_factory, client);
         try
         {
             using var scope = _factory.Services.CreateScope();
@@ -100,7 +129,7 @@ public sealed class DemoSeederTests(WebApplicationFactory<Program> factory)
         await TestDb.RequireAsync(_factory);
 
         var client = _factory.CreateClient();
-        var (userId, _) = await TestAuth.RegisterAsync(client);
+        var (userId, _) = await TestAuth.RegisterWithDemoAsync(_factory, client);
         try
         {
             using var scope = _factory.Services.CreateScope();
@@ -135,7 +164,7 @@ public sealed class DemoSeederTests(WebApplicationFactory<Program> factory)
     }
 
     [SkippableFact]
-    public async Task Seeder_Failure_Never_Fails_Registration()
+    public async Task Seeder_Failure_Returns_Null_And_Leaves_No_Demo()
     {
         await TestDb.RequireAsync(_factory);
 
@@ -148,6 +177,12 @@ public sealed class DemoSeederTests(WebApplicationFactory<Program> factory)
         var (userId, _) = await TestAuth.RegisterAsync(client); // asserts 200 internally
         try
         {
+            using (var brokenScope = broken.Services.CreateScope())
+            {
+                // Never throws — a broken storage backend just yields no demo.
+                var result = await brokenScope.ServiceProvider.GetRequiredService<DemoSeeder>().SeedAsync(userId);
+                Assert.Null(result);
+            }
             using var scope = _factory.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             Assert.False(await db.Songs.AnyAsync(

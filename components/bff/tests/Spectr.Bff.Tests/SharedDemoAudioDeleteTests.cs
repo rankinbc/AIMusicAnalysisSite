@@ -30,7 +30,7 @@ public sealed class SharedDemoAudioDeleteTests(WebApplicationFactory<Program> fa
         await TestDb.RequireAsync(_factory);
         using var f = NewFactory();
         var client = f.CreateClient();
-        var (userId, token) = await TestAuth.RegisterAsync(client);
+        var (userId, token) = await TestAuth.RegisterWithDemoAsync(f, client);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var key = $"audio/demo/test-{Guid.NewGuid():N}/source.wav";
@@ -64,7 +64,7 @@ public sealed class SharedDemoAudioDeleteTests(WebApplicationFactory<Program> fa
         await TestDb.RequireAsync(_factory);
         using var f = NewFactory();
         var client = f.CreateClient();
-        var (userId, token) = await TestAuth.RegisterAsync(client);
+        var (userId, token) = await TestAuth.RegisterWithDemoAsync(f, client);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var key = $"audio/demo/test-{Guid.NewGuid():N}/source.wav";
@@ -101,7 +101,7 @@ public sealed class SharedDemoAudioDeleteTests(WebApplicationFactory<Program> fa
         await TestDb.RequireAsync(_factory);
         using var f = NewFactory();
         var client = f.CreateClient();
-        var (userId, token) = await TestAuth.RegisterAsync(client);
+        var (userId, token) = await TestAuth.RegisterWithDemoAsync(f, client);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var key = $"audio/upload/test-{Guid.NewGuid():N}/source.wav";

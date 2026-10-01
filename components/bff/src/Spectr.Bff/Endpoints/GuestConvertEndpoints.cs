@@ -150,6 +150,11 @@ public static class GuestConvertEndpoints
         // "stale token version" instead of riding out its 15-minute TTL.
         cache.Remove($"tver:{userId:N}");
 
+        // The demo song is for guests only (owner decision 2026-10): drop it
+        // from the now-registered library. The guest's OWN uploads, analyses
+        // and coach chats stay (same users row).
+        await GuestConversion.RemoveGuestDemoAsync(db, userId, loggerFactory);
+
         // Fix round 1 (item 3) — the UPDATE above already COMMITTED: this
         // account is real no matter what happens next. The tail below
         // (refresh-row delete, new refresh issue, cookie write) is NOT part
