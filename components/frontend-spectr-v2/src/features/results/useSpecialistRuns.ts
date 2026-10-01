@@ -6,6 +6,7 @@ import { useBuyCredits } from '../billing/BuyCreditsProvider';
 import { isOutOfCredits } from '../billing/credits';
 import type { VerdictsListResponse } from '../../api/types';
 import { SPECIALIST_CATALOG } from './helpers/specialists';
+import { hasSpecialistVerdict } from './helpers/specialist-stage';
 import {
   RUN_EXPIRY_MS,
   activeRunningSlugs,
@@ -123,7 +124,9 @@ export function useSpecialistRuns({ jobId, analysisId, hasStems }: Options): Spe
     const plan = data?.routingPlan;
     if (!plan || autoRanRef.current === analysisId) return;
     autoRanRef.current = analysisId;
-    if (data.verdicts.some((v) => v.source === 'llm_identifier')) return; // already have AI fixes
+    // Already have AI fixes. Specialist verdicts carry `specialist = <slug>`
+    // (their `source` is the 'rule_engine' column default — never key on it).
+    if (hasSpecialistVerdict(data.verdicts)) return;
     const already = settledSlugs(data.specialists);
     for (const entry of plan.specialistsToRun) {
       const meta = SPECIALIST_CATALOG.find((s) => s.slug === entry.name);
