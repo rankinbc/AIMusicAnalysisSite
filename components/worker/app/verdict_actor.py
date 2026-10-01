@@ -32,7 +32,7 @@ from aimusic_shared.verdicts.models import Verdict as VerdictModel
 from aimusic_shared.verdicts.scoring import compute_priority_score
 from aimusic_shared.verdicts.ulid_helpers import new_fix_id, new_verdict_id
 
-from . import obs
+from . import auto_notes, obs
 from .db_sync import SessionFactory
 from .llm import gateway
 from .llm.gateway import LlmBudgetExceeded, LlmError
@@ -344,6 +344,8 @@ def run_specialist(analysis_id: str, slug: str, user_id: str) -> None:
             logger.exception("persist failed for slug=%s verdict=%s", slug, v.verdict_id)
             _persist_fail_marker(aid, slug, f"DB write failed: {exc}")
             return
+
+    auto_notes.write_note(aid, auto_notes.specialist_note_text(slug, len(final_verdicts)))
 
     logger.info(
         "run_specialist done analysis=%s slug=%s wrote=%d",

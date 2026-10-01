@@ -59,6 +59,9 @@ interface FixBoardProps {
    *  operable by Enter and silent to a screen reader. Omit it (the report) and
    *  the board behaves exactly as it always has. */
   applyLocked?: boolean | undefined;
+  /** Report-only: "N specialists run" chip in the Findings header that opens
+   *  the Specialist Team modal at its "Already run" list. Omit to hide it. */
+  specialistsRun?: { count: number; onOpen: () => void } | undefined;
 }
 
 interface Row {
@@ -88,6 +91,7 @@ export function FixBoard({
   surface = 'report',
   seek,
   applyLocked,
+  specialistsRun,
 }: FixBoardProps) {
   const findingsMode = mode === 'findings';
   const findings = useMemo(
@@ -193,6 +197,7 @@ export function FixBoard({
         <div className="es-s">
           Nothing surfaced on this track. Ask the Coach if you want a second opinion.
         </div>
+        {findingsMode && specialistsRun && <SpecialistsRunChip {...specialistsRun} />}
       </div>
     );
   }
@@ -242,7 +247,10 @@ export function FixBoard({
     <div className="fixboard">
       <div className={`fb-list${findingsMode ? ' wide' : ''}`}>
         <div className="fb-lh">
-          <span className="t">{findingsMode ? 'Findings' : 'Actions'}</span>
+          <span className="fb-lt">
+            <span className="t">{findingsMode ? 'Findings' : 'Actions'}</span>
+            {findingsMode && specialistsRun && <SpecialistsRunChip {...specialistsRun} />}
+          </span>
           <div className="fb-filters">
             {!findingsMode && (
               <button type="button" className="fpill selall" onClick={onSelectAll}>
@@ -491,6 +499,24 @@ function BoardRow({
       ) : (
         <span className="fr-obs" title="Observation — no one-click fix" />
       )}
+    </button>
+  );
+}
+
+// "N specialists run" — opens the Specialist Team modal at "Already run".
+function SpecialistsRunChip({ count, onOpen }: { count: number; onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      className="fb-specrun"
+      onClick={onOpen}
+      aria-describedby="fb-specrun-tip"
+    >
+      <Icon name="robot" size={12} />
+      {count} {count === 1 ? 'specialist' : 'specialists'} run
+      <span className="fb-specrun-tip" id="fb-specrun-tip" role="tooltip">
+        Run more specialists to discover more findings
+      </span>
     </button>
   );
 }

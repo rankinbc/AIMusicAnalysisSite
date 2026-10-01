@@ -19,6 +19,8 @@ interface CoachTabProps {
   onRunSpecialist: (slug: string) => Promise<void>;
   /** Specialist Team modal visibility — lifted so the header pill can open it. */
   specialistsOpen: boolean;
+  /** Where the modal lands when opened — see SpecialistTeamModal.initialView. */
+  specialistsView?: 'roster' | 'ran';
   onSpecialistsOpenChange: (open: boolean) => void;
   measurementsCount: number;
   inputs: SongHeaderInputs;
@@ -49,6 +51,7 @@ export function CoachTab({
   ranSlugs,
   onRunSpecialist,
   specialistsOpen,
+  specialistsView = 'roster',
   onSpecialistsOpenChange,
   measurementsCount,
   inputs,
@@ -145,6 +148,7 @@ export function CoachTab({
           credits={credits}
           onRun={onRunSpecialist}
           onClose={() => onSpecialistsOpenChange(false)}
+          initialView={specialistsView}
         />
       )}
     </>

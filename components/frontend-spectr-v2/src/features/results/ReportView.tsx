@@ -1,6 +1,7 @@
 import { analyzedInputs } from './helpers/analyzed-inputs';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { ApiError } from '../../api/fetcher';
@@ -148,7 +149,21 @@ export function ReportView({
   });
   const verdictsData = specialistRuns.data;
   const [specialistsOpen, setSpecialistsOpen] = useState(false);
-  const openSpecialists = useCallback(() => setSpecialistsOpen(true), []);
+  // Where the modal lands: the roster (header pill / Coach button) or the
+  // "Already run" list (the Findings header's "N specialists run" chip).
+  const [specialistsView, setSpecialistsView] = useState<'roster' | 'ran'>('roster');
+  const openSpecialists = useCallback(() => {
+    setSpecialistsView('roster');
+    setSpecialistsOpen(true);
+  }, []);
+  const openSpecialistsRan = useCallback(() => {
+    setSpecialistsView('ran');
+    setSpecialistsOpen(true);
+  }, []);
+  const onSpecialistsOpenChange = useCallback((open: boolean) => {
+    if (open) setSpecialistsView('roster');
+    setSpecialistsOpen(open);
+  }, []);
   const verdicts = useMemo(() => verdictsData?.verdicts ?? [], [verdictsData]);
   const triageTimedOut = useTriageTimedOut(jobId, verdictsData); // P9
 
@@ -162,6 +177,22 @@ export function ReportView({
   // Notes badge — shares the query cache with NotesTab (same key).
   const { data: notesData } = useNotes(versionId ?? '');
   const noteCount = notesData?.length ?? 0;
+  // The worker auto-writes a note when Triage settles ("Analysis complete…")
+  // and when each specialist finishes. Those land a moment AFTER the verdict
+  // rows/plan this poll sees, so refetch now and once more shortly after.
+  const queryClient = useQueryClient();
+  const noteMilestones = [
+    [...specialistRuns.ranSlugs].sort().join(','),
+    verdictsData?.routingPlan != null,
+    verdictsData?.degradation != null,
+  ].join('|');
+  useEffect(() => {
+    if (!versionId) return;
+    const refetch = () => void queryClient.invalidateQueries({ queryKey: ['notes', versionId] });
+    refetch();
+    const t = window.setTimeout(refetch, 4000);
+    return () => window.clearTimeout(t);
+  }, [noteMilestones, versionId, queryClient]);
 
 
   // ── Committed ("Added to Listen") moves — lifted here so both the Coach tab
@@ -481,7 +512,8 @@ export function ReportView({
                 ranSlugs={specialistRuns.ranSlugs}
                 onRunSpecialist={specialistRuns.runSpecialist}
                 specialistsOpen={specialistsOpen}
-                onSpecialistsOpenChange={setSpecialistsOpen}
+                specialistsView={specialistsView}
+                onSpecialistsOpenChange={onSpecialistsOpenChange}
                 measurementsCount={countMeasurements(fj)}
                 inputs={inputs}
                 committed={committed}
@@ -539,6 +571,10 @@ export function ReportView({
                   checkedNoteIds={checkedNoteIds}
                   onToggleNote={toggleNote}
                   focusId={boardFocus?.mode === 'findings' ? boardFocus.id : null}
+                  specialistsRun={{
+                    count: specialistRuns.ranSlugs.size,
+                    onOpen: openSpecialistsRan,
+                  }}
                   onConsumeFocus={consumeFocus}
                   onShowFix={onShowFix}
                   onShowFinding={onShowFinding}

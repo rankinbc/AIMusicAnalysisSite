@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { VerdictDto } from '../../api/types';
 import { Icon } from './Icon';
@@ -26,6 +26,9 @@ interface SpecialistTeamModalProps {
   credits: number | null;
   onRun: (slug: string) => void;
   onClose: () => void;
+  /** 'ran' = open with "Already run" expanded and scrolled into view (the
+   *  Findings header's "N specialists run" chip). Default: the roster top. */
+  initialView?: 'roster' | 'ran';
 }
 
 const GROUP_DESC: Record<SpecialistGroup, string> = {
@@ -69,6 +72,7 @@ export function SpecialistTeamModal({
   credits,
   onRun,
   onClose,
+  initialView = 'roster',
 }: SpecialistTeamModalProps) {
   const statusOf = (slug: string, needsStems: boolean | undefined): SpecStatus => {
     if (needsStems && !hasStems) return 'locked';
@@ -107,7 +111,13 @@ export function SpecialistTeamModal({
 
   const [selSlug, setSelSlug] = useState<string | null>(suggested[0]?.slug ?? null);
   const [triageOpen, setTriageOpen] = useState(false);
-  const [ranOpen, setRanOpen] = useState(false);
+  const [ranOpen, setRanOpen] = useState(initialView === 'ran');
+  const bodyRef = useRef<HTMLDivElement>(null);
+  // Mount-only: land on the "Already run" list at the bottom of the body.
+  useEffect(() => {
+    if (initialView !== 'ran' || !bodyRef.current) return;
+    bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+  }, [initialView]);
 
   const selSpec = SPECIALIST_CATALOG.find((m) => m.slug === selSlug) ?? null;
 
@@ -166,7 +176,7 @@ export function SpecialistTeamModal({
           </button>
         </div>
 
-        <div className="modal-body">
+        <div className="modal-body" ref={bodyRef}>
           {suggested.length > 0 && (
             <>
               <button type="button" className="triage" onClick={() => setTriageOpen((o) => !o)}>

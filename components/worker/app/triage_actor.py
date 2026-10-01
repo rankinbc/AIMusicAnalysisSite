@@ -40,7 +40,7 @@ from aimusic_shared.models import Analysis
 from aimusic_shared.models import Verdict as VerdictRow
 from aimusic_shared.verdicts.models import SpecialistRoutingPlan
 
-from . import obs
+from . import auto_notes, obs
 from .db_sync import SessionFactory
 from .llm import gateway
 from .llm.gateway import LlmBudgetExceeded, LlmError
@@ -150,7 +150,7 @@ def run_triage(analysis_id: str) -> None:
             analysis_id, exc.reason,
         )
         write_degradation_notice(aid, reason=exc.reason, detail=exc.detail)
-        run_rule_engine_for_analysis(aid)
+        _note_degraded(aid, len(rule_rows))
         return
     except LlmError as exc:
         # E5.3: a bare return here left routing_plan AND degradation_notice
@@ -160,7 +160,7 @@ def run_triage(analysis_id: str) -> None:
         # DegradationNotice guard stops all future enqueues.
         logger.info("run_triage: LLM call failed for %s: %s", analysis_id, exc)
         write_degradation_notice(aid, reason="triage_failed", detail=str(exc)[:500])
-        run_rule_engine_for_analysis(aid)
+        _note_degraded(aid, len(rule_rows))
         return
 
     # ── E: parse + validate ────────────────────────────────────────────────
@@ -171,7 +171,7 @@ def run_triage(analysis_id: str) -> None:
         # E5.3: same terminal-degradation treatment as the LlmError branch.
         logger.info("run_triage: invalid plan for %s: %s", analysis_id, exc)
         write_degradation_notice(aid, reason="triage_failed", detail=str(exc)[:500])
-        run_rule_engine_for_analysis(aid)
+        _note_degraded(aid, len(rule_rows))
         return
 
     # ── F: persist (idempotent — only write if still NULL) ─────────────────
@@ -186,7 +186,21 @@ def run_triage(analysis_id: str) -> None:
         logger.exception("run_triage: persist failed for %s", analysis_id)
         return
 
+    # Only the call that persisted the plan reaches here (idempotent above),
+    # so the "analysis complete" note is written once.
+    auto_notes.write_note(aid, auto_notes.analysis_note_text(
+        len(rule_rows),
+        auto_notes.recommended_slugs(plan.specialists_to_run),
+    ))
+
     logger.info(
         "run_triage done analysis=%s specialists=%d skip=%d",
         analysis_id, len(plan.specialists_to_run), len(plan.skip),
     )
+
+
+def _note_degraded(aid: uuid.UUID, prior_rule_rows: int) -> None:
+    """Degraded Triage: rule-engine findings (idempotent — usually already
+    written by Phase C2) + the "analysis complete" note without a plan."""
+    written = run_rule_engine_for_analysis(aid)
+    auto_notes.write_note(aid, auto_notes.analysis_note_text(prior_rule_rows or written, None))
