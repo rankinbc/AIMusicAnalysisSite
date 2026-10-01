@@ -114,7 +114,8 @@ describe('register.tsx — guest conversion fallback routes off-URL (item 3)', (
     render(<RegisterPage />);
 
     fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'me@example.com' } });
-    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'password123' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } });
+    fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'password123' } });
     fireEvent.click(screen.getByRole('button', { name: /create account/i }));
 
     await waitFor(() => expect(navigateSpy).toHaveBeenCalled());
@@ -131,8 +132,9 @@ describe('register.tsx — no submit while the session is still loading (final r
     authState = { register, convertGuest: vi.fn(), login: vi.fn(), devLogin: vi.fn(), user: null, isLoading: true };
     render(<RegisterPage />);
     fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'me@example.com' } });
-    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'password123' } });
-    fireEvent.click(screen.getByRole('button'));
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } });
+    fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'password123' } });
+    fireEvent.click(screen.getByRole('button', { name: /create account/i }));
     expect(register).not.toHaveBeenCalled();
   });
 });

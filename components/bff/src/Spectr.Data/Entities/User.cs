@@ -19,8 +19,9 @@ public sealed class User
     public bool IsActive { get; set; } = true;
 
     // Story 4.3 (FR26): set when the verification link is consumed.
-    // Timestamp (not bool) for audit. Does NOT gate login or report viewing;
-    // AR26's second-analysis gate reads it in the device story (4.5).
+    // Timestamp (not bool) for audit. Since 2026-10 (verify-before-sign-in)
+    // it GATES login + refresh for permanent accounts: null = pending
+    // account, refused with 403 email_unverified. Guests are stamped at mint.
     [Column("email_verified_at")]
     public DateTimeOffset? EmailVerifiedAt { get; set; }
 
@@ -75,4 +76,17 @@ public sealed class User
 
     [Column("guest_device_id"), MaxLength(26)]
     public string? GuestDeviceId { get; set; }
+
+    // Verify-before-sign-in (2026-10): a GUEST who signs up keeps being a
+    // guest (same session, same guest fences) until the emailed link is
+    // clicked. The chosen address + password hash wait here; the verify
+    // endpoint performs the real conversion (GuestConversion) from them and
+    // clears both. Never read by login — `email` still holds the reserved
+    // guest address, so a pending conversion can't be signed into.
+    // NOT unique: the users.email unique index is the arbiter at verify time.
+    [Column("pending_email"), MaxLength(255)]
+    public string? PendingEmail { get; set; }
+
+    [Column("pending_password_hash"), MaxLength(255)]
+    public string? PendingPasswordHash { get; set; }
 }

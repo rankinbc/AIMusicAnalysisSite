@@ -79,14 +79,22 @@ public static class BillingEndpoints
         CancellationToken ct)
     {
         var o = opts.Value;
+        var creditsEnabled = await PublicCredits.ResolveAsync(
+            config, entitlements.GetFlagsAsync, loggers.CreateLogger("PublicCredits"), ct);
+        int? signupBonus = null;
+        if (creditsEnabled == true)
+        {
+            var amount = await AuthEndpoints.SignupBonusAmountAsync(entitlements, loggers, ct);
+            if (amount > 0) signupBonus = amount;
+        }
         return Results.Ok(new PlansResponse(
             ProMonthlyCents: o.ProMonthlyCents,
             ProAnnualCents: o.ProAnnualCents,
             CreditPack5Cents: o.CreditPack5Cents,
             CreditPack10Cents: o.CreditPack10Cents,
             Currency: o.Currency,
-            CreditsEnabled: await PublicCredits.ResolveAsync(
-                config, entitlements.GetFlagsAsync, loggers.CreateLogger("PublicCredits"), ct)));
+            CreditsEnabled: creditsEnabled,
+            SignupBonusCredits: signupBonus));
     }
 
     // ── POST /checkout/subscription ─────────────────────────────────────────

@@ -94,6 +94,32 @@ public static class GuestConvertEndpoints
             && string.Equals(cfg["Auth:DevAutoVerify"], "true", StringComparison.OrdinalIgnoreCase);
         var now = DateTimeOffset.UtcNow;
 
+        // Verify-before-sign-in (2026-10) — outside dev auto-verify the guest
+        // does NOT convert yet. The chosen address + password hash are parked
+        // on the guest row (users.pending_email / pending_password_hash) and
+        // the row stays a guest: same session, same guest fences, nothing
+        // loginable. Clicking the emailed link (AuthEndpoints.VerifyEmail)
+        // runs the real conversion from the parked values and signs in as the
+        // account. A second sign-up attempt simply overwrites the parked pair
+        // (and IssueAsync kills the earlier link).
+        if (!autoVerify)
+        {
+            var parked = await db.Users
+                .Where(u => u.Id == userId && u.IsGuest
+                    && u.GuestExpiresAt != null && u.GuestExpiresAt > now)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(u => u.PendingEmail, normalizedEmail)
+                    .SetProperty(u => u.PendingPasswordHash, hasher.Hash(req.Password)), ct);
+            if (parked == 0)
+                return ErrorEnvelope.Build(410, "guest_expired",
+                    "This guest session has ended — create a new account to start again.");
+
+            await AuthEndpoints.TrySendVerificationRateLimitedAsync(
+                email, authTokens, cfg, env, limiter, loggerFactory, httpCtx,
+                userId, normalizedEmail, ct);
+            return AuthEndpoints.Pending(normalizedEmail);
+        }
+
         int rows;
         try
         {

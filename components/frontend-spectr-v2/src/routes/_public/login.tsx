@@ -3,6 +3,9 @@ import { useEffect, useState, type FormEvent } from 'react';
 
 import { useAuth } from '../../auth/AuthContext';
 import { clearPendingLoginEmail, peekPendingLoginEmail } from '../../auth/pending-login-email';
+import { UnverifiedLoginNotice } from '../../features/auth/VerificationViews';
+import { useResendVerification } from '../../features/auth/useResendVerification';
+import { isEmailUnverifiedError } from '../../features/auth/verify-status';
 import { optionalString } from '../../lib/search-params';
 import f from '../../styles/forms.module.css';
 import s from './auth.module.css';
@@ -37,10 +40,15 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // Verify-before-sign-in (2026-10): the address whose sign-in was refused
+  // with 403 email_unverified (correct password, account still pending).
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
+  const resend = useResendVerification();
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
+    setUnverifiedEmail(null);
     setPending(true);
     try {
       await login(email, password);
@@ -49,7 +57,8 @@ export function LoginPage() {
       await router.invalidate();
       await navigate({ to: next ?? '/library' });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign-in failed');
+      if (isEmailUnverifiedError(err)) setUnverifiedEmail(email.trim());
+      else setError(err instanceof Error ? err.message : 'Sign-in failed');
     } finally {
       setPending(false);
     }
@@ -109,6 +118,13 @@ export function LoginPage() {
           {pending ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
+      {unverifiedEmail && (
+        <UnverifiedLoginNotice
+          email={unverifiedEmail}
+          resend={resend}
+          onResend={() => void resend.send(unverifiedEmail)}
+        />
+      )}
       {import.meta.env.DEV && (
         <button
           type="button"

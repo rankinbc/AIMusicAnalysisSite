@@ -88,9 +88,9 @@ public sealed class AuthFlowTests(WebApplicationFactory<Program> factory)
         // TOKEN drove the stamp, not the register-time convenience.
         await UnverifyAsync(f, address);
 
-        // Verify — 204, user stamped.
+        // Verify — 200 (the link signs in since verify-before-sign-in), user stamped.
         var verify = await client.PostAsJsonAsync("/api/auth/verify-email", new { token });
-        Assert.Equal(HttpStatusCode.NoContent, verify.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, verify.StatusCode);
         using (var scope = f.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -133,7 +133,7 @@ public sealed class AuthFlowTests(WebApplicationFactory<Program> factory)
 
         // And it still works for its OWN purpose (the cross attempt did not consume it).
         var verify = await client.PostAsJsonAsync("/api/auth/verify-email", new { token = verifyToken });
-        Assert.Equal(HttpStatusCode.NoContent, verify.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, verify.StatusCode);
     }
 
     [SkippableFact]

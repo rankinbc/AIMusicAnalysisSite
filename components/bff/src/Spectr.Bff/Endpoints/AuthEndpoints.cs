@@ -9,7 +9,7 @@ using System.Security.Claims;
 
 namespace Spectr.Bff.Endpoints;
 
-public static class AuthEndpoints
+public static partial class AuthEndpoints
 {
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
@@ -28,6 +28,10 @@ public static class AuthEndpoints
         // Story 4.3 — verification + reset flows.
         g.MapPost("/verify-email", VerifyEmail).AllowAnonymous();
         g.MapPost("/resend-verification", ResendVerification).RequireAuthorization();
+        // Verify-before-sign-in — anonymous resend by email from the "Check
+        // your inbox" / login screens (a guest with a pending sign-up uses it
+        // too). Always the same 202 (no enumeration).
+        g.MapPost("/verify-email/resend", ResendVerificationByEmail).AllowAnonymous();
         g.MapPost("/forgot-password", ForgotPassword).AllowAnonymous();
         g.MapPost("/reset-password", ResetPassword).AllowAnonymous();
 
@@ -193,9 +197,40 @@ public static class AuthEndpoints
         // registration must never collide with a minted guest email.
         if (GuestIdentity.IsGuestEmail(normalizedEmail))
             return ErrorEnvelope.Build(400, "invalid_email", "That email address can't be used.");
-        var existing = await db.Users.AnyAsync(u => u.Email == normalizedEmail, ct);
-        // Wave-2 (E2.4) — typed AR38 envelope so the frontend can key on the code.
-        if (existing) return ErrorEnvelope.Build(409, "email_taken", "Email already registered.");
+        var existing = await db.Users.FirstOrDefaultAsync(u => u.Email == normalizedEmail, ct);
+        if (existing is not null)
+        {
+            // Verify-before-sign-in — re-registering a still-PENDING address
+            // (never verified, active, not banned) is "I lost the email / try
+            // again", not an error: the latest password wins and a fresh link
+            // goes out (rate-limited), with the SAME 202 a brand-new address
+            // gets. Latest-password-wins (not first-wins) is the pre-hijack
+            // defence: whoever squatted an address first can't keep a
+            // password the mailbox owner then activates. A pending account
+            // can't be signed into, so the overwrite grants nothing without
+            // the mailbox.
+            if (existing.EmailVerifiedAt is null && existing.IsActive
+                && existing.BannedAt is null && !existing.IsGuest)
+            {
+                existing.HashedPassword = hasher.Hash(req.Password);
+                existing.TokenVersion++; // any pre-gate session of this row dies
+                await db.SaveChangesAsync(ct);
+                await refresh.RevokeAllForUserAsync(existing.Id, ct);
+                // Earlier links would activate the NEW password; kill them even
+                // when the resend below is rate-limited and issues nothing.
+                await authTokens.InvalidateOutstandingAsync(
+                    existing.Id, AuthTokenService.PurposeVerifyEmail, ct);
+                httpCtx.RequestServices
+                    .GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()
+                    .Remove($"tver:{existing.Id:N}");
+                await TrySendVerificationRateLimitedAsync(
+                    email, authTokens, cfg, env, limiter, loggerFactory, httpCtx,
+                    existing.Id, existing.Email, ct);
+                return Pending(existing.Email);
+            }
+            // Wave-2 (E2.4) — typed AR38 envelope so the frontend can key on the code.
+            return ErrorEnvelope.Build(409, "email_taken", "Email already registered.");
+        }
 
         var user = new User
         {
@@ -292,26 +327,76 @@ public static class AuthEndpoints
         // not leave a permanently demo-less account (no re-seed path exists).
         await demoSeeder.SeedAsync(user.Id, CancellationToken.None);
 
-        var (rawRefresh, _) = await refresh.IssueAsync(user.Id, ct);
-        resp.Cookies.Append(RefreshTokenService.CookieName, rawRefresh, refresh.CookieOptions());
-
         // Story 4.3 (AC1) — verification email, BEST-EFFORT: an email-path
         // failure (Redis down, template bug) must never fail registration;
-        // /resend-verification is the recovery.
-        try
-        {
-            await SendVerificationEmailAsync(email, authTokens, cfg, env, loggerFactory, user.Id, user.Email, IsLoopbackRequest(httpCtx), ct);
-        }
-        catch (Exception ex)
-        {
-            loggerFactory.CreateLogger("Auth").LogError(ex,
-                "Verification email failed for new user {UserId}.", user.Id);
-        }
+        // /verify-email/resend is the recovery. Counted against the same
+        // per-address resend arm, so register + resend can't be combined to
+        // flood an inbox.
+        await TrySendVerificationRateLimitedAsync(
+            email, authTokens, cfg, env, limiter, loggerFactory, httpCtx,
+            user.Id, user.Email, ct);
+
+        // Verify-before-sign-in (2026-10): a PENDING account gets no session —
+        // no access token, no refresh cookie. The emailed link activates it
+        // AND signs in (VerifyEmail). Only a row already verified at creation
+        // (Development's Auth:DevAutoVerify — local dev has no email
+        // delivery) signs in immediately, exactly as before.
+        if (user.EmailVerifiedAt is null)
+            return Pending(user.Email);
+
+        var (rawRefresh, _) = await refresh.IssueAsync(user.Id, ct);
+        resp.Cookies.Append(RefreshTokenService.CookieName, rawRefresh, refresh.CookieOptions());
 
         var access = jwt.Issue(user);
         return Results.Ok(new AuthResponse(access,
             new AuthedUser(user.Id, user.Email, user.DisplayName,
                 await ResolveTierAsync(db, user.Id, ct))));
+    }
+
+    internal static IResult Pending(string email)
+        => Results.Json(new VerificationPendingResponse(true, email),
+            statusCode: StatusCodes.Status202Accepted);
+
+    // Per-address ceiling shared by every verification email an
+    // UNAUTHENTICATED caller can trigger (register, re-register, guest
+    // sign-up, anonymous resend): 3 per 15 min + 10 per day. Over the limit
+    // the send is SKIPPED silently — the caller's response never changes (no
+    // oracle; a throttled resend must not look like a failed registration).
+    internal const int VerifyResendPer15Min = 3;
+    internal const int VerifyResendPerDay = 10;
+
+    internal static async Task<bool> VerifyResendAllowedAsync(
+        IRateLimiter limiter, HttpContext ctx, string address, CancellationToken ct)
+    {
+        var key = $"email:{address.Trim().ToLowerInvariant()}";
+        if (await RateLimitAsync(limiter, ctx, "auth_verify_resend", key,
+                VerifyResendPer15Min, TimeSpan.FromMinutes(15), ct) is not null)
+            return false;
+        return await RateLimitAsync(limiter, ctx, "auth_verify_resend_daily", key,
+            VerifyResendPerDay, TimeSpan.FromHours(24), ct) is null;
+    }
+
+    internal static async Task TrySendVerificationRateLimitedAsync(
+        IEmailSender email, AuthTokenService tokens, IConfiguration cfg,
+        IWebHostEnvironment env, IRateLimiter limiter, ILoggerFactory lf,
+        HttpContext httpCtx, Guid userId, string toEmail, CancellationToken ct)
+    {
+        try
+        {
+            if (!await VerifyResendAllowedAsync(limiter, httpCtx, toEmail, ct))
+            {
+                lf.CreateLogger("Auth").LogInformation(
+                    "Verification email for {UserId} skipped — per-address resend limit.", userId);
+                return;
+            }
+            await SendVerificationEmailAsync(email, tokens, cfg, env, lf, userId, toEmail,
+                IsLoopbackRequest(httpCtx), ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            lf.CreateLogger("Auth").LogError(ex,
+                "Verification email failed for user {UserId}.", userId);
+        }
     }
 
     // POST /api/auth/login
@@ -356,6 +441,12 @@ public static class AuthEndpoints
         if (user.BannedAt is not null)
             return ErrorEnvelope.Build(403, "account_banned",
                 "This account is suspended. Contact support.");
+        // Verify-before-sign-in (2026-10) — a pending account is refused with
+        // its own code so the client can offer "resend". Reached ONLY after
+        // the password matched, so it reveals nothing a wrong-password probe
+        // could learn (bad credentials stay the indistinguishable 401 above).
+        if (user.EmailVerifiedAt is null)
+            return EmailUnverified();
 
         var (rawRefresh, _) = await refresh.IssueAsync(user.Id, ct);
         resp.Cookies.Append(RefreshTokenService.CookieName, rawRefresh, refresh.CookieOptions());
@@ -456,6 +547,11 @@ public static class AuthEndpoints
         // key off a stable code instead of an empty body.
         if (user.IsGuest && (user.GuestExpiresAt is not { } guestExpiry || guestExpiry <= DateTimeOffset.UtcNow))
             return ErrorEnvelope.Build(401, "guest_expired", "This demo sandbox has expired.");
+        // Verify-before-sign-in (2026-10) — a permanent account that never
+        // verified can't ride a pre-gate refresh cookie past the login gate
+        // (accounts registered before verification became mandatory).
+        if (!user.IsGuest && user.EmailVerifiedAt is null)
+            return EmailUnverified();
 
         if (!resolved.GraceHit)
         {
@@ -548,66 +644,6 @@ public static class AuthEndpoints
 
     // ── Story 4.3 — verification + reset handlers ─────────────────────────────
 
-    // POST /api/auth/verify-email {token}
-    private static async Task<IResult> VerifyEmail(
-        VerifyEmailRequest req,
-        AppDbContext db,
-        AuthTokenService tokens,
-        IRateLimiter limiter,
-        HttpContext httpCtx,
-        CancellationToken ct)
-    {
-        if (await RateLimitAsync(limiter, httpCtx, "auth_verify",
-                $"ip:{ClientIp(httpCtx)}", 10, TimeSpan.FromMinutes(1), ct) is { } denied)
-            return denied;
-
-        // Transaction: consume + stamp commit together — a failure after the
-        // consume must roll the token back, never strand a burned link.
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
-        var userId = await tokens.ConsumeAsync(
-            req.Token ?? "", AuthTokenService.PurposeVerifyEmail, ct);
-        if (userId is null)
-            return ErrorEnvelope.Build(400, "invalid_token",
-                "This verification link is invalid, expired, or already used.");
-
-        // IsActive: a deactivated account must not gain a verified stamp.
-        await db.Users.Where(u => u.Id == userId && u.IsActive && u.EmailVerifiedAt == null)
-            .ExecuteUpdateAsync(s => s.SetProperty(u => u.EmailVerifiedAt, DateTimeOffset.UtcNow), ct);
-        await tx.CommitAsync(ct);
-        return Results.NoContent();
-    }
-
-    // POST /api/auth/resend-verification (auth) — no-op when already verified.
-    private static async Task<IResult> ResendVerification(
-        ClaimsPrincipal currentUser,
-        AppDbContext db,
-        AuthTokenService tokens,
-        IEmailSender email,
-        IConfiguration cfg,
-        IWebHostEnvironment env,
-        IRateLimiter limiter,
-        HttpContext httpCtx,
-        CancellationToken ct)
-    {
-        var userId = currentUser.UserId();
-        if (await RateLimitAsync(limiter, httpCtx, "auth_resend_verify",
-                $"user:{userId}", 3, TimeSpan.FromMinutes(15), ct) is { } denied)
-            return denied;
-
-        var user = await db.Users.AsNoTracking()
-            .FirstOrDefaultAsync(u => u.Id == userId, ct);
-        if (user is null) return Results.Unauthorized();
-        // Task D5 fix round 1 (I6) — a guest is stamped EmailVerifiedAt at
-        // creation, so this is normally unreachable in practice; explicit
-        // anyway so no future change to that stamp can open a send path.
-        if (user.IsGuest) return Results.NoContent();
-        if (user.EmailVerifiedAt is not null) return Results.NoContent(); // already done
-
-        var lf = httpCtx.RequestServices.GetRequiredService<ILoggerFactory>();
-        await SendVerificationEmailAsync(email, tokens, cfg, env, lf, user.Id, user.Email, IsLoopbackRequest(httpCtx), ct);
-        return Results.NoContent();
-    }
-
     // POST /api/auth/forgot-password {email} — ALWAYS 204 (no user
     // enumeration): identical response whether or not the account exists.
     private static async Task<IResult> ForgotPassword(
@@ -682,6 +718,8 @@ public static class AuthEndpoints
         PasswordHasher hasher,
         AuthTokenService tokens,
         RefreshTokenService refresh,
+        CreditLedgerService ledger,
+        EntitlementService entitlements,
         IRateLimiter limiter,
         HttpContext httpCtx,
         CancellationToken ct)
@@ -720,7 +758,15 @@ public static class AuthEndpoints
 
         user.HashedPassword = hasher.Hash(req.NewPassword);
         // Consuming an emailed reset link proves mailbox control — at least
-        // as strong as the verify link. Don't make this user re-verify.
+        // as strong as the verify link. Don't make this user re-verify. For a
+        // still-PENDING account this is its activation, so it earns the same
+        // one-time sign-up bonus the verify link grants (granted below, in
+        // this transaction; idempotency key = never twice).
+        var activating = user.EmailVerifiedAt is null;
+        var bonus = activating
+            ? await SignupBonusAmountAsync(entitlements,
+                httpCtx.RequestServices.GetRequiredService<ILoggerFactory>(), ct)
+            : 0;
         user.EmailVerifiedAt ??= DateTimeOffset.UtcNow;
         // Story 4.6 — kill outstanding ACCESS tokens too (the 4.3 gap):
         // OnTokenValidated rejects the old tver within the 60 s cache window.
@@ -733,6 +779,7 @@ public static class AuthEndpoints
         // recorded; token-versioning lands with 4.6's account deletion.
         var revoked = await refresh.RevokeAllForUserAsync(user.Id, ct);
         await tokens.InvalidateOutstandingAsync(user.Id, AuthTokenService.PurposeResetPassword, ct);
+        if (activating) await ledger.GrantSignupBonusAsync(user.Id, bonus, ct);
         await tx.CommitAsync(ct);
 
         // Same-process instant revocation: evict the token-version cache.

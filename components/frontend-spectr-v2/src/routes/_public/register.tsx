@@ -1,10 +1,14 @@
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 
+import { isVerificationPending } from '../../api/types';
 import { useAuth } from '../../auth/AuthContext';
 import { setPendingLoginEmail } from '../../auth/pending-login-email';
+import { CheckInboxView } from '../../features/auth/VerificationViews';
+import { useResendVerification } from '../../features/auth/useResendVerification';
 import { capture } from '../../lib/analytics';
+import { usePublicSignupBonus } from '../../lib/public-plans';
 import { optionalString } from '../../lib/search-params';
 import { safeNext } from './safe-next';
 import f from '../../styles/forms.module.css';
@@ -15,6 +19,10 @@ import s from './auth.module.css';
 // form upgrades the SAME account in place (AuthContext.convertGuest, POST
 // /auth/guest/convert) instead of creating a second one; anyone else still
 // registers normally.
+//
+// Verify-before-sign-in (2026-10): both paths normally answer "pending" —
+// no session; this page swaps to "Check your inbox" and the emailed link
+// signs the user in (a guest keeps their guest session meanwhile).
 export const Route = createFileRoute('/_public/register')({
   validateSearch: (search: Record<string, unknown>): { next?: string; from?: string } => ({
     ...optionalString('next')(search),
@@ -23,15 +31,28 @@ export const Route = createFileRoute('/_public/register')({
   component: RegisterPage,
 });
 
+const MISMATCH = "Passwords don't match";
+
 export function RegisterPage() {
   const { register, convertGuest, user, isLoading } = useAuth();
   const navigate = useNavigate();
   const { next } = Route.useSearch();
   const isGuest = user?.isGuest === true;
+  const signupBonus = usePublicSignupBonus();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  // The mismatch message shows only once the user has left the confirm
+  // field (or tried to submit) — never mid-typing.
+  const [confirmTouched, setConfirmTouched] = useState(false);
+  const confirmRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const resend = useResendVerification({ startCoolingDown: true });
+
+  const mismatch = confirm !== password;
+  const showMismatch = confirmTouched && mismatch;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -44,10 +65,19 @@ export function RegisterPage() {
       setError('Password must be at least 8 characters.');
       return;
     }
+    if (mismatch) {
+      setConfirmTouched(true);
+      confirmRef.current?.focus();
+      return;
+    }
     setPending(true);
     try {
       if (isGuest) {
         const res = await convertGuest(email, password);
+        if (isVerificationPending(res)) {
+          setPendingEmail(res.email);
+          return;
+        }
         // The DB conversion committed either way — only whether a session
         // came back with it differs (addendum, G-D4).
         capture('guest_converted');
@@ -61,7 +91,11 @@ export function RegisterPage() {
           return;
         }
       } else {
-        await register(email, password);
+        const res = await register(email, password);
+        if (isVerificationPending(res)) {
+          setPendingEmail(res.email);
+          return;
+        }
       }
       const target = safeNext(next) ?? '/library';
       // window.location.assign so a `/pricing` redirect reaches the public
@@ -76,6 +110,26 @@ export function RegisterPage() {
     }
   };
 
+  if (pendingEmail) {
+    const back = isGuest ? safeNext(next) : undefined;
+    return (
+      <CheckInboxView
+        email={pendingEmail}
+        isGuest={isGuest}
+        resend={resend}
+        onResend={() => void resend.send(pendingEmail)}
+        onStartOver={() => {
+          setPendingEmail(null);
+          setPassword('');
+          setConfirm('');
+          setConfirmTouched(false);
+          setError(null);
+        }}
+        backLink={back ? <a href={back}>Back to where you were</a> : undefined}
+      />
+    );
+  }
+
   return (
     <div className={s.card}>
       <div className={s.header}>
@@ -85,6 +139,11 @@ export function RegisterPage() {
             ? 'Create a free account and keep everything you have done here.'
             : 'Sign up for SPECTR.'}
         </p>
+        {signupBonus !== null && (
+          <p className={s.subtitle} data-testid="signup-bonus">
+            You&apos;re receiving {signupBonus.toLocaleString()} free credits for signing up!
+          </p>
+        )}
       </div>
       <form onSubmit={handleSubmit} className={s.form}>
         <label className={f.label}>
@@ -110,10 +169,30 @@ export function RegisterPage() {
             className={f.input}
           />
         </label>
+        <label className={f.label}>
+          Confirm password
+          <input
+            ref={confirmRef}
+            type="password"
+            required
+            autoComplete="new-password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            onBlur={() => setConfirmTouched(true)}
+            aria-invalid={showMismatch}
+            aria-describedby={showMismatch ? 'register-confirm-error' : undefined}
+            className={f.input}
+          />
+        </label>
+        {showMismatch && (
+          <p id="register-confirm-error" className={f.error} role="alert">
+            {MISMATCH}
+          </p>
+        )}
         {error && <p className={f.error}>{error}</p>}
         <button
           type="submit"
-          disabled={pending || isLoading}
+          disabled={pending || isLoading || showMismatch}
           className={`${f.button} ${f.buttonPrimary} ${s.submit}`}
         >
           {pending ? 'Creating…' : 'Create account'}
@@ -132,4 +211,3 @@ export function RegisterPage() {
     </div>
   );
 }
-

@@ -158,14 +158,15 @@ public sealed class GuestConvertTests(WebApplicationFactory<Program> factory)
         finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); f.Dispose(); }
     }
 
-    // Fix round 1 (item 1, RED case) — outside auto-verify (dev) mode, the
-    // conversion must CLEAR the guest's synthetic EmailVerifiedAt stamp
-    // (minted at demo start) exactly as register leaves a brand-new row:
-    // unverified until the owner proves the address. Before the fix,
-    // GuestConversion.TryConvertAsync preserved the stamp, so this would
-    // still read non-null and resend-verification would short-circuit.
+    // Verify-before-sign-in (2026-10) — supersedes fix round 1 (item 1)'s
+    // "convert now, verify later". Outside auto-verify (dev) mode the guest
+    // is NOT converted by this call: the sign-up is parked on the guest row
+    // (pending_email / pending_password_hash), the verification email goes
+    // to the NEW address, and the row stays a guest (session, fences and the
+    // synthetic EmailVerifiedAt stamp untouched) until the emailed link is
+    // clicked. The verify half is covered by VerifyBeforeSignInTests.
     [SkippableFact]
-    public async Task A_Converted_Guest_Must_Verify_The_New_Address_When_AutoVerify_Is_Off()
+    public async Task Outside_AutoVerify_A_Guest_Sign_Up_Is_Parked_Until_The_Email_Is_Verified()
     {
         await TestDb.RequireAsync(factory);
         var queue = new RecordingQueue();
@@ -178,29 +179,27 @@ public sealed class GuestConvertTests(WebApplicationFactory<Program> factory)
             var email = $"convert+{Guid.NewGuid():N}@spectr.test";
 
             var resp = await client.PostAsJsonAsync("/api/auth/guest/convert", Body(email));
-            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-            var auth = (await resp.Content.ReadFromJsonAsync<AuthResponse>())!;
+            Assert.Equal(HttpStatusCode.Accepted, resp.StatusCode);
+            var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.True(body.GetProperty("verificationRequired").GetBoolean());
+            Assert.Equal(email, body.GetProperty("email").GetString());
+            Assert.False(body.TryGetProperty("accessToken", out _));
 
             using (var scope = f.Services.CreateScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                 var u = await db.Users.AsNoTracking().SingleAsync(x => x.Id == demo.User.Id);
-                Assert.Null(u.EmailVerifiedAt);
+                Assert.True(u.IsGuest);
+                Assert.NotNull(u.GuestExpiresAt);
+                Assert.Equal(email, u.PendingEmail);
+                Assert.NotEqual(email, u.Email);
+                Assert.Equal(0, await db.AuditLogs.CountAsync(a => a.Target == u.Id.ToString() && a.Action == "guest_converted"));
             }
 
-            // The conversion's own best-effort verification email went out
-            // for the NEW address.
+            // The verification email went out for the NEW address.
             Assert.Contains(queue.Sent, m => m.Task == DramatiqTasks.SendEmail && (string)m.Args[0] == email);
-
-            // resend-verification must NOT short-circuit (it does when
-            // EmailVerifiedAt is non-null) — a second job is enqueued.
-            var before = queue.Sent.Count(m => m.Task == DramatiqTasks.SendEmail);
-            var fresh = f.CreateClient();
-            fresh.DefaultRequestHeaders.Authorization = new("Bearer", auth.AccessToken);
-            var resend = await fresh.PostAsync("/api/auth/resend-verification", null);
-            Assert.Equal(HttpStatusCode.NoContent, resend.StatusCode);
-            Assert.True(queue.Sent.Count(m => m.Task == DramatiqTasks.SendEmail) > before,
-                "resend-verification short-circuited — the converted guest's EmailVerifiedAt is still non-null.");
+            // The guest session is untouched.
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/me/guest")).StatusCode);
         }
         finally { await DemoAuthEndpointsTests.CleanupAsync(f, userId); f.Dispose(); }
     }

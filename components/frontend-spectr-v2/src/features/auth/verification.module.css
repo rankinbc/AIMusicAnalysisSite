@@ -1,0 +1,55 @@
+/* Verify-before-sign-in (2026-10) — the bits the shared auth card
+   (routes/_public/auth.module.css) doesn't already cover: the emphasised
+   address, the "verify first" notice on /login, and a link-styled button. */
+
+.email {
+  color: var(--text);
+  font-weight: 700;
+  word-break: break-all;
+}
+
+.body {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+  margin: 0;
+}
+
+.notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--panel-radius);
+}
+
+.noticeTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.status {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+  text-align: center;
+}
+
+.linkButton {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: 4px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--cyan);
+  cursor: pointer;
+}
+
+.linkButton:hover {
+  color: var(--accent-bright-2);
+  text-decoration: underline;
+}

@@ -40,6 +40,10 @@ export interface PlansResponse {
    *  resolved it; null/absent means "unknown", which logged-out callers
    *  must treat as hidden, not as on. */
   creditsEnabled?: boolean | null;
+  /** Verify-before-sign-in — one-time credits a new account receives when it
+   *  verifies its email (`signup_bonus_credits` flag). Present only when
+   *  credits are ON and the bonus is > 0; never hardcode the number. */
+  signupBonusCredits?: number | null;
 }
 
 /** Story 2.2 — GET /api/billing/me summary for the Billing page. */
@@ -87,7 +91,7 @@ export interface BuyCreditsRequest {
 export interface CreditLedgerEntryDto {
   id: string;
   amount: number;
-  reason: 'purchase' | 'spend' | 'reversal' | 'adjustment' | string;
+  reason: 'purchase' | 'spend' | 'reversal' | 'adjustment' | 'signup_bonus' | string;
   reference: string | null;
   createdAt: string;
 }
@@ -160,7 +164,29 @@ export interface GuestConvertFallback {
   sessionIssued: false;
   message: string;
 }
-export type GuestConvertResponse = AuthResponse | GuestConvertFallback;
+/** Verify-before-sign-in (2026-10) — 202 body of POST /auth/register and
+ *  POST /auth/guest/convert when the address still needs verifying: NO
+ *  tokens and no refresh cookie. The UI shows "Check your inbox" for
+ *  `email`. (A dev build with Auth:DevAutoVerify still gets an AuthResponse.) */
+export interface VerificationPendingResponse {
+  verificationRequired: true;
+  email: string;
+}
+export type RegisterResponse = AuthResponse | VerificationPendingResponse;
+export type GuestConvertResponse = AuthResponse | GuestConvertFallback | VerificationPendingResponse;
+
+/** POST /auth/verify-email success: the link signs the user in. `converted`
+ *  = a guest's work was just moved onto the new account. A 204 (empty body)
+ *  means verified but no session could be issued — sign in normally. */
+export interface VerifyEmailResponse extends AuthResponse {
+  converted: boolean;
+}
+
+export function isVerificationPending(
+  res: RegisterResponse | GuestConvertResponse,
+): res is VerificationPendingResponse {
+  return 'verificationRequired' in res && res.verificationRequired === true;
+}
 
 /** D9 — POST /api/auth/demo response: the seeded demo song/version/job the
  *  guest lands on. */

@@ -28,3 +28,22 @@ export function useCreditsEnabled(): boolean | null {
   }, []);
   return value;
 }
+/** The sign-up bonus a logged-out visitor may be told about: a positive
+ *  number ONLY when the server says credits are on AND a bonus is set;
+ *  null otherwise (loading, credits off, unknown, no bonus) → show nothing. */
+export function signupBonusFrom(p: PlansResponse | null): number | null {
+  if (p?.creditsEnabled !== true) return null;
+  const n = p.signupBonusCredits;
+  return typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : null;
+}
+export function usePublicSignupBonus(): number | null {
+  const [value, setValue] = useState<number | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void loadPublicPlans().then((p) => {
+      if (alive) setValue(signupBonusFrom(p));
+    });
+    return () => { alive = false; };
+  }, []);
+  return value;
+}

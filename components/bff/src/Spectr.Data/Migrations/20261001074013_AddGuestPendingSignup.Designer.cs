@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Spectr.Data;
@@ -11,9 +12,11 @@ using Spectr.Data;
 namespace Spectr.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261001074013_AddGuestPendingSignup")]
+    partial class AddGuestPendingSignup
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -520,7 +523,7 @@ namespace Spectr.Data.Migrations
                         {
                             t.HasCheckConstraint("ck_credit_ledger_amount_nonzero", "\"amount\" <> 0");
 
-                            t.HasCheckConstraint("ck_credit_ledger_reason", "\"reason\" IN ('purchase','spend','reversal','adjustment','signup_bonus')");
+                            t.HasCheckConstraint("ck_credit_ledger_reason", "\"reason\" IN ('purchase','spend','reversal','adjustment')");
                         });
                 });
 

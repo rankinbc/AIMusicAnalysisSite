@@ -19,6 +19,9 @@ namespace Spectr.Data.Entities;
 //                 analysis job id. idempotency_key = "reversal:<jobId>"
 //                 to prevent double-reversal under partial unique index.
 //   "adjustment" — operator/admin manual entry (Epic 10 admin surface).
+//   "signup_bonus" — +N once when a permanent account is activated (email
+//                 verified); N = feature flag signup_bonus_credits.
+//                 idempotency_key = "signup_bonus:<userId>".
 //
 // No `expires_at` — FR29 structural invariant.
 
@@ -36,7 +39,7 @@ public sealed class CreditLedgerEntry
     public int Amount { get; set; }
 
     // CHECK constraint enforces one of:
-    //   'purchase' | 'spend' | 'reversal' | 'adjustment'
+    //   'purchase' | 'spend' | 'reversal' | 'adjustment' | 'signup_bonus'
     [Column("reason"), MaxLength(24)]
     public required string Reason { get; set; }
 

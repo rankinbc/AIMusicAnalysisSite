@@ -58,9 +58,9 @@ public static class EmailTemplates
                 "Verify your SPECTR email",
                 Shell("Verify your email",
                     $"""
-                    <p>One click and your account is provably yours.</p>
-                    <p style="margin:28px 0;"><a href="{U("verifyUrl")}" style="{ButtonCss}">VERIFY EMAIL</a></p>
-                    <p style="{MutedCss}">Link expires in {D("expiresHours")} hours. If you didn't create a SPECTR account, ignore this.</p>
+                    <p>One click confirms this address and signs you in to SPECTR.</p>
+                    <p style="margin:28px 0;"><a href="{U("verifyUrl")}" style="{ButtonCss}">VERIFY &amp; SIGN IN</a></p>
+                    <p style="{MutedCss}">The link works once and expires in {D("expiresHours")} hours. If you didn't create a SPECTR account, ignore this — nothing happens until the link is clicked.</p>
                     """)),
             Reset => (
                 "Reset your SPECTR password",

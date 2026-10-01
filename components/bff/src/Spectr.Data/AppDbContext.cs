@@ -210,7 +210,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         // CHECK constraints: enum-as-string for reason; amount nonzero.
         builder.Entity<CreditLedgerEntry>().ToTable(t => t.HasCheckConstraint(
             "ck_credit_ledger_reason",
-            "\"reason\" IN ('purchase','spend','reversal','adjustment')"));
+            "\"reason\" IN ('purchase','spend','reversal','adjustment','signup_bonus')"));
         builder.Entity<CreditLedgerEntry>().ToTable(t => t.HasCheckConstraint(
             "ck_credit_ledger_amount_nonzero", "\"amount\" <> 0"));
         // Hot path: balance = SUM(amount) WHERE user_id = ?; ledger

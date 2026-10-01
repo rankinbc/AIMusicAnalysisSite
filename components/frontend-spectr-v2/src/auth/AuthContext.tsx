@@ -23,11 +23,14 @@ import {
 } from '../api/fetcher';
 import { resetVerifyResendState } from '../components/verify-email';
 import { identifyUser } from '../lib/analytics';
-import type {
-  AuthResponse,
-  AuthedUser,
-  DemoStartResponse,
-  GuestConvertResponse,
+import {
+  isVerificationPending,
+  type AuthResponse,
+  type AuthedUser,
+  type DemoStartResponse,
+  type GuestConvertResponse,
+  type RegisterResponse,
+  type VerifyEmailResponse,
 } from '../api/types';
 
 interface AuthState {
@@ -40,7 +43,14 @@ interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<void>;
   /** Development-only one-click sign-in (no password). Defaults to the dev account. */
   devLogin: (email?: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  /** Verify-before-sign-in: resolves the server body. A pending account
+   *  (`verificationRequired`) is NOT signed in — the caller shows "Check
+   *  your inbox". Only an AuthResponse (dev auto-verify) applies a session. */
+  register: (email: string, password: string) => Promise<RegisterResponse>;
+  /** POST /auth/verify-email — the emailed link activates the account AND
+   *  signs in. Resolves null when verified but no session came back (204):
+   *  the caller sends the user to sign in. */
+  verifyEmail: (token: string) => Promise<VerifyEmailResponse | null>;
   /** G2/G5 — a guest upgrades the SAME account in place (POST
    *  /auth/guest/convert). Sits next to `register`; `register.tsx` calls
    *  this instead of `register` when `user?.isGuest`. Two response shapes —
@@ -191,14 +201,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const register = useCallback(
-    async (email: string, password: string) => {
+    async (email: string, password: string): Promise<RegisterResponse> => {
       bumpSessionGeneration();
-      const auth = await fetcher<AuthResponse>({
+      const res = await fetcher<RegisterResponse>({
         url: '/auth/register',
         method: 'POST',
         data: { email, password },
       });
-      applyAuth(auth);
+      // Pending account: no tokens came back and none must be applied — the
+      // visitor stays exactly as signed-out as they were.
+      if (!isVerificationPending(res)) applyAuth(res);
+      return res;
+    },
+    [applyAuth],
+  );
+
+  const verifyEmail = useCallback(
+    async (token: string): Promise<VerifyEmailResponse | null> => {
+      // Supersede any in-flight refresh (a pending guest's boot refresh, a
+      // different account's cookie) before installing the verified session.
+      bumpSessionGeneration();
+      const res = await fetcher<VerifyEmailResponse | undefined>({
+        url: '/auth/verify-email',
+        method: 'POST',
+        data: { token },
+      });
+      if (!res) return null;
+      applyAuth({ accessToken: res.accessToken, user: res.user });
+      return res;
     },
     [applyAuth],
   );
@@ -216,6 +246,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         method: 'POST',
         data: { email, password },
       });
+      // Verify-before-sign-in: the sign-up is parked until the emailed link
+      // is clicked. The guest session is untouched and stays in use.
+      if (isVerificationPending(res)) return res;
       if ('sessionIssued' in res) {
         // The DB write already committed — the account IS real now — but no
         // session came back. The guest's in-memory token is dead either way
@@ -294,13 +327,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       devLogin,
       register,
+      verifyEmail,
       convertGuest,
       logout,
       refresh,
       updateUser,
       startDemo,
     }),
-    [state, login, devLogin, register, convertGuest, logout, refresh, updateUser, startDemo],
+    [state, login, devLogin, register, verifyEmail, convertGuest, logout, refresh, updateUser, startDemo],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

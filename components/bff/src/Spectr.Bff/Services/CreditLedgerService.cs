@@ -203,6 +203,36 @@ public sealed class CreditLedgerService(
         }
     }
 
+    // Sign-up bonus (owner decision 2026-10) — +N once per user when a
+    // permanent account is ACTIVATED (email verified). Idempotency is the
+    // ledger's partial unique index on idempotency_key ("signup_bonus:<id>"),
+    // expressed as ON CONFLICT DO NOTHING rather than catch-on-violation:
+    // this runs INSIDE the verify transaction, and a raised unique violation
+    // would abort that whole Postgres transaction (activation included).
+    // Returns true only when THIS call inserted the row.
+    public const string ReasonSignupBonus = "signup_bonus";
+    public const string SignupBonusFlag = "signup_bonus_credits";
+
+    public static string SignupBonusKey(Guid userId) => $"signup_bonus:{userId:N}";
+
+    public async Task<bool> GrantSignupBonusAsync(Guid userId, int amount, CancellationToken ct)
+    {
+        if (amount <= 0) return false;
+        var key = SignupBonusKey(userId);
+        var rows = await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO credit_ledger (id, user_id, amount, reason, reference, idempotency_key, created_at)
+            VALUES ({Guid.NewGuid()}, {userId}, {amount}, {ReasonSignupBonus}, {ReasonSignupBonus}, {key}, now())
+            ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+            """, ct);
+        if (rows == 1)
+        {
+            logger.LogInformation(
+                "Sign-up bonus recorded: user={UserId}, amount=+{Amount}", userId, amount);
+            cache.Remove($"ent:{userId:N}");
+        }
+        return rows == 1;
+    }
+
     private static bool IsUniqueViolation(DbUpdateException ex)
         => ex.InnerException is PostgresException pg && pg.SqlState == "23505";
 

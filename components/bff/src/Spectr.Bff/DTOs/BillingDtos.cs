@@ -26,7 +26,12 @@ public sealed record PlansResponse(
     // Task P2 (public-surfaces-polish D6) — true/false only when the
     // server actually resolved it; null means "unknown" (a failed flag
     // read), which logged-out callers must treat as hidden, not as off.
-    bool? CreditsEnabled = null);
+    bool? CreditsEnabled = null,
+    // Verify-before-sign-in (2026-10) — the one-time credits a new account
+    // receives on email verification (`signup_bonus_credits` flag). Set ONLY
+    // when CreditsEnabled is true and the bonus is > 0; null otherwise, so
+    // the register page never advertises credits while they're switched off.
+    int? SignupBonusCredits = null);
 
 // ── Story 2.2 — manage-subscription self-service wire shapes ──────────
 

@@ -32,6 +32,10 @@ internal static class GuestConversion
                 .SetProperty(u => u.IsGuest, false)
                 .SetProperty(u => u.GuestExpiresAt, (DateTimeOffset?)null)
                 .SetProperty(u => u.GuestDeviceId, (string?)null)
+                // Verify-before-sign-in — the pending sign-up (if any) is
+                // now the real one; never leave a stale copy behind.
+                .SetProperty(u => u.PendingEmail, (string?)null)
+                .SetProperty(u => u.PendingPasswordHash, (string?)null)
                 .SetProperty(u => u.TokenVersion, u => u.TokenVersion + 1)
                 // Fix round 1 (item 1) — a guest is stamped EmailVerifiedAt
                 // at mint (DemoAuthEndpoints ~142) for an address nobody

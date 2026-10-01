@@ -6,29 +6,73 @@ import type { FormEvent, ReactNode } from 'react';
 import f from '../../styles/forms.module.css';
 import s from '../../routes/_public/auth.module.css';
 
-export type VerifyStatus = 'verifying' | 'success' | 'error' | 'missing';
+// Verify-before-sign-in (2026-10): the link activates the account AND signs
+// in, so 'success' is a brief "signing you in" before the redirect. 'signin'
+// = verified but no session came back (sign in normally). The failure states
+// carry the server's distinct codes.
+export type VerifyStatus =
+  | 'verifying'
+  | 'success'
+  | 'signin'
+  | 'error'
+  | 'missing'
+  | 'guest_expired'
+  | 'email_taken'
+  | 'banned';
 
-export function VerifyEmailView(props: { status: VerifyStatus; loginLink: ReactNode }) {
-  const { status, loginLink } = props;
+export function VerifyEmailView(props: {
+  status: VerifyStatus;
+  loginLink: ReactNode;
+  registerLink?: ReactNode;
+  /** Rendered for 'error' / 'missing': a resend-by-email form. */
+  resendForm?: ReactNode;
+}) {
+  const { status, loginLink, registerLink, resendForm } = props;
+  const showResend = status === 'error' || status === 'missing';
   return (
     <div className={s.card} data-status={status}>
       <div className={s.header}>
         <h1 className={s.title}>Email verification</h1>
         {status === 'verifying' && <p className={s.subtitle}>Checking your link…</p>}
         {status === 'success' && (
-          <p className={s.subtitle}>Verified. Your account is provably yours.</p>
+          <p className={s.subtitle}>Verified — signing you in…</p>
+        )}
+        {status === 'signin' && (
+          <p className={s.subtitle}>Verified. Sign in with your email and password to continue.</p>
         )}
         {status === 'error' && (
           <p className={s.subtitle}>
-            This link is invalid, expired, or already used — sign in and
-            request a fresh one.
+            This link is invalid, expired, or already used. Enter your email and we&apos;ll
+            send a fresh one.
           </p>
         )}
         {status === 'missing' && (
-          <p className={s.subtitle}>No verification token in this link.</p>
+          <p className={s.subtitle}>
+            No verification token in this link. Enter your email to get a new one.
+          </p>
+        )}
+        {status === 'guest_expired' && (
+          <p className={s.subtitle}>
+            Your guest session ended before the email was verified — create an account to
+            start again.
+          </p>
+        )}
+        {status === 'email_taken' && (
+          <p className={s.subtitle}>
+            That email is already registered to another account — sign in to it instead.
+          </p>
+        )}
+        {status === 'banned' && (
+          <p className={s.subtitle}>This account is suspended. Contact support.</p>
         )}
       </div>
-      {status !== 'verifying' && <p className={s.footerLink}>{loginLink}</p>}
+      {showResend && resendForm}
+      {status === 'guest_expired' && registerLink && (
+        <p className={s.footerLink}>{registerLink}</p>
+      )}
+      {status !== 'verifying' && status !== 'success' && status !== 'guest_expired' && (
+        <p className={s.footerLink}>{loginLink}</p>
+      )}
     </div>
   );
 }

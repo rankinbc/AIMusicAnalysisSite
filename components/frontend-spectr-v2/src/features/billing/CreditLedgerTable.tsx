@@ -14,6 +14,7 @@ const REASON_LABELS: Record<string, string> = {
   spend: 'Spend',
   reversal: 'Reversal',
   adjustment: 'Adjustment',
+  signup_bonus: 'Sign-up bonus',
 };
 
 function formatDate(iso: string): string {

@@ -29,6 +29,20 @@ public sealed record GuestConversionFallback(bool SessionIssued, string Message)
 // is treated as "clear it".
 public sealed record PatchMeRequest(string? DisplayName);
 
+// Verify-before-sign-in (2026-10) — 202 body of POST /auth/register and POST
+// /auth/guest/convert when the account still needs its email verified: NO
+// tokens, no refresh cookie. The frontend shows "Check your inbox" for
+// `Email`. Identical for a brand-new address and a re-registration of a
+// still-unverified one (no oracle between the two).
+public sealed record VerificationPendingResponse(bool VerificationRequired, string Email);
+
+// POST /auth/verify-email/resend (anonymous) — always the same 202.
+public sealed record ResendVerificationRequest(string? Email);
+
+// POST /auth/verify-email success: a normal signed-in session (refresh cookie
+// set alongside) + whether a guest's work was just converted onto the account.
+public sealed record VerifyEmailResponse(string AccessToken, AuthedUser User, bool Converted);
+
 // Story 4.3 — verification + reset flows (tokens are the emailed raw values).
 public sealed record VerifyEmailRequest(string? Token);
 public sealed record ForgotPasswordRequest(string? Email);
