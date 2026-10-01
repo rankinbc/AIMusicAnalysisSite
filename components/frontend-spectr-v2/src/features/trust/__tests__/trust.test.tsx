@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
+import { HowItWorksPage } from '../../how-it-works/HowItWorksPage';
 import { LandingPage } from '../../landing/LandingPage';
 import { PricingPlansView } from '../../pricing/PricingPlansView';
 import { NoTrainingPage, PLEDGE_VERSION } from '../pages/NoTrainingPage';
@@ -65,6 +66,13 @@ describe('trust pages (story 6.2 AC1/3/4)', () => {
       expect(html).toContain('Analyze free'); // PublicChrome CTA (anon variant)
       for (const href of others) expect(html).toContain(`href="${href}"`);
     }
+  });
+
+  it('keeps the pledge pages on the standard column (the wide layout is opt-in)', () => {
+    for (const Page of [NoTrainingPage, ResultsForeverPage, PrivacyDefaultsPage]) {
+      expect(renderToStaticMarkup(<Page />)).not.toContain('data-wide');
+    }
+    expect(renderToStaticMarkup(<HowItWorksPage />)).toContain('data-wide="true"');
   });
 });
 

@@ -155,9 +155,16 @@ describe('HowItWorksPage (/trust/how-its-built)', () => {
     expect(buildExamples([])).toEqual([]);
   });
 
+  it('never names the demo song or its artist', () => {
+    const { container } = render(<HowItWorksPage />);
+    for (const text of [html, container.textContent ?? '']) {
+      expect(text).not.toMatch(/Magnetic Fields|Artifact303/i);
+    }
+  });
+
   it('credits the demo track', () => {
     expect(html).toContain(
-      'Examples from SPECTR’s analysis of the demo track “Magnetic Fields” by Artifact303 (1:14 excerpt), used only as a demo.',
+      'Examples from SPECTR’s analysis of the demo track (1:14 excerpt), used only as a demo.',
     );
   });
 
@@ -194,9 +201,23 @@ describe('HowItWorksPage (/trust/how-its-built)', () => {
     });
 
     it('is a replica of the real panel: header, modes, role labels, composer, meta line', () => {
-      for (const t of ['Ask the Coach', 'Concise', 'Normal', 'Teach', 'I know everything about this song.', 'Coach Mix', 'Specialists', '>You<', '>Coach<', 'Ask the coach about this mix…', 'grounded']) {
+      for (const t of ['Coach Chat', 'Concise', 'Normal', 'Teach', 'Knows your track and can answer questions and provide guidance', 'Coach Mix', 'Specialists', '>You<', '>Coach<', 'Ask the coach about this mix…', 'grounded']) {
         expect(section).toContain(t);
       }
+    });
+
+    it('headers the panel "Coach Chat" with the small Coach avatar right beside the title', () => {
+      expect(section).not.toContain('Ask the Coach');
+      expect(section).not.toContain('I know everything about this song.');
+      const { container } = render(<HowItWorksPage />);
+      const panel = container.querySelector('[data-testid="coach-showcase"]')!;
+      const title = [...panel.querySelectorAll('span')].find((el) => el.textContent === 'Coach Chat')!;
+      expect(title).toBeTruthy();
+      const avatar = title.previousElementSibling!;
+      expect(avatar.getAttribute('aria-hidden')).toBe('true');
+      const svg = avatar.querySelector('svg')!;
+      expect(svg).toBeTruthy();
+      expect(Number(svg.getAttribute('width'))).toBeLessThanOrEqual(24);
     });
 
     it('links to the demo and offers no textbox that accepts input', () => {

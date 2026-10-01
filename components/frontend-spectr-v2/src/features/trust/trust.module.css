@@ -7,6 +7,18 @@
   gap: 28px;
 }
 
+/* Opt-in (TrustPage `wide`): 1100px of content, the width the how-it-works
+   pipeline diagram was drawn for. Long paragraphs keep a readable measure but
+   stay flush with the column's left edge. */
+.shellWide {
+  max-width: 1148px;
+}
+
+.shellWide .prose > p,
+.shellWide .prose > section > p {
+  max-width: 75ch;
+}
+
 .header {
   display: flex;
   flex-direction: column;

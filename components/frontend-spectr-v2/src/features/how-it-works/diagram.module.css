@@ -184,11 +184,10 @@
   gap: 14px;
 }
 
-/* The hero pipeline breaks out of the 720px prose column on wide screens —
-   a centred flex item wider than its column overflows evenly both sides. */
+/* The page itself is wide now (TrustPage `wide`), so the hero pipeline simply
+   fills the column — no breakout. */
 .wide {
-  align-self: center;
-  width: min(1100px, calc(100vw - 48px));
+  width: 100%;
 }
 
 .caption {
@@ -248,9 +247,6 @@
   }
   .layoutNarrow {
     display: block;
-  }
-  .wide {
-    width: 100%;
   }
 }
 

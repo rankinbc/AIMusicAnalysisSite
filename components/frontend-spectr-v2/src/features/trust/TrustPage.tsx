@@ -32,15 +32,18 @@ interface TrustPageProps {
   // the way the pledge pages do, so the "Last updated" line only renders
   // when a caller supplies one.
   updated?: string;
+  // Opt-in wide column (the how-it-works page): text spans the same width as
+  // its full-width diagram instead of the 720px pledge-page column.
+  wide?: boolean;
   children: ReactNode;
 }
 
-export function TrustPage({ path, eyebrow, title, metaDescription, updated, children }: TrustPageProps) {
+export function TrustPage({ path, eyebrow, title, metaDescription, updated, wide = false, children }: TrustPageProps) {
   usePageMeta(`${title} — SPECTR`, metaDescription, { path });
   return (
     <div>
       <PublicChrome />
-      <main className={s.shell}>
+      <main className={wide ? `${s.shell} ${s.shellWide}` : s.shell} data-wide={wide ? 'true' : undefined}>
         <header className={s.header}>
           <span className="label">{eyebrow ?? 'Trust'}</span>
           <h1 className={s.title}>{title}</h1>

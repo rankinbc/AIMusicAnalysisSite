@@ -131,8 +131,7 @@ export function ExampleFindings() {
         ))}
       </div>
       <p className={`mono ${s.credit}`}>
-        Examples from SPECTR&rsquo;s analysis of the demo track &ldquo;Magnetic Fields&rdquo; by Artifact303
-        (1:14 excerpt), used only as a demo.
+        Examples from SPECTR&rsquo;s analysis of the demo track (1:14 excerpt), used only as a demo.
       </p>
     </div>
   );

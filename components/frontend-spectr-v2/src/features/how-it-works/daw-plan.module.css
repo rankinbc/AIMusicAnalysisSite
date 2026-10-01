@@ -1,0 +1,198 @@
+/* "Take it back to your DAW" — the final device chain + DAW Plan excerpt. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.figure,
+.excerpt {
+  margin: 4px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.caption {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.caption :global(.label) {
+  color: var(--green);
+}
+
+/* ── the chain: a signal-flow row of device cards ─────────────────────── */
+.chain {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(300px, 1.5fr) repeat(2, minmax(220px, 1fr));
+  gap: 30px;
+  align-items: start;
+}
+
+.device {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-2);
+  border-top: 2px solid var(--green);
+  background:
+    radial-gradient(120% 80% at 0% 0%, rgba(52, 211, 153, 0.1), transparent 60%),
+    var(--card);
+}
+
+/* Signal-flow arrow in the gap before every card but the first. */
+.device + .device::before {
+  content: '→';
+  position: absolute;
+  left: -23px;
+  top: 14px;
+  font-size: 16px;
+  color: var(--green);
+}
+
+.devHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+
+.devNo {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--green);
+  border: 1px solid var(--green);
+}
+
+.devName {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.devModule {
+  margin-left: auto;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.eqWrap {
+  min-width: 0;
+}
+
+.params {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.param {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 76px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--card-2);
+}
+
+.param dt {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.param dd {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.device .why {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+/* ── the move the Coach Mix weighed and dropped ───────────────────────── */
+.dropped {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.droppedTag {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.droppedName {
+  font-weight: 700;
+  color: var(--text-2);
+  text-decoration: line-through;
+  text-decoration-color: var(--muted);
+}
+
+.droppedText {
+  flex: 1 1 320px;
+  color: var(--text-2);
+}
+
+/* ── DAW Plan excerpt ─────────────────────────────────────────────────── */
+.pre {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-2);
+  background: var(--card-2);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 959px) {
+  .chain {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 26px;
+  }
+
+  .device + .device::before {
+    content: '↓';
+    left: 50%;
+    top: -22px;
+    transform: translateX(-50%);
+  }
+}

@@ -97,13 +97,13 @@ export function CoachShowcase() {
 
       <figure className={s.panel} ref={ref} aria-label="Example coach chat from the demo track">
         <div className={s.head}>
-          <span className={s.avatar} aria-hidden="true">
-            <Coach size={30} thinking={typing !== null} />
-          </span>
           <div className={s.headBody}>
             <div className={s.headKey}>
               <span className={s.led} aria-hidden="true" />
-              <span className={s.headLab}>Ask the Coach</span>
+              <span className={s.avatar} aria-hidden="true">
+                <Coach size={22} thinking={typing !== null} glow={false} />
+              </span>
+              <span className={s.headLab}>Coach Chat</span>
               <span className={s.modes}>
                 {MODES.map((m) => (
                   <span key={m} className={s.mode} data-on={m === 'Normal' ? 'true' : undefined}>
@@ -112,7 +112,7 @@ export function CoachShowcase() {
                 ))}
               </span>
             </div>
-            <div className={s.headSub}>I know everything about this song.</div>
+            <div className={s.headSub}>Knows your track and can answer questions and provide guidance</div>
           </div>
           <div className={s.actions} aria-hidden="true">
             <span className={s.mixBtn}>Coach Mix</span>

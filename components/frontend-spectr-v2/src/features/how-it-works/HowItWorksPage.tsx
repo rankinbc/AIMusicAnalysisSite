@@ -10,6 +10,7 @@ import { useEffect } from 'react';
 import { capture } from '../../lib/analytics';
 import { TrustPage } from '../trust/TrustPage';
 import { CoachShowcase } from './CoachShowcase';
+import { DawPlanSection } from './DawPlanSection';
 import { ExampleFindings } from './ExampleFindings';
 import { DIFFERENTIATORS, KIND_LABEL, STAGES } from './pipeline';
 import { PipelineDiagram } from './PipelineDiagram';
@@ -30,6 +31,7 @@ export function HowItWorksPage() {
     <TrustPage
       path="/trust/how-its-built"
       eyebrow="How it works"
+      wide
       title="How SPECTR works"
       metaDescription="From upload to a mix plan: SPECTR measures your track, flags problems with genre-relative rules and AI specialists, checks every finding against the measurements, and lets you hear the fixes in your browser."
     >
@@ -96,6 +98,8 @@ export function HowItWorksPage() {
         ))}
       </div>
 
+      <DawPlanSection />
+
       <div className={`card ${s.cta}`}>
         <h2 className={s.ctaTitle}>See it for yourself</h2>
         <p className={s.ctaText}>
@@ -114,9 +118,6 @@ export function HowItWorksPage() {
             Analyze your track free
           </a>
         </div>
-        <p className={`mono ${s.credit}`}>
-          Demo track: &ldquo;Magnetic Fields&rdquo; by Artifact303, used with permission.
-        </p>
       </div>
     </TrustPage>
   );

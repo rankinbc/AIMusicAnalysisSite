@@ -229,11 +229,6 @@
   border-color: var(--violet);
 }
 
-.credit {
-  font-size: 10.5px;
-  color: var(--muted);
-}
-
 @media (max-width: 520px) {
   .ctaBtns {
     width: 100%;
