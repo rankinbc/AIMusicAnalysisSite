@@ -1,0 +1,15 @@
+{
+  "id": "evt_test_invoice_paid_manual_001",
+  "object": "event",
+  "type": "invoice.paid",
+  "data": {
+    "object": {
+      "id": "in_test_manual_001",
+      "object": "invoice",
+      "customer": "cus_test_onetime_001",
+      "billing_reason": "manual",
+      "subscription": null,
+      "parent": null
+    }
+  }
+}

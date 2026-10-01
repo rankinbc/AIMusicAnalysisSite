@@ -463,6 +463,62 @@ public sealed class StripeWebhookEndpointTests(WebApplicationFactory<Program> fa
         }
     }
 
+    // Managed Payments: a one-time credit-pack Checkout (mode=payment) also
+    // emits invoice.paid with billing_reason=manual and no subscription link.
+    // It must be ACKed (200 + processed), not thrown into the 5xx retry loop.
+    [SkippableFact]
+    public async Task Webhook_Invoice_Paid_For_OneTime_Purchase_Returns_200_And_Marks_Processed()
+    {
+        await TestDb.RequireAsync(_factory);
+
+        var factory = BuildConfigured();
+        var client = factory.CreateClient();
+        const string eventId = "evt_test_invoice_paid_manual_001";
+        try
+        {
+            var body = StripeTestUtilities.ReadFixture("invoice_paid_manual.json");
+            var resp = await PostWebhookAsync(client, body,
+                StripeTestUtilities.ComputeSignatureHeader(body, StripeTestUtilities.TestWebhookSecret));
+            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var row = await db.WebhookEvents.FirstAsync(w => w.Id == eventId);
+            Assert.NotNull(row.ProcessedAt);
+        }
+        finally
+        {
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.WebhookEvents.Where(w => w.Id == eventId).ExecuteDeleteAsync();
+        }
+    }
+
+    // A genuine subscription invoice whose mirror row is missing keeps the
+    // deliberate 5xx so Stripe redelivers after the mirror lands.
+    [SkippableFact]
+    public async Task Webhook_Invoice_Paid_For_Subscription_Without_Mirror_Returns_5xx()
+    {
+        await TestDb.RequireAsync(_factory);
+
+        var factory = BuildConfigured();
+        var client = factory.CreateClient();
+        const string eventId = "evt_test_invoice_paid_nomirror_001";
+        try
+        {
+            var body = StripeTestUtilities.ReadFixture("invoice_paid_subscription_no_mirror.json");
+            var resp = await PostWebhookAsync(client, body,
+                StripeTestUtilities.ComputeSignatureHeader(body, StripeTestUtilities.TestWebhookSecret));
+            Assert.True((int)resp.StatusCode >= 500, $"expected 5xx, got {(int)resp.StatusCode}");
+        }
+        finally
+        {
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.WebhookEvents.Where(w => w.Id == eventId).ExecuteDeleteAsync();
+        }
+    }
+
     // ── Story 2.10 AC2 — duplicate event id must be a no-op ───────────────
     // This is a focused AC2 proof-test. Webhook_Replay_Of_Same_Event_Is_Idempotent
     // also covers this path but includes response-body assertions; this test

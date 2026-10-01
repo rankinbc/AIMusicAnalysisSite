@@ -1,0 +1,17 @@
+{
+  "id": "evt_test_invoice_paid_nomirror_001",
+  "object": "event",
+  "type": "invoice.paid",
+  "data": {
+    "object": {
+      "id": "in_test_nomirror_001",
+      "object": "invoice",
+      "customer": "cus_test_nomirror_001",
+      "billing_reason": "subscription_create",
+      "parent": {
+        "type": "subscription_details",
+        "subscription_details": { "subscription": "sub_test_nomirror_001" }
+      }
+    }
+  }
+}

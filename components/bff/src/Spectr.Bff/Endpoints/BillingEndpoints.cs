@@ -1107,6 +1107,27 @@ public static class BillingEndpoints
                 if (string.IsNullOrEmpty(invoice.CustomerId))
                     return;
 
+                // Managed Payments also emits invoice.paid for one-time
+                // credit-pack Checkouts (billing_reason=manual, no
+                // subscription link). There is no mirror row to wait for, so
+                // the throw below would 500 forever and Stripe would retry for
+                // 3 days (and can disable the live endpoint). ACK it. Only
+                // skip when we POSITIVELY know it is not a subscription
+                // invoice — a missing billing_reason stays on the retry path.
+                // API 2025+: the subscription link lives on Parent, not on
+                // the removed Invoice.Subscription.
+                var isSubscriptionInvoice =
+                    !string.IsNullOrEmpty(invoice.Parent?.SubscriptionDetails?.SubscriptionId)
+                    || invoice.BillingReason is null
+                    || invoice.BillingReason.StartsWith("subscription", StringComparison.Ordinal);
+                if (!isSubscriptionInvoice)
+                {
+                    logger.LogInformation(
+                        "Ignoring non-subscription {Type} (event {Id}, billing_reason {Reason}).",
+                        stripeEvent.Type, stripeEvent.Id, invoice.BillingReason);
+                    return;
+                }
+
                 var sub = await db.Subscriptions
                     .FirstOrDefaultAsync(s => s.StripeCustomerId == invoice.CustomerId, ct);
                 if (sub is null)
