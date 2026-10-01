@@ -9,6 +9,7 @@ import { PublicChrome } from '../../components/PublicChrome';
 import { PublicFooter } from '../../components/PublicFooter';
 import { Pill } from '../../ui/Pill';
 import { formatCents } from '../billing/format-price';
+import { CreditCostsSection } from './CreditCostsSection';
 import s from './pricing.module.css';
 
 export function PricingPlansView({
@@ -122,6 +123,9 @@ export function PricingPlansView({
           <p className={`mono ${s.buttonTerms}`}>One-time purchase · credits never expire</p>
         </article>
       </section>
+
+      {/* Owner ask: "show how many credits everything costs" — server values only. */}
+      {plans && <CreditCostsSection plans={plans} />}
 
       {/* Task P3 — billing-specific fineprint stays here; the trust-link
           paragraph that used to live below it is now the shared footer. */}

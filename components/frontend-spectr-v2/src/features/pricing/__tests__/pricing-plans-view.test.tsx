@@ -32,7 +32,7 @@ describe('PricingPlansView (credit economy)', () => {
 
   it('credits card lists every pack and links to /usage, not disabled', () => {
     view();
-    for (const c of ['11', '22', '33']) expect(screen.getByText(new RegExp(`^${c} credits`))).toBeTruthy();
+    for (const c of ['11', '22', '33']) expect(screen.getAllByText(new RegExp(`^${c} credits`)).length).toBeGreaterThan(0);
     const cta = screen.getByTestId('pricing-credits-cta');
     expect(cta.getAttribute('href')).toBe('/usage');
     expect(cta.hasAttribute('disabled')).toBe(false);
