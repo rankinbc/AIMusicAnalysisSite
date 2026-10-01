@@ -10,9 +10,11 @@ import { toast } from 'sonner';
 import { parseErrorBody } from '../../api/error-utils';
 import { getAccessToken } from '../../api/fetcher';
 import type { CreateCheckoutSessionResponse, PlansResponse } from '../../api/types';
+import { useOptionalAuth } from '../../auth/AuthContext';
 import { capture } from '../../lib/analytics';
 import { loadPublicPlans } from '../../lib/public-plans';
 import { usePageMeta } from '../../lib/usePageMeta';
+import { GUEST_SIGNUP_HREF } from './guest-signup';
 import { PricingLoadingView } from './PricingLoadingView';
 import { PricingOffView } from './PricingOffView';
 import { PricingPlansView } from './PricingPlansView';
@@ -24,6 +26,10 @@ type PricingState = 'loading' | 'failed' | PlansResponse;
 export function PricingPage() {
   const [state, setState] = useState<PricingState>('loading');
   const [pending, setPending] = useState<'monthly' | 'annual' | null>(null);
+  // Owner ruling 2026-10-01 — a guest's every CTA goes to the guest → account
+  // sign-up screen. useOptionalAuth: static-render tests mount no provider.
+  const isGuest = useOptionalAuth()?.user?.isGuest === true;
+  const guestSignupHref = isGuest ? GUEST_SIGNUP_HREF : undefined;
 
   // Story 6.5 — pricing view (once per mount; no-op without a PostHog key).
   useEffect(() => { capture('pricing_viewed'); }, []);
@@ -38,6 +44,12 @@ export function PricingPage() {
   }, []);
 
   const startCheckout = async (cadence: 'monthly' | 'annual') => {
+    // Belt-and-braces: the plans view renders links (not checkout buttons)
+    // for a guest, but a guest bearer must never reach the checkout call.
+    if (isGuest) {
+      window.location.assign(GUEST_SIGNUP_HREF);
+      return;
+    }
     setPending(cadence);
     const token = getAccessToken();
     if (!token) {
@@ -107,9 +119,16 @@ export function PricingPage() {
   if (state === 'loading') return <PricingLoadingView failed={false} />;
   if (state === 'failed') return <PricingLoadingView failed={true} />;
   if (state.creditsEnabled === true) {
-    return <PricingPlansView plans={state} pending={pending} onCheckout={startCheckout} />;
+    return (
+      <PricingPlansView
+        plans={state}
+        pending={pending}
+        onCheckout={startCheckout}
+        guestSignupHref={guestSignupHref}
+      />
+    );
   }
-  if (state.creditsEnabled === false) return <PricingOffView />;
+  if (state.creditsEnabled === false) return <PricingOffView guestSignupHref={guestSignupHref} />;
   // creditsEnabled missing/null on an otherwise-successful response — unknown.
   return <PricingLoadingView failed={true} />;
 }

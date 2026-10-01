@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../../../lib/analytics', () => ({ capture: vi.fn() }));
 import type { PlansResponse } from '../../../api/types';
 import { PricingPlansView } from '../PricingPlansView';
+import { GUEST_SIGNUP_HREF } from '../guest-signup';
 
 const plans: PlansResponse = {
   proMonthlyCents: 100, proAnnualCents: 1000, currency: 'USD', creditsEnabled: true,
@@ -42,5 +43,32 @@ describe('PricingPlansView (credit economy)', () => {
   it('no server costs (older BFF): no invented numbers', () => {
     render(<PricingPlansView plans={{ ...plans, costs: null }} pending={null} onCheckout={() => {}} />);
     expect(screen.queryByText(/credits to start/)).toBeNull();
+  });
+
+  it('guest: every CTA links to the guest sign-up screen; no checkout buttons', () => {
+    const onCheckout = vi.fn();
+    render(
+      <PricingPlansView plans={plans} pending={null} onCheckout={onCheckout} guestSignupHref={GUEST_SIGNUP_HREF} />,
+    );
+    for (const id of ['pricing-monthly-cta', 'pricing-annual-cta', 'pricing-credits-cta']) {
+      const cta = screen.getByTestId(id);
+      expect(cta.tagName).toBe('A');
+      expect(cta.getAttribute('href')).toBe('/register?from=guest&next=%2Fpricing');
+    }
+    // Prices still shown on the plan CTAs — only the destination changes.
+    expect(screen.getByTestId('pricing-monthly-cta').textContent).toMatch(/^Monthly /);
+    // The only <button> left is the disabled "Current plan" placeholder.
+    expect(screen.queryAllByRole('button').every((b) => b.hasAttribute('disabled'))).toBe(true);
+    expect(onCheckout).not.toHaveBeenCalled();
+  });
+
+  it('non-guest: plan CTAs are checkout buttons wired to onCheckout', () => {
+    const onCheckout = vi.fn();
+    render(<PricingPlansView plans={plans} pending={null} onCheckout={onCheckout} />);
+    const monthly = screen.getByTestId('pricing-monthly-cta');
+    expect(monthly.tagName).toBe('BUTTON');
+    monthly.click();
+    screen.getByTestId('pricing-annual-cta').click();
+    expect(onCheckout.mock.calls).toEqual([['monthly'], ['annual']]);
   });
 });

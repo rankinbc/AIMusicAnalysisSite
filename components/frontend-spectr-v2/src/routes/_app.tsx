@@ -145,13 +145,16 @@ function AppLayout() {
           <SpectrLogo />
         </Link>
 
-        {/* Owner ruling 2026-10-01: guests (demo + guest upload) get no
-            Report/Library tabs — they live on their one track's pages. */}
-        {!guest.isGuest && (
+        {/* Owner ruling 2026-10-01: guests get no Report tab, and the
+            Library tab only once they've uploaded a track of their own (the
+            seeded demo song doesn't count) — same rule as /library's guard. */}
+        {(!guest.isGuest || guest.hasOwnUploads) && (
         <nav className={s.navTabs}>
-          <Link to="/reports" className={s.navTab} data-active={isReportActive}>
-            Report
-          </Link>
+          {!guest.isGuest && (
+            <Link to="/reports" className={s.navTab} data-active={isReportActive}>
+              Report
+            </Link>
+          )}
           {/* Story 12.5: the permanently-disabled Listen tab is GONE — Listen
               is per-version (library Play button / report "Open in Listen");
               a tooltip-only disabled tab read as broken. */}

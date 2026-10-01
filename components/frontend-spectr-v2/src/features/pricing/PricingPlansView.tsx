@@ -16,12 +16,18 @@ export function PricingPlansView({
   plans,
   pending,
   onCheckout,
+  guestSignupHref,
 }: {
   plans: PlansResponse | null;
   pending: 'monthly' | 'annual' | null;
   onCheckout: (cadence: 'monthly' | 'annual') => void;
+  /** Set for a GUEST viewer: every CTA becomes a link to this sign-up
+   *  screen instead of starting checkout (see guest-signup.ts). */
+  guestSignupHref?: string | undefined;
 }) {
   const costs = plans?.costs ?? null;
+  const monthlyLabel = plans ? `Monthly ${formatCents(plans.proMonthlyCents, plans.currency)}` : 'Monthly';
+  const annualLabel = plans ? `Annual ${formatCents(plans.proAnnualCents, plans.currency)}` : 'Annual';
   return (
     <>
     <PublicChrome />
@@ -73,30 +79,37 @@ export function PricingPlansView({
           <p className={s.planLine}>Full coach + all specialists</p>
           <p className={s.planLine}>Stems + .als + reference library</p>
           <div className={s.cadenceRow}>
-            <button
-              type="button"
-              className="btn primary"
-              disabled={pending !== null}
-              onClick={() => onCheckout('monthly')}
-            >
-              {pending === 'monthly'
-                ? 'Starting…'
-                : plans
-                  ? `Monthly ${formatCents(plans.proMonthlyCents, plans.currency)}`
-                  : 'Monthly'}
-            </button>
-            <button
-              type="button"
-              className="btn ghost"
-              disabled={pending !== null}
-              onClick={() => onCheckout('annual')}
-            >
-              {pending === 'annual'
-                ? 'Starting…'
-                : plans
-                  ? `Annual ${formatCents(plans.proAnnualCents, plans.currency)}`
-                  : 'Annual'}
-            </button>
+            {guestSignupHref ? (
+              <>
+                <a href={guestSignupHref} className="btn primary" data-testid="pricing-monthly-cta">
+                  {monthlyLabel}
+                </a>
+                <a href={guestSignupHref} className="btn ghost" data-testid="pricing-annual-cta">
+                  {annualLabel}
+                </a>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="btn primary"
+                  disabled={pending !== null}
+                  onClick={() => onCheckout('monthly')}
+                  data-testid="pricing-monthly-cta"
+                >
+                  {pending === 'monthly' ? 'Starting…' : monthlyLabel}
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost"
+                  disabled={pending !== null}
+                  onClick={() => onCheckout('annual')}
+                  data-testid="pricing-annual-cta"
+                >
+                  {pending === 'annual' ? 'Starting…' : annualLabel}
+                </button>
+              </>
+            )}
           </div>
           {/* Story 6.1 (UX-DR25): terms restated AT the buttons — no asterisks. */}
           <p className={`mono ${s.buttonTerms}`}>
@@ -117,7 +130,7 @@ export function PricingPlansView({
           ))}
           {/* /usage is auth-gated and hosts BuyCreditsCard (pack picker) —
               anonymous visitors are bounced through login and land back there. */}
-          <a href="/usage" className="btn ghost" data-testid="pricing-credits-cta">
+          <a href={guestSignupHref ?? '/usage'} className="btn ghost" data-testid="pricing-credits-cta">
             Buy credits
           </a>
           <p className={`mono ${s.buttonTerms}`}>One-time purchase · credits never expire</p>
