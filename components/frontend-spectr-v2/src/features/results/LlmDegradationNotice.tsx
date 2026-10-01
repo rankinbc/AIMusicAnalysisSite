@@ -25,6 +25,8 @@ function copyFor(reason: DegradationReason): string {
       return 'The AI provider is having trouble — showing rule-based findings only. AI verdicts return automatically once it recovers.';
     case 'triage_failed':
       return 'Specialist routing failed for this analysis — showing rule-based findings only.';
+    case 'triage_timeout':
+      return 'AI specialists are taking longer than expected — showing rule-based findings only for now. Reload the page to check again.';
     default:
       // Unknown reason strings pass through the wire verbatim — fail soft.
       return 'AI specialists are unavailable — showing rule-based findings only.';

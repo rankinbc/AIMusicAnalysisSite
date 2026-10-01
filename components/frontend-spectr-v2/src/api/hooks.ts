@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { fetcher } from './fetcher';
 import { terminalPoll } from './poll-helpers';
+import { triageRefetchMs } from './verdict-polling';
 // D10 fix1 (item 2/3) — every mutation below that changes a number
 // `GET /api/me/guest` reports invalidates it through this ONE shared
 // helper; a no-op for a real user (the query is `enabled: isGuest`).
@@ -644,10 +645,8 @@ export function useVerdicts(jobId: string, opts: UseVerdictsOptions) {
     // the triage wait so a permanently-empty plan doesn't poll forever.
     refetchInterval: (query) => {
       if (opts.optimisticRunning.size > 0) return 3000;
-      const d = query.state.data;
-      const triagePending = d != null && d.routingPlan == null && d.degradation == null;
-      if (triagePending && query.state.dataUpdateCount < 25) return 3000;
-      return false;
+      // P9: a TIME budget (3 s, then 10 s, up to 10 min) — see verdict-polling.ts.
+      return triageRefetchMs(jobId, query.state.data);
     },
     retry: false,
   });

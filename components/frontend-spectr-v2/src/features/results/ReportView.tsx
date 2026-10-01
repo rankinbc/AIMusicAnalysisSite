@@ -36,6 +36,7 @@ import { shouldShowAnalysisCompleteModal } from './analysis-complete-gate';
 import { AnalysisCompleteModal } from './AnalysisCompleteModal';
 import { DegradationBanner } from './DegradationBanner';
 import { LlmDegradationNotice } from './LlmDegradationNotice';
+import { TRIAGE_TIMEOUT_NOTICE, useTriageTimedOut } from '../../api/verdict-polling';
 import { CoachTab } from './CoachTab';
 import { ExportModal } from './ExportModal';
 import { ProjectTab } from './ProjectTab';
@@ -131,6 +132,7 @@ export function ReportView({
     optimisticRunning: emptySetRef.current,
   });
   const verdicts = useMemo(() => verdictsData?.verdicts ?? [], [verdictsData]);
+  const triageTimedOut = useTriageTimedOut(jobId, verdictsData); // P9
 
   const moves = useMemo(
     () => buildMoves({ verdicts, topFixes: fj.top_fixes, coachedFixes: fj.coached_fixes }),
@@ -495,6 +497,9 @@ export function ReportView({
                 phase-failure banner above; both may render at once. */}
             {verdictsData?.degradation && (
               <LlmDegradationNotice notice={verdictsData.degradation} />
+            )}
+            {!verdictsData?.degradation && triageTimedOut && (
+              <LlmDegradationNotice notice={TRIAGE_TIMEOUT_NOTICE} />
             )}
 
             <ResultsTabs

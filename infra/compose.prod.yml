@@ -92,6 +92,14 @@ services:
       # Required (:?) — the onboarding@resend.dev sandbox sender in prod
       # would be a deliverability/DMARC disaster.
       Resend__FromAddress: "${RESEND_FROM:?}"
+    # Task P9 — probe the real liveness endpoint (the image's own
+    # HEALTHCHECK hits `/`). No depends_on from caddy on this (spec D14).
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "3", "http://localhost:5000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

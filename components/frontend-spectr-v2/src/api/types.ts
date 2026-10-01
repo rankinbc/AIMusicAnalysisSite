@@ -1320,7 +1320,9 @@ export type DegradationReason =
   | 'circuit_breaker'
   // Wave 1 (E5.3): Triage hit a terminal LLM/parse failure — rule-engine
   // findings only, and the BFF stops re-enqueuing triage.
-  | 'triage_failed';
+  | 'triage_failed'
+  // Client-synthesised (api/verdict-polling.ts) — never on the wire.
+  | 'triage_timeout';
 
 export interface DegradationNoticeDto {
   reason: DegradationReason;
