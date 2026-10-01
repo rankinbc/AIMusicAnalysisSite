@@ -1,8 +1,14 @@
 /* Listen Rack v2 — page-wide "light show" atmosphere layer: 4 oscillating
  * laser beams, perspective floor grid, drifting dust motes, hue-cycling haze.
  * Fixed full-viewport canvas at z-0 (the .wrap content sits at z-1). Dims to
- * 35% when paused. Ported from the design handoff (lr-stage.jsx → LightShow). */
+ * 35% when paused. Ported from the design handoff (lr-stage.jsx → LightShow).
+ * Task P8: below 1024 px the page is a desktop-only card, so nothing mounts
+ * (no hidden full-viewport rAF loop on a phone); under reduced motion one
+ * static frame is painted (and repainted on resize) instead of a loop. */
 import { useEffect, useRef } from 'react';
+
+import { useMinWidth } from '../../hooks/useMinWidth';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 
 export function LightShow({ playing, intensity = 1, show, gridHue = 168, gridIntensity = 50 }: {
   playing: boolean; intensity?: number; show: boolean;
@@ -12,8 +18,11 @@ export function LightShow({ playing, intensity = 1, show, gridHue = 168, gridInt
   const cv = useRef<HTMLCanvasElement | null>(null);
   const pr = useRef({ playing, intensity, gridHue, gridIntensity });
   pr.current = { playing, intensity, gridHue, gridIntensity };
+  const desktop = useMinWidth(1024);
+  const reduce = useReducedMotion();
+  const active = show && desktop;
   useEffect(() => {
-    if (!show) return undefined;
+    if (!active) return undefined;
     const c = cv.current;
     const ctx = c?.getContext('2d');
     if (!c || !ctx) return undefined;
@@ -114,10 +123,15 @@ export function LightShow({ playing, intensity = 1, show, gridHue = 168, gridInt
       });
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = 'source-over';
-      raf = requestAnimationFrame(draw);
+      if (!reduce) raf = requestAnimationFrame(draw);
     };
+    if (reduce) {
+      draw(); // one static frame; repainted on resize so it never stretches
+      window.addEventListener('resize', draw);
+      return () => window.removeEventListener('resize', draw);
+    }
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [show]);
-  return show ? <canvas className="lr-bgfx" ref={cv} /> : null;
+  }, [active, reduce]);
+  return active ? <canvas className="lr-bgfx" ref={cv} /> : null;
 }

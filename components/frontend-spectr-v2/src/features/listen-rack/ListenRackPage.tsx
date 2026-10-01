@@ -492,6 +492,9 @@ export function ListenRackPage({ versionId, track: trackProp, fixPreset, reportR
             The Listen rack needs room for its EQ, meters, and rack modules — open this page on a
             screen at least 1024&nbsp;px wide. Your report and library work great here.
           </p>
+          {reportRef
+            ? <Link to="/songs/$songId/results/$jobId" params={{ songId: reportRef.songId, jobId: reportRef.jobId }} className="btn sm">← Back to the report</Link>
+            : <Link to="/library" className="btn sm">← Back to your library</Link>}
         </div>
       </div>
 
