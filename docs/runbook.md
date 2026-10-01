@@ -108,8 +108,10 @@ charges, no labels). To launch the economy (prices: PRPs/credit-economy.md):
    UPDATE feature_flags SET value='0' WHERE name IN ('free_analyses_per_month','coach_free_followups');
    UPDATE feature_flags SET value='true' WHERE name='credits_enabled';
    ```
-4. Grant the sign-up bonus to already-verified accounts (idempotent, safe to
-   re-run; header per "Admin surface"). A reason is required and is written to
+4. **Wait > 60 s after step 3** (the BFF flag cache), then grant the sign-up
+   bonus to already-verified accounts (idempotent, safe to re-run; header per
+   "Admin surface"). Run too early it silently returns `granted: 0` because the
+   cached `credits_enabled` is still false (seen in the 2026-10-01 rollout). A reason is required and is written to
    `audit_log`:
    `curl -X POST -H "X-Admin-Key: $ADMIN_API_KEY" -H "Content-Type: application/json" -d '{"reason":"credit economy rollout"}' https://<host>/api/admin/credits/backfill-signup-bonus`
 5. Watch `llm_calls` cost per analysis for a week and retune the
