@@ -57,6 +57,9 @@ class LlmSettings(BaseSettings):
     # cap — guest traffic must never be able to exhaust the budget real users
     # depend on. Mirrors the seeded feature_flags row (llm_budget_guest_usd=5).
     llm_budget_guest_usd: Decimal = Decimal("5.00")
+    # Per-guest lifetime allowance (a guest lives guest_ttl_hours), so one
+    # visitor can't spend the shared guest pool. Flag: llm_budget_guest_session_usd.
+    llm_budget_guest_session_usd: Decimal = Decimal("1.50")
     # Operator hard cap across all tiers in a calendar month.
     llm_budget_global_usd: Decimal = Decimal("1000.00")
 

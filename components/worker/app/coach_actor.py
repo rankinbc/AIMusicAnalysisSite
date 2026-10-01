@@ -59,6 +59,7 @@ from .coach_lib.payload import (
 from .coach_lib.stream_parser import StreamSplitter
 from .coach_lib.stream_publisher import CoachStreamPublisher
 from .llm import gateway
+from .llm.errors import DEGRADATION_REASON_GUEST_BUDGET, DEGRADATION_REASON_GUEST_SESSION
 from .llm.gateway import LlmBudgetExceeded, LlmError
 from .verdict_lib.flatten_analysis import flatten
 from .verdict_lib.json_extraction import extract_json_object
@@ -86,6 +87,16 @@ logger = logging.getLogger(__name__)
 COACH_OFFLINE_BODY = (
     "Coach is offline — your measured analysis and rule-based findings "
     "are unaffected."
+)
+# A guest who used their session's AI allowance, or arrived after the shared
+# guest pool ran out: the way forward is an account, not "try later".
+COACH_GUEST_LIMIT_BODY = (
+    "You've used this demo session's AI allowance — create a free account "
+    "to keep chatting with the Coach."
+)
+COACH_GUEST_POOL_BODY = (
+    "The demo's AI Coach is resting for now — create a free account to keep "
+    "chatting. Your analysis and findings are unaffected."
 )
 COACH_GENERIC_ERROR_BODY = (
     "The coach hit a transient error. Please try again."
@@ -665,9 +676,13 @@ def coach_reply(
             # to the llm_calls row the gateway wrote (if any). For
             # LlmBudgetExceeded the gateway raises PRE-call so there is no
             # row to link — exc.llm_call_id is None and that's correct.
-            publisher.error(code="coach_offline", message=COACH_OFFLINE_BODY)
+            body = {
+                DEGRADATION_REASON_GUEST_SESSION: COACH_GUEST_LIMIT_BODY,
+                DEGRADATION_REASON_GUEST_BUDGET: COACH_GUEST_POOL_BODY,
+            }.get(exc.reason, COACH_OFFLINE_BODY)
+            publisher.error(code="coach_offline", message=body)
             _mark_refused(
-                mid, refusal_reason="coach_offline", body=COACH_OFFLINE_BODY,
+                mid, refusal_reason="coach_offline", body=body,
                 llm_call_id=exc.llm_call_id, user_message_id=uid_msg,
             )
             return

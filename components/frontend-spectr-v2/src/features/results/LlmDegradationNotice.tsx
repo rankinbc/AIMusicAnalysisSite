@@ -21,6 +21,10 @@ function copyFor(reason: DegradationReason): string {
       return "Your plan's AI specialist budget is used up for this month — showing rule-based findings only. Upgrading restores AI verdicts.";
     case 'global_budget':
       return 'AI analysis is over capacity right now — showing rule-based findings only. AI verdicts return automatically.';
+    case 'guest_session_budget':
+      return "You've used this demo session's AI allowance — showing rule-based findings only. Create a free account to run more AI specialists.";
+    case 'guest_budget':
+      return "The demo's AI specialists are resting for now — showing rule-based findings only. Create a free account to run them.";
     case 'circuit_breaker':
       return 'The AI provider is having trouble — showing rule-based findings only. AI verdicts return automatically once it recovers.';
     case 'triage_failed':

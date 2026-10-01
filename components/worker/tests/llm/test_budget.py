@@ -18,6 +18,7 @@ from app.llm.gateway import (
     DEGRADATION_REASON_TIER_BUDGET,
     LlmBudgetExceeded,
 )
+from app.llm.errors import DEGRADATION_REASON_GUEST_BUDGET, DEGRADATION_REASON_GUEST_SESSION
 
 
 # ── tier_ceiling resolution ─────────────────────────────────────────────────
@@ -229,7 +230,8 @@ def test_guest_lane_trips_on_its_own_ceiling(configure, monkeypatch):
     monkeypatch.setattr(budget, "_aggregate_tier_spend", _spend({"guest": Decimal("5.00")}, Decimal("5.00")))
     with pytest.raises(LlmBudgetExceeded) as exc:
         budget.check_budget(tier="guest", purpose="coach", user_id="u")
-    assert exc.value.reason == DEGRADATION_REASON_TIER_BUDGET
+    # Its own reason, so the UI says "create a free account", not "upgrade".
+    assert exc.value.reason == DEGRADATION_REASON_GUEST_BUDGET
 def test_guest_lane_is_not_checked_against_the_global_cap(configure, monkeypatch):
     configure(llm_budget_guest_usd=Decimal("5.00"), llm_budget_global_usd=Decimal("10.00"))
     monkeypatch.setattr(budget, "_aggregate_tier_spend", _spend({"guest": Decimal("1.00")}, Decimal("999.00")))
@@ -252,3 +254,51 @@ def test_guest_ceiling_honours_the_flag_override(configure, monkeypatch):
                         lambda name: Decimal("0") if name == "llm_budget_guest_usd" else None)
     with pytest.raises(LlmBudgetExceeded):
         budget.check_budget(tier="guest", purpose="coach", user_id="u")
+
+
+# ── per-guest session allowance (2026-10) ───────────────────────────────────
+
+def test_guest_session_cap_trips_for_that_guest(configure, monkeypatch):
+    configure(llm_budget_guest_usd=Decimal("30.00"), llm_budget_guest_session_usd=Decimal("1.50"))
+    monkeypatch.setattr(budget, "_aggregate_user_spend", lambda uid: Decimal("1.50"))
+    with pytest.raises(LlmBudgetExceeded) as exc:
+        budget.check_budget(tier="guest", purpose="specialist", user_id="g1")
+    assert exc.value.reason == DEGRADATION_REASON_GUEST_SESSION
+
+
+def test_guest_under_session_cap_passes(configure, monkeypatch):
+    configure(llm_budget_guest_usd=Decimal("30.00"), llm_budget_guest_session_usd=Decimal("1.50"))
+    monkeypatch.setattr(budget, "_aggregate_user_spend", lambda uid: Decimal("1.49"))
+    budget.check_budget(tier="guest", purpose="coach", user_id="g1")  # no raise
+
+
+def test_session_cap_is_per_guest(configure, monkeypatch):
+    configure(llm_budget_guest_session_usd=Decimal("1.50"))
+    spent = {"heavy": Decimal("2.00"), "light": Decimal("0.10")}
+    monkeypatch.setattr(budget, "_aggregate_user_spend", lambda uid: spent[uid])
+    with pytest.raises(LlmBudgetExceeded):
+        budget.check_budget(tier="guest", purpose="coach", user_id="heavy")
+    budget.check_budget(tier="guest", purpose="coach", user_id="light")  # unaffected
+
+
+def test_session_cap_never_applies_to_real_users(configure, monkeypatch):
+    configure(llm_budget_guest_session_usd=Decimal("1.50"))
+    monkeypatch.setattr(budget, "_aggregate_user_spend", lambda uid: Decimal("50.00"))
+    budget.check_budget(tier="pro", purpose="coach", user_id="u")  # no raise
+
+
+def test_session_cap_honours_the_flag_override(configure, monkeypatch):
+    configure(llm_budget_guest_session_usd=Decimal("1.50"))
+    monkeypatch.setattr(budget, "_aggregate_user_spend", lambda uid: Decimal("0.60"))
+    monkeypatch.setattr(budget, "_ceiling_override",
+                        lambda name: Decimal("0.50") if name == "llm_budget_guest_session_usd" else None)
+    with pytest.raises(LlmBudgetExceeded) as exc:
+        budget.check_budget(tier="guest", purpose="coach", user_id="g1")
+    assert exc.value.reason == DEGRADATION_REASON_GUEST_SESSION
+
+
+def test_user_spend_aggregation_failure_fails_open(configure, monkeypatch):
+    monkeypatch.undo()  # drop the conftest stub for this one test
+    budget.reset_breaker_state()
+    monkeypatch.setattr(budget, "_ceiling_override", lambda _flag_name: None)
+    assert budget._aggregate_user_spend("not-a-uuid") == Decimal("0")

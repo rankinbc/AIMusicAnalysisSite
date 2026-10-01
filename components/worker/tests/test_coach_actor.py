@@ -364,6 +364,29 @@ def test_budget_exceeded_marks_offline_without_degrading_analysis(sqlite_db, mon
         assert analysis.degradation_notice is None
 
 
+@pytest.mark.parametrize("reason, attr", [
+    ("guest_session_budget", "COACH_GUEST_LIMIT_BODY"),
+    ("guest_budget", "COACH_GUEST_POOL_BODY"),
+])
+def test_guest_budget_refusal_points_to_an_account(sqlite_db, monkeypatch, reason, attr):
+    from app import coach_actor  # noqa: PLC0415
+
+    with sqlite_db.SessionFactory.begin() as s:
+        analysis_id = _seed_analysis(s)
+        cid = _seed_conversation(s, analysis_id)
+        user_msg_id, pending_id = _seed_pair(s, cid, "What's wrong with my mix?")
+
+    _stub_gateway(monkeypatch, raises=LlmBudgetExceeded(reason=reason, detail="guest"))
+    coach_actor.coach_reply.fn(str(cid), str(user_msg_id), str(pending_id))
+
+    with sqlite_db.SessionFactory() as s:
+        row = _fetch_message(s, pending_id)
+        assert row.status == "refused"
+        assert row.refusal_reason == "coach_offline"
+        assert row.content == getattr(coach_actor, attr)
+        assert "free account" in row.content
+
+
 # ── Generic LlmError → status=error ────────────────────────────────────────
 
 def test_generic_llm_error_marks_error(sqlite_db, monkeypatch):

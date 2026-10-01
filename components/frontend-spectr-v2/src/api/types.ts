@@ -1344,6 +1344,10 @@ export type DegradationReason =
   | 'tier_budget'
   | 'global_budget'
   | 'circuit_breaker'
+  // Guest lane: the shared guest pool is spent, or this guest used their own
+  // session allowance — the way forward is a free account.
+  | 'guest_budget'
+  | 'guest_session_budget'
   // Wave 1 (E5.3): Triage hit a terminal LLM/parse failure — rule-engine
   // findings only, and the BFF stops re-enqueuing triage.
   | 'triage_failed'

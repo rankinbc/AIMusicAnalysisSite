@@ -58,6 +58,7 @@ def _reset_breaker_and_stub_spend(monkeypatch):
         lambda tier, *, include_all_tiers=False: Decimal("0"),
     )
     monkeypatch.setattr(budget, "_ceiling_override", lambda _flag_name: None)
+    monkeypatch.setattr(budget, "_aggregate_user_spend", lambda _uid: Decimal("0"))
     lane.reset_lane_cache()
     monkeypatch.setattr(lane, "_lookup_is_guest", lambda _uid: False)
     yield

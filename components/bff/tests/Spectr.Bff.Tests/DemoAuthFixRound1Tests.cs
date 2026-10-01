@@ -181,6 +181,40 @@ public sealed class DemoAuthFixRound1Tests(WebApplicationFactory<Program> factor
         finally { f.Dispose(); }
     }
 
+    // 2026-10 — the 24 h per-IP arm next to the hourly one: one IP can't mint
+    // a fresh guest (and a fresh AI allowance) every 20 minutes all day.
+    [SkippableFact]
+    public async Task Daily_Creation_Limit_Denies_With_429_After_The_Hourly_Arm_Passes()
+    {
+        await TestDb.RequireAsync(factory);
+        var limiter = new RecordingLimiter { DenyAction = "demo_create_daily" };
+        var f = Build(b => b.UseSetting("RateLimits:Enabled", "true")
+            .ConfigureTestServices(s => { s.RemoveAll(typeof(IRateLimiter)); s.AddSingleton<IRateLimiter>(limiter); }));
+        try
+        {
+            var resp = await f.CreateClient().PostAsync("/api/auth/demo", null);
+            Assert.Equal(HttpStatusCode.TooManyRequests, resp.StatusCode);
+            Assert.Equal("rate_limited", await DemoAuthEndpointsTests.Code(resp));
+            Assert.Contains("demo_create", limiter.Seen.Select(c => c.Action));
+            var daily = Assert.Single(limiter.Seen, c => c.Action == "demo_create_daily");
+            Assert.Equal(TimeSpan.FromHours(24), daily.Window);
+            Assert.True(daily.Limit > 0);
+        }
+        finally { f.Dispose(); }
+    }
+
+    private sealed class RecordingLimiter : IRateLimiter
+    {
+        public string? DenyAction;
+        public readonly List<(string Action, int Limit, TimeSpan Window)> Seen = [];
+        public Task<RateLimitResult> CheckAsync(
+            string actorKey, string ip, string action, int limit, TimeSpan window, CancellationToken ct = default)
+        {
+            lock (Seen) Seen.Add((action, limit, window));
+            return Task.FromResult(action == DenyAction ? new RateLimitResult(false, window) : RateLimitResult.Ok);
+        }
+    }
+
     // ── I2 — the endpoint never 500s, and never burns a cap slot on a guest
     // nobody can use ─────────────────────────────────────────────────────────
 

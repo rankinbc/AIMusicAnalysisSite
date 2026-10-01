@@ -13,6 +13,11 @@ from __future__ import annotations
 DEGRADATION_REASON_TIER_BUDGET = "tier_budget"
 DEGRADATION_REASON_GLOBAL_BUDGET = "global_budget"
 DEGRADATION_REASON_CIRCUIT_BREAKER = "circuit_breaker"
+# Guest lane (2026-10): the shared monthly guest pool is spent, or ONE guest
+# hit their own per-session allowance. Distinct from tier_budget so the UI
+# can say "create a free account" instead of "upgrade your plan".
+DEGRADATION_REASON_GUEST_BUDGET = "guest_budget"
+DEGRADATION_REASON_GUEST_SESSION = "guest_session_budget"
 
 
 class LlmError(RuntimeError):

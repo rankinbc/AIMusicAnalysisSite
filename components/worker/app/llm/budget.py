@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -31,6 +32,8 @@ from typing import Any
 from .errors import (
     DEGRADATION_REASON_CIRCUIT_BREAKER,
     DEGRADATION_REASON_GLOBAL_BUDGET,
+    DEGRADATION_REASON_GUEST_BUDGET,
+    DEGRADATION_REASON_GUEST_SESSION,
     DEGRADATION_REASON_TIER_BUDGET,
     LlmBudgetExceeded,
 )
@@ -172,6 +175,32 @@ def _tier_ceiling(tier: str, settings: Any) -> Decimal:
     return _global_ceiling(settings)
 
 
+def _guest_session_ceiling(settings: Any) -> Decimal:
+    override = _ceiling_override("llm_budget_guest_session_usd")
+    return override if override is not None else settings.llm_budget_guest_session_usd
+
+
+def _aggregate_user_spend(user_id: Any) -> Decimal:
+    """All-time ``ok`` spend for one user (fail-open at $0, like the tier sum)."""
+    try:
+        from sqlalchemy import func, select  # noqa: PLC0415 — deliberate lazy import
+        from aimusic_shared.models import LlmCall
+
+        from app.db_sync import SessionFactory
+
+        stmt = select(
+            func.coalesce(func.sum(LlmCall.cost_usd), Decimal("0"))
+        ).where(LlmCall.user_id == uuid.UUID(str(user_id)), LlmCall.outcome == "ok")
+        with SessionFactory() as s:
+            value = s.execute(stmt).scalar()
+        if value is None:
+            return Decimal("0")
+        return value if isinstance(value, Decimal) else Decimal(str(value))
+    except Exception:
+        logger.exception("user spend aggregation failed (user=%s) — fail-open at $0", user_id)
+        return Decimal("0")
+
+
 def _global_ceiling(settings: Any) -> Decimal:
     override = _ceiling_override("llm_budget_global_usd")
     return override if override is not None else settings.llm_budget_global_usd
@@ -223,10 +252,28 @@ def check_budget(*, tier: str | None, purpose: str, user_id: Any | None) -> None
             effective_tier, _fmt_money(tier_spent), _fmt_money(tier_cap),
         )
         raise LlmBudgetExceeded(
-            DEGRADATION_REASON_TIER_BUDGET,
+            DEGRADATION_REASON_GUEST_BUDGET if effective_tier == "guest"
+            else DEGRADATION_REASON_TIER_BUDGET,
             f"tier={effective_tier} spent=${_fmt_money(tier_spent)} "
             f"ceiling=${_fmt_money(tier_cap)}",
         )
+
+    # 2b. Per-guest allowance — the pool above is shared by every guest, so
+    #     without this one visitor (or a script minting guests) could spend it
+    #     for everyone. A guest's whole life is ≤ guest_ttl_hours, so all-time
+    #     spend for that user id IS the session spend.
+    if effective_tier == "guest" and user_id is not None:
+        session_spent = _aggregate_user_spend(user_id)
+        session_cap = _guest_session_ceiling(settings)
+        if session_spent >= session_cap:
+            logger.warning(
+                "guest session budget EXCEEDED user=%s spent=$%s ceiling=$%s",
+                user_id, _fmt_money(session_spent), _fmt_money(session_cap),
+            )
+            raise LlmBudgetExceeded(
+                DEGRADATION_REASON_GUEST_SESSION,
+                f"guest spent=${_fmt_money(session_spent)} ceiling=${_fmt_money(session_cap)}",
+            )
 
     # 3. Global operator hard cap — REAL users only. The guest lane is additive: it has
     #    its own ceiling above, is excluded from this sum, and is not checked against it.

@@ -113,6 +113,13 @@ public static class DemoAuthEndpoints
                         GuestIdentity.Flag(flags, "demo_guests_per_ip_hourly", 5), TimeSpan.FromHours(1), ct);
                     if (!verdict.Allowed)
                         return ErrorEnvelope.Build(429, "rate_limited", "You've started the demo a few times already — try again in a bit.");
+                    // Daily arm (2026-10): the hourly window alone lets one IP mint
+                    // a fresh guest — and a fresh AI allowance — every 20 minutes
+                    // all day. A real visitor needs one or two.
+                    var daily = await limiter.CheckAsync(actor, ip, "demo_create_daily",
+                        GuestIdentity.Flag(flags, "demo_guests_per_ip_daily", 10), TimeSpan.FromHours(24), ct);
+                    if (!daily.Allowed)
+                        return ErrorEnvelope.Build(429, "rate_limited", "You've started the demo a lot today — create a free account to keep going.");
                 }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
