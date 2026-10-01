@@ -6,13 +6,18 @@
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
   grid-template-areas:
     'copy  stage'
-    'demo  stage';
-  grid-template-rows: auto 1fr;
+    'demo  stage'
+    'feat  stage';
+  grid-template-rows: auto auto 1fr;
   column-gap: clamp(40px, 5vw, 80px);
   row-gap: 36px;
   align-items: start;
   padding-top: clamp(40px, 7vh, 88px);
   padding-bottom: 24px;
+}
+
+.features {
+  grid-area: feat;
 }
 
 .copy {
@@ -326,7 +331,8 @@
     grid-template-areas:
       'copy'
       'stage'
-      'demo';
+      'demo'
+      'feat';
     grid-template-rows: auto;
     row-gap: 28px;
   }
