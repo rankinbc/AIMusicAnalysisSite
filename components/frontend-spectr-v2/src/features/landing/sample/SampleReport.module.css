@@ -593,3 +593,12 @@
     display: none;
   }
 }
+
+/* Demo-track credit / demo-use disclaimer (from the exported song description). */
+.root .credit {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+  max-width: 60ch;
+}

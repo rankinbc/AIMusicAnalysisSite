@@ -13,9 +13,10 @@ const issues = SAMPLE_FINDINGS.filter((f) => !isWin(f));
 const wins = SAMPLE_FINDINGS.filter(isWin);
 
 describe('sample fixture (generated from the demo snapshot)', () => {
-  it('is the curated demo report (real analyzer output), not a toy', () => {
-    expect(SAMPLE_META.title).toBe('Neon Meridian');
-    expect(SAMPLE_META.artist).toBeNull();
+  it('is the curated demo report (real analyzer output), credited to the artist', () => {
+    expect(SAMPLE_META.title).toBe('Magnetic Fields — Artifact303');
+    expect(SAMPLE_META.credit).toMatch(/Artifact303/);
+    expect(SAMPLE_META.credit).toMatch(/only as a SPECTR demo/);
     expect(issues.length).toBeGreaterThanOrEqual(10);
     expect(wins.length).toBeGreaterThan(0);
     expect(planSteps(SAMPLE_FINDINGS).length).toBeGreaterThanOrEqual(5);
@@ -60,6 +61,11 @@ describe('describeOp — plain DAW instructions from dsp ops', () => {
 });
 
 describe('<SampleReport /> (landing live sample)', () => {
+  it('shows the demo-track credit and demo-use disclaimer under the title', () => {
+    render(<SampleReport />);
+    expect(screen.getByText(/All rights belong to the artist/)).toBeTruthy();
+  });
+
   it('renders every finding with severity, group and who raised it', () => {
     render(<SampleReport />);
     const rows = screen.getAllByTestId('sample-finding');

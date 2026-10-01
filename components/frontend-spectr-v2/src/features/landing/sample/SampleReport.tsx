@@ -59,6 +59,7 @@ export default function SampleReport() {
             {m.key && <span>{m.key}</span>}
             <span>pipeline {m.pipelineVersion}</span>
           </div>
+          {m.credit && <p className={s.credit}>{m.credit}</p>}
         </div>
         <div className={`mono ${s.grade}`} title="Overall score — a summary, not the point">
           <span className={s.gradeLetter}>{m.grade}</span>
