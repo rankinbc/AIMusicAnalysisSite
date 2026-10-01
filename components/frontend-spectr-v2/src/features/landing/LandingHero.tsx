@@ -84,9 +84,6 @@ export function LandingHero() {
             >
               Sign up free
             </a>
-            <a href="/login" className="btn ghost sm" data-testid="landing-login-cta">
-              Log in
-            </a>
           </div>
         </div>
       </div>

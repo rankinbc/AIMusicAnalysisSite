@@ -114,7 +114,7 @@ describe('Landing hero (two-column redesign + the Coach)', () => {
     expect(html).toMatch(/<a href="\/register"[^>]*data-testid="landing-signup-cta"/);
     expect(html.indexOf('landing-demo-cta')).toBeLessThan(html.indexOf('landing-hiw-cta'));
     expect(html.indexOf('landing-hiw-cta')).toBeLessThan(html.indexOf('landing-signup-cta'));
-    expect(html).toMatch(/<a href="\/login"[^>]*data-testid="landing-login-cta"/);
+    expect(html).not.toContain('landing-login-cta');
   });
 
   it('points the primary CTA at /analyze and the demo CTA at /demo', () => {
