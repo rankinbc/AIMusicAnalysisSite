@@ -42,7 +42,14 @@ if init_sentry():
 
 _REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
-broker = RedisBroker(url=_REDIS_URL)
+if os.environ.get("DRAMATIQ_BROKER") == "stub":
+    # Test suites only (tests/conftest.py): an in-memory broker so importing
+    # this module never dials Redis — see the conftest for why that matters.
+    from dramatiq.brokers.stub import StubBroker
+
+    broker = StubBroker()
+else:
+    broker = RedisBroker(url=_REDIS_URL)
 broker.add_middleware(make_correlation_reset_middleware())
 if os.environ.get("WORKER_METRICS", "").strip() == "1":
     from dramatiq.middleware.prometheus import Prometheus
