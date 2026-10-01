@@ -30,9 +30,14 @@ export function applyDirectorToViz(base: VizState, dir: Director | undefined): V
   return base;
 }
 
+/** What the Visuals panel's "Sync all to music" button switches on. */
+export const SYNC_ALL_TO_MUSIC = { autoReact: true, laserSync: true, autoColor: true, bgSync: true } as const;
+
 /** The page's director + viz pair for a visitor with no persisted choice —
- * literally "as if they had clicked Minimal from the base state". */
+ * literally "as if they had clicked Minimal, then Sync all to music, from the
+ * base state" (owner ruling 2026-10-01: the visuals follow the track by
+ * default). */
 export function initialDirectorState(): { director: string; viz: VizState } {
   const dir = DIRECTORS.find((d) => d.id === DEFAULT_DIRECTOR_ID);
-  return { director: DEFAULT_DIRECTOR_ID, viz: applyDirectorToViz(DEFAULT_VIZ, dir) };
+  return { director: DEFAULT_DIRECTOR_ID, viz: { ...applyDirectorToViz(DEFAULT_VIZ, dir), ...SYNC_ALL_TO_MUSIC } };
 }

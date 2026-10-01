@@ -8,6 +8,7 @@ import { Icon } from '../results/Icon';
 import {
   BG_COLORS, DIRECTORS, LASER_EFFECTS, LASER_PATTERNS, STAGES, type VizState,
 } from './data';
+import { SYNC_ALL_TO_MUSIC } from './director';
 import { hslToHex } from './helpers';
 import { Sw } from './lrControls';
 
@@ -93,7 +94,7 @@ export function VisualsTabV2({ viz, setViz, stages, toggleStage, director, setDi
         <button
           type="button"
           className="lr-syncall"
-          onClick={() => setViz((s) => ({ ...s, autoReact: true, laserSync: true, autoColor: true, bgSync: true }))}
+          onClick={() => setViz((s) => ({ ...s, ...SYNC_ALL_TO_MUSIC }))}
         >
           <Icon name="refresh" size={14} />Sync all to music
         </button>

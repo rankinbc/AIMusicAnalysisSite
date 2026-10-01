@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_VIZ, DIRECTORS } from './data';
-import { applyDirectorToViz, DEFAULT_DIRECTOR_ID, initialDirectorState } from './director';
+import { applyDirectorToViz, DEFAULT_DIRECTOR_ID, initialDirectorState, SYNC_ALL_TO_MUSIC } from './director';
 
 const MINIMAL = DIRECTORS.find((d) => d.id === 'minimal')!;
 const PULSE = DIRECTORS.find((d) => d.id === 'pulse')!; // behaviorOnly: true
@@ -53,14 +53,17 @@ describe('initialDirectorState — the page\'s first-paint state', () => {
     expect(initialDirectorState().director).toBe('minimal');
   });
 
-  it('is exactly base viz + Minimal applied — the SAME transform the click path uses', () => {
-    expect(initialDirectorState().viz).toEqual(applyDirectorToViz(DEFAULT_VIZ, MINIMAL));
+  it('is exactly base viz + Minimal + "Sync all to music" — the SAME transforms the clicks use', () => {
+    expect(initialDirectorState().viz).toEqual({ ...applyDirectorToViz(DEFAULT_VIZ, MINIMAL), ...SYNC_ALL_TO_MUSIC });
   });
 
-  it('lasers are off and nothing auto-cycles, matching the calmest program', () => {
+  it('follows the music by default, but stays calm: lasers, drop FX and bg auto stay off', () => {
     const { viz } = initialDirectorState();
+    expect(viz.autoReact).toBe(true);
+    expect(viz.laserSync).toBe(true);
+    expect(viz.autoColor).toBe(true);
+    expect(viz.bgSync).toBe(true);
     expect(viz.laserOn).toBe(false);
-    expect(viz.autoColor).toBe(false);
     expect(viz.bgAuto).toBe(false);
     expect(viz.dropFx).toBe(false);
   });
