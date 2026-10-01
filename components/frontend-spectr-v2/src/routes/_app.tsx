@@ -160,6 +160,9 @@ function AppLayout() {
           <SpectrLogo />
         </Link>
 
+        {/* Owner ruling 2026-10-01: guests (demo + guest upload) get no
+            Report/Library tabs — they live on their one track's pages. */}
+        {!guest.isGuest && (
         <nav className={s.navTabs}>
           <Link to="/reports" className={s.navTab} data-active={isReportActive}>
             Report
@@ -171,6 +174,7 @@ function AppLayout() {
             Library
           </Link>
         </nav>
+        )}
 
         <div className={s.navRight}>
           {/* Story 5.10: the ⌘K palette is BACK with real machinery (nav
