@@ -34,24 +34,15 @@ test('a visitor lands inside a working guest sandbox on desktop', async ({ page 
 
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  // Registered BEFORE the navigation that triggers it, or the response can
-  // arrive before waitForResponse starts listening and the test races.
-  const audioResponse = page.waitForResponse((r) => /\/api\/versions\/.+\/audio/.test(r.url()), {
-    timeout: 20_000,
-  });
-
   await page.goto('/demo');
-  await expect(page).toHaveURL(/\/listen-rack\//, { timeout: 20_000 });
-  await expect(page.getByTestId('listen-rack-page')).toBeVisible({ timeout: 20_000 });
+  // Owner ruling 2026-10-01: every screen size lands on the demo song's report.
+  await expect(page).toHaveURL(/\/songs\/.+\/results\//, { timeout: 20_000 });
   await expect(page.getByText(/as a guest/i)).toBeVisible();
-
-  const audio = await audioResponse;
-  expect([200, 206, 302]).toContain(audio.status());
 
   // Reload restore: the guest session (refresh cookie) survives a hard
   // reload with no local state — same destination, same banner.
   await page.reload();
-  await expect(page).toHaveURL(/\/listen-rack\//, { timeout: 20_000 });
+  await expect(page).toHaveURL(/\/songs\/.+\/results\//, { timeout: 20_000 });
   await expect(page.getByText(/as a guest/i)).toBeVisible();
 });
 

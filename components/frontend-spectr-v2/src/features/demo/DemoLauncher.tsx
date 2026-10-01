@@ -71,11 +71,11 @@ export function DemoLauncher() {
       try {
         const res = await withTimeout(demoPromise, START_TIMEOUT_MS);
         await router.invalidate();
-        const dest = demoDestination(res.demo, window.innerWidth);
+        const dest = demoDestination(res.demo);
         await navigate({ ...dest, replace: true });
         capture('demo_started', {
           resumed: res.resumed,
-          surface: dest.to === '/listen-rack/$versionId' ? 'listen' : 'report',
+          surface: 'report',
         });
       } catch (err) {
         if (err instanceof DemoTimeoutError) {
@@ -87,11 +87,11 @@ export function DemoLauncher() {
             .then(async (res) => {
               if (!timedOutRef.current || !mountedRef.current) return;
               await router.invalidate();
-              const dest = demoDestination(res.demo, window.innerWidth);
+              const dest = demoDestination(res.demo);
               await navigate({ ...dest, replace: true });
               capture('demo_started', {
                 resumed: res.resumed,
-                surface: dest.to === '/listen-rack/$versionId' ? 'listen' : 'report',
+                surface: 'report',
                 late: true,
               });
             })

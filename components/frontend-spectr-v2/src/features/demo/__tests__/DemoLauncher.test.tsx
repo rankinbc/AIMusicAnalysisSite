@@ -81,8 +81,8 @@ describe('DemoLauncher', () => {
     await waitFor(() =>
       expect(navigateSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          to: '/listen-rack/$versionId',
-          params: { versionId: 'v' },
+          to: '/songs/$songId/results/$jobId',
+          params: { songId: 's', jobId: 'j' },
           replace: true,
         }),
       ),
@@ -94,7 +94,7 @@ describe('DemoLauncher', () => {
       navigateSpy.mock.invocationCallOrder[0],
     );
     expect(auth.startDemo).toHaveBeenCalledTimes(1); // StrictMode-safe
-    expect(capture).toHaveBeenCalledWith('demo_started', { resumed: false, surface: 'listen' });
+    expect(capture).toHaveBeenCalledWith('demo_started', { resumed: false, surface: 'report' });
   });
 
   it('a signed-in real user goes to the library instead', async () => {
@@ -167,14 +167,14 @@ describe('DemoLauncher', () => {
 
       expect(navigateSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          to: '/listen-rack/$versionId',
-          params: { versionId: 'v' },
+          to: '/songs/$songId/results/$jobId',
+          params: { songId: 's', jobId: 'j' },
           replace: true,
         }),
       );
       expect(capture).toHaveBeenCalledWith('demo_started', {
         resumed: false,
-        surface: 'listen',
+        surface: 'report',
         late: true,
       });
     } finally {
@@ -224,7 +224,7 @@ describe('DemoLauncher', () => {
     );
     await waitFor(() =>
       expect(navigateSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ to: '/listen-rack/$versionId' }),
+        expect.objectContaining({ to: '/songs/$songId/results/$jobId' }),
       ),
     );
     // A fresh auth object (same startDemo fn, new reference) — simulates an
