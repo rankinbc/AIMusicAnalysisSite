@@ -10,7 +10,7 @@ import { presetRows, type PresetRow } from './send-to-listen-model';
 interface Props {
   jobId: string;
   versionId: string | null;
-  /** Number of committed (queued) fixes — gates Listen + the footer note. */
+  /** Number of committed (queued) fixes — drives the footer note. */
   committedCount: number;
   /** The compiled Coach Mix (source='analysis'), lifted from ReportView so the
    *  generate trigger can live in the coach header while the preset row shows
@@ -40,7 +40,10 @@ export function SendToListenCard({ versionId, committedCount, fixRack, onOpenGam
     });
   };
 
-  const canListen = versionId != null && committedCount > 0;
+  // Listen is reachable with an empty queue: a first-time visitor (the demo
+  // above all) has queued nothing yet, and this is the report's only way into
+  // the Listen page. Queued fixes still ride along when there are some.
+  const canListen = versionId != null;
 
   return (
     <div className="fixcard">
