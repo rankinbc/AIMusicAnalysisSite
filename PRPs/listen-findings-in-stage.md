@@ -175,6 +175,13 @@ default on throw, and the page renders correctly with storage disabled.
 **First-visit defaults:** `content: 'findings'`, `bgViz: true`. Under
 `prefers-reduced-motion: reduce`, `bgViz` defaults to `false`.
 
+**Amended 2026-10-01 (owner):** `bgViz` defaults to `true` for everyone — the
+reduced-motion carve-out is removed (VizStage still drops its flash effects
+under reduced motion). Storage now holds only the fields the viewer actually
+set, so switching Findings/Visualizer no longer freezes the current `bgViz`
+default in as a "choice". The body-portaled layer (`.lr-vizbg-layer`) hides
+below 1024px with the rest of the page.
+
 **Rationale.** "Findings in the box, visuals in the background" is the product
 default (P1/§1). Reduced-motion users get the board with no moving canvas
 behind it, matching the existing photosensitivity handling in `VizStage`
