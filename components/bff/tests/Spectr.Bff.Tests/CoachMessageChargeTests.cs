@@ -183,4 +183,45 @@ public sealed class CoachMessageChargeTests(WebApplicationFactory<Program> baseF
         }
         finally { await CleanupAsync(f, uid); }
     }
+
+    // Fails any SaveChanges that inserts a coach message — simulates the message
+    // rows failing to persist AFTER the charge already committed.
+    private sealed class FailCoachMessageSave : Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor
+    {
+        public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> SavingChangesAsync(
+            Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData eventData,
+            Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result, CancellationToken ct = default)
+        {
+            if (eventData.Context!.ChangeTracker.Entries<CoachMessage>()
+                .Any(e => e.State == EntityState.Added))
+                throw new DbUpdateException("simulated message-row save failure");
+            return base.SavingChangesAsync(eventData, result, ct);
+        }
+    }
+
+    // Spec 3.4 / review #4: the charge commits in its own transaction, so a
+    // failed message save must hand the credits back.
+    [SkippableFact]
+    public async Task Message_Save_Failure_Refunds_The_Charge()
+    {
+        var f = baseFactory.WithWebHostBuilder(b =>
+        {
+            b.UseSetting("Credits:Prices:CoachMessage", "5");
+            b.ConfigureTestServices(s =>
+            {
+                s.RemoveAll(typeof(IJobQueue));
+                s.AddSingleton<IJobQueue>(new NoopQueue());
+                s.ConfigureDbContext<AppDbContext>(o => o.AddInterceptors(new FailCoachMessageSave()));
+            });
+        });
+        await TestDb.RequireAsync(f);
+        var (c, uid, analysisId) = await SeedAsync(f, grant: 100);
+        try
+        {
+            try { await c.PostAsJsonAsync($"/api/coach/{analysisId}/messages", new { content = "hello" }); }
+            catch (DbUpdateException) { /* TestServer rethrows unhandled */ }
+            Assert.Equal(100, await BalanceAsync(f, uid));
+        }
+        finally { await CleanupAsync(f, uid); }
+    }
 }
