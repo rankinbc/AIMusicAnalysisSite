@@ -1303,14 +1303,24 @@ public static class VersionEndpoints
                 "Entitlement service temporarily unavailable."));
         }
 
+        var prices = await ents.GetPricesAsync(ct);
+
         if (!freeRetry && ent.AnalysesRemaining == 0)
-            return (Guid.Empty, ErrorEnvelope.Build(409, "entitlement_exhausted",
-                "You have used all your analyses for this billing period."));
+        {
+            // Credit economy: a credits/pro user who can't cover the price gets
+            // the buy sheet (402); a free-tier user keeps the legacy 409 grammar.
+            return (Guid.Empty, ent.Tier is "credits" or "pro"
+                ? ErrorEnvelope.Build(402, "insufficient_credits", "Not enough credits for an analysis.",
+                    new { required = prices.Analysis, balance = ent.CreditBalance })
+                : ErrorEnvelope.Build(409, "entitlement_exhausted",
+                    "You have used all your analyses for this billing period."));
+        }
 
         // Story 10.6 (FR47) — the CROSS-ACCOUNT layers. Per-account caps are
         // useless against N disposable accounts; these arms see through them.
-        // Paid tiers exempt (they pay per unit). Both checks fail-open.
-        if (ent.Tier is not ("pro" or "credits"))
+        // Paying users (Pro or a purchase) exempt — a signup-grant-only account
+        // is not paying (grant farming). Both checks fail-open.
+        if (!ent.IsPaying)
         {
             var cfg106 = httpCtx.RequestServices.GetRequiredService<IConfiguration>();
             var limitsOn = !string.Equals(cfg106["RateLimits:Enabled"], "false", StringComparison.OrdinalIgnoreCase);
@@ -1387,14 +1397,15 @@ public static class VersionEndpoints
 
         // Story 4.5 (AC5/AR26) — the SECOND-analysis verify gate: a free-tier
         // user with an unverified email gets exactly one analysis; the next
-        // dispatch requires verification. Pro/credits exempt (Stripe receipts
-        // already prove a mailbox). Report VIEWING is never gated — read
+        // dispatch requires verification. Paying users (Pro or a purchase)
+        // exempt (Stripe receipts already prove a mailbox; a signup-grant-only
+        // account is NOT paying). Report VIEWING is never gated — read
         // paths don't check this.
         // Story 5.7 review: the verify gate exists to stop a SECOND analysis
         // grant — a free retry re-runs an ALREADY-granted one, and its origin
         // (a degraded complete job) would otherwise count as the "one
         // analysis" and 403 the flagship unverified-free-user scenario.
-        if (!freeRetry && ent.Tier is not ("pro" or "credits"))
+        if (!freeRetry && !ent.IsPaying)
         {
             var verified = await db.Users.AsNoTracking()
                 .Where(u => u.Id == userId)
@@ -1458,39 +1469,11 @@ public static class VersionEndpoints
                     "The free retry for this analysis was already used."));
             }
         }
-        else if (ent.Tier == "credits")
+        else if ((ent.Tier == "pro" && ent.ProAnalysesUsed < (ent.ProAnalysesLimit ?? int.MaxValue))
+                 || ent.Tier == "free")
         {
-            // Insert job first (outside Serializable TX), then spend atomically.
-            var job = new AnalysisJob
-            {
-                Id = jobId,
-                UserId = userId,
-                VersionId = versionId,
-                ReferenceId = referenceId,
-                Tier = "credits",
-                Status = "pending",
-            };
-            db.AnalysisJobs.Add(job);
-            await db.SaveChangesAsync(ct);
-
-            try
-            {
-                await credits.SpendAsync(userId, jobId, billingPeriod, ct);
-            }
-            catch (InsufficientCreditsException)
-            {
-                // Race: balance hit 0 between entitlement check and spend.
-                job.Status = "failed";
-                job.ErrorCode = "insufficient_credits";
-                job.FailedAt = DateTimeOffset.UtcNow;
-                await db.SaveChangesAsync(ct);
-                return (Guid.Empty, ErrorEnvelope.Build(409, "insufficient_credits",
-                    "Insufficient credits."));
-            }
-        }
-        else
-        {
-            // Free / Pro: atomic insert of job + usage event (single EF SaveChanges = implicit TX).
+            // Pro within its monthly allowance, or legacy free allotment:
+            // job + usage event, no credits (single SaveChanges = implicit TX).
             db.AnalysisJobs.Add(new AnalysisJob
             {
                 Id = jobId,
@@ -1508,6 +1491,41 @@ public static class VersionEndpoints
                 Reference = jobId.ToString(),
             });
             await db.SaveChangesAsync(ct);
+        }
+        else
+        {
+            // Credits tier, or Pro past its allowance: charge the analysis price.
+            // Insert job first (outside Serializable TX), then charge atomically.
+            var job = new AnalysisJob
+            {
+                Id = jobId,
+                UserId = userId,
+                VersionId = versionId,
+                ReferenceId = referenceId,
+                Tier = ent.Tier,
+                Status = "pending",
+            };
+            db.AnalysisJobs.Add(job);
+            await db.SaveChangesAsync(ct);
+
+            try
+            {
+                await credits.ChargeAsync(userId, prices.Analysis, jobId.ToString(),
+                    $"spend:analysis:{jobId}", "analysis", ct, billingPeriod);
+            }
+            catch (InsufficientCreditsException ex)
+            {
+                // Race: balance dropped between entitlement check and charge.
+                job.Status = "failed";
+                job.ErrorCode = "insufficient_credits";
+                job.FailedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync(ct);
+                return (Guid.Empty, ErrorEnvelope.Build(402, "insufficient_credits",
+                    "Not enough credits for an analysis.",
+                    new { required = ex.Required, balance = ex.CurrentBalance }));
+            }
+            // Refresh the balance chip on the next entitlements read.
+            ents.InvalidateAsync(userId);
         }
 
         // Enqueue AFTER transaction commits (AR13: worker reads tier from job row).
