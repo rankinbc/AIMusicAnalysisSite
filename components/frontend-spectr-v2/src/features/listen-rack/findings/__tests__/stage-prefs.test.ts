@@ -31,14 +31,27 @@ describe('stage prefs', () => {
     expect(readStagePrefs()).toEqual({ content: 'findings', bgViz: true });
   });
 
-  it('first visit under prefers-reduced-motion leaves the background still', () => {
+  it('first visit = visuals ON in the background even under prefers-reduced-motion (owner, 2026-10-01)', () => {
     mockReducedMotion(true);
-    expect(defaultStagePrefs()).toEqual({ content: 'findings', bgViz: false });
+    expect(defaultStagePrefs()).toEqual({ content: 'findings', bgViz: true });
+    expect(readStagePrefs()).toEqual({ content: 'findings', bgViz: true });
   });
 
-  it('an explicit choice beats the reduced-motion default', () => {
-    mockReducedMotion(true);
-    writeStagePrefs({ content: 'visualizer', bgViz: true });
+  it('an explicit "background off" choice beats the default', () => {
+    writeStagePrefs({ bgViz: false });
+    expect(readStagePrefs()).toEqual({ content: 'findings', bgViz: false });
+  });
+
+  it('writing one field never freezes the other one in', () => {
+    writeStagePrefs({ content: 'visualizer' });
+    expect(JSON.parse(localStorage.getItem(STAGE_PREFS_KEY) ?? '{}')).toEqual({ content: 'visualizer' });
+    writeStagePrefs({ bgViz: false });
+    expect(JSON.parse(localStorage.getItem(STAGE_PREFS_KEY) ?? '{}'))
+      .toEqual({ content: 'visualizer', bgViz: false });
+  });
+
+  it('a stored content choice without a bgViz field keeps the background default', () => {
+    localStorage.setItem(STAGE_PREFS_KEY, JSON.stringify({ content: 'visualizer' }));
     expect(readStagePrefs()).toEqual({ content: 'visualizer', bgViz: true });
   });
 
