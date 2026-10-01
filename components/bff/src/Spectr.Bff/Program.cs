@@ -401,6 +401,8 @@ builder.Services.AddOptions<PricingDisplayOptions>()
     .Validate(o => o.ProMonthlyCents > 0 && o.ProAnnualCents > 0,
         "PricingDisplay cents values must be positive")
     .ValidateOnStart();
+// Runs after Bind: configured credit packs replace (never extend) the defaults.
+builder.Services.PostConfigure<PricingDisplayOptions>(PricingDisplayOptions.ApplyDefaultCreditPacks);
 
 // Initialize Stripe SDK if a key is present. Read straight from
 // IConfiguration to avoid BuildServiceProvider() at config-time (ASP0000).

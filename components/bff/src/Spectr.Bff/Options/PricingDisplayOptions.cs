@@ -24,12 +24,24 @@ public sealed class PricingDisplayOptions
     // Credit economy (2026-10-01) — one-time credit packs (display cents). The
     // BILLED amount is the Stripe Price in StripeOptions.CreditPackPrices[credits];
     // BillingReconciliationService alerts on drift.
-    public List<CreditPackOption> CreditPacks { get; init; } =
+    // Empty by default ON PURPOSE: the configuration binder APPENDS to a
+    // pre-populated list, so configuring one pack would have yielded the three
+    // defaults plus the configured one. Defaults are applied after binding,
+    // only when nothing is configured (see ApplyDefaultCreditPacks).
+    public List<CreditPackOption> CreditPacks { get; set; } = [];
+
+    public static readonly IReadOnlyList<CreditPackOption> DefaultCreditPacks =
     [
         new() { Credits = 500, Cents = 700 },
         new() { Credits = 1500, Cents = 1800 },
         new() { Credits = 5000, Cents = 5500 },
     ];
+
+    // Configured packs REPLACE the defaults; none configured ⇒ the defaults.
+    public static void ApplyDefaultCreditPacks(PricingDisplayOptions o)
+    {
+        if (o.CreditPacks.Count == 0) o.CreditPacks = [.. DefaultCreditPacks];
+    }
     public string Currency { get; init; } = "USD";
 }
 

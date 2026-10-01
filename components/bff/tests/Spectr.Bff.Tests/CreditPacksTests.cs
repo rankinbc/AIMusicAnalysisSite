@@ -20,6 +20,22 @@ public sealed class CreditPacksTests(WebApplicationFactory<Program> f) : IClassF
         Assert.Equal(15, plans.Costs!.Specialist);
     }
 
+    // The config binder appends to a pre-populated list; configured packs must
+    // REPLACE the defaults or the credits checkout would need Stripe prices for
+    // packs the operator never configured.
+    [SkippableFact]
+    public async Task Configured_Packs_Replace_The_Defaults()
+    {
+        await TestDb.RequireAsync(f);
+        var custom = f.WithWebHostBuilder(b =>
+            b.UseSetting("PricingDisplay:CreditPacks:0:Credits", "1000")
+             .UseSetting("PricingDisplay:CreditPacks:0:Cents", "1500"));
+        var plans = await custom.CreateClient().GetFromJsonAsync<PlansResponse>("/api/billing/plans");
+        Assert.NotNull(plans);
+        Assert.Equal(new[] { 1000 }, plans!.CreditPacks.Select(p => p.Credits));
+        Assert.Equal(new[] { 1500 }, plans.CreditPacks.Select(p => p.Cents));
+    }
+
     [SkippableFact]
     public async Task Checkout_Rejects_Unknown_Pack_Size()
     {
