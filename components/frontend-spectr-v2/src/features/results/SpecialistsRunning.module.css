@@ -1,0 +1,95 @@
+/* "N specialists running…" header pill (SpecialistsRunning.tsx).
+   Selectors carry an element part (`span.wrap`, `.pill > .bars > span`) or a
+   second class so they out-rank the results page's scoped reset
+   (`.rdx * { margin:0; padding:0 }`, specificity 0,1,0). */
+/* Negative block margins: the pill is taller than the kicker text, and the
+   header must not jump when it appears/disappears. */
+span.wrap {
+  display: inline-flex;
+  margin: -6px 0 -6px auto;
+}
+
+.wrap .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 10px 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--cyan-glow);
+  background: var(--cyan-dim);
+  color: var(--cyan);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  line-height: 1.4;
+  animation: srGlow 2.4s ease-in-out infinite;
+}
+
+button.pill {
+  cursor: pointer;
+}
+button.pill:hover {
+  border-color: var(--cyan);
+}
+button.pill:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+.pill > .bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 10px;
+}
+
+.pill > .bars > span {
+  width: 2px;
+  height: 100%;
+  border-radius: 1px;
+  background: var(--cyan);
+  transform-origin: bottom;
+  animation: srBar 0.9s ease-in-out infinite;
+}
+.pill > .bars > span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.pill > .bars > span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+.pill > .bars > span:nth-child(4) {
+  animation-delay: 0.45s;
+}
+
+@keyframes srBar {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes srGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    box-shadow: 0 0 10px 0 var(--cyan-glow);
+  }
+}
+
+/* Motion-sensitive users keep the cue (static bars at staggered heights). */
+@media (prefers-reduced-motion: reduce) {
+  .wrap .pill,
+  .pill > .bars > span {
+    animation: none;
+  }
+  .pill > .bars > span:nth-child(odd) {
+    transform: scaleY(0.6);
+  }
+}

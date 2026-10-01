@@ -105,6 +105,8 @@
 .rdx .rh-kicker { font-family:'JetBrains Mono',monospace; font-size:8.5px; letter-spacing:.16em; text-transform:uppercase; color:#7aa2f7; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
 .rdx .rh-kicker::before { content:''; width:5px; height:5px; border-radius:50%; background:#7aa2f7; box-shadow:0 0 6px #7aa2f7; }
 .rdx .rhead .player { margin-top:auto; }
+.rdx .rh-kickrow { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:6px; }
+.rdx .rh-kickrow .rh-kicker { margin-bottom:0; }
 .rdx .rh-top { display:flex; align-items:flex-start; gap:16px; }
 .rdx .rh-cover { flex-shrink:0; }
 .rdx .rh-titles { flex:1; min-width:0; }

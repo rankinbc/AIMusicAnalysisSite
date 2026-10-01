@@ -3,6 +3,7 @@ import { hueFromId } from '../../ui/hueFromId';
 import { GenreCorrectChip } from './GenreCorrectChip';
 import { fmtGenre } from './helpers/format';
 import { Icon } from './Icon';
+import { SpecialistsRunning } from './SpecialistsRunning';
 
 export interface SongHeaderInputs {
   mix: boolean;
@@ -31,6 +32,11 @@ interface SongHeaderProps {
   /** Story 12.5: the clicked chip's input key — the parent opens the matching
    *  real upload dialog (stems/.als/reference). Undefined = generic add. */
   onAddInputs: (key?: keyof SongHeaderInputs) => void;
+  /** How many AI specialists are running right now — shows the animated
+   *  "N specialists running…" pill in the kicker row (hidden at 0). */
+  specialistsRunning?: number;
+  /** Opens the Specialist Team roster from the running pill. */
+  onSpecialistsClick?: (() => void) | undefined;
 }
 
 const INPUT_DEFS: { key: keyof SongHeaderInputs; label: string; add: string }[] = [
@@ -54,13 +60,18 @@ export function SongHeader({
   genre,
   inputs,
   onAddInputs,
+  specialistsRunning = 0,
+  onSpecialistsClick,
 }: SongHeaderProps) {
   const hue = hueFromId(versionId ?? songId);
   const genreLabel = genre && genre !== 'other' ? fmtGenre(genre) : null;
 
   return (
     <div className="rhead">
-      <div className="rh-kicker">Analyzed</div>
+      <div className="rh-kickrow">
+        <div className="rh-kicker">Analyzed</div>
+        <SpecialistsRunning count={specialistsRunning} onClick={onSpecialistsClick} />
+      </div>
       <div className="rh-top">
         <CoverArt hue={hue} size="md">
           {versionLabel && <span className="rh-cover-badge">{versionLabel}</span>}

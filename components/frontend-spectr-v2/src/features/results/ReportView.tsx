@@ -1,5 +1,5 @@
 import { analyzedInputs } from './helpers/analyzed-inputs';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { toast } from 'sonner';
 
@@ -14,7 +14,6 @@ import {
   useNotes,
   useReanalyzeVersion,
   useSong,
-  useVerdicts,
   useVersionFiles,
 } from '../../api/hooks';
 import { UpgradeSheet } from '../../components/UpgradeSheet';
@@ -53,6 +52,7 @@ import { generateGamePlan, type ExportConfig } from './export-generator';
 import { ResultsTabs, type ResultsTabKey } from './ResultsTabs';
 import { FixBoard, type FixBoardMode } from './FixBoard';
 import { useFixRackGeneration } from './useFixRackGeneration';
+import { useSpecialistRuns } from './useSpecialistRuns';
 import { faultCount } from './problems-helpers';
 import { appendPlanLog, readPlanLog } from './plan-log';
 import type { VerdictDto } from '../../api/types';
@@ -127,13 +127,28 @@ export function ReportView({
   // Stems tab unlocks when the user-stems analysis ran clean.
   const hasStems = (phase4?.stems as { status?: string } | undefined)?.status === 'ok';
 
-  // Verdicts are the AI-Move source + CoachChat grounding. Shared query cache
-  // (keyed by jobId) — single fetch.
-  const emptySetRef = useRef<ReadonlySet<string>>(new Set<string>());
-  const { data: verdictsData } = useVerdicts(jobId, {
-    enabled: true,
-    optimisticRunning: emptySetRef.current,
+  // Which inputs the analysis ran on — drives the header chips.
+  const { data: filesData } = useVersionFiles(versionId ?? '');
+  const inputs: SongHeaderInputs = useMemo(
+    () =>
+      analyzedInputs(
+        filesData?.files ?? [],
+        isFinalJson(results.finalJson) ? results.finalJson : undefined,
+      ),
+    [filesData, results.finalJson],
+  );
+
+  // Verdicts are the AI-Move source + CoachChat grounding, and the specialist
+  // run state (Triage auto-run + user clicks) lives here so the header's
+  // "N specialists running…" pill and the Coach card's roster share ONE set.
+  const specialistRuns = useSpecialistRuns({
+    jobId,
+    analysisId: results.analysisId,
+    hasStems: inputs.stems,
   });
+  const verdictsData = specialistRuns.data;
+  const [specialistsOpen, setSpecialistsOpen] = useState(false);
+  const openSpecialists = useCallback(() => setSpecialistsOpen(true), []);
   const verdicts = useMemo(() => verdictsData?.verdicts ?? [], [verdictsData]);
   const triageTimedOut = useTriageTimedOut(jobId, verdictsData); // P9
 
@@ -148,16 +163,6 @@ export function ReportView({
   const { data: notesData } = useNotes(versionId ?? '');
   const noteCount = notesData?.length ?? 0;
 
-  // Which inputs the analysis ran on — drives the header chips.
-  const { data: filesData } = useVersionFiles(versionId ?? '');
-  const inputs: SongHeaderInputs = useMemo(
-    () =>
-      analyzedInputs(
-        filesData?.files ?? [],
-        isFinalJson(results.finalJson) ? results.finalJson : undefined,
-      ),
-    [filesData, results.finalJson],
-  );
 
   // ── Committed ("Added to Listen") moves — lifted here so both the Coach tab
   // (move toggles) and the sidebar (Fixes for Listen queue) stay in sync. ──
@@ -455,6 +460,8 @@ export function ReportView({
                   findingCount={faultCount(verdicts)}
                   suggestionCount={moves.length}
                   onAddInputs={onAddInputs}
+                  specialistsRunning={specialistRuns.running.size}
+                  onSpecialistsClick={openSpecialists}
                 />
                 <SendToListenCard
                   jobId={jobId}
@@ -466,10 +473,15 @@ export function ReportView({
               </div>
 
               <CoachTab
-                jobId={jobId}
                 analysisId={results.analysisId}
                 trackName={trackName}
                 verdicts={verdicts}
+                verdictsData={verdictsData}
+                runningSlugs={specialistRuns.running}
+                ranSlugs={specialistRuns.ranSlugs}
+                onRunSpecialist={specialistRuns.runSpecialist}
+                specialistsOpen={specialistsOpen}
+                onSpecialistsOpenChange={setSpecialistsOpen}
                 measurementsCount={countMeasurements(fj)}
                 inputs={inputs}
                 committed={committed}

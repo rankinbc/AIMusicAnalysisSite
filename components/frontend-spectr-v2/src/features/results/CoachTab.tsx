@@ -1,20 +1,25 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { useMemo, useState } from 'react';
 
-import { useRunSpecialist, useVerdicts } from '../../api/hooks';
-import type { VerdictDto } from '../../api/types';
+import type { VerdictDto, VerdictsListResponse } from '../../api/types';
 import { CoachChat } from './CoachChat';
 import { Icon } from './Icon';
-import { SPECIALIST_CATALOG } from './helpers/specialists';
 import { SpecialistTeamModal } from './SpecialistTeamModal';
 import type { Move } from './move-model';
 import type { SongHeaderInputs } from './SongHeader';
 
 interface CoachTabProps {
-  jobId: string;
   analysisId: string;
   trackName: string;
   verdicts: VerdictDto[];
+  /** The verdicts list response — owned by ReportView's useSpecialistRuns. */
+  verdictsData: VerdictsListResponse | undefined;
+  /** Specialist run state, lifted to ReportView (shared with the header pill). */
+  runningSlugs: ReadonlySet<string>;
+  ranSlugs: ReadonlySet<string>;
+  onRunSpecialist: (slug: string) => Promise<void>;
+  /** Specialist Team modal visibility — lifted so the header pill can open it. */
+  specialistsOpen: boolean;
+  onSpecialistsOpenChange: (open: boolean) => void;
   measurementsCount: number;
   inputs: SongHeaderInputs;
   /** Committed ("queued for Listen") moves — the Coach Mix confirm modal lists
@@ -36,10 +41,15 @@ interface CoachTabProps {
  *  header actions (Coach Mix confirm, Specialist Team). The recommended-fixes
  *  list moved to the Findings board — this card is chat-only now. */
 export function CoachTab({
-  jobId,
   analysisId,
   trackName,
   verdicts,
+  verdictsData,
+  runningSlugs,
+  ranSlugs,
+  onRunSpecialist,
+  specialistsOpen,
+  onSpecialistsOpenChange,
   measurementsCount,
   inputs,
   committed,
@@ -50,30 +60,8 @@ export function CoachTab({
   credits,
   askSeed,
 }: CoachTabProps) {
-  const [optimisticRunning, setOptimisticRunning] = useState<ReadonlySet<string>>(
-    () => new Set<string>(),
-  );
-  const [specOpen, setSpecOpen] = useState(false);
   const [cmOpen, setCmOpen] = useState(false);
-
-  const { data } = useVerdicts(jobId, { optimisticRunning, enabled: true });
-  const run = useRunSpecialist(jobId);
-
-  // Drop slugs from optimistic-running once their verdict lands.
-  useEffect(() => {
-    if (!data) return;
-    const ran = new Set(data.specialists.filter((sp) => sp.status !== 'idle').map((sp) => sp.slug));
-    setOptimisticRunning((prev) => {
-      const next = new Set<string>();
-      for (const slug of prev) if (!ran.has(slug)) next.add(slug);
-      return next.size === prev.size ? prev : next;
-    });
-  }, [data]);
-
-  const ranSlugs = useMemo(
-    () => new Set((data?.specialists ?? []).filter((sp) => sp.status !== 'idle').map((sp) => sp.slug)),
-    [data],
-  );
+  const data = verdictsData;
 
   const foundBySlug = useMemo(() => {
     const m = new Map<string, number>();
@@ -89,56 +77,6 @@ export function CoachTab({
     () => new Set((data?.routingPlan?.specialistsToRun ?? []).map((e) => e.name)),
     [data],
   );
-
-  const handleRun = useCallback(
-    async (slug: string) => {
-      setOptimisticRunning((prev) => new Set(prev).add(slug));
-      try {
-        await run.mutateAsync(slug);
-      } catch (err) {
-        setOptimisticRunning((prev) => {
-          const next = new Set(prev);
-          next.delete(slug);
-          return next;
-        });
-        toast.error(err instanceof Error ? err.message : 'Could not start specialist');
-      }
-    },
-    [run],
-  );
-
-  // Auto-run the Triage-suggested specialists on the initial view so the
-  // rack-backed suggested fixes actually appear. Fires once per analysis, only
-  // when no AI verdict has landed yet, and skips stem-only specialists.
-  const autoRanRef = useRef<string | null>(null);
-  const autoRunSpecialist = useCallback(
-    (slug: string) => {
-      setOptimisticRunning((prev) => new Set(prev).add(slug));
-      void run.mutateAsync(slug).catch(() => {
-        setOptimisticRunning((prev) => {
-          const next = new Set(prev);
-          next.delete(slug);
-          return next;
-        });
-      });
-    },
-    [run],
-  );
-  useEffect(() => {
-    const plan = data?.routingPlan;
-    if (!plan || autoRanRef.current === analysisId) return;
-    autoRanRef.current = analysisId;
-    if (verdicts.some((v) => v.source === 'llm_identifier')) return; // already have AI fixes
-    const already = new Set(
-      (data?.specialists ?? []).filter((sp) => sp.status !== 'idle').map((sp) => sp.slug),
-    );
-    for (const entry of plan.specialistsToRun) {
-      const meta = SPECIALIST_CATALOG.find((s) => s.slug === entry.name);
-      if (already.has(entry.name)) continue;
-      if (meta?.needsStems && !inputs.stems) continue;
-      autoRunSpecialist(entry.name);
-    }
-  }, [data, analysisId, verdicts, inputs.stems, autoRunSpecialist]);
 
   const fixCount = committed.length;
 
@@ -162,7 +100,7 @@ export function CoachTab({
           {coachMixGenerating ? 'Compiling…' : 'Coach Mix'}
         </button>
       )}
-      <button type="button" className="spec-btn" onClick={() => setSpecOpen(true)}>
+      <button type="button" className="spec-btn" onClick={() => onSpecialistsOpenChange(true)}>
         <Icon name="robot" size={13} />
         Specialists
       </button>
@@ -196,17 +134,17 @@ export function CoachTab({
         />
       )}
 
-      {specOpen && (
+      {specialistsOpen && (
         <SpecialistTeamModal
           ranSlugs={ranSlugs}
-          runningSlugs={optimisticRunning}
+          runningSlugs={runningSlugs}
           foundBySlug={foundBySlug}
           suggestedSlugs={suggestedSlugs}
           verdicts={verdicts}
           hasStems={inputs.stems}
           credits={credits}
-          onRun={handleRun}
-          onClose={() => setSpecOpen(false)}
+          onRun={onRunSpecialist}
+          onClose={() => onSpecialistsOpenChange(false)}
         />
       )}
     </>

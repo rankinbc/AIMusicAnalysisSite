@@ -120,7 +120,7 @@ export const STAGES: readonly PipelineStage[] = [
       // verdict_lib/prompt_loader.py SLUG_TO_FILENAME (26 specialists);
       // aimusic_shared/verdicts/models.py (Verdict.evidence, Fix.dsp_chain,
       // DspOp params: frequency_hz/gain_db/q, threshold_db/ratio/attack_ms/
-      // release_ms); results/CoachTab.tsx auto-runs the Triage-suggested
+      // release_ms); results/useSpecialistRuns.ts auto-runs the Triage-suggested
       // specialists, the rest run on demand (useRunSpecialist).
       {
         id: 'specialists',
