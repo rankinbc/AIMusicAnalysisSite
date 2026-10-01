@@ -209,4 +209,51 @@ describe('useCoachBrief', () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  // Fix wave FW3 — a routed specialist that never runs (stem-only without
+  // stems, a guest limit, a failed dispatch) must not block the brief
+  // forever: 150 s after triage it is asked for anyway, once.
+  it('asks for the brief 150 s after triage even when a specialist never ran — exactly once', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({ ok: true, status: 202, json: async () => ({ status: 'created', messageId: 'm1' }) } as Response),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const onMessageId = vi.fn();
+    const args = { ...readyArgs, specialistsSuggested: 3, specialistsRan: 1 };
+
+    renderHook(() => useCoachBrief({ analysisId: 'a1', ...args, onMessageId }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(149_000);
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(onMessageId).toHaveBeenCalledWith('m1');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600_000);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('never asks when unmounted before the 150 s wait ends', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const { unmount } = renderHook(() =>
+      useCoachBrief({ analysisId: 'a1', ...readyArgs, specialistsSuggested: 3, specialistsRan: 1, onMessageId: vi.fn() }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100_000);
+    });
+    unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200_000);
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

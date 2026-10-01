@@ -23,13 +23,20 @@ export interface ShouldRequestBriefArgs {
   conversationLoaded: boolean;
   hasBrief: boolean;
   alreadyRequested: boolean;
+  /** Fix wave FW3 — the post-triage wait for specialists ran out. */
+  specialistWaitExpired?: boolean;
 }
 
 /** Pure gate, independently testable. */
 export function shouldRequestBrief(a: ShouldRequestBriefArgs): boolean {
   if (a.alreadyRequested || a.hasBrief) return false;
   if (!a.triageDone || !a.conversationLoaded) return false;
-  if (a.specialistsSuggested > 0 && a.specialistsRan < a.specialistsSuggested) return false;
+  if (
+    a.specialistsSuggested > 0 &&
+    a.specialistsRan < a.specialistsSuggested &&
+    !a.specialistWaitExpired
+  )
+    return false;
   return true;
 }
 
@@ -37,6 +44,11 @@ export function shouldRequestBrief(a: ShouldRequestBriefArgs): boolean {
 // 120s (~2 minutes), then the hook goes silent for the rest of the report
 // view. Never a tight loop; never unbounded.
 const BACKOFF_MS = [5000, 10000, 20000, 40000, 45000];
+
+// Fix wave FW3 — a routed specialist may never run (stem-only without stems,
+// a guest limit, a failed dispatch). Once triage is done, wait at most this
+// long for the specialists, then ask for a (thinner) brief anyway.
+export const SPECIALIST_WAIT_MS = 150_000;
 
 interface Latch {
   analysisId: string | null;
@@ -72,6 +84,16 @@ export function useCoachBrief({
   const latchRef = useRef<Latch>({ analysisId: null, requested: false, settled: false, attempt: 0 });
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [tick, setTick] = useState(0);
+  const [waitExpiredFor, setWaitExpiredFor] = useState<string | null>(null);
+  const specialistWaitExpired = analysisId !== null && waitExpiredFor === analysisId;
+
+  // FW3 — the bounded specialist wait. Starts once triage is done; cleared
+  // on unmount or when the report changes.
+  useEffect(() => {
+    if (!analysisId || !triageDone) return;
+    const t = setTimeout(() => setWaitExpiredFor(analysisId), SPECIALIST_WAIT_MS);
+    return () => clearTimeout(t);
+  }, [analysisId, triageDone]);
 
   // A new report view resets the latch and cancels any pending backoff.
   useEffect(() => {
@@ -96,6 +118,7 @@ export function useCoachBrief({
         conversationLoaded,
         hasBrief,
         alreadyRequested,
+        specialistWaitExpired,
       })
     ) {
       return;
@@ -153,6 +176,7 @@ export function useCoachBrief({
     hasBrief,
     onMessageId,
     tick,
+    specialistWaitExpired,
   ]);
 
   useEffect(

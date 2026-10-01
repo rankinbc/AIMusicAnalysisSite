@@ -141,7 +141,10 @@ export function CoachChat({
   // stream and shows it live instead of the old invalidate-a-signal-query
   // indirection (which only ever refetched once, at t≈0, before the worker
   // had written anything).
-  const hasBrief = turns.some((t) => t.role === 'assistant' && t.isBrief === true);
+  // Fix wave FW3 — only a FINISHED brief counts: an `error` (or a pending
+  // one nobody is following) is re-asked once per mount (the server answers
+  // `retried`, or `exists` for a fresh pending/capped one) and followed.
+  const hasBrief = turns.some((t) => t.role === 'assistant' && t.isBrief === true && t.finalized === true);
   useCoachBrief({
     analysisId,
     triageDone,

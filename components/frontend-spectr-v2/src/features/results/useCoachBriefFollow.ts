@@ -32,9 +32,12 @@ function buildAuthHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function fetchConversationDto(analysisId: string): Promise<CoachConversationDto | null> {
+async function fetchConversationDto(
+  analysisId: string,
+  signal: AbortSignal,
+): Promise<CoachConversationDto | null> {
   try {
-    const res = await fetch(`/api/coach/${analysisId}/conversation`, { headers: buildAuthHeaders() });
+    const res = await fetch(`/api/coach/${analysisId}/conversation`, { headers: buildAuthHeaders(), signal });
     if (!res.ok) return null;
     return (await res.json()) as CoachConversationDto;
   } catch {
@@ -83,6 +86,20 @@ export function useCoachBriefFollow({
 
   useEffect(() => () => clearPollTimer(), [clearPollTimer]);
 
+  // Fix wave FW3 — one controller per mount: unmount aborts any in-flight
+  // ensure-fetch / poll fetch, and tells an `aborted` stream result apart
+  // from a user Stop.
+  const lifeRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const ac = new AbortController();
+    lifeRef.current = ac;
+    return () => ac.abort();
+  }, []);
+  const lifeSignal = useCallback(() => {
+    if (!lifeRef.current) lifeRef.current = new AbortController();
+    return lifeRef.current.signal;
+  }, []);
+
   // Bounded fallback for the opening brief: fetch the conversation, apply
   // it (unless a send is mid-flight — never replace `turns` wholesale
   // while one streams), and stop once the brief row is terminal. `attempt`
@@ -95,8 +112,10 @@ export function useCoachBriefFollow({
     (messageId: string, requestAnalysisId: string, attempt: number) => {
       (async () => {
         if (requestAnalysisId !== analysisId) return; // navigated away — stop
-        const dto = await fetchConversationDto(requestAnalysisId);
-        if (requestAnalysisId !== analysisId) return;
+        const signal = lifeSignal();
+        if (signal.aborted) return; // unmounted — stop
+        const dto = await fetchConversationDto(requestAnalysisId, signal);
+        if (requestAnalysisId !== analysisId || signal.aborted) return;
         let isTerminal = false;
         if (dto && !sendingRef.current) {
           setCaps(dto.caps);
@@ -110,7 +129,7 @@ export function useCoachBriefFollow({
         }, BRIEF_POLL_INTERVAL_MS);
       })();
     },
-    [analysisId, sendingRef, setCaps, setTurns],
+    [analysisId, lifeSignal, sendingRef, setCaps, setTurns],
   );
 
   const followMessage = useCallback(
@@ -125,8 +144,9 @@ export function useCoachBriefFollow({
         // Mount-time hydration ran before the brief existed, so `turns`
         // won't have it yet — one GET /conversation (never more) to seed
         // it before opening the stream.
-        const dto = await fetchConversationDto(requestAnalysisId);
-        if (requestAnalysisId !== analysisId) return;
+        const life = lifeSignal();
+        const dto = await fetchConversationDto(requestAnalysisId, life);
+        if (requestAnalysisId !== analysisId || life.aborted) return;
         if (sendingRef.current) {
           // A send started while this fetch was in flight — don't clobber
           // it with a wholesale turns replace; resume after it settles.
@@ -196,7 +216,16 @@ export function useCoachBriefFollow({
         abortRef.current = null;
         if (requestAnalysisId !== analysisId) return;
 
-        if (result === 'aborted') return; // unmount or user Stop — leave state as-is
+        if (result === 'aborted') {
+          if (life.aborted) return; // unmounted — apply nothing
+          // Fix wave FW3 — a user Stop only detaches this view: the server
+          // never cancels a brief (the row is authoritative), so reconcile
+          // by polling until it is terminal instead of leaving an
+          // unfinished bubble with no closing line until a reload.
+          setStreamStatus('The coach is finishing the brief…');
+          pollUntilTerminal(messageId, requestAnalysisId, 1);
+          return;
+        }
         if (result === 'done' || result === 'refusal' || result === 'error') {
           setStreamStatus(
             result === 'done'
@@ -214,7 +243,7 @@ export function useCoachBriefFollow({
         pollUntilTerminal(messageId, requestAnalysisId, 1);
       })();
     },
-    [analysisId, abortRef, pollUntilTerminal, sendingRef, setCaps, setStreamStatus, setStreaming, setTurns],
+    [analysisId, abortRef, lifeSignal, pollUntilTerminal, sendingRef, setCaps, setStreamStatus, setStreaming, setTurns],
   );
 
   // Item 2 — called from send()'s `finally`, after `sendingRef.current`
