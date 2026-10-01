@@ -1,7 +1,9 @@
 // components/bff/tests/Spectr.Bff.Tests/DispatchCreditChargeTests.cs
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Spectr.Bff.Services;
 using Spectr.Data;
 using Spectr.Data.Entities;
@@ -136,6 +138,42 @@ public sealed class DispatchCreditChargeTests(WebApplicationFactory<Program> bas
         await TestDb.RequireAsync(f);
         var (c, uid, vid) = await SeedAsync(f, grant: 500);
         Assert.Equal(HttpStatusCode.Accepted, (await c.PostAsync($"/api/versions/{vid}/analyze", null)).StatusCode);
+        Assert.Equal(500, await BalanceAsync(f, uid));
+    }
+
+    private sealed class ThrowingQueue : Spectr.Bff.Services.IJobQueue
+    {
+        public Task EnqueueAsync(string t, object[] a, CancellationToken ct = default) => throw new InvalidOperationException("redis down (test double)");
+        public Task EnqueueAsync(string t, object[] a, string q, CancellationToken ct = default) => throw new InvalidOperationException("redis down (test double)");
+        public Task EnqueueDelayedAsync(string t, object[] a, string q, TimeSpan d, CancellationToken ct = default) => throw new InvalidOperationException("redis down (test double)");
+    }
+
+    // Spec 3.4: the 500 hides the jobId from the client, so the lazy GET /jobs
+    // refund can never fire — the enqueue-failure catch must refund itself.
+    [SkippableFact]
+    public async Task Enqueue_Failure_Refunds_The_Charge_Once()
+    {
+        var f = Factory();
+        await TestDb.RequireAsync(f);
+        var (c, uid, vid) = await SeedAsync(f, grant: 500);
+        using var broken = f.WithWebHostBuilder(b => b.ConfigureTestServices(s =>
+        {
+            s.RemoveAll(typeof(Spectr.Bff.Services.IJobQueue));
+            s.AddSingleton<Spectr.Bff.Services.IJobQueue>(new ThrowingQueue());
+        }));
+        var client = broken.CreateClient();
+        client.DefaultRequestHeaders.Authorization = c.DefaultRequestHeaders.Authorization;
+        try { await client.PostAsync($"/api/versions/{vid}/analyze", null); }
+        catch (InvalidOperationException) { /* TestServer rethrows unhandled */ }
+
+        Assert.Equal(500, await BalanceAsync(f, uid));
+        using var scope = f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var job = await db.AnalysisJobs.AsNoTracking().SingleAsync(j => j.VersionId == vid);
+        Assert.Equal("dispatch_failed", job.ErrorCode);
+        // The lazy read path must not pay a second time.
+        var svc = scope.ServiceProvider.GetRequiredService<CreditLedgerService>();
+        await svc.ReverseAsync(uid, job.Id, "dispatch_failed", CancellationToken.None);
         Assert.Equal(500, await BalanceAsync(f, uid));
     }
 }

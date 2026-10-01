@@ -119,6 +119,53 @@ public sealed class StaleJobReaperTests(WebApplicationFactory<Program> factory)
         }
     }
 
+    // Credit economy (spec 3.4): a reaped job's analysis charge is refunded in
+    // the write path — the user may never re-open the job. Idempotent: a second
+    // sweep (and the lazy GET /jobs/{id} backstop) must not double-refund.
+    [SkippableFact]
+    public async Task Reaped_Job_Refunds_Its_Analysis_Charge_Once()
+    {
+        await TestDb.RequireAsync(_factory);
+
+        var client = _factory.CreateClient();
+        var (userId, _) = await TestAuth.RegisterAsync(client);
+        var (_, versionId) = await TestSeed.SongWithVersionAsync(_factory, userId);
+        var jobId = await SeedJobAsync(userId, versionId, "processing",
+            dispatchedAt: DateTimeOffset.UtcNow.AddHours(-1), startedAt: DateTimeOffset.UtcNow.AddMinutes(-40));
+        int Balance()
+        {
+            using var s = _factory.Services.CreateScope();
+            return s.ServiceProvider.GetRequiredService<CreditLedgerService>()
+                .GetBalanceAsync(userId, CancellationToken.None).GetAwaiter().GetResult();
+        }
+        try
+        {
+            using (var scope = _factory.Services.CreateScope())
+            {
+                var svc = scope.ServiceProvider.GetRequiredService<CreditLedgerService>();
+                await svc.GrantSignupBonusAsync(userId, 500, CancellationToken.None);
+                await svc.ChargeAsync(userId, 100, jobId.ToString(), $"spend:analysis:{jobId}", "analysis", CancellationToken.None);
+            }
+            Assert.Equal(400, Balance());
+
+            await NewReaper().ReapAsync(CancellationToken.None);
+            Assert.Equal("failed", await StatusOfAsync(jobId));
+            Assert.Equal(500, Balance());
+
+            await NewReaper().ReapAsync(CancellationToken.None);
+            Assert.Equal(500, Balance());
+        }
+        finally
+        {
+            await CleanupAsync(jobId);
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await TestAuth.AllowPurgeAsync(db);
+            await db.CreditLedger.Where(e => e.UserId == userId).ExecuteDeleteAsync();
+            await db.UsageEvents.Where(e => e.UserId == userId).ExecuteDeleteAsync();
+        }
+    }
+
     // Story 12.2 (AC2) — the heartbeat-aware fast pending tier: a DEAD worker
     // (stale/absent heartbeat) fails queued jobs after the short grace; a
     // BUSY worker (fresh heartbeat) keeps the long grace so its queue is
