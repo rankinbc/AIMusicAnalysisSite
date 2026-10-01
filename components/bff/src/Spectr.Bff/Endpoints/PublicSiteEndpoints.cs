@@ -46,13 +46,15 @@ public static class PublicSiteEndpoints
             description: "Private-by-default library, no public pages or share links, anonymous analysis data purged after 72 hours, full export and deletion.",
             heading: "Privacy defaults",
             body: "Private by default. Nothing you upload is visible to anyone else. Export or delete everything, any time.")).AllowAnonymous().WithTags("public-site");
-        // Task P6 — the engineering page ("How SPECTR is built").
+        // Task P6, rewritten 2026-10: the producer-facing "How SPECTR works"
+        // page (upload -> plan pipeline + differentiators). Second copy of
+        // features/how-it-works/pipeline.ts — keep the two in step.
         app.MapGet("/trust/how-its-built", (HttpContext c) => Shell(c,
             path: "/trust/how-its-built",
-            title: "How SPECTR is built — SPECTR",
-            description: "The architecture, the decisions and the guard rails behind SPECTR — a .NET BFF, a Python analysis worker and a React audio workstation.",
-            heading: "How SPECTR is built",
-            body: "A .NET gateway, a Python analysis worker and a React audio workstation — with the numbers and the trade-offs.")).AllowAnonymous().WithTags("public-site");
+            title: "How SPECTR works — SPECTR",
+            description: "From upload to a mix plan: SPECTR measures your track, flags problems with genre-relative rules and AI specialists, checks every finding against the measurements, and lets you hear the fixes in your browser.",
+            heading: "How SPECTR works",
+            body: "Most online mix checkers give you a score and a few generic tips. SPECTR measures your track, finds the specific problems those measurements point to, and turns them into a prioritised plan with exact settings that you can hear on your own track before you touch your DAW.")).AllowAnonymous().WithTags("public-site");
         return app;
     }
 
