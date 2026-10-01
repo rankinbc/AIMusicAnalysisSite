@@ -68,6 +68,18 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
     }
 
 
+    // Stripe refusing the call (e.g. a config error) surfaces as StripeException.
+    private sealed class ThrowingCheckoutClient : IStripeCheckoutClient
+    {
+        public Task<Customer> CreateCustomerAsync(
+            CustomerCreateOptions options, string idempotencyKey, CancellationToken ct)
+            => Task.FromResult(new Customer { Id = $"cus_test_{Guid.NewGuid():N}" });
+
+        public Task<Session> CreateCheckoutSessionAsync(
+            SessionCreateOptions options, string idempotencyKey, CancellationToken ct)
+            => throw new StripeException("No such price");
+    }
+
     // Settable clock so a test can cross a checkout idempotency-key bucket.
     private sealed class MutableClock(DateTimeOffset now) : TimeProvider
     {
@@ -276,6 +288,27 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
             Assert.NotEqual(first, fake.LastSessionIdempotencyKey);
         }
         finally { await CleanupUser(factory, userId); }
+    }
+
+    [SkippableFact]
+    public async Task Post_Checkout_Stripe_Refusal_Returns_502_Checkout_Failed()
+    {
+        await TestDb.RequireAsync(_factory);
+        var (f0, _) = BuildWithFakeStripe();
+        var f = f0.WithWebHostBuilder(b => b.ConfigureTestServices(services =>
+        {
+            services.RemoveAll(typeof(IStripeCheckoutClient));
+            services.AddSingleton<IStripeCheckoutClient>(new ThrowingCheckoutClient());
+        }));
+        var (client, userId) = await SeedAuthed(f, "billing-502");
+        try
+        {
+            var resp = await client.PostAsJsonAsync("/api/billing/checkout/subscription", new CreateCheckoutSessionRequest("monthly"));
+            Assert.Equal(HttpStatusCode.BadGateway, resp.StatusCode);
+            var json = await resp.Content.ReadAsStringAsync();
+            Assert.Contains("checkout_failed", json);
+        }
+        finally { await CleanupUser(f, userId); }
     }
 
     [SkippableFact]
