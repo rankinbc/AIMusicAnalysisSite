@@ -204,7 +204,7 @@ describe('AnalysisCompleteModal (complete)', () => {
       expect(cta().disabled).toBe(false);
       expect(cta().getAttribute('data-ready')).toBe('true');
       expect(cta().textContent).toContain('Open full report');
-      expect(chatText()).toContain('Let’s go to the Full Report and get started.');
+      expect(chatText()).toContain('Let’s go to the Full Report and determine how we can improve this mix.');
       expect(headerMascot().getAttribute('data-thinking')).toBe('false');
       expect(screen.getByTestId('acm-ai-block').textContent).toContain('AI specialists complete');
       fireEvent.click(cta());

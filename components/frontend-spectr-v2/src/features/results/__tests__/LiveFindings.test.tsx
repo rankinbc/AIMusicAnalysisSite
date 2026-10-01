@@ -87,7 +87,6 @@ const settled: Partial<Props> = {
 };
 
 const rows = () => screen.queryAllByTestId('lf-row');
-const headlines = () => rows().map((r) => r.querySelector('button')!.textContent ?? '');
 const cta = () => screen.getByTestId('acm-cta') as HTMLButtonElement;
 const chatMsgs = () => screen.getAllByTestId('acm-chat-msg');
 
@@ -103,18 +102,54 @@ describe('live findings list', () => {
     expect(rows()).toHaveLength(0);
   });
 
-  it('lists rule-engine findings by severity then priority; no fail-marker, dismissed or specialist rows', () => {
+  it('lists rule + specialist findings by severity then priority; no fail-marker or dismissed rows', () => {
     renderPage({ ...running, verdicts: [ruleMod, failMarker, ruleCrit, dismissed, specFinding, ruleModHigh] });
-    expect(headlines().map((h) => h.split('Critical').join('').split('Moderate').join(''))).toEqual([
-      expect.stringContaining('Clipping on the master'),
-      expect.stringContaining('Harsh highs'),
-      expect.stringContaining('Low-mid buildup'),
+    expect(rows().map((r) => r.getAttribute('data-finding-id'))).toEqual([
+      ruleCrit.id,
+      specFinding.id,
+      ruleModHigh.id,
+      ruleMod.id,
     ]);
-    expect(rows().map((r) => r.getAttribute('data-severity'))).toEqual(['critical', 'moderate', 'moderate']);
-    expect(within(rows()[0]!).getByTestId('lf-source').textContent).toBe('Loudness');
+    expect(rows().map((r) => r.getAttribute('data-severity'))).toEqual(['critical', 'severe', 'moderate', 'moderate']);
     expect(screen.queryByText('Specialist failed')).toBeNull();
     expect(screen.queryByText('Dismissed one')).toBeNull();
-    expect(within(screen.getByTestId('lf-list')).queryByText('Sub too hot')).toBeNull();
+    expect(within(screen.getByTestId('lf-list')).getByText(/4 findings/)).toBeTruthy();
+  });
+
+  it('rule rows show their area; specialist rows show the specialist with its bot head', () => {
+    renderPage({ ...running, verdicts: [ruleCrit, specFinding] });
+    const [rule, spec] = rows();
+    const ruleSrc = within(rule!).getByTestId('lf-source');
+    expect(ruleSrc.getAttribute('data-source')).toBe('rules');
+    expect(ruleSrc.textContent).toBe('Loudness');
+    const specSrc = within(spec!).getByTestId('lf-source');
+    expect(specSrc.getAttribute('data-source')).toBe('specialist');
+    expect(specSrc.textContent).toBe('Low End');
+    expect(within(specSrc).getByTestId('spec-bot').getAttribute('data-label')).toBe('Low End');
+  });
+
+  it('a specialist’s findings join the list when it settles; they stay in its chat bubble too', () => {
+    const { rr } = renderPage({ ...running, verdicts: [ruleMod] });
+    expect(rows()).toHaveLength(1);
+    rr({
+      ...running,
+      specialistStatuses: [st('low_end', 'cached'), st('loudness', 'idle')],
+      runningSlugs: new Set(['loudness']),
+      verdicts: [ruleMod, specFinding],
+    });
+    expect(rows().map((r) => r.getAttribute('data-finding-id'))).toEqual([specFinding.id, ruleMod.id]);
+    const back = chatMsgs().find((m) => m.getAttribute('data-msg-id') === 'back:low_end')!;
+    expect(within(back).getByTestId('acm-chat-items').textContent).toContain('Sub too hot');
+  });
+
+  it('merges a specialist finding with the rule finding it explicitly refines — and only then', () => {
+    const parent = vd({ headline: 'Sub buildup (rule)', severity: 'moderate', problemId: 'P-sub' });
+    const lookalike = vd({ headline: 'Sub buildup lookalike', severity: 'minor', problemId: 'P-other' });
+    const refiner = vd({ specialist: 'low_end', headline: 'Sub buildup at 50 Hz', severity: 'severe', refines: 'P-sub' });
+    renderPage({ ...running, verdicts: [parent, lookalike, refiner] });
+    expect(rows().map((r) => r.getAttribute('data-finding-id'))).toEqual([refiner.id, lookalike.id]);
+    fireEvent.click(within(rows()[0]!).getByRole('button'));
+    expect(screen.getByTestId('lf-refines').textContent).toContain('Sub buildup (rule)');
   });
 
   it('fills in live as findings land, in severity order', () => {
@@ -188,7 +223,7 @@ describe('closing line + report CTA', () => {
     expect(ids.indexOf('p7:settled')).toBeLessThan(ids.indexOf(CLOSER_ID));
     const closer = chatMsgs().at(-1)!;
     expect(closer.textContent).toContain(
-      'We have a good enough analysis to get started. Let’s view the full report. You can also dig deeper with more AI specialists or talk to me about the mix. Let’s go to the Full Report and get started.',
+      'We have a good enough analysis to get started. Let’s view the full report. You can also dig deeper with more AI specialists or talk to me about the mix. Let’s go to the Full Report and determine how we can improve this mix.',
     );
     fireEvent.click(within(closer).getByTestId('acm-chat-link'));
     expect(props.onViewReport).toHaveBeenCalledTimes(1);

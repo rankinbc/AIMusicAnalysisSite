@@ -214,7 +214,7 @@ describe('narrate — triage, plan, specialists', () => {
     const closer = ls.at(-1)!;
     expect(closer.id).toBe(CLOSER_ID);
     expect(messageText(closer)).toBe(
-      'We have a good enough analysis to get started. Let’s view the full report. You can also dig deeper with more AI specialists or talk to me about the mix. Let’s go to the Full Report and get started.',
+      'We have a good enough analysis to get started. Let’s view the full report. You can also dig deeper with more AI specialists or talk to me about the mix. Let’s go to the Full Report and determine how we can improve this mix.',
     );
     expect(closer.parts).toContainEqual({ link: 'Full Report' });
   });
