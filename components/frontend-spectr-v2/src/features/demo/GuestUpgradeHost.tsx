@@ -5,14 +5,12 @@ import { onGuestUpgrade, type GuestUpgradeReason } from './guest-upgrade-bus';
 import { useGuestState } from './useGuestState';
 
 /**
- * Task G5 fix1 (item 1) — the bus subscription + the ONE upgrade dialog,
- * extracted out of `GuestShell` so it can be mounted WITHOUT the banner.
- * `GuestShell` (`_app.tsx`, authed shell) renders banner + this; the public
- * `/analyze` page (no `_app`, no `GuestShell`) mounts this alone (already its
- * own TanStack Router route chunk, so this never reaches the shared public
- * entry chunk) — a guest who hits a limit there gets the same dialog every
- * other guest limit opens, instead of a silent dead end (nothing was
- * listening on the bus).
+ * Task G5 fix1 (item 1) — the guest-upgrade bus subscription + the ONE
+ * upgrade dialog. Mounted by the authed shell (`_app.tsx`) and, standalone,
+ * by the public `/analyze` page (no `_app`) — a guest who hits a limit there
+ * gets the same dialog every other guest limit opens, instead of a silent
+ * dead end (nothing was listening on the bus). The guest BANNER is separate:
+ * it is mounted once in the root route and shows on every page.
  */
 export function GuestUpgradeHost() {
   const { isGuest } = useGuestState();
