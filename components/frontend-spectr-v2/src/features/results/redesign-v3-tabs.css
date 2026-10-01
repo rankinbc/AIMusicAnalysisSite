@@ -360,10 +360,16 @@
 .rdx .fixboard { display:grid; grid-template-columns:276px 1fr; gap:14px; align-items:start; margin-top:14px; }
 @media (max-width:900px) { .rdx .fixboard { grid-template-columns:1fr; } }
 .rdx .fb-list { border:1px solid var(--border); border-radius:var(--radius); background:var(--surface-2); overflow:hidden; }
-.rdx .fb-lh { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 10px 8px 12px; border-bottom:1px solid var(--border); }
+/* flex-wrap: the list pane is a fixed 276px column in Actions mode (report AND
+   Listen stage). Without wrap, the controls' min-content (the priority pill alone
+   is ~235px) squeezed `.fb-lt` to ~9px and the title painted over the PRIORITY
+   label. Now the controls drop to their own row(s) when the title can't sit
+   beside them; at wide widths it is still one row. */
+.rdx .fb-lh { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; row-gap:7px; padding:9px 10px 8px 12px; border-bottom:1px solid var(--border); }
 .rdx .fb-lh .t { font-size:12px; font-weight:700; color:var(--text); letter-spacing:-.01em; }
 .rdx .fb-lh .c { font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--muted); }
-.rdx .fb-lt { display:flex; align-items:center; gap:8px; min-width:0; }
+.rdx .fb-lt { display:flex; flex-wrap:wrap; align-items:center; gap:8px; min-width:0; }
+.rdx .fb-lt .t { white-space:nowrap; }
 .rdx .fb-specrun { position:relative; display:inline-flex; align-items:center; gap:5px; padding:3px 8px; border-radius:999px; border:1px solid var(--border-2); background:transparent; color:var(--text-2); font-size:10.5px; font-weight:600; cursor:pointer; }
 .rdx .fb-specrun:hover, .rdx .fb-specrun:focus-visible { color:var(--accent); border-color:rgba(0,229,176,.35); background:rgba(0,229,176,.06); }
 .rdx .fb-specrun-tip { display:none; position:absolute; left:0; top:calc(100% + 6px); z-index:30; white-space:nowrap; padding:7px 10px; border-radius:7px; background:var(--surface-2); border:1px solid var(--border-2); box-shadow:0 14px 34px -12px rgba(0,0,0,.7); font-size:11px; font-weight:400; color:var(--text-2); pointer-events:none; }
