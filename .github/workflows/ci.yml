@@ -234,6 +234,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write   # Azure OIDC login — opens SSH on the NSG for this runner only
+    env:
+      HAS_AZURE: ${{ secrets.AZURE_CLIENT_ID != '' }}
     steps:
       - uses: actions/checkout@v5
       - uses: docker/setup-buildx-action@v3
@@ -304,11 +307,34 @@ jobs:
             docker push "$ref:latest"
           done
 
+      # The VM's NSG only admits SSH from the owner's ISP ranges, and GitHub
+      # runners use thousands of shifting IPs. Log into Azure via OIDC (no
+      # stored password; the SP holds Network Contributor on the NSG only),
+      # admit THIS runner's IP for the deploy, and always remove it after.
+      - name: Azure login (OIDC)
+        if: env.HAS_AZURE == 'true'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Open SSH for this runner
+        if: env.HAS_AZURE == 'true'
+        run: |
+          set -euo pipefail
+          ip=$(curl -fsS https://api.ipify.org)
+          az network nsg rule create -g spectr-rg --nsg-name spectr-vmNSG \
+            -n "ci-deploy-${{ github.run_id }}" --priority 110 --direction Inbound \
+            --access Allow --protocol Tcp --destination-port-ranges 22 \
+            --source-address-prefixes "$ip/32" -o none
+          sleep 10   # NSG rule propagation
+
       - name: Deploy over SSH
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -z "$VPS_HOST" ] || [ -z "$VPS_USER" ] || [ -z "$VPS_SSH_KEY" ]; then
             echo "VPS secrets not configured — images pushed, deploy skipped."
@@ -322,5 +348,15 @@ jobs:
           # then pin + pull + up + health verify (deploy.sh auto-rolls-back).
           scp -i ~/.ssh/deploy_key infra/compose.prod.yml infra/deploy.sh infra/backup.sh infra/restore-test.sh "$VPS_USER@$VPS_HOST:/opt/spectr/"
           scp -r -i ~/.ssh/deploy_key infra/prometheus infra/grafana "$VPS_USER@$VPS_HOST:/opt/spectr/"
+          # The images are private: log the VM into GHCR with this job's
+          # short-lived token (enough for deploy.sh's pull; no PAT on the box).
+          printf '%s' "$GHCR_TOKEN" | ssh -i ~/.ssh/deploy_key "$VPS_USER@$VPS_HOST" \
+            "docker login ghcr.io -u ${{ github.actor }} --password-stdin"
           ssh -i ~/.ssh/deploy_key "$VPS_USER@$VPS_HOST" \
             "chmod +x /opt/spectr/deploy.sh /opt/spectr/backup.sh /opt/spectr/restore-test.sh && /opt/spectr/deploy.sh ${{ github.sha }}"
+
+      - name: Close SSH for this runner
+        if: always() && env.HAS_AZURE == 'true'
+        run: |
+          az network nsg rule delete -g spectr-rg --nsg-name spectr-vmNSG \
+            -n "ci-deploy-${{ github.run_id }}" -o none || true
