@@ -84,6 +84,10 @@ public class EntitlementService(
     public bool CreditsEnabled(Dictionary<string, string> flags)
         => CreditsEnabled(config, flags);
 
+    // Credit economy — the resolved price list (config → flag → default).
+    public async Task<CreditPrices> GetPricesAsync(CancellationToken ct)
+        => CreditPricing.Resolve(config, await GetFlagsAsync(ct));
+
     private async Task<EntitlementsDto> ComputeAsync(Guid userId, CancellationToken ct)
     {
         // 0. Credit-system kill switch (credits_enabled=false): everyone is

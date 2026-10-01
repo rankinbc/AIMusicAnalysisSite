@@ -42,6 +42,9 @@ internal static class TestProcessBaseline
     internal static void PinCreditsEnabled()
     {
         Environment.SetEnvironmentVariable("Credits__Enabled", "true");
+        // Existing tests were written for a 1-credit analysis; credit-economy
+        // tests opt in to real prices via UseSetting.
+        Environment.SetEnvironmentVariable("Credits__Prices__Analysis", "1");
         Environment.SetEnvironmentVariable("Demo__SnapshotKey", "");
         Environment.SetEnvironmentVariable("Admin__ApiKey", "");
     }
