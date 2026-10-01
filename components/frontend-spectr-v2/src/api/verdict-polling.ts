@@ -63,6 +63,25 @@ export function useTriageTimedOut(key: string, d: VerdictsListResponse | undefin
   return pending && timedOutKey === key;
 }
 
+/** Final-review fix — the delay while specialists the user (or auto-run)
+ *  dispatched have not reported back. A run that never writes a verdict (a
+ *  budget refusal, a lost message, a worker down) used to poll every 3 s for
+ *  as long as the page stayed open. Same budget shape as triage: 3 s for the
+ *  first minute, 10 s after, nothing past 10 minutes. Keyed on the job AND
+ *  the running set, so a newly dispatched specialist gets a fresh budget. */
+export function optimisticRefetchMs(
+  jobKey: string,
+  running: ReadonlySet<string>,
+  now: number = Date.now(),
+): number | false {
+  if (running.size === 0) return false;
+  const key = `${jobKey}|run|${[...running].sort().join(',')}`;
+  const elapsed = now - startOf(key, now);
+  if (elapsed < TRIAGE_FAST_WINDOW_MS) return TRIAGE_FAST_POLL_MS;
+  if (elapsed < TRIAGE_TIMEOUT_MS) return TRIAGE_SLOW_POLL_MS;
+  return false;
+}
+
 export function resetTriageWaitForTests(): void {
   waitStart.clear();
 }

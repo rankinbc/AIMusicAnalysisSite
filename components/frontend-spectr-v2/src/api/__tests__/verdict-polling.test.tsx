@@ -95,3 +95,30 @@ describe('useVerdicts keeps waiting for a slow triage', () => {
     qc.clear();
   });
 });
+
+describe('a specialist that never writes a verdict does not poll forever', () => {
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+  it('the optimistic-running poll stops within the 10-minute budget', async () => {
+    vi.useFakeTimers();
+    resetTriageWaitForTests();
+    const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+    const { useVerdicts } = await import('../hooks');
+    let calls = 0;
+    vi.stubGlobal('fetch', vi.fn(() => {
+      calls += 1;
+      return Promise.resolve(new Response(JSON.stringify(planned), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    }));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const running = new Set(['low_end']);
+    renderHook(() => useVerdicts('job-stuck', { optimisticRunning: running, enabled: true }), {
+      wrapper: ({ children }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>,
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(11 * 60_000); });
+    const after = calls;
+    await act(async () => { await vi.advanceTimersByTimeAsync(5 * 60_000); });
+    expect(calls).toBe(after);
+    expect(after).toBeLessThan(150); // 3 s polls for 11 min would be ~220
+    qc.clear();
+  });
+});
