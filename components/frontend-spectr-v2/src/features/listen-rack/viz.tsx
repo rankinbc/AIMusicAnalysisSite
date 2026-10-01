@@ -251,7 +251,7 @@ export function VizStage({
     : { position: 'relative', height, overflow: 'hidden', borderRadius: compact ? 0 : 'var(--radius) var(--radius) 0 0', background: 'var(--bg-2)' };
 
   const stage = (
-    <div ref={onStageEngine} style={stageStyle}>
+    <div ref={onStageEngine} className={bgMode ? 'lr-vizbg-layer' : undefined} style={stageStyle}>
       <div ref={bgLayerRef} className={'viz-bg' + (viz.bgAuto ? ' lr-bg-cycle' : '')} style={{ position: 'absolute', inset: 0, background: `radial-gradient(ellipse 95% 85% at 50% 100%, ${cssVar(viz.bg || 'var(--cyan)')}1f, transparent 62%), transparent` }} />
       {viz.bgFlash && playing && !reduceMotion && <div className="lr-bg-flash" style={{ background: viz.bgFlashColor, animationDuration: (1 / safeFlashHz(viz.bgFlashHz)) + 's' }} />}
       {!isInfo && <StageCanvas ref={stageRef} accent={accentHex} />}

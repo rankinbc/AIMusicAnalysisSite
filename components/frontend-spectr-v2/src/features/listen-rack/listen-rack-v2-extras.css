@@ -64,3 +64,11 @@
   user-select: none;
 }
 .lr-tip-arrow { fill: var(--surface); }
+
+/* The background visualizer is portaled to <body> — OUTSIDE `.rdx` and the
+ * desktop-only gate above — so it would keep painting full-screen behind the
+ * phone notice now that it is on by default. Hide it with the rest of the
+ * page below the lg breakpoint. Deliberately unscoped: no `.rdx` ancestor. */
+@media (max-width: 1023.98px) {
+  .lr-vizbg-layer { display: none; }
+}

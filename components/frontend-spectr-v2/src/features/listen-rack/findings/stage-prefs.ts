@@ -14,48 +14,51 @@ export interface StagePrefs {
 
 export const STAGE_PREFS_KEY = 'listenStagePrefs';
 
-function prefersReducedMotion(): boolean {
-  try {
-    return (
-      typeof window !== 'undefined' &&
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    );
-  } catch {
-    return false;
-  }
-}
-
 /**
- * Spec D6 — first visit is findings in the box with the visuals behind the
- * page, except under prefers-reduced-motion, where nothing moves until the
- * viewer asks for it. This is only the DEFAULT: a stored choice always wins,
- * because someone who switched the background on meant it.
+ * Spec D6, as amended 2026-10-01 (owner): the first visit opens with the
+ * visualizations ON — playing full-screen in the background, behind the
+ * findings board. This is only the DEFAULT: a stored choice always wins,
+ * because someone who switched the background off meant it.
+ *
+ * The earlier prefers-reduced-motion carve-out (background off by default) is
+ * gone at the owner's request; the visualizer itself still honours reduced
+ * motion for its flash effects, and the ⛶/⤡ control turns it off in one click.
  */
 export function defaultStagePrefs(): StagePrefs {
-  return { content: 'findings', bgViz: !prefersReducedMotion() };
+  return { content: 'findings', bgViz: true };
+}
+
+/** Only the fields the viewer actually CHOSE. A field that was never touched
+ *  is absent, so it keeps following the default — even if the default changes
+ *  later. */
+type StoredStagePrefs = Partial<StagePrefs>;
+
+function readStored(): StoredStagePrefs {
+  try {
+    const raw = localStorage.getItem(STAGE_PREFS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed !== 'object' || parsed === null) return {};
+    const obj = parsed as Record<string, unknown>;
+    const out: StoredStagePrefs = {};
+    if (obj['content'] === 'visualizer' || obj['content'] === 'findings') out.content = obj['content'];
+    if (typeof obj['bgViz'] === 'boolean') out.bgViz = obj['bgViz'];
+    return out;
+  } catch {
+    return {};
+  }
 }
 
 export function readStagePrefs(): StagePrefs {
-  const fallback = defaultStagePrefs();
-  try {
-    const raw = localStorage.getItem(STAGE_PREFS_KEY);
-    if (!raw) return fallback;
-    const parsed = JSON.parse(raw) as unknown;
-    if (typeof parsed !== 'object' || parsed === null) return fallback;
-    const obj = parsed as Record<string, unknown>;
-    return {
-      content: obj['content'] === 'visualizer' ? 'visualizer' : 'findings',
-      bgViz: typeof obj['bgViz'] === 'boolean' ? obj['bgViz'] : fallback.bgViz,
-    };
-  } catch {
-    return fallback;
-  }
+  return { ...defaultStagePrefs(), ...readStored() };
 }
 
-export function writeStagePrefs(prefs: StagePrefs): void {
+/** Persist the given fields (merged over what is already stored). Untouched
+ *  fields are NOT written, so switching Findings -> Visualizer never freezes
+ *  the current background default in as if it had been chosen. */
+export function writeStagePrefs(prefs: StoredStagePrefs): void {
   try {
-    localStorage.setItem(STAGE_PREFS_KEY, JSON.stringify(prefs));
+    localStorage.setItem(STAGE_PREFS_KEY, JSON.stringify({ ...readStored(), ...prefs }));
   } catch {
     /* quota / unavailable — the page works without it */
   }
@@ -75,7 +78,7 @@ export function useStagePrefs(): StagePrefsHandle {
   const update = useCallback((patch: Partial<StagePrefs>) => {
     const next = { ...latest.current, ...patch };
     latest.current = next;
-    writeStagePrefs(next);
+    writeStagePrefs(patch);
     setPrefs(next);
   }, []);
   const setContent = useCallback((content: StageContent) => update({ content }), [update]);

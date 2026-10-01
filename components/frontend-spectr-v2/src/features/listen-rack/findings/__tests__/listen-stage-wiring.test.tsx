@@ -87,4 +87,35 @@ describe('Listen stage wiring', () => {
     expect(fetcherMock.mock.calls.some(([arg]) => String(arg.url).startsWith('/reports/')))
       .toBe(false);
   });
+
+  // The background visualizer is the VizStage portaled straight onto <body>
+  // as a fixed full-viewport layer.
+  const bgLayer = () =>
+    Array.from(document.body.children).find(
+      (el) => el instanceof HTMLElement && el.style.position === 'fixed' && el.style.inset === '0px',
+    );
+
+  it('first load (no saved pref): visuals ON, full-screen in the background', async () => {
+    renderPage();
+    await waitFor(() => expect(bgLayer()).toBeTruthy());
+    expect(screen.getByRole('button', { name: 'Stop the background visualizer' })).toBeTruthy();
+  });
+
+  it('a saved "background off" choice wins, and the exit control persists', async () => {
+    localStorage.setItem(STAGE_PREFS_KEY, JSON.stringify({ bgViz: false }));
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Play the visualizer full-screen behind the page' }))
+        .toBeTruthy(),
+    );
+    expect(bgLayer()).toBeUndefined();
+  });
+
+  it('the exit control turns the background off and remembers it', async () => {
+    renderPage();
+    const stop = await screen.findByRole('button', { name: 'Stop the background visualizer' });
+    fireEvent.click(stop);
+    await waitFor(() => expect(bgLayer()).toBeUndefined());
+    expect(JSON.parse(localStorage.getItem(STAGE_PREFS_KEY) ?? '{}').bgViz).toBe(false);
+  });
 });
