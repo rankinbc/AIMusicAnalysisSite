@@ -12,7 +12,7 @@ using UserEntity = Spectr.Data.Entities.User;
 namespace Spectr.Bff.Tests;
 
 // Story 2.8 / FR32 / UX-DR32 — HonestMathService: 90-day credit-purchase spend
-// vs Pro-equivalent. Defaults: ProMonthly = 1299 → proEquivalent (3 mo) = 3897;
+// vs Pro-equivalent. Defaults: ProMonthly = 799 → proEquivalent (3 mo) = 2397;
 // 5-pack = 1900, 10-pack = 3500 (set explicitly; production packs are 500/1500/5000).
 public sealed class HonestMathServiceTests
     : IClassFixture<WebApplicationFactory<Program>>
@@ -49,7 +49,7 @@ public sealed class HonestMathServiceTests
     private static HonestMathService NewService(IServiceScope scope)
     {
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var opts = Microsoft.Extensions.Options.Options.Create(new PricingDisplayOptions { CreditPacks = [new() { Credits = 5, Cents = 1900 }, new() { Credits = 10, Cents = 3500 }] }); // 1299 / 1900 / 3500
+        var opts = Microsoft.Extensions.Options.Options.Create(new PricingDisplayOptions { CreditPacks = [new() { Credits = 5, Cents = 1900 }, new() { Credits = 10, Cents = 3500 }] }); // 799 / 1900 / 3500
         return new HonestMathService(db, opts);
     }
 
@@ -64,7 +64,7 @@ public sealed class HonestMathServiceTests
             CreatedAt = createdAt,
         };
 
-    // Two 10-packs in window → 7000c ≥ 3897c → qualifies.
+    // Two 10-packs in window → 7000c ≥ 2397c → qualifies.
     [SkippableFact]
     public async Task HeavySpender_Qualifies()
     {
@@ -81,13 +81,13 @@ public sealed class HonestMathServiceTests
             var dto = await NewService(scope).ForAsync(userId, CancellationToken.None);
             Assert.True(dto.Qualifies);
             Assert.Equal(7000, dto.CreditsSpentCents);
-            Assert.Equal(3897, dto.ProEquivalentCents);
+            Assert.Equal(2397, dto.ProEquivalentCents);
             Assert.Equal(90, dto.PeriodDays);
         }
         finally { await CleanupAsync(userId); }
     }
 
-    // One 5-pack → 1900c < 3897c → does NOT qualify.
+    // One 5-pack → 1900c < 2397c → does NOT qualify.
     [SkippableFact]
     public async Task LightSpender_DoesNotQualify()
     {

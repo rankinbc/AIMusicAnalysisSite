@@ -15,7 +15,7 @@ public sealed class CreditPacksTests(WebApplicationFactory<Program> f) : IClassF
         var plans = await f.CreateClient().GetFromJsonAsync<PlansResponse>("/api/billing/plans");
         Assert.NotNull(plans);
         Assert.Equal(new[] { 500, 1500, 5000 }, plans!.CreditPacks.Select(p => p.Credits));
-        Assert.Equal(new[] { 700, 1800, 5500 }, plans.CreditPacks.Select(p => p.Cents));
+        Assert.Equal(new[] { 400, 1000, 3000 }, plans.CreditPacks.Select(p => p.Cents));
         Assert.NotNull(plans.Costs);
         Assert.Equal(15, plans.Costs!.Specialist);
     }
