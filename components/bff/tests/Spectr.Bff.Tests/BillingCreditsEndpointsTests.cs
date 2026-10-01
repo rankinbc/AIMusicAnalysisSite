@@ -68,8 +68,17 @@ public sealed class BillingCreditsEndpointsTests(WebApplicationFactory<Program> 
                         ? StripeTestUtilities.TestWebhookSecret : "",
                     ["Stripe:PriceProMonthly"] = configured ? "price_test_monthly" : "",
                     ["Stripe:PriceProAnnual"] = configured ? "price_test_annual" : "",
-                    ["Stripe:PriceCreditPack5"] = creditsConfigured ? "price_test_pack5" : "",
-                    ["Stripe:PriceCreditPack10"] = creditsConfigured ? "price_test_pack10" : "",
+                    ["Stripe:CreditPackPrices:5"] = creditsConfigured ? "price_test_pack5" : "",
+                    ["Stripe:CreditPackPrices:10"] = creditsConfigured ? "price_test_pack10" : "",
+                    // The config binder APPENDS indexed list entries to the 500/1500/5000
+                    // defaults, so those packs need price ids too for "configured".
+                    ["Stripe:CreditPackPrices:500"] = creditsConfigured ? "price_test_pack500" : "",
+                    ["Stripe:CreditPackPrices:1500"] = creditsConfigured ? "price_test_pack1500" : "",
+                    ["Stripe:CreditPackPrices:5000"] = creditsConfigured ? "price_test_pack5000" : "",
+                    ["PricingDisplay:CreditPacks:0:Credits"] = "5",
+                    ["PricingDisplay:CreditPacks:0:Cents"] = "1900",
+                    ["PricingDisplay:CreditPacks:1:Credits"] = "10",
+                    ["PricingDisplay:CreditPacks:1:Cents"] = "3500",
                 });
             });
             builder.ConfigureTestServices(services =>

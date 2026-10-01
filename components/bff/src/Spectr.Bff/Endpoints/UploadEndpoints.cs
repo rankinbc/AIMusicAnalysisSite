@@ -117,8 +117,16 @@ public static class UploadEndpoints
                 "Entitlement service temporarily unavailable.");
         }
         if (ent.AnalysesRemaining == 0)
+        {
+            // Same grammar as DispatchAnalysisAsync: credits/pro → buy-sheet 402;
+            // the legacy 409 survives for the guest free allotment only.
+            if (ent.Tier is "credits" or "pro")
+                return ErrorEnvelope.Build(402, "insufficient_credits",
+                    "Not enough credits for an analysis.",
+                    new { required = (await ents.GetPricesAsync(ct)).Analysis, balance = ent.CreditBalance });
             return ErrorEnvelope.Build(409, "entitlement_exhausted",
                 "You have used all your analyses for this billing period.");
+        }
 
         var jobId = Guid.NewGuid();
         var ext = Path.GetExtension(body.FileName).ToLowerInvariant();

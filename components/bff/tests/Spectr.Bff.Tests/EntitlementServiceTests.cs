@@ -24,7 +24,10 @@ public sealed class EntitlementServiceTests
     public EntitlementServiceTests(WebApplicationFactory<Program> factory)
         => _factory = factory;
 
-    private async Task<Guid> SeedUserAsync(string prefix)
+    // `guest` — with credits on, real non-Pro users are tier "credits" at any
+    // balance (spec 3.3); the legacy free branch survives for guests only, so
+    // the free-allotment math is exercised through guest rows.
+    private async Task<Guid> SeedUserAsync(string prefix, bool guest = false)
     {
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -34,6 +37,14 @@ public sealed class EntitlementServiceTests
             Email = $"{prefix}+{Guid.NewGuid():N}@spectr.test",
             HashedPassword = "x",
         };
+        if (guest)
+        {
+            user.IsGuest = true;
+            user.GuestExpiresAt = DateTimeOffset.UtcNow.AddHours(72);
+            user.GuestDeviceId = Spectr.Bff.Services.UlidGen.NewUlid();
+            user.Email = Spectr.Bff.Auth.GuestIdentity.EmailFor(user.Id);
+            user.EmailVerifiedAt = DateTimeOffset.UtcNow;
+        }
         db.Users.Add(user);
         await db.SaveChangesAsync();
         return user.Id;
@@ -72,12 +83,12 @@ public sealed class EntitlementServiceTests
         return new EntitlementService(db, cache, cfg, NullLogger<EntitlementService>.Instance);
     }
 
-    // ── Case (a) free user, 0 used → remaining = 3 ──────────────────────────
+    // ── Case (a) guest (free branch), 0 used → remaining = 3 ──────────────────────────
     [SkippableFact]
-    public async Task Free_ZeroUsed_Remaining3()
+    public async Task Guest_Free_ZeroUsed_Remaining3()
     {
         await TestDb.RequireAsync(_factory);
-        var userId = await SeedUserAsync("ent-a");
+        var userId = await SeedUserAsync("ent-a", guest: true);
         try
         {
             using var scope = _factory.Services.CreateScope();
@@ -101,12 +112,12 @@ public sealed class EntitlementServiceTests
         finally { await CleanupAsync(userId); }
     }
 
-    // ── Case (b) free user, 3 used → remaining = 0 (exhausted) ─────────────
+    // ── Case (b) guest (free branch), 3 used → remaining = 0 (exhausted) ─────────────
     [SkippableFact]
-    public async Task Free_ThreeUsed_RemainingZero()
+    public async Task Guest_Free_ThreeUsed_RemainingZero()
     {
         await TestDb.RequireAsync(_factory);
-        var userId = await SeedUserAsync("ent-b");
+        var userId = await SeedUserAsync("ent-b", guest: true);
         try
         {
             using var scope = _factory.Services.CreateScope();
@@ -138,10 +149,10 @@ public sealed class EntitlementServiceTests
     // ── Story 3.2 (AR16) — an invalid_file failure restores the free slot ──
     // Also proves the EF subquery (j.Id.ToString() == e.Reference) translates.
     [SkippableFact]
-    public async Task Free_InvalidFileJob_DoesNotConsumeMonthlyCap()
+    public async Task Guest_Free_InvalidFileJob_DoesNotConsumeMonthlyCap()
     {
         await TestDb.RequireAsync(_factory);
-        var userId = await SeedUserAsync("ent-inv");
+        var userId = await SeedUserAsync("ent-inv", guest: true);
         Guid jobId = Guid.NewGuid(), songId = Guid.NewGuid(), versionId = Guid.NewGuid();
         try
         {
@@ -175,6 +186,25 @@ public sealed class EntitlementServiceTests
             await db.Songs.Where(s => s.Id == songId).ExecuteDeleteAsync();
             await CleanupAsync(userId);
         }
+    }
+
+    // ── Spec 3.3 — a 0-balance real user is "credits" (never "free") ────────
+    [SkippableFact]
+    public async Task ZeroBalance_RealUser_TierCredits_NoFreeAllotment()
+    {
+        await TestDb.RequireAsync(_factory);
+        var userId = await SeedUserAsync("ent-zero");
+        try
+        {
+            using var scope = _factory.Services.CreateScope();
+            var svc = await NewServiceAsync(scope);
+            var ent = await svc.ForAsync(userId, CancellationToken.None);
+            Assert.Equal("credits", ent.Tier);
+            Assert.Equal(0, ent.AnalysesRemaining);
+            Assert.Equal(0, ent.CreditBalance);
+            Assert.Equal("unlimited", ent.Coach!.Scope);
+        }
+        finally { await CleanupAsync(userId); }
     }
 
     // ── Case (c) credits balance = 2 → tier = "credits", remaining = 2 ─────
@@ -282,7 +312,7 @@ public sealed class EntitlementServiceTests
     public async Task InvalidateAsync_ClearsCache()
     {
         await TestDb.RequireAsync(_factory);
-        var userId = await SeedUserAsync("ent-f");
+        var userId = await SeedUserAsync("ent-f", guest: true);
         try
         {
             using var scope = _factory.Services.CreateScope();
@@ -323,7 +353,7 @@ public sealed class EntitlementServiceTests
     public async Task FreeAnalysesCap_FlagOverride()
     {
         await TestDb.RequireAsync(_factory);
-        var userId = await SeedUserAsync("ent-g");
+        var userId = await SeedUserAsync("ent-g", guest: true);
         try
         {
             using var scope = _factory.Services.CreateScope();
@@ -357,7 +387,7 @@ public sealed class EntitlementServiceTests
     // AC #2: when Stripe Smart Retries exhaust and the subscription reaches a
     // terminal state, the tier degrades to Free (no credits on hand).
     [SkippableFact]
-    public async Task Canceled_NoCredits_DegradesToFree()
+    public async Task Canceled_NoCredits_ResolvesCreditsTierWithZeroRemaining()
     {
         await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("ent-h");
@@ -378,18 +408,17 @@ public sealed class EntitlementServiceTests
 
             var svc = await NewServiceAsync(scope);
             var ent = await svc.ForAsync(userId, CancellationToken.None);
-            Assert.Equal("free", ent.Tier);
-            // Pro depth locks (the BlurLock-gated inputs) — AC #2.
-            Assert.False(ent.StemsEnabled);
-            Assert.False(ent.AlsEnabled);
-            Assert.False(ent.FullVerdictsEnabled);
+            // Spec 3.3: no free tier for real users while credits are on.
+            Assert.Equal("credits", ent.Tier);
+            Assert.Equal(0, ent.AnalysesRemaining);
+            Assert.Equal(0, ent.CreditBalance);
         }
         finally { await CleanupAsync(userId); }
     }
 
     // ── Story 2.9 case (i) terminal `unpaid` → degrades to free ────────────
     [SkippableFact]
-    public async Task Unpaid_NoCredits_DegradesToFree()
+    public async Task Unpaid_NoCredits_ResolvesCreditsTierWithZeroRemaining()
     {
         await TestDb.RequireAsync(_factory);
         var userId = await SeedUserAsync("ent-i");
@@ -410,8 +439,8 @@ public sealed class EntitlementServiceTests
 
             var svc = await NewServiceAsync(scope);
             var ent = await svc.ForAsync(userId, CancellationToken.None);
-            Assert.Equal("free", ent.Tier);
-            Assert.False(ent.StemsEnabled);
+            Assert.Equal("credits", ent.Tier);
+            Assert.Equal(0, ent.AnalysesRemaining);
         }
         finally { await CleanupAsync(userId); }
     }
@@ -517,7 +546,8 @@ public sealed class EntitlementServiceTests
                 db, new MemoryCache(new MemoryCacheOptions()), cfg,
                 NullLogger<EntitlementService>.Instance);
             var ent = await svc.ForAsync(userId, CancellationToken.None);
-            Assert.Equal("free", ent.Tier);
+            // Credits on ⇒ a plain 0-balance real user is "credits", not "free".
+            Assert.Equal("credits", ent.Tier);
             Assert.True(ent.CreditsEnabled);
         }
         finally { await CleanupAsync(userId); }

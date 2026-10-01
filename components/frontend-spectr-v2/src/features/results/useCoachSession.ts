@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 
 import { getAccessToken } from '../../api/fetcher';
 import { capture } from '../../lib/analytics';
+import { useBuyCredits } from '../billing/BuyCreditsProvider';
 import { invalidateGuestState } from '../demo/useGuestState';
 import type {
   CoachCapsDto,
@@ -67,6 +68,8 @@ interface UseCoachSessionArgs {
   wireMode: 'qa' | 'teach' | 'concise';
   input: string;
   clearInput: () => void;
+  /** Puts the message back in the box when a 402 rolls the turn back. */
+  setInput?: (value: string) => void;
   scheduleAriaLive: (delta: string) => void;
   flushAriaLive: () => void;
   resetAriaLive: () => void;
@@ -78,11 +81,13 @@ export function useCoachSession({
   wireMode,
   input,
   clearInput,
+  setInput,
   scheduleAriaLive,
   flushAriaLive,
   resetAriaLive,
   cancelAriaLiveTimer,
 }: UseCoachSessionArgs) {
+  const buyCredits = useBuyCredits();
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [offlineState, setOfflineState] = useState(false);
@@ -252,6 +257,20 @@ export function useCoachSession({
         // same `t` in both closures and skip the user-bubble removal).
         // We trim the empty pending assistant AND the optimistic user
         // bubble in one pass.
+        // Credit economy — out of credits: same rollback, then the buy sheet.
+        // The message goes back in the box so nothing is lost; once bought the
+        // user just hits send again (labels-only, no auto-fire).
+        if (postRes.status === 402 || code === 'insufficient_credits') {
+          setTurns((t) => {
+            const trimmed = trimEmptyPending(t);
+            return trimmed.length > 0 && trimmed[trimmed.length - 1]?.role === 'user'
+              ? trimmed.slice(0, -1)
+              : trimmed;
+          });
+          setInput?.(msg);
+          buyCredits.open({ title: 'Not enough credits' });
+          return;
+        }
         if (code === 'coach_cap_reached') {
           setTurns((t) => {
             const trimmed = trimEmptyPending(t);
@@ -365,8 +384,10 @@ export function useCoachSession({
   }, [
     analysisId,
     cancelAriaLiveTimer,
+    buyCredits,
     caps,
     clearInput,
+    setInput,
     drainQueuedBrief,
     flushAriaLive,
     input,

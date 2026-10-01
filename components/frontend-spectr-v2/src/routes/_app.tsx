@@ -20,6 +20,8 @@ import { AppDunningNotice } from '../features/billing/AppDunningNotice';
 import { GuestShell } from '../features/demo/GuestShell';
 import { useGuestState } from '../features/demo/useGuestState';
 import { AppWorkerHealthNotice } from '../features/health/AppWorkerHealthNotice';
+import { BuyCreditsProvider } from '../features/billing/BuyCreditsProvider';
+import { CreditBalanceChip } from '../features/billing/CreditBalanceChip';
 import { DevHealthDot } from '../features/health/DevHealthDot';
 import { SpectrLogo } from '../ui/SpectrLogo';
 import { UsageMeter } from '../components/UsageMeter';
@@ -154,6 +156,7 @@ function AppLayout() {
   const creditsOn = entitlements?.creditsEnabled !== false;
 
   return (
+    <BuyCreditsProvider>
     <div className={s.shell}>
       <header className={s.topnav}>
         <Link to={guest.isGuest ? '/' : '/library'} className={s.brand} aria-label={guest.isGuest ? 'SPECTR — home' : 'SPECTR — your library'}>
@@ -177,6 +180,7 @@ function AppLayout() {
         )}
 
         <div className={s.navRight}>
+          {creditsOn && !guest.isGuest && <CreditBalanceChip />}
           {/* Story 5.10: the ⌘K palette is BACK with real machinery (nav
               commands + client-side song search over the cached songs query)
               — see CommandPalette. The 12.5 removal note is satisfied. */}
@@ -310,5 +314,6 @@ function AppLayout() {
       <ShortcutSheet open={sheetOpen} onOpenChange={setSheetOpen} />
       <UnifiedUploadDialog open={uploadOpen} onOpenChange={setUploadOpen} />
     </div>
+    </BuyCreditsProvider>
   );
 }

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 
 import type { VerdictDto, VerdictsListResponse } from '../../api/types';
+import { CostTag, usePaidAction } from '../billing/CostTag';
 import { CoachChat } from './CoachChat';
 import { Icon } from './Icon';
 import { SpecialistTeamModal } from './SpecialistTeamModal';
@@ -165,6 +166,7 @@ function CoachMixConfirmModal({
   onCreate: () => void;
   onClose: () => void;
 }) {
+  const { guard } = usePaidAction('coachMix');
   return (
     <div className="modal-scrim" onClick={onClose} role="presentation">
       <div
@@ -209,9 +211,9 @@ function CoachMixConfirmModal({
           <span className="sf-note">
             <span className="v">{queued.length}</span> {queued.length === 1 ? 'fix' : 'fixes'} → 1 preset
           </span>
-          <button type="button" className="btn primary sm" onClick={onCreate}>
+          <button type="button" className="btn primary sm" onClick={() => guard(onCreate)}>
             <Icon name="bolt" size={13} />
-            Create preset · 1 cr
+            Create preset <CostTag action="coachMix" />
           </button>
         </div>
       </div>

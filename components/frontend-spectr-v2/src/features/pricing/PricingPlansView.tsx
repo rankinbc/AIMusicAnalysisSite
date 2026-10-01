@@ -20,6 +20,7 @@ export function PricingPlansView({
   pending: 'monthly' | 'annual' | null;
   onCheckout: (cadence: 'monthly' | 'annual') => void;
 }) {
+  const costs = plans?.costs ?? null;
   return (
     <>
     <PublicChrome />
@@ -43,9 +44,15 @@ export function PricingPlansView({
             <Pill>Free</Pill>
             <h2 className={s.planName}>Free</h2>
           </div>
-          <p className={s.planLine}>3 analyses per month</p>
+          {/* Credit economy — every number comes from plans.costs (never literals);
+              an older BFF without costs simply shows no credit lines. */}
+          {costs && <p className={s.planLine}>{`${costs.signupGrant} credits to start`}</p>}
+          {costs && (
+            <p className={s.planLine}>
+              {`Analysis ${costs.analysis} ◆ · specialist ${costs.specialist} ◆ · coach ${costs.coachMessage} ◆`}
+            </p>
+          )}
           <p className={s.planLine}>Core report + verdicts</p>
-          <p className={s.planLine}>Limited coach follow-ups</p>
           <button type="button" className="btn ghost" disabled>
             Current plan
           </button>
@@ -56,7 +63,12 @@ export function PricingPlansView({
             <Pill tone="cyan">Pro</Pill>
             <h2 className={s.planName}>Pro</h2>
           </div>
-          <p className={s.planLine}>Unlimited analyses</p>
+          {costs && (
+            <p className={s.planLine}>
+              {`${costs.proAnalysesMonthly} analyses + ${costs.proCoachMonthly} coach messages / month`}
+            </p>
+          )}
+          {costs && <p className={s.planLine}>Then pay as you go with credits</p>}
           <p className={s.planLine}>Full coach + all specialists</p>
           <p className={s.planLine}>Stems + .als + reference library</p>
           <div className={s.cadenceRow}>
@@ -97,10 +109,16 @@ export function PricingPlansView({
             <h2 className={s.planName}>Credits</h2>
           </div>
           <p className={s.planLine}>Pay per release cycle</p>
-          <p className={s.planLine}>Packs of 5 or 10 — never expire</p>
-          <button type="button" className="btn ghost" disabled>
-            Coming soon
-          </button>
+          {plans?.creditPacks.map((pack) => (
+            <p key={pack.credits} className={s.planLine}>
+              {`${pack.credits} credits · ${formatCents(pack.cents, plans.currency)}`}
+            </p>
+          ))}
+          {/* /usage is auth-gated and hosts BuyCreditsCard (pack picker) —
+              anonymous visitors are bounced through login and land back there. */}
+          <a href="/usage" className="btn ghost" data-testid="pricing-credits-cta">
+            Buy credits
+          </a>
           <p className={`mono ${s.buttonTerms}`}>One-time purchase · credits never expire</p>
         </article>
       </section>

@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { useFixRack, useGenerateFixRack } from '../../api/hooks';
 import type { FixRackDto } from '../../api/types';
+import { useBuyCredits } from '../billing/BuyCreditsProvider';
+import { isOutOfCredits } from '../billing/credits';
 
 export type FixRackGenPhase = 'idle' | 'generating' | 'error' | 'timeout';
 
@@ -25,11 +27,18 @@ export function useFixRackGeneration(jobId: string): {
 } {
   const qc = useQueryClient();
   const gen = useGenerateFixRack(jobId);
+  const buyCredits = useBuyCredits();
   const [phase, setPhase] = useState<FixRackGenPhase>('idle');
   const fixRack = useFixRack(jobId, phase === 'generating');
   const rack = fixRack.data ?? null;
+  // Each generation is charged server-side, so a double-click or a re-fired
+  // callback must not start a second one while the first is still compiling.
+  // A ref (not `phase`) so it holds within the same tick, before a re-render.
+  const inFlight = useRef(false);
 
   const generate = useCallback(() => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     // resetQueries (not invalidateQueries): zeroes dataUpdateCount so the poll
     // cap restarts, and clears cached data so a Regenerate isn't satisfied by
     // the stale rack (which used to stop refetchInterval on the first poll).
@@ -37,11 +46,22 @@ export function useFixRackGeneration(jobId: string): {
     setPhase('generating');
     gen.mutate(undefined, {
       onError: (err) => {
+        inFlight.current = false;
+        if (isOutOfCredits(err)) {
+          setPhase('idle');
+          buyCredits.open({ title: 'Not enough credits', onBought: () => generate() });
+          return;
+        }
         setPhase('error');
         toast.error(err.message);
       },
     });
-  }, [qc, gen, jobId]);
+  }, [qc, gen, jobId, buyCredits]);
+
+  // The generation is over once its rack lands or the wait gives up.
+  useEffect(() => {
+    if (rack != null || phase === 'timeout' || phase === 'error') inFlight.current = false;
+  }, [rack, phase]);
 
   // Timeout watchdog: while waiting on the worker with nothing to show, arm a
   // single timer; a rack arriving (or a phase change) disarms it.

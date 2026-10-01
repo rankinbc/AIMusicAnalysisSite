@@ -58,8 +58,23 @@ public static partial class AdminEndpoints
     // ── AC1 — the billing/webhook trail for refund decisions ────────────────
     // Credit economy rollout — grant the sign-up bonus to verified accounts that
     // predate it. Idempotent (ledger key), so safe to re-run.
-    private static async Task<IResult> PostBackfillSignupBonus(SignupBonusBackfill backfill, CancellationToken ct)
-        => Results.Ok(new { granted = await backfill.RunAsync(ct) });
+    // Like every admin mutation: a reason is required and an audit_log row is
+    // written. The grants themselves are idempotent ledger inserts made inside
+    // SignupBonusBackfill (each its own keyed insert), so the audit row records
+    // the count that run actually granted.
+    private static async Task<IResult> PostBackfillSignupBonus(
+        AdminActionRequest req, SignupBonusBackfill backfill, AppDbContext db, CancellationToken ct)
+    {
+        if (ValidateReason(req.Reason) is { } bad) return bad;
+        var granted = await backfill.RunAsync(ct);
+        db.AuditLogs.Add(new AuditLog
+        {
+            ActorUserId = OperatorActor, Action = "credits_backfill_signup_bonus",
+            Target = "credit_ledger", Reason = Fit($"{req.Reason} (granted {granted})"),
+        });
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new { granted });
+    }
 
     private static async Task<IResult> GetBillingTrail(
         string idOrEmail, AppDbContext db, CancellationToken ct)

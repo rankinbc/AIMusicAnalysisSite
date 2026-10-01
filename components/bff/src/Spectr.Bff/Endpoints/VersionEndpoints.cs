@@ -1581,6 +1581,16 @@ public static class VersionEndpoints
                     row.FailedAt = DateTimeOffset.UtcNow;
                 }
                 await db.SaveChangesAsync(ct);
+                if (!freeRetry)
+                {
+                    // Credit economy (spec 3.4): the client never receives the jobId
+                    // (this rethrows → 500), so the lazy GET /jobs/{id} refund would
+                    // never fire. Refund here, same key as that path ("reversal:{jobId}")
+                    // so the two can never both pay out. Pro-allowance jobs spent
+                    // nothing → no-op.
+                    try { await credits.ReverseAsync(userId, jobId, "dispatch_failed", CancellationToken.None); }
+                    catch (Exception) { /* the lazy read-path refund is the backstop */ }
+                }
             }
             throw;
         }

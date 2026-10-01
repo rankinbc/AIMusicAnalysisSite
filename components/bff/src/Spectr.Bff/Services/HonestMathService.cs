@@ -12,7 +12,7 @@ namespace Spectr.Bff.Services;
 //
 // The credit ledger stores credit COUNTS, not cents, so 90-day spend is
 // reconstructed by mapping each credit-PURCHASE row to its pack DISPLAY price
-// from PricingDisplayOptions (5 → CreditPack5Cents, 10 → CreditPack10Cents).
+// from PricingDisplayOptions (amount → its CreditPacks entry).
 // Non-standard amounts (e.g. operator `adjustment` rows that happen to carry a
 // purchase reason, or future pack sizes) are skipped — we never invent a price.
 // Pro-equivalent = (PeriodDays / 30) months of ProMonthlyCents. All cents come
@@ -35,15 +35,9 @@ public sealed class HonestMathService(AppDbContext db, IOptions<PricingDisplayOp
             .ToListAsync(ct);
 
         var spentCents = 0;
+        var centsByCredits = p.CreditPacks.ToDictionary(x => x.Credits, x => x.Cents);
         foreach (var amount in purchaseAmounts)
-        {
-            spentCents += amount switch
-            {
-                5 => p.CreditPack5Cents,
-                10 => p.CreditPack10Cents,
-                _ => 0, // unknown pack shape — can't price it, don't guess
-            };
-        }
+            spentCents += centsByCredits.TryGetValue(amount, out var c) ? c : 0; // unknown shape — don't guess
 
         var months = PeriodDays / 30; // 3 monthly cycles ≈ 90 days
         var proEquivalentCents = p.ProMonthlyCents * months;

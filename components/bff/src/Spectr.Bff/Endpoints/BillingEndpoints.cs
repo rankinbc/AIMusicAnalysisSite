@@ -87,14 +87,19 @@ public static class BillingEndpoints
             var amount = await AuthEndpoints.SignupBonusAmountAsync(entitlements, loggers, ct);
             if (amount > 0) signupBonus = amount;
         }
+        var flags = await entitlements.GetFlagsAsync(ct);
+        var prices = CreditPricing.Resolve(config, flags);
+        var proCoach = flags.TryGetValue("coach_pro_monthly", out var cp) && int.TryParse(cp, out var cpv)
+            ? cpv : CoachCapService.CoachProMonthlyDefault;
         return Results.Ok(new PlansResponse(
             ProMonthlyCents: o.ProMonthlyCents,
             ProAnnualCents: o.ProAnnualCents,
-            CreditPack5Cents: o.CreditPack5Cents,
-            CreditPack10Cents: o.CreditPack10Cents,
+            CreditPacks: o.CreditPacks.Select(p => new CreditPackDto(p.Credits, p.Cents)).ToList(),
             Currency: o.Currency,
             CreditsEnabled: creditsEnabled,
-            SignupBonusCredits: signupBonus));
+            SignupBonusCredits: signupBonus,
+            Costs: new CreditCostsDto(prices.Analysis, prices.Specialist, prices.CoachMessage,
+                prices.CoachMix, prices.SignupGrant, prices.ProAnalysesMonthly, proCoach)));
     }
 
     // ── POST /checkout/subscription ─────────────────────────────────────────
@@ -658,28 +663,28 @@ public static class BillingEndpoints
         ClaimsPrincipal currentUser,
         AppDbContext db,
         IOptions<StripeOptions> stripeOpts,
+        IOptions<PricingDisplayOptions> display,
         IStripeCheckoutClient stripeClient,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
         var opts = stripeOpts.Value;
 
-        if (body is null || (body.PackSize != 5 && body.PackSize != 10))
+        var packs = display.Value.CreditPacks.Select(p => p.Credits).ToList();
+        if (body is null || !packs.Contains(body.PackSize))
         {
             return ErrorEnvelope.Build(StatusCodes.Status400BadRequest,
                 "invalid_pack_size",
-                "Pack size must be 5 or 10.");
+                $"Pack size must be one of: {string.Join(", ", packs)}.");
         }
-        if (!opts.CreditPacksConfigured)
+        if (!opts.CreditPacksConfigured(packs))
         {
             return ErrorEnvelope.Build(StatusCodes.Status503ServiceUnavailable,
                 "stripe_not_configured",
                 "Stripe is not configured in this environment.");
         }
 
-        var priceId = body.PackSize == 5
-            ? opts.PriceCreditPack5!
-            : opts.PriceCreditPack10!;
+        var priceId = opts.PriceForPack(body.PackSize)!;
 
         // Resolve or create the Stripe customer — same atomic
         // UPDATE-WHERE-NULL pattern as story 2.1's subscription checkout

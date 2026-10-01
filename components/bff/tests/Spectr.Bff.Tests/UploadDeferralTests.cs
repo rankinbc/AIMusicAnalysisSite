@@ -100,7 +100,8 @@ public sealed class UploadDeferralTests(WebApplicationFactory<Program> factory)
         await TestDb.RequireAsync(_factory);
 
         var (client, queue) = NewClient();
-        await Authenticate(client);
+        var uid = await Authenticate(client);
+        await TestCredits.GrantAsync(_factory, uid);
 
         using var form = MixForm(analyze: null); // omit field → defaults to true
         var resp = await client.PostAsync("/api/versions/", form);
@@ -189,7 +190,7 @@ public sealed class UploadDeferralTests(WebApplicationFactory<Program> factory)
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    private static async Task Authenticate(HttpClient client)
+    private static async Task<Guid> Authenticate(HttpClient client)
     {
         var email = $"unified+{Guid.NewGuid():N}@spectr.test";
         var reg = await client.PostAsJsonAsync("/api/auth/register",
@@ -198,6 +199,7 @@ public sealed class UploadDeferralTests(WebApplicationFactory<Program> factory)
         var auth = await reg.Content.ReadFromJsonAsync<AuthResponse>();
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", auth!.AccessToken);
+        return auth.User.Id;
     }
 
     private static MultipartFormDataContent MixForm(bool? analyze)

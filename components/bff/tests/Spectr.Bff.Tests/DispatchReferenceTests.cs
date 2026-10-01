@@ -80,7 +80,8 @@ public sealed class DispatchReferenceTests(WebApplicationFactory<Program> factor
     {
         await TestDb.RequireAsync(_factory);
         var (client, queue) = NewClient();
-        await AuthAsync(client, "ref-own");
+        var (_, uid) = await AuthAsync(client, "ref-own");
+        await TestCredits.GrantAsync(_factory, uid);
         var referenceId = await CreateReferenceAsync(client);
         var versionId = await CreateVersionAsync(client);
 
@@ -130,7 +131,8 @@ public sealed class DispatchReferenceTests(WebApplicationFactory<Program> factor
     {
         await TestDb.RequireAsync(_factory);
         var (client, queue) = NewClient();
-        await AuthAsync(client, "ref-none");
+        var (_, uid) = await AuthAsync(client, "ref-none");
+        await TestCredits.GrantAsync(_factory, uid);
         var versionId = await CreateVersionAsync(client);
 
         var resp = await client.PostAsync($"/api/versions/{versionId}/analyze", null);

@@ -17,6 +17,9 @@ import {
 import { extractApiError } from '../api/error-utils';
 import { handleGuestRestricted } from '../api/mutation-error-toast';
 import { STEM_ROLES } from '../api/types';
+import { useBuyCredits } from '../features/billing/BuyCreditsProvider';
+import { CostTag, usePaidAction } from '../features/billing/CostTag';
+import { isOutOfCredits } from '../features/billing/credits';
 import { GuestUpgradeDialog } from '../features/demo/GuestUpgradeDialog';
 import { invalidateGuestState, useGuestState } from '../features/demo/useGuestState';
 import type {
@@ -164,6 +167,8 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   const [entExhausted, setEntExhausted] = useState(false);
+  const analysisCost = usePaidAction('analysis');
+  const buyCredits = useBuyCredits();
   // Why the UpgradeSheet opened: 'cap' = free allotment spent (count copy);
   // 'feature' = a Pro-only input (stems/.als) was clicked. Keeps the sheet copy
   // from telling a user with analyses left that they're "out of analyses".
@@ -374,7 +379,14 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
     // then too). If the query ERRORED we proceed and let the server 409 be the
     // backstop — never silently dead-end the button with no data.
     if (ents.isLoading) return;
-    if (ents.data?.analysesRemaining === 0) {
+    // Credit economy: when a price applies, an unaffordable click opens the buy
+    // sheet (resuming the upload once bought); the legacy cap gate only applies
+    // when no credit price is in play (credits off).
+    if (analysisCost.cost && !analysisCost.cost.affordable) {
+      analysisCost.guard(() => void runUpload());
+      return;
+    }
+    if (!analysisCost.cost && ents.data?.analysesRemaining === 0) {
       setUpgradeReason('cap');
       setEntExhausted(true);
       return;
@@ -610,10 +622,14 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
     } catch (err) {
       // Server-side entitlement gate (catches races where the client check passed but the
       // server rejects because the last slot was consumed concurrently).
-      if (err instanceof ApiError && extractApiError(err.body).code === 'entitlement_exhausted') {
+      if (isOutOfCredits(err)) {
         setPhase('form');
         setStatus('');
         setBusy(false);
+        if (extractApiError((err as ApiError).body).code === 'insufficient_credits') {
+          buyCredits.open({ title: 'Not enough credits', onBought: () => void runUpload() });
+          return;
+        }
         setUpgradeReason('cap');
         setEntExhausted(true);
         return;
@@ -1262,7 +1278,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                   disabled={!mix || busy || ents.isLoading}
                   className={`${f.button} ${f.buttonPrimary}`}
                 >
-                  {busy ? status || 'Working…' : 'Upload & analyze'}
+                  {busy ? status || 'Working…' : <>Upload & analyze <CostTag action="analysis" /></>}
                 </button>
               )}
             </div>

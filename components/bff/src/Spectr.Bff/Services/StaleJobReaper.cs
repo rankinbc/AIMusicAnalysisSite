@@ -109,11 +109,23 @@ internal sealed class StaleJobReaper(
         //    merely waiting out a worker restart or backlog.
         // error_code is deliberately NOT "invalid_file" (that triggers the BFF
         // credit-reversal read path in JobEndpoints).
-        var failed = await db.AnalysisJobs
+        // Credit economy (spec 3.4): the refund belongs in the WRITE path — a user
+        // who closed the tab never re-reads the job, so the lazy refund on
+        // GET /jobs/{id} alone would strand their credits. Snapshot the ids,
+        // fail exactly those, then reverse each (idempotent via "reversal:{jobId}").
+        var abandoned = await db.AnalysisJobs
             .Where(j =>
                 (j.Status == "processing" && (j.StartedAt ?? j.DispatchedAt) < startedCutoff)
                 || (j.Status == "pending" && j.DispatchedAt < pendingCutoff)
                 || (workerDead && j.Status == "pending" && j.DispatchedAt < pendingNoWorkerCutoff))
+            .Select(j => new { j.Id, j.UserId })
+            .ToListAsync(ct);
+        if (abandoned.Count == 0) return 0;
+        var abandonedIds = abandoned.Select(a => a.Id).ToList();
+
+        var failed = await db.AnalysisJobs
+            .Where(j => abandonedIds.Contains(j.Id)
+                && (j.Status == "processing" || j.Status == "pending"))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(j => j.Status, "failed")
                 .SetProperty(j => j.ErrorCode, "worker_unavailable")
@@ -122,6 +134,30 @@ internal sealed class StaleJobReaper(
                 .SetProperty(j => j.CurrentPhase, "failed")
                 .SetProperty(j => j.FailedAt, DateTimeOffset.UtcNow),
                 ct);
+
+        if (failed > 0)
+        {
+            // Only jobs this sweep actually failed (a job that completed between
+            // the snapshot and the update must never be refunded).
+            var reapedIds = await db.AnalysisJobs.AsNoTracking()
+                .Where(j => abandonedIds.Contains(j.Id)
+                    && j.Status == "failed" && j.ErrorCode == "worker_unavailable")
+                .Select(j => j.Id)
+                .ToListAsync(ct);
+            var credits = scope.ServiceProvider.GetRequiredService<CreditLedgerService>();
+            foreach (var job in abandoned.Where(a => a.UserId is not null && reapedIds.Contains(a.Id)))
+            {
+                try
+                {
+                    await credits.ReverseAsync(job.UserId!.Value, job.Id, "worker_unavailable", ct);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // The lazy read-path refund (JobEndpoints) is the backstop.
+                    _logger.LogError(ex, "Refund for reaped job {JobId} failed.", job.Id);
+                }
+            }
+        }
 
         if (failed > 0)
         {

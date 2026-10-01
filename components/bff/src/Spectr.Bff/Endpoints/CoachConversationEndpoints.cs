@@ -230,7 +230,29 @@ public static class CoachConversationEndpoints
             Reference = userRow.Id.ToString(),
         });
 
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception)
+        {
+            // The charge committed in its own transaction above; the message
+            // never landed, so give it back (same reference/key as the
+            // enqueue-failure refund below — idempotent). Drop the failed
+            // pending rows first or the refund's SaveChanges would replay them.
+            if (mustPay)
+            {
+                db.ChangeTracker.Clear();
+                try
+                {
+                    await credits.RefundChargeAsync(userId, userRow.Id.ToString(),
+                        $"reversal:coach:{userRow.Id}", CancellationToken.None);
+                    ents.InvalidateAsync(userId);
+                }
+                catch (Exception) { /* surface the original failure */ }
+            }
+            throw;
+        }
 
         // The coach_message meter row just landed — the pro pooled-monthly count
         // baked into the 60s-cached entitlements DTO is now stale. Invalidate so

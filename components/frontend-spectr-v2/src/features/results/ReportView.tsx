@@ -18,6 +18,8 @@ import {
   useVersionFiles,
 } from '../../api/hooks';
 import { UpgradeSheet } from '../../components/UpgradeSheet';
+import { useBuyCredits } from '../billing/BuyCreditsProvider';
+import { isOutOfCredits } from '../billing/credits';
 import {
   isFinalJson,
   type FinalJson,
@@ -413,6 +415,7 @@ export function ReportView({
   const reanalyze = useReanalyzeVersion(versionId ?? '');
   const ents = useEntitlements();
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const buyCredits = useBuyCredits();
   const dispatchReanalyze = useCallback(() => {
     if (!versionId) {
       toast.error('This analysis is not tied to a version — cannot re-analyze.');
@@ -427,14 +430,16 @@ export function ReportView({
         });
       },
       onError: (err) => {
-        if (err instanceof ApiError && extractApiError(err.body).code === 'entitlement_exhausted') {
+        if (err instanceof ApiError && extractApiError(err.body).code === 'insufficient_credits') {
+          buyCredits.open({ title: 'Not enough credits', onBought: () => dispatchReanalyze() });
+        } else if (isOutOfCredits(err)) {
           setUpgradeOpen(true);
         } else {
           toast.error(err instanceof Error ? err.message : 'Could not re-analyze');
         }
       },
     });
-  }, [versionId, reanalyze, navigate, songId]);
+  }, [versionId, reanalyze, navigate, songId, buyCredits]);
   const handleReanalyze = dispatchReanalyze;
 
   // Story 12.5: the add-input chips (and the coach unlock chips) open the REAL

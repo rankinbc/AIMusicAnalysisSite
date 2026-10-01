@@ -87,6 +87,9 @@ services:
       Stripe__WebhookSecret: "${STRIPE_WEBHOOK_SECRET:-}"
       Stripe__PriceProMonthly: "${STRIPE_PRICE_PRO_MONTHLY:-}"
       Stripe__PriceProAnnual: "${STRIPE_PRICE_PRO_ANNUAL:-}"
+      Stripe__CreditPackPrices__500: "${STRIPE_PRICE_CREDITS_500:-}"
+      Stripe__CreditPackPrices__1500: "${STRIPE_PRICE_CREDITS_1500:-}"
+      Stripe__CreditPackPrices__5000: "${STRIPE_PRICE_CREDITS_5000:-}"
       Resend__ApiKey: "${RESEND_API_KEY:?}"
       Resend__WebhookSecret: "${RESEND_WEBHOOK_SECRET:?}"
       # Required (:?) — the onboarding@resend.dev sandbox sender in prod

@@ -73,6 +73,56 @@ The `spectr-llm-budget-80` alert fires at 80% of
    copy. Nothing to restart; service resumes when the month rolls or the
    ceiling rises.
 
+## Turning credits on (credit economy rollout)
+
+Credits are seeded OFF (`credits_enabled='false'`: everyone premium, no
+charges, no labels). To launch the economy (prices: PRPs/credit-economy.md):
+
+0. **Pre-flip: convert legacy balances.** Before this economy, one credit was
+   one analysis (packs of 5 and 10). Now an analysis costs 100 credits, so any
+   existing balance would be devalued 100x. Count the affected buyers first:
+   ```sql
+   SELECT user_id, count(*) AS purchases, sum(amount) AS purchased_credits
+   FROM credit_ledger
+   WHERE reason = 'purchase' AND amount IN (5, 10)
+   GROUP BY user_id;
+   ```
+   If this returns rows, convert each such user's balance BEFORE flipping
+   `credits_enabled`: multiply their current balance
+   (`SELECT sum(amount) FROM credit_ledger WHERE user_id = ...`) by the
+   old-to-new ratio (x100; analysis price 100 vs. the old 1) with a
+   compensating, keyed `adjustment` ledger entry of `balance * 99` credits
+   (the ledger is append-only — never UPDATE). If it returns nothing,
+   there is nothing to convert.
+1. Stripe Dashboard: create three one-time USD Prices — 500 credits / $7,
+   1,500 / $18, 5,000 / $55. Set `STRIPE_PRICE_CREDITS_500`,
+   `STRIPE_PRICE_CREDITS_1500`, `STRIPE_PRICE_CREDITS_5000` in the prod
+   `.env` (compose maps them to `Stripe__CreditPackPrices__*`), then
+   `./deploy.sh redeploy`.
+2. Raise `LLM_BUDGET_GLOBAL_USD` / the `llm_budget_global_usd` flag (prod
+   default is $10/month; see "LLM budget breach") and confirm
+   `llm_budget_credits_usd` is set.
+3. Flip the flags (BFF cache <= 60 s, no restart). The sign-up bonus replaces
+   the free allowance:
+   ```sql
+   UPDATE feature_flags SET value='0' WHERE name IN ('free_analyses_per_month','coach_free_followups');
+   UPDATE feature_flags SET value='true' WHERE name='credits_enabled';
+   ```
+4. Grant the sign-up bonus to already-verified accounts (idempotent, safe to
+   re-run; header per "Admin surface"). A reason is required and is written to
+   `audit_log`:
+   `curl -X POST -H "X-Admin-Key: $ADMIN_API_KEY" -H "Content-Type: application/json" -d '{"reason":"credit economy rollout"}' https://<host>/api/admin/credits/backfill-signup-bonus`
+5. Watch `llm_calls` cost per analysis for a week and retune the
+   `credit_cost_*` flags.
+
+Note on worker LLM lanes: while `credits_enabled` is off the BFF stamps every
+job `tier='pro'` (everyone is premium), so worker LLM spend (triage,
+specialists, coach) meters in the **pro** budget lane, not the free one. This
+is intended — it is the same premium experience the kill switch promises. Once
+credits are on, jobs are stamped with the real tier again.
+
+Kill switch back: `UPDATE feature_flags SET value='false' WHERE name='credits_enabled';`
+
 ## Prompt rollback (story 1.1 mechanism / 10.5 writer)
 
 No deploy, effective ≤60 s (worker pin TTL):

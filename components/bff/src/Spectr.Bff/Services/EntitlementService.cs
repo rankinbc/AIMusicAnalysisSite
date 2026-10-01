@@ -12,8 +12,8 @@ namespace Spectr.Bff.Services;
 //
 // Tier derivation:
 //   "pro"     : subscription.status IN ('active','past_due')
-//   "credits" : no active sub AND credit_balance >= 1
-//   "free"    : all other cases
+//   "credits" : no active sub (any balance; 0 ⇒ 402 on paid work)
+//   "free"    : guests only (credits on); everyone is "pro" when credits are off
 //
 // results-forever guarantee (AR15): this service is NEVER injected into
 // the job-status or results handlers — those paths have no entitlement
@@ -193,7 +193,13 @@ public class EntitlementService(
                 ProAnalysesUsed: usedThisPeriod);
         }
 
-        if (balance >= 1)
+        // Spec 3.3: with credits on, every non-Pro real user is "credits" —
+        // whatever the balance — so a 0-balance user hits 402 (buy sheet), not
+        // the free allotment / free coach cap. Guests keep the legacy free
+        // branch (they are never charged or granted).
+        var isGuest = balance < 1 && await db.Users.AsNoTracking()
+            .Where(u => u.Id == userId).Select(u => u.IsGuest).FirstOrDefaultAsync(ct);
+        if (!isGuest)
         {
             return new EntitlementsDto(
                 AnalysesRemaining: CreditAnalyses(balance),

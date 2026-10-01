@@ -24,8 +24,12 @@ vi.mock('../../api/hooks', () => ({
     data: {
       proMonthlyCents: 1299,
       proAnnualCents: 9900,
-      creditPack5Cents: 1900,
-      creditPack10Cents: 3500,
+      creditPacks: [
+        { credits: 500, cents: 700 },
+        { credits: 1500, cents: 1800 },
+        { credits: 5000, cents: 5500 },
+      ],
+      costs: { analysis: 100, specialist: 15, coachMessage: 5, coachMix: 5, signupGrant: 500, proAnalysesMonthly: 15, proCoachMonthly: 300 },
       currency: 'USD',
     },
   }),
@@ -68,7 +72,10 @@ describe('UpgradeSheet (story 2.7 / UX-DR30)', () => {
     const html = render();
     expect(html).toContain('$12.99/mo');
     expect(html).toContain('$99.00/yr');
-    expect(html).toContain('5-pack');
+    expect(html).toContain('500 credits · $7.00');
+    expect(html).toContain('1,500 credits · $18.00');
+    expect(html).toContain('5,000 credits · $55.00');
+    expect(html).toContain('15 analyses / month');
     // annual savings: 1299*12 - 9900 = 5688
     expect(html).toContain('$56.88');
   });
@@ -78,7 +85,7 @@ describe('UpgradeSheet (story 2.7 / UX-DR30)', () => {
     const primaries = [...html.matchAll(/class="btn primary"/g)];
     expect(primaries.length).toBe(1);
     expect(html).toContain('Subscribe');
-    expect(html).toContain('Buy credits');
+    expect(html).toContain('aria-label="Credit packs"');
   });
 
   it('renders the value-recap grade chip for the user climb', () => {

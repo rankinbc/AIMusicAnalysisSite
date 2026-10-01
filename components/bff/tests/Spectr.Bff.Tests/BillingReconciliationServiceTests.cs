@@ -117,8 +117,7 @@ public sealed class BillingReconciliationServiceTests
             Currency = "USD",
             ProMonthlyCents = 1299,
             ProAnnualCents = 9900,
-            CreditPack5Cents = 1900,
-            CreditPack10Cents = 3500,
+            CreditPacks = [new() { Credits = 5, Cents = 1900 }, new() { Credits = 10, Cents = 3500 }],
         };
 
         var (svc, logger) = Build(fake, ConfiguredStripe(), pricingOpts);
@@ -142,8 +141,7 @@ public sealed class BillingReconciliationServiceTests
             Currency = "USD",
             ProMonthlyCents = 1299,
             ProAnnualCents = 9900,
-            CreditPack5Cents = 1900,
-            CreditPack10Cents = 3500,
+            CreditPacks = [new() { Credits = 5, Cents = 1900 }, new() { Credits = 10, Cents = 3500 }],
         };
 
         var (svc, logger) = Build(fake, ConfiguredStripe(), pricingOpts);

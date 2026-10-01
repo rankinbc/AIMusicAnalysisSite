@@ -18,10 +18,9 @@ public sealed record CreateCheckoutSessionResponse(string Url, string SessionId)
 public sealed record PlansResponse(
     int ProMonthlyCents,
     int ProAnnualCents,
-    // Story 2.3 — credit-pack display cents so the BuyCreditsCard can
-    // render prices via formatCents (AR39 no-literals lint).
-    int CreditPack5Cents,
-    int CreditPack10Cents,
+    // Credit packs (display cents) so the buy sheet renders prices via
+    // formatCents (AR39 no-literals lint).
+    IReadOnlyList<CreditPackDto> CreditPacks,
     string Currency,
     // Task P2 (public-surfaces-polish D6) — true/false only when the
     // server actually resolved it; null means "unknown" (a failed flag
@@ -31,7 +30,21 @@ public sealed record PlansResponse(
     // receives on email verification (`signup_bonus_credits` flag). Set ONLY
     // when CreditsEnabled is true and the bonus is > 0; null otherwise, so
     // the register page never advertises credits while they're switched off.
-    int? SignupBonusCredits = null);
+    int? SignupBonusCredits = null,
+    // Credit economy — the live per-action costs, so the frontend never
+    // hardcodes a credit amount.
+    CreditCostsDto? Costs = null);
+
+public sealed record CreditPackDto(int Credits, int Cents);
+
+public sealed record CreditCostsDto(
+    int Analysis,
+    int Specialist,
+    int CoachMessage,
+    int CoachMix,
+    int SignupGrant,
+    int ProAnalysesMonthly,
+    int ProCoachMonthly);
 
 // ── Story 2.2 — manage-subscription self-service wire shapes ──────────
 

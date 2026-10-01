@@ -15,8 +15,9 @@ interface PlanCardProps {
   features: string[];
   /** Small reassurance line under the features (e.g. "never expire"). */
   footnote?: string;
-  ctaLabel: string;
-  onCta: () => void;
+  /** Omit for a card whose price node carries its own actions (credit packs). */
+  ctaLabel?: string;
+  onCta?: () => void;
   ctaPending?: boolean;
   /** The recommended plan gets the accent border + primary CTA. */
   featured?: boolean;
@@ -52,14 +53,16 @@ export function PlanCard({
 
       {footnote && <p className={s.footnote}>{footnote}</p>}
 
-      <button
-        type="button"
-        className={`btn ${featured ? 'primary' : 'ghost'}`}
-        onClick={onCta}
-        disabled={ctaPending}
-      >
-        {ctaPending ? 'Opening…' : ctaLabel}
-      </button>
+      {ctaLabel && onCta && (
+        <button
+          type="button"
+          className={`btn ${featured ? 'primary' : 'ghost'}`}
+          onClick={onCta}
+          disabled={ctaPending}
+        >
+          {ctaPending ? 'Opening…' : ctaLabel}
+        </button>
+      )}
     </section>
   );
 }

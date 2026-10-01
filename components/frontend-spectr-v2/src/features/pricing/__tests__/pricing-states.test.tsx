@@ -5,7 +5,7 @@ vi.mock('../../../lib/analytics', () => ({ capture: vi.fn() }));
 import { resetPublicPlansForTests } from '../../../lib/public-plans';
 import { PricingPage } from '../PricingPage';
 const body = (creditsEnabled: boolean | null) => JSON.stringify({
-  proMonthlyCents: 100, proAnnualCents: 1000, creditPack5Cents: 500, creditPack10Cents: 900, currency: 'USD', creditsEnabled,
+  proMonthlyCents: 100, proAnnualCents: 1000, creditPacks: [], currency: 'USD', creditsEnabled,
 });
 describe('PricingPage states', () => {
   beforeEach(() => { resetPublicPlansForTests(); });
@@ -35,7 +35,7 @@ describe('PricingPage states', () => {
   });
   it('200 with no creditsEnabled field (an older BFF): unavailable, not plans, not off', async () => {
     const bodyMissingField = JSON.stringify({
-      proMonthlyCents: 100, proAnnualCents: 1000, creditPack5Cents: 500, creditPack10Cents: 900, currency: 'USD',
+      proMonthlyCents: 100, proAnnualCents: 1000, creditPacks: [], currency: 'USD',
       // no creditsEnabled key at all — distinct from `creditsEnabled: null`
     });
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(bodyMissingField, { status: 200 }))));

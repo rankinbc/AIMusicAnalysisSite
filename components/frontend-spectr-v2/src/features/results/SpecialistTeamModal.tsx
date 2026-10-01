@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 
 import type { VerdictDto } from '../../api/types';
+import { CostTag, usePaidAction } from '../billing/CostTag';
 import { Icon } from './Icon';
 import {
   SPECIALIST_CATALOG,
@@ -61,7 +62,7 @@ function SpecAvatar({ color, size = 40 }: { color: string; size?: number }) {
 // The full roster as a modal (prototype `.spec-modal`): triage rationale,
 // "Suggested for this track" + per-group tile grids (tiles SELECT, green ring),
 // a collapsible "Already run" list, and a bottom action bar that runs the
-// selected specialist for 1 credit.
+// selected specialist (priced via CostTag).
 export function SpecialistTeamModal({
   ranSlugs,
   runningSlugs,
@@ -74,6 +75,9 @@ export function SpecialistTeamModal({
   onClose,
   initialView = 'roster',
 }: SpecialistTeamModalProps) {
+  // Triage-routed specialists are free; the guard picks the matching price.
+  const paidNormal = usePaidAction('specialist');
+  const paidRouted = usePaidAction('specialist', { routed: true });
   const statusOf = (slug: string, needsStems: boolean | undefined): SpecStatus => {
     if (needsStems && !hasStems) return 'locked';
     if (runningSlugs.has(slug)) return 'running';
@@ -174,7 +178,9 @@ export function SpecialistTeamModal({
         ) : status === 'locked' ? (
           <span className="srr-found">needs stems</span>
         ) : (
-          <span className="srr-found cr">1 cr</span>
+          <span className="srr-found cr">
+            <CostTag action="specialist" routed={suggestedSlugs?.has(m.slug) === true} />
+          </span>
         )}
       </button>
     );
@@ -220,7 +226,7 @@ export function SpecialistTeamModal({
                     metrics that stood out on this mix.
                   </p>
                   <p className="tri-note">
-                    Running a suggested specialist costs 1 credit and drops its result into the chat
+                    Suggested specialists are included; others show their credit price. A result drops into the chat
                     and the Findings tab.
                   </p>
                 </div>
@@ -327,10 +333,18 @@ export function SpecialistTeamModal({
                       type="button"
                       className="ssb-run"
                       disabled={status !== 'idle'}
-                      onClick={() => onRun(selSpec.slug)}
+                      onClick={() =>
+                        (suggestedSlugs?.has(selSpec.slug) ? paidRouted : paidNormal).guard(() =>
+                          onRun(selSpec.slug),
+                        )
+                      }
                     >
                       <Icon name="bolt" size={13} />
-                      {status === 'cached' ? 'Cached' : status === 'locked' ? 'Needs stems' : 'Run · 1 cr'}
+                      {status === 'cached' ? 'Cached' : status === 'locked' ? 'Needs stems' : (
+                        <>
+                          Run <CostTag action="specialist" routed={suggestedSlugs?.has(selSpec.slug) === true} />
+                        </>
+                      )}
                     </button>
                   )}
                 </>

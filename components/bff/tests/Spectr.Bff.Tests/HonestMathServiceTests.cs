@@ -13,7 +13,7 @@ namespace Spectr.Bff.Tests;
 
 // Story 2.8 / FR32 / UX-DR32 — HonestMathService: 90-day credit-purchase spend
 // vs Pro-equivalent. Defaults: ProMonthly = 1299 → proEquivalent (3 mo) = 3897;
-// CreditPack5 = 1900, CreditPack10 = 3500.
+// 5-pack = 1900, 10-pack = 3500 (set explicitly; production packs are 500/1500/5000).
 public sealed class HonestMathServiceTests
     : IClassFixture<WebApplicationFactory<Program>>
 {
@@ -49,7 +49,7 @@ public sealed class HonestMathServiceTests
     private static HonestMathService NewService(IServiceScope scope)
     {
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var opts = Microsoft.Extensions.Options.Options.Create(new PricingDisplayOptions()); // 1299 / 1900 / 3500
+        var opts = Microsoft.Extensions.Options.Options.Create(new PricingDisplayOptions { CreditPacks = [new() { Credits = 5, Cents = 1900 }, new() { Credits = 10, Cents = 3500 }] }); // 1299 / 1900 / 3500
         return new HonestMathService(db, opts);
     }
 

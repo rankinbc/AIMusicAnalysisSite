@@ -4,6 +4,7 @@ import { getAccessToken } from '../../api/fetcher';
 import { useVersionFiles } from '../../api/hooks';
 import type { VersionFileType } from '../../api/types';
 import type { SongHeaderInputs } from './SongHeader';
+import { CostTag } from '../billing/CostTag';
 import s from './FilesTab.module.css';
 
 interface FilesTabProps {
@@ -116,7 +117,7 @@ export function FilesTab({
           onClick={() => onReanalyze?.()}
           disabled={!onReanalyze || reanalyzing}
         >
-          ↺ {reanalyzing ? 'Re-analyzing…' : 'Re-analyze'}
+          ↺ {reanalyzing ? 'Re-analyzing…' : 'Re-analyze'} <CostTag action="analysis" />
         </button>
         <button type="button" className="btn sm" onClick={onAddInputs}>
           Add files to deepen

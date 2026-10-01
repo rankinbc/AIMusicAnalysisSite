@@ -1,0 +1,6 @@
+/* Credit economy — price hint under the coach input. */
+p.costHint {
+  margin: 4px 14px 0;
+  font-size: 11px;
+  color: var(--text-2);
+}
