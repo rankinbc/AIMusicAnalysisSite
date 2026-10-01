@@ -78,16 +78,20 @@ $PythonExe = if ($env:SPECTR_PYTHON) { $env:SPECTR_PYTHON }
              else { (Get-Command python -ErrorAction SilentlyContinue)?.Source }
 
 # Worker entrypoints, pinned to the resolved interpreter above. Dev mirrors the
-# prod pool split (infra/compose.prod.yml): a coach-ONLY worker plus a batch
-# worker. A worker is one process with one thread and Dramatiq has no
-# cross-queue priority, so with a single all-queues worker every coach reply
-# (~20 s of work) waits behind whatever batch job is running - a 10-minute
-# analyze_audio_job, a multi-minute allin1 structure run, 40-90 s specialists.
+# prod pool split (infra/compose.prod.yml): an INTERACTIVE worker (`coach ai` -
+# coach replies, Triage, on-demand specialists, Coach Mix) plus a batch worker.
+# Dramatiq has no cross-queue priority, so with a single one-thread all-queues
+# worker every coach reply / Triage waits behind whatever batch job is running
+# - a 10-minute analyze_audio_job, a multi-minute allin1 structure run. The
+# interactive actors are I/O-bound LLM calls, so that worker runs several
+# threads (a coach reply never waits behind a 60 s specialist); the batch
+# worker stays at ONE thread (Demucs/librosa memory profile).
 # See docs/STARTUP.md problem #3b.
-$WorkerBase = "& `"$PythonExe`" -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues"
+$InteractiveThreads = 4
+$WorkerBase = "& `"$PythonExe`" -m dramatiq app.dramatiq_app --processes 1"
 $WorkerPools = [ordered]@{
-    'SPECTR Worker - coach'    = "$WorkerBase coach"
-    'SPECTR Worker - analysis' = "$WorkerBase analysis-paid analysis-free maintenance"
+    'SPECTR Worker - interactive' = "$WorkerBase --threads $InteractiveThreads --queues coach ai"
+    'SPECTR Worker - analysis'    = "$WorkerBase --threads 1 --queues analysis-paid analysis-free maintenance"
 }
 
 # ── Pretty output helpers ───────────────────────────────────────────────────

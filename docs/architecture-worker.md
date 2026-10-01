@@ -32,7 +32,7 @@ From `components/worker/requirements.txt` (lockfile `requirements.lock.txt`):
 | Redis client | `redis >= 5.0` | Coach stream publisher |
 | Tests | `pytest >= 8`, `pytest-asyncio >= 0.23` | `components/worker/tests/` |
 
-Runtime: Python 3.11+, `--processes 1 --threads 1` always (Demucs memory + per-loop LLM client constraints; see Procfile comment).
+Runtime: Python 3.11+, `--processes 1` always; `--threads 1` on the batch pool (Demucs memory), `--threads 4` on the interactive `coach ai` pool (I/O-bound LLM actors; gateway semaphores are thread-local — see Procfile comment and docs/STARTUP.md #3b).
 
 ## Actor Inventory
 
@@ -42,12 +42,12 @@ Runtime: Python 3.11+, `--processes 1 --threads 1` always (Demucs memory + per-l
 |---|---|---|---|---|---|
 | `analyze_audio_job` | `app/tasks_dramatiq.py` | declares `analysis-free` (BFF tier-routes the enqueue) | 2 / 60 min | Full 7/8-phase pipeline -> `analyses` row -> Problem engine -> LLM identifiers -> enqueue structure follow-up | ~75 s for an 8-min track (structure deferred) |
 | `classify_stems` | `app/tasks_dramatiq.py` | analysis-paid | 1 / 10 min | Audio-content role classification of staged stems; writes proposals to `song_versions.stem_paths_raw` | seconds–minutes (per stem count) |
-| `run_triage` | `app/triage_actor.py` | analysis-paid | 1 / 3 min | One LLM call -> `analyses.routing_plan` (specialist routing) | ~5–30 s |
-| `run_specialist` | `app/verdict_actor.py` | analysis-paid | 1 / 3 min | One specialist prompt -> validated `verdicts` rows (or fail marker) | ~10–60 s (LLM timeout 120 s) |
+| `run_triage` | `app/triage_actor.py` | ai | 1 / 3 min | One LLM call -> `analyses.routing_plan` (specialist routing) | ~5–30 s |
+| `run_specialist` | `app/verdict_actor.py` | ai | 1 / 3 min | One specialist prompt -> validated `verdicts` rows (or fail marker) | ~10–60 s (LLM timeout 120 s) |
 | `run_reference_analyzer` | `app/reference_analyzer_actor.py` | analysis-paid | 1 / 3 min | Phase-1-only analysis of a saved reference track -> metrics on `reference_tracks` | ~10–30 s |
 | `rerun_phase` | `app/rerun_phase_actor.py` | analysis-paid | 1 / 10 min | Re-run ONE phase (2–8), merge into the existing `analyses.final_json` in place | ~5–60 s |
 | `detect_structure_job` | `app/structure_actor.py` | analysis-paid | 1 / (ALLIN1_TIMEOUT+300) s, default 35 min | Deferred allin1 structure detection; folds sections into Phase 1/7 of the SAME analysis row | ~6–7 min CPU (Docker allin1) |
-| `generate_fix_rack` | `app/fix_rack_actor.py` | analysis-paid | 1 | Problem engine + `coach_mix.synthesize` -> `rack_presets` row (`source='analysis'`) | seconds (LLM arbiter optional) |
+| `generate_fix_rack` | `app/fix_rack_actor.py` | ai | 1 | Problem engine + `coach_mix.synthesize` -> `rack_presets` row (`source='analysis'`) | seconds (LLM arbiter optional) |
 | `coach_reply` | `app/coach_actor.py` | **coach** | 1 / 3 min | Grounded streaming coach turn; updates the pending `coach_messages` assistant row | first tokens in seconds; full turn ~10–45 s |
 | `sweep_retention` | `app/retention_actor.py` | **maintenance** | 0 (nightly re-run IS the retry) | Purge raw audio past retention (free 30 d / lapsed 90 d / anon 72 h); stamps `raw_audio_purged_at`; FAIL-CLOSED on billing-query errors | minutes |
 | `send_email` | `app/send_email_actor.py` | **maintenance** | 3 (backoff) | Resend HTTP send; no API key -> stub log; 5xx/429 raise (retry), 4xx swallow; send-time suppression recheck | < 5 s |

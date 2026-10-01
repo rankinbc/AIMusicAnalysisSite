@@ -657,7 +657,7 @@ app.MapGet("/healthz", async (AppDbContext db, IConnectionMultiplexer redis) =>
 
 // Story 10.3 (AC2) — /metrics + the queue-depth gauge. The worker's dramatiq
 // middleware can't see Redis LIST depth; the BFF already owns a Redis
-// connection, so depth is collected here at scrape time for all four lanes.
+// connection, so depth is collected here at scrape time for every lane.
 var queueDepthGauge = Metrics.CreateGauge(
     "spectr_queue_depth", "Dramatiq queue depth (pending + delayed messages).", "queue");
 var queueScrapeErrors = Metrics.CreateCounter(
@@ -669,7 +669,7 @@ Metrics.DefaultRegistry.AddBeforeCollectCallback(async ct =>
     {
         var redisConn = app.Services.GetRequiredService<IConnectionMultiplexer>();
         var rdb = redisConn.GetDatabase();
-        foreach (var q in new[] { "coach", "analysis-paid", "analysis-free", "maintenance" })
+        foreach (var q in new[] { "coach", "ai", "analysis-paid", "analysis-free", "maintenance" })
         {
             // .DQ carries retried/delayed messages — a retry storm must not
             // read as an empty queue (review).

@@ -31,9 +31,10 @@ cross-queue precedence within one worker).
 
 | Queue           | Actor(s)                                                                                   | Consumed by |
 |-----------------|--------------------------------------------------------------------------------------------|-------------|
-| `analysis-paid` | `run_triage`, `run_specialist`, `run_reference_analyzer`, `classify_stems`, `rerun_phase`  | W1          |
-| `analysis-free` | `analyze_audio_job` *(sole declarer — see below)*                                          | W2          |
-| `coach`         | `coach_reply`                                                                              | W1          |
+| `ai`            | `run_triage`, `run_specialist`, `generate_fix_rack` *(interactive LLM, multi-thread pool)*  | interactive |
+| `analysis-paid` | `run_reference_analyzer`, `classify_stems`, `rerun_phase`, `detect_structure_job`          | batch       |
+| `analysis-free` | `analyze_audio_job` *(sole declarer — see below)*                                          | batch       |
+| `coach`         | `coach_reply`                                                                              | interactive |
 | `maintenance`   | *(provisioned-but-empty; Epic 3/4 add `sweep_retention` / `send_email`)*                   | W2          |
 
 - **`analyze_audio_job` is tier-routed by the BFF, not by its decorator.** The BFF
@@ -54,14 +55,16 @@ cross-queue precedence within one worker).
 # Dev — TWO workers, two terminals (scripts/start-spectr.ps1 does this). A
 # single all-queues worker parks every coach reply behind the running batch
 # job for minutes — docs/STARTUP.md problem #3b.
-python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues coach
+python -m dramatiq app.dramatiq_app --processes 1 --threads 4 --queues coach ai
 python -m dramatiq app.dramatiq_app --processes 1 --threads 1 \
     --queues analysis-paid analysis-free maintenance
 # (The Procfile's single all-queues line is kept for the compose `worker` service.)
 
-# Prod — two pools (W1 paid + coach, W2 free + maintenance):
+# Prod (infra/compose.prod.yml): worker-paid = WORKER_QUEUES "coach ai" +
+# WORKER_THREADS 4; worker-free = "analysis-paid analysis-free maintenance" + 1.
+# Dev prod-parity overlay:
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up
-#   worker-paid (W1): --queues coach analysis-paid
+#   worker-paid (W1): --queues coach ai analysis-paid
 #   worker-free (W2): --queues analysis-free maintenance
 ```
 

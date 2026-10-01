@@ -107,7 +107,9 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
 
-  # W1 — paid-priority pool (AR23): paid/credit analysis + coach + auxiliaries.
+  # W1 — INTERACTIVE pool: coach replies + the `ai` lane (Triage, on-demand
+  # specialists, Coach Mix). I/O-bound LLM calls only — no DSP — so it runs
+  # several threads (docs/STARTUP.md #3b).
   worker-paid:
     image: ghcr.io/rankinbc/spectr-worker:${IMAGE_TAG:?}
     restart: unless-stopped
@@ -148,9 +150,16 @@ services:
       # global ceilings are the live guards).
       LLM_BUDGET_GLOBAL_USD: "${LLM_BUDGET_GLOBAL_USD:-10}"
       LLM_BUDGET_PRO_USD: "${LLM_BUDGET_PRO_USD:-8}"
-      # Queue reshape (D9) for the single-VM demo: worker-paid keeps coach
-      # only so a chat reply never queues behind a running analysis.
-      WORKER_QUEUES: "coach"
+      # Queue reshape (D9) for the single-VM demo + interactive AI lane:
+      # worker-paid drains coach + ai so neither a chat reply nor Triage /
+      # specialists / Coach Mix ever queue behind a running analysis or allin1
+      # structure run. 4 threads so a coach reply never waits behind a 60 s
+      # specialist; the gateway's per-loop semaphores are thread-local and its
+      # breaker is locked, so threads are safe here. NEVER put a DSP queue
+      # (analysis-*) on this pool. worker-free inherits this env block via
+      # `<<: *worker-env`, so it overrides BOTH vars explicitly.
+      WORKER_QUEUES: "coach ai"
+      WORKER_THREADS: "4"
     volumes:
       - /opt/spectr/data:/data
     depends_on:
@@ -164,10 +173,16 @@ services:
     logging: *default-logging
     environment:
       <<: *worker-env
-      # Queue reshape (D9): worker-free now also drains analysis-paid so a
-      # single-VM demo still processes on-demand specialists; trade-off
-      # accepted per brief — they queue behind a running analysis here.
+      # Queue reshape (D9): worker-free also drains analysis-paid (paid
+      # analysis + batch auxiliaries: rerun_phase, structure, reference,
+      # classify_stems). Interactive LLM work left this pool for `ai` above.
+      # Keeping analysis-paid here also drains any run_triage / run_specialist /
+      # generate_fix_rack messages enqueued there before the `ai` lane deploy
+      # (dispatch is by actor_name). Guests' AI work rides analysis-free here
+      # (GuestLimits.QueueFor) so demo traffic never takes the interactive
+      # pool's threads. One thread: Demucs/librosa memory profile.
       WORKER_QUEUES: "analysis-paid analysis-free maintenance"
+      WORKER_THREADS: "1"
       # G4 fix1 #3 — worker-free is the ONLY service that can ever run
       # analyze_audio_job / detect_structure_job (worker-paid's WORKER_QUEUES
       # above is "coach" only), so it is the only service that can launch the

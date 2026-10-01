@@ -185,7 +185,18 @@ def reset_client_cache() -> None:
 
 # ── per-event-loop semaphores (AR6) ─────────────────────────────────────────
 
-_sem_state: tuple[int, asyncio.Semaphore, asyncio.Semaphore] | None = None
+# THREAD-LOCAL, not a module global: the interactive worker pool runs
+# `--threads N` (STARTUP.md #3b), so several threads each drive their own
+# ``asyncio.run`` loop at once. A shared slot would let thread B swap in its
+# loop's semaphores between thread A's check and return — A would then wait
+# on a semaphore bound to B's loop ("bound to a different event loop").
+# Each loop only ever lives on one thread, so a per-thread cache is exact.
+# The cache holds the loop OBJECT, not ``id(loop)``: back-to-back
+# ``asyncio.run`` loops can reuse a freed id, which would hand a new loop the
+# old loop's (possibly loop-bound) semaphores. Holding one dead loop per
+# thread until the next call is negligible. Cross-thread concurrency is
+# bounded by the thread count.
+_sem_local = threading.local()
 
 
 def _semaphores() -> tuple[asyncio.Semaphore, asyncio.Semaphore]:
@@ -193,25 +204,28 @@ def _semaphores() -> tuple[asyncio.Semaphore, asyncio.Semaphore]:
 
     ``complete_sync`` runs each call in a fresh ``asyncio.run`` loop, so a
     module-global semaphore would bind to a dead loop. Key the cache on the
-    running loop's id and rebuild when it changes; within one loop (the async
+    running loop and rebuild when it changes; within one loop (the async
     batch/coach paths and the concurrency tests) the semaphores are shared.
     """
-    global _sem_state
-    loop_id = id(asyncio.get_running_loop())
+    loop = asyncio.get_running_loop()
     settings = get_llm_settings()
-    if _sem_state is None or _sem_state[0] != loop_id:
-        _sem_state = (
-            loop_id,
+    state: tuple[asyncio.AbstractEventLoop, asyncio.Semaphore, asyncio.Semaphore] | None = (
+        getattr(_sem_local, "state", None)
+    )
+    if state is None or state[0] is not loop:
+        state = (
+            loop,
             asyncio.Semaphore(settings.llm_max_concurrency),
             asyncio.Semaphore(settings.llm_coach_concurrency),
         )
-    return _sem_state[1], _sem_state[2]
+        _sem_local.state = state
+    return state[1], state[2]
 
 
 def reset_semaphore_cache() -> None:
-    """Test helper — force semaphore rebuild."""
-    global _sem_state
-    _sem_state = None
+    """Test helper — force semaphore rebuild (every thread)."""
+    global _sem_local
+    _sem_local = threading.local()
 
 
 # ── metering (AC3) — lazy DB import, fail-open ──────────────────────────────

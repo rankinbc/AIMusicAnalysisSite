@@ -227,7 +227,9 @@ public sealed class GuestCapsTests(WebApplicationFactory<Program> factory)
             Assert.Equal(HttpStatusCode.OK, listReal.StatusCode);
 
             Assert.Equal(3, queue.Sent.Count);
-            Assert.All(queue.Sent, s => Assert.Equal(DramatiqQueues.AnalysisPaid, s.Queue));
+            // Interactive AI lane: real users' Triage / specialists / Coach Mix
+            // ride `ai` (the multi-thread interactive pool), never batch DSP.
+            Assert.All(queue.Sent, s => Assert.Equal(DramatiqQueues.Ai, s.Queue));
         }
         finally { await CleanupAsync(f, guestId, realUserId); f.Dispose(); }
     }

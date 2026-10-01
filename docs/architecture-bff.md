@@ -186,10 +186,12 @@ single authoritative dispatch path used by `POST /api/versions`, `POST /api/uplo
    free/anon → `analysis-free`. Enqueue failure marks the row `dispatch_failed` (or deletes a
    free-retry row) and rethrows.
 
-Secondary actors (`run_triage`, `run_specialist`, `generate_fix_rack`, `rerun_phase`,
-`run_reference_analyzer`, `classify_stems`) enqueue on `analysis-paid`; `coach_reply` on
-`coach`; housekeeping (`sweep_retention`, `send_email`, `delete_account_data`) on `maintenance`.
-Queue depth for all four lanes (+ `.DQ`) is exported as the `spectr_queue_depth` gauge at
+Interactive LLM actors (`run_triage`, `run_specialist`, `generate_fix_rack`) enqueue on `ai`
+(`DramatiqQueues.Ai`; guests → `analysis-free` via `GuestLimits.QueueFor`); batch secondary
+actors (`rerun_phase`, `run_reference_analyzer`, `classify_stems`) on `analysis-paid`;
+`coach_reply` on `coach`; housekeeping (`sweep_retention`, `send_email`, `delete_account_data`)
+on `maintenance`.
+Queue depth for every lane (+ `.DQ`) is exported as the `spectr_queue_depth` gauge at
 `/metrics` scrape time (Program.cs).
 
 ## Billing (Endpoints/BillingEndpoints.cs, 1230 lines)

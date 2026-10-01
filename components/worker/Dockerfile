@@ -1,5 +1,6 @@
 # Story 10.1 — the worker image (deferred since story 1.1).
-# ONE image serves both prod pools: W1/W2 differ only by WORKER_QUEUES.
+# ONE image serves both prod pools: W1/W2 differ only by WORKER_QUEUES
+# (+ WORKER_THREADS on the interactive pool).
 # No [ml] extra — torch/demucs stay out (USE_DEMUCS=False per analysis
 # gotchas); allin1 structure detection runs via the separate docker/allin1
 # one-shot image, not in this container.
@@ -43,8 +44,11 @@ HEALTHCHECK --interval=60s --timeout=10s --start-period=60s --retries=3 \
 
 ENV PYTHONUNBUFFERED=1 \
     TORCH_HOME=/data/models \
-    WORKER_QUEUES="coach analysis-paid analysis-free maintenance"
+    WORKER_QUEUES="coach ai analysis-paid analysis-free maintenance"     WORKER_THREADS=1
 
-# Mirrors the Procfile: single process/thread (Demucs memory profile) —
-# prod scales by POOLS (W1/W2 services), never intra-worker concurrency.
-CMD ["sh", "-c", "python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues $WORKER_QUEUES"]
+# Mirrors the Procfile: single process (Demucs memory profile) — prod scales
+# by POOLS (W1/W2 services). WORKER_THREADS defaults to 1 for the batch pool;
+# ONLY the interactive pool (`coach ai`, I/O-bound LLM calls, no DSP) raises
+# it (compose.prod.yml worker-paid) so a coach reply never waits behind a
+# 60 s specialist. Never raise it on a pool that runs analyze_audio_job.
+CMD ["sh", "-c", "python -m dramatiq app.dramatiq_app --processes 1 --threads ${WORKER_THREADS:-1} --queues $WORKER_QUEUES"]

@@ -51,15 +51,15 @@ def decide(status_history, restart_times, now) -> Decision:
 
 
 def launch_worker_logged(worker_dir: str, log_dir: str) -> str:
-    """Relaunch the workers — one per pool in ``worker_ctl.WORKER_POOLS`` (coach
-    alone, then batch; STARTUP.md #3b) — each with output redirected to its own
+    """Relaunch the workers — one per pool in ``worker_ctl.WORKER_POOLS``
+    (interactive `coach ai`, then batch; STARTUP.md #3b) — each with output redirected to its own
     dated log file. Returns the batch (last) pool's log path. Uses Start-Process
     redirection (the workers keep running after the watchdog exits)."""
     Path(log_dir).mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
     log = ""
     for pool in worker_ctl.WORKER_POOLS:
-        name = pool[0] if len(pool) == 1 else "batch"
+        name = "interactive" if "ai" in pool else "batch"
         log = os.path.join(log_dir, f"worker-{name}-{stamp}.log")
         err = os.path.join(log_dir, f"worker-{name}-{stamp}.err.log")
         queues = ",".join(f"'{q}'" for q in pool)
@@ -67,7 +67,7 @@ def launch_worker_logged(worker_dir: str, log_dir: str) -> str:
             f"Start-Process -WindowStyle Hidden -WorkingDirectory '{worker_dir}' "
             f"-RedirectStandardOutput '{log}' -RedirectStandardError '{err}' "
             "-FilePath python -ArgumentList '-m','dramatiq','app.dramatiq_app',"
-            "'--processes','1','--threads','1',"
+            f"'--processes','1','--threads','{worker_ctl.pool_threads(pool)}',"
             f"'--queues',{queues}"
         )
         subprocess.run(["powershell", "-NoProfile", "-Command", ps],

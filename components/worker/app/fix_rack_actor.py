@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 @dramatiq.actor(
     actor_name="generate_fix_rack",
-    queue_name="analysis-paid",  # story 2.5: secondary op → W1
+    queue_name="ai",  # interactive LLM lane — never behind batch DSP (see dramatiq_app)
     max_retries=1,
 )
 def generate_fix_rack(analysis_id: str, user_id: str | None = None,

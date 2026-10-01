@@ -19,7 +19,7 @@ Related docs (do not duplicate their content here):
 | Postgres 16 | Docker container | 5432 | `docker/docker-compose.yml` service `postgres` |
 | Redis 7 | Docker container (dramatiq broker) | 6379 | `docker/docker-compose.yml` service `redis` |
 | BFF | .NET 10 minimal API | 5000 | `components/bff/src/Spectr.Bff` — `dotnet run` |
-| Workers (×2) | Python dramatiq consumers: a **coach-only** worker + an **analysis** (batch) worker — see problem #3b | none | `components/worker` — commands in section 4 |
+| Workers (×2) | Python dramatiq consumers: an **interactive** worker (`coach ai`, 4 threads) + an **analysis** (batch, 1 thread) worker — see problem #3b | none | `components/worker` — commands in section 4 |
 | Frontend v2 | Vite dev server (React 19) | 5174 | `components/frontend-spectr-v2` — `npm run dev` |
 | allin1 | One-shot `docker run` per track (structure detection) | none | image `allin1:latest` (built from `docker/allin1`) |
 | MinIO (optional) | S3-compatible storage, off by default | 9000/9001 | compose service `minio` |
@@ -127,7 +127,7 @@ $env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run
 # 4. Workers — TWO terminals, same split as prod (problem #3b). Always pass the
 #    full flags; short forms drop the queue set.
 cd components/worker
-python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues coach
+python -m dramatiq app.dramatiq_app --processes 1 --threads 4 --queues coach ai
 #    ...and in a second terminal:
 cd components/worker
 python -m dramatiq app.dramatiq_app --processes 1 --threads 1 --queues analysis-paid analysis-free maintenance
@@ -189,10 +189,11 @@ Do all of these before declaring success — several failure modes look "up":
    `GET /api/health/full` (DB, Redis, storage, worker heartbeat).
    In the BFF boot log, eyeball `S3 configured: {bool}` and the resolved
    `Storage:LocalRoot` (must point at the repo's `data/`, not `components/data/`).
-3. **Workers**: there are TWO windows (`SPECTR Worker - coach` and
+3. **Workers**: there are TWO windows (`SPECTR Worker - interactive` and
    `SPECTR Worker - analysis`). In each, find the single `Boot config:` line —
-   check redis host:port, the queues (`coach` alone in one; `analysis-paid`,
-   `analysis-free`, `maintenance` in the other), and `storage_root=` (must be
+   check redis host:port, the queues (the line lists every DECLARED queue; the
+   window title + `--queues` decide what it consumes: `coach ai` in one;
+   `analysis-paid`, `analysis-free`, `maintenance` in the other), and `storage_root=` (must be
    the repo `data/` path — NEVER `/data` on a native run, problem #7). Process
    check: 2 dramatiq masters + 2 `--multiprocessing-fork` children.
 4. **Worker is CONSUMING, not just alive**: a fresh heartbeat does not prove
@@ -201,6 +202,7 @@ Do all of these before declaring success — several failure modes look "up":
    ```powershell
    docker compose -f docker/docker-compose.yml exec redis redis-cli LLEN dramatiq:analysis-paid
    docker compose -f docker/docker-compose.yml exec redis redis-cli LLEN dramatiq:analysis-free
+   docker compose -f docker/docker-compose.yml exec redis redis-cli LLEN dramatiq:ai
    ```
 
    Numbers should trend to 0 within seconds. `GET /api/health/worker` reports
@@ -360,8 +362,8 @@ says healthy. **Fix**: `./scripts/start-spectr.ps1` (its stop phase tree-kills
 masters and sweeps orphans), or the manual tree-kill in section 4. The restarted
 worker recovers the unacked backlog automatically.
 
-### #3b Coach reply hangs for minutes / "glitches out" while an analysis is running
-A worker is ONE process with ONE thread (`--processes 1 --threads 1` — Demucs
+### #3b Coach reply / Triage hangs for minutes while an analysis is running
+A batch worker is ONE process with ONE thread (`--processes 1 --threads 1` — Demucs
 and the pipeline are memory-heavy), and Dramatiq has no cross-queue priority
 (`--queues` is an unordered set; equal-priority messages run in arbitrary
 order). With a single all-queues worker, a `coach_reply` — ~20 s of real work —
@@ -372,14 +374,29 @@ sat `pending` for 4–14 minutes, the chat showed an empty "Coach" bubble, and
 the BFF's 30 s SSE idle fallback made the stream look broken. Diagnose: `coach`
 rows in `coach_messages` stuck `pending` with no matching `purpose='coach'` row
 in `llm_calls`, while `dramatiq:coach.msgs` HLEN > 0 and the worker's fork has a
-long-running child (`docker run … allin1`, or the pipeline). **Fix**: run the
-prod pool split locally — a coach-ONLY worker plus an analysis worker. The
-launcher, the workerdash restart button and the watchdog all do this now
-(`WORKER_POOLS` in `components/workerdash/workerdash/worker_ctl.py`). Never
-"simplify" back to one all-queues worker, and don't raise `--threads` instead
-(two analyses would then run at once). To rescue replies already stuck behind a
-busy all-queues worker without killing its job: start the coach-only worker,
-then `RPUSH dramatiq:coach <message_id>` for each id in
+long-running child (`docker run … allin1`, or the pipeline). The same thing
+hit Triage after the coach got its own worker (seen 2026-10-01): `run_triage`,
+`run_specialist` and `generate_fix_rack` were on `analysis-paid`, drained by the
+batch worker, so opening a report right after an analysis showed no
+recommended specialists and none auto-ran until the allin1 run finished.
+**Fix (current topology)**: an INTERACTIVE worker consuming `coach ai` with 4
+threads, plus a one-thread batch worker on `analysis-paid analysis-free
+maintenance`. `ai` carries run_triage / run_specialist / generate_fix_rack —
+I/O-bound LLM calls, no DSP — so threads let a coach reply run alongside a
+60 s specialist (thread-safety: the gateway's per-loop semaphores are
+thread-local and its circuit breaker is locked; DB sessions are per call).
+Prod: `worker-paid` = `WORKER_QUEUES "coach ai"` + `WORKER_THREADS 4`;
+`worker-free` = the batch set + `WORKER_THREADS 1` (infra/compose.prod.yml).
+Guests' AI work is routed to `analysis-free` (`GuestLimits.QueueFor`) so demo
+traffic never takes the interactive threads. The launcher, the workerdash
+restart button and the watchdog all launch this split (`WORKER_POOLS` /
+`pool_threads` in `components/workerdash/workerdash/worker_ctl.py`). Never
+"simplify" back to one all-queues worker, and never raise `--threads` on the
+BATCH worker (two analyses would then run at once). Messages enqueued on
+`analysis-paid` for the three AI actors before the move still dispatch by
+`actor_name` and drain on the batch worker. To rescue replies already stuck
+behind a busy all-queues worker without killing its job: start the interactive
+worker, then `RPUSH dramatiq:coach <message_id>` for each id in
 `HKEYS dramatiq:coach.msgs` — `coach_reply` is idempotent (a second delivery
 no-ops on `status != 'pending'`).
 

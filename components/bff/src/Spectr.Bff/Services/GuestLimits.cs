@@ -29,8 +29,14 @@ public sealed partial class GuestLimits(
     // Fix round 1 item 1 — guest LLM work (lazy Triage, on-demand specialists,
     // fix-rack generation) rides the free lane, whatever queue the caller's
     // tier would otherwise route to. The worker dispatches by actor_name, so
-    // an actor declared on analysis-paid is consumed fine from analysis-free;
-    // real users are unaffected (defaultQueue passes through unchanged).
+    // an actor declared on `ai` is consumed fine from analysis-free (every
+    // actor is registered in every worker process via app.dramatiq_app, and
+    // analyze_audio_job keeps analysis-free declared); real users are
+    // unaffected (defaultQueue passes through unchanged).
+    // Interactive AI lane decision: guests stay OFF `ai` — that pool serves
+    // real users' coach replies + Triage, and demo traffic must never take
+    // its threads. A guest's AI work keeps the pre-lane trade-off: it may
+    // queue behind batch DSP on the free/batch pool.
     public static string QueueFor(ClaimsPrincipal user, string defaultQueue)
         => user.IsGuest() ? DramatiqQueues.AnalysisFree : defaultQueue;
 
