@@ -25,6 +25,8 @@ const REASON_FALLBACK: Record<GuestUpgradeReason, string> = {
     "You've used the reference track included with a guest account — create a free account to add more.",
   fix_rack_limit:
     "You've used the fix-rack generations included with a guest account — create a free account for more.",
+  specialist_limit:
+    "You've used the specialist reviews included with a guest account — create a free account for more.",
 };
 
 interface GuestUpgradeDialogProps {
@@ -39,9 +41,11 @@ interface GuestUpgradeDialogProps {
 export function GuestUpgradeDialog({ open, reason, message, onOpenChange }: GuestUpgradeDialogProps) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      {/* Same purchase layer as UpgradeSheet: a guest limit can fire from
+          inside any modal and this must land in front of it. */}
       <Dialog.Portal>
-        <Dialog.Overlay className={f.dialogOverlay} />
-        <Dialog.Content className={f.dialogContent}>
+        <Dialog.Overlay className={`${f.dialogOverlay} ${f.topLayer}`} data-layer="purchase" />
+        <Dialog.Content className={`${f.dialogContent} ${f.topLayer}`} data-layer="purchase">
           <Dialog.Title className={f.dialogTitle}>Create a free account to continue</Dialog.Title>
           <Dialog.Description className={`${f.dialogDescription} ${s.upgradeBody}`}>
             {message ?? REASON_FALLBACK[reason]}

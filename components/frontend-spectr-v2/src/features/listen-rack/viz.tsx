@@ -136,7 +136,8 @@ export function VizStage({
   // the board owns it, and Esc must not silently kill the background visuals.
   useEffect(() => {
     if (!bgMode || slot === 'none') return undefined;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onBgModeChange(false); };
+    // defaultPrevented: a Radix dialog on top (e.g. the buy sheet) already took this Esc.
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.defaultPrevented) onBgModeChange(false); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [bgMode, slot, onBgModeChange]);

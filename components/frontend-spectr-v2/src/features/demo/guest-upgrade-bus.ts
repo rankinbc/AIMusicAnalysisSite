@@ -18,7 +18,8 @@ export type GuestUpgradeReason =
   | 'analysis_limit'
   | 'stems_limit'
   | 'reference_limit'
-  | 'fix_rack_limit';
+  | 'fix_rack_limit'
+  | 'specialist_limit';
 
 type Listener = (reason: GuestUpgradeReason, message?: string) => void;
 

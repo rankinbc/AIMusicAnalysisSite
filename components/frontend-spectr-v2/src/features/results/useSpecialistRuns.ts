@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { useRunSpecialist, useVerdicts } from '../../api/hooks';
+import { isGuestRestrictedError } from '../../api/mutation-error-toast';
 import { useBuyCredits } from '../billing/BuyCreditsProvider';
 import { isOutOfCredits } from '../billing/credits';
 import type { VerdictsListResponse } from '../../api/types';
@@ -103,6 +104,10 @@ export function useSpecialistRuns({ jobId, analysisId, hasStems }: Options): Spe
         await run.mutateAsync(slug);
       } catch (err) {
         unmark(slug);
+        // A guest's run cap (403 guest_restricted, reason specialist_limit)
+        // already opened the guest upgrade dialog via the mutation cache —
+        // don't stack a raw error toast on top of it.
+        if (isGuestRestrictedError(err)) return;
         if (isOutOfCredits(err)) {
           buyCredits.open({
             title: 'Not enough credits',

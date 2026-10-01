@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { useFixRack, useGenerateFixRack } from '../../api/hooks';
+import { isGuestRestrictedError } from '../../api/mutation-error-toast';
 import type { FixRackDto } from '../../api/types';
 import { useBuyCredits } from '../billing/BuyCreditsProvider';
 import { isOutOfCredits } from '../billing/credits';
@@ -47,6 +48,11 @@ export function useFixRackGeneration(jobId: string): {
     gen.mutate(undefined, {
       onError: (err) => {
         inFlight.current = false;
+        // Guest cap: the mutation cache already opened the upgrade dialog.
+        if (isGuestRestrictedError(err)) {
+          setPhase('idle');
+          return;
+        }
         if (isOutOfCredits(err)) {
           setPhase('idle');
           buyCredits.open({ title: 'Not enough credits', onBought: () => generate() });

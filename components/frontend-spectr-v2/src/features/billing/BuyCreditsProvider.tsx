@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
+import { useOptionalAuth } from '../../auth/AuthContext';
 import { UpgradeSheet } from '../../components/UpgradeSheet';
+import { openGuestUpgrade } from '../demo/guest-upgrade-bus';
 
 // Credit economy — ONE app-wide buy-credits surface. Paid buttons call
 // useBuyCredits().open() when the user can't afford the action (labels-only
@@ -23,7 +25,23 @@ export function useBuyCredits() {
 
 export function BuyCreditsProvider({ children }: { children: ReactNode }) {
   const [opts, setOpts] = useState<OpenOpts | null>(null);
-  const open = useCallback((o: OpenOpts = {}) => setOpts(o), []);
+  const isGuest = useOptionalAuth()?.user?.isGuest === true;
+  // A guest can't buy credits (never charged, never granted) — any path that
+  // still reaches open() gets the guest flow's own "create an account" prompt
+  // instead of a checkout they can't complete.
+  const open = useCallback(
+    (o: OpenOpts = {}) => {
+      if (isGuest) {
+        openGuestUpgrade(
+          'not_allowed',
+          "Credits aren't part of the guest demo — create a free account to buy credits or go Pro.",
+        );
+        return;
+      }
+      setOpts(o);
+    },
+    [isGuest],
+  );
   const value = useMemo(() => ({ open }), [open]);
   return (
     <Ctx.Provider value={value}>

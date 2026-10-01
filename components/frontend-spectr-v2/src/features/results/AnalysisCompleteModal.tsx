@@ -100,10 +100,13 @@ export function AnalysisCompleteModal(props: Props) {
   const status = runStatus(job, fj);
   const complete = status === 'complete';
 
-  // Esc to close.
+  // Esc to close — unless a Radix layer above us (the buy-credits sheet,
+  // the guest upgrade dialog) already consumed this Esc: Radix handles it in
+  // a document capture listener and preventDefault()s it, so the sheet
+  // closes and this modal stays open underneath.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !e.defaultPrevented) onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 
 import { useEntitlements, usePlans } from '../../api/hooks';
+import { useOptionalAuth } from '../../auth/AuthContext';
 import { useBuyCredits } from './BuyCreditsProvider';
 import { costOf } from './credits';
 import type { ActionCost, PaidAction } from './credits';
@@ -14,7 +15,13 @@ export function usePaidAction(action: PaidAction, opts: { routed?: boolean } = {
   const { data: plans } = usePlans();
   const { data: ent } = useEntitlements();
   const { open } = useBuyCredits();
-  const cost: ActionCost | null = costOf(action, plans, ent, opts);
+  // Guests (users.is_guest) are never charged and never granted credits —
+  // every BFF charge site skips them and their limits come back as a
+  // guest_restricted 403 (→ GuestUpgradeDialog via the mutation cache).
+  // Their entitlements still say tier "free" / balance 0, so without this a
+  // guest saw "15 ◆" tags and a buy sheet for actions the server runs free.
+  const isGuest = useOptionalAuth()?.user?.isGuest === true;
+  const cost: ActionCost | null = isGuest ? null : costOf(action, plans, ent, opts);
   const guard = useCallback(
     (run: () => void) => {
       if (cost && !cost.affordable) {
