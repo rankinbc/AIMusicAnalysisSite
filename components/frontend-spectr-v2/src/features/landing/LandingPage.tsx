@@ -1,5 +1,5 @@
 /* Story 6.1 (FR40) — the public landing page at `/`. One-scroll pitch:
- * hero (with a real finding + fix card) + feature list + footer. Anonymous only — the
+ * hero (finding/fix card, How-it-works link) + feature grid + footer. Anonymous only — the
  * root route's beforeLoad redirects authed users to /library. Keep this
  * chunk LEAN (AC4 LCP): ui primitives only, nothing that pulls
  * wavesurfer/recharts/listen-rack. */
@@ -10,6 +10,7 @@ import { PublicFooter } from '../../components/PublicFooter';
 import { capture } from '../../lib/analytics';
 import { usePageMeta } from '../../lib/usePageMeta';
 import { LandingResumeSlot } from '../anon-analyze/LandingResumeSlot';
+import { LandingFeatures } from './LandingFeatures';
 import { LandingHero } from './LandingHero';
 import s from './landing.module.css';
 
@@ -32,6 +33,8 @@ export function LandingPage() {
         <LandingResumeSlot />
 
         <LandingHero />
+
+        <LandingFeatures />
 
         <PublicFooter />
       </main>

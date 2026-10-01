@@ -7,7 +7,7 @@
   grid-template-areas:
     'copy  stage'
     'demo  stage'
-    'feat  stage';
+    'hiw   stage';
   grid-template-rows: auto auto 1fr;
   column-gap: clamp(40px, 5vw, 80px);
   row-gap: 36px;
@@ -16,8 +16,10 @@
   padding-bottom: 24px;
 }
 
-.features {
-  grid-area: feat;
+.hiwBtn {
+  grid-area: hiw;
+  justify-self: start;
+  margin-top: -20px;
 }
 
 .copy {
@@ -332,7 +334,7 @@
       'copy'
       'stage'
       'demo'
-      'feat';
+      'hiw';
     grid-template-rows: auto;
     row-gap: 28px;
   }

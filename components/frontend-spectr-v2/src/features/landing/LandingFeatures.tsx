@@ -1,5 +1,5 @@
-/* "What you get" — the six-item glowing feature list. Sits in the hero's
- * left column under the demo card (owner ruling 2026-10-01), compact type. */
+/* "What you get" — the six-item glowing feature list: a 2-column grid below
+ * the hero, compact type (owner ruling 2026-10-01). */
 import s from './LandingFeatures.module.css';
 
 // Ordered as the producer's loop: diagnose → understand → fix → hear → apply →

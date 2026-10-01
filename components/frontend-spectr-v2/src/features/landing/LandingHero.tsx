@@ -11,7 +11,6 @@
 import { Coach } from '../../ui/Coach';
 import { capture } from '../../lib/analytics';
 import { HeroFindingCard } from './HeroFindingCard';
-import { LandingFeatures } from './LandingFeatures';
 import s from './LandingHero.module.css';
 
 // Re-exported: tests and other modules import them from here.
@@ -65,7 +64,9 @@ export function LandingHero() {
         </a>
       </div>
 
-      <LandingFeatures className={s.features} />
+      <a href="/trust/how-its-built" className={`btn ghost sm ${s.hiwBtn}`} data-testid="landing-hiw-cta">
+        How it works →
+      </a>
 
       <figure className={s.stage} data-testid="landing-coach">
         <blockquote className={s.bubble}>
