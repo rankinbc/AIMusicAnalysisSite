@@ -49,6 +49,10 @@ public sealed class DemoSeeder(
         + "the findings below come from a deliberately rough demo mix, not from this audio. "
         + "Upload your own track to get real answers.";
 
+    public const string SnapshotDescription =
+        "Sample report — a real SPECTR analysis of this demo track. "
+        + "Explore the findings, actions and coach, then upload your own track to get yours.";
+
     // Closes the paid-triage-on-GET leak (VerdictEndpoints.ListVerdicts only
     // lazy-fires run_triage when routing_plan IS NULL): a "nothing to triage"
     // plan in the SAME shape run_triage itself writes (specialists_to_run /
@@ -148,7 +152,11 @@ public sealed class DemoSeeder(
             Id = doc.Source.SongId,
             UserId = userId,
             Name = DemoSeedMapping.TruncateSongName(DemoSongPrefix + doc.Song.Title),
-            Description = DemoDescription,
+            // A snapshot IS a real analysis of its own audio — never the
+            // fallback's "not from this audio" disclaimer.
+            Description = string.IsNullOrWhiteSpace(doc.Song.Description)
+                ? SnapshotDescription
+                : doc.Song.Description,
             GenreHint = doc.Song.GenreHint,
         };
         var version = new SongVersion

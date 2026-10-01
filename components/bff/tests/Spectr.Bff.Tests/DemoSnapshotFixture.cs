@@ -68,13 +68,15 @@ internal static class DemoSnapshotFixture
         string? waveformPeaksKey = null,
         string title = "Fixture Track",
         string rackPresetsJson = DefaultRackPresetsJson,
-        string finalJson = DefaultFinalJson)
+        string finalJson = DefaultFinalJson,
+        string? description = null)
     {
+        var descriptionFragment = description is null ? "" : $",\"description\":\"{description}\"";
         var routingPlanFragment = routingPlan is null ? "" : $"\"routingPlan\":{routingPlan},";
         return $$$"""
     { "format":"spectr-demo-snapshot/v1","exportedAt":"2026-09-20T00:00:00Z",
       "source":{"songId":"22222222-2222-2222-2222-222222222222","versionId":"{{{SourceVersion}}}","jobId":"{{{SourceJob}}}","analysisId":"44444444-4444-4444-4444-444444444444"},
-      "song":{"title":"{{{title}}}","genreHint":"house"},
+      "song":{"title":"{{{title}}}","genreHint":"house"{{{descriptionFragment}}}},
       "version":{"audioKey":"{{{audioKey}}}"},
       "analysis":{"finalJson":{{{finalJson}}},{{{routingPlanFragment}}}"pipelineVersion":"t","ruleEngineVersion":"t","validatorVersion":"t","promptSetVersion":"t","phaseDurations":{},
                   "stemMetrics":null,"spectrogramImageKey":{{{Lit(spectrogramImageKey)}}},"waveformImageKey":{{{Lit(waveformImageKey)}}},"waveformPeaksKey":{{{Lit(waveformPeaksKey)}}}},

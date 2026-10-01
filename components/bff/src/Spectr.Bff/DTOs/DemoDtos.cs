@@ -8,7 +8,8 @@ public sealed record DemoSnapshotExportRequest(Guid VersionId, string? Reason);
 // questions) — it's exported verbatim by design. This is pure disclosure so
 // an operator can read it before flipping the demo on; no filtering here.
 public sealed record DemoSnapshotFreeText(
-    string Title, IReadOnlyList<string> RackPresetNames, IReadOnlyList<string> UserMessages);
+    string Title, IReadOnlyList<string> RackPresetNames, IReadOnlyList<string> UserMessages,
+    string? Description = null);
 
 public sealed record DemoSnapshotExportResponse(
     string SnapshotKey, int Verdicts, int Messages, int RackPresets, long AudioBytes,

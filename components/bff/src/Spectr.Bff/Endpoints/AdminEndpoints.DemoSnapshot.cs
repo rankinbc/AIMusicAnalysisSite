@@ -214,7 +214,8 @@ public static partial class AdminEndpoints
             var freeText = new DemoSnapshotFreeText(
                 song.Name,
                 rackPresets.Select(p => p.Name).ToList(),
-                messages.Where(m => m.Role == "user").Select(m => m.Content).ToList());
+                messages.Where(m => m.Role == "user").Select(m => m.Content).ToList(),
+                song.Description);
 
             return Results.Json(new DemoSnapshotExportResponse(
                 snapshotKey, verdicts.Count, messages.Count, rackPresets.Count, audioBytes, freeText));
@@ -488,6 +489,7 @@ public static partial class AdminEndpoints
             {
                 ["title"] = song.Name,
                 ["genreHint"] = song.GenreHint,
+                ["description"] = song.Description,
             },
             ["version"] = new JsonObject { ["audioKey"] = audioKey },
             ["analysis"] = new JsonObject

@@ -25,7 +25,9 @@ public static class DemoSnapshotFormat
 
 public sealed record DemoSnapshotSourceIds(Guid SongId, Guid VersionId, Guid JobId, Guid AnalysisId);
 
-public sealed record DemoSnapshotSong(string Title, string? GenreHint);
+// Description: the exported song description (e.g. the demo track's credit /
+// disclaimer). Optional so snapshots exported before it existed still load.
+public sealed record DemoSnapshotSong(string Title, string? GenreHint, string? Description = null);
 
 public sealed record DemoSnapshotVersion(string AudioKey);
 

@@ -53,6 +53,39 @@ public sealed class DemoSnapshotSeedTests(WebApplicationFactory<Program> factory
     }
 
     [SkippableFact]
+    public async Task Seeded_Demo_Song_Carries_The_Snapshot_Description()
+    {
+        // The exported description is the demo track's credit/disclaimer — it
+        // must reach every seeded copy verbatim.
+        await TestDb.RequireAsync(factory);
+        const string credit = "Demo track: Magnetic Fields by Artifact303, used only as a demo.";
+        var dir = $"audio/demo/test-snapshots/{Guid.NewGuid():N}/";
+        var (f, _) = Build(dir + "snapshot.json");
+        using (var scope = f.Services.CreateScope())
+        {
+            var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
+            await storage.WriteAsync(dir + "source.wav", new MemoryStream(DemoSeeder.GenerateToneWav()), "audio/wav");
+            await storage.WriteAsync(dir + "snapshot.json",
+                new MemoryStream(Encoding.UTF8.GetBytes(DemoSnapshotFixture.Json(dir + "source.wav", description: credit))),
+                "application/json");
+        }
+        Guid userId = default;
+        try
+        {
+            var client = f.CreateClient();
+            (userId, _) = await TestAuth.RegisterAsync(client);
+            using var scope = f.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var song = await db.Songs.AsNoTracking().SingleAsync(s => s.UserId == userId);
+            Assert.Equal(credit, song.Description);
+        }
+        finally
+        {
+            if (userId != default) await CleanupAsync(f, userId);
+        }
+    }
+
+    [SkippableFact]
     public async Task Registration_Seeds_From_The_Snapshot_With_Fresh_Ids_And_No_Triage()
     {
         await TestDb.RequireAsync(factory);
@@ -77,6 +110,9 @@ public sealed class DemoSnapshotSeedTests(WebApplicationFactory<Program> factory
             var song = await db.Songs.AsNoTracking().SingleAsync(s => s.UserId == userId);
             Assert.Equal("Demo: Fixture Track", song.Name);
             Assert.Equal("house", song.GenreHint); // item 6
+            // No description in the snapshot -> the honest snapshot default,
+            // never the tone fallback's "not from this audio" line.
+            Assert.Equal(DemoSeeder.SnapshotDescription, song.Description);
             var analysis = await db.Analyses.AsNoTracking().SingleAsync(a => a.UserId == userId);
             Assert.NotEqual(Guid.Parse(DemoSnapshotFixture.SourceJob), analysis.JobId);
             Assert.Contains(analysis.JobId.ToString(), analysis.FinalJson);          // embedded id was remapped
