@@ -1,0 +1,130 @@
+/* Compact DAW-style EQ panel on the hero's "The fix" face. */
+.device {
+  border-radius: 10px;
+  border: 1px solid var(--border-2);
+  background: rgba(6, 10, 18, 0.85);
+  overflow: hidden;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.name {
+  color: var(--violet);
+}
+
+.target {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.graph {
+  display: block;
+  width: 100%;
+  height: 92px;
+}
+
+.grid {
+  stroke: rgba(255, 255, 255, 0.05);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.zero {
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.fill {
+  fill: color-mix(in srgb, var(--cyan) 12%, transparent);
+}
+
+.curve {
+  fill: none;
+  stroke: var(--cyan);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--cyan) 60%, transparent));
+}
+
+.node circle {
+  fill: var(--bg);
+  stroke: var(--cyan);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.node text {
+  fill: var(--cyan);
+  font-size: 8.5px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.axis {
+  position: relative;
+  height: 14px;
+  margin: -2px 0 2px;
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.axis span {
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.bands {
+  margin: 0;
+  padding: 6px 8px 8px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.band {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.bandNo {
+  display: inline-grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--cyan);
+  color: var(--bg);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.kind {
+  min-width: 68px;
+  font-weight: 600;
+}
+
+.param {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-2);
+}

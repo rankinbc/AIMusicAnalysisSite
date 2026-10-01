@@ -10,7 +10,6 @@ import { describeOp } from '../sample/sample-model';
 import type { VerdictDspOp } from '../../../api/types';
 import { LandingPage } from '../LandingPage';
 import { SAMPLE_FINDINGS } from '../sample/sample-data';
-import { SampleReportEmbed } from '../SampleReportEmbed';
 
 // Story 6.1 — static renders (the 6-1 idiom: plain <a> anchors so no
 // RouterProvider is needed; effects don't run, so no fetch fires).
@@ -48,18 +47,6 @@ describe('PublicChrome (story 6.1 AC3 — UX-DR6 slim chrome)', () => {
   });
 });
 
-describe('SampleReportEmbed shell (lazy body — see sample-report.test.tsx)', () => {
-  it('renders the frame, label and both CTAs without the lazy body', () => {
-    const html = renderToStaticMarkup(<SampleReportEmbed />);
-    expect(html).toContain('Live sample report');
-    expect(html).toContain('real analyzer output');
-    expect(html).toContain('href="/analyze"');
-    expect(html).toContain('Analyze my track free');
-    expect(html).toContain('href="/demo"');
-    expect(html).toContain('Explore the full demo');
-  });
-});
-
 describe('LandingPage (story 6.1 AC1)', () => {
   const html = renderToStaticMarkup(<LandingPage />);
 
@@ -68,11 +55,11 @@ describe('LandingPage (story 6.1 AC1)', () => {
     expect(html).toContain('Analyze my track free');
   });
 
-  it('renders chrome, sample embed, honesty strip, and footer links', () => {
+  it('renders chrome, honesty strip, and footer links — no sample report embed', () => {
     // Task P2 (D6) — same as above: PricingLink never resolves under
     // renderToStaticMarkup, so the footer link is hidden too.
     expect(html).not.toContain('href="/pricing"');
-    expect(html).toContain('Live sample report');
+    expect(html).not.toContain('Live sample report');
     expect(html).toContain('No AI training on your audio');
     expect(html).toContain('Reports stay yours forever');
     expect(html).toContain('href="/login"');
@@ -129,6 +116,12 @@ describe('Landing hero (two-column redesign + the Coach)', () => {
     expect(first.verdict.summary).toContain('12 dB louder than bass band');
     expect(first.corroboratedBy.map((c) => c.headline)).toContain(HERO_FINDING.alsoFlagged);
     expect(html).toContain(HERO_FINDING.headline);
+    // Evidence bars use the verdict's real first two evidence rows.
+    const ev = first.verdict.evidence as { value: number; expected_range: [number, number] }[];
+    HERO_FINDING.evidence.forEach((e, i) => {
+      expect(e.value).toBeCloseTo(ev[i]!.value, 1);
+      expect([...e.range]).toEqual(ev[i]!.expected_range);
+    });
   });
 
   it('alternates the finding with the real suggested fix for it', () => {

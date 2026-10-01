@@ -1,9 +1,8 @@
 /* Story 6.1 (FR40) — the public landing page at `/`. One-scroll pitch:
- * hero + live sample report + honesty strip + footer. Anonymous only — the
+ * hero (with a real finding + fix card) + honesty strip + footer. Anonymous only — the
  * root route's beforeLoad redirects authed users to /library. Keep this
  * chunk LEAN (AC4 LCP): ui primitives only, nothing that pulls
- * wavesurfer/recharts/listen-rack. The sample report body is lazy-loaded by
- * SampleReportEmbed. */
+ * wavesurfer/recharts/listen-rack. */
 import { useEffect } from 'react';
 
 import { PublicChrome } from '../../components/PublicChrome';
@@ -12,7 +11,6 @@ import { capture } from '../../lib/analytics';
 import { usePageMeta } from '../../lib/usePageMeta';
 import { LandingResumeSlot } from '../anon-analyze/LandingResumeSlot';
 import { LandingHero } from './LandingHero';
-import { SampleReportEmbed } from './SampleReportEmbed';
 import s from './landing.module.css';
 
 // The honesty strip mirrors the UpgradeSheet trust line (story 2.7 copy).
@@ -41,8 +39,6 @@ export function LandingPage() {
         <LandingResumeSlot />
 
         <LandingHero />
-
-        <SampleReportEmbed />
 
         <section className={s.honesty}>
           {HONESTY_POINTS.map((p) => (

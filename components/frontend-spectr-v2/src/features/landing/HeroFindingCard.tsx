@@ -6,10 +6,16 @@
  * auto-advances under prefers-reduced-motion (the tabs still switch it). */
 import { useEffect, useState } from 'react';
 
+import { EqDevice } from './EqDevice';
 import { HERO_FINDING, HERO_FIX } from './hero-content';
 import s from './HeroFindingCard.module.css';
 
 const CYCLE_MS = 4500;
+
+// Evidence bar scale (dB): wide enough to show both rows' value and target.
+const EV_MIN = -36;
+const EV_MAX = -12;
+const evPct = (db: number) => ((Math.min(EV_MAX, Math.max(EV_MIN, db)) - EV_MIN) / (EV_MAX - EV_MIN)) * 100;
 type Face = 'finding' | 'fix';
 
 export function HeroFindingCard({ className }: { className?: string }) {
@@ -80,24 +86,34 @@ export function HeroFindingCard({ className }: { className?: string }) {
           </p>
           <p className={s.head}>{HERO_FINDING.headline}</p>
           <p className={`mono ${s.measure}`}>{HERO_FINDING.measure}</p>
+          <ul className={s.evidence} aria-label="Measured vs the genre's expected range">
+            {HERO_FINDING.evidence.map((e) => (
+              <li key={e.label} className={s.evRow}>
+                <span className={s.evLabel}>{e.label}</span>
+                <span className={s.evTrack} aria-hidden="true">
+                  <span
+                    className={s.evZone}
+                    style={{ left: `${evPct(e.range[0])}%`, width: `${evPct(e.range[1]) - evPct(e.range[0])}%` }}
+                  />
+                  <span className={s.evDot} style={{ left: `${evPct(e.value)}%` }} />
+                </span>
+                <span className={`mono ${s.evValue}`}>
+                  {e.value.toFixed(1)} dB <span className={s.evExpected}>vs {e.range[0]}…{e.range[1]}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
           <p className={s.also}>
             Corroborated by a second check: {HERO_FINDING.alsoFlagged.toLowerCase()}
           </p>
         </div>
 
         <div className={s.face} data-active={face === 'fix'} aria-hidden={face !== 'fix'}>
-          <p className={s.meta}>
-            <span>On the {HERO_FIX.target.toLowerCase()}</span>
-            <span className={s.device}>{HERO_FIX.device}</span>
-          </p>
-          <ol className={s.steps}>
-            {HERO_FIX.steps.map((step, i) => (
-              <li key={step} className={`mono ${s.step}`}>
-                <span className={s.stepNo} aria-hidden="true">
-                  {i + 1}
-                </span>
-                {step}
-              </li>
+          <EqDevice device={HERO_FIX.device} target={`on the ${HERO_FIX.target.toLowerCase()}`} bands={HERO_FIX.bands} />
+          {/* Screen readers + crawlers get the fix as plain steps too. */}
+          <ol className={s.srOnly}>
+            {HERO_FIX.steps.map((step) => (
+              <li key={step}>{step}</li>
             ))}
           </ol>
           <p className={s.outcome}>
