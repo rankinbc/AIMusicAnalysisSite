@@ -13,7 +13,7 @@ const base = {
   songId: 's',
   versionId: 'v',
   versionLabel: 'v1',
-  trackName: 'Demo: Magnetic Fields — Artifact303',
+  trackName: 'Demo: Sample track',
   genre: null,
   durationSeconds: 74,
   inputs: { mix: true, stems: false, als: false, reference: false },
@@ -24,7 +24,7 @@ const base = {
 
 describe('SongHeader', () => {
   it('shows the song description (a demo track credit) under the title', () => {
-    render(<SongHeader {...base} description="Demo track by Artifact303, used only as a SPECTR demo." />);
+    render(<SongHeader {...base} description="Sample analysis of a demo track, used only as a SPECTR demo." />);
     expect(screen.getByText(/used only as a SPECTR demo/)).toBeTruthy();
   });
 

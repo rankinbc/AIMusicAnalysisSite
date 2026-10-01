@@ -9,10 +9,11 @@ const issues = SAMPLE_FINDINGS.filter((f) => !isWin(f));
 const wins = SAMPLE_FINDINGS.filter(isWin);
 
 describe('sample fixture (generated from the demo snapshot)', () => {
-  it('is the curated demo report (real analyzer output), credited to the artist', () => {
-    expect(SAMPLE_META.title).toBe('Magnetic Fields — Artifact303');
-    expect(SAMPLE_META.credit).toMatch(/Artifact303/);
-    expect(SAMPLE_META.credit).toMatch(/only as a SPECTR demo/);
+  it('is the curated demo report (real analyzer output), never naming the track', () => {
+    expect(SAMPLE_META.title).toBe('Sample track');
+    // Owner: the demo track is never named on the site (it will be replaced).
+    expect(JSON.stringify(SAMPLE_META)).not.toMatch(/Magnetic|Artifact303/i);
+    expect(SAMPLE_META.credit).toMatch(/demo track/);
     expect(issues.length).toBeGreaterThanOrEqual(10);
     expect(wins.length).toBeGreaterThan(0);
     expect(planSteps(SAMPLE_FINDINGS).length).toBeGreaterThanOrEqual(5);
