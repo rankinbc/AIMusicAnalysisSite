@@ -47,6 +47,9 @@ export interface PhaseRow {
   kv: KvPair[];
   clashes: ClashRow[];
   note?: string;
+  /** Background work for this phase is still in flight (e.g. phase-7
+   *  structure detection) — rendered with a spinner instead of a ✓. */
+  pending?: boolean;
 }
 
 export interface InputRow {
@@ -198,6 +201,7 @@ function summarize(fj: FinalJson, p: PhaseResult): PhaseRow {
       row.kv = [
         { k: 'Integrated LUFS', v: f1(d.lufs) },
         { k: 'True peak', v: `${f1(d.true_peak_db)} dBTP`, tone: 'good' },
+        { k: 'BPM', v: num(d.bpm) ? String(Math.round(d.bpm as number)) : '—' },
         { k: 'Detected key', v: d.detected_key ?? '—' },
         { k: 'Stereo width', v: f2(d.stereo_width) },
         { k: 'Stereo corr.', v: f2(d.stereo_correlation) },
@@ -278,6 +282,7 @@ function summarize(fj: FinalJson, p: PhaseResult): PhaseRow {
       // "analyzing…" is a lie once the worker marked it failed.
       if (d.arrangement_status === 'pending') {
         row.detail = 'Arrangement analysis running…';
+        row.pending = true;
         row.note =
           'Structure detection runs in the background — the score fills in when it lands.';
         break;

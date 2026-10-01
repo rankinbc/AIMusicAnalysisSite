@@ -1,31 +1,36 @@
-// Analysis Complete modal — the teaser/conversion surface shown after analysis.
-// Recreates design_handoff_analysis_modal/Analysis Modal.html against real
-// finalJson + the Triage routing plan. Two states: running + complete.
+// Analysis Complete modal — the hand-off from the static (free) analysis to
+// the AI analysis in the full report. Two states: running + complete. The
+// complete state is laid out as:
+//   header (song + genre correct) → scrolling body (coach: static summary +
+//   which specialists he'll consult next; every step's measured results) →
+//   PINNED dock (✓ static analysis complete → AI analysis next, with the
+//   primary "Open full report & run AI analysis" CTA).
+// The dock lives outside the scroll area so the next action is always visible.
+// Findings cards are deliberately NOT shown here — the full report owns them.
+//
+// Rendered through a portal to <body>: ReportView mounts it inside `.rdx`,
+// whose `.rdx * { margin:0; padding:0 }` reset ties on specificity with every
+// CSS-module class here and wins or loses on stylesheet order. The modal is
+// a fixed overlay, so escaping the subtree changes nothing but that.
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 import type { FinalJson, RoutingPlanDto } from '../../api/types';
+import { Coach } from '../../ui/Coach';
 import { GenreCorrectChip } from './GenreCorrectChip';
 import { CostTag } from '../billing/CostTag';
 import {
   GROUP_COLORS,
   coachMessage,
-  deriveFindings,
   deriveInputs,
   derivePhaseRows,
   inputsSummary,
-  specInitials,
   splitRouting,
+  type KvPair,
   type PhaseRow,
 } from './helpers/analysisModalData';
 import s from './AnalysisCompleteModal.module.css';
-
-const SEV_LABEL: Record<string, string> = {
-  crit: 'critical',
-  mod: 'moderate',
-  min: 'minor',
-  win: 'win',
-};
 
 const cx = (...c: Array<string | false | undefined>) => c.filter(Boolean).join(' ');
 
@@ -33,11 +38,6 @@ const cx = (...c: Array<string | false | undefined>) => c.filter(Boolean).join('
 const Sparkle = ({ n = 22 }: { n?: number }) => (
   <svg width={n} height={n} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
     <path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z" />
-  </svg>
-);
-const Chevron = ({ n = 13 }: { n?: number }) => (
-  <svg width={n} height={n} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden>
-    <path d="m6 9 6 6 6-6" />
   </svg>
 );
 const CloseIcon = () => (
@@ -51,39 +51,56 @@ const ArrowRight = ({ n = 14 }: { n?: number }) => (
     <path d="m12 5 7 7-7 7" />
   </svg>
 );
-const InputIcon = ({ kind }: { kind: string }) => {
-  if (kind === 'stems')
-    return (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-        <path d="M4 6h16M4 12h16M4 18h16" />
-      </svg>
-    );
-  if (kind === 'als')
-    return (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-        <path d="M14 2v6h6" />
-      </svg>
-    );
-  if (kind === 'reference')
-    return (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path d="M12 3v12" />
-        <circle cx="6" cy="18" r="3" />
-        <path d="M12 9l9-3" />
-      </svg>
-    );
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M9 18V5l12-2v13" />
-      <circle cx="6" cy="18" r="3" />
-      <circle cx="18" cy="16" r="3" />
-    </svg>
-  );
-};
 
 const STAT_GLYPH: Record<string, string> = { ok: '✓', warn: '✓', failed: '!', skipped: '–' };
-const STAT_TAG: Record<string, string> = { ok: 'done', warn: 'done', failed: 'failed', skipped: 'skipped' };
+const STAT_TAG: Record<string, string> = {
+  ok: 'done',
+  warn: 'done',
+  failed: 'failed',
+  skipped: 'skipped',
+  pending: 'running',
+};
+
+// Short display labels for the always-visible step results (the helper's kv
+// labels were written for a roomy expanded panel).
+const KV_SHORT: Record<string, string> = {
+  'Integrated LUFS': 'LUFS',
+  'True peak': 'Peak',
+  'Detected key': 'Key',
+  'Total score': 'Score',
+  'Arrangement grade': 'Grade',
+  'Project health': 'Health',
+  'Total devices': 'Devices',
+  'Mono compat': 'Mono',
+  'Bass translation': 'Bass',
+};
+// Per-phase picks of the headline measurements; other phases show their
+// first few values.
+const KV_PICK: Record<number, string[]> = {
+  1: ['Integrated LUFS', 'True peak', 'BPM', 'Detected key', 'Clipping'],
+};
+const KV_MAX = 4;
+
+function stepValues(p: PhaseRow): KvPair[] {
+  const pick = KV_PICK[p.phase];
+  const kv = pick
+    ? pick.map((k) => p.kv.find((x) => x.k === k)).filter((x): x is KvPair => Boolean(x))
+    : p.kv.slice(0, KV_MAX);
+  return kv.map((x) => ({ ...x, k: KV_SHORT[x.k] ?? x.k }));
+}
+
+// The coach's static-analysis summary: his brief when the pipeline wrote one,
+// otherwise composed from the headline measurements shown below it.
+function staticSummary(fj: FinalJson, rows: PhaseRow[]): string {
+  const hasBrief =
+    Boolean((fj.coach_intro ?? '').trim()) ||
+    (fj.coached_fixes ?? []).some((x) => typeof x === 'string' && x.trim());
+  if (hasBrief) return coachMessage(fj);
+  const ok = rows.filter((r) => (r.status === 'ok' || r.status === 'warn') && !r.pending && r.detail);
+  if (!ok.length) return coachMessage(fj);
+  const parts = ok.slice(0, 3).map((r) => `${r.short.toLowerCase()}: ${r.detail}`);
+  return `From the static pass — ${parts.join('; ')}.`;
+}
 
 export interface RunningState {
   pct: number; // 0..1
@@ -118,10 +135,6 @@ export function AnalysisCompleteModal(props: Props) {
   const { fj, running, onClose, onViewReport, onReanalyze } = props;
   const isRunning = Boolean(running);
 
-  const [openPhases, setOpenPhases] = useState<Set<number>>(new Set());
-  const [aiOpen, setAiOpen] = useState(true);
-  const [inputsOpen, setInputsOpen] = useState(false);
-
   // Esc to close.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -131,26 +144,17 @@ export function AnalysisCompleteModal(props: Props) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const findings = deriveFindings(fj);
   const phaseRows = derivePhaseRows(fj);
-  const inputs = deriveInputs(fj, props.songName);
-  const inSum = inputsSummary(inputs);
+  const inSum = inputsSummary(deriveInputs(fj, props.songName));
   const routing = splitRouting(props.routingPlan);
   const ranCount = phaseRows.filter((p) => p.status === 'ok' || p.status === 'warn' || p.status === 'failed').length;
-
-  const togglePhase = (n: number) =>
-    setOpenPhases((prev) => {
-      const next = new Set(prev);
-      if (next.has(n)) next.delete(n);
-      else next.add(n);
-      return next;
-    });
+  const failedCount = phaseRows.filter((p) => p.status === 'failed').length;
 
   const R = 66;
   const C = 2 * Math.PI * R; // 414.7
   const pct = running ? Math.max(0.02, Math.min(1, running.pct)) : 0;
 
-  return (
+  const modal = (
     <div className={s.root} role="dialog" aria-modal="true" aria-label="Analysis">
       <div className={s.backdrop} onClick={onClose} />
       <div className={s.stage}>
@@ -196,300 +200,167 @@ export function AnalysisCompleteModal(props: Props) {
             </button>
           </div>
 
-          {/* Body */}
+          {/* Body — the only part that scrolls */}
           <div className={s.modalBody}>
             {isRunning ? (
               <RunView running={running!} R={R} C={C} pct={pct} />
             ) : (
               <>
-                {/* Coach hero */}
-                <div className={s.coachHero}>
+                {/* Coach: what he knows from the static pass + who he'll consult next */}
+                <div className={s.coachHero} data-testid="acm-coach">
                   <span className={s.chAv}>
-                    <Sparkle />
+                    <Coach size={46} thinking={!routing} />
                   </span>
                   <div className={s.chTx}>
                     <div className={s.chName}>
                       <span>{fj.coach_name || 'Nova'}</span>
                       <span className={s.chRole}>your AI coach</span>
-                      <span className={s.aiDot} />
                     </div>
-                    <div className={s.chMsg}>{coachMessage(fj)}</div>
-                  </div>
-                </div>
-
-                {/* Report grid */}
-                <div className={s.reportGrid}>
-                  <div>
-                    <div className={s.sectionLabel}>
-                      <span>What I found</span>
-                      <span className={s.line} />
-                      <span>{findings.length} initial findings</span>
-                    </div>
-                    <div className={s.findings}>
-                      {findings.map((f, i) => (
-                        <div key={i} className={s.finding} style={{ ['--sc' as string]: `var(--${sevVar(f.sev)})` }}>
-                          <div className={s.fTop}>
-                            <span className={cx(s.sevPill, s[f.sev])}>{SEV_LABEL[f.sev]}</span>
-                            <span className={s.fCat}>{f.cat}</span>
-                          </div>
-                          <div className={s.fTitle}>{f.title}</div>
-                          <div className={s.fBody}>{f.body}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className={s.sectionLabel}>
-                      <span>Analysis steps</span>
-                      <span className={s.line} />
-                      <span>{ranCount} run · AI next</span>
-                    </div>
-                    <div className={s.pipe}>
-                      {phaseRows.map((p) => (
-                        <PhaseCard key={p.phase} p={p} open={openPhases.has(p.phase)} onToggle={() => togglePhase(p.phase)} />
-                      ))}
-                      <AiPhaseCard routing={routing} open={aiOpen} onToggle={() => setAiOpen((v) => !v)} onRun={onViewReport} />
+                    <div className={s.chMsg}>{staticSummary(fj, phaseRows)}</div>
+                    <div className={s.chNext} data-testid="acm-coach-next">
+                      {routing ? (
+                        <>
+                          <span className={s.chNextLbl}>Next I&apos;ll bring in</span>
+                          {[...routing.high, ...routing.rest].map((sp) => {
+                            const g = GROUP_COLORS[sp.group];
+                            return (
+                              <span
+                                key={sp.slug}
+                                className={s.specChip}
+                                style={{ color: g.c, borderColor: g.d, background: g.d }}
+                                title={sp.focus}
+                              >
+                                {sp.label}
+                              </span>
+                            );
+                          })}
+                        </>
+                      ) : (
+                        <span className={s.chPicking}>
+                          <span className={s.spin} aria-hidden />
+                          Picking which specialists to consult…
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* Inputs disclosure */}
-                <div className={cx(s.disc, inputsOpen && s.open)}>
-                  <button className={s.discHead} onClick={() => setInputsOpen((v) => !v)}>
-                    <span className={s.dhL}>Inputs analyzed</span>
-                    <span className={s.dhSum}>
-                      {inSum.present.join(' · ')} · <b>{inSum.used}/4 sources</b>
-                    </span>
-                    <span className={s.chev}>
-                      <Chevron n={14} />
-                    </span>
-                  </button>
-                  {inputsOpen && (
-                    <div className={s.discBody}>
-                      <div className={s.inputsList}>
-                        {inputs.map((r) => (
-                          <div key={r.kind} className={cx(s.inRow, s[r.cls])}>
-                            <span className={s.inIc}>
-                              <InputIcon kind={r.kind} />
-                            </span>
-                            <div className={s.inTx}>
-                              <span className={s.inK}>{r.label}</span>
-                              <span className={s.inV}>{r.value}</span>
-                            </div>
-                            <span className={s.inMeta}>{r.meta}</span>
-                          </div>
+                {/* Every step's measured results, readable without clicking */}
+                <div className={s.sectionLabel}>
+                  <span>Static analysis results</span>
+                  <span className={s.line} />
+                  <span className={s.inputsSum}>
+                    {inSum.present.join(' · ')} · {inSum.used}/4 inputs
+                  </span>
+                </div>
+                {/* Ran steps as result cards; skipped steps as one muted
+                    line each underneath, so they never stretch beside a full
+                    result card in the grid. */}
+                <div data-testid="acm-steps">
+                  <ul className={s.steps}>
+                    {phaseRows
+                      .filter((p) => p.status !== 'skipped')
+                      .map((p) => (
+                        <StepCard key={p.phase} p={p} />
+                      ))}
+                  </ul>
+                  {phaseRows.some((p) => p.status === 'skipped') && (
+                    <ul className={s.skippedList}>
+                      {phaseRows
+                        .filter((p) => p.status === 'skipped')
+                        .map((p) => (
+                          <StepCard key={p.phase} p={p} />
                         ))}
-                      </div>
-                    </div>
+                    </ul>
                   )}
                 </div>
               </>
             )}
           </div>
 
-          {/* Footer */}
-          <div className={s.modalFt}>
-            {isRunning ? (
-              <>
-                <div className={s.ftMeta}>
-                  Phase {running!.phaseIndex} of {running!.total} · analyzing your mix…
-                </div>
-                <button className={s.btn} onClick={onClose}>
-                  Run in background
-                </button>
-              </>
-            ) : (
-              <>
-                <div className={s.ftMeta}>
-                  {props.analyzedSec ? (
-                    <>
-                      Analyzed in <b>{props.analyzedSec}s</b> · {ranCount} analyses ran
-                    </>
-                  ) : (
-                    <>
-                      <b>{ranCount}</b> analyses ran · AI specialists next
-                    </>
-                  )}
-                </div>
-                <button className={s.btn} onClick={onReanalyze}>
-                  ↺ Re-analyze <CostTag action="analysis" />
-                </button>
-                <button className={cx(s.btn, s.primary)} onClick={onViewReport}>
-                  View full report <ArrowRight />
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function sevVar(sev: string): string {
-  return sev === 'crit' ? 'red' : sev === 'mod' ? 'orange' : sev === 'min' ? 'blue' : 'cyan';
-}
-
-function PhaseCard({ p, open, onToggle }: { p: PhaseRow; open: boolean; onToggle: () => void }) {
-  const st = p.status;
-  return (
-    <div className={cx(s.phase, open && s.open)} id={`ph-${p.phase}`}>
-      <div className={s.phaseRow} onClick={onToggle}>
-        <span className={cx(s.phaseStat, s[st])}>{STAT_GLYPH[st]}</span>
-        <div className={s.phaseTxt}>
-          <div className={s.pl}>
-            {p.short} <span className={s.pnum}>phase {p.phase}</span>
-          </div>
-          <div className={s.pd}>{p.detail}</div>
-        </div>
-        <span className={cx(s.phaseTag, s[st])}>{STAT_TAG[st]}</span>
-        <span className={s.chev}>
-          <Chevron />
-        </span>
-      </div>
-      {open && (
-        <div className={s.phaseDetail}>
-          {st === 'skipped' ? (
-            <div className={s.detailEmpty}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                <circle cx="12" cy="12" r="9" />
-                <path d="M8 12h8" />
-              </svg>
-              {p.note ?? 'Not applicable for this run.'}
+          {isRunning ? (
+            <div className={s.modalFt}>
+              <div className={s.ftMeta}>
+                Phase {running!.phaseIndex} of {running!.total} · analyzing your mix…
+              </div>
+              <button type="button" className={s.btn} onClick={onClose}>
+                Run in background
+              </button>
             </div>
           ) : (
-            <>
-              {p.clashes.map((c, i) => (
-                <div key={i} className={s.clashRow}>
-                  <span className={cx(s.sev, s[c.sev])}>{c.sev}</span>
-                  <span>
-                    <b>{c.stems}</b>
-                    {c.range ? ` · ${c.range}` : ''}
+            <div className={s.dock} data-testid="acm-status-dock">
+              <div className={s.stages}>
+                <div className={cx(s.stageRow, s.done)}>
+                  <span className={s.stageIc} aria-hidden>
+                    ✓
+                  </span>
+                  <span className={s.stageTitle}>Static analysis complete</span>
+                  <span className={s.stageMeta}>
+                    {ranCount} of {phaseRows.length} steps ran
+                    {failedCount > 0 && <span className={s.failedNote}> · {failedCount} failed</span>}
+                    {props.analyzedSec ? ` · ${props.analyzedSec}s` : ''}
                   </span>
                 </div>
-              ))}
-              {p.kv.length > 0 && (
-                <div className={s.kvGrid}>
-                  {p.kv.map((kv, i) => (
-                    <div key={i} className={s.kv}>
-                      <span className={s.k}>{kv.k}</span>
-                      <span className={cx(s.v, kv.tone && s[kv.tone])}>{kv.v}</span>
-                    </div>
-                  ))}
+                <div className={cx(s.stageRow, s.next)} data-testid="acm-ai-block">
+                  <span className={s.stageIc} aria-hidden>
+                    <Sparkle n={11} />
+                  </span>
+                  <span className={s.stageTitle}>Next: AI analysis</span>
+                  <span className={s.stageMeta}>
+                    {routing ? `${routing.total} specialists · in the full report` : 'runs in the full report'}
+                  </span>
                 </div>
-              )}
-              {p.note && (
-                <div className={s.detailNote} style={{ marginTop: 10 }}>
-                  {p.note}
-                </div>
-              )}
-            </>
+              </div>
+              <div className={s.actions}>
+                <button type="button" className={s.btn} onClick={onReanalyze}>
+                  ↺ Re-analyze <CostTag action="analysis" />
+                </button>
+                <button type="button" className={cx(s.btn, s.primary)} onClick={onViewReport}>
+                  Open full report &amp; run AI analysis <ArrowRight n={16} />
+                </button>
+              </div>
+            </div>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
+
+  return typeof document === 'undefined' ? modal : createPortal(modal, document.body);
 }
 
-function AiPhaseCard({
-  routing,
-  open,
-  onToggle,
-  onRun,
-}: {
-  routing: ReturnType<typeof splitRouting>;
-  open: boolean;
-  onToggle: () => void;
-  onRun: () => void;
-}) {
+function StepCard({ p }: { p: PhaseRow }) {
+  const st = p.pending ? 'pending' : p.status;
+  const muted = st === 'skipped';
+  const values = muted || st === 'failed' || p.pending ? [] : stepValues(p);
   return (
-    <div className={cx(s.phase, s.ai, open && s.open)}>
-      <div className={s.phaseRow} onClick={onToggle}>
-        <span className={cx(s.phaseStat, s.aiStat)}>
-          <Sparkle n={12} />
+    <li className={cx(s.step, muted && s.muted)} data-status={st} title={muted ? p.note : undefined}>
+      <div className={s.stepHd}>
+        <span className={cx(s.stepStat, s[st])} aria-hidden>
+          {p.pending ? <span className={s.spin} /> : STAT_GLYPH[st]}
         </span>
-        <div className={s.phaseTxt}>
-          <div className={s.pl}>
-            AI Analysis <span className={s.pnum}>specialist deep-dive</span>
-          </div>
-          <div className={s.pd}>Runs when you open the full report</div>
-        </div>
-        <span className={cx(s.phaseTag, s.locked)}>in full report</span>
-        <span className={s.chev}>
-          <Chevron />
-        </span>
+        <span className={s.stepName}>{p.short}</span>
+        {muted && <span className={s.stepSum}>{p.detail}</span>}
+        <span className={cx(s.stepTag, s[st])}>{STAT_TAG[st]}</span>
       </div>
-      {open && (
-        <div className={s.phaseDetail}>
-          {!routing ? (
-            <>
-              <div className={s.aiIntro}>
-                <b>Triage AI</b> will route the right specialists for your mix and run a deeper,
-                section-by-section analysis when you open the full report — then build a concrete
-                DAW action plan.
-              </div>
-              <button className={s.scCta} onClick={onRun}>
-                Run AI analysis in the full report <ArrowRight n={13} />
-              </button>
-            </>
+      {!muted && (
+        <div className={s.stepRes}>
+          {values.length > 0 ? (
+            values.map((kv, i) => (
+              <span key={i} className={s.kv}>
+                <span className={s.k}>{kv.k}</span>
+                <span className={cx(s.v, kv.tone && s[kv.tone])}>{kv.v}</span>
+              </span>
+            ))
           ) : (
-            <>
-              <div className={s.aiIntro}>
-                <b>Triage AI</b> lined up <b>{routing.total} specialists</b>
-                {routing.high.length ? (
-                  <>
-                    {' '}
-                    — <b>{routing.high.length} high-priority</b> on what I found
-                  </>
-                ) : null}
-                . They run when you open the full report.
-              </div>
-              <div className={s.aiSpecList}>
-                {routing.high.map((sp, i) => {
-              const g = GROUP_COLORS[sp.group];
-              return (
-                <div key={i} className={s.aiSpec}>
-                  <span className={s.aiSpecAv} style={{ color: g.c, background: g.d }}>
-                    {specInitials(sp.label)}
-                  </span>
-                  <div className={s.aiSpecTx}>
-                    <div className={s.aiSpecName}>
-                      {sp.label}{' '}
-                      <span className={s.aiSpecGrp} style={{ color: g.c }}>
-                        {sp.group}
-                      </span>
-                    </div>
-                    <div className={s.aiSpecFocus}>{sp.focus}</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          {routing.rest.length > 0 && (
-            <>
-              <div className={s.aiMoreLabel}>Also sweeping {routing.rest.length} more areas</div>
-              <div className={s.aiChipRow}>
-                {routing.rest.map((sp, i) => {
-                  const g = GROUP_COLORS[sp.group];
-                  return (
-                    <span key={i} className={s.aiChip} style={{ color: g.c, borderColor: g.d }}>
-                      <span className={s.aiChipDot} style={{ background: g.c }} />
-                      {sp.label}
-                    </span>
-                  );
-                })}
-              </div>
-            </>
-          )}
-              <button className={s.scCta} onClick={onRun}>
-                Run AI analysis in the full report <ArrowRight n={13} />
-              </button>
-            </>
+            <span className={s.stepText}>
+              {p.detail}
+              {p.clashes.length > 0 && ` — ${p.clashes.map((c) => c.stems).join(', ')}`}
+            </span>
           )}
         </div>
       )}
-    </div>
+    </li>
   );
 }
 
