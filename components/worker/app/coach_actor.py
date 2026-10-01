@@ -260,6 +260,29 @@ def _complete_with_template_brief(
     )
 
 
+def _brief_fallback_or_error(
+    mode: str, message_id: uuid.UUID, *, analysis_id: uuid.UUID,
+    user_message_id: uuid.UUID, publisher: CoachStreamPublisher,
+    code: str = "coach_error", llm_call_id: str | None = None,
+) -> None:
+    """Fix wave FW3 (I3) — the one terminal for a failed turn. Brief mode
+    finishes with the template brief (G-D3: a brief never renders as an
+    error bubble, never cut off); every other mode errors exactly as before.
+    If even the template cannot be built, the brief errors (the BFF's capped
+    retry path re-asks it)."""
+    if mode == "brief":
+        try:
+            _complete_with_template_brief(
+                message_id, analysis_id=analysis_id, user_message_id=user_message_id,
+                publisher=publisher, llm_call_id=llm_call_id,
+            )
+            return
+        except Exception:
+            logger.exception("coach_reply: template brief failed for %s", message_id)
+    publisher.error(code=code, message=COACH_GENERIC_ERROR_BODY)
+    _mark_error(message_id, llm_call_id=llm_call_id, user_message_id=user_message_id)
+
+
 # ── prompt assembly ────────────────────────────────────────────────────────
 
 def _render_teach_block(teach_units: list[Any], catalog: list[str]) -> str:
@@ -572,8 +595,9 @@ def coach_reply(
                 version, system_body = load_coach_brief()
             except FileNotFoundError:
                 logger.exception("coach_reply: brief prompt file missing")
-                publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
-                _mark_error(mid, user_message_id=uid_msg)
+                _brief_fallback_or_error(
+                    mode, mid, analysis_id=analysis_id, user_message_id=uid_msg, publisher=publisher,
+                )
                 return
             model_pin = load_coach_brief_model()
             prompt_slug = "coach_brief"
@@ -594,7 +618,9 @@ def coach_reply(
 
         # ── Phase D: stream gateway call (story 1.6) ───────────────────────
         splitter = StreamSplitter()
-        cancel_check = cancel_check_for(mid)
+        # FW3 (I3): a brief never honours the cancel key — the row is
+        # authoritative and must finish even when the page went away.
+        cancel_check = (lambda: False) if mode == "brief" else cancel_check_for(mid)
         final_event_result: Any | None = None
         try:
             for ev in gateway.stream_complete_sync(
@@ -675,7 +701,7 @@ def coach_reply(
             # already saw the tokens, so a typed ``done`` (with no evidence)
             # closes the stream cleanly.
             partial_body = parsed.prose.strip()
-            if partial_body:
+            if partial_body and mode != "brief":
                 logger.info(
                     "coach_reply: cancel-mid-prose for %s — persisting partial",
                     assistant_message_id,
@@ -694,8 +720,10 @@ def coach_reply(
                     "coach_reply: empty pre-sentinel stream for %s — marking error",
                     assistant_message_id,
                 )
-                publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
-                _mark_error(mid, llm_call_id=llm_call_id, user_message_id=uid_msg)
+                _brief_fallback_or_error(
+                    mode, mid, analysis_id=analysis_id, user_message_id=uid_msg,
+                    publisher=publisher, llm_call_id=llm_call_id,
+                )
             return
 
         # Sentinel was seen — parse Section 2 and re-inject the prose body
@@ -707,8 +735,10 @@ def coach_reply(
                 "coach_reply: Section-2 JSON parse failed for %s",
                 assistant_message_id,
             )
-            publisher.error(code="coach_parse_failed", message=COACH_GENERIC_ERROR_BODY)
-            _mark_error(mid, llm_call_id=llm_call_id, user_message_id=uid_msg)
+            _brief_fallback_or_error(
+                mode, mid, analysis_id=analysis_id, user_message_id=uid_msg,
+                publisher=publisher, code="coach_parse_failed", llm_call_id=llm_call_id,
+            )
             return
 
         meta["body"] = parsed.prose.strip()
@@ -719,8 +749,10 @@ def coach_reply(
                 "coach_reply: payload validation failed for %s: %s",
                 assistant_message_id, exc,
             )
-            publisher.error(code="coach_parse_failed", message=COACH_GENERIC_ERROR_BODY)
-            _mark_error(mid, llm_call_id=llm_call_id, user_message_id=uid_msg)
+            _brief_fallback_or_error(
+                mode, mid, analysis_id=analysis_id, user_message_id=uid_msg,
+                publisher=publisher, code="coach_parse_failed", llm_call_id=llm_call_id,
+            )
             return
 
         # Teach mode states general craft numbers ("-1 dBTP", "200-500 Hz")
@@ -732,8 +764,10 @@ def coach_reply(
                 "coach_reply: rejecting numeric answer with no evidence (msg=%s)",
                 assistant_message_id,
             )
-            publisher.error(code="coach_parse_failed", message=COACH_GENERIC_ERROR_BODY)
-            _mark_error(mid, llm_call_id=llm_call_id, user_message_id=uid_msg)
+            _brief_fallback_or_error(
+                mode, mid, analysis_id=analysis_id, user_message_id=uid_msg,
+                publisher=publisher, code="coach_parse_failed", llm_call_id=llm_call_id,
+            )
             return
 
         # ── Phase F: resolve evidence ──────────────────────────────────────
@@ -741,6 +775,14 @@ def coach_reply(
             update={"evidence": resolve_evidence(payload.evidence, bundle)},
         )
         evidence_dicts = [e.model_dump() for e in payload.evidence]
+
+        # FW3 (I3): a refusal is not a brief — finish with the template.
+        if mode == "brief" and payload.kind != "answer":
+            _brief_fallback_or_error(
+                mode, mid, analysis_id=analysis_id, user_message_id=uid_msg,
+                publisher=publisher, llm_call_id=llm_call_id,
+            )
+            return
 
         # ── Phase G: persist + publish terminal frame ──────────────────────
         _mark_complete(mid, payload=payload, llm_call_id=llm_call_id,
@@ -762,8 +804,9 @@ def coach_reply(
             "coach_reply: unexpected failure in Phases B-G for %s",
             assistant_message_id,
         )
-        publisher.error(code="coach_error", message=COACH_GENERIC_ERROR_BODY)
-        _mark_error(mid, user_message_id=uid_msg)
+        _brief_fallback_or_error(
+            mode, mid, analysis_id=analysis_id, user_message_id=uid_msg, publisher=publisher,
+        )
         return
 
 
