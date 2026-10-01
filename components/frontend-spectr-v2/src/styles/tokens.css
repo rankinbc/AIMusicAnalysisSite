@@ -130,4 +130,14 @@
   --z-stage-modal:   1000;
   --z-stage-popover: 1100;
   --z-purchase:      5000;
+
+  /* Guest banner (root route, every page). In normal flow at the top of the
+     page, raised just enough to sit above page-level decoration layers (the
+     Listen rack's fixed background visualizer is z 1) and below everything
+     interactive that floats (popovers 20+, dialogs 50+). */
+  --z-guest-banner:  10;
+  /* Live height of the guest banner, written on <html> by GuestBanner while
+     it is mounted (0 otherwise). Full-viewport overlays that must leave the
+     banner visible (the live analysis page) start below it. */
+  --guest-banner-h:  0px;
 }

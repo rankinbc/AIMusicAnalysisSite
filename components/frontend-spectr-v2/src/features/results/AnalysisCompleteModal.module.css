@@ -20,7 +20,7 @@
 /* ── Backdrop + stage ─────────────────────────────────────────────────── */
 .backdrop {
   position: fixed;
-  inset: 0;
+  inset: var(--guest-banner-h) 0 0; /* leave the guest banner visible */
   overflow: hidden;
   z-index: 1000;
   background:
@@ -38,7 +38,7 @@
 }
 .stage {
   position: fixed;
-  inset: 0;
+  inset: var(--guest-banner-h) 0 0;
   display: grid;
   place-items: center;
   padding: 24px 16px;

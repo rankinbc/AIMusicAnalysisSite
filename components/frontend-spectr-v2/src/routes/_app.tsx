@@ -16,7 +16,7 @@ import { ShortcutSheet } from '../components/ShortcutSheet';
 import { UnifiedUploadDialog } from '../components/UnifiedUploadDialog';
 import { AccountMenu } from '../features/account/AccountMenu';
 import { AppDunningNotice } from '../features/billing/AppDunningNotice';
-import { GuestShell } from '../features/demo/GuestShell';
+import { GuestUpgradeHost } from '../features/demo/GuestUpgradeHost';
 import { useGuestState } from '../features/demo/useGuestState';
 import { AppWorkerHealthNotice } from '../features/health/AppWorkerHealthNotice';
 import { BuyCreditsProvider } from '../features/billing/BuyCreditsProvider';
@@ -50,13 +50,13 @@ function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // D10 — guest shell: quota state for the banner/"+ Upload" swap / ⌘U gate.
-  // The banner + the ONE upgrade dialog + its bus subscription (opened by
-  // ANY guest_restricted 403 anywhere in the app, via the MutationCache in
+  // D10 — guest shell: quota state for the "+ Upload" swap / ⌘U gate.
+  // The ONE upgrade dialog + its bus subscription (opened by ANY
+  // guest_restricted 403 anywhere in the app, via the MutationCache in
   // api/mutation-error-toast.ts, or by a proactive pre-request gate like
-  // UnifiedUploadDialog itself) live in GuestShell (D10 fix1 item 5) — this
-  // second useGuestState() call shares the same ['me','guest'] query, no
-  // extra fetch.
+  // UnifiedUploadDialog itself) live in GuestUpgradeHost — its own
+  // useGuestState() call shares the same ['me','guest'] query, no extra
+  // fetch. The guest BANNER is mounted once in the root route (every page).
   const guest = useGuestState();
 
   // Story 5.10 (UX-DR43) — global product shortcuts: ⌘K palette, ⌘U upload,
@@ -197,9 +197,9 @@ function AppLayout() {
       {pathname !== '/billing' && (
         <AppDunningNotice className={s.dunningSlot} />
       )}
-      {/* D10 — guest-shell banner + ONE upgrade dialog; renders nothing for
-          a real user (GuestShell). */}
-      <GuestShell />
+      {/* D10 — the ONE guest upgrade dialog; renders nothing for a real user.
+          The guest banner itself lives in routes/__root.tsx (every page). */}
+      <GuestUpgradeHost />
       {/* Global analysis-worker outage notice — renders nothing while healthy. */}
       <AppWorkerHealthNotice className={s.workerHealthSlot} />
       {/* Story 12.1 — unverified-email notice (free tier only); renders

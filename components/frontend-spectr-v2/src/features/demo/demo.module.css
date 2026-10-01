@@ -21,8 +21,14 @@
 }
 
 /* D10 — guest-shell banner. flex-wrap + no fixed widths so it collapses to
-   two lines instead of forcing horizontal scroll at phone width (390px). */
+   two lines instead of forcing horizontal scroll at phone width (390px).
+   Mounted once in the root route, in normal flow above every layout, so it
+   reserves its own space (no overlap with sticky headers, which simply
+   stick once it has scrolled away). Positioned + z-indexed so fixed
+   page-decoration layers (Listen background visuals) never paint over it. */
 .banner {
+  position: relative;
+  z-index: var(--z-guest-banner);
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;

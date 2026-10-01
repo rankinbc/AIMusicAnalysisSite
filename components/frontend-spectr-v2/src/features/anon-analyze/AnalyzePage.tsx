@@ -42,10 +42,11 @@ import { GuestStartFailedError, startGuestUpload } from './startGuestUpload';
 import s from './analyze.module.css';
 
 // Item 1 (CRITICAL) — /analyze is a top-level PUBLIC route with no
-// `GuestShell` (that's `_app.tsx` only), so nothing was listening on the
-// guest-upgrade bus here: a guest who hit a limit dropped a file and got a
-// silent dead end. `GuestUpgradeHost` is the same tiny host GuestShell uses
-// (bus subscription + the ONE dialog). A plain import, not React.lazy: this
+// `_app` shell (whose GuestUpgradeHost is `_app.tsx` only), so nothing was
+// listening on the guest-upgrade bus here: a guest who hit a limit dropped a
+// file and got a silent dead end. `GuestUpgradeHost` is the same tiny host
+// `_app` uses (bus subscription + the ONE dialog). The guest banner is NOT
+// mounted here — the root route renders it on every page. A plain import, not React.lazy: this
 // route is already its own TanStack Router chunk (`analyze-*.js`, verified
 // via `npm run build` + `lint:bundle` — the shared entry chunk is unchanged
 // at ~364 KB raw / ~114 KB gzip), so React.lazy bought nothing here and, in

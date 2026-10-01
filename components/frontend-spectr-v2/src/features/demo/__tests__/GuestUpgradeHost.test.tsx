@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-// D10 fix1 (item 5) — layout wiring had no test. GuestShell is the banner +
-// the ONE upgrade dialog + its bus subscription, extracted from `_app.tsx`
-// so this is testable without mounting the whole authenticated shell.
+// D10 fix1 (item 5) — layout wiring had no test. GuestUpgradeHost is the ONE
+// upgrade dialog + its bus subscription, mounted by `_app.tsx` (and /analyze);
+// tested here without mounting the whole authenticated shell. The banner is
+// no longer part of it (root route, every page — see guest-banner-root.test).
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
@@ -52,7 +53,7 @@ vi.mock('../guest-upgrade-bus', async (importOriginal) => {
 
 import { fetcher } from '../../../api/fetcher';
 import { openGuestUpgrade } from '../guest-upgrade-bus';
-import { GuestShell } from '../GuestShell';
+import { GuestUpgradeHost } from '../GuestUpgradeHost';
 
 function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -67,13 +68,13 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-describe('GuestShell', () => {
-  it('for a guest: shows the banner, subscribes to the bus, and opens the dialog when it fires', async () => {
+describe('GuestUpgradeHost', () => {
+  it('for a guest: subscribes to the bus and opens the dialog when it fires (no banner)', async () => {
     auth = { user: { id: 'g', isGuest: true } };
     vi.mocked(fetcher).mockReturnValue(new Promise(() => {}));
-    render(<GuestShell />, { wrapper });
+    render(<GuestUpgradeHost />, { wrapper });
 
-    expect(screen.getByText(/as a guest/i)).toBeTruthy();
+    expect(screen.queryByText(/as a guest/i)).toBeNull();
     expect(onGuestUpgradeSpy).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('dialog')).toBeNull();
 
@@ -82,9 +83,9 @@ describe('GuestShell', () => {
     expect(screen.getByText('M')).toBeTruthy();
   });
 
-  it('for a real user: renders neither the banner nor the dialog, and never subscribes to the bus', () => {
+  it('for a real user: renders no dialog, and never subscribes to the bus', () => {
     auth = { user: { id: 'u', isGuest: false } };
-    const { container } = render(<GuestShell />, { wrapper });
+    const { container } = render(<GuestUpgradeHost />, { wrapper });
     expect(container.textContent).toBe('');
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(onGuestUpgradeSpy).not.toHaveBeenCalled();
@@ -95,7 +96,7 @@ describe('GuestShell', () => {
     vi.mocked(fetcher).mockReturnValue(new Promise(() => {}));
     const { unmount } = render(
       <StrictMode>
-        <GuestShell />
+        <GuestUpgradeHost />
       </StrictMode>,
       { wrapper },
     );
