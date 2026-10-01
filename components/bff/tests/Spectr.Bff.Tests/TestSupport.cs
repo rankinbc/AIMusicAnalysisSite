@@ -279,3 +279,20 @@ public static class TestSeed
         return (songId, versionAId, versionBId);
     }
 }
+
+/// <summary>Verdict row builders for tests that need worker-written rows.</summary>
+public static class TestVerdicts
+{
+    /// <summary>The sentinel row the worker writes when a specialist run fails.</summary>
+    public static Spectr.Data.Entities.Verdict FailMarker(Guid analysisId, string slug) => new()
+    {
+        Id = $"vrd_{Guid.NewGuid():N}"[..30],
+        AnalysisId = analysisId,
+        Specialist = slug,
+        PromptVersion = $"{slug}@0.0.0",
+        Model = "test",
+        Severity = "minor",
+        Category = "dynamics",
+        Headline = "Specialist failed",
+    };
+}
