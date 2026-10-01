@@ -10,7 +10,8 @@ import { PricingLink } from './PricingLink';
 import s from './PublicFooter.module.css';
 
 export function PublicFooter({ currentPath }: { currentPath?: string } = {}) {
-  const authed = Boolean(useOptionalAuth()?.user);
+  const user = useOptionalAuth()?.user;
+  const authed = Boolean(user && !user.isGuest); // a guest has no library
   return (
     <footer className={s.footer}>
       <div className={s.grid}>

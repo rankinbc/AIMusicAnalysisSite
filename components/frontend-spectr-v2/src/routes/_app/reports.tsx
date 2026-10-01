@@ -1,4 +1,4 @@
-import { Link, createFileRoute } from '@tanstack/react-router';
+import { Link, createFileRoute, redirect } from '@tanstack/react-router';
 import { useState } from 'react';
 
 import { useReports } from '../../api/hooks';
@@ -7,6 +7,11 @@ import { GradePill } from '../../ui/GradePill';
 import s from './reports.module.css';
 
 export const Route = createFileRoute('/_app/reports')({
+  // Owner ruling 2026-10-01: guests (demo / guest upload) have no library or
+  // reports — send them to the landing page.
+  beforeLoad: ({ context }) => {
+    if (context.auth.user?.isGuest) throw redirect({ to: '/' });
+  },
   component: ReportsPage,
 });
 

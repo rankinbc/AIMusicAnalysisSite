@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 import { useState } from 'react';
 
 import { SongsLibrarySection } from '../../features/library/SongsLibrarySection';
@@ -6,6 +6,11 @@ import { ReferenceLibrarySection } from '../../features/references/ReferenceLibr
 import s from './library.module.css';
 
 export const Route = createFileRoute('/_app/library')({
+  // Owner ruling 2026-10-01: guests (demo / guest upload) have no library or
+  // reports — send them to the landing page.
+  beforeLoad: ({ context }) => {
+    if (context.auth.user?.isGuest) throw redirect({ to: '/' });
+  },
   component: LibraryPage,
 });
 

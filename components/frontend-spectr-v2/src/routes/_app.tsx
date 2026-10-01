@@ -156,7 +156,7 @@ function AppLayout() {
   return (
     <div className={s.shell}>
       <header className={s.topnav}>
-        <Link to="/library" className={s.brand} aria-label="SPECTR — your library">
+        <Link to={guest.isGuest ? '/' : '/library'} className={s.brand} aria-label={guest.isGuest ? 'SPECTR — home' : 'SPECTR — your library'}>
           <SpectrLogo />
         </Link>
 

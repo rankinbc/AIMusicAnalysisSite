@@ -10,7 +10,8 @@ import { LandingPage } from '../features/landing/LandingPage';
 // /library a beat later.
 export const Route = createFileRoute('/')({
   beforeLoad: ({ context }) => {
-    if (!context.auth.isLoading && context.auth.user) {
+    // Guests stay on the landing page (they have no library — see library.tsx).
+    if (!context.auth.isLoading && context.auth.user && !context.auth.user.isGuest) {
       throw redirect({ to: '/library' });
     }
   },

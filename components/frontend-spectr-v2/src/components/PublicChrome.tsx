@@ -18,7 +18,9 @@ import { PricingLink } from './PricingLink';
 import s from './PublicChrome.module.css';
 
 export function PublicChrome() {
-  const authed = Boolean(useOptionalAuth()?.user);
+  // A guest has no library, so they get the anonymous chrome.
+  const user = useOptionalAuth()?.user;
+  const authed = Boolean(user && !user.isGuest);
   return (
     <header className={s.chrome}>
       <a href="/" className={s.brand} aria-label="SPECTR — AI Music Analysis, home">

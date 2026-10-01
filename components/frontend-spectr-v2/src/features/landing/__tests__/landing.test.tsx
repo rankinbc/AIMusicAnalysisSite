@@ -48,6 +48,20 @@ describe('PublicChrome (story 6.1 AC3 — UX-DR6 slim chrome)', () => {
   });
 });
 
+describe('PublicChrome for a guest', () => {
+  it('shows the anonymous chrome — a guest has no library', () => {
+    const user: AuthedUser = { id: 'g1', email: 'g@x', displayName: null, tier: 'free', isGuest: true };
+    const value = { user, accessToken: 't', isLoading: false } as never;
+    const html = renderToStaticMarkup(
+      <AuthContext.Provider value={value}>
+        <PublicChrome />
+      </AuthContext.Provider>,
+    );
+    expect(html).not.toContain('Open library');
+    expect(html).toContain('href="/login"');
+  });
+});
+
 describe('LandingPage (story 6.1 AC1)', () => {
   const html = renderToStaticMarkup(<LandingPage />);
 
