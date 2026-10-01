@@ -73,6 +73,24 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up
 | `REDIS_URL`           | Dramatiq broker URL (matches BFF `Redis:ConnectionString`).                                |
 | `STORAGE_LOCAL_ROOT`  | Where audio files live on disk. Mounted from `data/` in docker-compose.                     |
 | `RESULTS_DIR`         | Optional artifact dump directory. Failure is non-fatal.                                     |
+| `WORKER_LOG_DIR`      | Run logs + pool/crash logs. Default `<STORAGE_LOCAL_ROOT>/logs/worker`.                     |
+| `WORKER_POOL`         | Pool name for log files. Default: `WORKER_QUEUES`, else the `--queues` list.                |
+| `WORKER_LOG_RETENTION_DAYS` | Run-log day dirs kept (default 14).                                                   |
+| `WORKER_CRASH_MAX_ATTEMPTS` | Poison guard: died attempts before a message is skipped (default 2; 0 disables).     |
+| `GIT_SHA`             | Build id in run headers (falls back to `IMAGE_TAG`, then `git rev-parse`).                 |
+
+## Run logs + crash forensics
+
+`app/runlog/` (PRP `PRPs/worker-run-logs-and-crash-forensics.md`):
+`RunLogMiddleware` (first in the middleware list) writes one log file per
+message attempt, points `faulthandler` at it, sweeps runs killed by a dead
+process (`status=died`) at boot, and skips messages that keep killing the
+worker. `give_up.py` + `hooks.py` write an actor's terminal state when its
+message is finished for good — covering `TimeLimitExceeded` (a
+`BaseException`, so `except Exception` failure arms never see it) and crash
+skips. New actors with a user-visible "in progress" state should register a
+hook (`@on_give_up("actor_name")`, idempotent, only moves non-terminal rows).
+Where the files live and how to read them: `docs/STARTUP.md` section 5.
 
 ## Actors
 

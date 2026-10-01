@@ -210,6 +210,31 @@ Do all of these before declaring success — several failure modes look "up":
    through all phases in ~75 s (structure detection continues in background).
 6. Frontend shell shows the DevHealthDot (dev builds) — red means a probe failed.
 
+### Where worker evidence lives (check this FIRST when a worker misbehaves)
+
+Every worker process writes to `data/logs/worker/` (prod: `/data/logs/worker/`;
+override with `WORKER_LOG_DIR`), independent of its console window:
+
+| File | What |
+|---|---|
+| `runs/<date>/<HHMMSS-mmm>_<actor>_<message_id>.log` | ONE file per message attempt: header (actor, args, pool, pid, git sha, retry #), every log line of that run, footer `=== END status=ok\|failed\|timed_out\|skipped\|died` + traceback |
+| `pool-<pool>.log` | Rolling log of the whole process (10 MB × 5) — boot lines, sweeps, everything |
+| `crash-<pool>.log` | `faulthandler` native stack dumps that happened between runs (+ a line per process boot) |
+
+- **`status=died`** = the process exited mid-run with no Python unwinding
+  (native crash e.g. #8, OOM kill, or a forced stop/restart). Written by the
+  NEXT boot of the same pool. If the crash was native, the faulthandler stack
+  is in that run file right above the footer.
+- **No footer** = the run is still in progress, or its pool hasn't restarted yet.
+- A run that hangs inside C code past its time limit + 60 s gets an all-threads
+  stack dump in its file even though dramatiq's interrupt can't fire.
+- **Poison guard**: a message whose earlier attempts died
+  `WORKER_CRASH_MAX_ATTEMPTS` times (default 2) is skipped and parked in the
+  dead-letter queue, and its job is failed with `error_code=worker_crashed`,
+  instead of crash-looping the worker.
+- workerdash → **Run logs** tab lists/filters them (and the Operations
+  drill-down shows a job's runs). Retention: `WORKER_LOG_RETENTION_DAYS` (14).
+
 ---
 
 ## 6. Common problems (all previously encountered — check here FIRST)
@@ -385,6 +410,8 @@ clone>/data` in `components/worker/.env`. Check the worker's boot
 `storage_root=` line; it warns if the directory doesn't exist.
 
 ### #8 Worker fork dies silently after audio work (OpenMP abort)
+Evidence: the run shows `status=died` in `data/logs/worker/runs/` with a
+faulthandler `Fatal Python error: Aborted` stack above the footer (section 5).
 librosa (numba) and torch/demucs each ship an OpenMP runtime; loading both in
 one process aborts it ("OMP: Error #15 … libiomp5md.dll already initialized") —
 no traceback, master left half-alive, queue stops draining (looks like #3).

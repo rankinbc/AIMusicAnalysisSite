@@ -32,6 +32,14 @@ banner. Supervision resumes automatically once the worker is healthy again
 WATCHDOG_STATUS_FILE. See docs/STARTUP.md for how it fits the boot flow.
 Localhost-only, no auth — dev tool. Tests: `pytest`.
 
+## Run logs tab
+
+Lists the worker's per-run log files (`WORKER_LOG_DIR`, default
+`<STORAGE_LOCAL_ROOT>/logs/worker/runs/`), newest first, filterable by status
+(`died` = worker crashed mid-run), search (job / analysis / message id) and age;
+click to read the full file. The Operations drill-down shows the selected job's
+runs too.
+
 ## Operations tab
 
 Searchable, paginated list of every upload/analysis run (backed by

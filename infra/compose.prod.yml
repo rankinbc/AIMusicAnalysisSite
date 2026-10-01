@@ -137,6 +137,9 @@ services:
       dramatiq_prom_host: "0.0.0.0"
       dramatiq_prom_port: "9191"
       SENTRY_DSN: "${SENTRY_DSN_WORKER:-}"
+      # Run logs (app/runlog) land on the shared volume at /data/logs/worker;
+      # the header stamps this build id on every run.
+      GIT_SHA: "${IMAGE_TAG:?}"
       # LLM spend caps (worker/app/llm/budget.py resolves feature-flag first,
       # env fallback second; with credits off everyone is tier pro, so pro +
       # global ceilings are the live guards).
