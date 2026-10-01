@@ -777,7 +777,6 @@ export function ReportView({
           runningSlugs={specialistRuns.running}
           verdicts={verdictsData?.verdicts}
           hasStems={inputs.stems}
-          sequential={user?.isGuest === true}
           running={null}
           onClose={dismissModal}
           onViewReport={dismissModal}

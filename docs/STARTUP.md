@@ -390,7 +390,7 @@ Prod: `worker-paid` = `WORKER_QUEUES "coach ai"` + `WORKER_THREADS 4`;
 Guests' AI work is routed to its own `ai-guest` lane (`GuestLimits.AiQueueFor`)
 so demo traffic never takes the interactive threads nor waits behind batch
 work: prod runs it as a separate one-thread service `worker-guest-ai`
-(`WORKER_QUEUES "ai-guest"`, `WORKER_THREADS 1`); dev folds it into the
+(`WORKER_QUEUES "ai-guest"`, `WORKER_THREADS 4`); dev folds it into the
 interactive worker (no 4th window). The launcher, the workerdash
 restart button and the watchdog all launch this split (`WORKER_POOLS` /
 `pool_threads` in `components/workerdash/workerdash/worker_ctl.py`). Never
