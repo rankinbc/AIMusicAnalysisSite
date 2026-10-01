@@ -210,6 +210,31 @@ public sealed class AdminEndpointsTests(WebApplicationFactory<Program> factory)
     }
 
     [SkippableFact]
+    public async Task Signup_Bonus_Backfill_Requires_A_Reason_And_Writes_An_Audit_Row()
+    {
+        await TestDb.RequireAsync(_factory);
+        using var f = WithAdmin(out _);
+        var client = f.CreateClient();
+        var marker = $"rollout {Guid.NewGuid():N}";
+
+        // No reason → 400 before anything runs.
+        var noReason = await client.SendAsync(Req(HttpMethod.Post,
+            "/api/admin/credits/backfill-signup-bonus", new { reason = "  " }));
+        Assert.Equal(HttpStatusCode.BadRequest, noReason.StatusCode);
+        Assert.Contains("reason_required", await noReason.Content.ReadAsStringAsync());
+
+        var ok = await client.SendAsync(Req(HttpMethod.Post,
+            "/api/admin/credits/backfill-signup-bonus", new { reason = marker }));
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+
+        using var scope = f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var audit = await db.AuditLogs.AsNoTracking().SingleAsync(a =>
+            a.Action == "credits_backfill_signup_bonus" && a.Reason!.StartsWith(marker));
+        Assert.Contains("(granted ", audit.Reason);
+    }
+
+    [SkippableFact]
     public async Task Flag_Change_Persists_Evicts_And_Audits_Prompt_Pin_Validates()
     {
         await TestDb.RequireAsync(_factory);

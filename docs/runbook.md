@@ -93,8 +93,9 @@ charges, no labels). To launch the economy (prices: PRPs/credit-economy.md):
    UPDATE feature_flags SET value='true' WHERE name='credits_enabled';
    ```
 4. Grant the sign-up bonus to already-verified accounts (idempotent, safe to
-   re-run; header per "Admin surface"):
-   `curl -X POST -H "X-Admin-Key: $ADMIN_API_KEY" https://<host>/api/admin/credits/backfill-signup-bonus`
+   re-run; header per "Admin surface"). A reason is required and is written to
+   `audit_log`:
+   `curl -X POST -H "X-Admin-Key: $ADMIN_API_KEY" -H "Content-Type: application/json" -d '{"reason":"credit economy rollout"}' https://<host>/api/admin/credits/backfill-signup-bonus`
 5. Watch `llm_calls` cost per analysis for a week and retune the
    `credit_cost_*` flags.
 
