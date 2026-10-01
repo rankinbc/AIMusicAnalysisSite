@@ -165,6 +165,9 @@ def _tier_ceiling(tier: str, settings: Any) -> Decimal:
     if tier == "pro":
         override = _ceiling_override("llm_budget_pro_usd")
         return override if override is not None else settings.llm_budget_pro_usd
+    if tier == "credits":
+        override = _ceiling_override("llm_budget_credits_usd")
+        return override if override is not None else settings.llm_budget_credits_usd
     if tier == "guest":
         override = _ceiling_override("llm_budget_guest_usd")
         return override if override is not None else settings.llm_budget_guest_usd

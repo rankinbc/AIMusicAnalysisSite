@@ -60,6 +60,7 @@ from .coach_lib.stream_parser import StreamSplitter
 from .coach_lib.stream_publisher import CoachStreamPublisher
 from .llm import gateway
 from .llm.gateway import LlmBudgetExceeded, LlmError
+from .llm.job_tier import tier_for_analysis
 from .verdict_lib.flatten_analysis import flatten
 from .verdict_lib.json_extraction import extract_json_object
 from .coach_lib.brief_template import build_template_brief
@@ -456,6 +457,7 @@ def coach_reply(
             degradation_notice = analysis.degradation_notice
             user_id = conversation.user_id
             analysis_id = analysis.id
+            tier = tier_for_analysis(s, analysis)  # real billing lane (None → default)
             # 10.3: stitch the coach lane onto the analysis correlation chain.
             obs.set_tag("analysis_id", analysis_id)
 
@@ -631,6 +633,7 @@ def coach_reply(
                 prompt_version=version,
                 model=model_pin,
                 user_id=user_id,
+                tier=tier,
                 correlation_id=str(cid),
                 timeout_s=120,
                 cancel_check=cancel_check,

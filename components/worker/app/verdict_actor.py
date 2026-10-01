@@ -36,6 +36,7 @@ from . import auto_notes, obs
 from .db_sync import SessionFactory
 from .llm import gateway
 from .llm.gateway import LlmBudgetExceeded, LlmError
+from .llm.job_tier import tier_for_analysis
 from .verdict_lib.degraded import (
     run_rule_engine_for_analysis,
     write_degradation_notice,
@@ -223,6 +224,7 @@ def run_specialist(analysis_id: str, slug: str, user_id: str) -> None:
             # `final_json` is JSONB — already a dict by SA.
             raw_final = analysis.final_json
             track_id = str(analysis.id)
+            tier = tier_for_analysis(s, analysis)  # real billing lane (None → default)
             # cross-lane trace stitch (getattr: test stubs omit the column)
             obs.set_tag("job_id", getattr(analysis, "job_id", None))
     except Exception as exc:
@@ -271,6 +273,7 @@ def run_specialist(analysis_id: str, slug: str, user_id: str) -> None:
                 prompt_version=prompt_version,
                 model=pinned_model,
                 user_id=caller_id,
+                tier=tier,
                 correlation_id=analysis_id,
                 # A full specialist answer (several verdicts, each with a
                 # dsp_chain) runs past the gateway's 4096 default; truncated

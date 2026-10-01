@@ -53,6 +53,9 @@ class LlmSettings(BaseSettings):
     # tier), "pro" (Epic 2). Unknown tier falls back to the global ceiling.
     llm_budget_free_usd: Decimal = Decimal("5.00")
     llm_budget_pro_usd: Decimal = Decimal("100.00")
+    # Credit-pack buyers' own lane (credit economy) — separate from free so a
+    # few payers can never trip the free ceiling and take the coach offline.
+    llm_budget_credits_usd: Decimal = Decimal("100.00")
     # Guest demo sandbox (D2): its own ceiling, additive on top of the global
     # cap — guest traffic must never be able to exhaust the budget real users
     # depend on. Mirrors the seeded feature_flags row (llm_budget_guest_usd=5).
@@ -82,6 +85,8 @@ class LlmSettings(BaseSettings):
             return self.llm_budget_free_usd
         if tier == "pro":
             return self.llm_budget_pro_usd
+        if tier == "credits":
+            return self.llm_budget_credits_usd
         if tier == "guest":
             return self.llm_budget_guest_usd
         return self.llm_budget_global_usd
