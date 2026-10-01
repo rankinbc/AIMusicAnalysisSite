@@ -4,8 +4,11 @@ import { run as axeRun } from 'axe-core';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { ARCH_TITLE, DEPLOY_CHAIN } from '../ArchitectureDiagram';
+import { buildExamples } from '../examples-model';
 import { HowItWorksPage } from '../HowItWorksPage';
 import { DIFFERENTIATORS, STAGES } from '../pipeline';
+import { PIPELINE_TITLE } from '../PipelineDiagram';
 
 afterEach(() => {
   cleanup();
@@ -29,7 +32,15 @@ describe('HowItWorksPage (/trust/how-its-built)', () => {
   const html = renderToStaticMarkup(<HowItWorksPage />);
 
   it('renders the producer-facing title and section headings', () => {
-    for (const h of ['How SPECTR works', 'From upload to a plan', 'What makes it different', 'See it for yourself']) {
+    for (const h of [
+      'How SPECTR works',
+      'The analysis pipeline',
+      'What it finds — and what it tells you to do',
+      'From upload to a plan',
+      'Under the hood',
+      'What makes it different',
+      'See it for yourself',
+    ]) {
       expect(html).toContain(h);
     }
   });
@@ -67,11 +78,84 @@ describe('HowItWorksPage (/trust/how-its-built)', () => {
   });
 
   it('names no other product', () => {
-    expect(html).not.toMatch(/trackscore|landr|ozone|izotope|mixcheck|bandlab|emastered|cryo/i);
+    expect(html).not.toMatch(/trackscore|landr|ozone|izotope|mixcheck|bandlab|emastered|cryo|mixed in key|sonible|mastering\.com/i);
   });
 
-  it('drops the old engineering-page content', () => {
-    expect(html).not.toMatch(/By the numbers|CI and security|Known limits|\bBFF\b|PostgreSQL|Redis/);
+  it('renders both diagrams as accessible images, in wide and narrow layouts', () => {
+    const { container } = render(<HowItWorksPage />);
+    const imgs = [...container.querySelectorAll('svg[role="img"]')];
+    expect(imgs.map((i) => i.getAttribute('aria-label'))).toEqual([
+      PIPELINE_TITLE,
+      PIPELINE_TITLE,
+      ARCH_TITLE,
+      ARCH_TITLE,
+    ]);
+    for (const svg of imgs) {
+      expect(svg.querySelector('title')?.textContent).toBe(svg.getAttribute('aria-label'));
+      const descId = svg.getAttribute('aria-describedby');
+      expect(descId && svg.querySelector('desc')?.id).toBe(descId);
+    }
+    // Each marker id is unique even though each layout renders twice.
+    const markers = [...container.querySelectorAll('marker')].map((m) => m.id);
+    expect(new Set(markers).size).toBe(markers.length);
+  });
+
+  it('pipeline diagram shows both diagnosis lanes, the validator and the audio boundary', () => {
+    const fig = html.slice(html.indexOf('data-testid="pipeline-diagram"'), html.indexOf('data-testid="example-findings"'));
+    for (const node of ['rules', 'triage', 'spec-group', 'validator', 'plan', 'listen', 'coach', 'm-tonal', 'm-als', 'audio-boundary']) {
+      expect(fig).toContain(`data-node="${node}"`);
+    }
+    for (const text of ['Rule engine', 'AI triage', 'Validator', 'measurement ±10%', 'AUDIO STOPS HERE', '7 bands']) {
+      expect(fig).toContain(text);
+    }
+    // Truth rules: no structure/arrangement detection, no stem separation.
+    expect(fig).not.toMatch(/arrangement|structure|demucs|separat/i);
+  });
+
+  it('architecture diagram shows the verified production stack and deploy chain', () => {
+    const fig = html.slice(html.indexOf('data-testid="architecture-diagram"'));
+    for (const text of ['React 19', 'ASP.NET Core', '.NET 10', 'PostgreSQL 16', 'Redis 7 + Dramatiq', 'Cloudflare R2', 'Coach worker', 'LLM gateway', 'Anthropic Claude', 'never audio']) {
+      expect(fig).toContain(text);
+    }
+    for (const step of DEPLOY_CHAIN) expect(fig).toContain(step);
+    expect(fig).toContain('href="https://github.com/rankinbc/AIMusicAnalysisSite"');
+  });
+
+  it('example cards carry real demo verdicts: headline, evidence and fix steps', () => {
+    const ex = buildExamples();
+    expect(ex).toHaveLength(4);
+    expect(ex.map((e) => e.verdict.headline)).toEqual([
+      'Excessive sub-bass energy overwhelming the mix',
+      'Mix is too narrow — sounds flat and unprofessional',
+      'Air band severely deficient — missing trance shimmer and sparkle',
+      'Sub-30 Hz rumble wasting headroom',
+    ]);
+    expect(ex.filter((e) => e.isRule)).toHaveLength(1);
+    for (const e of ex) {
+      expect(html).toContain(e.verdict.headline);
+      expect(e.evidence.length).toBeGreaterThan(0);
+      expect(e.steps.length).toBeGreaterThan(0);
+      for (const st of e.steps) expect(html).toContain(st);
+      for (const r of e.evidence) {
+        expect(html).toContain(r.measured);
+        expect(r.bar.min).toBeLessThanOrEqual(Math.min(r.bar.lo, r.bar.value));
+        expect(r.bar.max).toBeGreaterThanOrEqual(Math.max(r.bar.hi, r.bar.value));
+      }
+    }
+    expect(ex[0].evidence[0]).toMatchObject({ measured: '−18.3 dB', expected: '−30.0 dB … −24.0 dB', out: 'above' });
+    expect(ex[0].steps).toEqual(['High-pass at 30 Hz, 24 dB/oct', 'EQ bell −3 dB at 40 Hz, Q 1']);
+    expect(ex[3].evidence[0]).toMatchObject({ measured: '39%', expected: 'under 35%', out: 'above' });
+    expect(html.match(/data-testid="example-card"/g) ?? []).toHaveLength(4);
+  });
+
+  it('skips an example whose finding is missing instead of crashing', () => {
+    expect(buildExamples([])).toEqual([]);
+  });
+
+  it('credits the demo track', () => {
+    expect(html).toContain(
+      'Examples from SPECTR’s analysis of the demo track “Magnetic Fields” by Artifact303 (1:14 excerpt), used only as a demo.',
+    );
   });
 
   it("stays clear of the guard suite's banned phrases", () => {

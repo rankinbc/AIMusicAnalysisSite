@@ -1,0 +1,304 @@
+/* Inline-SVG diagrams on /trust/how-its-built. Every colour is a token; a
+   node's tone class sets --k and every part of the node reads from it. */
+
+.svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+/* ── tones ─────────────────────────────────────────────────────────────── */
+.box {
+  --k: var(--text-2);
+  --k-dim: rgba(255, 255, 255, 0.04);
+}
+.neutral {
+  --k: var(--text-2);
+  --k-dim: rgba(255, 255, 255, 0.04);
+}
+.cyan {
+  --k: var(--cyan);
+  --k-dim: var(--cyan-dim);
+}
+.blue {
+  --k: var(--blue);
+  --k-dim: rgba(96, 165, 250, 0.1);
+}
+.violet {
+  --k: var(--violet);
+  --k-dim: var(--violet-dim);
+}
+.yellow {
+  --k: var(--yellow);
+  --k-dim: rgba(251, 191, 36, 0.09);
+}
+.green {
+  --k: var(--green);
+  --k-dim: rgba(52, 211, 153, 0.1);
+}
+.orange {
+  --k: var(--orange);
+  --k-dim: var(--orange-dim);
+}
+
+/* ── boxes ─────────────────────────────────────────────────────────────── */
+.rect {
+  fill: var(--card-2);
+  stroke: var(--k);
+  stroke-opacity: 0.55;
+  stroke-width: 1;
+}
+
+.accent {
+  fill: var(--k);
+}
+
+.optional .rect,
+.optional .pillRect {
+  stroke-dasharray: 4 3;
+  stroke-opacity: 0.7;
+}
+
+.title {
+  font-family: 'Syne', system-ui, sans-serif;
+  font-size: 12.5px;
+  font-weight: 700;
+  fill: var(--text);
+}
+
+.line {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  fill: var(--text-2);
+}
+
+.pillRect {
+  fill: var(--k-dim);
+  stroke: var(--k);
+  stroke-opacity: 0.45;
+}
+
+.pillText {
+  font-family: 'Syne', system-ui, sans-serif;
+  font-size: 11.5px;
+  font-weight: 600;
+  fill: var(--text);
+}
+
+.groupRect {
+  fill: var(--k-dim);
+  fill-opacity: 0.5;
+  stroke: var(--k);
+  stroke-opacity: 0.35;
+  stroke-dasharray: 5 4;
+}
+
+.groupLabel {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  fill: var(--k);
+}
+
+.stripRect {
+  fill: var(--k-dim);
+  stroke: var(--k);
+  stroke-opacity: 0.4;
+}
+
+.stripText {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  fill: var(--text-2);
+}
+
+/* ── edges + annotations ───────────────────────────────────────────────── */
+.edge {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+}
+
+.edgeDashed {
+  stroke-dasharray: 4 3;
+}
+
+.arrowHead {
+  fill: var(--muted);
+}
+
+.edgeLabel {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  fill: var(--muted);
+}
+
+.stage {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  fill: var(--cyan);
+}
+
+.note {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  fill: var(--violet);
+}
+
+/* The "audio stops here" privacy boundary. */
+.boundary {
+  stroke: var(--red);
+  stroke-opacity: 0.55;
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.boundaryBg {
+  fill: var(--card);
+}
+
+.boundaryText {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  fill: var(--red);
+}
+
+/* ── figure chrome (HTML around the SVGs) ──────────────────────────────── */
+.figure {
+  margin: 4px 0 0;
+  padding: 20px 20px 16px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(90% 60% at 50% 0%, var(--cyan-dim), transparent 70%),
+    var(--card);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* The hero pipeline breaks out of the 720px prose column on wide screens —
+   a centred flex item wider than its column overflows evenly both sides. */
+.wide {
+  align-self: center;
+  width: min(1100px, calc(100vw - 48px));
+}
+
+.caption {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+  margin: 0;
+}
+
+.figure .legend {
+  list-style: none;
+  flex-direction: row;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10.5px;
+  color: var(--text-2);
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--k);
+  box-shadow: 0 0 8px -2px var(--k);
+}
+
+.legendItem.optional .swatch {
+  background: transparent;
+  border: 1px dashed var(--text-2);
+  box-shadow: none;
+}
+
+/* Wide/narrow layout switch: two hand-placed SVGs, one shown. */
+.layoutWide {
+  display: block;
+}
+
+.layoutNarrow {
+  display: none;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+@media (max-width: 959px) {
+  .layoutWide {
+    display: none;
+  }
+  .layoutNarrow {
+    display: block;
+  }
+  .wide {
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .figure {
+    padding: 14px 10px 12px;
+  }
+}
+
+/* ── deploy chain (HTML under the architecture SVG) ────────────────────── */
+.figure .chain {
+  list-style: none;
+  flex-direction: row;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.chainStep {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10.5px;
+  color: var(--text-2);
+}
+
+.chainStep span {
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border-2);
+  background: var(--card-2);
+}
+
+.chainStep:not(:last-child)::after {
+  content: '→';
+  color: var(--muted);
+}
+
+.repo {
+  font-size: 12.5px;
+  color: var(--text-2);
+  margin: 0;
+}
+
+.repo a {
+  color: var(--cyan);
+}

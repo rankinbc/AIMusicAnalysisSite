@@ -1,6 +1,7 @@
-// /trust/how-its-built — the producer-facing "how it works" page: the flow
-// from upload to a plan to improve the mix, what sets SPECTR apart from
-// score-and-tips mix checkers, and the two funnel CTAs. Copy lives in
+// /trust/how-its-built — the "how it works" page: the pipeline diagram, worked
+// examples from the real demo analysis, the step-by-step flow from upload to
+// a plan, the system architecture, what sets SPECTR apart from score-and-tips
+// mix checkers, and the two funnel CTAs. Copy lives in
 // pipeline.ts, where every entry cites the code that backs it. Lives in
 // features/ so the router's auto code-splitting lazy-chunks it out of the
 // entry bundle (same pattern as the other trust route files).
@@ -8,7 +9,10 @@ import { useEffect } from 'react';
 
 import { capture } from '../../lib/analytics';
 import { TrustPage } from '../trust/TrustPage';
+import { ArchitectureDiagram } from './ArchitectureDiagram';
+import { ExampleFindings } from './ExampleFindings';
 import { DIFFERENTIATORS, KIND_LABEL, STAGES } from './pipeline';
+import { PipelineDiagram } from './PipelineDiagram';
 import s from './how-it-works.module.css';
 
 // Steps are numbered continuously across stages; each stage's <ol> starts
@@ -34,6 +38,20 @@ export function HowItWorksPage() {
         finds the specific problems those measurements point to, and turns them into a prioritised
         plan with exact settings — which you can hear on your own track before you touch your DAW.
       </p>
+
+      <h2>The analysis pipeline</h2>
+      <p>
+        Your track goes through twelve measurement modules, two lanes of diagnosis —
+        fixed rules and AI specialists — and a validator, before anything is shown to you.
+      </p>
+      <PipelineDiagram />
+
+      <h2>What it finds — and what it tells you to do</h2>
+      <p>
+        Four real findings from the demo analysis. Each one cites the measurements behind it, explains why
+        it matters, and comes with a fix you can dial in.
+      </p>
+      <ExampleFindings />
 
       <h2>From upload to a plan</h2>
       <div className={s.pipeline}>
@@ -64,6 +82,13 @@ export function HowItWorksPage() {
           </section>
         ))}
       </div>
+
+      <h2>Under the hood</h2>
+      <p>
+        The system that runs it in production: a React front end, a .NET API, Python workers on a job
+        queue, and an LLM gateway that keeps AI spend capped and metered.
+      </p>
+      <ArchitectureDiagram />
 
       <h2>What makes it different</h2>
       <div className={s.diffGrid}>
