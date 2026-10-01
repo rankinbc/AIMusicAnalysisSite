@@ -53,6 +53,26 @@ public sealed class BillingCreditsEndpointsTests(WebApplicationFactory<Program> 
         }
     }
 
+
+    // Stripe refusing the call (e.g. a config error) surfaces as StripeException.
+    private sealed class ThrowingCheckoutClient : IStripeCheckoutClient
+    {
+        public Task<Customer> CreateCustomerAsync(
+            CustomerCreateOptions options, string idempotencyKey, CancellationToken ct)
+            => Task.FromResult(new Customer { Id = $"cus_test_{Guid.NewGuid():N}" });
+
+        public Task<Session> CreateCheckoutSessionAsync(
+            SessionCreateOptions options, string idempotencyKey, CancellationToken ct)
+            => throw new StripeException("No such price");
+    }
+
+    // Settable clock so a test can cross a checkout idempotency-key bucket.
+    private sealed class MutableClock(DateTimeOffset now) : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = now;
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
     private (WebApplicationFactory<Program> F, RecordingCheckoutClient Client)
         BuildWithFakeStripe(bool configured = true, bool creditsConfigured = true)
     {
@@ -118,6 +138,58 @@ public sealed class BillingCreditsEndpointsTests(WebApplicationFactory<Program> 
     }
 
     // ── POST /checkout/credits ─────────────────────────────────────────────
+
+    // Stripe replays a FAILED request under the same key, so the key must
+    // change across time buckets (retry after a failure) yet stay stable
+    // inside one (network double-submit).
+    [SkippableFact]
+    public async Task PostCheckoutCredits_Idempotency_Key_Changes_Across_Time_Buckets()
+    {
+        await TestDb.RequireAsync(_factory);
+        var (f0, fake) = BuildWithFakeStripe();
+        var clock = new MutableClock(new DateTimeOffset(2026, 10, 1, 12, 0, 5, TimeSpan.Zero));
+        var f = f0.WithWebHostBuilder(b => b.ConfigureTestServices(services =>
+        {
+            services.RemoveAll(typeof(TimeProvider));
+            services.AddSingleton<TimeProvider>(clock);
+        }));
+        var (client, userId) = await SeedAuthedAsync(f, "credits-bucket");
+        try
+        {
+            await client.PostAsJsonAsync("/api/billing/checkout/credits", new BuyCreditsRequest(5));
+            var first = fake.LastSessionIdempotencyKey;
+
+            clock.Now = clock.Now.AddSeconds(10);
+            await client.PostAsJsonAsync("/api/billing/checkout/credits", new BuyCreditsRequest(5));
+            Assert.Equal(first, fake.LastSessionIdempotencyKey);
+
+            clock.Now = clock.Now.AddMinutes(2);
+            await client.PostAsJsonAsync("/api/billing/checkout/credits", new BuyCreditsRequest(5));
+            Assert.NotEqual(first, fake.LastSessionIdempotencyKey);
+        }
+        finally { await CleanupAsync(f, userId); }
+    }
+
+    [SkippableFact]
+    public async Task PostCheckoutCredits_Stripe_Refusal_Returns_502_Checkout_Failed()
+    {
+        await TestDb.RequireAsync(_factory);
+        var (f0, _) = BuildWithFakeStripe();
+        var f = f0.WithWebHostBuilder(b => b.ConfigureTestServices(services =>
+        {
+            services.RemoveAll(typeof(IStripeCheckoutClient));
+            services.AddSingleton<IStripeCheckoutClient>(new ThrowingCheckoutClient());
+        }));
+        var (client, userId) = await SeedAuthedAsync(f, "credits-502");
+        try
+        {
+            var resp = await client.PostAsJsonAsync("/api/billing/checkout/credits", new BuyCreditsRequest(5));
+            Assert.Equal(HttpStatusCode.BadGateway, resp.StatusCode);
+            var json = await resp.Content.ReadAsStringAsync();
+            Assert.Contains("checkout_failed", json);
+        }
+        finally { await CleanupAsync(f, userId); }
+    }
 
     [SkippableFact]
     public async Task PostCheckoutCredits_With_Pack5_Returns_Stripe_Url()

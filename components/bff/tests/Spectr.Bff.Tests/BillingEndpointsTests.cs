@@ -67,6 +67,26 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
         }
     }
 
+
+    // Stripe refusing the call (e.g. a config error) surfaces as StripeException.
+    private sealed class ThrowingCheckoutClient : IStripeCheckoutClient
+    {
+        public Task<Customer> CreateCustomerAsync(
+            CustomerCreateOptions options, string idempotencyKey, CancellationToken ct)
+            => Task.FromResult(new Customer { Id = $"cus_test_{Guid.NewGuid():N}" });
+
+        public Task<Session> CreateCheckoutSessionAsync(
+            SessionCreateOptions options, string idempotencyKey, CancellationToken ct)
+            => throw new StripeException("No such price");
+    }
+
+    // Settable clock so a test can cross a checkout idempotency-key bucket.
+    private sealed class MutableClock(DateTimeOffset now) : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = now;
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
     private (WebApplicationFactory<Program> Factory, RecordingStripeClient Stripe)
         BuildWithFakeStripe(bool configured = true)
     {
@@ -238,6 +258,57 @@ public sealed class BillingEndpointsTests(WebApplicationFactory<Program> factory
             Assert.NotEqual(monthlyKey, fake.LastSessionIdempotencyKey);
         }
         finally { await CleanupUser(factory, userId); }
+    }
+
+    [SkippableFact]
+    public async Task Post_Checkout_Idempotency_Key_Changes_Across_Time_Buckets()
+    {
+        await TestDb.RequireAsync(_factory);
+
+        var (f0, fake) = BuildWithFakeStripe();
+        var clock = new MutableClock(new DateTimeOffset(2026, 10, 1, 12, 0, 5, TimeSpan.Zero));
+        var factory = f0.WithWebHostBuilder(b => b.ConfigureTestServices(services =>
+        {
+            services.RemoveAll(typeof(TimeProvider));
+            services.AddSingleton<TimeProvider>(clock);
+        }));
+        var (client, userId) = await SeedAuthed(factory, "billing-bucket");
+        try
+        {
+            var req = new CreateCheckoutSessionRequest("monthly");
+            await client.PostAsJsonAsync("/api/billing/checkout/subscription", req);
+            var first = fake.LastSessionIdempotencyKey;
+
+            clock.Now = clock.Now.AddSeconds(10);
+            await client.PostAsJsonAsync("/api/billing/checkout/subscription", req);
+            Assert.Equal(first, fake.LastSessionIdempotencyKey);
+
+            clock.Now = clock.Now.AddMinutes(2);
+            await client.PostAsJsonAsync("/api/billing/checkout/subscription", req);
+            Assert.NotEqual(first, fake.LastSessionIdempotencyKey);
+        }
+        finally { await CleanupUser(factory, userId); }
+    }
+
+    [SkippableFact]
+    public async Task Post_Checkout_Stripe_Refusal_Returns_502_Checkout_Failed()
+    {
+        await TestDb.RequireAsync(_factory);
+        var (f0, _) = BuildWithFakeStripe();
+        var f = f0.WithWebHostBuilder(b => b.ConfigureTestServices(services =>
+        {
+            services.RemoveAll(typeof(IStripeCheckoutClient));
+            services.AddSingleton<IStripeCheckoutClient>(new ThrowingCheckoutClient());
+        }));
+        var (client, userId) = await SeedAuthed(f, "billing-502");
+        try
+        {
+            var resp = await client.PostAsJsonAsync("/api/billing/checkout/subscription", new CreateCheckoutSessionRequest("monthly"));
+            Assert.Equal(HttpStatusCode.BadGateway, resp.StatusCode);
+            var json = await resp.Content.ReadAsStringAsync();
+            Assert.Contains("checkout_failed", json);
+        }
+        finally { await CleanupUser(f, userId); }
     }
 
     [SkippableFact]

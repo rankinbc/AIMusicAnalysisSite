@@ -277,6 +277,7 @@ builder.Services.AddSingleton<CoachChatService>();
 // fake without hitting api.stripe.com. SubscriptionMirrorService is the
 // ONLY writer to the `subscriptions` table (architecture money-boundary).
 builder.Services.AddSingleton<IStripeCheckoutClient, StripeCheckoutClient>();
+Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddSingleton(builder.Services, TimeProvider.System);
 builder.Services.AddSingleton<IStripeSubscriptionClient, StripeSubscriptionClient>();
 builder.Services.AddSingleton<IStripeRefundClient, StripeRefundClient>(); // 10.5 admin refunds
 builder.Services.AddSingleton<DisposableEmailService>(); // 10.6 abuse containment

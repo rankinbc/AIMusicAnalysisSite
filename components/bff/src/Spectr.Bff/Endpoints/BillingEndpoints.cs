@@ -102,6 +102,31 @@ public static class BillingEndpoints
                 prices.CoachMix, prices.SignupGrant, prices.ProAnalysesMonthly, proCoach)));
     }
 
+    // A Stripe refusal (bad price id, API-version/config error, rate limit…)
+    // must not escape as the generic 500. Log the Stripe error code/message
+    // and request id for triage and give the client a retryable 502.
+    private static IResult CheckoutFailed(
+        StripeException ex, ILogger<BillingWebhook> logger, string step, Guid userId)
+    {
+        logger.LogError(ex,
+            "Stripe checkout {Step} failed for user {UserId}: code {Code}, message {Message}, request {RequestId}",
+            step, userId, ex.StripeError?.Code, ex.StripeError?.Message ?? ex.Message,
+            ex.StripeResponse?.RequestId);
+        return ErrorEnvelope.Build(StatusCodes.Status502BadGateway,
+            "checkout_failed",
+            "Checkout couldn't be started — please try again in a moment.");
+    }
+
+    // Stripe stores a failed request's result under its idempotency key and
+    // replays it, so a key that stays constant for an hour turns one transient
+    // failure (e.g. a config error) into an hour-long outage for that user and
+    // pack. One-minute buckets still dedupe a double-submit within seconds
+    // while letting a retry after a failure (or fix) get a fresh key. Smallest
+    // option: no client contract change; double-charge safety is the ledger's
+    // credits_purchase:{eventId} key, not this one.
+    internal static string CheckoutAttemptBucket(TimeProvider clock) =>
+        (clock.GetUtcNow().ToUnixTimeSeconds() / 60).ToString();
+
     // ── POST /checkout/subscription ─────────────────────────────────────────
 
     private static async Task<IResult> PostCheckoutSubscription(
@@ -110,6 +135,8 @@ public static class BillingEndpoints
         AppDbContext db,
         IOptions<StripeOptions> stripeOpts,
         IStripeCheckoutClient stripeClient,
+        TimeProvider clock,
+        ILogger<BillingWebhook> logger,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -152,17 +179,25 @@ public static class BillingEndpoints
             // of this exact request a no-op on Stripe's side. They'll
             // return the same `cus_...` id.
             var customerIdempotencyKey = $"customer:{userId:N}";
-            var customer = await stripeClient.CreateCustomerAsync(
-                new CustomerCreateOptions
-                {
-                    Email = user.Email,
-                    Metadata = new Dictionary<string, string>
+            Customer customer;
+            try
+            {
+                customer = await stripeClient.CreateCustomerAsync(
+                    new CustomerCreateOptions
                     {
-                        ["spectr_user_id"] = userId.ToString(),
+                        Email = user.Email,
+                        Metadata = new Dictionary<string, string>
+                        {
+                            ["spectr_user_id"] = userId.ToString(),
+                        },
                     },
-                },
-                customerIdempotencyKey,
-                ct);
+                    customerIdempotencyKey,
+                    ct);
+            }
+            catch (StripeException ex)
+            {
+                return CheckoutFailed(ex, logger, "customer", userId);
+            }
 
             // review-fix P2 — TOCTOU-safe write. Two concurrent checkout
             // POSTs from the same user could both read `StripeCustomerId
@@ -197,39 +232,49 @@ public static class BillingEndpoints
         }
 
         // review-fix P1 — idempotency key on session creation too. A
-        // user+cadence-stable key means a retry returns the SAME session
-        // URL; the user gets one checkout, not two. Salting with
+        // user+cadence key means a network double-submit returns the SAME
+        // session URL; the user gets one checkout, not two. Salting with
         // `priceId` lets a user start monthly, cancel, then start annual
-        // without colliding.
-        var sessionIdempotencyKey = $"session:{userId:N}:{priceId}";
-        var session = await stripeClient.CreateCheckoutSessionAsync(
-            new SessionCreateOptions
-            {
-                Mode = "subscription",
-                Customer = user.StripeCustomerId,
-                ClientReferenceId = userId.ToString(),
-                LineItems = new List<SessionLineItemOptions>
+        // without colliding. The one-minute bucket (see CheckoutAttemptBucket)
+        // stops Stripe replaying a FAILED attempt's stored result for good.
+        var sessionIdempotencyKey =
+            $"session:{userId:N}:{priceId}:{CheckoutAttemptBucket(clock)}";
+        Session session;
+        try
+        {
+            session = await stripeClient.CreateCheckoutSessionAsync(
+                new SessionCreateOptions
                 {
-                    new() { Price = priceId, Quantity = 1 },
-                },
-                AutomaticTax = new SessionAutomaticTaxOptions { Enabled = true },
-                SuccessUrl = opts.SuccessUrl,
-                CancelUrl = opts.CancelUrl,
-                AllowPromotionCodes = false,
-                BillingAddressCollection = "auto",
-                // Stripe also propagates this onto the Subscription so the
-                // webhook's metadata lookup wins regardless of customer-id
-                // race.
-                SubscriptionData = new SessionSubscriptionDataOptions
-                {
-                    Metadata = new Dictionary<string, string>
+                    Mode = "subscription",
+                    Customer = user.StripeCustomerId,
+                    ClientReferenceId = userId.ToString(),
+                    LineItems = new List<SessionLineItemOptions>
                     {
-                        ["spectr_user_id"] = userId.ToString(),
+                        new() { Price = priceId, Quantity = 1 },
+                    },
+                    AutomaticTax = new SessionAutomaticTaxOptions { Enabled = true },
+                    SuccessUrl = opts.SuccessUrl,
+                    CancelUrl = opts.CancelUrl,
+                    AllowPromotionCodes = false,
+                    BillingAddressCollection = "auto",
+                    // Stripe also propagates this onto the Subscription so the
+                    // webhook's metadata lookup wins regardless of customer-id
+                    // race.
+                    SubscriptionData = new SessionSubscriptionDataOptions
+                    {
+                        Metadata = new Dictionary<string, string>
+                        {
+                            ["spectr_user_id"] = userId.ToString(),
+                        },
                     },
                 },
-            },
-            sessionIdempotencyKey,
-            ct);
+                sessionIdempotencyKey,
+                ct);
+        }
+        catch (StripeException ex)
+        {
+            return CheckoutFailed(ex, logger, "session", userId);
+        }
 
         return Results.Ok(new CreateCheckoutSessionResponse(
             Url: session.Url, SessionId: session.Id));
@@ -665,6 +710,8 @@ public static class BillingEndpoints
         IOptions<StripeOptions> stripeOpts,
         IOptions<PricingDisplayOptions> display,
         IStripeCheckoutClient stripeClient,
+        TimeProvider clock,
+        ILogger<BillingWebhook> logger,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -697,17 +744,25 @@ public static class BillingEndpoints
         if (string.IsNullOrEmpty(user.StripeCustomerId))
         {
             var customerIdempotencyKey = $"customer:{userId:N}";
-            var customer = await stripeClient.CreateCustomerAsync(
-                new CustomerCreateOptions
-                {
-                    Email = user.Email,
-                    Metadata = new Dictionary<string, string>
+            Customer customer;
+            try
+            {
+                customer = await stripeClient.CreateCustomerAsync(
+                    new CustomerCreateOptions
                     {
-                        ["spectr_user_id"] = userId.ToString(),
+                        Email = user.Email,
+                        Metadata = new Dictionary<string, string>
+                        {
+                            ["spectr_user_id"] = userId.ToString(),
+                        },
                     },
-                },
-                customerIdempotencyKey,
-                ct);
+                    customerIdempotencyKey,
+                    ct);
+            }
+            catch (StripeException ex)
+            {
+                return CheckoutFailed(ex, logger, "customer", userId);
+            }
 
             var rows = await db.Users
                 .Where(u => u.Id == userId && u.StripeCustomerId == null)
@@ -729,65 +784,70 @@ public static class BillingEndpoints
             }
         }
 
-        // Review-fix P2-C — hourly bucket instead of daily so the user can
-        // buy the same pack size more than once per calendar day. The daily
-        // bucket caused Stripe to return a cached completed session on the
-        // second same-day same-pack call. The ledger partial-unique index
+        // Review-fix P2-C — short time bucket so the user can buy the same
+        // pack size more than once per day. The ledger partial-unique index
         // (idempotency_key = "credits_purchase:{stripeEventId}") is the
-        // canonical financial guard; this key only dedupes network retries
-        // within the same hour window.
-        var hourBucket = DateTimeOffset.UtcNow.ToString("yyyyMMddHH");
+        // canonical financial guard; this key only dedupes network
+        // double-submits (see CheckoutAttemptBucket).
         var sessionIdempotencyKey =
-            $"credits_session:{userId:N}:{body.PackSize}:{hourBucket}";
+            $"credits_session:{userId:N}:{body.PackSize}:{CheckoutAttemptBucket(clock)}";
 
-        var session = await stripeClient.CreateCheckoutSessionAsync(
-            new SessionCreateOptions
-            {
-                Mode = "payment",
-                Customer = user.StripeCustomerId,
-                ClientReferenceId = userId.ToString(),
-                LineItems = new List<SessionLineItemOptions>
+        Session session;
+        try
+        {
+            session = await stripeClient.CreateCheckoutSessionAsync(
+                new SessionCreateOptions
                 {
-                    new() { Price = priceId, Quantity = 1 },
-                },
-                AutomaticTax = new SessionAutomaticTaxOptions { Enabled = true },
-                // Audit wave-3 (E8.4) — tag the shared SuccessUrl so the
-                // success page knows a CREDIT PACK was bought (the frontend
-                // does a full-page redirect to Stripe, so it has no memory of
-                // the product when it returns). opts.SuccessUrl already
-                // carries `?session_id={CHECKOUT_SESSION_ID}` → append with
-                // '&'. The subscription checkout stays untagged (absent
-                // param = subscription, back-compat).
-                SuccessUrl = opts.SuccessUrl + "&product=credits",
-                CancelUrl = opts.CancelUrl,
-                AllowPromotionCodes = false,
-                BillingAddressCollection = "auto",
-                // The webhook reads spectr_user_id + pack_size off the
-                // PaymentIntent's metadata to record the +N ledger
-                // entry — store both at session creation so the
-                // webhook never has to look up local state.
-                // Review-fix P1-A — metadata must also live on the Session object
-        // (SessionCreateOptions.Metadata) so session.Metadata is populated
-        // in the checkout.session.completed webhook payload. The webhook
-        // handler reads session.Metadata, NOT the nested PaymentIntent
-        // metadata. PaymentIntentData.Metadata is kept as a dashboard-visible
-        // copy on the PaymentIntent object.
-                Metadata = new Dictionary<string, string>
-                {
-                    ["spectr_user_id"] = userId.ToString(),
-                    ["pack_size"] = body.PackSize.ToString(),
-                },
-                PaymentIntentData = new SessionPaymentIntentDataOptions
-                {
+                    Mode = "payment",
+                    Customer = user.StripeCustomerId,
+                    ClientReferenceId = userId.ToString(),
+                    LineItems = new List<SessionLineItemOptions>
+                    {
+                        new() { Price = priceId, Quantity = 1 },
+                    },
+                    AutomaticTax = new SessionAutomaticTaxOptions { Enabled = true },
+                    // Audit wave-3 (E8.4) — tag the shared SuccessUrl so the
+                    // success page knows a CREDIT PACK was bought (the frontend
+                    // does a full-page redirect to Stripe, so it has no memory of
+                    // the product when it returns). opts.SuccessUrl already
+                    // carries `?session_id={CHECKOUT_SESSION_ID}` → append with
+                    // '&'. The subscription checkout stays untagged (absent
+                    // param = subscription, back-compat).
+                    SuccessUrl = opts.SuccessUrl + "&product=credits",
+                    CancelUrl = opts.CancelUrl,
+                    AllowPromotionCodes = false,
+                    BillingAddressCollection = "auto",
+                    // The webhook reads spectr_user_id + pack_size off the
+                    // PaymentIntent's metadata to record the +N ledger
+                    // entry — store both at session creation so the
+                    // webhook never has to look up local state.
+                    // Review-fix P1-A — metadata must also live on the Session object
+            // (SessionCreateOptions.Metadata) so session.Metadata is populated
+            // in the checkout.session.completed webhook payload. The webhook
+            // handler reads session.Metadata, NOT the nested PaymentIntent
+            // metadata. PaymentIntentData.Metadata is kept as a dashboard-visible
+            // copy on the PaymentIntent object.
                     Metadata = new Dictionary<string, string>
                     {
                         ["spectr_user_id"] = userId.ToString(),
                         ["pack_size"] = body.PackSize.ToString(),
                     },
+                    PaymentIntentData = new SessionPaymentIntentDataOptions
+                    {
+                        Metadata = new Dictionary<string, string>
+                        {
+                            ["spectr_user_id"] = userId.ToString(),
+                            ["pack_size"] = body.PackSize.ToString(),
+                        },
+                    },
                 },
-            },
-            sessionIdempotencyKey,
-            ct);
+                sessionIdempotencyKey,
+                ct);
+        }
+        catch (StripeException ex)
+        {
+            return CheckoutFailed(ex, logger, "session", userId);
+        }
 
         return Results.Ok(new CreateCheckoutSessionResponse(
             Url: session.Url, SessionId: session.Id));
@@ -1106,6 +1166,27 @@ public static class BillingEndpoints
                 // SaveChanges below actually persists.
                 if (string.IsNullOrEmpty(invoice.CustomerId))
                     return;
+
+                // Managed Payments also emits invoice.paid for one-time
+                // credit-pack Checkouts (billing_reason=manual, no
+                // subscription link). There is no mirror row to wait for, so
+                // the throw below would 500 forever and Stripe would retry for
+                // 3 days (and can disable the live endpoint). ACK it. Only
+                // skip when we POSITIVELY know it is not a subscription
+                // invoice — a missing billing_reason stays on the retry path.
+                // API 2025+: the subscription link lives on Parent, not on
+                // the removed Invoice.Subscription.
+                var isSubscriptionInvoice =
+                    !string.IsNullOrEmpty(invoice.Parent?.SubscriptionDetails?.SubscriptionId)
+                    || invoice.BillingReason is null
+                    || invoice.BillingReason.StartsWith("subscription", StringComparison.Ordinal);
+                if (!isSubscriptionInvoice)
+                {
+                    logger.LogInformation(
+                        "Ignoring non-subscription {Type} (event {Id}, billing_reason {Reason}).",
+                        stripeEvent.Type, stripeEvent.Id, invoice.BillingReason);
+                    return;
+                }
 
                 var sub = await db.Subscriptions
                     .FirstOrDefaultAsync(s => s.StripeCustomerId == invoice.CustomerId, ct);
