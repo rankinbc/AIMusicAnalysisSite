@@ -27,6 +27,38 @@
   cursor: not-allowed;
 }
 
+/* Dropdowns share the .input look. The native arrow is replaced by a
+   two-gradient chevron so it can use a token colour (no SVG/hex), and
+   `color-scheme: dark` makes the browser's open option list dark too. */
+.select {
+  composes: input;
+  appearance: none;
+  -webkit-appearance: none;
+  color-scheme: dark;
+  cursor: pointer;
+  padding-right: 34px;
+  font-size: 13px;
+  text-transform: none;
+  letter-spacing: normal;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--text-2) 50%),
+    linear-gradient(135deg, var(--text-2) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 50%,
+    calc(100% - 13px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+
+.select:hover:not(:disabled) {
+  border-color: var(--border-2);
+}
+
+.select option {
+  background: var(--card);
+  color: var(--text);
+}
+
 /* UX-DR41 (story 4.3): mono overline labels — uppercase, monospace, wide
    tracking. The wrapped input text keeps the app font (inherit on .input). */
 .label {

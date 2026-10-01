@@ -160,7 +160,8 @@
 }
 
 .roleSelect {
-  padding: 4px 8px;
+  /* right padding leaves room for forms .select's chevron */
+  padding: 4px 28px 4px 8px;
   background: var(--card-2);
   color: var(--text);
   border: 1px solid var(--border);

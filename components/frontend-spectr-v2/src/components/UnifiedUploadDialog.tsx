@@ -836,7 +836,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                           {r.file.name}
                         </span>
                         <select
-                          className={s.roleSelect}
+                          className={`${f.select} ${s.roleSelect}`}
                           value={r.role}
                           onChange={(e) => setRole(r.localId, e.target.value as StemRole)}
                         >
@@ -907,6 +907,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                       <label className={f.label}>
                         Song
                         <select
+                          className={f.select}
                           value={songChoice}
                           onChange={(e) => setSongChoice(e.target.value)}
                         >
@@ -939,6 +940,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                   <label className={f.label}>
                     Genre hint <span className={f.hint}>(optional)</span>
                     <select
+                      className={f.select}
                       value={genreCustom ? CUSTOM_GENRE : genre}
                       onChange={(e) => {
                         const v = e.target.value;
@@ -1047,6 +1049,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                   <label className={f.label}>
                     Reference source
                     <select
+                      className={f.select}
                       value={refMode}
                       onChange={(e) => {
                         const next = e.target.value as 'upload' | 'library';
@@ -1067,6 +1070,7 @@ export function UnifiedUploadDialog({ open, onOpenChange, songId, defaultGenre }
                       <label className={f.label}>
                         Saved reference
                         <select
+                          className={f.select}
                           value={pickedReferenceId}
                           onChange={(e) => setPickedReferenceId(e.target.value)}
                         >
