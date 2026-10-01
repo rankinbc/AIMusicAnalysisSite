@@ -1,7 +1,8 @@
 /* Analysis Complete modal. Originally ported from the design handoff prototype
-   (design_handoff_analysis_modal/Analysis Modal.html); compacted 2026-10 —
-   single-line step rows, and a pinned status dock (static analysis done →
-   AI analysis next) between the scrolling body and the footer. Shared tokens
+   (design_handoff_analysis_modal/Analysis Modal.html); reworked 2026-10 —
+   coach card (static summary + specialists he'll consult next), a grid of
+   always-visible step results, and a pinned dock (static analysis done → AI
+   analysis next + the primary CTA) below the scrolling body. Shared tokens
    inherit from :root (AR39 no-raw-hex); only modal-local values are scoped
    here. The modal is portalled to <body>, so the results page's `.rdx *`
    reset does not reach these rules. */
@@ -165,9 +166,6 @@
   gap: 12px;
   background: rgba(0, 0, 0, 0.18);
 }
-.ftSpacer {
-  flex: 1;
-}
 .ftMeta {
   flex: 1;
   font-family: var(--mono);
@@ -211,45 +209,43 @@
   filter: brightness(1.06);
 }
 
-/* ── Status dock (pinned): stage 1 done → stage 2 AI next ─────────────── */
+/* ── Pinned dock: two-stage status + actions ──────────────────────────── */
 .dock {
   flex-shrink: 0;
   border-top: 1px solid var(--border);
-  padding: 10px 24px 4px;
+  background: rgba(0, 0, 0, 0.18);
+  padding: 12px 24px 14px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.stages {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
+  gap: 6px;
 }
 .stageRow {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 36px;
-  position: relative;
+  gap: 10px;
+  min-width: 0;
 }
 .stageIc {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
   display: grid;
   place-items: center;
   border-radius: 50%;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  position: relative;
-  z-index: 1;
-}
-.stageTx {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
 }
 .stageTitle {
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: -0.005em;
   white-space: nowrap;
 }
 .stageMeta {
@@ -261,12 +257,6 @@
   text-overflow: ellipsis;
   min-width: 0;
 }
-.stageMeta b {
-  color: var(--text-2);
-  font-weight: 600;
-}
-
-/* stage 1 — done */
 .stageRow.done .stageIc {
   color: var(--ink-on-accent);
   background: var(--cyan);
@@ -278,123 +268,20 @@
 .failedNote {
   color: var(--red);
 }
-
-/* stage 2 — AI analysis, next */
-.aiBlock {
-  margin: 4px -10px 0;
-  padding: 1px 10px;
-  border: 1px solid var(--violet-line);
-  border-radius: var(--radius);
-  background: linear-gradient(135deg, var(--cyan-dim), var(--violet-dim));
-}
 .stageRow.next .stageIc {
   background: linear-gradient(135deg, var(--cyan), var(--violet));
   color: var(--ink-on-accent);
 }
-.stageRow.next .stageTitle {
-  color: var(--text);
-}
-.aiTag {
+.actions {
   flex-shrink: 0;
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--violet);
-  padding: 3px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--violet-line);
-  white-space: nowrap;
-}
-.aiToggle {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-2);
-  padding: 3px 4px 3px 8px;
-  border-radius: 6px;
-}
-.aiToggle:hover {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.04);
-}
-.aiDetail {
-  padding: 2px 0 10px 34px;
-  max-height: 150px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.aiSpec {
   display: flex;
   align-items: center;
-  gap: 9px;
-  min-height: 24px;
+  gap: 10px;
 }
-.aiSpecAv {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  font-family: var(--mono);
-  font-size: 8px;
-  font-weight: 700;
-}
-.aiSpecName {
-  font-size: 12px;
-  font-weight: 650;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.aiSpecFocus {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-}
-.aiMoreLabel {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-right: 2px;
-}
-.aiChipRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 5px;
-  margin-top: 4px;
-}
-.aiChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10.5px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--border-2);
-  background: rgba(255, 255, 255, 0.02);
-}
-.aiChipDot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  flex-shrink: 0;
+.actions .btn.primary {
+  font-size: 14.5px;
+  padding: 14px 24px;
+  border-radius: var(--radius);
 }
 
 /* ── Running view ─────────────────────────────────────────────────────── */
@@ -455,7 +342,7 @@
   color: var(--muted);
 }
 
-/* ── Coach hero ───────────────────────────────────────────────────────── */
+/* ── Coach card ───────────────────────────────────────────────────────── */
 .coachHero {
   display: flex;
   align-items: flex-start;
@@ -478,19 +365,14 @@
   pointer-events: none;
 }
 .chAv {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg, var(--cyan), var(--violet));
-  color: var(--ink-on-accent);
-  box-shadow: 0 0 18px rgba(167, 139, 250, 0.35);
   position: relative;
   z-index: 1;
 }
 .chTx {
+  flex: 1;
   position: relative;
   z-index: 1;
   min-width: 0;
@@ -511,14 +393,6 @@
   color: var(--violet);
   font-weight: 700;
 }
-.chName .aiDot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--cyan);
-  box-shadow: 0 0 6px var(--cyan);
-  animation: blink 1.6s ease-in-out infinite;
-}
 .chMsg {
   font-size: 13px;
   line-height: 1.55;
@@ -526,25 +400,39 @@
   margin-top: 4px;
   text-wrap: pretty;
 }
-.chMsg b {
-  color: var(--cyan);
-  font-weight: 600;
+.chNext {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+.chNextLbl {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  margin-right: 4px;
+}
+.specChip {
+  font-size: 11.5px;
+  font-weight: 650;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-2);
+  white-space: nowrap;
+}
+.chPicking {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-2);
 }
 
-/* ── Report grid ──────────────────────────────────────────────────────── */
-.reportGrid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 24px;
-  align-items: start;
-  margin-top: 16px;
-}
-@container (max-width: 840px) {
-  .reportGrid {
-    grid-template-columns: 1fr;
-    gap: 18px;
-  }
-}
+/* ── Step results ─────────────────────────────────────────────────────── */
 .sectionLabel {
   font-family: var(--mono);
   font-size: 10px;
@@ -554,105 +442,61 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 10px;
+  margin: 16px 0 10px;
 }
 .sectionLabel .line {
   flex: 1;
   height: 1px;
   background: var(--border);
 }
-
-/* ── Findings ─────────────────────────────────────────────────────────── */
-.findings {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.inputsSum {
+  letter-spacing: 0.06em;
+  white-space: nowrap;
 }
-.finding {
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--sc, var(--muted));
-  border-radius: var(--radius);
-  padding: 10px 13px;
-  background: rgba(255, 255, 255, 0.014);
-}
-.fTop {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin-bottom: 5px;
-}
-.fTitle {
-  font-size: 13.5px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-}
-.fBody {
-  font-size: 12px;
-  color: var(--text-2);
-  line-height: 1.5;
-  margin-top: 3px;
-}
-.sevPill {
-  font-family: var(--mono);
-  font-size: 8.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 2px 8px;
-  border-radius: 999px;
-}
-.sevPill.crit {
-  color: var(--red);
-  background: rgba(244, 63, 94, 0.13);
-}
-.sevPill.mod {
-  color: var(--orange);
-  background: rgba(251, 146, 60, 0.13);
-}
-.sevPill.min {
-  color: var(--blue);
-  background: rgba(96, 165, 250, 0.13);
-}
-.sevPill.win {
-  color: var(--cyan);
-  background: var(--cyan-dim);
-}
-.fCat {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-/* ── Analysis steps — compact single-line list ────────────────────────── */
 .steps {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+@container (max-width: 700px) {
+  .steps {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.step {
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.014);
-  overflow: hidden;
+  background: rgba(255, 255, 255, 0.018);
+  padding: 9px 12px 10px;
+  min-width: 0;
 }
-.step + .step {
-  border-top: 1px solid var(--border);
+.skippedList {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
-.step.open {
-  background: rgba(255, 255, 255, 0.022);
+@container (max-width: 700px) {
+  .skippedList {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
-.stepRow {
-  width: 100%;
-  height: 32px;
+.step.muted {
+  background: transparent;
+  border-style: dashed;
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+.stepHd {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 8px 0 11px;
-  text-align: left;
-  user-select: none;
-}
-.stepRow:hover {
-  background: rgba(255, 255, 255, 0.03);
+  gap: 9px;
+  min-width: 0;
 }
 .stepStat {
   width: 16px;
@@ -682,8 +526,10 @@
   background: rgba(255, 255, 255, 0.04);
 }
 .spin {
+  display: inline-block;
   width: 12px;
   height: 12px;
+  flex-shrink: 0;
   border-radius: 50%;
   border: 2px solid rgba(0, 229, 176, 0.25);
   border-top-color: var(--cyan);
@@ -696,14 +542,11 @@
 }
 .stepName {
   flex-shrink: 0;
-  width: 112px;
   font-size: 12.5px;
-  font-weight: 650;
+  font-weight: 700;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
-.step[data-status='skipped'] .stepName {
+.step.muted .stepName {
   color: var(--muted);
   font-weight: 500;
 }
@@ -717,19 +560,17 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* expanded: the full summary moves into the detail (.detailLead) */
-.step.open .stepSum {
-  visibility: hidden;
-}
 .stepTag {
   flex-shrink: 0;
+  margin-left: auto;
   font-family: var(--mono);
   font-size: 9px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   white-space: nowrap;
 }
-.stepTag.ok {
+.stepTag.ok,
+.stepTag.pending {
   color: var(--cyan);
 }
 .stepTag.warn {
@@ -740,55 +581,32 @@
 }
 .stepTag.skipped {
   color: var(--muted);
-  opacity: 0.8;
 }
-.stepTag.pending {
-  color: var(--cyan);
-}
-.chev {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  color: var(--muted);
-  transition: transform 0.2s;
-}
-.step.open .chev,
-.chev.chevOpen {
-  transform: rotate(180deg);
-}
-.stepDetail {
-  padding: 2px 12px 11px 37px;
-}
-.detailLead {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--text-2);
-  line-height: 1.5;
-  margin-bottom: 6px;
-}
-
-/* step detail content */
-.kvGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2px 16px;
+.stepRes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 6px;
+  padding-left: 25px;
 }
 .kv {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 11.5px;
-  padding: 4px 0;
-  border-bottom: 1px solid var(--border);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  white-space: nowrap;
 }
 .kv .k {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--muted);
 }
 .kv .v {
   font-family: var(--mono);
-  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
 }
 .kv .v.good {
   color: var(--cyan);
@@ -799,149 +617,11 @@
 .kv .v.bad {
   color: var(--red);
 }
-.detailNote {
-  font-size: 11.5px;
-  color: var(--text-2);
-  line-height: 1.5;
-  margin-top: 8px;
-}
-.detailEmpty {
+.stepText {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--muted);
-}
-.clashRow {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 11.5px;
-  padding: 4px 0;
-}
-.clashRow .sev {
-  font-family: var(--mono);
-  font-size: 9px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-.clashRow .sev.high {
-  color: var(--red);
-  background: var(--red-dim);
-}
-.clashRow .sev.moderate {
-  color: var(--orange);
-  background: var(--orange-dim);
-}
-.clashRow .sev.low {
-  color: var(--yellow);
-  background: rgba(251, 191, 36, 0.1);
-}
-
-/* ── Inputs disclosure ────────────────────────────────────────────────── */
-.disc {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.014);
-  overflow: hidden;
-  margin-top: 14px;
-}
-.discHead {
-  width: 100%;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 10px 0 13px;
-  text-align: left;
-}
-.discHead:hover {
-  background: rgba(255, 255, 255, 0.02);
-}
-.dhL {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
   color: var(--text-2);
-  white-space: nowrap;
-}
-.dhSum {
-  flex: 1;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.dhSum b {
-  color: var(--text-2);
-  font-weight: 600;
-}
-.disc.open .chev {
-  transform: rotate(180deg);
-}
-.discBody {
-  border-top: 1px solid var(--border);
-}
-.inRow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 32px;
-  padding: 0 13px;
-}
-.inRow + .inRow {
-  border-top: 1px solid var(--border);
-}
-.inRow.empty {
-  opacity: 0.55;
-}
-.inIc {
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  display: grid;
-  place-items: center;
-  color: var(--text-2);
-  flex-shrink: 0;
-}
-.inRow.req .inIc {
-  color: var(--cyan);
-  background: var(--cyan-dim);
-}
-.inRow.has .inIc {
-  color: var(--violet);
-  background: var(--violet-dim);
-}
-.inK {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--muted);
-  width: 112px;
-  flex-shrink: 0;
-}
-.inV {
-  font-size: 12.5px;
-  font-weight: 650;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-}
-.inMeta {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 44%;
-  text-align: right;
-  margin-left: auto;
+  line-height: 1.45;
 }
 
 /* ── Narrow (phone) ───────────────────────────────────────────────────── */
@@ -953,48 +633,32 @@
     padding-left: 16px;
     padding-right: 16px;
   }
-  .stageTx {
+  .dock {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 1px;
-    padding: 5px 0;
+    align-items: stretch;
+    gap: 12px;
   }
-  .stageTitle {
-    white-space: normal;
+  .actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 8px;
   }
-  .aiTag {
-    display: none;
+  .actions .btn.primary {
+    font-size: 14px;
+    padding: 13px 16px;
   }
-  .stepName {
-    width: 96px;
+  .coachHero {
+    padding: 12px;
+    gap: 10px;
   }
-  .stepSum {
-    display: none;
-  }
-  .stepRow .stepTag {
-    margin-left: auto;
-  }
-  .inK {
-    width: 84px;
-  }
-  .inMeta {
-    display: none;
-  }
-  .modalFt .btn {
-    flex: 1;
-    padding-left: 10px;
-    padding-right: 10px;
-  }
-  .ftSpacer {
+  .inputsSum {
     display: none;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .live .d,
-  .chName .aiDot,
-  .spin,
-  .chev {
+  .spin {
     animation: none;
     transition: none;
   }

@@ -201,6 +201,7 @@ function summarize(fj: FinalJson, p: PhaseResult): PhaseRow {
       row.kv = [
         { k: 'Integrated LUFS', v: f1(d.lufs) },
         { k: 'True peak', v: `${f1(d.true_peak_db)} dBTP`, tone: 'good' },
+        { k: 'BPM', v: num(d.bpm) ? String(Math.round(d.bpm as number)) : '—' },
         { k: 'Detected key', v: d.detected_key ?? '—' },
         { k: 'Stereo width', v: f2(d.stereo_width) },
         { k: 'Stereo corr.', v: f2(d.stereo_correlation) },
