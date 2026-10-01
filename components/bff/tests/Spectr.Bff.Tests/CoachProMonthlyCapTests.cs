@@ -231,7 +231,7 @@ public sealed class CoachProMonthlyCapTests(WebApplicationFactory<Program> facto
 
     // ── AC1 + AC4: at the pooled cap, POST is refused (COUNT guard) ──────────
     [SkippableFact]
-    public async Task ProUser_AtMonthlyCap_Refuses_With_MonthScope()
+    public async Task ProUser_AtMonthlyCap_WithoutCredits_Gets_402_NoSideEffects()
     {
         await TestDb.RequireAsync(_factory);
         var (f, client) = NewClient();
@@ -250,16 +250,14 @@ public sealed class CoachProMonthlyCapTests(WebApplicationFactory<Program> facto
         Assert.Equal(limit, getBody!.Caps.Used);
         Assert.True(getBody.Caps.CapReached);
 
-        // POST refused with the monthly grammar + zero side effects.
+        // Credit economy: past the pool a Pro user draws credits, so with none
+        // the POST is refused 402 (not 403) + zero side effects.
         var refused = await client.PostAsJsonAsync($"/api/coach/{analysisId}/messages",
             new CreateCoachMessageRequest("one too many"));
-        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.Equal(HttpStatusCode.PaymentRequired, refused.StatusCode);
         using var doc = JsonDocument.Parse(await refused.Content.ReadAsStringAsync());
         var err = doc.RootElement.GetProperty("error");
-        Assert.Equal("coach_cap_reached", err.GetProperty("code").GetString());
-        var details = err.GetProperty("details");
-        Assert.Equal(limit, details.GetProperty("limit").GetInt32());
-        Assert.Equal("month", details.GetProperty("scope").GetString());
+        Assert.Equal("insufficient_credits", err.GetProperty("code").GetString());
 
         // No conversation/message rows created by the refused POST.
         using var scope = f.Services.CreateScope();

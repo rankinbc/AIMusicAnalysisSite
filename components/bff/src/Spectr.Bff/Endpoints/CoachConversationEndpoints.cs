@@ -71,6 +71,7 @@ public static class CoachConversationEndpoints
         CoachCapService capService,
         EntitlementService ents,
         GuestLimits guestLimits,
+        CreditLedgerService credits,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -115,7 +116,15 @@ public static class CoachConversationEndpoints
         // the Pro pooled-monthly form) instead of IOptions<CoachCapsOptions>.
         // This is the COUNT guard; the worker gateway gates SPEND independently.
         var capBefore = await capService.ResolveAsync(userId, analysisId, ct);
-        if (capBefore.CapReached)
+        var flags = await ents.GetFlagsAsync(ct);
+        var creditsOn = ents.CreditsEnabled(flags);
+        var ent = creditsOn && !currentUser.IsGuest() ? await ents.ForAsync(userId, ct) : null;
+        // Credit economy: credits tier always pays; Pro pays only past its pool.
+        var mustPay = ent is not null
+            && (ent.Tier == "credits" || (ent.Tier == "pro" && capBefore.CapReached));
+        var coachPrice = mustPay ? (await ents.GetPricesAsync(ct)).CoachMessage : 0;
+
+        if (capBefore.CapReached && !mustPay)
         {
             // review-fix P12 — route through the shared ErrorEnvelope helper
             // (now accepts optional details). One AR38 emission path keeps
@@ -127,6 +136,12 @@ public static class CoachConversationEndpoints
                     ? "Monthly coach allowance reached."
                     : "Per-analysis follow-up limit reached.",
                 new { used = capBefore.Used, limit = capBefore.Limit, scope = capBefore.Scope });
+        }
+        if (mustPay && ent!.CreditBalance < coachPrice)
+        {
+            return ErrorEnvelope.Build(402, "insufficient_credits",
+                "Not enough credits to message the coach.",
+                new { required = coachPrice, balance = ent.CreditBalance });
         }
         // Fix wave FW1 (I2) — the count above is not atomic; this is the
         // guests' race guard, taken before any row is written.
@@ -179,6 +194,27 @@ public static class CoachConversationEndpoints
             CreatedAt = now.AddMilliseconds(1),
             CompletedAt = null,
         };
+
+        // Credit economy — charged before any message row is written (the
+        // charge commits its own transaction; the conversation row stays
+        // tracked). Reference = the user message id so a failed turn can be
+        // refunded for exactly this charge.
+        if (mustPay)
+        {
+            try
+            {
+                await credits.ChargeAsync(userId, coachPrice, userRow.Id.ToString(),
+                    $"spend:coach:{userRow.Id}", null, ct);
+                ents.InvalidateAsync(userId);
+            }
+            catch (InsufficientCreditsException ex)
+            {
+                return ErrorEnvelope.Build(402, "insufficient_credits",
+                    "Not enough credits to message the coach.",
+                    new { required = ex.Required, balance = ex.CurrentBalance });
+            }
+        }
+
         db.CoachMessages.Add(userRow);
         db.CoachMessages.Add(assistantRow);
 
@@ -232,6 +268,12 @@ public static class CoachConversationEndpoints
             // marker the worker writes on refusals/errors).
             userRow.RefusalReason = "coach_error";
             await db.SaveChangesAsync(ct);
+            if (mustPay)
+            {
+                await credits.RefundChargeAsync(userId, userRow.Id.ToString(),
+                    $"reversal:coach:{userRow.Id}", ct);
+                ents.InvalidateAsync(userId);
+            }
             return ErrorEnvelope.Build(
                 StatusCodes.Status503ServiceUnavailable,
                 "coach_queue_unavailable",
