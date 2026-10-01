@@ -304,17 +304,34 @@ def true_peak_dbtp(y: np.ndarray, sr: int) -> float:  # noqa: ARG001 — sr kept
     return float(20.0 * np.log10(true_peak_linear + 1e-9))
 
 
+def _emit(partial_cb: Callable | None, data: dict) -> None:
+    """Hand an early sub-result to *partial_cb*. Display-only: a callback error
+    is logged and swallowed — it must never change or fail the analysis."""
+    if partial_cb is None:
+        return
+    try:
+        partial_cb(data)
+    except Exception:  # noqa: BLE001 — best-effort live-progress hook
+        logger.warning("phase1 partial_cb failed", exc_info=True)
+
+
 def analyze(
     wav_path: Path,
     progress_cb: Callable | None = None,
     *,
     defer_structure: bool = False,
+    partial_cb: Callable[[dict], None] | None = None,
 ) -> dict:
     """Run phase-1 universal analysis on *wav_path*.
 
     Args:
         wav_path:    Path to a 44100 Hz WAV file.
         progress_cb: Optional ``(phase, name, pct)`` progress callback.
+        partial_cb:  Optional ``(data: dict)`` hook handed the headline
+                     measurements (LUFS, true peak, tempo, key) as soon as each
+                     is computed — phase 1 runs for over a minute, and the live
+                     analysis page narrates these early. Never affects the
+                     returned dict.
 
     Returns:
         dict with keys: lufs, rms, bpm, duration_seconds, bands, stereo_correlation,
@@ -344,6 +361,7 @@ def analyze(
     # ------------------------------------------------------------------
     rms = float(np.sqrt(np.mean(y**2)))
     duration_seconds = float(y.shape[1] / sr)
+    _emit(partial_cb, {"lufs": lufs, "duration_seconds": duration_seconds})
 
     # ------------------------------------------------------------------
     # Mono downmix — reused for most single-channel computations
@@ -391,6 +409,12 @@ def analyze(
     clipped_samples = int(np.sum(np.abs(y) >= 0.9999))
     clipping_detected = clipped_samples > 0
     clipped_sample_count = clipped_samples
+    _emit(partial_cb, {
+        "true_peak_db": true_peak_db,
+        "peak_dbfs": peak_dbfs,
+        "clipping_detected": clipping_detected,
+        "clipped_sample_count": clipped_sample_count,
+    })
 
     # ------------------------------------------------------------------
     # BPM
@@ -398,6 +422,7 @@ def analyze(
     tempo, _ = librosa.beat.beat_track(y=mono, sr=sr)
     # librosa ≥0.10 returns a scalar ndarray; .ravel() handles both scalar and array
     bpm = float(np.asarray(tempo).ravel()[0])
+    _emit(partial_cb, {"bpm": bpm})
 
     # ------------------------------------------------------------------
     # Musical key detection via constant-Q chromagram
@@ -413,6 +438,11 @@ def analyze(
     # Full 24-key Krumhansl readout (B4 lift) — key/mode + second-best + the raw
     # correlation vector. key/confidence match the two fields above by construction.
     key_estimate = _key_estimate(chroma_mean)
+    _emit(partial_cb, {
+        "detected_key": detected_key,
+        "key_detection_confidence": key_detection_confidence,
+        "key_estimate": key_estimate,
+    })
 
     # ------------------------------------------------------------------
     # Crest factor (dB) — peak-to-RMS. NOTE: `rms` above is LINEAR amplitude,
