@@ -158,31 +158,7 @@ def detect_structure_job(structure_job_id: str, analysis_id: str) -> None:
                 j.error_message = str(exc)[:2000]
                 j.failed_at = _utc_now()
                 j.current_phase = "failed"
-        # E5.1 — best-effort: mark the report's Phase 7 as failed so the
-        # frontend's arrangement poll terminates on an honest state instead of
-        # "analyzing…" forever. Only flips a still-'pending' status (idempotent,
-        # never clobbers a completed rerun); a successful dramatiq retry's
-        # Phase C overwrites final_json wholesale anyway. Must never mask the
-        # original raise.
-        try:
-            with SessionFactory.begin() as s:
-                row = s.get(Analysis, aid)
-                fj = row.final_json if row is not None else None
-                if isinstance(fj, dict):
-                    fj = json.loads(json.dumps(fj, default=str))
-                    for ph in fj.get("phases") or []:
-                        if isinstance(ph, dict) and ph.get("phase") == 7:
-                            data = ph.get("data")
-                            if (
-                                isinstance(data, dict)
-                                and data.get("arrangement_status") == "pending"
-                            ):
-                                data["arrangement_status"] = "failed"
-                                data["arrangement_error"] = str(exc)[:500]
-                                row.final_json = fj  # REASSIGN — JSONB dirty-flag rule
-                            break
-        except Exception:
-            logger.warning("arrangement failure write-back failed", exc_info=True)
+        mark_arrangement_failed(aid, str(exc))
         raise
 
     # ── Phase C — write merged result back + flip the structure job complete ─
@@ -214,3 +190,32 @@ def detect_structure_job(structure_job_id: str, analysis_id: str) -> None:
     logger.info(
         "detect_structure_job: complete job=%s analysis=%s", structure_job_id, analysis_id
     )
+
+
+def mark_arrangement_failed(aid: uuid.UUID, error: str) -> None:
+    """E5.1 — best-effort: mark the report's Phase 7 as failed so the
+    frontend's arrangement poll terminates on an honest state instead of
+    "analyzing…" forever. Only flips a still-'pending' status (idempotent,
+    never clobbers a completed rerun); a successful dramatiq retry's Phase C
+    overwrites final_json wholesale anyway. Never raises — it runs inside a
+    failure arm and from the run-log give-up hook, and must not mask either.
+    """
+    try:
+        with SessionFactory.begin() as s:
+            row = s.get(Analysis, aid)
+            fj = row.final_json if row is not None else None
+            if isinstance(fj, dict):
+                fj = json.loads(json.dumps(fj, default=str))
+                for ph in fj.get("phases") or []:
+                    if isinstance(ph, dict) and ph.get("phase") == 7:
+                        data = ph.get("data")
+                        if (
+                            isinstance(data, dict)
+                            and data.get("arrangement_status") == "pending"
+                        ):
+                            data["arrangement_status"] = "failed"
+                            data["arrangement_error"] = error[:500]
+                            row.final_json = fj  # REASSIGN — JSONB dirty-flag rule
+                        break
+    except Exception:
+        logger.warning("arrangement failure write-back failed", exc_info=True)

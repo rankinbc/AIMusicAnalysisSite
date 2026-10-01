@@ -65,6 +65,25 @@ from . import retention_actor  # noqa: E402,F401  (story 3.4 — sweep_retention
 from . import send_email_actor  # noqa: E402,F401  (story 4.2 — send_email)
 from . import account_deletion_actor  # noqa: E402,F401  (story 4.6 — delete_account_data)
 
+# Per-run log files + crash forensics + give-up hooks
+# (PRPs/worker-run-logs-and-crash-forensics.md). Installed FIRST in the
+# middleware list; the hooks import the actor modules, so this follows them.
+import sys as _sys  # noqa: E402
+
+from .runlog import config as _runlog_config  # noqa: E402
+from .runlog import hooks as _runlog_hooks  # noqa: E402,F401  (registers give-up hooks)
+from .runlog.middleware import RunLogMiddleware, install as _install_runlog  # noqa: E402
+
+_install_runlog(broker, RunLogMiddleware(
+    _runlog_config.log_dir(tasks_dramatiq.LOCAL_ROOT),
+    _runlog_config.pool_name(argv=_sys.argv),
+    git_sha=_runlog_config.git_sha(),
+    crash_max_attempts=_runlog_config.int_env(
+        "WORKER_CRASH_MAX_ATTEMPTS", _runlog_config.DEFAULT_CRASH_MAX_ATTEMPTS),
+    retention_days=_runlog_config.int_env(
+        "WORKER_LOG_RETENTION_DAYS", _runlog_config.DEFAULT_RETENTION_DAYS),
+))
+
 # Story 2.5 (AR23) / 3.4 / 4.2: `maintenance` carries sweep_retention +
 # send_email (declared by their decorators); the explicit declare stays
 # harmless and keeps W2's `--queues analysis-free maintenance` whitelist

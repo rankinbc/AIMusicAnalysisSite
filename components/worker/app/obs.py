@@ -89,15 +89,22 @@ class CorrelationFilter(logging.Filter):
         return True
 
 
+LOG_FORMAT = "%(asctime)s %(levelname)s [%(correlation_id)s] %(name)s: %(message)s"
+
+
+def apply_format(handler: logging.Handler) -> logging.Handler:
+    """Give any handler the shared correlation-stamped format (console, pool
+    log file, per-run log file all read the same)."""
+    handler.setFormatter(logging.Formatter(LOG_FORMAT))
+    handler.addFilter(CorrelationFilter())
+    return handler
+
+
 def configure_logging() -> None:
     """Structured-ish console logging with the correlation id inline."""
     root = logging.getLogger()
     root.setLevel(logging.INFO)
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter(
-        "%(asctime)s %(levelname)s [%(correlation_id)s] %(name)s: %(message)s"))
-    handler.addFilter(CorrelationFilter())
-    root.handlers[:] = [handler]
+    root.handlers[:] = [apply_format(logging.StreamHandler())]
 
 
 def init_sentry() -> bool:
