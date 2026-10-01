@@ -12,13 +12,15 @@ namespace Spectr.Bff.Services;
 // balance routes through this service.
 //
 // Append-only invariant: NEVER UPDATE existing rows. Adjustments come as
-// compensating entries (purchase = +N, spend = -1, reversal = +1).
+// compensating entries (purchase = +N, spend = -N, reversal = +|spent|).
 //
 // Idempotency-key shape (story 2.2 review-fix P3 convention — salt with
 // stable Stripe ids, never UtcNow timestamps):
 //   purchase   → "credits_purchase:<stripeEventId>"
-//   reversal   → "reversal:<jobId>"
-//   spend      → no key (concurrency via serializable transaction)
+//   reversal   → "reversal:<ref>"
+//   spend      → "spend:<kind>:<ref>" (optional; keyless spends rely on the
+//                serializable transaction + balance check)
+//   signup     → "signup_bonus:<userId>" (GrantSignupBonusAsync)
 
 public sealed class CreditLedgerService(
     AppDbContext db,
@@ -52,152 +54,129 @@ public sealed class CreditLedgerService(
                 nameof(packSize), packSize, "Pack size must be positive.");
         }
 
-        var entry = new CreditLedgerEntry
+        var entry = await InsertKeyedAsync(
+            userId, packSize, "purchase", stripePaymentIntentId, idempotencyKey, ct);
+        if (entry is null)
+            logger.LogInformation(
+                "Credit purchase idempotency collision (already recorded): user={UserId}, idempotencyKey={Key}",
+                userId, idempotencyKey);
+        return entry;
+    }
+
+    // Legacy analysis spend (1 credit, no key) — kept for existing callers/tests.
+    public async Task<CreditLedgerEntry> SpendAsync(
+        Guid userId, Guid jobId, string billingPeriod, CancellationToken ct)
+        => (await ChargeAsync(userId, 1, jobId.ToString(), null, "analysis", ct, billingPeriod))!;
+
+    // Debit `amount` credits (+ an optional usage_events row) in one serializable
+    // transaction. Idempotent on `idempotencyKey`: a replay returns null and
+    // charges nothing (the caller proceeds — it was already paid). Throws
+    // InsufficientCreditsException when balance < amount. Retries ONCE on 40001.
+    public async Task<CreditLedgerEntry?> ChargeAsync(
+        Guid userId, int amount, string reference, string? idempotencyKey,
+        string? usageEventType, CancellationToken ct, string? billingPeriod = null)
+    {
+        if (amount < 0) throw new ArgumentOutOfRangeException(nameof(amount));
+        if (amount == 0) return null;
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                return await ChargeOnceAsync(userId, amount, reference, idempotencyKey, usageEventType, billingPeriod, ct);
+            }
+            catch (Exception ex) when (IsSerializationFailure(ex) && attempt == 0)
+            {
+                logger.LogWarning("Charge serialization conflict — retrying once. user={UserId}, ref={Ref}", userId, reference);
+                db.ChangeTracker.Clear();
+            }
+        }
+        throw new InvalidOperationException("Charge retry exhausted.");
+    }
+
+    private async Task<CreditLedgerEntry?> ChargeOnceAsync(
+        Guid userId, int amount, string reference, string? idempotencyKey,
+        string? usageEventType, string? billingPeriod, CancellationToken ct)
+    {
+        await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+
+        if (idempotencyKey is not null
+            && await db.CreditLedger.AnyAsync(e => e.IdempotencyKey == idempotencyKey, ct))
+            return null; // already charged
+
+        var balance = await db.CreditLedger
+            .Where(e => e.UserId == userId)
+            .SumAsync(e => (int?)e.Amount, ct) ?? 0;
+        if (balance < amount)
+            throw new InsufficientCreditsException(balance, amount);
+
+        var spend = new CreditLedgerEntry
         {
             UserId = userId,
-            Amount = packSize,
-            Reason = "purchase",
-            Reference = stripePaymentIntentId,
+            Amount = -amount,
+            Reason = "spend",
+            Reference = reference,
             IdempotencyKey = idempotencyKey,
         };
+        db.CreditLedger.Add(spend);
+        if (usageEventType is not null)
+        {
+            db.UsageEvents.Add(new UsageEvent
+            {
+                UserId = userId,
+                EventType = usageEventType,
+                BillingPeriod = billingPeriod ?? DateTimeOffset.UtcNow.ToString("yyyy-MM"),
+                Reference = reference,
+            });
+        }
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            db.ChangeTracker.Clear(); // concurrent twin won the key
+            return null;
+        }
+        logger.LogInformation("Credit charge: user={UserId}, amount=-{Amount}, ref={Ref}", userId, amount, reference);
+        cache.Remove($"ent:{userId:N}");
+        return spend;
+    }
 
+    // Legacy job reversal — now refunds whatever that job actually spent.
+    public Task<CreditLedgerEntry?> ReverseAsync(
+        Guid userId, Guid jobId, string reasonCode, CancellationToken ct)
+        => RefundChargeAsync(userId, jobId.ToString(), $"reversal:{jobId}", ct);
+
+    // Refund exactly what was charged under `reference` (sum of its spend rows).
+    // Nothing charged → null (never mints credits). Idempotent on refundKey.
+    public async Task<CreditLedgerEntry?> RefundChargeAsync(
+        Guid userId, string reference, string refundKey, CancellationToken ct)
+    {
+        var spent = await db.CreditLedger.AsNoTracking()
+            .Where(e => e.UserId == userId && e.Reason == "spend" && e.Reference == reference)
+            .SumAsync(e => (int?)e.Amount, ct) ?? 0;
+        if (spent >= 0) return null;
+        return await InsertKeyedAsync(userId, -spent, "reversal", reference, refundKey, ct);
+    }
+
+    private async Task<CreditLedgerEntry?> InsertKeyedAsync(
+        Guid userId, int amount, string reason, string reference, string key, CancellationToken ct)
+    {
+        var entry = new CreditLedgerEntry
+        {
+            UserId = userId, Amount = amount, Reason = reason, Reference = reference, IdempotencyKey = key,
+        };
         try
         {
             db.CreditLedger.Add(entry);
             await db.SaveChangesAsync(ct);
-            logger.LogInformation(
-                "Credit purchase recorded: user={UserId}, amount=+{Amount}, paymentIntent={PaymentIntentId}, idempotencyKey={Key}",
-                userId, packSize, stripePaymentIntentId, idempotencyKey);
+            logger.LogInformation("Credit {Reason}: user={UserId}, amount=+{Amount}, key={Key}", reason, userId, amount, key);
             cache.Remove($"ent:{userId:N}");
             return entry;
         }
         catch (DbUpdateException ex) when (IsUniqueViolation(ex))
         {
-            logger.LogInformation(
-                "Credit purchase idempotency collision (already recorded): user={UserId}, idempotencyKey={Key}",
-                userId, idempotencyKey);
-            // The entity got added to the tracker; detach so subsequent
-            // SaveChanges on the same context doesn't retry the insert.
-            db.Entry(entry).State = EntityState.Detached;
-            return null;
-        }
-    }
-
-    // Append a -1 spend row + the matched usage_events row in one
-    // serializable transaction. Throws InsufficientCreditsException
-    // if the user's balance is < 1 at spend time (caller maps to 409).
-    //
-    // Retries ONCE on Postgres serialization_failure (40001) — the
-    // serializable isolation level may abort one of two concurrent
-    // transactions; a single retry suffices since the second attempt
-    // sees the winner's spend and either retries cleanly or hits the
-    // insufficient-balance path.
-    public async Task<CreditLedgerEntry> SpendAsync(
-        Guid userId,
-        Guid jobId,
-        string billingPeriod,
-        CancellationToken ct)
-    {
-        for (var attempt = 0; attempt < 2; attempt++)
-        {
-            try
-            {
-                return await SpendOnceAsync(userId, jobId, billingPeriod, ct);
-            }
-            catch (Exception ex)
-                // Review-fix P2-A — use IsSerializationFailure(Exception) which
-                // also catches raw PostgresException from the SumAsync read phase.
-                // PG 40001 from a SELECT/SUM surfaces as PostgresException directly
-                // (not wrapped in DbUpdateException), bypassing the original filter.
-                when (IsSerializationFailure(ex) && attempt == 0)
-            {
-                logger.LogWarning(
-                    "Spend serialization conflict — retrying once. user={UserId}, jobId={JobId}",
-                    userId, jobId);
-            }
-        }
-        // Unreachable — the loop either returns or throws.
-        throw new InvalidOperationException("Spend retry exhausted.");
-    }
-
-    private async Task<CreditLedgerEntry> SpendOnceAsync(
-        Guid userId,
-        Guid jobId,
-        string billingPeriod,
-        CancellationToken ct)
-    {
-        await using var tx = await db.Database.BeginTransactionAsync(
-            IsolationLevel.Serializable, ct);
-
-        var balance = await db.CreditLedger
-            .Where(e => e.UserId == userId)
-            .SumAsync(e => (int?)e.Amount, ct) ?? 0;
-        if (balance < 1)
-        {
-            throw new InsufficientCreditsException(balance);
-        }
-
-        var spend = new CreditLedgerEntry
-        {
-            UserId = userId,
-            Amount = -1,
-            Reason = "spend",
-            Reference = jobId.ToString(),
-            // Spend uses no idempotency_key — the serializable
-            // transaction + balance check is the concurrency guard.
-            IdempotencyKey = null,
-        };
-        var usage = new UsageEvent
-        {
-            UserId = userId,
-            EventType = "analysis",
-            BillingPeriod = billingPeriod,
-            Reference = jobId.ToString(),
-        };
-
-        db.CreditLedger.Add(spend);
-        db.UsageEvents.Add(usage);
-        await db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
-
-        logger.LogInformation(
-            "Credit spend recorded: user={UserId}, jobId={JobId}, billingPeriod={Period}",
-            userId, jobId, billingPeriod);
-        cache.Remove($"ent:{userId:N}");
-        return spend;
-    }
-
-    // Append a +1 reversal row with idempotency_key="reversal:<jobId>".
-    // Returns null on partial-unique-index collision (already reversed).
-    public async Task<CreditLedgerEntry?> ReverseAsync(
-        Guid userId,
-        Guid jobId,
-        string reasonCode,
-        CancellationToken ct)
-    {
-        var entry = new CreditLedgerEntry
-        {
-            UserId = userId,
-            Amount = 1,
-            Reason = "reversal",
-            Reference = jobId.ToString(),
-            IdempotencyKey = $"reversal:{jobId}",
-        };
-
-        try
-        {
-            db.CreditLedger.Add(entry);
-            await db.SaveChangesAsync(ct);
-            logger.LogInformation(
-                "Credit reversal recorded: user={UserId}, jobId={JobId}, reasonCode={ReasonCode}",
-                userId, jobId, reasonCode);
-            return entry;
-        }
-        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
-        {
-            logger.LogDebug(
-                "Reversal idempotency collision (already reversed): user={UserId}, jobId={JobId}",
-                userId, jobId);
             db.Entry(entry).State = EntityState.Detached;
             return null;
         }
@@ -236,7 +215,13 @@ public sealed class CreditLedgerService(
     private static bool IsUniqueViolation(DbUpdateException ex)
         => ex.InnerException is PostgresException pg && pg.SqlState == "23505";
 
-    private static bool IsSerializationFailure(Exception ex) =>
-        (ex is DbUpdateException dbe && dbe.InnerException is PostgresException pg1 && pg1.SqlState == "40001")
-        || (ex is PostgresException pg2 && pg2.SqlState == "40001");
+    // Walks the inner-exception chain: EF's Npgsql execution strategy wraps a
+    // 40001 raised inside a user transaction in an InvalidOperationException
+    // ("transient failure") around the DbUpdateException.
+    private static bool IsSerializationFailure(Exception? ex)
+    {
+        for (; ex is not null; ex = ex.InnerException)
+            if (ex is PostgresException { SqlState: "40001" }) return true;
+        return false;
+    }
 }
