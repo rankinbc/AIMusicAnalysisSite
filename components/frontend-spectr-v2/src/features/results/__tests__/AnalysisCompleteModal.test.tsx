@@ -6,6 +6,7 @@
 // primary CTA gated until every specialist has settled (failed counts), and a
 // safety valve if triage or a run stalls. Live (running) behaviour is in
 // AnalysisLivePage.test.tsx.
+import * as Dialog from '@radix-ui/react-dialog';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -352,5 +353,32 @@ describe('AnalysisCompleteModal (complete)', () => {
     cleanup();
     renderModal(allSettled);
     expect(screen.queryByText(/Re-analyze/)).toBeNull();
+  });
+});
+
+describe('AnalysisCompleteModal Esc with a sheet on top', () => {
+  afterEach(cleanup);
+
+  it('Esc alone closes the modal', () => {
+    const { props } = renderModal();
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('Esc closes only the Radix sheet above it (the buy sheet), never the modal underneath', () => {
+    const onSheet = vi.fn();
+    const { props } = renderModal();
+    render(
+      <Dialog.Root open onOpenChange={onSheet}>
+        <Dialog.Portal>
+          <Dialog.Content aria-describedby={undefined}>
+            <Dialog.Title>Not enough credits</Dialog.Title>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>,
+    );
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    expect(onSheet).toHaveBeenCalledWith(false);
+    expect(props.onClose).not.toHaveBeenCalled();
   });
 });

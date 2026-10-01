@@ -28,6 +28,7 @@ const KNOWN_GUEST_REASONS: readonly GuestUpgradeReason[] = [
   'stems_limit',
   'reference_limit',
   'fix_rack_limit',
+  'specialist_limit',
 ];
 
 function guestUpgradeReason(raw: unknown): GuestUpgradeReason {

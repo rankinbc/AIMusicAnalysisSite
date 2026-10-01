@@ -117,9 +117,16 @@ export function UpgradeSheet({
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      {/* Portaled to <body> (Radix default) and on the purchase layer
+          (--z-purchase): the buy sheet opens from INSIDE other modals
+          (SpecialistTeamModal, AnalysisCompleteModal, the coach dialog, the
+          upload dialog) and must always sit in front of them. */}
       <Dialog.Portal>
-        <Dialog.Overlay className={f.dialogOverlay} />
-        <Dialog.Content className={`${f.dialogContent} ${s.sheet}`}>
+        <Dialog.Overlay className={`${f.dialogOverlay} ${f.topLayer}`} data-layer="purchase" />
+        <Dialog.Content
+          className={`${f.dialogContent} ${f.topLayer} ${s.sheet}`}
+          data-layer="purchase"
+        >
           <Dialog.Title className={f.dialogTitle}>
             {title ?? `${analysesUsed ?? 0} of ${analysesLimit ?? 0} free analyses used this month`}
           </Dialog.Title>

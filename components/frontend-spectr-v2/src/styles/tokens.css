@@ -116,4 +116,18 @@
      Dark scrim sitting over --bg; opacity tuned so blurred content underneath
      remains shape-recognisable but unreadable. */
   --paywall-overlay: rgba(7, 10, 18, 0.72);
+
+  /* Z-index layers (2026-10-01). The modal surfaces grew their own ad-hoc
+     values (form dialogs 50/51, CancelDialog 60/61, the .modal-scrim roster
+     modals incl. SpecialistTeamModal 80, AnalysisCompleteModal +
+     CoachChatDialog 1000/1001, popovers inside them 1100). The buy-credits
+     sheet borrowed the form-dialog 50/51 and so opened BEHIND any of those.
+     Owner rule: the purchase / guest-upgrade sheet is ALWAYS the front-most
+     modal — it is the only thing on --z-purchase, and nothing else may go
+     above it (Sonner toasts excepted; they carry their own huge z). */
+  --z-dialog:        50;
+  --z-modal:         80;
+  --z-stage-modal:   1000;
+  --z-stage-popover: 1100;
+  --z-purchase:      5000;
 }
