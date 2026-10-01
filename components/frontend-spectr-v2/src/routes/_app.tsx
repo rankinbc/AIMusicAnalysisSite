@@ -156,7 +156,7 @@ function AppLayout() {
   return (
     <div className={s.shell}>
       <header className={s.topnav}>
-        <Link to="/library" className={s.brand}>
+        <Link to="/library" className={s.brand} aria-label="SPECTR — your library">
           <BrandMark size={22} glow />
           <div className={s.brandText}>
             <span>SPECTR</span>
@@ -187,7 +187,8 @@ function AppLayout() {
               Upload" entry point; it becomes the registration link instead. */}
           {guest.isGuest && !guest.canUpload ? (
             <Link to="/register" search={{ from: 'guest' }} className="btn primary sm">
-              Create a free account
+              <span className={s.ctaLong}>Create a free account</span>
+              <span className={s.ctaShort}>Sign up</span>
             </Link>
           ) : (
             <Link to="/library" className="btn primary sm">

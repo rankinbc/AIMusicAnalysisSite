@@ -75,6 +75,9 @@ internal sealed class FakeMultipartObjectStore : IMultipartObjectStore
         PresignedGets.Enqueue((key, downloadName, contentType));
         return $"https://fake-s3.test/{key}?get=1&X-Amz-Expires=900";
     }
+    // FW2 (I5) — the exporter's server-side read; no upload test reads bytes.
+    public Task<Stream> OpenReadAsync(string key, CancellationToken ct = default)
+        => Task.FromResult<Stream>(new MemoryStream());
 }
 
 // Story 12.3 — configured-but-unreachable S3 (MinIO down with ServiceUrl set).
@@ -110,6 +113,8 @@ internal sealed class ThrowingMultipartObjectStore : IMultipartObjectStore
         => throw Dead();
 
     public string PresignGetUrl(string key, string? downloadName = null, string? contentType = null)
+        => throw Dead();
+    public Task<Stream> OpenReadAsync(string key, CancellationToken ct = default)
         => throw Dead();
 }
 

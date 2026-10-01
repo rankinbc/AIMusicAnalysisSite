@@ -23,7 +23,9 @@ namespace Spectr.Bff.Tests;
 public sealed class AnonAnalysisTests(WebApplicationFactory<Program> factory)
     : IClassFixture<WebApplicationFactory<Program>>
 {
-    private readonly WebApplicationFactory<Program> _factory = factory;
+    // FW2 (M4): the anon upload is off by default — this suite exercises it.
+    private readonly WebApplicationFactory<Program> _factory =
+        factory.WithWebHostBuilder(b => b.UseSetting("Anon:UploadsEnabled", "true"));
 
     // TestServer's RemoteIpAddress is null, which fail-opens the IP rate arm.
     // Stamp a fixed client IP so the per-IP ceilings actually engage (the

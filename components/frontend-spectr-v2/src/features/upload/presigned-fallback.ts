@@ -17,6 +17,7 @@
 // must only consult this predicate where zero bytes have moved (init stage /
 // single-PUT attachments); a mid-multipart failure surfaces as an error,
 // never a silent proxy re-upload.
+import { extractApiError } from '../../api/error-utils';
 import { ApiError } from '../../api/fetcher';
 
 // Thrown by the attachment single-PUT helper when the PUT itself fails (network
@@ -31,6 +32,13 @@ export class PresignedPutError extends Error {
 }
 
 export function shouldFallBackToProxy(e: unknown): boolean {
-  if (e instanceof ApiError) return e.status === 501 || e.status >= 500;
+  if (e instanceof ApiError) {
+    // Final review — a guest's typed refusal (503 demo_capacity from the
+    // abuse arms / slot store, any guest_* code) is a product gate even as a
+    // 5xx: never re-upload the whole file through the proxy for it.
+    const code = extractApiError(e.body).code ?? '';
+    if (code === 'demo_capacity' || code.startsWith('guest_')) return false;
+    return e.status === 501 || e.status >= 500;
+  }
   return e instanceof TypeError || e instanceof PresignedPutError;
 }

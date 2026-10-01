@@ -16,6 +16,17 @@ describe('shouldFallBackToProxy', () => {
     },
   );
 
+  // Final review — a guest's 503 demo_capacity at init is a deliberate
+  // refusal (abuse arms / slot store), not "storage is down": falling back
+  // re-uploads the whole file through the proxy and burns the guest's slot.
+  it.each(['demo_capacity', 'guest_restricted'])('false for a typed guest refusal (%s), even as a 5xx', (code) => {
+    expect(shouldFallBackToProxy(new ApiError(503, { error: { code, message: 'no' } }))).toBe(false);
+  });
+
+  it('still true for a typed storage outage', () => {
+    expect(shouldFallBackToProxy(new ApiError(503, { error: { code: 'storage_unreachable', message: 'down' } }))).toBe(true);
+  });
+
   it('true for a fetch-level network failure (TypeError)', () => {
     expect(shouldFallBackToProxy(new TypeError('Failed to fetch'))).toBe(true);
   });

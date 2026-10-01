@@ -424,7 +424,7 @@ public static class CoachConversationEndpoints
                 && a.UserId == userId
             select new StreamMessageProjection(
                 m.Id, m.Status, m.Content, m.Evidence, m.RefusalReason,
-                c.Id)
+                c.Id, m.Mode)
         ).FirstOrDefaultAsync(ct);
 
         if (row is null)
@@ -502,7 +502,9 @@ public static class CoachConversationEndpoints
             // stale signal can't poison a future request that happens to reuse
             // the id (UUIDs collide with vanishing probability but the EX
             // guard costs nothing).
-            if (ct.IsCancellationRequested)
+            // FW3 (I3): never for a brief — it must finish even when the
+            // visitor closes the tab; the row stays authoritative.
+            if (ct.IsCancellationRequested && row.Mode != CoachBrief.Mode)
             {
                 try
                 {
@@ -667,7 +669,7 @@ public static class CoachConversationEndpoints
                 m => m.ConversationId, c => c.Id,
                 (m, c) => new StreamMessageProjection(
                     m.Id, m.Status, m.Content, m.Evidence,
-                    m.RefusalReason, c.Id))
+                    m.RefusalReason, c.Id, m.Mode))
             .FirstOrDefaultAsync(ct);
     }
 
@@ -725,5 +727,6 @@ public static class CoachConversationEndpoints
         string? Content,
         string? Evidence,
         string? RefusalReason,
-        Guid ConversationId);
+        Guid ConversationId,
+        string? Mode);
 }

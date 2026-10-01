@@ -435,8 +435,11 @@ public static class AuthEndpoints
                 $"ip:{ClientIp(httpCtx)}", 60, TimeSpan.FromMinutes(1), ct) is { } denied)
             return denied;
 
+        // Task P9 (a): NO cookie = simply no session — a quiet 204, so a
+        // logged-out visitor's boot silent-refresh never logs a red 401. A
+        // presented-but-invalid cookie still answers 401 below.
         if (!httpReq.Cookies.TryGetValue(RefreshTokenService.CookieName, out var raw) || string.IsNullOrEmpty(raw))
-            return Results.Unauthorized();
+            return Results.NoContent();
 
         var resolved = await refresh.ResolveWithGraceAsync(raw, RefreshTokenService.RotationGrace, ct);
         if (resolved is null) return Results.Unauthorized();

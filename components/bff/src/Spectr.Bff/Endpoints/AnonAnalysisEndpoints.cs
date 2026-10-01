@@ -39,6 +39,18 @@ public static class AnonAnalysisEndpoints
         return g;
     }
 
+    private static async Task<bool> AnonUploadsEnabledAsync(
+        IConfiguration cfg, EntitlementService ents, CancellationToken ct)
+    {
+        var val = cfg["Anon:UploadsEnabled"];
+        if (string.IsNullOrEmpty(val))
+        {
+            try { val = (await ents.GetFlagsAsync(ct)).GetValueOrDefault("anon_uploads_enabled"); }
+            catch (Exception ex) when (ex is not OperationCanceledException) { return false; }
+        }
+        return string.Equals(val, "true", StringComparison.OrdinalIgnoreCase);
+    }
+
     // ── POST /api/anon/analyses — multipart proxy upload + dispatch ──────────
     private static async Task<IResult> Upload(
         [FromForm] IFormFile file,
@@ -52,6 +64,13 @@ public static class AnonAnalysisEndpoints
         EntitlementService ents,
         CancellationToken ct)
     {
+        // Fix wave FW2 (final review M4) — the frontend no longer calls this
+        // (/analyze uploads as a guest since G5), and it sits outside every
+        // guest limit. Off by default: config Anon:UploadsEnabled wins, else
+        // the `anon_uploads_enabled` flag; anything but "true" (or an
+        // unreadable flag store) answers 404, as if the route did not exist.
+        if (!await AnonUploadsEnabledAsync(cfg, ents, ct)) return Results.NotFound();
+
         if (file is null || file.Length == 0)
             return ErrorEnvelope.Build(400, "invalid_file", "Empty file.");
         if (file.Length > MaxUploadBytes)

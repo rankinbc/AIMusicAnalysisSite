@@ -23,7 +23,7 @@ namespace Spectr.Bff.Tests;
 public sealed class CoachBriefTests(WebApplicationFactory<Program> factory)
     : IClassFixture<WebApplicationFactory<Program>>
 {
-    private sealed class RecordingJobQueue : IJobQueue
+    internal sealed class RecordingJobQueue : IJobQueue
     {
         public readonly System.Collections.Concurrent.ConcurrentQueue<(string Task, object[] Args, string Queue)> Calls = new();
 
@@ -68,7 +68,7 @@ public sealed class CoachBriefTests(WebApplicationFactory<Program> factory)
     // degraded triage — routing_plan stays null forever but the analysis
     // is still "ready" (that's exactly the case the template-fallback
     // brief exists for).
-    private static async Task<Guid> SeedAnalysisAsync(
+    internal static async Task<Guid> SeedAnalysisAsync(
         WebApplicationFactory<Program> f, Guid userId,
         string? routingPlan = "not-null", bool demoVersion = false,
         string? degradationNotice = null)
@@ -103,7 +103,7 @@ public sealed class CoachBriefTests(WebApplicationFactory<Program> factory)
         return analysis.Id;
     }
 
-    private static async Task<(HttpClient Client, Guid UserId)> RegisterRealUserAsync(WebApplicationFactory<Program> f)
+    internal static async Task<(HttpClient Client, Guid UserId)> RegisterRealUserAsync(WebApplicationFactory<Program> f)
     {
         var client = f.CreateClient();
         var (uid, token) = await TestAuth.RegisterAsync(client);
@@ -121,7 +121,7 @@ public sealed class CoachBriefTests(WebApplicationFactory<Program> factory)
         return (client, body.User.Id);
     }
 
-    private static async Task CleanupUser(WebApplicationFactory<Program> factory, Guid userId)
+    internal static async Task CleanupUser(WebApplicationFactory<Program> factory, Guid userId)
     {
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();

@@ -4,6 +4,7 @@ using Spectr.Bff.DTOs;
 using Spectr.Bff.Services;
 using Spectr.Data;
 using Spectr.Data.Entities;
+using StackExchange.Redis;
 using System.Security.Claims;
 
 namespace Spectr.Bff.Endpoints;
@@ -57,12 +58,34 @@ public static class CoachBriefEndpoints
         return app;
     }
 
+    internal const int MaxBriefRetries = 3;
+
+    private static async Task<bool> TryTakeBriefRetryAsync(
+        IConnectionMultiplexer redis, Guid conversationId, ILoggerFactory loggers)
+    {
+        try
+        {
+            var db = redis.GetDatabase();
+            var key = $"brief_retry:{conversationId}";
+            var n = await db.StringIncrementAsync(key);
+            await db.KeyExpireAsync(key, TimeSpan.FromHours(24), ExpireWhen.HasNoExpiry);
+            return n <= MaxBriefRetries;
+        }
+        catch (Exception ex)
+        {
+            loggers.CreateLogger("CoachBrief").LogWarning(ex, "brief retry counter unavailable — not retrying");
+            return false;
+        }
+    }
+
     // POST /api/coach/{analysisId}/brief
     private static async Task<IResult> Post(
         Guid analysisId,
         ClaimsPrincipal currentUser,
         AppDbContext db,
         IJobQueue queue,
+        IConnectionMultiplexer redis,
+        ILoggerFactory loggers,
         CancellationToken ct)
     {
         var userId = currentUser.UserId();
@@ -116,6 +139,15 @@ public static class CoachBriefEndpoints
             var isBroken = existing.Status == "error" || isStalePending;
 
             if (!isBroken)
+                return Results.Ok(new CoachBriefResponse("exists", existing.AssistantId));
+
+            // FW3 (I3): at most MaxBriefRetries re-enqueues per conversation
+            // (the first creation does not count). Over the cap, or Redis
+            // unavailable → `exists`: never spend on an unbounded retry. A
+            // visitor still ends with a finished brief: the worker now always
+            // completes a brief (template fallback), so an `error` row only
+            // comes from an enqueue failure.
+            if (!await TryTakeBriefRetryAsync(redis, conversation.Id, loggers))
                 return Results.Ok(new CoachBriefResponse("exists", existing.AssistantId));
 
             // Fix round 2 item 1: race-safe reset. The conditional

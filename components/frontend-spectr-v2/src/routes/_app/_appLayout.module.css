@@ -80,6 +80,23 @@
   box-shadow: inset 0 0 0 1px var(--border);
 }
 
+/* Task P8 — phone-width app nav. Measured in Chrome at a true 390 css px
+   (and 360): the desktop row (24 px gutters, 18 px gaps, wordmark + caption,
+   14 px tab padding) needs ~513 px, so the header scrolled sideways. Below
+   640 px: tighter gutters/gaps, the brand keeps only its mark (the link
+   carries an aria-label), smaller tab padding, and the guest CTA uses its
+   short label. ~320 px of content at the widest (guest) state. */
+.ctaShort { display: none; }
+@media (max-width: 640px) {
+  .topnav { padding: 0 12px; gap: 8px; }
+  .brandText { display: none; }
+  .navTabs { margin-left: 0; }
+  .navTab { padding: 6px 10px; }
+  .navRight { gap: 8px; }
+  .ctaLong { display: none; }
+  .ctaShort { display: inline; }
+}
+
 .navRight {
   margin-left: auto;
   display: flex;

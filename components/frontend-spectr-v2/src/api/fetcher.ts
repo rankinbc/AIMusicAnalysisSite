@@ -138,7 +138,8 @@ function startRefresh(): Promise<AuthResponse | null> {
         method: 'POST',
         credentials: 'include',
       });
-      if (!r.ok) return null;
+      // 204 = no session at all (P9: a logged-out visit is not an error).
+      if (!r.ok || r.status === 204) return null;
       const data = (await r.json()) as AuthResponse;
       if (sessionGeneration !== startGeneration) return null; // superseded while in flight
       accessToken = data.accessToken;

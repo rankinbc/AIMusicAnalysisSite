@@ -46,12 +46,25 @@ www.{$SPECTR_DOMAIN} {
 		reverse_proxy bff:5000
 	}
 
-	# Everything else: SPA + funnel statics with far-future caching on
-	# hashed assets ("funnel statics via Caddy with cache headers" — D8).
+	# Task P9 — hashed assets: far-future immutable caching, and a MISSING
+	# one is a real 404 (never the SPA shell served as JavaScript after a
+	# deploy, which breaks a stale tab with a MIME error instead of the
+	# app's chunk-reload path).
+	handle /assets/* {
+		root * /srv
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	# Everything else: SPA + funnel statics. Unhashed statics cache for a
+	# day; HTML (index.html via the SPA fallback) is never cached, so a
+	# deploy is picked up on the next navigation.
 	handle {
 		root * /srv
-		@assets path /assets/*
-		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@static path /fonts/* /favicon.svg /og-share.png /coach.png /robots.txt /sitemap.xml
+		header @static Cache-Control "public, max-age=86400"
+		@html not path /fonts/* /favicon.svg /og-share.png /coach.png /robots.txt /sitemap.xml
+		header @html Cache-Control "no-cache"
 		try_files {path} /index.html
 		file_server
 	}

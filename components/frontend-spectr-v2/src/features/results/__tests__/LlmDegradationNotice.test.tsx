@@ -21,6 +21,7 @@ describe('LlmDegradationNotice (wave 2)', () => {
     ['global_budget', 'over capacity'],
     ['circuit_breaker', 'The AI provider is having trouble'],
     ['triage_failed', 'Specialist routing failed'],
+    ['triage_timeout', 'taking longer than expected'],
   ] as const)('renders reason-specific copy for %s', (reason, substring) => {
     render(<LlmDegradationNotice notice={makeNotice(reason)} />);
     const notice = screen.getByTestId('llm-degradation-notice');
