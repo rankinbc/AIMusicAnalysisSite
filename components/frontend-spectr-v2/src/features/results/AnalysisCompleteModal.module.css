@@ -1,8 +1,8 @@
-/* Analysis Complete modal. Originally ported from the design handoff prototype
-   (design_handoff_analysis_modal/Analysis Modal.html); reworked 2026-10 —
-   coach card (static summary + specialists he'll consult next), a grid of
-   always-visible step results, and a pinned dock (static analysis done → AI
-   analysis next + the primary CTA) below the scrolling body. Shared tokens
+/* The analysis page (AnalysisCompleteModal). Originally ported from the design
+   handoff prototype (design_handoff_analysis_modal/Analysis Modal.html);
+   reworked 2026-10 into ONE live layout from upload to report — the coach's
+   chat beside the pipeline steps (waiting → running → ✓ + duration), the AI
+   specialists stage, and a pinned dock (status + the primary CTA) below. Shared tokens
    inherit from :root (AR39 no-raw-hex); only modal-local values are scoped
    here. The modal is portalled to <body>, so the results page's `.rdx *`
    reset does not reach these rules. */
@@ -149,12 +149,51 @@
   background: var(--card-hover);
 }
 
-/* Body is the ONLY scroller; header, dock and footer never move. */
+/* Body: the chat (its own scroller) beside the steps column (its own
+   scroller); header and dock never move. The shell has a fixed height so the
+   page doesn't grow and jump as results fill in. */
+.modal {
+  height: min(860px, calc(100dvh - 48px));
+}
 .modalBody {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 16px 24px 16px;
+  padding: 14px 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: 18px;
+  overflow: hidden;
+}
+.chatCol {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.workCol {
+  min-height: 0;
   overflow-y: auto;
+  padding-right: 4px;
+}
+.workCol > .sectionLabel:first-child {
+  margin-top: 0;
+}
+@container (max-width: 760px) {
+  .modal {
+    height: auto;
+  }
+  .modalBody {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .chatCol {
+    height: 340px;
+    flex-shrink: 0;
+  }
+  .workCol {
+    overflow: visible;
+    padding-right: 0;
+  }
 }
 
 /* ── Footer ───────────────────────────────────────────────────────────── */
@@ -271,6 +310,9 @@
 .stageRow.next .stageIc {
   background: transparent;
 }
+.stageRow.later {
+  opacity: 0.55;
+}
 .actions {
   flex-shrink: 0;
   display: flex;
@@ -283,232 +325,6 @@
   border-radius: var(--radius);
 }
 
-/* ── Running view ─────────────────────────────────────────────────────── */
-.runWrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 14px 0 8px;
-}
-.runRing {
-  position: relative;
-  width: 150px;
-  height: 150px;
-}
-.runRing svg {
-  transform: rotate(-90deg);
-}
-.runRing .pct {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-.runRing .pct .n {
-  font-family: var(--mono);
-  font-size: 34px;
-  font-weight: 600;
-  color: var(--text);
-  letter-spacing: -0.02em;
-}
-.runRing .pct .n small {
-  font-size: 16px;
-  color: var(--muted);
-}
-.runRing .pct .lbl {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-top: 2px;
-}
-.runPhase {
-  margin-top: 18px;
-  font-size: 16px;
-  font-weight: 600;
-}
-.runPhase .pn {
-  color: var(--cyan);
-}
-.runHint {
-  margin-top: 7px;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
-}
-
-/* ── Coach card ───────────────────────────────────────────────────────── */
-.coachHero {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 11px 16px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--violet-line);
-  background: linear-gradient(135deg, var(--cyan-dim), var(--violet-dim));
-  position: relative;
-  overflow: hidden;
-}
-.coachHero::after {
-  content: '';
-  position: absolute;
-  top: -50%;
-  right: -8%;
-  width: 240px;
-  height: 240px;
-  background: radial-gradient(circle, var(--accent-glow), transparent 70%);
-  pointer-events: none;
-}
-.chAv {
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  position: relative;
-  z-index: 1;
-}
-.chTx {
-  flex: 1;
-  position: relative;
-  z-index: 1;
-  min-width: 0;
-}
-.chName {
-  font-size: 14px;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  letter-spacing: -0.01em;
-}
-.chRole {
-  font-family: var(--mono);
-  font-size: 8.5px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--violet);
-  font-weight: 700;
-}
-/* running log — newest emphasised, older dimmed, fixed max height */
-.chLog {
-  list-style: none;
-  margin: 3px 0 0;
-  padding: 0;
-  max-height: 104px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  scrollbar-width: thin;
-}
-.chLine {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: var(--text-2);
-  opacity: 0.62;
-  animation: lineIn 0.35s ease-out;
-}
-.chLine.newest {
-  opacity: 1;
-  color: var(--text);
-  font-size: 13px;
-}
-.chLine b {
-  color: var(--text);
-  font-weight: 650;
-}
-.chLine.newest b {
-  color: var(--cyan);
-}
-.chLine i {
-  font-style: italic;
-  color: var(--text-2);
-}
-.chLine.tone_warn b {
-  color: var(--orange);
-}
-.chLine.tone_done.newest {
-  color: var(--cyan);
-}
-.chLine .spin {
-  align-self: center;
-}
-@keyframes lineIn {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-}
-.logMore {
-  margin-left: auto;
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-  padding: 2px 6px;
-  border-radius: 6px;
-}
-.logMore:hover {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.05);
-}
-.chNext {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-top: 6px;
-}
-.specChip {
-  font-family: inherit;
-  font-size: 11.5px;
-  font-weight: 650;
-  padding: 3px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border-2);
-  white-space: nowrap;
-  cursor: help;
-}
-.specChip[data-state='open'],
-.specChip:hover {
-  filter: brightness(1.2);
-}
-
-/* why-chip tooltip — portalled to <body>, so tokens only (no .root vars) */
-.whyTip {
-  z-index: 1100;
-  max-width: 360px;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-2);
-  background: var(--card-2);
-  color: var(--text-2);
-  font-family: 'Syne', system-ui, sans-serif;
-  font-size: 12px;
-  line-height: 1.5;
-  box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.7);
-}
-.whyTipHd {
-  display: block;
-  margin-bottom: 4px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 9.5px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--violet);
-}
-.whyTipArrow {
-  fill: var(--card-2);
-}
-
-/* ── Step results ─────────────────────────────────────────────────────── */
 .sectionLabel {
   font-family: var(--mono);
   font-size: 10px;
@@ -658,6 +474,55 @@
 .stepTag.skipped {
   color: var(--muted);
 }
+/* live step states */
+.stepStat.st_done,
+.stepTag.st_done,
+.stepTag.st_running,
+.stepTag.st_background {
+  color: var(--cyan);
+}
+.stepStat.st_done {
+  background: var(--cyan-dim);
+}
+.stepStat.st_failed {
+  color: var(--red);
+  background: var(--red-dim);
+}
+.stepTag.st_failed {
+  color: var(--red);
+}
+.stepStat.st_skipped,
+.stepStat.st_unavailable {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.04);
+}
+.stepTag.st_skipped,
+.stepTag.st_waiting,
+.stepTag.st_unavailable {
+  color: var(--muted);
+}
+.stepStat.st_waiting,
+.stepStat.st_running,
+.stepStat.st_background {
+  background: transparent;
+}
+.step.st_waiting {
+  opacity: 0.5;
+}
+.step.st_running {
+  border-color: rgba(0, 229, 176, 0.35);
+  background: linear-gradient(135deg, var(--cyan-dim), transparent 70%);
+}
+.step.st_background .spin {
+  animation-duration: 1.6s;
+}
+.stepTag.time {
+  /* durations read "54.4s", not "54.4S" */
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
 .stepRes {
   display: flex;
   flex-wrap: wrap;
@@ -706,13 +571,8 @@
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px 8px;
-}
-@container (max-width: 860px) {
-  .specRows {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 @container (max-width: 620px) {
   .specRows {
@@ -722,9 +582,9 @@
 .specRow {
   display: flex;
   align-items: center;
-  gap: 9px;
-  height: 34px;
-  padding: 0 12px;
+  gap: 8px;
+  height: 36px;
+  padding: 0 10px 0 6px;
   border: 1px solid var(--violet-line);
   border-radius: var(--radius);
   background: linear-gradient(135deg, var(--cyan-dim), var(--violet-dim));
@@ -741,6 +601,10 @@
 }
 .specRow.row_queued {
   opacity: 0.7;
+}
+.specBot {
+  display: inline-flex;
+  flex-shrink: 0;
 }
 .specName {
   flex-shrink: 0;
@@ -781,30 +645,6 @@
 }
 .stepTag.queued {
   color: var(--muted);
-}
-
-/* coach chips carry their specialist's live state */
-.specChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.chipGlyph {
-  display: inline-grid;
-  place-items: center;
-  width: 12px;
-  height: 12px;
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 700;
-}
-.chipGlyph .spin {
-  width: 10px;
-  height: 10px;
-  border-width: 1.5px;
-}
-.chip_failed {
-  opacity: 0.55;
 }
 
 /* gated CTA + safety valve */
@@ -857,10 +697,6 @@
   .actions .btn.primary {
     font-size: 14px;
     padding: 13px 16px;
-  }
-  .coachHero {
-    padding: 12px;
-    gap: 10px;
   }
   .inputsSum {
     display: none;

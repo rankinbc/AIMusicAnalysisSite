@@ -90,6 +90,19 @@ $PythonExe = if ($env:SPECTR_PYTHON) { $env:SPECTR_PYTHON }
 # worker-guest-ai; a dev box doesn't need a 4th window, so the interactive
 # worker consumes it too. See docs/STARTUP.md problem #3b.
 $InteractiveThreads = 4
+# The worker must import THIS checkout's shared + analysis packages. An
+# editable install (`pip install -e`) binds ONE checkout machine-wide, so a
+# worktree's worker would otherwise silently run another checkout's
+# aimusic_shared/audio_analysis (seen 2026-10-01: a stale editable install
+# pointing at another worktree lacked new llm_calls columns, so every LLM call
+# logged "metering write failed"). PYTHONPATH entries precede site-packages
+# and editable finders, so prepend them for the pre-flight AND the windows.
+# See docs/STARTUP.md #2c.
+$WorkerPythonPath = ((@(
+    (Join-Path $RepoRoot 'components/shared'),
+    (Join-Path $RepoRoot 'components/analysis/src'),
+    $env:PYTHONPATH
+) | Where-Object { $_ }) -join ';')
 $WorkerBase = "& `"$PythonExe`" -m dramatiq app.dramatiq_app --processes 1"
 $WorkerPools = [ordered]@{
     'SPECTR Worker - interactive' = "$WorkerBase --threads $InteractiveThreads --queues coach ai ai-guest"
@@ -396,11 +409,18 @@ function Start-Apps {
         # launcher exits green — a dead worker from minute zero. Story 12.7
         # (AC5): the check and the window use the SAME resolved interpreter.
         Info "Worker python: $PythonExe"
-        & $PythonExe -c "import dramatiq, audio_analysis" 2>$null
-        if ($LASTEXITCODE -ne 0) {
+        Info "Worker PYTHONPATH: $WorkerPythonPath"
+        $savedPyPath = $env:PYTHONPATH
+        $env:PYTHONPATH = $WorkerPythonPath
+        & $PythonExe -c "import dramatiq, audio_analysis, aimusic_shared" 2>$null
+        $importOk = ($LASTEXITCODE -eq 0)
+        if (-not $importOk) {
             # Re-run without suppression to capture the actual import error.
-            $importError = (& $PythonExe -c "import dramatiq, audio_analysis" 2>&1 |
+            $importError = (& $PythonExe -c "import dramatiq, audio_analysis, aimusic_shared" 2>&1 |
                             Where-Object { $_ -match 'Error' } | Select-Object -Last 1)
+        }
+        $env:PYTHONPATH = $savedPyPath
+        if (-not $importOk) {
             if (-not $importError) { $importError = 'import failed (no error text captured)' }
             Fail ("Worker NOT started: ``$PythonExe`` cannot import worker deps - $importError. " +
                   'Install: pip install -r components/worker/requirements.txt ' +
@@ -408,7 +428,8 @@ function Start-Apps {
                   '(or point $env:SPECTR_PYTHON at the prepared venv python.exe)')
         } else {
             foreach ($title in $WorkerPools.Keys) {
-                Start-InWindow -Title $title -WorkDir $WorkerDir -Command $WorkerPools[$title]
+                Start-InWindow -Title $title -WorkDir $WorkerDir -Command $WorkerPools[$title] `
+                    -EnvVars @{ PYTHONPATH = $WorkerPythonPath }
             }
         }
     } else {

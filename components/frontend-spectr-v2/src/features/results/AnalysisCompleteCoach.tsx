@@ -1,23 +1,23 @@
-// The Analysis Complete modal's narrating coach: a running log of lines
-// (built by the pure helpers/coachNarration.ts) plus one "why" chip per
-// routed specialist whose tooltip carries Triage's full reason for picking it.
-// Newest line is emphasised, older ones dim, and only the last few are shown
-// until the user expands the earlier ones.
+// The analysis page's narrating coach, as a chat. Messages come from the
+// pure helpers/coachNarration.ts (+ the time-based coachWaitLines.ts) via the
+// append-only useLiveNarration log. The look matches the report's coach chat
+// (CoachChat / CoachThread `.cmsg` bubbles: mono role label, card-2 bubble
+// with a squared tail corner, accent-bold measurements) — ported into a CSS
+// module because this page is portalled out of `.rdx`, where those globals
+// live. The coach speaks through his `Coach` mascot; each specialist through
+// its own tinted SpecialistBot. The feed autoscrolls to the newest message.
 
 import { useEffect, useRef, useState } from 'react';
 import * as Tooltip from '@radix-ui/react-tooltip';
 
 import { Coach } from '../../ui/Coach';
-import { RowGlyph } from './AnalysisCompleteStage';
-import { GROUP_COLORS } from './helpers/analysisModalData';
-import type { CoachLine, LinePart } from './helpers/coachNarration';
+import { RowGlyph, SpecialistHead } from './AnalysisCompleteStage';
+import { groupColor } from './helpers/specialists';
+import type { ChatMessage, LinePart } from './helpers/coachNarration';
 import type { SpecialistStage, StageRow } from './helpers/specialist-stage';
-import s from './AnalysisCompleteModal.module.css';
+import s from './LiveCoachChat.module.css';
 
-const cx = (...c: Array<string | false | undefined>) => c.filter(Boolean).join(' ');
-
-/** Lines visible before "N earlier" collapses the rest. */
-export const VISIBLE_LINES = 5;
+const cx = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(' ');
 
 function Part({ p }: { p: LinePart }) {
   if (typeof p === 'string') return <>{p}</>;
@@ -25,14 +25,18 @@ function Part({ p }: { p: LinePart }) {
   return <i>{p.i}</i>;
 }
 
+function speakerKey(m: ChatMessage): string {
+  return m.speaker.kind === 'coach' ? 'coach' : `spec:${m.speaker.slug}`;
+}
+
 function WhyChip({ row }: { row: StageRow }) {
   const [open, setOpen] = useState(false);
-  const g = GROUP_COLORS[row.group];
+  const c = groupColor(row.group);
   const chip = (
     <button
       type="button"
-      className={cx(s.specChip, s[`chip_${row.state}`])}
-      style={{ color: g.c, borderColor: g.d, background: g.d }}
+      className={cx(s.chip, s[`chip_${row.state}`])}
+      style={{ color: c, borderColor: `color-mix(in srgb, ${c} 34%, transparent)` }}
       data-state={row.state}
       aria-label={`${row.label}: why I picked this specialist`}
       // Tap toggles (touch has no hover). Default-prevented so Radix's own
@@ -43,10 +47,11 @@ function WhyChip({ row }: { row: StageRow }) {
         setOpen((o) => !o);
       }}
     >
-      <span className={cx(s.chipGlyph, s[row.state])} aria-hidden>
+      <SpecialistHead row={row} size={18} />
+      {row.label}
+      <span className={s.chipGlyph} aria-hidden>
         <RowGlyph state={row.state} />
       </span>
-      {row.label}
     </button>
   );
   if (!row.focus) return chip;
@@ -54,7 +59,7 @@ function WhyChip({ row }: { row: StageRow }) {
     <Tooltip.Root open={open} onOpenChange={setOpen} delayDuration={150}>
       <Tooltip.Trigger asChild>{chip}</Tooltip.Trigger>
       <Tooltip.Portal>
-        <Tooltip.Content className={s.whyTip} side="bottom" align="start" sideOffset={6} collisionPadding={12}>
+        <Tooltip.Content className={s.whyTip} side="top" align="start" sideOffset={6} collisionPadding={12}>
           <span className={s.whyTipHd}>Why {row.label}</span>
           {row.focus}
           <Tooltip.Arrow className={s.whyTipArrow} />
@@ -64,74 +69,105 @@ function WhyChip({ row }: { row: StageRow }) {
   );
 }
 
-export function CoachNarrator({
+export function CoachChatFeed({
   name,
-  lines,
+  messages,
+  initialIds,
   stage,
+  busy,
 }: {
   name: string;
-  lines: CoachLine[];
+  messages: readonly ChatMessage[];
+  /** Already shown before this view mounted — not re-animated. */
+  initialIds: ReadonlySet<string>;
   stage: SpecialistStage;
+  /** Work is in flight — the coach shows a typing indicator. */
+  busy: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const logRef = useRef<HTMLOListElement>(null);
-  const hidden = expanded ? 0 : Math.max(0, lines.length - VISIBLE_LINES);
-  const shown = lines.slice(hidden);
-  const newest = lines[lines.length - 1]?.id;
+  const threadRef = useRef<HTMLDivElement>(null);
+  const last = messages[messages.length - 1];
+  const newest = last?.id;
+  const coachSpokeLast = last?.speaker.kind === 'coach';
 
-  // Keep the newest line in view when the expanded log scrolls.
+  // The newest message is always in view.
   useEffect(() => {
-    const el = logRef.current;
+    const el = threadRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [newest, expanded]);
+  }, [newest, busy]);
 
   return (
-    <div className={s.coachHero} data-testid="acm-coach">
-      <span className={s.chAv}>
-        <Coach size={46} thinking={!stage.complete} />
-      </span>
-      <div className={s.chTx}>
-        <div className={s.chName}>
-          <span>{name}</span>
-          <span className={s.chRole}>your AI coach</span>
-          {hidden > 0 && (
-            <button type="button" className={s.logMore} onClick={() => setExpanded(true)}>
-              {hidden} earlier
-            </button>
-          )}
-          {expanded && lines.length > VISIBLE_LINES && (
-            <button type="button" className={s.logMore} onClick={() => setExpanded(false)}>
-              show latest
-            </button>
-          )}
+    <section className={s.chat} data-testid="acm-coach" aria-label="Coach">
+      <div className={s.hd}>
+        <Coach size={26} thinking={busy} />
+        <div className={s.hdB}>
+          <div className={s.hdK}>
+            <span className={s.led} />
+            <span className={s.lab}>{name}</span>
+          </div>
+          <div className={s.hdSub}>Narrating your analysis as it runs</div>
         </div>
-        <ol className={s.chLog} ref={logRef} aria-live="polite" data-testid="acm-coach-log">
-          {shown.map((l) => (
-            <li
-              key={l.id}
-              className={cx(s.chLine, s[`tone_${l.tone}`], l.id === newest && s.newest)}
-              data-line-id={l.id}
-              data-testid="acm-coach-line"
+      </div>
+      <div className={s.thread} ref={threadRef} aria-live="polite" data-testid="acm-coach-log">
+        {messages.map((m, i) => {
+          const firstOfRun = i === 0 || speakerKey(messages[i - 1]!) !== speakerKey(m);
+          const spec = m.speaker.kind === 'specialist' ? m.speaker : null;
+          return (
+            <div
+              key={m.id}
+              className={cx(
+                s.msg,
+                spec && s.spec,
+                !firstOfRun && s.cont,
+                !initialIds.has(m.id) && s.enter,
+                s[`tone_${m.tone}`],
+              )}
+              style={spec ? ({ '--spec': groupColor(spec.group) } as React.CSSProperties) : undefined}
+              data-testid="acm-chat-msg"
+              data-msg-id={m.id}
+              data-speaker={spec ? spec.slug : 'coach'}
             >
-              {l.tone === 'pending' && <span className={s.spin} aria-hidden />}
-              <span>
-                {l.parts.map((p, i) => (
-                  <Part key={i} p={p} />
-                ))}
+              <span className={s.av} aria-hidden>
+                {firstOfRun && (spec ? <SpecialistHead row={spec} size={26} /> : <Coach size={26} glow={false} />)}
               </span>
-            </li>
-          ))}
-        </ol>
-        {stage.planReady && stage.total > 0 && (
-          <Tooltip.Provider delayDuration={150}>
-            <div className={s.chNext} data-testid="acm-coach-next">
-              {stage.rows.map((r) => (
-                <WhyChip key={r.slug} row={r} />
-              ))}
+              <div className={s.col}>
+                {firstOfRun && <span className={s.role}>{spec ? spec.label : name}</span>}
+                <div className={s.bub}>
+                  {m.parts.map((p, j) => (
+                    <Part key={j} p={p} />
+                  ))}
+                </div>
+              </div>
             </div>
-          </Tooltip.Provider>
+          );
+        })}
+        {busy && (
+          <div
+            className={cx(s.msg, coachSpokeLast && s.cont, s.typing)}
+            data-testid="acm-chat-typing"
+            aria-label={`${name} is working`}
+          >
+            <span className={s.av} aria-hidden>
+              {!coachSpokeLast && <Coach size={26} glow={false} />}
+            </span>
+            <div className={s.col}>
+              <div className={s.bub}>
+                <span className={s.dot} />
+                <span className={s.dot} />
+                <span className={s.dot} />
+              </div>
+            </div>
+          </div>
         )}
       </div>
-    </div>
+      {stage.planReady && stage.total > 0 && (
+        <Tooltip.Provider delayDuration={150}>
+          <div className={s.chips} data-testid="acm-coach-next">
+            {stage.rows.map((r) => (
+              <WhyChip key={r.slug} row={r} />
+            ))}
+          </div>
+        </Tooltip.Provider>
+      )}
+    </section>
   );
 }

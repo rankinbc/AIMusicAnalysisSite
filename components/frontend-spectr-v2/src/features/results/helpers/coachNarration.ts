@@ -1,34 +1,51 @@
-/* The Analysis Complete modal's narrating coach — a pure map from the modal's
- * current state to a running log of coach lines. No LLM calls: every line is
- * built from data already on the page (phase-1 measurements, rule-engine
- * verdicts, Triage's routing plan + rationale, live specialist run state).
+/* The analysis page's narrating coach — a pure map from the run's current
+ * state to the chat messages that state has earned. No LLM calls: every
+ * message is a template filled from data already on the page (phase results
+ * as they land, phase 1's early measurements, rule-engine verdicts, Triage's
+ * routing plan + rationale, live specialist run state).
  *
- * Lines are keyed by EVENT (`static`, `big-one`, `why:<slug>`, `back:<slug>`,
- * …) so a re-render with the same state yields the same ids — React keys stay
- * stable and nothing duplicates. Order is narrative order, so as the state
- * advances new lines only ever append (the transient "picking…" line is the
- * one exception: it is replaced by the plan once Triage lands). */
+ * Messages are keyed by EVENT (`p1:lufs`, `p3`, `plan`, `back:<slug>`, …) so
+ * the same state always yields the same ids. The chat itself is append-only
+ * (useLiveNarration keeps the log): a message is shown from the first render
+ * whose state produces its id, in narrative order, and never moves after.
+ * State-specific ids (`queued`, `p7:pending` vs `p7:settled`) let a message
+ * that was true at the time stay in the log after the state moves on.
+ * Time-based "still working" lines live in coachWaitLines.ts. */
 import type { FinalJson, Phase1Data, RoutingPlanDto, VerdictDto } from '../../../api/types';
-import { findingsLabel, type SpecialistStage } from './specialist-stage';
+import { phaseLines } from './coachPhaseLines';
+import type { RunStatus } from './liveRun';
+import { isRuleEngineVerdict, specialistFindings, type SpecialistStage } from './specialist-stage';
+import type { SpecialistGroup } from './specialists';
 
 /** A run of text: plain, **bold** (b) or *quoted/italic* (i). */
 export type LinePart = string | { b: string } | { i: string };
-export type LineTone = 'info' | 'pending' | 'done' | 'warn';
+export type LineTone = 'info' | 'done' | 'warn';
 
-export interface CoachLine {
+export type ChatSpeaker =
+  | { kind: 'coach' }
+  | { kind: 'specialist'; slug: string; label: string; group: SpecialistGroup };
+
+export interface ChatMessage {
   id: string;
+  speaker: ChatSpeaker;
   parts: LinePart[];
   tone: LineTone;
 }
 
+export const COACH: ChatSpeaker = { kind: 'coach' };
+
 export interface NarrationInput {
+  status: RunStatus;
+  /** Final result, or the partial results while the job runs (liveFinalJson). */
   fj: FinalJson;
-  verdicts: readonly VerdictDto[] | undefined;
-  routingPlan: RoutingPlanDto | undefined;
+  /** Phase-1 values as far as known — incl. the early sub-results. */
+  p1?: Phase1Data | undefined;
+  verdicts?: readonly VerdictDto[] | undefined;
+  routingPlan?: RoutingPlanDto | undefined;
   stage: SpecialistStage;
-  /** Slugs in the order the modal saw them settle, so "X is back" lines
-   *  append in arrival order. Settled rows missing from it follow in
-   *  priority order. */
+  /** Slugs in the order the page saw them settle, so specialists report
+   *  back in arrival order. Settled rows missing from it follow in priority
+   *  order. */
   settleOrder?: readonly string[] | undefined;
 }
 
@@ -39,16 +56,8 @@ const SEVERITY_RANK: Record<string, number> = {
   minor: 2,
   win: 0,
 };
-const FAIL_MARKER_HEADLINE = 'Specialist failed';
 export const REASON_MAX = 90;
 export const SKIP_MAX = 140;
-
-const MINUS = '−';
-const signed = (n: number, digits = 1): string => {
-  const v = n.toFixed(digits);
-  return n < 0 ? `${MINUS}${v.slice(1)}` : v;
-};
-const isNum = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
 
 /** Cut to `max` chars at a word boundary, with an ellipsis when cut. */
 export function trimWords(text: string, max: number): string {
@@ -81,121 +90,100 @@ export function skipText(rationale: string | undefined): string {
 function rank(v: VerdictDto): number {
   return SEVERITY_RANK[String(v.severity)] ?? 1;
 }
-function topVerdict(vs: readonly VerdictDto[]): VerdictDto | undefined {
+export function topVerdict(vs: readonly VerdictDto[]): VerdictDto | undefined {
   return vs
-    .filter((v) => v.headline && v.headline !== FAIL_MARKER_HEADLINE && rank(v) > 0)
+    .filter((v) => v.headline && rank(v) > 0)
     .slice()
     .sort((a, b) => rank(b) - rank(a) || (b.priorityScore ?? 0) - (a.priorityScore ?? 0))[0];
 }
 
-/** "Your mix sits at −11.9 LUFS, peaks at −0.4 dBTP, B minor @ 128 BPM." —
- *  flagged measurements (clipping, hot true peak) take precedence. */
-function staticLine(fj: FinalJson): CoachLine | null {
-  const p1 = fj.phases?.find((p) => p.phase === 1);
-  if (!p1 || p1.status === 'failed' || p1.status === 'skipped') return null;
-  const d = (p1.data ?? {}) as Phase1Data;
-  const bits: LinePart[][] = [];
-  if (d.clipping_detected) {
-    bits.push([
-      'is ',
-      { b: 'clipping' },
-      isNum(d.clipped_sample_count) && d.clipped_sample_count > 0
-        ? ` (${d.clipped_sample_count} samples)`
-        : '',
-    ]);
-  }
-  if (isNum(d.true_peak_db) && d.true_peak_db > -1) {
-    bits.push(['peaks hot at ', { b: `${signed(d.true_peak_db)} dBTP` }]);
-  }
-  if (isNum(d.lufs)) bits.push(['sits at ', { b: `${signed(d.lufs)} LUFS` }]);
-  if (isNum(d.true_peak_db) && d.true_peak_db <= -1 && bits.length < 3) {
-    bits.push(['peaks at ', { b: `${signed(d.true_peak_db)} dBTP` }]);
-  }
-  const key = d.key_estimate?.key ?? d.detected_key;
-  const mode = d.key_estimate?.mode;
-  const keyText = key ? `${key}${mode ? ` ${mode}` : ''}` : '';
-  const bpm = isNum(d.bpm) ? `${Math.round(d.bpm)} BPM` : '';
-  if (keyText || bpm) bits.push([keyText ? 'is in ' : 'runs at ', { b: [keyText, bpm].filter(Boolean).join(' @ ') }]);
-  if (!bits.length) return null;
-  const parts: LinePart[] = ['Your mix '];
-  bits.slice(0, 3).forEach((b, i, arr) => {
-    if (i > 0) parts.push(i === arr.length - 1 ? ' and ' : ', ');
-    parts.push(...b.filter((x) => x !== ''));
+/** "A", "A and B", "A, B and C" — names bold. */
+function nameList(names: string[]): LinePart[] {
+  const out: LinePart[] = [];
+  names.forEach((n, i) => {
+    if (i > 0) out.push(i === names.length - 1 ? ' and ' : ', ');
+    out.push({ b: n });
   });
-  parts.push('.');
-  return { id: 'static', parts, tone: 'info' };
+  return out;
 }
 
-export function narrate(input: NarrationInput): CoachLine[] {
-  const { fj, stage } = input;
+const coach = (id: string, parts: LinePart[], tone: LineTone = 'info'): ChatMessage => ({
+  id,
+  speaker: COACH,
+  parts,
+  tone,
+});
+
+/** Every message the current state has earned, in narrative order. */
+export function narrate(input: NarrationInput): ChatMessage[] {
+  const { stage, status } = input;
   const verdicts = input.verdicts ?? [];
-  const lines: CoachLine[] = [];
+  const out: ChatMessage[] = [coach('open', ['Let’s take a look at your mix.'])];
 
-  const st = staticLine(fj);
-  if (st) lines.push(st);
-
-  const big = topVerdict(verdicts.filter((v) => v.source === 'rule_engine'));
-  if (big) lines.push({ id: 'big-one', parts: ['The big one: ', { b: big.headline }, '.'], tone: 'info' });
-
-  if (!stage.planReady) {
-    lines.push({ id: 'picking', parts: ['Picking which specialists to consult…'], tone: 'pending' });
-    return lines;
+  if (status === 'queued') {
+    out.push(coach('queued', ['You’re in the queue — I’ll start the moment a worker frees up.']));
   }
 
+  out.push(...phaseLines(input.fj, input.p1).map((l) => coach(l.id, l.parts, l.tone)));
+
+  if (status !== 'complete') return out;
+
+  const big = topVerdict(verdicts.filter(isRuleEngineVerdict));
+  if (big) out.push(coach('big-one', ['The big one so far: ', { b: big.headline }, '.'], 'warn'));
+
+  out.push(coach('triage', ['I have enough information to consult some specialists…']));
+  if (!stage.planReady) return out;
+
   if (stage.total === 0) {
-    lines.push({
-      id: 'plan',
-      parts: ['No specialist deep-dive needed for this mix — the full report has the whole picture.'],
-      tone: 'done',
-    });
+    out.push(
+      coach('plan', ['No specialist deep-dive needed for this mix — the full report has the whole picture.'], 'done'),
+    );
   } else {
-    lines.push({
-      id: 'plan',
-      parts: [
-        'I’m bringing in ',
-        { b: `${stage.total} specialist${stage.total === 1 ? '' : 's'}` },
-        ':',
-      ],
-      tone: 'info',
-    });
+    out.push(coach('plan', ['I’m going to bring in ', ...nameList(stage.rows.map((r) => r.label)), '.']));
     for (const r of stage.rows) {
       const reason = shortReason(r.focus);
-      lines.push({
-        id: `why:${r.slug}`,
-        parts: reason ? [{ b: r.label }, `: ${reason}`] : [{ b: r.label }],
-        tone: 'info',
-      });
+      out.push(coach(`why:${r.slug}`, reason ? [{ b: r.label }, ` — ${reason}`] : [{ b: r.label }]));
     }
   }
 
   const skip = skipText(input.routingPlan?.rationale);
-  if (skip) lines.push({ id: 'skip', parts: [`Skipping ${skip}`], tone: 'info' });
+  if (skip) out.push(coach('skip', [`Skipping ${skip}`]));
 
   const seen = input.settleOrder ?? [];
-  const settledRows = stage.rows
+  const settled = stage.rows
     .filter((r) => r.state === 'done' || r.state === 'failed')
     .map((r, i) => ({ r, at: seen.includes(r.slug) ? seen.indexOf(r.slug) : seen.length + i }))
     .sort((a, b) => a.at - b.at)
     .map((x) => x.r);
-  for (const r of settledRows) {
-    if (r.state === 'done') {
-      const top = topVerdict(
-        verdicts.filter((v) => v.specialist === r.slug && v.source === 'llm_identifier'),
-      );
-      const parts: LinePart[] = [{ b: r.label }, ' is back: ', findingsLabel(r.findings) || 'done'];
-      if (top) parts.push(' — top: ', { i: `“${trimWords(top.headline, 70)}”` });
-      lines.push({ id: `back:${r.slug}`, parts, tone: 'done' });
-    } else if (r.state === 'failed') {
-      lines.push({
+  for (const r of settled) {
+    const speaker: ChatSpeaker = { kind: 'specialist', slug: r.slug, label: r.label, group: r.group };
+    if (r.state === 'failed') {
+      out.push({
         id: `back:${r.slug}`,
-        parts: [{ b: r.label }, ' couldn’t finish — you can re-run it from the full report.'],
+        speaker,
+        parts: ['I couldn’t finish — you can re-run me from the full report.'],
         tone: 'warn',
       });
+      continue;
     }
+    const mine = specialistFindings(verdicts, r.slug);
+    const n = r.findings ?? mine.length;
+    const top = topVerdict(mine);
+    const parts: LinePart[] =
+      n === 0
+        ? ['I found ', { b: 'no issues' }, ' — this part of your mix holds up.']
+        : ['I found ', { b: `${n} issue${n === 1 ? '' : 's'}` }, '.'];
+    if (n > 0 && top) parts.push(' Top: ', { i: `“${trimWords(top.headline, 80)}”` });
+    out.push({ id: `back:${r.slug}`, speaker, parts, tone: 'done' });
   }
 
   if (stage.total > 0 && stage.complete) {
-    lines.push({ id: 'all-done', parts: ['That’s everyone. Here’s the full picture →'], tone: 'done' });
+    out.push(coach('all-done', ['That’s everyone. Here’s the full picture →'], 'done'));
   }
-  return lines;
+  return out;
+}
+
+/** Plain text of a message (tests, aria). */
+export function messageText(m: Pick<ChatMessage, 'parts'>): string {
+  return m.parts.map((p) => (typeof p === 'string' ? p : 'b' in p ? p.b : p.i)).join('');
 }

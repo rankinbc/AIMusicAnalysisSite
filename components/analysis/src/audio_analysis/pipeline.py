@@ -55,6 +55,7 @@ def run_single_phase(
     defer_structure: bool = False,
     reference_profile: dict | None = None,
     progress_cb=None,
+    phase_done_cb=None,
 ) -> PhaseResult:
     """Run one phase (1–7) against an already-converted WAV and return its
     :class:`PhaseResult`.
@@ -64,6 +65,9 @@ def run_single_phase(
     for folding the returned ``data`` back in on success. Phase 8 (ALS) is handled
     by the caller, not this function. Behaviour mirrors the original ``run_pipeline``
     loop body exactly (same dispatch args, logging, progress_cb, try/except).
+
+    *phase_done_cb* — see :func:`run_pipeline`. Purely observational: it is
+    never allowed to change or fail the returned result.
     """
     phase_name = _PHASE_NAMES.get(phase_num, f"Phase {phase_num}")
     if progress_cb:
@@ -72,7 +76,15 @@ def run_single_phase(
     t0 = time.perf_counter()
     try:
         if phase_num == 1:
-            data = phase1_universal.analyze(wav_path, progress_cb, defer_structure=defer_structure)
+            if phase_done_cb is not None:
+                # Only pass the hook when someone listens, so the call (and
+                # any test double of analyze) is unchanged otherwise.
+                data = phase1_universal.analyze(
+                    wav_path, progress_cb, defer_structure=defer_structure,
+                    partial_cb=lambda d: _notify(phase_done_cb, 1, phase_name, d, None),
+                )
+            else:
+                data = phase1_universal.analyze(wav_path, progress_cb, defer_structure=defer_structure)
         elif phase_num == 2:
             data = phase2_genre.classify(wav_path, phase_data.get(1, {}), progress_cb, genre_hint=genre_hint)
         elif phase_num == 3:
@@ -124,12 +136,13 @@ def run_single_phase(
         )
         if progress_cb:
             progress_cb(phase_num, phase_name, 1.0)
+        _notify(phase_done_cb, phase_num, phase_name, result, result["duration_s"])
         return result
 
     except Exception as exc:
         elapsed = time.perf_counter() - t0
         logger.exception("phase %d (%s) FAILED after %.1fs: %s", phase_num, phase_name, elapsed, exc)
-        return PhaseResult(
+        failed = PhaseResult(
             phase=phase_num,
             name=phase_name,
             status="failed",
@@ -137,6 +150,18 @@ def run_single_phase(
             error=str(exc),
             duration_s=round(elapsed, 2),
         )
+        _notify(phase_done_cb, phase_num, phase_name, failed, failed["duration_s"])
+        return failed
+
+
+def _notify(phase_done_cb, phase: int, name: str, data, seconds) -> None:
+    """Call *phase_done_cb* best-effort — an observer error is logged, never raised."""
+    if phase_done_cb is None:
+        return
+    try:
+        phase_done_cb(phase, name, data, seconds)
+    except Exception:  # noqa: BLE001 — live-progress hook must not fail a phase
+        logger.warning("phase_done_cb failed (phase=%s)", phase, exc_info=True)
 
 
 def finalize_result(
@@ -210,6 +235,7 @@ def run_pipeline(
     reference_stem_paths: dict | None = None,
     stem_mode: str = "grouped",
     defer_structure: bool = False,
+    phase_done_cb=None,
 ) -> PipelineResult:
     """Run all 7 analysis phases (+ optional ALS phase 8) and return a structured
     result dict.
@@ -227,6 +253,15 @@ def run_pipeline(
         file_path:      Path to the uploaded audio file (MP3, FLAC, WAV …).
         reference_path: Optional path to a reference track for Phase 5.
         progress_cb:    Optional callback — ``(phase: int, name: str, pct: float)``.
+        phase_done_cb:  Optional live-results hook —
+                        ``(phase: int, name: str, data, seconds: float | None)``.
+                        Called with the finished :class:`PhaseResult` and its
+                        duration when each phase (incl. 8) completes or fails;
+                        and with ``seconds=None`` plus a dict of early
+                        sub-results (LUFS, true peak, tempo, key) while phase 1
+                        is still running. Observational only — errors are
+                        swallowed and the returned result is byte-identical
+                        with or without it.
 
     Returns:
         :class:`~audio_analysis.schemas.PipelineResult` TypedDict.
@@ -250,6 +285,7 @@ def run_pipeline(
                 stem_mode=stem_mode,
                 defer_structure=defer_structure,
                 progress_cb=progress_cb,
+                phase_done_cb=phase_done_cb,
             )
             phase_results.append(pr)
             if pr["status"] == "ok":
@@ -264,6 +300,7 @@ def run_pipeline(
         phase_results.append(phase8)  # type: ignore[arg-type]  # analyze_als returns the PhaseResult keys
         if progress_cb:
             progress_cb(8, "ALS Analysis", 1.0)
+        _notify(phase_done_cb, 8, "ALS Analysis", phase8, phase8["duration_s"])
 
         return finalize_result(phase_data, phase_results, file_path)
     finally:

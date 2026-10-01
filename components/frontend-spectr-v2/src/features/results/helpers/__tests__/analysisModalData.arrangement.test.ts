@@ -15,14 +15,27 @@ function finalJsonWithPhase7(data: Record<string, unknown>): FinalJson {
 }
 
 describe('derivePhaseRows — phase 7 (arrangement)', () => {
-  it('shows "Not assessed" and no grade when arrangement_status is unavailable', () => {
+  it('shows a terminal "couldn’t detect structure" and no grade when unavailable', () => {
     const rows = derivePhaseRows(finalJsonWithPhase7({ arrangement_status: 'unavailable' }));
     const phase7 = rows.find((r) => r.phase === 7);
-    expect(phase7?.detail).toBe('Not assessed for this track');
+    expect(phase7?.detail).toBe('Couldn’t detect structure');
+    expect(phase7?.unavailable).toBe(true);
+    expect(phase7?.pending).toBeUndefined();
     expect(phase7?.kv).toEqual([]);
     expect(phase7?.detail).not.toMatch(/grade/i);
     expect(phase7?.detail).not.toContain('N/A');
     expect(phase7?.detail).not.toContain('—');
+  });
+
+  it('maps a failed background job to the same terminal state (no spinner)', () => {
+    const rows = derivePhaseRows(
+      finalJsonWithPhase7({ arrangement_status: 'failed', arrangement_error: 'OOM' }),
+    );
+    const phase7 = rows.find((r) => r.phase === 7);
+    expect(phase7?.detail).toBe('Couldn’t detect structure');
+    expect(phase7?.unavailable).toBe(true);
+    expect(phase7?.pending).toBeUndefined();
+    expect(phase7?.note).toContain('OOM');
   });
 
   it('still shows a grade when the arrangement was actually scored', () => {

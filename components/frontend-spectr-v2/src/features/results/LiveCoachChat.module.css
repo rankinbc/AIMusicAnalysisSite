@@ -1,0 +1,259 @@
+/* The analysis page's coach chat. A port of the report's coach chat look
+   (redesign-v3-tabs.css `.coach-hd` / `.coach-thread` / `.cmsg` and the
+   expanded CoachChatDialog): mono uppercase role labels, card-2 bubbles with a
+   squared tail corner, accent-bold values. Those globals are scoped to `.rdx`
+   and this page is portalled to <body>, so the look is copied here — tokens
+   only. Specialists tint their bubble with their roster colour (`--spec`). */
+
+.chat {
+  --accent: var(--cyan);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.035);
+  overflow: hidden;
+}
+
+/* ── header (`.coach-hd`) ──────────────────────────────────────────── */
+.hd {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.035));
+}
+.hdB {
+  flex: 1;
+  min-width: 0;
+}
+.hdK {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.led {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+.lab {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+.hdSub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+/* ── thread (`.coach-thread`) ──────────────────────────────────────── */
+.thread {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 8px;
+  padding: 10px;
+  border-radius: 9px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+
+/* ── message (`.cmsg`) ─────────────────────────────────────────────── */
+.msg {
+  display: flex;
+  gap: 9px;
+  max-width: 94%;
+}
+.msg.cont {
+  margin-top: -4px;
+}
+.av {
+  width: 26px;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+}
+.col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+.role {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.spec .role {
+  color: var(--spec);
+}
+.bub {
+  font-size: 12.5px;
+  line-height: 1.5;
+  padding: 7px 11px;
+  border-radius: 10px;
+  border-bottom-left-radius: 4px;
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.bub b {
+  color: var(--accent);
+  font-weight: 600;
+}
+.bub i {
+  color: var(--text-2);
+}
+.tone_warn .bub b {
+  color: var(--orange);
+}
+.spec .bub {
+  background: color-mix(in srgb, var(--spec) 8%, var(--card-2));
+  border-color: color-mix(in srgb, var(--spec) 30%, transparent);
+}
+.spec .bub b {
+  color: var(--spec);
+}
+
+.enter {
+  animation: msgIn 0.28s ease-out both;
+}
+@keyframes msgIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* typing indicator */
+.typing .bub {
+  display: inline-flex;
+  gap: 4px;
+  padding: 9px 12px;
+}
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: dot 1.2s ease-in-out infinite;
+}
+.dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: none;
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+/* ── "why" chips — one per routed specialist ───────────────────────── */
+.chips {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 8px 8px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 9px 2px 3px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: help;
+}
+.chip:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+.chip_failed {
+  opacity: 0.55;
+}
+.chipGlyph {
+  display: inline-grid;
+  place-items: center;
+  width: 12px;
+  height: 12px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+}
+.chipGlyph :global(span) {
+  width: 10px;
+  height: 10px;
+  border-width: 1.5px;
+}
+.whyTip {
+  z-index: 1100;
+  max-width: 320px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  border: 1px solid var(--border-2);
+  background: var(--card-2);
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow: 0 14px 34px -12px rgba(0, 0, 0, 0.7);
+}
+.whyTipHd {
+  display: block;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.whyTipArrow {
+  fill: var(--card-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .enter,
+  .dot {
+    animation: none;
+  }
+  .thread {
+    scroll-behavior: auto;
+  }
+}

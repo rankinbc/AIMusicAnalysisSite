@@ -41,6 +41,7 @@ from aimusic_shared.models import (
 )
 
 from .db_sync import SessionFactory
+from .live_partial import make_phase_recorder, merge_running
 
 logger = logging.getLogger(__name__)
 
@@ -204,6 +205,8 @@ def analyze_audio_job(job_id: str) -> None:
         job.started_at = _utc_now()
         job.current_phase = "starting"
         job.phase_pct = 0.0
+        # A redelivered (crashed mid-run) job starts its live results over.
+        job.partial_json = None
 
         file_rel = version.file_path if version is not None else job.file_path
         user_id = job.user_id
@@ -251,8 +254,16 @@ def analyze_audio_job(job_id: str) -> None:
                 if pj is not None:
                     pj.current_phase = name
                     pj.phase_pct = overall
+                    if pct <= 0.0:
+                        # Live page: the running step's clock starts here.
+                        pj.partial_json = merge_running(pj.partial_json, phase, name, _utc_now())
         except Exception:  # progress is best-effort — never fail the job over it
             logger.warning("progress update failed (phase=%s)", phase, exc_info=True)
+
+    # Live page: each phase's result slice + duration (and phase 1's early
+    # LUFS / peak / tempo / key) merged into analysis_jobs.partial_json as it
+    # lands. Same best-effort short-tx pattern as _report_progress.
+    _record_phase = make_phase_recorder(SessionFactory.begin, AnalysisJob, jid, logger)
 
     # Story 3.1/3.2: presigned uploads land in object storage, not the local
     # root. resolve_local is local-first (legacy disk deployments untouched)
@@ -380,6 +391,7 @@ def analyze_audio_job(job_id: str) -> None:
             # path; a background `detect_structure_job` fills Phase 7 in after.
             defer_structure=True,
             progress_cb=_report_progress,
+            phase_done_cb=_record_phase,
         )
         # The pipeline returns a TypedDict that may contain nested TypedDicts —
         # coerce to plain JSON-safe dict so SA's JSONB serializer doesn't

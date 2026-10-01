@@ -8,6 +8,7 @@ import {
   useFreeRetry,
   useJob,
   useJobResults,
+  useSong,
   useSongs,
   useVersion,
   useVersionFiles,
@@ -15,7 +16,7 @@ import {
 import { useAuth } from '../../auth/AuthContext';
 import { capture } from '../../lib/analytics';
 import { setCorrelation } from '../../lib/sentry';
-import { ProgressStoryline } from '../../features/results/ProgressStoryline';
+import { LiveAnalysisView } from '../../features/results/LiveAnalysisView';
 import { ReportView } from '../../features/results/ReportView';
 import {
   DEFAULT_RESULTS_TAB,
@@ -89,19 +90,22 @@ function ResultsPage() {
   });
   const results = useJobResults(jobId, isComplete);
 
-  // Task G0 — the in-progress checklist must not claim stems/reference/.als
-  // analysis ran when the visitor never supplied that input. Derived from the
-  // same version the rest of the page already loads through, never a new
-  // endpoint/DTO field.
+  // Task G0 — the live page must not claim stems/reference/.als analysis
+  // ran when the visitor never supplied that input. Derived from the same
+  // version the rest of the page already loads through, never a new
+  // endpoint/DTO field. Unknown (undefined) until the version has loaded.
   const versionId = job.data?.versionId ?? '';
   const version = useVersion(versionId);
   const versionFiles = useVersionFiles(versionId);
   const inputsLoading = Boolean(versionId) && (version.data === undefined || versionFiles.data === undefined);
-  const progressInputs = {
-    hasStems: (versionFiles.data?.files ?? []).some((f) => f.type === 'stem'),
-    hasReference: Boolean(version.data?.referencePath),
-    hasAls: Boolean(version.data?.alsFilePath),
-  };
+  const liveInputs = inputsLoading || !versionId
+    ? undefined
+    : {
+        hasStems: (versionFiles.data?.files ?? []).some((f) => f.type === 'stem'),
+        hasReference: Boolean(version.data?.referencePath),
+        hasAls: Boolean(version.data?.alsFilePath),
+      };
+  const songName = useSong(songId).data?.name;
 
   // Story 5.7 (FR6): failed-job free retry. The server owns eligibility —
   // a 409 (not eligible / already used) just hides the button.
@@ -182,20 +186,18 @@ function ResultsPage() {
         />
       );
     }
-    // Job is done — never fall through to the in-progress storyline (its
-    // elapsed clock and "taking longer" hint would misread a finished job).
-    return (
-      <FrameWithBack songId={songId}>
-        {results.error ? (
+    if (results.error) {
+      return (
+        <FrameWithBack songId={songId}>
           <p className={s.loadError}>
             Analysis finished, but the report failed to load:{' '}
             {results.error instanceof Error ? results.error.message : String(results.error)}
           </p>
-        ) : (
-          <p className="mono">Loading report…</p>
-        )}
-      </FrameWithBack>
-    );
+        </FrameWithBack>
+      );
+    }
+    // Report data still loading — the live page stays up (now reading
+    // "Analysis complete") until ReportView takes over with the same layout.
   }
 
   if (isFailed && job.data) {
@@ -250,13 +252,22 @@ function ResultsPage() {
     );
   }
 
+  // Queued / running: the analysis page itself, live off the job poll — no
+  // separate progress view, no jump when it completes.
   return (
     <FrameWithBack songId={songId}>
-      <h1 className={s.heading}>Analysis in progress</h1>
-      {job.data && (
-        <ProgressStoryline job={job.data} inputs={progressInputs} inputsLoading={inputsLoading} />
+      {job.data ? (
+        <LiveAnalysisView
+          jobId={jobId}
+          job={job.data}
+          songName={songName}
+          inputs={liveInputs}
+          onLeave={() => void navigate({ to: '/songs/$songId', params: { songId } })}
+          dockExtra={demoReport ? <DemoWaitingLink link={demoReport} /> : undefined}
+        />
+      ) : (
+        <p className="mono">Loading analysis…</p>
       )}
-      <DemoWaitingLink link={demoReport} />
     </FrameWithBack>
   );
 }

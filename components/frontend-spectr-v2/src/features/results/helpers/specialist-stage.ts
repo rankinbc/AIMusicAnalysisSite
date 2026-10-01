@@ -7,7 +7,15 @@
  *  - when an AI verdict already existed, the auto-run does not fire, so a
  *    specialist that is neither settled nor running will never run here and
  *    is left out of the stage instead of spinning forever.
- * Settled = cached (done) or failed, exactly as settledSlugs() defines it. */
+ * Settled = cached (done) or failed, exactly as settledSlugs() defines it.
+ *
+ * Whose verdict is whose: a specialist's own (LLM) verdicts are stored with
+ * `specialist = <slug>` — and `source = 'rule_engine'`, the column default the
+ * specialist actor leaves in place (the worker's idempotency guard keys on
+ * that value, so it is NOT changed). Rule-engine Problems use
+ * `specialist = 'rule_engine.<rule>'`. So: findings for slug X are the
+ * verdicts with `specialist === X`, minus the "Specialist failed" marker.
+ * Never filter on `source` here. */
 import type { RoutingPlanDto, SpecialistStatus, VerdictDto } from '../../../api/types';
 import { SPECIALIST_CATALOG, type SpecialistGroup } from './specialists';
 
@@ -45,7 +53,28 @@ export interface SpecialistStageInput {
 }
 
 // The worker's fail-marker verdict (run_specialist writes it on exception).
-const FAIL_MARKER_HEADLINE = 'Specialist failed';
+export const FAIL_MARKER_HEADLINE = 'Specialist failed';
+
+/** A routed specialist's own findings (fail-marker excluded). */
+export function specialistFindings(
+  verdicts: readonly VerdictDto[] | undefined,
+  slug: string,
+): VerdictDto[] {
+  return (verdicts ?? []).filter((v) => v.specialist === slug && v.headline !== FAIL_MARKER_HEADLINE);
+}
+
+/** Rule-engine (deterministic) Problems — `specialist = 'rule_engine.<rule>'`. */
+export function isRuleEngineVerdict(v: VerdictDto): boolean {
+  return v.specialist === 'rule_engine' || v.specialist.startsWith('rule_engine.');
+}
+
+/** Some specialist already produced verdicts for this analysis — the Triage
+ *  auto-run (useSpecialistRuns) then does not fire again. */
+export function hasSpecialistVerdict(verdicts: readonly VerdictDto[] | undefined): boolean {
+  return (verdicts ?? []).some(
+    (v) => !isRuleEngineVerdict(v) && SPECIALIST_CATALOG.some((m) => m.slug === v.specialist),
+  );
+}
 
 export function deriveSpecialistStage(input: SpecialistStageInput): SpecialistStage {
   const plan = input.routingPlan;
@@ -54,7 +83,7 @@ export function deriveSpecialistStage(input: SpecialistStageInput): SpecialistSt
   const statusOf = new Map((input.specialists ?? []).map((s) => [s.slug, s.status]));
   const running = input.running ?? new Set<string>();
   const verdicts = input.verdicts ?? [];
-  const aiAlreadyRan = verdicts.some((v) => v.source === 'llm_identifier');
+  const aiAlreadyRan = hasSpecialistVerdict(verdicts);
 
   const rows: StageRow[] = [];
   const ordered = (plan.specialistsToRun ?? []).slice().sort((a, b) => a.priority - b.priority);
@@ -75,16 +104,7 @@ export function deriveSpecialistStage(input: SpecialistStageInput): SpecialistSt
       focus: entry.focus,
       state,
     };
-    if (state === 'done') {
-      row.findings = verdicts.filter(
-        // Rule-engine Problems share the specialist slug — count only the
-        // specialist's own (LLM) verdicts.
-        (v) =>
-          v.specialist === entry.name &&
-          v.source === 'llm_identifier' &&
-          v.headline !== FAIL_MARKER_HEADLINE,
-      ).length;
-    }
+    if (state === 'done') row.findings = specialistFindings(verdicts, entry.name).length;
     rows.push(row);
   }
 

@@ -777,7 +777,6 @@ export function ReportView({
           runningSlugs={specialistRuns.running}
           verdicts={verdictsData?.verdicts}
           hasStems={inputs.stems}
-          running={null}
           onClose={dismissModal}
           onViewReport={dismissModal}
           onReanalyze={() => {

@@ -541,7 +541,7 @@ export function useJobs(opts?: { status?: string; limit?: number }) {
 /** True while Phase 7's arrangement score is still being filled in by the
  *  background structure-detection job (allin1). Used to keep polling the report
  *  until the real score lands. Defensive against the loosely-typed finalJson. */
-function isArrangementPending(results: JobResultsDto | undefined): boolean {
+export function isArrangementPending(results: JobResultsDto | undefined): boolean {
   const phases = (results?.finalJson as { phases?: Array<{ phase?: number; data?: unknown }> } | undefined)?.phases;
   const phase7 = phases?.find((p) => p.phase === 7)?.data as
     | { arrangement_status?: string }
@@ -556,16 +556,37 @@ export function useJobResults(jobId: string, enabled: boolean) {
     enabled: enabled && Boolean(jobId),
     retry: false,
     // Structure detection (allin1) runs in the background — ~10-15 s on GPU but
-    // many minutes on CPU for a full-length track. Poll on a relaxed interval
-    // until the deferred Phase 7 fills in, then stop. E5.1: ~10 min backstop —
-    // a crashed structure job now writes arrangement_status='failed', and the
-    // cap covers the crash-before-write hole.
-    refetchInterval: terminalPoll<JobResultsDto>({
-      pollMs: 8000,
-      active: isArrangementPending,
-      maxPolls: 75,
-    }),
+    // many minutes on CPU for a full-length track, after waiting its turn on
+    // the batch worker. Poll until the deferred Phase 7 settles, then stop.
+    refetchInterval: arrangementPollInterval,
   });
+}
+
+/** Fast polls for the first ~4 min, then relaxed ones. */
+export const ARRANGEMENT_FAST_POLL_MS = 8_000;
+export const ARRANGEMENT_SLOW_POLL_MS = 20_000;
+const ARRANGEMENT_FAST_POLLS = 30;
+/** Backstop ≈ 4 min fast + 40 min slow. The old 75 × 8 s (10 min) cap ran out
+ *  before a CPU allin1 run that waited behind other batch work (seen: 8 min
+ *  of allin1 alone before it hit its memory limit) — the step then showed
+ *  "running" forever. A crashed structure job writes 'failed'; the cap only
+ *  covers the crash-before-write hole. */
+export const ARRANGEMENT_MAX_POLLS = ARRANGEMENT_FAST_POLLS + 120;
+
+const arrangementPoll = terminalPoll<JobResultsDto>({
+  pollMs: ARRANGEMENT_FAST_POLL_MS,
+  active: isArrangementPending,
+  maxPolls: ARRANGEMENT_MAX_POLLS,
+});
+
+/** refetchInterval for the results query: poll only while phase 7's
+ *  background structure detection is pending; stop once it settles
+ *  (scored / unavailable / failed), on 404/errors, or at the backstop. */
+export function arrangementPollInterval(query: Parameters<typeof arrangementPoll>[0]): number | false {
+  const base = arrangementPoll(query);
+  if (base === false) return false;
+  const polls = query.state.dataUpdateCount + query.state.errorUpdateCount;
+  return polls >= ARRANGEMENT_FAST_POLLS ? ARRANGEMENT_SLOW_POLL_MS : ARRANGEMENT_FAST_POLL_MS;
 }
 
 // Story 12.5: useRerunPhase was removed with its only consumer (the orphaned
