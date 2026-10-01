@@ -1,4 +1,4 @@
-import { queryOptions, useQuery, type QueryClient } from '@tanstack/react-query';
+import { useQuery, type QueryClient } from '@tanstack/react-query';
 
 import { fetcher } from '../../api/fetcher';
 import type { GuestStateDto } from '../../api/types';
@@ -19,12 +19,15 @@ import { useAuth } from '../../auth/AuthContext';
  */
 /** Shared by the hook and the /library route guard (which fetches it via
  *  `queryClient.fetchQuery` in beforeLoad) — one key, one cache entry. */
-export const guestStateQueryOptions = queryOptions({
+// A plain object (not `queryOptions(...)`): several tests mock
+// @tanstack/react-query wholesale, and a module-scope call would need every
+// one of those mocks to provide it.
+export const guestStateQueryOptions = {
   queryKey: ['me', 'guest'] as const,
   queryFn: () => fetcher<GuestStateDto>({ url: '/me/guest', method: 'GET' }),
   staleTime: 30_000,
-  retry: false,
-});
+  retry: false as const,
+};
 
 /**
  * Owner ruling 2026-10-01 — a guest may use the library once they have
