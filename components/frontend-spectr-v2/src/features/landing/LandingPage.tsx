@@ -1,5 +1,5 @@
 /* Story 6.1 (FR40) — the public landing page at `/`. One-scroll pitch:
- * hero (with a real finding + fix card) + honesty strip + footer. Anonymous only — the
+ * hero (with a real finding + fix card) + feature list + footer. Anonymous only — the
  * root route's beforeLoad redirects authed users to /library. Keep this
  * chunk LEAN (AC4 LCP): ui primitives only, nothing that pulls
  * wavesurfer/recharts/listen-rack. */
@@ -13,11 +13,18 @@ import { LandingResumeSlot } from '../anon-analyze/LandingResumeSlot';
 import { LandingHero } from './LandingHero';
 import s from './landing.module.css';
 
-// The honesty strip mirrors the UpgradeSheet trust line (story 2.7 copy).
-const HONESTY_POINTS = [
-  { head: 'No AI training on your audio', body: 'Your unreleased music is analyzed, never used to train models.' },
-  { head: 'Reports stay yours forever', body: 'Cancel anytime in two clicks — every report you generated stays accessible.' },
-  { head: 'Honest grades', body: 'A real 7-phase measurement pipeline. If the mix is rough, the report says so.' },
+// Ordered as the producer's loop: diagnose → understand → fix → hear → apply →
+// prove. Every claim maps to a shipped surface. Copy rules (e515995): the coach
+// reasons over measurements (never "hears"), and no arrangement/structure
+// promise — structure detection doesn't run in prod. No export/download promise
+// until the fix plan actually has one.
+const FEATURES = [
+  { head: 'Know exactly what’s wrong with your mix', body: 'Upload a WAV, MP3 or FLAC and get a full breakdown of loudness, low end, stereo image, dynamics and tonal balance, judged against your genre.' },
+  { head: 'An AI coach that knows your report', body: 'Ask anything in plain language. Every answer points to your measured numbers, not generic advice.' },
+  { head: 'From problem to exact fix', body: 'Every finding comes with a specific move: processor, frequency and amount, on the right track and section. Ranked, so you know where to start.' },
+  { head: 'Hear the fix before you commit', body: 'Audition the suggested fix chain against your original mix in real time, right in the browser.' },
+  { head: 'Follow along in your DAW', body: 'Dial in concrete settings step by step and check off each fix as you apply it.' },
+  { head: 'Prove it got better', body: 'Every bounce of a song lives on one timeline. Compare any two versions side by side and see whether the changes actually helped.' },
 ];
 
 export function LandingPage() {
@@ -40,13 +47,16 @@ export function LandingPage() {
 
         <LandingHero />
 
-        <section className={s.honesty}>
-          {HONESTY_POINTS.map((p) => (
-            <div key={p.head} className={`card ${s.honestyCard}`}>
-              <h3 className={s.honestyHead}>{p.head}</h3>
-              <p className={s.honestyBody}>{p.body}</p>
-            </div>
-          ))}
+        <section className={s.features} aria-labelledby="landing-features-title">
+          <h2 id="landing-features-title" className={`label ${s.featuresLabel}`}>What you get</h2>
+          <ul className={s.featureList}>
+            {FEATURES.map((f) => (
+              <li key={f.head} className={s.feature}>
+                <span className={s.featureHead}>{f.head}</span>
+                <span className={s.featureBody}>{f.body}</span>
+              </li>
+            ))}
+          </ul>
         </section>
 
         <PublicFooter />

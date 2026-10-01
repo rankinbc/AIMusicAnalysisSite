@@ -56,13 +56,16 @@ describe('LandingPage (story 6.1 AC1)', () => {
     expect(html).toContain('Analyze my track free');
   });
 
-  it('renders chrome, honesty strip, and footer links — no sample report embed', () => {
+  it('renders chrome, feature list, and footer links — no sample report embed', () => {
     // Task P2 (D6) — same as above: PricingLink never resolves under
     // renderToStaticMarkup, so the footer link is hidden too.
     expect(html).not.toContain('href="/pricing"');
     expect(html).not.toContain('Live sample report');
-    expect(html).toContain('No AI training on your audio');
-    expect(html).toContain('Reports stay yours forever');
+    expect(html).toContain('What you get');
+    expect(html).toContain('From problem to exact fix');
+    expect(html).toContain('Prove it got better');
+    // The old 3-card honesty strip was removed from the landing page.
+    expect(html).not.toContain('Reports stay yours forever');
     expect(html).toContain('href="/login"');
   });
 
