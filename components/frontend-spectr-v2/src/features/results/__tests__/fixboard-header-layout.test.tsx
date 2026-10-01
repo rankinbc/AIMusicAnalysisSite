@@ -50,18 +50,19 @@ function header(mode: 'actions' | 'findings') {
 }
 
 describe('FixBoard header layout', () => {
-  it('Actions: title in .fb-lt, each control a separate wrappable child of .fb-filters', () => {
+  it('Actions: title + Select all on the title row, the filters wrappable beneath', () => {
     const lh = header('actions');
-    expect(Array.from(lh.children).map((c) => c.className)).toEqual(['fb-lt', 'fb-filters']);
+    // Owner 2026-10-01 (Actions at the top): Select all sits beside the title;
+    // the priority pill + Filter share the row below.
+    expect(Array.from(lh.children).map((c) => c.className)).toEqual(['fb-lt', 'fpill selall', 'fb-filters']);
     expect(lh.querySelector('.fb-lt .t')?.textContent).toBe('Actions');
     const filters = lh.querySelector('.fb-filters');
     if (!filters) throw new Error('no filters');
-    // Select all, the priority pill, the Filter dropdown — three flex items, so
-    // each can drop to its own row.
-    expect(filters.children).toHaveLength(3);
-    expect(filters.children[0]?.classList.contains('selall')).toBe(true);
-    expect(filters.children[1]?.classList.contains('fb-prio')).toBe(true);
-    expect(filters.children[2]?.classList.contains('fb-filterdd')).toBe(true);
+    // The priority pill and the Filter dropdown — two flex items, so each can
+    // drop to its own row.
+    expect(filters.children).toHaveLength(2);
+    expect(filters.children[0]?.classList.contains('fb-prio')).toBe(true);
+    expect(filters.children[1]?.classList.contains('fb-filterdd')).toBe(true);
   });
 
   it('Findings: no Select all, same two-group header', () => {
