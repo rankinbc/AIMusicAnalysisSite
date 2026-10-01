@@ -62,9 +62,28 @@ RETRY_SUFFIX = (
 )
 
 
+# Length caps from aimusic_shared Verdict. The model overruns these now and
+# then; one long sentence must not cost the whole finding (validation would
+# reject the verdict outright), so clip at a word boundary instead.
+_TEXT_CAPS = {"headline": 80, "summary": 300, "why_it_matters": 200}
+
+
+def _clip(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    cut = text[: limit - 1]
+    space = cut.rfind(" ")
+    if space > limit // 2:
+        cut = cut[:space]
+    return cut.rstrip(" ,;:—-") + "…"
+
+
 def _hydrate(raw: dict[str, Any], *, track_id: str, slug: str,
              prompt_version: str, model: str) -> VerdictModel:
     body = dict(raw)
+    for field, limit in _TEXT_CAPS.items():
+        if isinstance(body.get(field), str):
+            body[field] = _clip(body[field], limit)
     body.setdefault("verdict_id", new_verdict_id())
     fix = body.get("fix")
     if isinstance(fix, dict):
@@ -249,7 +268,11 @@ def run_specialist(analysis_id: str, slug: str, user_id: str) -> None:
                 model=pinned_model,
                 user_id=caller_id,
                 correlation_id=analysis_id,
-                timeout_s=120,
+                # A full specialist answer (several verdicts, each with a
+                # dsp_chain) runs past the gateway's 4096 default; truncated
+                # JSON silently became a "Specialist failed" marker in prod.
+                max_tokens=16000,
+                timeout_s=240,
             )
         except LlmBudgetExceeded as exc:
             # Story 1.4 / FR16: degraded path. Stamp the notice + ensure

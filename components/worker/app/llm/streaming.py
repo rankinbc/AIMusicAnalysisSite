@@ -119,7 +119,7 @@ def stream_complete_sync(
     user_id: Any | None = None,
     tier: str | None = None,
     correlation_id: str | None = None,
-    max_tokens: int = 4096,
+    max_tokens: int = 16000,  # truncated JSON = a silent failed verdict; billed per token used, not per cap
     timeout_s: int | None = None,
     cancel_check: Callable[[], bool] | None = None,
 ) -> Iterator[GatewayStreamEvent]:

@@ -277,7 +277,7 @@ async def complete(
     user_id: Any | None = None,
     tier: str | None = None,
     correlation_id: str | None = None,
-    max_tokens: int = 4096,
+    max_tokens: int = 16000,  # truncated JSON = a silent failed verdict; billed per token used, not per cap
     timeout_s: int | None = None,
 ) -> GatewayResult:
     """Run one metered LLM call. Records exactly one ``llm_calls`` row on every
