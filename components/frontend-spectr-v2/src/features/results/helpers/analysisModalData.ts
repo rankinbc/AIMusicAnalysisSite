@@ -47,6 +47,9 @@ export interface PhaseRow {
   kv: KvPair[];
   clashes: ClashRow[];
   note?: string;
+  /** Background work for this phase is still in flight (e.g. phase-7
+   *  structure detection) — rendered with a spinner instead of a ✓. */
+  pending?: boolean;
 }
 
 export interface InputRow {
@@ -278,6 +281,7 @@ function summarize(fj: FinalJson, p: PhaseResult): PhaseRow {
       // "analyzing…" is a lie once the worker marked it failed.
       if (d.arrangement_status === 'pending') {
         row.detail = 'Arrangement analysis running…';
+        row.pending = true;
         row.note =
           'Structure detection runs in the background — the score fills in when it lands.';
         break;

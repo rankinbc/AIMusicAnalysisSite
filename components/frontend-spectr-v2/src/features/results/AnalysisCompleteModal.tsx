@@ -1,8 +1,18 @@
 // Analysis Complete modal — the teaser/conversion surface shown after analysis.
-// Recreates design_handoff_analysis_modal/Analysis Modal.html against real
-// finalJson + the Triage routing plan. Two states: running + complete.
+// Two states: running + complete. The complete state is laid out as:
+//   header (song + genre correct) → scrolling body (coach, findings, compact
+//   step list, inputs) → PINNED dock (two-stage status: static analysis done ✓,
+//   AI analysis next in the full report) → footer actions.
+// The dock lives outside the scroll area so the "what happens next" message
+// and the primary CTA are always visible, however long the body gets.
+//
+// Rendered through a portal to <body>: ReportView mounts it inside `.rdx`,
+// whose `.rdx * { margin:0; padding:0 }` reset ties on specificity with every
+// CSS-module class here and wins or loses on stylesheet order. The modal is
+// a fixed overlay, so escaping the subtree changes nothing but that.
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import type { FinalJson, RoutingPlanDto } from '../../api/types';
 import { GenreCorrectChip } from './GenreCorrectChip';
@@ -54,27 +64,27 @@ const ArrowRight = ({ n = 14 }: { n?: number }) => (
 const InputIcon = ({ kind }: { kind: string }) => {
   if (kind === 'stems')
     return (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
         <path d="M4 6h16M4 12h16M4 18h16" />
       </svg>
     );
   if (kind === 'als')
     return (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
         <path d="M14 2v6h6" />
       </svg>
     );
   if (kind === 'reference')
     return (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M12 3v12" />
         <circle cx="6" cy="18" r="3" />
         <path d="M12 9l9-3" />
       </svg>
     );
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M9 18V5l12-2v13" />
       <circle cx="6" cy="18" r="3" />
       <circle cx="18" cy="16" r="3" />
@@ -119,7 +129,7 @@ export function AnalysisCompleteModal(props: Props) {
   const isRunning = Boolean(running);
 
   const [openPhases, setOpenPhases] = useState<Set<number>>(new Set());
-  const [aiOpen, setAiOpen] = useState(true);
+  const [aiOpen, setAiOpen] = useState(false);
   const [inputsOpen, setInputsOpen] = useState(false);
 
   // Esc to close.
@@ -137,6 +147,7 @@ export function AnalysisCompleteModal(props: Props) {
   const inSum = inputsSummary(inputs);
   const routing = splitRouting(props.routingPlan);
   const ranCount = phaseRows.filter((p) => p.status === 'ok' || p.status === 'warn' || p.status === 'failed').length;
+  const failedCount = phaseRows.filter((p) => p.status === 'failed').length;
 
   const togglePhase = (n: number) =>
     setOpenPhases((prev) => {
@@ -150,7 +161,7 @@ export function AnalysisCompleteModal(props: Props) {
   const C = 2 * Math.PI * R; // 414.7
   const pct = running ? Math.max(0.02, Math.min(1, running.pct)) : 0;
 
-  return (
+  const modal = (
     <div className={s.root} role="dialog" aria-modal="true" aria-label="Analysis">
       <div className={s.backdrop} onClick={onClose} />
       <div className={s.stage}>
@@ -196,7 +207,7 @@ export function AnalysisCompleteModal(props: Props) {
             </button>
           </div>
 
-          {/* Body */}
+          {/* Body — the only part that scrolls */}
           <div className={s.modalBody}>
             {isRunning ? (
               <RunView running={running!} R={R} C={C} pct={pct} />
@@ -205,7 +216,7 @@ export function AnalysisCompleteModal(props: Props) {
                 {/* Coach hero */}
                 <div className={s.coachHero}>
                   <span className={s.chAv}>
-                    <Sparkle />
+                    <Sparkle n={18} />
                   </span>
                   <div className={s.chTx}>
                     <div className={s.chName}>
@@ -219,7 +230,7 @@ export function AnalysisCompleteModal(props: Props) {
 
                 {/* Report grid */}
                 <div className={s.reportGrid}>
-                  <div>
+                  <section>
                     <div className={s.sectionLabel}>
                       <span>What I found</span>
                       <span className={s.line} />
@@ -237,56 +248,71 @@ export function AnalysisCompleteModal(props: Props) {
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </section>
 
-                  <div>
+                  <section>
                     <div className={s.sectionLabel}>
                       <span>Analysis steps</span>
                       <span className={s.line} />
-                      <span>{ranCount} run · AI next</span>
+                      <span>
+                        {ranCount} of {phaseRows.length} ran
+                      </span>
                     </div>
-                    <div className={s.pipe}>
+                    <ul className={s.steps} data-testid="acm-steps">
                       {phaseRows.map((p) => (
-                        <PhaseCard key={p.phase} p={p} open={openPhases.has(p.phase)} onToggle={() => togglePhase(p.phase)} />
+                        <StepRow key={p.phase} p={p} open={openPhases.has(p.phase)} onToggle={() => togglePhase(p.phase)} />
                       ))}
-                      <AiPhaseCard routing={routing} open={aiOpen} onToggle={() => setAiOpen((v) => !v)} onRun={onViewReport} />
-                    </div>
-                  </div>
+                    </ul>
+                  </section>
                 </div>
 
                 {/* Inputs disclosure */}
                 <div className={cx(s.disc, inputsOpen && s.open)}>
-                  <button className={s.discHead} onClick={() => setInputsOpen((v) => !v)}>
+                  <button
+                    type="button"
+                    className={s.discHead}
+                    aria-expanded={inputsOpen}
+                    onClick={() => setInputsOpen((v) => !v)}
+                  >
                     <span className={s.dhL}>Inputs analyzed</span>
                     <span className={s.dhSum}>
                       {inSum.present.join(' · ')} · <b>{inSum.used}/4 sources</b>
                     </span>
                     <span className={s.chev}>
-                      <Chevron n={14} />
+                      <Chevron n={13} />
                     </span>
                   </button>
                   {inputsOpen && (
                     <div className={s.discBody}>
-                      <div className={s.inputsList}>
-                        {inputs.map((r) => (
-                          <div key={r.kind} className={cx(s.inRow, s[r.cls])}>
-                            <span className={s.inIc}>
-                              <InputIcon kind={r.kind} />
-                            </span>
-                            <div className={s.inTx}>
-                              <span className={s.inK}>{r.label}</span>
-                              <span className={s.inV}>{r.value}</span>
-                            </div>
-                            <span className={s.inMeta}>{r.meta}</span>
-                          </div>
-                        ))}
-                      </div>
+                      {inputs.map((r) => (
+                        <div key={r.kind} className={cx(s.inRow, s[r.cls])}>
+                          <span className={s.inIc}>
+                            <InputIcon kind={r.kind} />
+                          </span>
+                          <span className={s.inK}>{r.label}</span>
+                          <span className={s.inV}>{r.value}</span>
+                          <span className={s.inMeta}>{r.meta}</span>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
               </>
             )}
           </div>
+
+          {/* Pinned dock: two-stage status (complete state only) */}
+          {!isRunning && (
+            <StatusDock
+              ranCount={ranCount}
+              total={phaseRows.length}
+              failedCount={failedCount}
+              analyzedSec={props.analyzedSec}
+              routing={routing}
+              aiOpen={aiOpen}
+              onToggleAi={() => setAiOpen((v) => !v)}
+            />
+          )}
 
           {/* Footer */}
           <div className={s.modalFt}>
@@ -295,27 +321,17 @@ export function AnalysisCompleteModal(props: Props) {
                 <div className={s.ftMeta}>
                   Phase {running!.phaseIndex} of {running!.total} · analyzing your mix…
                 </div>
-                <button className={s.btn} onClick={onClose}>
+                <button type="button" className={s.btn} onClick={onClose}>
                   Run in background
                 </button>
               </>
             ) : (
               <>
-                <div className={s.ftMeta}>
-                  {props.analyzedSec ? (
-                    <>
-                      Analyzed in <b>{props.analyzedSec}s</b> · {ranCount} analyses ran
-                    </>
-                  ) : (
-                    <>
-                      <b>{ranCount}</b> analyses ran · AI specialists next
-                    </>
-                  )}
-                </div>
-                <button className={s.btn} onClick={onReanalyze}>
+                <button type="button" className={s.btn} onClick={onReanalyze}>
                   ↺ Re-analyze <CostTag action="analysis" />
                 </button>
-                <button className={cx(s.btn, s.primary)} onClick={onViewReport}>
+                <span className={s.ftSpacer} />
+                <button type="button" className={cx(s.btn, s.primary)} onClick={onViewReport}>
                   View full report <ArrowRight />
                 </button>
               </>
@@ -325,41 +341,36 @@ export function AnalysisCompleteModal(props: Props) {
       </div>
     </div>
   );
+
+  return typeof document === 'undefined' ? modal : createPortal(modal, document.body);
 }
 
 function sevVar(sev: string): string {
   return sev === 'crit' ? 'red' : sev === 'mod' ? 'orange' : sev === 'min' ? 'blue' : 'cyan';
 }
 
-function PhaseCard({ p, open, onToggle }: { p: PhaseRow; open: boolean; onToggle: () => void }) {
-  const st = p.status;
+function StepRow({ p, open, onToggle }: { p: PhaseRow; open: boolean; onToggle: () => void }) {
+  const st = p.pending ? 'pending' : p.status;
   return (
-    <div className={cx(s.phase, open && s.open)} id={`ph-${p.phase}`}>
-      <div className={s.phaseRow} onClick={onToggle}>
-        <span className={cx(s.phaseStat, s[st])}>{STAT_GLYPH[st]}</span>
-        <div className={s.phaseTxt}>
-          <div className={s.pl}>
-            {p.short} <span className={s.pnum}>phase {p.phase}</span>
-          </div>
-          <div className={s.pd}>{p.detail}</div>
-        </div>
-        <span className={cx(s.phaseTag, s[st])}>{STAT_TAG[st]}</span>
-        <span className={s.chev}>
-          <Chevron />
+    <li className={cx(s.step, open && s.open)} id={`ph-${p.phase}`} data-status={st}>
+      <button type="button" className={s.stepRow} aria-expanded={open} onClick={onToggle} title={p.detail}>
+        <span className={cx(s.stepStat, s[st])} aria-hidden>
+          {p.pending ? <span className={s.spin} /> : STAT_GLYPH[st]}
         </span>
-      </div>
+        <span className={s.stepName}>{p.short}</span>
+        <span className={s.stepSum}>{p.detail}</span>
+        <span className={cx(s.stepTag, s[st])}>{p.pending ? 'running' : STAT_TAG[st]}</span>
+        <span className={s.chev}>
+          <Chevron n={11} />
+        </span>
+      </button>
       {open && (
-        <div className={s.phaseDetail}>
+        <div className={s.stepDetail}>
           {st === 'skipped' ? (
-            <div className={s.detailEmpty}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                <circle cx="12" cy="12" r="9" />
-                <path d="M8 12h8" />
-              </svg>
-              {p.note ?? 'Not applicable for this run.'}
-            </div>
+            <div className={s.detailEmpty}>{p.note ?? 'Not applicable for this run.'}</div>
           ) : (
             <>
+              {p.detail && <div className={s.detailLead}>{p.detail}</div>}
               {p.clashes.map((c, i) => (
                 <div key={i} className={s.clashRow}>
                   <span className={cx(s.sev, s[c.sev])}>{c.sev}</span>
@@ -379,97 +390,103 @@ function PhaseCard({ p, open, onToggle }: { p: PhaseRow; open: boolean; onToggle
                   ))}
                 </div>
               )}
-              {p.note && (
-                <div className={s.detailNote} style={{ marginTop: 10 }}>
-                  {p.note}
-                </div>
-              )}
+              {p.note && <div className={s.detailNote}>{p.note}</div>}
             </>
           )}
         </div>
       )}
-    </div>
+    </li>
   );
 }
 
-function AiPhaseCard({
+function StatusDock({
+  ranCount,
+  total,
+  failedCount,
+  analyzedSec,
   routing,
-  open,
-  onToggle,
-  onRun,
+  aiOpen,
+  onToggleAi,
 }: {
+  ranCount: number;
+  total: number;
+  failedCount: number;
+  analyzedSec?: number | undefined;
   routing: ReturnType<typeof splitRouting>;
-  open: boolean;
-  onToggle: () => void;
-  onRun: () => void;
+  aiOpen: boolean;
+  onToggleAi: () => void;
 }) {
   return (
-    <div className={cx(s.phase, s.ai, open && s.open)}>
-      <div className={s.phaseRow} onClick={onToggle}>
-        <span className={cx(s.phaseStat, s.aiStat)}>
-          <Sparkle n={12} />
+    <div className={s.dock} data-testid="acm-status-dock">
+      {/* Stage 1 — done */}
+      <div className={cx(s.stageRow, s.done)}>
+        <span className={s.stageIc} aria-hidden>
+          ✓
         </span>
-        <div className={s.phaseTxt}>
-          <div className={s.pl}>
-            AI Analysis <span className={s.pnum}>specialist deep-dive</span>
-          </div>
-          <div className={s.pd}>Runs when you open the full report</div>
+        <div className={s.stageTx}>
+          <span className={s.stageTitle}>Static analysis complete</span>
+          <span className={s.stageMeta}>
+            {ranCount} of {total} steps ran
+            {failedCount > 0 && <span className={s.failedNote}> · {failedCount} failed</span>}
+            {analyzedSec ? ` · analyzed in ${analyzedSec}s` : ''}
+          </span>
         </div>
-        <span className={cx(s.phaseTag, s.locked)}>in full report</span>
-        <span className={s.chev}>
-          <Chevron />
-        </span>
       </div>
-      {open && (
-        <div className={s.phaseDetail}>
-          {!routing ? (
-            <>
-              <div className={s.aiIntro}>
-                <b>Triage AI</b> will route the right specialists for your mix and run a deeper,
-                section-by-section analysis when you open the full report — then build a concrete
-                DAW action plan.
-              </div>
-              <button className={s.scCta} onClick={onRun}>
-                Run AI analysis in the full report <ArrowRight n={13} />
-              </button>
-            </>
-          ) : (
-            <>
-              <div className={s.aiIntro}>
-                <b>Triage AI</b> lined up <b>{routing.total} specialists</b>
-                {routing.high.length ? (
-                  <>
-                    {' '}
-                    — <b>{routing.high.length} high-priority</b> on what I found
-                  </>
-                ) : null}
-                . They run when you open the full report.
-              </div>
-              <div className={s.aiSpecList}>
-                {routing.high.map((sp, i) => {
+
+      {/* Stage 2 — next: AI analysis in the full report */}
+      <div className={s.aiBlock} data-testid="acm-ai-block">
+        <div className={cx(s.stageRow, s.next)}>
+          <span className={s.stageIc} aria-hidden>
+            <Sparkle n={12} />
+          </span>
+          <div className={s.stageTx}>
+            <span className={s.stageTitle}>Continue to the full report to run AI analysis</span>
+            <span className={s.stageMeta}>
+              {routing ? (
+                <>
+                  Triage AI lined up <b>{routing.total} specialists</b>
+                  {routing.high.length ? (
+                    <>
+                      {' '}
+                      · <b>{routing.high.length} high-priority</b>
+                    </>
+                  ) : null}
+                </>
+              ) : (
+                <>Triage AI will route the right specialists for your mix, then build a DAW action plan</>
+              )}
+            </span>
+          </div>
+          {routing ? (
+            <button type="button" className={s.aiToggle} aria-expanded={aiOpen} onClick={onToggleAi}>
+              {aiOpen ? 'Hide' : 'Specialists'}
+              <span className={cx(s.chev, aiOpen && s.chevOpen)}>
+                <Chevron n={11} />
+              </span>
+            </button>
+          ) : null}
+          <span className={s.aiTag}>In full report</span>
+        </div>
+
+        {routing && aiOpen && (
+          <div className={s.aiDetail}>
+            {routing.high.map((sp, i) => {
               const g = GROUP_COLORS[sp.group];
               return (
                 <div key={i} className={s.aiSpec}>
                   <span className={s.aiSpecAv} style={{ color: g.c, background: g.d }}>
                     {specInitials(sp.label)}
                   </span>
-                  <div className={s.aiSpecTx}>
-                    <div className={s.aiSpecName}>
-                      {sp.label}{' '}
-                      <span className={s.aiSpecGrp} style={{ color: g.c }}>
-                        {sp.group}
-                      </span>
-                    </div>
-                    <div className={s.aiSpecFocus}>{sp.focus}</div>
-                  </div>
+                  <span className={s.aiSpecName}>{sp.label}</span>
+                  <span className={s.aiSpecFocus} title={sp.focus}>
+                    {sp.focus}
+                  </span>
                 </div>
               );
             })}
-          </div>
-          {routing.rest.length > 0 && (
-            <>
-              <div className={s.aiMoreLabel}>Also sweeping {routing.rest.length} more areas</div>
+            {routing.rest.length > 0 && (
               <div className={s.aiChipRow}>
+                <span className={s.aiMoreLabel}>+{routing.rest.length} more</span>
                 {routing.rest.map((sp, i) => {
                   const g = GROUP_COLORS[sp.group];
                   return (
@@ -480,15 +497,10 @@ function AiPhaseCard({
                   );
                 })}
               </div>
-            </>
-          )}
-              <button className={s.scCta} onClick={onRun}>
-                Run AI analysis in the full report <ArrowRight n={13} />
-              </button>
-            </>
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
