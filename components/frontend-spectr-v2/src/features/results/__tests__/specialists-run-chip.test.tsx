@@ -112,3 +112,64 @@ describe('SpecialistTeamModal initialView', () => {
     expect(document.querySelector('.spec-ranlist')).toBeNull();
   });
 });
+
+function groupHeader(name: string): HTMLElement {
+  const hd = [...document.querySelectorAll<HTMLElement>('.sg-toggle')].find(
+    (b) => b.querySelector('.sg-n')?.textContent === name,
+  );
+  if (!hd) throw new Error(`no group header ${name}`);
+  return hd;
+}
+
+describe('SpecialistTeamModal compact roster', () => {
+  function renderRoster(onRun = vi.fn()) {
+    render(
+      <SpecialistTeamModal
+        ranSlugs={new Set(['low_end'])}
+        runningSlugs={new Set<string>()}
+        foundBySlug={new Map([['low_end', 1]])}
+        suggestedSlugs={new Set(['spatial'])}
+        verdicts={[VERDICT]}
+        hasStems={false}
+        credits={null}
+        onRun={onRun}
+        onClose={vi.fn()}
+      />,
+    );
+    return onRun;
+  }
+
+  it('collapses every category by default and flags recommended ones in the header', () => {
+    renderRoster();
+    for (const g of ['Spectrum', 'Loudness', 'Dynamics', 'Stereo', 'Sections', 'Stems', 'Misc']) {
+      expect(groupHeader(g).getAttribute('aria-expanded')).toBe('false');
+    }
+    expect(screen.queryByRole('button', { name: /Spatial/ })).toBeNull();
+    expect(screen.getByText('1 recommended')).toBeTruthy();
+  });
+
+  it('expands a category into rows; recommended rows are highlighted', () => {
+    renderRoster();
+    fireEvent.click(groupHeader('Stereo'));
+    const spatial = screen.getByRole('button', { name: /Spatial/ });
+    expect(spatial.className).toContain('rec');
+    expect(spatial.textContent).toContain('Recommended for this track');
+    expect(screen.getByRole('button', { name: /Stereo Field/ }).className).not.toContain('rec');
+  });
+
+  it('shows a run specialist with its findings, like the Already run list', () => {
+    renderRoster();
+    fireEvent.click(groupHeader('Spectrum'));
+    const row = screen.getByRole('button', { name: /Low End/ });
+    expect(row.textContent).toContain('Sub is masking the kick');
+    expect(row.textContent).toContain('1 finding');
+  });
+
+  it('selecting a row arms the run button', () => {
+    const onRun = renderRoster();
+    fireEvent.click(groupHeader('Dynamics'));
+    fireEvent.click(screen.getByRole('button', { name: /^Dynamics.*Not run yet/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Run · 1 cr/ }));
+    expect(onRun).toHaveBeenCalledWith('dynamics');
+  });
+});

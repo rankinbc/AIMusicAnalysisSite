@@ -121,22 +121,46 @@ export function SpecialistTeamModal({
 
   const selSpec = SPECIALIST_CATALOG.find((m) => m.slug === selSlug) ?? null;
 
-  const Tile = ({ m }: { m: (typeof SPECIALIST_CATALOG)[number] }) => {
+  const [openGroups, setOpenGroups] = useState<ReadonlySet<SpecialistGroup>>(new Set());
+  const toggleGroup = (g: SpecialistGroup) =>
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(g)) next.delete(g);
+      else next.add(g);
+      return next;
+    });
+
+  // One row per specialist, in the "Already run" list style: avatar · name ·
+  // what it found (or its state) · status. Clicking selects it for the
+  // action bar; triage-recommended rows are highlighted.
+  const Row = ({ m }: { m: (typeof SPECIALIST_CATALOG)[number] }) => {
     const status = statusOf(m.slug, m.needsStems);
-    const found = foundBySlug.get(m.slug) ?? 0;
-    const color = groupColor(m.group);
+    const hits = headlinesBySlug.get(m.slug) ?? [];
+    const found = foundBySlug.get(m.slug) ?? hits.length;
+    const rec = status === 'idle' && suggested.some((x) => x.slug === m.slug);
     return (
       <button
         type="button"
-        className={`spec-tile${m.slug === selSlug ? ' sel' : ''}`}
+        className={`spec-ranrow pick${m.slug === selSlug ? ' sel' : ''}${rec ? ' rec' : ''}`}
         data-status={status}
+        aria-pressed={m.slug === selSlug}
         onClick={() => setSelSlug(m.slug)}
       >
-        {found > 0 && <span className="spec-found">{found}</span>}
-        <SpecAvatar color={color} />
-        <span className="spec-tn">{m.label}</span>
+        <SpecAvatar color={groupColor(m.group)} size={22} />
+        <span className="srr-n">{m.label}</span>
+        <span className="srr-res">
+          {status === 'cached'
+            ? hits.join(' · ') || (found > 0 ? 'See the Findings tab' : 'No findings')
+            : status === 'running'
+              ? 'Running…'
+              : status === 'locked'
+                ? 'Upload stems to enable'
+                : rec
+                  ? 'Recommended for this track'
+                  : 'Not run yet'}
+        </span>
         {status === 'running' ? (
-          <span className="spec-st run">
+          <span className="srr-found run">
             <span className="eqdots">
               <i />
               <i />
@@ -145,13 +169,13 @@ export function SpecialistTeamModal({
             </span>
           </span>
         ) : status === 'cached' ? (
-          <span className="spec-st">{found > 0 ? `${found} found` : 'cached'}</span>
-        ) : status === 'locked' ? (
-          <span className="spec-st">needs stems</span>
-        ) : (
-          <span className="spec-st" style={{ color: 'var(--accent)' }}>
-            1 cr
+          <span className="srr-found">
+            {found} finding{found === 1 ? '' : 's'}
           </span>
+        ) : status === 'locked' ? (
+          <span className="srr-found">needs stems</span>
+        ) : (
+          <span className="srr-found cr">1 cr</span>
         )}
       </button>
     );
@@ -185,7 +209,7 @@ export function SpecialistTeamModal({
                 </span>
                 <span className="tri-l">AI triage</span>
                 <span className="tri-sub">
-                  why these {suggested.length} specialists were suggested
+                  why these {suggested.length} specialists were recommended
                 </span>
                 <span className="tri-chev">{triageOpen ? '▾' : '▸'}</span>
               </button>
@@ -205,50 +229,50 @@ export function SpecialistTeamModal({
             </>
           )}
 
-          <p className="tab-intro" style={{ margin: '14px 0 16px' }}>
-            {SPECIALIST_CATALOG.length} specialists across {SPECIALIST_GROUPS.length} groups.
-            Already-run ones are cached; run another to surface new findings — results drop into the
-            chat and the Findings tab.
+          <p className="tab-intro spec-intro">
+            {SPECIALIST_CATALOG.length} specialists across {SPECIALIST_GROUPS.length} groups. Run
+            one to surface new findings — results drop into the chat and the Findings tab.
           </p>
 
           <div className="spec-groups">
-            {suggested.length > 0 && (
-              <div className="spec-group">
-                <div className="sg-h">
-                  <span className="sg-dot" style={{ background: 'var(--accent)' }} />
-                  <span className="sg-n">Suggested for this track</span>
-                  <span className="sg-c">{suggested.length}</span>
-                </div>
-                <div className="spec-grid">
-                  {suggested.map((m) => (
-                    <Tile key={m.slug} m={m} />
-                  ))}
-                </div>
-              </div>
-            )}
-
             {SPECIALIST_GROUPS.map((group) => {
               const members = SPECIALIST_CATALOG.filter((m) => m.group === group);
               if (members.length === 0) return null;
+              const open = openGroups.has(group);
+              const recCount = members.filter((m) => suggested.some((x) => x.slug === m.slug)).length;
               return (
                 <div className="spec-group" key={group}>
-                  <div className="sg-h">
+                  <button
+                    type="button"
+                    className="sg-h sg-toggle"
+                    aria-expanded={open}
+                    onClick={() => toggleGroup(group)}
+                  >
                     <span className="sg-dot" style={{ background: groupColor(group) }} />
                     <span className="sg-n">{group}</span>
                     <span className="sg-c">{members.length}</span>
-                  </div>
-                  <div className="spec-grid">
-                    {members.map((m) => (
-                      <Tile key={m.slug} m={m} />
-                    ))}
-                  </div>
+                    {recCount > 0 && <span className="sg-rec">{recCount} recommended</span>}
+                    <span className="sg-chev">{open ? '▾' : '▸'}</span>
+                  </button>
+                  {open && (
+                    <div className="spec-ranlist boxed full">
+                      {members.map((m) => (
+                        <Row key={m.slug} m={m} />
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
 
             {ran.length > 0 && (
               <div className="spec-group">
-                <button type="button" className="sg-h sg-toggle" onClick={() => setRanOpen((o) => !o)}>
+                <button
+                  type="button"
+                  className="sg-h sg-toggle"
+                  aria-expanded={ranOpen}
+                  onClick={() => setRanOpen((o) => !o)}
+                >
                   <span className="sg-dot" style={{ background: 'var(--text-2)' }} />
                   <span className="sg-n">Already run</span>
                   <span className="sg-c">{ran.length}</span>
@@ -256,19 +280,9 @@ export function SpecialistTeamModal({
                 </button>
                 {ranOpen && (
                   <div className="spec-ranlist boxed">
-                    {ran.map((m) => {
-                      const hits = headlinesBySlug.get(m.slug) ?? [];
-                      return (
-                        <div className="spec-ranrow" key={m.slug}>
-                          <SpecAvatar color={groupColor(m.group)} size={22} />
-                          <span className="srr-n">{m.label}</span>
-                          <span className="srr-res">{hits.join(' · ')}</span>
-                          <span className="srr-found">
-                            {hits.length} finding{hits.length === 1 ? '' : 's'}
-                          </span>
-                        </div>
-                      );
-                    })}
+                    {ran.map((m) => (
+                      <Row key={m.slug} m={m} />
+                    ))}
                   </div>
                 )}
               </div>

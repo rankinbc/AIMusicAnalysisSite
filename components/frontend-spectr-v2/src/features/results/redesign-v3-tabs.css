@@ -702,8 +702,10 @@
 
 /* Specialist Team modal */
 .rdx .spec-modal { width:min(760px,100%); }
-.rdx .spec-groups { display:flex; flex-direction:column; gap:18px; }
-.rdx .spec-group .sg-h { display:flex; align-items:center; gap:9px; margin-bottom:11px; }
+.rdx .spec-intro { margin:10px 0 12px; }
+.rdx .spec-groups { display:flex; flex-direction:column; gap:8px; }
+.rdx .spec-group .sg-h { display:flex; align-items:center; gap:9px; margin-bottom:6px; }
+.rdx .spec-group .sg-h .sg-rec { font-size:10px; font-weight:600; color:var(--accent); background:rgba(0,229,176,.08); border:1px solid rgba(0,229,176,.28); border-radius:9px; padding:1px 7px; }
 .rdx .spec-group .sg-h .sg-dot { width:8px; height:8px; border-radius:2px; flex-shrink:0; }
 .rdx .spec-group .sg-h .sg-n { font-size:12px; font-weight:700; color:var(--text); letter-spacing:.01em; }
 .rdx .spec-group .sg-h .sg-c { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--muted); }
@@ -727,6 +729,16 @@
 .rdx .srr-n { font-size:12px; font-weight:600; color:var(--text); flex-shrink:0; min-width:138px; }
 .rdx .srr-res { flex:1; min-width:0; font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .rdx .srr-found { font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--text-2); flex-shrink:0; }
+.rdx .spec-ranlist.full { max-height:none; }
+.rdx .spec-ranrow.pick { width:100%; text-align:left; border:1px solid transparent; background:transparent; cursor:pointer; font:inherit; }
+.rdx .spec-ranrow.pick:nth-child(odd) { background:rgba(255,255,255,.018); }
+.rdx .spec-ranrow.pick:hover { background:var(--card-hover); }
+.rdx .spec-ranrow.pick.rec { background:rgba(0,229,176,.06); border-color:rgba(0,229,176,.22); }
+.rdx .spec-ranrow.pick.rec .srr-res { color:var(--accent); }
+.rdx .spec-ranrow.pick.sel { border-color:var(--accent); box-shadow:0 0 0 1px rgba(0,229,176,.25) inset; }
+.rdx .spec-ranrow.pick[data-status="locked"] { opacity:.55; }
+.rdx .srr-found.cr { color:var(--accent); }
+.rdx .srr-found.run { display:inline-flex; }
 .rdx .spec-tile { position:relative; display:flex; flex-direction:column; align-items:center; gap:8px; padding:13px 10px; border-radius:9px;
   border:1px solid var(--border-2); background:var(--surface-2); box-shadow:0 2px 8px -4px rgba(0,0,0,.5), inset 0 1px 0 var(--inner-hi); text-align:center; transition:all .15s; }
 .rdx .spec-tile:hover { border-color:var(--border-3); background:var(--card-hover); }
