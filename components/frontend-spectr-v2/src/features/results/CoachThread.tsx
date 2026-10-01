@@ -1,3 +1,4 @@
+import { CoachText } from './CoachText';
 import type { ReactNode, Ref } from 'react';
 
 import { Pill } from '../../ui/Pill';
@@ -53,7 +54,7 @@ export function CoachThread({
               </span>
             )}
             <div className="bub">
-              {turn.text}
+              {isAssistant ? <CoachText text={turn.text} /> : turn.text}
               {isLive && (turn.text ? <StreamCaret /> : <TypingDots />)}
               {isAssistant && turn.finalized && turn.evidence && turn.evidence.length > 0 && (
                 <EvidenceChips evidence={turn.evidence} />
