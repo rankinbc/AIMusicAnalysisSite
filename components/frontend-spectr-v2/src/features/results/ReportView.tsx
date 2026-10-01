@@ -773,6 +773,10 @@ export function ReportView({
           genre={phase2?.genre}
           versionLabel={undefined}
           routingPlan={verdictsData?.routingPlan}
+          specialistStatuses={verdictsData?.specialists}
+          runningSlugs={specialistRuns.running}
+          verdicts={verdictsData?.verdicts}
+          hasStems={inputs.stems}
           running={null}
           onClose={dismissModal}
           onViewReport={dismissModal}

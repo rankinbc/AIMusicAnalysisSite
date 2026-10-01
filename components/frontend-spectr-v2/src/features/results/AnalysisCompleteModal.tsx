@@ -3,8 +3,14 @@
 // complete state is laid out as:
 //   header (song + genre correct) → scrolling body (coach: static summary +
 //   which specialists he'll consult next; every step's measured results) →
-//   PINNED dock (✓ static analysis complete → AI analysis next, with the
-//   primary "Open full report & run AI analysis" CTA).
+//   PINNED dock (✓ static analysis complete → AI specialists n/N → the
+//   primary "Open full report" CTA).
+// The AI specialists (Triage's routed set, auto-run in parallel by
+// useSpecialistRuns in ReportView) are the pipeline's FINAL stage: the coach
+// narrates it, each specialist gets a live row, and the primary CTA stays
+// disabled until every one has settled (done or failed). A safety-valve
+// "Open report now" appears if triage or a run stalls, so nothing traps the
+// user.
 // The dock lives outside the scroll area so the next action is always visible.
 // Findings cards are deliberately NOT shown here — the full report owns them.
 //
@@ -13,20 +19,20 @@
 // CSS-module class here and wins or loses on stylesheet order. The modal is
 // a fixed overlay, so escaping the subtree changes nothing but that.
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
-import type { FinalJson, RoutingPlanDto } from '../../api/types';
-import { Coach } from '../../ui/Coach';
+import type { FinalJson, RoutingPlanDto, SpecialistStatus, VerdictDto } from '../../api/types';
 import { GenreCorrectChip } from './GenreCorrectChip';
 import { CostTag } from '../billing/CostTag';
+import { CoachNarrator } from './AnalysisCompleteCoach';
+import { SpecialistStageSection } from './AnalysisCompleteStage';
+import { narrate } from './helpers/coachNarration';
+import { deriveSpecialistStage } from './helpers/specialist-stage';
 import {
-  GROUP_COLORS,
-  coachMessage,
   deriveInputs,
   derivePhaseRows,
   inputsSummary,
-  splitRouting,
   type KvPair,
   type PhaseRow,
 } from './helpers/analysisModalData';
@@ -35,11 +41,6 @@ import s from './AnalysisCompleteModal.module.css';
 const cx = (...c: Array<string | false | undefined>) => c.filter(Boolean).join(' ');
 
 // ── inline icons (stroke-based, matching the design) ──
-const Sparkle = ({ n = 22 }: { n?: number }) => (
-  <svg width={n} height={n} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-    <path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z" />
-  </svg>
-);
 const CloseIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
     <path d="M18 6 6 18M6 6l12 12" />
@@ -89,19 +90,6 @@ function stepValues(p: PhaseRow): KvPair[] {
   return kv.map((x) => ({ ...x, k: KV_SHORT[x.k] ?? x.k }));
 }
 
-// The coach's static-analysis summary: his brief when the pipeline wrote one,
-// otherwise composed from the headline measurements shown below it.
-function staticSummary(fj: FinalJson, rows: PhaseRow[]): string {
-  const hasBrief =
-    Boolean((fj.coach_intro ?? '').trim()) ||
-    (fj.coached_fixes ?? []).some((x) => typeof x === 'string' && x.trim());
-  if (hasBrief) return coachMessage(fj);
-  const ok = rows.filter((r) => (r.status === 'ok' || r.status === 'warn') && !r.pending && r.detail);
-  if (!ok.length) return coachMessage(fj);
-  const parts = ok.slice(0, 3).map((r) => `${r.short.toLowerCase()}: ${r.detail}`);
-  return `From the static pass — ${parts.join('; ')}.`;
-}
-
 export interface RunningState {
   pct: number; // 0..1
   phaseName: string;
@@ -119,10 +107,23 @@ interface Props {
   analyzedSec?: number | undefined;
   routingPlan?: RoutingPlanDto | undefined;
   running?: RunningState | null | undefined;
+  /** Live specialist run state from useSpecialistRuns (ReportView owns the
+   *  polling + auto-run; the modal only reads it). */
+  specialistStatuses?: readonly SpecialistStatus[] | undefined;
+  runningSlugs?: ReadonlySet<string> | undefined;
+  verdicts?: readonly VerdictDto[] | undefined;
+  hasStems?: boolean | undefined;
+  /** One-thread worker lane (guest pool): specialists run one at a time. */
+  sequential?: boolean | undefined;
   onClose: () => void;
   onViewReport: () => void;
   onReanalyze: () => void;
 }
+
+/** No routing plan after this long → offer "Open report now". */
+export const PLAN_WAIT_MS = 120_000;
+/** Specialists not all settled this long after the plan landed → same. */
+export const SETTLE_WAIT_MS = 240_000;
 
 function fmtDur(sec?: number): string {
   if (!sec || !Number.isFinite(sec)) return '—';
@@ -146,7 +147,59 @@ export function AnalysisCompleteModal(props: Props) {
 
   const phaseRows = derivePhaseRows(fj);
   const inSum = inputsSummary(deriveInputs(fj, props.songName));
-  const routing = splitRouting(props.routingPlan);
+  const stage = deriveSpecialistStage({
+    routingPlan: props.routingPlan,
+    specialists: props.specialistStatuses,
+    running: props.runningSlugs,
+    verdicts: props.verdicts,
+    hasStems: props.hasStems ?? false,
+    sequential: props.sequential,
+  });
+  const sequential = props.sequential ?? false;
+
+  // Arrival order of settled specialists, so the coach's "X is back" lines
+  // append in the order they actually came back.
+  const [settleOrder, setSettleOrder] = useState<string[]>([]);
+  const settledKey = stage.rows
+    .filter((r) => r.state === 'done' || r.state === 'failed')
+    .map((r) => r.slug)
+    .join(',');
+  useEffect(() => {
+    if (!settledKey) return;
+    setSettleOrder((prev) => {
+      const add = settledKey.split(',').filter((slug) => !prev.includes(slug));
+      return add.length ? [...prev, ...add] : prev;
+    });
+  }, [settledKey]);
+  const coachLines = narrate({
+    fj,
+    verdicts: props.verdicts,
+    routingPlan: props.routingPlan,
+    stage,
+    settleOrder,
+  });
+
+  // Stage clock + safety valve. `now` only ticks while the stage is live.
+  const [mountedAt] = useState(() => Date.now());
+  const [planSeenAt, setPlanSeenAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const [valveOpen, setValveOpen] = useState(false);
+  useEffect(() => {
+    if (stage.planReady && planSeenAt === null) setPlanSeenAt(Date.now());
+  }, [stage.planReady, planSeenAt]);
+  useEffect(() => {
+    if (isRunning || stage.complete) return undefined;
+    const t = setInterval(() => {
+      const at = Date.now();
+      setNow(at);
+      if (planSeenAt === null ? at - mountedAt >= PLAN_WAIT_MS : at - planSeenAt >= SETTLE_WAIT_MS) {
+        setValveOpen(true);
+      }
+    }, 1000);
+    return () => clearInterval(t);
+  }, [isRunning, stage.complete, planSeenAt, mountedAt]);
+  const elapsedMs = planSeenAt === null ? null : (stage.complete ? null : Math.max(0, now - planSeenAt));
+  const ctaReady = stage.complete;
   const ranCount = phaseRows.filter((p) => p.status === 'ok' || p.status === 'warn' || p.status === 'failed').length;
   const failedCount = phaseRows.filter((p) => p.status === 'failed').length;
 
@@ -206,44 +259,8 @@ export function AnalysisCompleteModal(props: Props) {
               <RunView running={running!} R={R} C={C} pct={pct} />
             ) : (
               <>
-                {/* Coach: what he knows from the static pass + who he'll consult next */}
-                <div className={s.coachHero} data-testid="acm-coach">
-                  <span className={s.chAv}>
-                    <Coach size={46} thinking={!routing} />
-                  </span>
-                  <div className={s.chTx}>
-                    <div className={s.chName}>
-                      <span>{fj.coach_name || 'Nova'}</span>
-                      <span className={s.chRole}>your AI coach</span>
-                    </div>
-                    <div className={s.chMsg}>{staticSummary(fj, phaseRows)}</div>
-                    <div className={s.chNext} data-testid="acm-coach-next">
-                      {routing ? (
-                        <>
-                          <span className={s.chNextLbl}>Next I&apos;ll bring in</span>
-                          {[...routing.high, ...routing.rest].map((sp) => {
-                            const g = GROUP_COLORS[sp.group];
-                            return (
-                              <span
-                                key={sp.slug}
-                                className={s.specChip}
-                                style={{ color: g.c, borderColor: g.d, background: g.d }}
-                                title={sp.focus}
-                              >
-                                {sp.label}
-                              </span>
-                            );
-                          })}
-                        </>
-                      ) : (
-                        <span className={s.chPicking}>
-                          <span className={s.spin} aria-hidden />
-                          Picking which specialists to consult…
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                {/* Coach: a running log of what he knows and what he's doing */}
+                <CoachNarrator name={fj.coach_name || 'Nova'} lines={coachLines} stage={stage} />
 
                 {/* Every step's measured results, readable without clicking */}
                 <div className={s.sectionLabel}>
@@ -274,6 +291,11 @@ export function AnalysisCompleteModal(props: Props) {
                     </ul>
                   )}
                 </div>
+
+                {/* Final pipeline stage: the routed AI specialists */}
+                {stage.planReady && stage.total > 0 && (
+                  <SpecialistStageSection stage={stage} elapsedMs={elapsedMs} sequential={sequential} />
+                )}
               </>
             )}
           </div>
@@ -301,22 +323,64 @@ export function AnalysisCompleteModal(props: Props) {
                     {props.analyzedSec ? ` · ${props.analyzedSec}s` : ''}
                   </span>
                 </div>
-                <div className={cx(s.stageRow, s.next)} data-testid="acm-ai-block">
+                <div
+                  className={cx(s.stageRow, ctaReady ? s.done : s.next)}
+                  data-testid="acm-ai-block"
+                >
                   <span className={s.stageIc} aria-hidden>
-                    <Sparkle n={11} />
+                    {ctaReady ? '✓' : <span className={s.spin} />}
                   </span>
-                  <span className={s.stageTitle}>Next: AI analysis</span>
+                  <span className={s.stageTitle}>
+                    {!stage.planReady
+                      ? 'AI specialists'
+                      : stage.total === 0
+                        ? 'AI specialists · none needed'
+                        : ctaReady
+                          ? 'AI specialists complete'
+                          : `AI specialists ${stage.settled}/${stage.total}`}
+                  </span>
                   <span className={s.stageMeta}>
-                    {routing ? `${routing.total} specialists · in the full report` : 'runs in the full report'}
+                    {!stage.planReady
+                      ? 'picking who to consult…'
+                      : ctaReady
+                        ? stage.rows.some((r) => r.state === 'failed')
+                          ? `${stage.rows.filter((r) => r.state === 'failed').length} didn’t finish`
+                          : ''
+                        : sequential
+                          ? 'running one at a time'
+                          : 'running in parallel'}
                   </span>
                 </div>
               </div>
               <div className={s.actions}>
+                {valveOpen && !ctaReady && (
+                  <button type="button" className={s.valve} onClick={onViewReport}>
+                    Open report now
+                  </button>
+                )}
                 <button type="button" className={s.btn} onClick={onReanalyze}>
                   ↺ Re-analyze <CostTag action="analysis" />
                 </button>
-                <button type="button" className={cx(s.btn, s.primary)} onClick={onViewReport}>
-                  Open full report &amp; run AI analysis <ArrowRight n={16} />
+                <button
+                  type="button"
+                  className={cx(s.btn, s.primary)}
+                  onClick={onViewReport}
+                  disabled={!ctaReady}
+                  data-testid="acm-cta"
+                >
+                  {ctaReady ? (
+                    <>
+                      Open full report <ArrowRight n={16} />
+                    </>
+                  ) : stage.planReady ? (
+                    <>
+                      <span className={s.spin} aria-hidden /> Consulting specialists… ({stage.settled}/{stage.total})
+                    </>
+                  ) : (
+                    <>
+                      <span className={s.spin} aria-hidden /> Picking specialists…
+                    </>
+                  )}
                 </button>
               </div>
             </div>

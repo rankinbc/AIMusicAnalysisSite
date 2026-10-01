@@ -219,7 +219,11 @@ services:
     environment:
       <<: *worker-env
       WORKER_QUEUES: "ai-guest"
-      WORKER_THREADS: "1"
+      # Guests' routed specialists run in parallel like real users' (the
+      # same LLM-only actors worker-paid runs at 4 threads, thread-safety
+      # checked there). Isolation from real users comes from the separate
+      # pool, not from serialising guests.
+      WORKER_THREADS: "4"
     volumes:
       - /opt/spectr/data:/data
     depends_on:
