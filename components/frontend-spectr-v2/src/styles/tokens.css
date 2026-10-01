@@ -98,6 +98,13 @@
   --ink-on-accent:   #06151a;
   --ink-on-accent-2: #04221b;
 
+  /* Guest "mystery person" avatar (owner ruling 2026-10-01). Dark-only
+     palette like the rest of this file (light mode deferred): a slate disc,
+     a near-black silhouette, and a light "?" glyph. */
+  --avatar-mystery-bg:    #334155;
+  --avatar-mystery-fill:  #05070c;
+  --avatar-mystery-glyph: var(--text);
+
   /* Story 1.7 / UX-DR3 — commerce surface tokens (consumed by Epic 2 BillingCard,
      PlanCard, TierChip, UpgradeSheet, UsageMeter). Declared here in advance so
      Epic 2 surfaces consume them from day one — no parallel styling system. */

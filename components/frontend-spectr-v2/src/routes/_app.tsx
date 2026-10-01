@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Link,
   Outlet,
@@ -9,13 +9,12 @@ import {
 } from '@tanstack/react-router';
 
 import { useAuth } from '../auth/AuthContext';
-import { getLastTraceId } from '../api/fetcher';
-import { buildProblemReportMailto, jobIdFromPath, SUPPORT_EMAIL } from '../lib/report-problem';
 import { matchShortcut } from '../lib/shortcuts';
 import { useEntitlements } from '../api/hooks';
 import { CommandPalette } from '../components/CommandPalette';
 import { ShortcutSheet } from '../components/ShortcutSheet';
 import { UnifiedUploadDialog } from '../components/UnifiedUploadDialog';
+import { AccountMenu } from '../features/account/AccountMenu';
 import { AppDunningNotice } from '../features/billing/AppDunningNotice';
 import { GuestShell } from '../features/demo/GuestShell';
 import { useGuestState } from '../features/demo/useGuestState';
@@ -24,7 +23,6 @@ import { BuyCreditsProvider } from '../features/billing/BuyCreditsProvider';
 import { CreditBalanceChip } from '../features/billing/CreditBalanceChip';
 import { DevHealthDot } from '../features/health/DevHealthDot';
 import { SpectrLogo } from '../ui/SpectrLogo';
-import { UsageMeter } from '../components/UsageMeter';
 import { VerifyEmailBanner } from '../components/VerifyEmailBanner';
 import s from './_app/_appLayout.module.css';
 
@@ -51,8 +49,6 @@ function AppLayout() {
   const { data: entitlements } = useEntitlements();
   const navigate = useNavigate();
   const location = useLocation();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
 
   // D10 — guest shell: quota state for the banner/"+ Upload" swap / ⌘U gate.
   // The banner + the ONE upgrade dialog + its bus subscription (opened by
@@ -62,17 +58,6 @@ function AppLayout() {
   // second useGuestState() call shares the same ['me','guest'] query, no
   // extra fetch.
   const guest = useGuestState();
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
-    };
-    window.addEventListener('mousedown', onClick);
-    return () => window.removeEventListener('mousedown', onClick);
-  }, [menuOpen]);
 
   // Story 5.10 (UX-DR43) — global product shortcuts: ⌘K palette, ⌘U upload,
   // `?` sheet. Registered in the authed shell ONLY, so public/anon routes
@@ -138,7 +123,6 @@ function AppLayout() {
   }
 
   const handleLogout = async () => {
-    setMenuOpen(false);
     await logout();
     void navigate({ to: '/login' });
   };
@@ -147,8 +131,6 @@ function AppLayout() {
   const isLibraryActive = pathname === '/library' || pathname.startsWith('/songs');
   const isReportActive =
     pathname === '/reports' || pathname.includes('/results/');
-
-  const avatarChar = (user?.email ?? '?').trim().charAt(0).toUpperCase() || '?';
 
   // Server-side credits_enabled kill switch: when off, everyone is premium and
   // the billing/usage/meter surfaces are meaningless — hide them. Missing
@@ -199,95 +181,14 @@ function AppLayout() {
               + Upload
             </Link>
           )}
-          <div ref={menuRef} className={s.navAvatarWrap}>
-            <button
-              type="button"
-              className={s.navAvatar}
-              onClick={() => setMenuOpen((v) => !v)}
-              title="Account menu"
-            >
-              {avatarChar}
-            </button>
-            {menuOpen && (
-              <div className={s.avatarMenu} role="menu">
-                <div className={s.avatarMenuHeader}>
-                  <div className="label" style={{ marginBottom: 4 }}>
-                    Signed in as
-                  </div>
-                  <div className={s.avatarMenuEmail}>{user?.email}</div>
-                </div>
-                <Link
-                  to="/profile"
-                  className={s.avatarMenuItem}
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Profile
-                </Link>
-                {creditsOn && (
-                  <Link
-                    to="/usage"
-                    className={s.avatarMenuItem}
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    Usage
-                  </Link>
-                )}
-                {creditsOn && entitlements && (
-                  <div className={s.avatarMenuMeter}>
-                    {/* Credits is balance-funded, not unlimited — show the
-                        remaining balance instead of the false "Unlimited". */}
-                    {entitlements.tier === 'credits' ? (
-                      <UsageMeter
-                        variant="nav"
-                        label="Credits"
-                        used={entitlements.analysesUsed}
-                        limit={null}
-                        valueText={`${entitlements.analysesRemaining ?? 0} left`}
-                      />
-                    ) : (
-                      <UsageMeter
-                        variant="nav"
-                        label="Analyses"
-                        used={entitlements.analysesUsed}
-                        limit={entitlements.analysesLimit}
-                      />
-                    )}
-                  </div>
-                )}
-                {/* Billing stays reachable even with credits disabled — an
-                    existing Stripe subscriber must always be able to manage or
-                    cancel; the page itself hides the upsell surfaces. */}
-                <Link
-                  to="/billing"
-                  className={s.avatarMenuItem}
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Billing
-                </Link>
-                {/* Story 12.8 (AC2): prefilled problem report — page URL,
-                    jobId when on a results route, last 500 traceId if any. */}
-                <button
-                  type="button"
-                  className={s.avatarMenuItem}
-                  onClick={() => {
-                    setMenuOpen(false);
-                    window.location.href = buildProblemReportMailto({
-                      email: SUPPORT_EMAIL,
-                      url: window.location.href,
-                      jobId: jobIdFromPath(window.location.pathname),
-                      traceId: getLastTraceId(),
-                    });
-                  }}
-                >
-                  Report a problem
-                </button>
-                <div className={s.avatarMenuDivider} />
-                <button type="button" className={s.avatarMenuItem} onClick={handleLogout}>
-                  Sign out
-                </button>
-              </div>
-            )}
-          </div>
+          <AccountMenu
+            email={user?.email}
+            isGuest={guest.isGuest}
+            guestExpiresAt={guest.state?.expiresAt}
+            creditsOn={creditsOn}
+            entitlements={entitlements}
+            onSignOut={handleLogout}
+          />
         </div>
       </header>
       {/* Story 2.9 — app-wide dunning notice. Suppressed on /billing, which
