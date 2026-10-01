@@ -1,7 +1,7 @@
 # Controller ledger — "first impression" work (user: plan items 1,2,3,5,6,7; then "continue")
 
-Worktree `C:/Users/badmin/projects/spectr-solo`, branch `solo`. Trust this file + `git log` over memory.
-Approved plan (source of truth for scope/order): `C:\Users\badmin\.claude\plans\glimmering-foraging-liskov.md`.
+Worktree `<solo-worktree>`, branch `solo`. Trust this file + `git log` over memory.
+Approved plan (source of truth for scope/order): `PRPs/handoff-ledgers/approved-plan.md`.
 
 ## Owner decisions (2026-09-20, via AskUserQuestion — binding)
 - Demo model: PER-VISITOR SANDBOX (instant guest account; purged later). NOT a shared/read-only account.
@@ -29,7 +29,7 @@ Approved plan (source of truth for scope/order): `C:\Users\badmin\.claude\plans\
 Cut list if short: `.rd-row` override, compose healthcheck, Pixel 7 project, lazy Sentry, D8.
 
 ## Log
-- 2026-09-20: owner named a demo track: `C:/Users/badmin/Music/Artifact303 - Magnetic Fields.mp3` (22.4 MB MP3, file dated 2016). RIGHTS UNCONFIRMED — Artifact303 is a released goa-trance artist, so unless the owner holds the rights or has permission this is LOCAL-DEV ONLY: fine to analyze locally to build/test the snapshot exporter (D3/D4); must NOT be installed as the prod snapshot or committed. Asked the owner. Ruling: pipeline stays track-agnostic, `demo_enabled=false` in prod until a cleared track is installed — cost if wrong: none (one re-export).
+- 2026-09-20: owner named a demo track: `<local-music-folder>/Artifact303 - Magnetic Fields.mp3` (22.4 MB MP3, file dated 2016). RIGHTS UNCONFIRMED — Artifact303 is a released goa-trance artist, so unless the owner holds the rights or has permission this is LOCAL-DEV ONLY: fine to analyze locally to build/test the snapshot exporter (D3/D4); must NOT be installed as the prod snapshot or committed. Asked the owner. Ruling: pipeline stays track-agnostic, `demo_enabled=false` in prod until a cleared track is installed — cost if wrong: none (one re-export).
 - 2026-09-20: owner confirmed "i have permission" for the Artifact303 track -> CLEARED as the prod demo track (owner's statement; I cannot verify it). Still never commit the audio or a snapshot built from it (repo is PUBLIC); it ships via the storage volume only. Engineering/demo pages should carry a credit line for the artist.
 - 2026-09-20: demo track uploaded + analyzed LOCALLY in the showcase account (`showcase@spectr.test`): song `a2fe6c31-e9ce-4f7d-95ed-3f0af4b938c4` ("Artifact303 - Magnetic Fields", genre_hint `classic_trance`), version `eb0ef7bb-e5da-42b1-a137-1fc7b9a0fc59`, job `eca86baf-1d85-4f29-9243-a3042a1968d0` = complete. Before exporting a snapshot (D4) it still needs: triage/verdicts generated (open the report once, LLM via local claude CLI), a short coach conversation, and a generated fix rack. Rename the song to a clean title first.
 - 2026-09-20: research (3 Explore) + design (2 Plan) done; plan file written; user said "continue" → treated as approval. Forks dispatched to write the two PRP spec+plan pairs.

@@ -1,9 +1,9 @@
 # Handoff — 2026-09-21
 
-Work happens in THIS worktree (`C:/Users/badmin/projects/spectr-solo`, branch `solo`). Never touch the main checkout `C:/Users/badmin/projects/AIMusicAnalysisSite` or `master`.
+Work happens in THIS worktree (`<solo-worktree>`, branch `solo`). Never touch the main checkout `<main-checkout>` or `master`.
 
 ## What we were working on
-Making spectrmix.com impressive to a first-time visitor who is a software hiring manager (no audio file, no audio vocabulary, ~90 seconds, often a phone). The owner approved a plan (`C:\Users\badmin\.claude\plans\glimmering-foraging-liskov.md`) with two workstreams, executed by subagent-driven development (one implementer at a time, fresh reviewer per task, ledgers with rulings):
+Making spectrmix.com impressive to a first-time visitor who is a software hiring manager (no audio file, no audio vocabulary, ~90 seconds, often a phone). The owner approved a plan (`PRPs/handoff-ledgers/approved-plan.md`) with two workstreams, executed by subagent-driven development (one implementer at a time, fresh reviewer per task, ledgers with rulings):
 - **D — guest demo sandbox** (`PRPs/guest-demo-sandbox.md` + `-plan.md`, tasks D1–D11): one click → an isolated, purgeable GUEST account seeded with a real analyzed track, fully live coach, one upload.
 - **P — public surfaces polish** (`PRPs/public-surfaces-polish.md` + `-plan.md`, tasks P1–P10).
 

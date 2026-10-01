@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- **Worktree:** all work happens in `C:/Users/badmin/projects/spectr-solo` on branch `solo`. NEVER touch `C:/Users/badmin/projects/AIMusicAnalysisSite` (it holds another session's uncommitted README work) and never commit to `master` except Task 17 Step 1, which needs Brian's explicit go-ahead.
+- **Worktree:** all work happens in `<solo-worktree>` on branch `solo`. NEVER touch `<main-checkout>` (it holds another session's uncommitted README work) and never commit to `master` except Task 17 Step 1, which needs Brian's explicit go-ahead.
 - **The test for every judgment call:** _could a visitor learn anything about another account, or about how busy the site is, from this surface?_ If yes, it goes.
 - **Delete, don't disable.** No feature flags, no `if (false)`, no always-true capability objects, no commented-out code, no `// removed` markers. In mixed files remove the social branch and simplify what is left.
 - **Do not change audio/DSP behaviour.** `features/listen/useAudioGraph.ts`, `audio/**`, rack state, presets/drafts, pitch, stems, meters are out of scope.
@@ -51,16 +51,16 @@ Everything else is deletion or in-place surgery, listed per task.
 - [ ] **Step 1: Confirm location and branch**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo && git branch --show-current && git log --oneline -2
+cd <solo-worktree> && git branch --show-current && git log --oneline -2
 ```
 Expected: `solo`; top commits are the two `docs(prp): solo fork …` commits on top of `2e62ca4`.
 
 - [ ] **Step 2: Copy untracked local config from the main checkout (read-only copy, never edit the source)**
 
 ```bash
-cp C:/Users/badmin/projects/AIMusicAnalysisSite/.env C:/Users/badmin/projects/spectr-solo/.env
-cp C:/Users/badmin/projects/AIMusicAnalysisSite/components/worker/.env C:/Users/badmin/projects/spectr-solo/components/worker/.env
-git -C C:/Users/badmin/projects/spectr-solo status --short   # expect: nothing (both are git-ignored)
+cp <main-checkout>/.env <solo-worktree>/.env
+cp <main-checkout>/components/worker/.env <solo-worktree>/components/worker/.env
+git -C <solo-worktree> status --short   # expect: nothing (both are git-ignored)
 ```
 
 - [ ] **Step 3: Point storage at the existing audio library**
@@ -68,8 +68,8 @@ git -C C:/Users/badmin/projects/spectr-solo status --short   # expect: nothing (
 The BFF resolves `Storage:LocalRoot` relative to its csproj (`../../../../data` → `spectr-solo/data`, which is empty). Append to `spectr-solo/.env` and `spectr-solo/components/worker/.env` (both git-ignored):
 
 ```
-STORAGE_LOCAL_ROOT=C:/Users/badmin/projects/AIMusicAnalysisSite/data
-Storage__LocalRoot=C:/Users/badmin/projects/AIMusicAnalysisSite/data
+STORAGE_LOCAL_ROOT=<main-checkout>/data
+Storage__LocalRoot=<main-checkout>/data
 ```
 If `docs/STARTUP.md` §6 "storage-root misconfig" names a different variable, use that one and note it in the task report.
 
@@ -78,11 +78,11 @@ If `docs/STARTUP.md` §6 "storage-root misconfig" names a different variable, us
 They currently resolve to the main checkout, which would make the solo worker import the OLD models (and crash on dropped columns after Task 14).
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo
+cd <solo-worktree>
 pip install -e components/shared && pip install -e components/analysis
 python -c "import aimusic_shared, audio_analysis; print(aimusic_shared.__file__); print(audio_analysis.__file__)"
 ```
-Expected: both paths start with `C:\Users\badmin\projects\spectr-solo\`. (Reversible: re-run the same two installs from another checkout.)
+Expected: both paths start with `<solo-worktree>\`. (Reversible: re-run the same two installs from another checkout.)
 
 - [ ] **Step 5: Install frontend deps**
 
@@ -93,9 +93,9 @@ cd components/frontend-spectr-v2 && npm ci
 - [ ] **Step 6: Record the baseline (all must be green before any deletion)**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npm run build && npm run lint && npx vitest run 2>&1 | tail -5
-cd C:/Users/badmin/projects/spectr-solo/components/bff && dotnet build 2>&1 | tail -3 && dotnet test 2>&1 | tail -5
-cd C:/Users/badmin/projects/spectr-solo && pytest -q components/worker/tests/ components/shared/tests/ 2>&1 | tail -3
+cd <solo-worktree>/components/frontend-spectr-v2 && npm run build && npm run lint && npx vitest run 2>&1 | tail -5
+cd <solo-worktree>/components/bff && dotnet build 2>&1 | tail -3 && dotnet test 2>&1 | tail -5
+cd <solo-worktree> && pytest -q components/worker/tests/ components/shared/tests/ 2>&1 | tail -3
 ```
 Write the pass/skip counts into the task report. Known flake: `CoachStreamEndpointTests.Client_Disconnect_Sets_Cancel_Key_In_Redis` (timing) — re-run once before treating it as real. If anything else is red at baseline, STOP and report; do not start deleting on a red tree.
 
@@ -740,7 +740,7 @@ Run `pytest -q components/worker/tests/test_actor_queues.py` → FAIL.
 - [ ] **Step 5: Hard gate — nothing in Python may name a dropped table/column**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo && grep -rn -E "share_settings|\binvites\b|listening_sessions|control_grants|track_comments|track_bookmarks|follow_relations|\bsuggestions\b|share_token|share_enabled_at|share_show_verdicts|created_in_session_id|via_grant_id|from_suggestion_id|\.handle\b|\"handle\"|public_link|banner_hue|avatar_hue" components/worker components/shared components/workerdash --include=*.py
+cd <solo-worktree> && grep -rn -E "share_settings|\binvites\b|listening_sessions|control_grants|track_comments|track_bookmarks|follow_relations|\bsuggestions\b|share_token|share_enabled_at|share_show_verdicts|created_in_session_id|via_grant_id|from_suggestion_id|\.handle\b|\"handle\"|public_link|banner_hue|avatar_hue" components/worker components/shared components/workerdash --include=*.py
 ```
 Expected: no output (the word "suggestions" in coach/solve code that means *AI suggestions* is fine — confirm each hit by reading it).
 
@@ -788,7 +788,7 @@ Leave the scaffolded `Down()` otherwise as generated. Do NOT touch any earlier m
 - [ ] **Step 5: Back up the dev DB** (resolve docker.exe per STARTUP.md §6; container = the compose `postgres` service, db/user `spectr`):
 
 ```bash
-mkdir -p C:/Users/badmin/projects/spectr-solo/output/db-backups/2026-09-19_pre-solo-strip
+mkdir -p <solo-worktree>/output/db-backups/2026-09-19_pre-solo-strip
 "$DOCKER_EXE" compose -f docker/docker-compose.yml exec -T postgres pg_dump -U spectr -Fc spectr > output/db-backups/2026-09-19_pre-solo-strip/spectr.dump
 ls -la output/db-backups/2026-09-19_pre-solo-strip/   # expect a non-trivial file size
 ```
@@ -828,7 +828,7 @@ cd components/bff && dotnet ef database update --project src/Spectr.Data --start
 - [ ] **Step 3: Archive** —
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo && mkdir -p PRPs/archive/2026-09-19_social-epic
+cd <solo-worktree> && mkdir -p PRPs/archive/2026-09-19_social-epic
 git mv PRPs/product-brief-spectr-room-2026-06-17.md PRPs/spectr-flywheel.md PRPs/async-social-core-design.md PRPs/listen-v3-notifications.md PRPs/listen-v3-bookmark-ui.md PRPs/archive/2026-09-19_social-epic/
 git mv PRPs/stories/7-1* PRPs/stories/7-2* PRPs/stories/7-3* PRPs/stories/7-4* PRPs/stories/11-* PRPs/archive/2026-09-19_social-epic/
 ```
@@ -854,7 +854,7 @@ curl -s http://localhost:5000/api/health/worker   # no queueDepth key
 - [ ] **Step 5: Final hand review**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo && git grep -n -i -E "follow|roster|listening_session|share_token|visibility|invite|\bhandle\b" -- components/bff/src components/frontend-spectr-v2/src components/worker/app components/shared/aimusic_shared | grep -v -E "/Migrations/|routeTree.gen|visibility: ?(hidden|visible)|visibilitychange|handle(r|d|s|Click|Change|Submit|Sign|Drop|Key|[A-Z])|onHandle|ErrorHandl|Handler"
+cd <solo-worktree> && git grep -n -i -E "follow|roster|listening_session|share_token|visibility|invite|\bhandle\b" -- components/bff/src components/frontend-spectr-v2/src components/worker/app components/shared/aimusic_shared | grep -v -E "/Migrations/|routeTree.gen|visibility: ?(hidden|visible)|visibilitychange|handle(r|d|s|Click|Change|Submit|Sign|Drop|Key|[A-Z])|onHandle|ErrorHandl|Handler"
 ```
 Read every remaining hit; each must be unrelated to other users. Record the verdict in the task report.
 - [ ] **Step 6: STOP — ask Brian before each of these (outward-facing, not pre-approved):**

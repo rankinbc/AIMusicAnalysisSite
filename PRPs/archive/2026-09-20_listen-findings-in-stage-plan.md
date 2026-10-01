@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- **Worktree:** all work happens in `C:/Users/badmin/projects/spectr-solo` on branch `solo`. **NEVER touch `C:/Users/badmin/projects/AIMusicAnalysisSite`.**
+- **Worktree:** all work happens in `<solo-worktree>` on branch `solo`. **NEVER touch `<main-checkout>`.**
 - **Never stage these two files** — they are another session's uncommitted work: `components/frontend-spectr-v2/src/features/results/AnalysisCompleteModal.tsx` and `AnalysisCompleteModal.module.css`. Always `git add` **by explicit path**, never `git add -A` / `git add .`.
 - **Never edit the solo guards:** `components/frontend-spectr-v2/src/routes/__tests__/no-social-surface.test.ts`, `components/bff/tests/Spectr.Bff.Tests/NoSocialSurfaceTests.cs`. They must stay green. Note its banned pattern `/jobs? queued/i` — never write "jobs queued" in source.
 - **TypeScript:** strict, `verbatimModuleSyntax` (so `import type` for every type-only import), and **`exactOptionalPropertyTypes: true`** — declare optional props as `name?: T | undefined`, and pass conditional props with the `{...(x ? { x } : {})}` idiom used throughout the codebase.
@@ -210,20 +210,20 @@ public sealed class VersionLatestJobIdTests(WebApplicationFactory<Program> facto
 Every later BFF command in this plan reuses `$PGPW`. Run this **in the same Bash call** as the command that needs it (shell state does not persist between calls):
 
 ```bash
-PGPW=$(python -c "import json;print(json.load(open(r'C:/Users/badmin/projects/spectr-solo/components/bff/src/Spectr.Bff/appsettings.json'))['ConnectionStrings']['Postgres'].split('Password=')[1].split(';')[0])")
+PGPW=$(python -c "import json;print(json.load(open(r'<solo-worktree>/components/bff/src/Spectr.Bff/appsettings.json'))['ConnectionStrings']['Postgres'].split('Password=')[1].split(';')[0])")
 ```
 Expected: no output. Never `echo $PGPW`.
 
 - [ ] **Step 3: Run the test to verify it fails**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/bff && \
+cd <solo-worktree>/components/bff && \
 PGPW=$(python -c "import json;print(json.load(open(r'src/Spectr.Bff/appsettings.json'))['ConnectionStrings']['Postgres'].split('Password=')[1].split(';')[0])") \
 ASPNETCORE_ENVIRONMENT=Development \
-Storage__LocalRoot=C:/Users/badmin/projects/AIMusicAnalysisSite/data \
+Storage__LocalRoot=<main-checkout>/data \
 Redis__ConnectionString=127.0.0.1:6379 \
 ConnectionStrings__Postgres="Host=127.0.0.1;Port=5432;Database=spectr;Username=spectr;Password=$PGPW" \
-dotnet test --artifacts-path C:/Users/badmin/AppData/Local/Temp/spectr-bff-artifacts \
+dotnet test --artifacts-path $TEMP/spectr-bff-artifacts \
   --filter FullyQualifiedName~VersionLatestJobIdTests 2>&1 | tail -20
 ```
 Expected: the build fails with `CS1061: 'VersionDto' does not contain a definition for 'LatestJobId'`.
@@ -282,13 +282,13 @@ Expected: `Passed!  - Failed:     0, Passed:     3` (or `Skipped: 3` if Postgres
 - [ ] **Step 7: Run the whole BFF suite**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/bff && \
+cd <solo-worktree>/components/bff && \
 PGPW=$(python -c "import json;print(json.load(open(r'src/Spectr.Bff/appsettings.json'))['ConnectionStrings']['Postgres'].split('Password=')[1].split(';')[0])") \
 ASPNETCORE_ENVIRONMENT=Development \
-Storage__LocalRoot=C:/Users/badmin/projects/AIMusicAnalysisSite/data \
+Storage__LocalRoot=<main-checkout>/data \
 Redis__ConnectionString=127.0.0.1:6379 \
 ConnectionStrings__Postgres="Host=127.0.0.1;Port=5432;Database=spectr;Username=spectr;Password=$PGPW" \
-dotnet test --artifacts-path C:/Users/badmin/AppData/Local/Temp/spectr-bff-artifacts 2>&1 | tail -8
+dotnet test --artifacts-path $TEMP/spectr-bff-artifacts 2>&1 | tail -8
 ```
 Expected: `Failed:     0`, `Passed:` 368 or more. Known flake: `CoachStreamEndpointTests.Client_Disconnect_Sets_Cancel_Key_In_Redis` — re-run once before treating it as real.
 
@@ -309,14 +309,14 @@ In `components/frontend-spectr-v2/src/api/types.ts`, inside `interface VersionDt
 - [ ] **Step 9: Frontend gates**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npx tsc -b && npm run lint && npx vitest run 2>&1 | tail -5
+cd <solo-worktree>/components/frontend-spectr-v2 && npx tsc -b && npm run lint && npx vitest run 2>&1 | tail -5
 ```
 Expected: `tsc` silent, lint prints `css/fonts` clean, vitest `Tests  <baseline> passed`.
 
 - [ ] **Step 10: Commit**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo && git add \
+cd <solo-worktree> && git add \
   components/bff/src/Spectr.Bff/DTOs/VersionDtos.cs \
   components/bff/src/Spectr.Bff/Endpoints/VersionEndpoints.cs \
   components/bff/tests/Spectr.Bff.Tests/VersionLatestJobIdTests.cs \
@@ -478,7 +478,7 @@ describe('useFixCarryOver', () => {
 - [ ] **Step 2: Run it and watch it fail**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/__tests__/useFixCarryOver.test.tsx 2>&1 | tail -15
+cd <solo-worktree>/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/__tests__/useFixCarryOver.test.tsx 2>&1 | tail -15
 ```
 Expected: `Failed to resolve import "../useFixCarryOver"`.
 
@@ -630,7 +630,7 @@ export function useFixCarryOver({ versionId, fixPreset, realAudio, rsRef, curren
 - [ ] **Step 4: Run the test to verify it passes**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/__tests__/useFixCarryOver.test.tsx 2>&1 | tail -8
+cd <solo-worktree>/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/__tests__/useFixCarryOver.test.tsx 2>&1 | tail -8
 ```
 Expected: `Tests  3 passed`.
 
@@ -728,7 +728,7 @@ describe('useRackPresetActions', () => {
 - [ ] **Step 6: Run it and watch it fail**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/__tests__/useRackPresetActions.test.tsx 2>&1 | tail -10
+cd <solo-worktree>/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/__tests__/useRackPresetActions.test.tsx 2>&1 | tail -10
 ```
 Expected: `Failed to resolve import "../useRackPresetActions"`.
 
@@ -849,7 +849,7 @@ export function useRackPresetActions({ versionId, realAudio, rs, currentChain }:
 - [ ] **Step 8: Run the test to verify it passes**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/__tests__/useRackPresetActions.test.tsx 2>&1 | tail -8
+cd <solo-worktree>/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/__tests__/useRackPresetActions.test.tsx 2>&1 | tail -8
 ```
 Expected: `Tests  2 passed`.
 
@@ -891,7 +891,7 @@ Remove every import that is now unused. After the edit, these must be gone from 
 - [ ] **Step 10: Verify the page shrank and everything still passes**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && \
+cd <solo-worktree>/components/frontend-spectr-v2 && \
 wc -l src/features/listen-rack/ListenRackPage.tsx && \
 npx tsc -b && npm run lint && npx vitest run 2>&1 | tail -6
 ```
@@ -900,7 +900,7 @@ Expected: `ListenRackPage.tsx` is between 470 and 500 lines; `tsc` silent; lint 
 - [ ] **Step 11: Commit**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo && git add \
+cd <solo-worktree> && git add \
   components/frontend-spectr-v2/src/features/listen-rack/useFixCarryOver.ts \
   components/frontend-spectr-v2/src/features/listen-rack/useRackPresetActions.ts \
   components/frontend-spectr-v2/src/features/listen-rack/__tests__/useFixCarryOver.test.tsx \
@@ -1128,7 +1128,7 @@ describe('stage prefs', () => {
 - [ ] **Step 3: Run both and watch them fail**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/findings 2>&1 | tail -10
+cd <solo-worktree>/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/findings 2>&1 | tail -10
 ```
 Expected: `Failed to resolve import "../findings-helpers"` and `"../stage-prefs"`.
 
@@ -1316,21 +1316,21 @@ export function useStagePrefs(): StagePrefsHandle {
 - [ ] **Step 6: Run the tests to verify they pass**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/findings 2>&1 | tail -8
+cd <solo-worktree>/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/findings 2>&1 | tail -8
 ```
 Expected: `Tests  19 passed` (13 helper + 6 prefs).
 
 - [ ] **Step 7: Gates**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npx tsc -b && npm run lint && npx vitest run 2>&1 | tail -5
+cd <solo-worktree>/components/frontend-spectr-v2 && npx tsc -b && npm run lint && npx vitest run 2>&1 | tail -5
 ```
 Expected: all green, 0 failed.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo && git add \
+cd <solo-worktree> && git add \
   components/frontend-spectr-v2/src/features/listen-rack/findings/findings-helpers.ts \
   components/frontend-spectr-v2/src/features/listen-rack/findings/stage-prefs.ts \
   components/frontend-spectr-v2/src/features/listen-rack/findings/__tests__/findings-helpers.test.ts \
@@ -1473,7 +1473,7 @@ describe('FixBoard surface="listen"', () => {
 - [ ] **Step 2: Run it and watch it fail**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npx vitest run src/features/results/__tests__/FixBoard.surface.test.tsx 2>&1 | tail -20
+cd <solo-worktree>/components/frontend-spectr-v2 && npx vitest run src/features/results/__tests__/FixBoard.surface.test.tsx 2>&1 | tail -20
 ```
 Expected: TypeScript/runtime failures — `surface` and `seek` are not props, and the four handlers are required.
 
@@ -1735,7 +1735,7 @@ Then make exactly these edits:
 - [ ] **Step 7: Run the test to verify it passes**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npx vitest run src/features/results/__tests__/FixBoard.surface.test.tsx 2>&1 | tail -10
+cd <solo-worktree>/components/frontend-spectr-v2 && npx vitest run src/features/results/__tests__/FixBoard.surface.test.tsx 2>&1 | tail -10
 ```
 Expected: `Tests  5 passed`.
 
@@ -1744,14 +1744,14 @@ Note: the `.fbd-seek` rule does not exist yet (Task 6 adds it). The chip is unst
 - [ ] **Step 8: Gates**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npx tsc -b && npm run lint && npx vitest run 2>&1 | tail -5
+cd <solo-worktree>/components/frontend-spectr-v2 && npx tsc -b && npm run lint && npx vitest run 2>&1 | tail -5
 ```
 Expected: 0 failed. `ReportView.tsx` needs no change — it already passes all four handlers, and `surface` defaults to `'report'`.
 
 - [ ] **Step 9: Commit**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo && git add \
+cd <solo-worktree> && git add \
   components/frontend-spectr-v2/src/features/results/fix-board-helpers.ts \
   components/frontend-spectr-v2/src/features/results/FixBoard.tsx \
   components/frontend-spectr-v2/src/features/results/FindingDetail.tsx \
@@ -1895,7 +1895,7 @@ describe('useListenFindings', () => {
 - [ ] **Step 2: Run it and watch it fail**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/findings/__tests__/useListenFindings.test.tsx 2>&1 | tail -10
+cd <solo-worktree>/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/findings/__tests__/useListenFindings.test.tsx 2>&1 | tail -10
 ```
 Expected: `Failed to resolve import "../useListenFindings"`.
 
@@ -1993,21 +1993,21 @@ export function useListenFindings({ versionId, latestJobId, rs }: {
 - [ ] **Step 4: Run the test to verify it passes**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/findings/__tests__/useListenFindings.test.tsx 2>&1 | tail -8
+cd <solo-worktree>/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/findings/__tests__/useListenFindings.test.tsx 2>&1 | tail -8
 ```
 Expected: `Tests  4 passed`.
 
 - [ ] **Step 5: Gates**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npx tsc -b && npm run lint && npx vitest run 2>&1 | tail -5
+cd <solo-worktree>/components/frontend-spectr-v2 && npx tsc -b && npm run lint && npx vitest run 2>&1 | tail -5
 ```
 Expected: 0 failed.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo && git add \
+cd <solo-worktree> && git add \
   components/frontend-spectr-v2/src/features/listen-rack/findings/useListenFindings.ts \
   components/frontend-spectr-v2/src/features/listen-rack/findings/__tests__/useListenFindings.test.tsx && \
 git commit -m "feat(listen): one hook for the playing version's findings
@@ -2163,7 +2163,7 @@ describe('FindingsStage', () => {
 - [ ] **Step 2: Run it and watch it fail**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/findings/__tests__/FindingsStage.test.tsx 2>&1 | tail -10
+cd <solo-worktree>/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/findings/__tests__/FindingsStage.test.tsx 2>&1 | tail -10
 ```
 Expected: `Failed to resolve import "../FindingsStage"`.
 
@@ -2421,21 +2421,21 @@ export function FindingsStage({
 - [ ] **Step 5: Run the test to verify it passes**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/findings/__tests__/FindingsStage.test.tsx 2>&1 | tail -10
+cd <solo-worktree>/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/findings/__tests__/FindingsStage.test.tsx 2>&1 | tail -10
 ```
 Expected: `Tests  4 passed`.
 
 - [ ] **Step 6: Gates**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npx tsc -b && npm run lint && npm run lint:css && npm run lint:focus && npx vitest run 2>&1 | tail -5
+cd <solo-worktree>/components/frontend-spectr-v2 && npx tsc -b && npm run lint && npm run lint:css && npm run lint:focus && npx vitest run 2>&1 | tail -5
 ```
 Expected: `css tokens lint: clean`, `focus ring lint: clean`, 0 failed.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo && git add \
+cd <solo-worktree> && git add \
   components/frontend-spectr-v2/src/features/listen-rack/findings/FindingsStage.tsx \
   components/frontend-spectr-v2/src/features/listen-rack/findings/findings-stage.css \
   components/frontend-spectr-v2/src/features/listen-rack/findings/__tests__/FindingsStage.test.tsx && \
@@ -2555,7 +2555,7 @@ describe('StageCardV2 stage content', () => {
 - [ ] **Step 2: Run it and watch it fail**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/__tests__/StageCardV2.content.test.tsx 2>&1 | tail -15
+cd <solo-worktree>/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/__tests__/StageCardV2.content.test.tsx 2>&1 | tail -15
 ```
 Expected: type/runtime failures — `stageContent` and friends are not props.
 
@@ -2795,14 +2795,14 @@ import type { StageContent } from './findings/stage-prefs';
 - [ ] **Step 6: Run the test to verify it passes**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/__tests__/StageCardV2.content.test.tsx 2>&1 | tail -10
+cd <solo-worktree>/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/__tests__/StageCardV2.content.test.tsx 2>&1 | tail -10
 ```
 Expected: `Tests  4 passed`.
 
 - [ ] **Step 7: Gates**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npx tsc -b && npm run lint && npx vitest run 2>&1 | tail -6
+cd <solo-worktree>/components/frontend-spectr-v2 && npx tsc -b && npm run lint && npx vitest run 2>&1 | tail -6
 ```
 Expected: `tsc` reports errors in `ListenRackPage.tsx` only if you forgot — `StageCardV2`'s new props are required, so the page **must** be updated. If that is the only error, it is expected here; fix it in Task 8 Step 2 and do not commit this task until Step 8 below is green.
 
@@ -2819,7 +2819,7 @@ Actually make it green now: this task's commit must build. Add the five props to
 - [ ] **Step 8: Commit**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo && git add \
+cd <solo-worktree> && git add \
   components/frontend-spectr-v2/src/features/listen-rack/findings/StagePlacementButton.tsx \
   components/frontend-spectr-v2/src/features/listen-rack/viz.tsx \
   components/frontend-spectr-v2/src/features/listen-rack/StageCardV2.tsx \
@@ -2951,7 +2951,7 @@ describe('Listen stage wiring', () => {
 - [ ] **Step 2: Run it and watch it fail**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/findings/__tests__/listen-stage-wiring.test.tsx 2>&1 | tail -15
+cd <solo-worktree>/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/findings/__tests__/listen-stage-wiring.test.tsx 2>&1 | tail -15
 ```
 Expected: `data-stage` is `visualizer` (Task 7's temporary literal) and no `/reports/` call was made.
 
@@ -3052,7 +3052,7 @@ In `components/frontend-spectr-v2/src/routes/_app/listen-rack.$versionId.tsx`, r
 - [ ] **Step 6: Run the test to verify it passes**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/findings/__tests__/listen-stage-wiring.test.tsx 2>&1 | tail -10
+cd <solo-worktree>/components/frontend-spectr-v2 && npx vitest run src/features/listen-rack/findings/__tests__/listen-stage-wiring.test.tsx 2>&1 | tail -10
 ```
 Expected: `Tests  3 passed`.
 
@@ -3067,7 +3067,7 @@ Expected console noise, not failures: jsdom prints
 - [ ] **Step 7: Check the page is still within budget, then run every gate**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && \
+cd <solo-worktree>/components/frontend-spectr-v2 && \
 wc -l src/features/listen-rack/ListenRackPage.tsx && \
 npx tsc -b && npm run lint && npm run lint:css && npm run lint:focus && npm run build && npx vitest run 2>&1 | tail -6
 ```
@@ -3076,7 +3076,7 @@ Expected: `ListenRackPage.tsx` ≤ 515 lines; every gate green; vitest 0 failed.
 - [ ] **Step 8: Commit**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo && git add \
+cd <solo-worktree> && git add \
   components/frontend-spectr-v2/src/features/listen-rack/ListenRackPage.tsx \
   components/frontend-spectr-v2/src/features/listen-rack/CoachTabV2.tsx \
   components/frontend-spectr-v2/src/routes/_app/listen-rack.\$versionId.tsx \
@@ -3108,7 +3108,7 @@ Nothing ships on unit tests alone. This task proves the four things unit tests c
 - [ ] **Step 1: Bring the stack up**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo && powershell -File ./scripts/start-spectr.ps1
+cd <solo-worktree> && powershell -File ./scripts/start-spectr.ps1
 ```
 Follow `docs/STARTUP.md` §5 to verify before continuing; if anything fails, §6 first. Then:
 ```bash
@@ -3206,26 +3206,26 @@ Switch the stage to **Visualizer**, reload the page, and confirm it comes back o
 - [ ] **Step 10: Run all four frontend gates plus the two extra lints and the full BFF suite**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/frontend-spectr-v2 && \
+cd <solo-worktree>/components/frontend-spectr-v2 && \
 npm run build && npx tsc -b && npm run lint && npm run lint:css && npm run lint:focus && npx vitest run 2>&1 | tail -6
 ```
 Expected: `Tests  <baseline + 41> passed`, 0 failed. (`npm run build` runs `vite build && tsc -b`, which regenerates `src/routeTree.gen.ts` — run it first.)
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo/components/bff && \
+cd <solo-worktree>/components/bff && \
 PGPW=$(python -c "import json;print(json.load(open(r'src/Spectr.Bff/appsettings.json'))['ConnectionStrings']['Postgres'].split('Password=')[1].split(';')[0])") \
 ASPNETCORE_ENVIRONMENT=Development \
-Storage__LocalRoot=C:/Users/badmin/projects/AIMusicAnalysisSite/data \
+Storage__LocalRoot=<main-checkout>/data \
 Redis__ConnectionString=127.0.0.1:6379 \
 ConnectionStrings__Postgres="Host=127.0.0.1;Port=5432;Database=spectr;Username=spectr;Password=$PGPW" \
-dotnet test --artifacts-path C:/Users/badmin/AppData/Local/Temp/spectr-bff-artifacts 2>&1 | tail -6
+dotnet test --artifacts-path $TEMP/spectr-bff-artifacts 2>&1 | tail -6
 ```
 Expected: `Failed:     0`.
 
 - [ ] **Step 11: Commit the screenshots and any height fix**
 
 ```bash
-cd C:/Users/badmin/projects/spectr-solo && git add \
+cd <solo-worktree> && git add \
   output/frontend-spectr-v2 \
   components/frontend-spectr-v2/src/features/listen-rack/findings/findings-stage.css && \
 git commit -m "test(listen): live verification of findings in the stage
