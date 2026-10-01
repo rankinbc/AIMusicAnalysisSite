@@ -149,4 +149,80 @@ public sealed class CoachMixChargeTests(WebApplicationFactory<Program> baseFacto
         }
         finally { await CleanupAsync(f, uid); }
     }
+
+    // Double-click / client retry: the second POST finds the first generation
+    // in flight (charged, no rack yet) and neither charges nor enqueues again.
+    [SkippableFact]
+    public async Task Coach_Mix_Duplicate_Request_Charges_Once()
+    {
+        var q = new CountingQueue();
+        var f = Build(q);
+        await TestDb.RequireAsync(f);
+        var (c, uid, jobId) = await SeedAsync(f, grant: 20);
+        try
+        {
+            Assert.Equal(HttpStatusCode.Accepted, (await c.PostAsync($"/api/reports/{jobId}/fix-rack", null)).StatusCode);
+            Assert.Equal(HttpStatusCode.Accepted, (await c.PostAsync($"/api/reports/{jobId}/fix-rack", null)).StatusCode);
+            Assert.Equal(15, await BalanceAsync(f, uid));
+            Assert.Equal(1, q.Count);
+        }
+        finally { await CleanupAsync(f, uid); }
+    }
+
+    // Truly concurrent twins collapse onto one idempotency key.
+    [SkippableFact]
+    public async Task Coach_Mix_Concurrent_Requests_Charge_Once()
+    {
+        var q = new CountingQueue();
+        var f = Build(q);
+        await TestDb.RequireAsync(f);
+        var (c, uid, jobId) = await SeedAsync(f, grant: 20);
+        try
+        {
+            var rs = await Task.WhenAll(
+                c.PostAsync($"/api/reports/{jobId}/fix-rack", null),
+                c.PostAsync($"/api/reports/{jobId}/fix-rack", null),
+                c.PostAsync($"/api/reports/{jobId}/fix-rack", null));
+            Assert.All(rs, r => Assert.Equal(HttpStatusCode.Accepted, r.StatusCode));
+            Assert.Equal(15, await BalanceAsync(f, uid));
+            Assert.Equal(1, q.Count);
+        }
+        finally { await CleanupAsync(f, uid); }
+    }
+
+    // Once the rack landed, a deliberate regenerate is a new, charged generation.
+    [SkippableFact]
+    public async Task Coach_Mix_Regenerate_After_Rack_Lands_Charges_Again()
+    {
+        var q = new CountingQueue();
+        var f = Build(q);
+        await TestDb.RequireAsync(f);
+        var (c, uid, jobId) = await SeedAsync(f, grant: 20);
+        try
+        {
+            await c.PostAsync($"/api/reports/{jobId}/fix-rack", null);
+            using (var scope = f.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var versionId = await db.Analyses.Where(a => a.JobId == jobId).Select(a => a.VersionId!.Value).SingleAsync();
+                db.RackPresets.Add(new RackPreset { SongVersionId = versionId, Name = "Coach mix", Source = "analysis" });
+                await db.SaveChangesAsync();
+            }
+            Assert.Equal(HttpStatusCode.Accepted, (await c.PostAsync($"/api/reports/{jobId}/fix-rack", null)).StatusCode);
+            Assert.Equal(10, await BalanceAsync(f, uid));
+            Assert.Equal(2, q.Count);
+        }
+        finally { await CleanupAsync(f, uid); }
+    }
+
+    // Counts only the fix-rack generations (registration also enqueues an email).
+    private sealed class CountingQueue : IJobQueue
+    {
+        private int _count;
+        public int Count => _count;
+        private Task Rec(string t) { if (t == DramatiqTasks.GenerateFixRack) Interlocked.Increment(ref _count); return Task.CompletedTask; }
+        public Task EnqueueAsync(string t, object[] a, CancellationToken ct = default) => Rec(t);
+        public Task EnqueueAsync(string t, object[] a, string q, CancellationToken ct = default) => Rec(t);
+        public Task EnqueueDelayedAsync(string t, object[] a, string q, TimeSpan d, CancellationToken ct = default) => Rec(t);
+    }
 }

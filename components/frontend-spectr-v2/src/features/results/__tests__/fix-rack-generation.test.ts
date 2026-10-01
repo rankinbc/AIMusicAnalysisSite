@@ -52,6 +52,17 @@ describe('useFixRackGeneration', () => {
     expect(result.current.phase).toBe('generating');
   });
 
+  it('a second generate() while one is compiling is a no-op (each one is charged)', () => {
+    const { result } = renderHook(() => useFixRackGeneration('job-1'));
+    act(() => {
+      result.current.generate();
+      result.current.generate();
+    });
+    expect(mutateMock).toHaveBeenCalledTimes(1);
+    act(() => result.current.generate());
+    expect(mutateMock).toHaveBeenCalledTimes(1);
+  });
+
   it('a failed POST lands in error and toasts the message', () => {
     const { result } = renderHook(() => useFixRackGeneration('job-1'));
     act(() => result.current.generate());

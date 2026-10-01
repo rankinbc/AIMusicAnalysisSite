@@ -13,6 +13,8 @@ namespace Spectr.Bff.Endpoints;
 // which writes a system RackPreset(source='analysis'); GET serves it once ready.
 public static class FixRackEndpoints
 {
+    private const int InFlightWindowMinutes = 10;
+
     public static IEndpointRouteBuilder MapFixRackEndpoints(this IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/reports/{jobId:guid}/fix-rack").WithTags("fix-rack").RequireAuthorization();
@@ -59,15 +61,49 @@ public static class FixRackEndpoints
 
         // Credit economy — each Coach Mix generation costs credits (Pro: included).
         var flags = await ents.GetFlagsAsync(ct);
-        var requestId = Guid.NewGuid();
         var charged = false;
+        string? chargeRef = null, refundKey = null;
         if (!user.IsGuest() && ents.CreditsEnabled(flags) && tier != "pro")
         {
             var price = (await ents.GetPricesAsync(ct)).CoachMix;
+            var prefix = $"coachmix:{analysis.Id}:";
+
+            // A double-click / client retry must not buy a second generation.
+            // In flight = this analysis' latest un-refunded Coach Mix charge is
+            // recent and no analysis rack has landed since — return it as
+            // queued WITHOUT charging or enqueuing. The window bounds a
+            // generation that never produces a rack (worker down), so it can't
+            // block a deliberate regenerate forever.
+            if (price > 0)
+            {
+                var since = DateTimeOffset.UtcNow.AddMinutes(-InFlightWindowMinutes);
+                var lastChargeAt = await db.CreditLedger.AsNoTracking()
+                    .Where(e => e.UserId == userId && e.Reason == "spend"
+                        && e.Reference != null && e.Reference.StartsWith(prefix) && e.CreatedAt >= since
+                        && !db.CreditLedger.Any(r => r.UserId == userId
+                            && r.Reason == "reversal" && r.Reference == e.Reference))
+                    .OrderByDescending(e => e.CreatedAt)
+                    .Select(e => (DateTimeOffset?)e.CreatedAt)
+                    .FirstOrDefaultAsync(ct);
+                if (lastChargeAt is { } at
+                    && !await db.RackPresets.AsNoTracking().AnyAsync(p =>
+                        p.SongVersionId == analysis.VersionId!.Value
+                        && p.Source == "analysis" && p.CreatedAt >= at, ct))
+                    return Results.Accepted(value: new { status = "queued" });
+            }
+
+            // Stable key: n = prior Coach Mix charges for this analysis, so two
+            // truly concurrent requests (both read the same n) collapse onto one
+            // key — the ledger's unique index makes the loser a replay.
+            var n = await db.CreditLedger.AsNoTracking()
+                .CountAsync(e => e.UserId == userId && e.Reason == "spend"
+                    && e.Reference != null && e.Reference.StartsWith(prefix), ct);
+            chargeRef = $"{prefix}{n}";
+            refundKey = $"reversal:coachmix:{analysis.Id}:{n}";
             try
             {
                 charged = await credits.ChargeAsync(userId, price,
-                    $"coachmix:{analysis.Id}:{requestId}", $"spend:coachmix:{requestId}", null, ct) is not null;
+                    chargeRef, $"spend:coachmix:{analysis.Id}:{n}", null, ct) is not null;
                 ents.InvalidateAsync(userId);
             }
             catch (InsufficientCreditsException ex)
@@ -76,6 +112,10 @@ public static class FixRackEndpoints
                     "Not enough credits for a Coach Mix.",
                     new { required = ex.Required, balance = ex.CurrentBalance });
             }
+            // Priced but not charged by THIS call ⇒ a concurrent twin already
+            // paid for (and enqueued) this generation.
+            if (!charged && price > 0)
+                return Results.Accepted(value: new { status = "queued" });
         }
 
         try
@@ -91,8 +131,7 @@ public static class FixRackEndpoints
         {
             // Never queued — give the credits back (degraded racks are NOT refunded).
             if (charged)
-                await credits.RefundChargeAsync(userId, $"coachmix:{analysis.Id}:{requestId}",
-                    $"reversal:coachmix:{requestId}", ct);
+                await credits.RefundChargeAsync(userId, chargeRef!, refundKey!, ct);
             throw;
         }
 
