@@ -180,6 +180,10 @@ export function useCoachBriefFollow({
         setStreaming(true);
         setStreamStatus('Coach is responding…');
 
+        // Final-review fix — a network drop mid-body makes the reader throw
+        // (not an AbortError). Treat it like a stream that ended without a
+        // terminal frame: unlock the composer and poll the row instead of
+        // leaving `streaming` stuck true with a half-written brief.
         const result = await readCoachStream(
           `/api/coach/${requestAnalysisId}/messages/${messageId}/stream`,
           authHeaders,
@@ -210,7 +214,7 @@ export function useCoachBriefFollow({
               );
             },
           },
-        );
+        ).catch(() => 'ended-without-terminal' as const);
 
         setStreaming(false);
         abortRef.current = null;

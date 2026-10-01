@@ -67,6 +67,7 @@ function openStream() {
   return {
     body,
     push: (f: string) => ctrl.enqueue(enc.encode(f)),
+    fail: (e: Error) => ctrl.error(e),
     bind: (signal?: AbortSignal | null) =>
       signal?.addEventListener('abort', () => ctrl.error(new DOMException('aborted', 'AbortError'))),
   };
@@ -180,6 +181,37 @@ describe('the coach brief recovers (FW3)', () => {
     expect(brief?.text).toBe(BODY);
     expect(brief?.closingLine).toBe(CLOSING_LINE);
   });
+
+  it('a network drop mid-brief unlocks the composer and still finishes the brief', async () => {
+    const stream = openStream();
+    let conversationCalls = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = urlOf(input);
+      if (url.includes('/conversation')) {
+        conversationCalls += 1;
+        const dto = conversationCalls <= 2 ? briefConversation('pending') : briefConversation('complete');
+        return Promise.resolve({ ok: true, json: async () => dto } as Response);
+      }
+      if (url.includes(`/messages/${BRIEF_ID}/stream`)) {
+        return Promise.resolve({ ok: true, status: 200, body: stream.body } as Response);
+      }
+      return Promise.reject(new Error(`unexpected fetch in test: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = sessionHook();
+    await waitFor(() => expect(result.current.caps).not.toBeNull());
+    act(() => result.current.followMessage(BRIEF_ID));
+    await waitFor(() => expect(result.current.streaming).toBe(true));
+    await act(async () => {
+      stream.fail(new TypeError('network error'));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(result.current.streaming).toBe(false));
+    await waitFor(() => expect(result.current.turns.find((t) => t.isBrief)?.finalized).toBe(true), { timeout: 8000 });
+    expect(result.current.turns.find((t) => t.isBrief)?.closingLine).toBe(CLOSING_LINE);
+  }, 15000);
 
   it('unmounting mid-poll aborts the in-flight conversation fetch', async () => {
     const signals: AbortSignal[] = [];
