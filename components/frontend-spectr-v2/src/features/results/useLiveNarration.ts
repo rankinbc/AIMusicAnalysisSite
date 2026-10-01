@@ -11,7 +11,7 @@
 // the exact same conversation, including the time-based lines.
 import { useEffect, useMemo, useState } from 'react';
 
-import type { ChatMessage } from './helpers/coachNarration';
+import { CLOSER_ID, type ChatMessage } from './helpers/coachNarration';
 import { dueWaitLine } from './helpers/coachWaitLines';
 
 interface StoredLog {
@@ -39,8 +39,9 @@ function stored(jobId: string): StoredLog {
 }
 
 /** Append `available` ids not yet in `log` (in their narrative order) and
- *  refresh the content of ones already there. Returns `log` itself when
- *  nothing changed. */
+ *  refresh the content of ones already there. The coach's closing line stays
+ *  LAST: anything earned after it (a late arrangement result, a stray wait
+ *  line) lands just above it. Returns `log` itself when nothing changed. */
 export function appendNew(log: readonly ChatMessage[], available: readonly ChatMessage[]): ChatMessage[] {
   const fresh = new Map(available.map((m) => [m.id, m]));
   let changed = false;
@@ -55,7 +56,9 @@ export function appendNew(log: readonly ChatMessage[], available: readonly ChatM
   const have = new Set(log.map((m) => m.id));
   for (const m of available) {
     if (!have.has(m.id)) {
-      next.push(m);
+      const closerAt = next.findIndex((x) => x.id === CLOSER_ID);
+      if (closerAt >= 0) next.splice(closerAt, 0, m);
+      else next.push(m);
       have.add(m.id);
       changed = true;
     }

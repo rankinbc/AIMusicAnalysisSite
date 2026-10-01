@@ -10,29 +10,58 @@
  * whose state produces its id, in narrative order, and never moves after.
  * State-specific ids (`queued`, `p7:pending` vs `p7:settled`) let a message
  * that was true at the time stay in the log after the state moves on.
- * Time-based "still working" lines live in coachWaitLines.ts. */
+ * Time-based "still working" lines live in coachWaitLines.ts.
+ *
+ * The closing line (CLOSER_ID) is always the LAST message: it's earned when
+ * the report is ready (static analysis complete + specialists settled), and
+ * the log keeps it last even if a late line (a background arrangement
+ * result) arrives after it — see useLiveNarration.appendNew. */
 import type { FinalJson, Phase1Data, RoutingPlanDto, VerdictDto } from '../../../api/types';
 import { phaseLines } from './coachPhaseLines';
 import type { RunStatus } from './liveRun';
+import { sortFindings } from './liveFindings';
 import { isRuleEngineVerdict, specialistFindings, type SpecialistStage } from './specialist-stage';
 import type { SpecialistGroup } from './specialists';
 
-/** A run of text: plain, **bold** (b) or *quoted/italic* (i). */
-export type LinePart = string | { b: string } | { i: string };
+/** A run of text: plain, **bold** (b), *quoted/italic* (i), or an inline
+ *  link to the full report (link — the feed wires it to the report CTA). */
+export type LinePart = string | { b: string } | { i: string } | { link: string };
 export type LineTone = 'info' | 'done' | 'warn';
 
 export type ChatSpeaker =
   | { kind: 'coach' }
   | { kind: 'specialist'; slug: string; label: string; group: SpecialistGroup };
 
+/** One finding listed under a specialist's report-back line. */
+export interface ChatItem {
+  severity: string;
+  text: string;
+}
+
 export interface ChatMessage {
   id: string;
   speaker: ChatSpeaker;
   parts: LinePart[];
   tone: LineTone;
+  /** A specialist's findings, listed in the same bubble (most important
+   *  first, capped at ITEMS_MAX). */
+  items?: ChatItem[] | undefined;
+  /** Findings beyond the listed ones ("+N more"). */
+  more?: number | undefined;
 }
 
 export const COACH: ChatSpeaker = { kind: 'coach' };
+
+/** The closing message's id — always kept last in the chat. */
+export const CLOSER_ID = 'all-done';
+/** The closing line; the `link` part opens the full report. */
+export const CLOSER_PARTS: LinePart[] = [
+  'We have a good enough analysis to get started. Let’s view the full report. ',
+  'You can also dig deeper with more AI specialists or talk to me about the mix. ',
+  'Let’s go to the ',
+  { link: 'Full Report' },
+  ' and get started.',
+];
 
 export interface NarrationInput {
   status: RunStatus;
@@ -57,6 +86,9 @@ const SEVERITY_RANK: Record<string, number> = {
   win: 0,
 };
 export const REASON_MAX = 90;
+/** Findings listed in a specialist's bubble before "+N more". */
+export const ITEMS_MAX = 5;
+export const ITEM_TEXT_MAX = 90;
 export const SKIP_MAX = 140;
 
 /** Cut to `max` chars at a word boundary, with an ellipsis when cut. */
@@ -136,7 +168,7 @@ export function narrate(input: NarrationInput): ChatMessage[] {
 
   if (stage.total === 0) {
     out.push(
-      coach('plan', ['No specialist deep-dive needed for this mix — the full report has the whole picture.'], 'done'),
+      coach('plan', ['No specialist deep-dive needed for this mix.'], 'done'),
     );
   } else {
     out.push(coach('plan', ['I’m going to bring in ', ...nameList(stage.rows.map((r) => r.label)), '.']));
@@ -166,24 +198,29 @@ export function narrate(input: NarrationInput): ChatMessage[] {
       });
       continue;
     }
-    const mine = specialistFindings(verdicts, r.slug);
-    const n = r.findings ?? mine.length;
-    const top = topVerdict(mine);
+    // Its findings, listed right in the bubble. The stage's count can run a
+    // poll ahead of the verdict rows — the list fills in when they land.
+    const mine = sortFindings(specialistFindings(verdicts, r.slug));
+    const n = mine.length || (r.findings ?? 0);
     const parts: LinePart[] =
       n === 0
         ? ['I found ', { b: 'no issues' }, ' — this part of your mix holds up.']
-        : ['I found ', { b: `${n} issue${n === 1 ? '' : 's'}` }, '.'];
-    if (n > 0 && top) parts.push(' Top: ', { i: `“${trimWords(top.headline, 80)}”` });
-    out.push({ id: `back:${r.slug}`, speaker, parts, tone: 'done' });
+        : ['I found ', { b: `${n} issue${n === 1 ? '' : 's'}` }, mine.length > 0 ? ':' : '.'];
+    const msg: ChatMessage = { id: `back:${r.slug}`, speaker, parts, tone: 'done' };
+    if (mine.length > 0) {
+      msg.items = mine
+        .slice(0, ITEMS_MAX)
+        .map((f) => ({ severity: String(f.severity), text: trimWords(f.headline, ITEM_TEXT_MAX) }));
+      if (n > ITEMS_MAX) msg.more = n - ITEMS_MAX;
+    }
+    out.push(msg);
   }
 
-  if (stage.total > 0 && stage.complete) {
-    out.push(coach('all-done', ['That’s everyone. Here’s the full picture →'], 'done'));
-  }
+  if (stage.complete) out.push(coach(CLOSER_ID, CLOSER_PARTS, 'done'));
   return out;
 }
 
 /** Plain text of a message (tests, aria). */
 export function messageText(m: Pick<ChatMessage, 'parts'>): string {
-  return m.parts.map((p) => (typeof p === 'string' ? p : 'b' in p ? p.b : p.i)).join('');
+  return m.parts.map((p) => (typeof p === 'string' ? p : 'b' in p ? p.b : 'i' in p ? p.i : p.link)).join('');
 }

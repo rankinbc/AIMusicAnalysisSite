@@ -1,13 +1,15 @@
 // The analysis page's pinned dock: two-stage status (static analysis → AI
 // specialists) plus the actions. It lives outside the scrolling body so the
 // next action is always visible. While the job runs the primary CTA is a
-// disabled "Analyzing…" and the secondary action leaves the page (the job
-// keeps running server-side); once complete the CTA is gated on every routed
-// specialist settling, with a safety valve if triage or a run stalls.
+// greyed-out "Open full report" and the secondary action leaves the page (the
+// job keeps running server-side). The CTA turns primary once the report is
+// ready — static analysis complete AND every routed specialist settled (a
+// still-pending arrangement never blocks it) — the same moment the coach's
+// closing line links to the report. A safety valve opens if triage or a run
+// stalls.
 
 import type { ReactNode } from 'react';
 
-import { CostTag } from '../billing/CostTag';
 import { fmtSeconds, type LiveStep, type RunStatus } from './helpers/liveRun';
 import type { SpecialistStage } from './helpers/specialist-stage';
 import s from './AnalysisCompleteModal.module.css';
@@ -31,10 +33,9 @@ interface DockProps {
   extra?: ReactNode;
   onClose: () => void;
   onViewReport: () => void;
-  onReanalyze?: (() => void) | undefined;
 }
 
-export function AnalysisDock({ status, steps, stage, sequential, valveOpen, extra, onClose, onViewReport, onReanalyze }: DockProps) {
+export function AnalysisDock({ status, steps, stage, sequential, valveOpen, extra, onClose, onViewReport }: DockProps) {
   const complete = status === 'complete';
   const runnable = steps.filter((p) => p.state !== 'skipped');
   const ran = steps.filter((p) => p.state !== 'skipped' && p.state !== 'waiting' && p.state !== 'running');
@@ -99,18 +100,12 @@ export function AnalysisDock({ status, steps, stage, sequential, valveOpen, extr
       </div>
       <div className={s.actions}>
         {complete ? (
-          <>
-            {valveOpen && !ctaReady && (
-              <button type="button" className={s.valve} onClick={onViewReport}>
-                Open report now
-              </button>
-            )}
-            {onReanalyze && (
-              <button type="button" className={s.btn} onClick={onReanalyze}>
-                ↺ Re-analyze <CostTag action="analysis" />
-              </button>
-            )}
-          </>
+          valveOpen &&
+          !ctaReady && (
+            <button type="button" className={s.valve} onClick={onViewReport}>
+              Open report now
+            </button>
+          )
         ) : (
           <button type="button" className={s.btn} onClick={onClose}>
             Run in background
@@ -121,25 +116,11 @@ export function AnalysisDock({ status, steps, stage, sequential, valveOpen, extr
           className={cx(s.btn, s.primary)}
           onClick={onViewReport}
           disabled={!ctaReady}
+          data-ready={ctaReady}
+          title={ctaReady ? undefined : 'Ready once the analysis and the specialists finish'}
           data-testid="acm-cta"
         >
-          {ctaReady ? (
-            <>
-              Open full report <ArrowRight n={16} />
-            </>
-          ) : !complete ? (
-            <>
-              <span className={s.spin} aria-hidden /> Analyzing…
-            </>
-          ) : stage.planReady ? (
-            <>
-              <span className={s.spin} aria-hidden /> Consulting specialists… ({stage.settled}/{stage.total})
-            </>
-          ) : (
-            <>
-              <span className={s.spin} aria-hidden /> Picking specialists…
-            </>
-          )}
+          Open full report <ArrowRight n={16} />
         </button>
       </div>
     </div>

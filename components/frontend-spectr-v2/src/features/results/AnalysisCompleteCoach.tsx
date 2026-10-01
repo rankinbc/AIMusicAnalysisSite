@@ -13,16 +13,49 @@ import * as Tooltip from '@radix-ui/react-tooltip';
 import { Coach } from '../../ui/Coach';
 import { RowGlyph, SpecialistHead } from './AnalysisCompleteStage';
 import { groupColor } from './helpers/specialists';
-import type { ChatMessage, LinePart } from './helpers/coachNarration';
+import type { ChatItem, ChatMessage, LinePart } from './helpers/coachNarration';
+import { severityColor, severityLabel } from './helpers/severity';
 import type { SpecialistStage, StageRow } from './helpers/specialist-stage';
 import s from './LiveCoachChat.module.css';
 
 const cx = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(' ');
 
-function Part({ p }: { p: LinePart }) {
+function Part({ p, onLink }: { p: LinePart; onLink?: (() => void) | undefined }) {
   if (typeof p === 'string') return <>{p}</>;
   if ('b' in p) return <b>{p.b}</b>;
-  return <i>{p.i}</i>;
+  if ('i' in p) return <i>{p.i}</i>;
+  // Only the closing line carries a link, and only once the report is ready.
+  return (
+    <button type="button" className={s.link} onClick={onLink} data-testid="acm-chat-link">
+      {p.link}
+    </button>
+  );
+}
+
+/** A specialist's findings, listed under its report-back line: a severity
+ *  mark (the report's `--sev-*` colours) + the headline. */
+function FindingItems({ items, more }: { items: readonly ChatItem[]; more?: number | undefined }) {
+  return (
+    <ul className={s.items} data-testid="acm-chat-items">
+      {items.map((it, i) => (
+        <li key={i} className={s.item} data-severity={it.severity}>
+          <span
+            className={s.sevMark}
+            style={{ '--sev': severityColor(it.severity) } as React.CSSProperties}
+            title={severityLabel(it.severity)}
+            aria-label={severityLabel(it.severity).toLowerCase()}
+            role="img"
+          />
+          <span>{it.text}</span>
+        </li>
+      ))}
+      {more !== undefined && more > 0 && (
+        <li className={s.more} data-testid="acm-chat-more">
+          +{more} more
+        </li>
+      )}
+    </ul>
+  );
 }
 
 function speakerKey(m: ChatMessage): string {
@@ -75,6 +108,7 @@ export function CoachChatFeed({
   initialIds,
   stage,
   busy,
+  onOpenReport,
 }: {
   name: string;
   messages: readonly ChatMessage[];
@@ -83,6 +117,8 @@ export function CoachChatFeed({
   stage: SpecialistStage;
   /** Work is in flight — the coach shows a typing indicator. */
   busy: boolean;
+  /** The closing line's inline "Full Report" link (same as the dock CTA). */
+  onOpenReport?: (() => void) | undefined;
 }) {
   const threadRef = useRef<HTMLDivElement>(null);
   const last = messages[messages.length - 1];
@@ -133,8 +169,9 @@ export function CoachChatFeed({
                 {firstOfRun && <span className={s.role}>{spec ? spec.label : name}</span>}
                 <div className={s.bub}>
                   {m.parts.map((p, j) => (
-                    <Part key={j} p={p} />
+                    <Part key={j} p={p} onLink={onOpenReport} />
                   ))}
+                  {m.items && m.items.length > 0 && <FindingItems items={m.items} more={m.more} />}
                 </div>
               </div>
             </div>

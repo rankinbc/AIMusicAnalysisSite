@@ -4,22 +4,15 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
-import { ApiError } from '../../api/fetcher';
-import { extractApiError } from '../../api/error-utils';
 import { useAuth } from '../../auth/AuthContext';
 import {
   useApplyVerdict,
   useDismissVerdict,
-  useEntitlements,
   useFeedbackVerdict,
   useNotes,
-  useReanalyzeVersion,
   useSong,
   useVersionFiles,
 } from '../../api/hooks';
-import { UpgradeSheet } from '../../components/UpgradeSheet';
-import { useBuyCredits } from '../billing/BuyCreditsProvider';
-import { isOutOfCredits } from '../billing/credits';
 import {
   isFinalJson,
   type FinalJson,
@@ -411,37 +404,6 @@ export function ReportView({
     }
   }, [versionFilePath]);
 
-  // Re-analyze: fire the same actor as a fresh upload, navigate to the new job.
-  const reanalyze = useReanalyzeVersion(versionId ?? '');
-  const ents = useEntitlements();
-  const [upgradeOpen, setUpgradeOpen] = useState(false);
-  const buyCredits = useBuyCredits();
-  const dispatchReanalyze = useCallback(() => {
-    if (!versionId) {
-      toast.error('This analysis is not tied to a version — cannot re-analyze.');
-      return;
-    }
-    reanalyze.mutate(undefined, {
-      onSuccess: (res) => {
-        toast.success('Re-analysis dispatched.');
-        void navigate({
-          to: '/songs/$songId/results/$jobId',
-          params: { songId, jobId: res.jobId },
-        });
-      },
-      onError: (err) => {
-        if (err instanceof ApiError && extractApiError(err.body).code === 'insufficient_credits') {
-          buyCredits.open({ title: 'Not enough credits', onBought: () => dispatchReanalyze() });
-        } else if (isOutOfCredits(err)) {
-          setUpgradeOpen(true);
-        } else {
-          toast.error(err instanceof Error ? err.message : 'Could not re-analyze');
-        }
-      },
-    });
-  }, [versionId, reanalyze, navigate, songId, buyCredits]);
-  const handleReanalyze = dispatchReanalyze;
-
   // Story 12.5: the add-input chips (and the coach unlock chips) open the REAL
   // upload dialogs — no more "go to the song page" toast.
   const [stemsDialogOpen, setStemsDialogOpen] = useState(false);
@@ -779,23 +741,9 @@ export function ReportView({
           hasStems={inputs.stems}
           onClose={dismissModal}
           onViewReport={dismissModal}
-          onReanalyze={() => {
-            dismissModal();
-            handleReanalyze();
-          }}
         />
       )}
 
-      <UpgradeSheet
-        open={upgradeOpen}
-        onOpenChange={setUpgradeOpen}
-        analysesUsed={ents.data?.analysesUsed ?? 0}
-        analysesLimit={ents.data?.analysesLimit ?? 0}
-        onUpgraded={() => {
-          setUpgradeOpen(false);
-          dispatchReanalyze();
-        }}
-      />
     </div>
   );
 }
