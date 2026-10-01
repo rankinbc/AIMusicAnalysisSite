@@ -269,8 +269,7 @@
   color: var(--red);
 }
 .stageRow.next .stageIc {
-  background: linear-gradient(135deg, var(--cyan), var(--violet));
-  color: var(--ink-on-accent);
+  background: transparent;
 }
 .actions {
   flex-shrink: 0;
@@ -442,7 +441,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 16px 0 10px;
+  margin: 14px 0 8px;
 }
 .sectionLabel .line {
   flex: 1;
@@ -470,7 +469,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.018);
-  padding: 9px 12px 10px;
+  padding: 7px 12px 8px;
   min-width: 0;
 }
 .skippedList {
@@ -586,7 +585,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px 14px;
-  margin-top: 6px;
+  margin-top: 4px;
   padding-left: 25px;
 }
 .kv {
@@ -622,6 +621,141 @@
   font-size: 11px;
   color: var(--text-2);
   line-height: 1.45;
+}
+
+/* ── AI specialists stage ─────────────────────────────────────────────── */
+.specRows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 8px;
+}
+@container (max-width: 860px) {
+  .specRows {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container (max-width: 620px) {
+  .specRows {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.specRow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--violet-line);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, var(--cyan-dim), var(--violet-dim));
+  min-width: 0;
+}
+.specRow.row_done {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.018);
+}
+.specRow.row_failed {
+  border-color: var(--border);
+  border-style: dashed;
+  background: transparent;
+}
+.specRow.row_queued {
+  opacity: 0.7;
+}
+.specName {
+  flex-shrink: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.specResult {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.row_done .specResult {
+  color: var(--text-2);
+}
+.stepStat.done {
+  color: var(--cyan);
+  background: var(--cyan-dim);
+}
+.stepStat.running,
+.stepStat.queued {
+  background: transparent;
+}
+.queuedDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.stepTag.done,
+.stepTag.running {
+  color: var(--cyan);
+}
+.stepTag.queued {
+  color: var(--muted);
+}
+
+/* coach chips carry their specialist's live state */
+.specChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.chipGlyph {
+  display: inline-grid;
+  place-items: center;
+  width: 12px;
+  height: 12px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+}
+.chipGlyph .spin {
+  width: 10px;
+  height: 10px;
+  border-width: 1.5px;
+}
+.chip_failed {
+  opacity: 0.55;
+}
+
+/* gated CTA + safety valve */
+.btn:disabled,
+.btn:disabled:hover {
+  cursor: progress;
+  filter: none;
+}
+.btn.primary:disabled {
+  background: rgba(0, 229, 176, 0.12);
+  color: var(--cyan);
+  box-shadow: 0 0 0 1px rgba(0, 229, 176, 0.3);
+}
+.btn .spin {
+  width: 13px;
+  height: 13px;
+}
+.valve {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: 6px 4px;
+  white-space: nowrap;
+}
+.valve:hover {
+  color: var(--text);
 }
 
 /* ── Narrow (phone) ───────────────────────────────────────────────────── */
