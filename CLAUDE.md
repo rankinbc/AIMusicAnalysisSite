@@ -55,7 +55,7 @@ AIMusicAnalysisSite/
 ├── docker/                   (Docker Compose for local dev: PostgreSQL, Redis, allin1)
 ├── docs/                     (Ops docs: STARTUP.md ← canonical startup guide, runbook.md, launch-checklist.md; plus generated project knowledge — index.md is the master doc index)
 ├── infra/                    (Production compose stack + deploy tooling — see docs/runbook.md)
-├── scripts/                  (Local dev orchestration scripts — e.g. start-spectr.ps1 stack launcher)
+├── scripts/                  (Local dev orchestration scripts — start-spectr.ps1 stack launcher, test-changed.ps1 dev-loop/checkpoint test runner)
 ├── _bmad/                    (BMad workflow tooling config — core/config.yaml; committed project config)
 ├── PRPs/
 │   ├── v1_ai_music_analyzer.md
@@ -276,7 +276,32 @@ token/cost breakdown via `llm_calls` rollup.
 
 ---
 
+## Testing workflow: dev loop vs checkpoint (RULE)
+
+**During development, run only the checks for what you touched. Run the full
+gates only at checkpoints.** Waiting on every gate after every small edit
+wastes far more time than it saves; CI runs everything on every push anyway.
+
+- **Dev loop (after each change):** `./scripts/test-changed.ps1`. It diffs your
+  working tree against `origin/develop` and runs only the affected checks:
+  pytest on the changed test files + tests importing a changed module, ruff on
+  changed `.py`, `tsc -b` + eslint on changed files + `vitest related`, and
+  `dotnet build` + BFF test classes that mention a changed type. Use `-DryRun`
+  to preview, `-Only worker,frontend` to narrow, `-Base <ref>` to diff against
+  something else. Running one test file or `pytest --lf` directly is also fine.
+- **Checkpoint (full gates):** `./scripts/test-changed.ps1 -Full` runs every
+  gate listed below + the CI extras. Run it **before merging `develop` →
+  `solo` (= deploy)**, before declaring a PRP/feature done, and **whenever the
+  user asks**. NOT after every edit, and not before every commit to a
+  feature/`develop` branch.
+- A dev-loop pass is NOT a claim that "all tests pass". Report what actually
+  ran (e.g. "worker tests for the touched modules pass; full gates not run").
+- BFF tests need Postgres up; worker/analysis/shared/workerdash/frontend tests
+  need no services (the worker conftest forces a dead DB/Redis on purpose).
+
 ## Validation gates
+
+The full checkpoint set (`./scripts/test-changed.ps1 -Full` runs all of it):
 
 ```bash
 # ── v2 stack — primary ──────────────────────────────────────────
@@ -361,7 +386,7 @@ curl -f http://localhost:5000/healthz && echo "BFF OK"
 - Custom `fetcher.ts` for HTTP — single instance, owns 401-retry-with-refresh. Don't introduce axios.
 - All file upload via XHR (`useFileUpload` hook). Job progress via SSE / TanStack Query polling.
 - No inline styles unless dynamic (color-from-grade, etc).
-- All four gates must pass before committing: `tsc -b` (NOT `--noEmit`), `npm run lint --max-warnings 0`, `npm run build`, `npx vitest run`.
+- All four gates must pass at CHECKPOINTS (see "Testing workflow"): `tsc -b` (NOT `--noEmit`), `npm run lint --max-warnings 0`, `npm run build`, `npx vitest run`. During dev, `./scripts/test-changed.ps1` runs the changed-file subset.
 
 **Windows dev note**
 - allin1/all-in-one-fix structure detection (Phase 1) requires Docker on Windows. Run `docker compose -f docker/docker-compose.yml up -d` before starting the worker.
@@ -401,6 +426,7 @@ Language-agnostic defaults. Append your stack-specific section at the end.
 
 - **Unit tests for new features.** At minimum: one expected-use, one edge case, one failure case.
 - **When you change logic**, update affected tests.
+- **Run only what you touched while iterating** (`./scripts/test-changed.ps1`); full gates at checkpoints only — see "Testing workflow".
 
 ### Docs
 
@@ -428,7 +454,7 @@ Language-agnostic defaults. Append your stack-specific section at the end.
 
 ### Task Completion
 
-- **PRP workflow**: validation gates passing = work is done.
+- **PRP workflow**: full validation gates (`./scripts/test-changed.ps1 -Full`) passing = work is done. Between steps, use the dev loop (`./scripts/test-changed.ps1`).
 
 ---
 

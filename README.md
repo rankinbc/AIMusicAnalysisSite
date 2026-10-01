@@ -79,7 +79,7 @@ Frontend: http://localhost:5174 · BFF OpenAPI: http://localhost:5000/openapi/v1
 
 ## Validation and testing
 
-Every component has its own gate, and all of them run in CI on every push — the frontend alone has four lint gates that fail on a single warning:
+Every component has its own gate, and all of them run in CI on every push — the frontend alone has four lint gates that fail on a single warning. Locally, `./scripts/test-changed.ps1` runs only the checks affected by your changes (dev loop) and `./scripts/test-changed.ps1 -Full` runs every gate below (checkpoint):
 
 ```bash
 cd components/bff && dotnet build && dotnet test        # integration tests hit real Postgres/Redis
