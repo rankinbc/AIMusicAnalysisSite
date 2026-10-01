@@ -2,7 +2,7 @@
 /* Task V1 — Rack/Coach stay full labelled tabs; Visuals becomes a compact
  * icon-only control at the end of the SAME tablist (still a real tab for
  * assistive tech). */
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ListenTabBar } from '../ListenTabBar';
@@ -25,8 +25,16 @@ describe('ListenTabBar', () => {
     render(<ListenTabBar tab="rack" onSelect={vi.fn()} activeCount={0} coachCount={0} />);
     const visuals = screen.getByRole('tab', { name: 'Visuals' });
     expect(visuals.getAttribute('aria-label')).toBe('Visuals');
-    expect(visuals.getAttribute('title')).toBe('Visuals');
     expect(visuals.textContent?.trim()).toBe('');
+  });
+
+  it('shows a tooltip naming Visuals when the control gets keyboard focus', async () => {
+    // Radix positions the popper with ResizeObserver, which jsdom lacks.
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+    render(<ListenTabBar tab="rack" onSelect={vi.fn()} activeCount={0} coachCount={0} />);
+    const visuals = screen.getByRole('tab', { name: 'Visuals' });
+    fireEvent.focus(visuals);
+    expect((await screen.findByRole('tooltip')).textContent).toMatch(/light show/i);
   });
 
   it('is inside the same tablist as Rack and Coach', () => {
