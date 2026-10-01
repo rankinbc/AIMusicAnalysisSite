@@ -323,10 +323,16 @@ jobs:
         run: |
           set -euo pipefail
           ip=$(curl -fsS https://api.ipify.org)
-          az network nsg rule create -g spectr-rg --nsg-name spectr-vmNSG \
-            -n "ci-deploy-${{ github.run_id }}" --priority 110 --direction Inbound \
-            --access Allow --protocol Tcp --destination-port-ranges 22 \
-            --source-address-prefixes "$ip/32" -o none
+          # Retry: the runner's az CLI intermittently dies on a Python import
+          # deadlock (_ModuleLock 'requests.structures') before any API call.
+          for attempt in 1 2 3; do
+            az network nsg rule create -g spectr-rg --nsg-name spectr-vmNSG \
+              -n "ci-deploy-${{ github.run_id }}" --priority 110 --direction Inbound \
+              --access Allow --protocol Tcp --destination-port-ranges 22 \
+              --source-address-prefixes "$ip/32" -o none && break
+            [ "$attempt" = 3 ] && exit 1
+            sleep 5
+          done
           sleep 10   # NSG rule propagation
 
       - name: Deploy over SSH
