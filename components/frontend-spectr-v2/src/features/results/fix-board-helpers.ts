@@ -124,17 +124,20 @@ export interface FilterState {
   minPriority: number;
 }
 
+/** Owner default: low-priority findings start hidden (wins always show). */
+export const DEFAULT_MIN_PRIORITY = 50;
+
 export const EMPTY_FILTERS: FilterState = {
   fixableOnly: false,
   groups: new Set<string>(),
   devices: new Set<string>(),
-  minPriority: 0,
+  minPriority: DEFAULT_MIN_PRIORITY,
 };
 
+/** Badge count for the Filter menu. The min-priority slider sits outside the
+ *  menu with its own readout, so it isn't counted here. */
 export function countActiveFilters(f: FilterState): number {
-  return (
-    (f.fixableOnly ? 1 : 0) + f.groups.size + f.devices.size + (f.minPriority > 0 ? 1 : 0)
-  );
+  return (f.fixableOnly ? 1 : 0) + f.groups.size + f.devices.size;
 }
 
 /** Numeric param → display string (op racks, move steps). */

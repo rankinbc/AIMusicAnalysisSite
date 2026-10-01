@@ -100,33 +100,31 @@ describe('chip on the empty Findings board', () => {
   });
 });
 
+function tab(name: RegExp) {
+  return screen.getByRole('tab', { name });
+}
+
 describe('SpecialistTeamModal initialView', () => {
-  it("'ran' opens with the Already run list expanded", () => {
+  it("'ran' opens on the Already run tab", () => {
     renderModal('ran');
-    expect(screen.getByText('Already run').closest('button')?.textContent).toContain('▾');
-    expect(document.querySelector('.spec-ranlist')).not.toBeNull();
+    expect(tab(/Already run/).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tabpanel').textContent).toContain('Low End');
   });
 
-  it('defaults to the roster with Already run collapsed', () => {
+  it('defaults to a group tab', () => {
     renderModal();
-    expect(document.querySelector('.spec-ranlist')).toBeNull();
+    expect(tab(/Already run/).getAttribute('aria-selected')).toBe('false');
+    expect(tab(/Spectrum/).getAttribute('aria-selected')).toBe('true');
   });
 });
 
-function groupHeader(name: string): HTMLElement {
-  const hd = [...document.querySelectorAll<HTMLElement>('.sg-toggle')].find(
-    (b) => b.querySelector('.sg-n')?.textContent === name,
-  );
-  if (!hd) throw new Error(`no group header ${name}`);
-  return hd;
-}
-
-describe('SpecialistTeamModal compact roster', () => {
-  function renderRoster(onRun = vi.fn()) {
+describe('SpecialistTeamModal tabs', () => {
+  function renderRoster(opts: { running?: string[]; onRun?: () => void } = {}) {
+    const onRun = opts.onRun ?? vi.fn();
     render(
       <SpecialistTeamModal
         ranSlugs={new Set(['low_end'])}
-        runningSlugs={new Set<string>()}
+        runningSlugs={new Set(opts.running ?? [])}
         foundBySlug={new Map([['low_end', 1]])}
         suggestedSlugs={new Set(['spatial'])}
         verdicts={[VERDICT]}
@@ -139,35 +137,45 @@ describe('SpecialistTeamModal compact roster', () => {
     return onRun;
   }
 
-  it('collapses every category by default and flags recommended ones in the header', () => {
+  it('opens on the tab holding a recommended specialist, which is highlighted', () => {
     renderRoster();
-    for (const g of ['Spectrum', 'Loudness', 'Dynamics', 'Stereo', 'Sections', 'Stems', 'Misc']) {
-      expect(groupHeader(g).getAttribute('aria-expanded')).toBe('false');
-    }
-    expect(screen.queryByRole('button', { name: /Spatial/ })).toBeNull();
-    expect(screen.getByText('1 recommended')).toBeTruthy();
+    expect(tab(/Stereo/).getAttribute('aria-selected')).toBe('true');
+    expect(tab(/Stereo/).className).toContain('rec');
+    const rows = screen.getByRole('tabpanel').querySelectorAll('.spec-ranrow');
+    // Recommended sorts to the top of its tab.
+    expect(rows[0]?.textContent).toContain('Spatial');
+    expect(rows[0]?.className).toContain('rec');
+    expect(rows[0]?.textContent).toContain('Recommended for this track');
   });
 
-  it('expands a category into rows; recommended rows are highlighted', () => {
+  it('switching tabs shows that group; a run specialist shows its findings', () => {
     renderRoster();
-    fireEvent.click(groupHeader('Stereo'));
-    const spatial = screen.getByRole('button', { name: /Spatial/ });
-    expect(spatial.className).toContain('rec');
-    expect(spatial.textContent).toContain('Recommended for this track');
-    expect(screen.getByRole('button', { name: /Stereo Field/ }).className).not.toContain('rec');
-  });
-
-  it('shows a run specialist with its findings, like the Already run list', () => {
-    renderRoster();
-    fireEvent.click(groupHeader('Spectrum'));
+    fireEvent.click(tab(/Spectrum/));
     const row = screen.getByRole('button', { name: /Low End/ });
     expect(row.textContent).toContain('Sub is masking the kick');
     expect(row.textContent).toContain('1 finding');
   });
 
+  it('pins running specialists at the top and first in their tab', () => {
+    renderRoster({ running: ['dynamics', 'humanization'] });
+    expect(screen.getByText('Running now')).toBeTruthy();
+    const pinned = document.querySelector('.spec-running')?.textContent ?? '';
+    expect(pinned).toContain('Dynamics');
+    expect(pinned).toContain('Humanization');
+    fireEvent.click(tab(/^Dynamics/));
+    const rows = screen.getByRole('tabpanel').querySelectorAll('.spec-ranrow');
+    expect(rows[0]?.textContent).toContain('Dynamics');
+    expect(rows[1]?.textContent).toContain('Humanization');
+  });
+
+  it('has no Running now section when nothing runs', () => {
+    renderRoster();
+    expect(screen.queryByText('Running now')).toBeNull();
+  });
+
   it('selecting a row arms the run button', () => {
     const onRun = renderRoster();
-    fireEvent.click(groupHeader('Dynamics'));
+    fireEvent.click(tab(/^Dynamics/));
     fireEvent.click(screen.getByRole('button', { name: /^Dynamics.*Not run yet/ }));
     fireEvent.click(screen.getByRole('button', { name: /Run · 1 cr/ }));
     expect(onRun).toHaveBeenCalledWith('dynamics');

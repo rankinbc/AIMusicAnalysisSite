@@ -35,6 +35,8 @@ interface SongHeaderProps {
   /** How many AI specialists are running right now — shows the animated
    *  "N specialists running…" pill in the kicker row (hidden at 0). */
   specialistsRunning?: number;
+  /** Specialists already run — the pill reads "N specialists run" while idle. */
+  specialistsRan?: number | undefined;
   /** Opens the Specialist Team roster from the running pill. */
   onSpecialistsClick?: (() => void) | undefined;
 }
@@ -61,6 +63,7 @@ export function SongHeader({
   inputs,
   onAddInputs,
   specialistsRunning = 0,
+  specialistsRan,
   onSpecialistsClick,
 }: SongHeaderProps) {
   const hue = hueFromId(versionId ?? songId);
@@ -70,7 +73,11 @@ export function SongHeader({
     <div className="rhead">
       <div className="rh-kickrow">
         <div className="rh-kicker">Analyzed</div>
-        <SpecialistsRunning count={specialistsRunning} onClick={onSpecialistsClick} />
+        <SpecialistsRunning
+          count={specialistsRunning}
+          ran={specialistsRan}
+          onClick={onSpecialistsClick}
+        />
       </div>
       <div className="rh-top">
         <CoverArt hue={hue} size="md">

@@ -97,6 +97,18 @@ describe('SpecialistsRunning', () => {
     expect(onClick).toHaveBeenCalledOnce();
   });
 
+  it('shows a static "N specialists run" while idle when given the ran count', () => {
+    const onClick = vi.fn();
+    const { rerender } = render(<SpecialistsRunning count={0} ran={5} onClick={onClick} />);
+    const pill = screen.getByRole('button', { name: '5 specialists run' });
+    fireEvent.click(pill);
+    expect(onClick).toHaveBeenCalledOnce();
+    rerender(<SpecialistsRunning count={0} ran={1} />);
+    expect(screen.getByTestId('specialists-running').textContent).toBe('1 specialist run');
+    rerender(<SpecialistsRunning count={2} ran={1} />);
+    expect(screen.getByRole('status').textContent).toBe('2 specialists running…');
+  });
+
   it('shows in the SongHeader kicker row only while specialists run', () => {
     const base = {
       songId: 's',

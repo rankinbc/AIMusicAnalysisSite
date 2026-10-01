@@ -492,7 +492,10 @@ export function ReportView({
                   suggestionCount={moves.length}
                   onAddInputs={onAddInputs}
                   specialistsRunning={specialistRuns.running.size}
-                  onSpecialistsClick={openSpecialists}
+                  specialistsRan={specialistRuns.ranSlugs.size}
+                  onSpecialistsClick={
+                    specialistRuns.running.size > 0 ? openSpecialists : openSpecialistsRan
+                  }
                 />
                 <SendToListenCard
                   jobId={jobId}

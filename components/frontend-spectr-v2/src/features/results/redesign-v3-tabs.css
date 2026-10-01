@@ -371,6 +371,10 @@
 .rdx .fb-specrun:hover .fb-specrun-tip, .rdx .fb-specrun:focus-visible .fb-specrun-tip { display:block; }
 .rdx .fb-filters { display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
 .rdx .fb-filters .fpill { padding:4px 8px; font-size:10.5px; }
+.rdx .fb-prio { display:inline-flex; align-items:center; gap:7px; padding:3px 9px; border:1px solid var(--border); border-radius:999px; cursor:default; }
+.rdx .fb-prio-l { font-size:8.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); white-space:nowrap; }
+.rdx .fb-prio input[type="range"] { width:96px; accent-color:var(--accent); height:14px; }
+.rdx .fb-prio-v { font-size:10px; font-weight:700; color:var(--accent); min-width:34px; text-align:right; }
 .rdx .fpill.selall { color:var(--accent); border-color:rgba(0,229,176,.3); }
 .rdx .fpill.selall:hover { background:rgba(0,229,176,.08); }
 .rdx .fb-filterdd { position:relative; }
@@ -730,6 +734,23 @@
 .rdx .srr-res { flex:1; min-width:0; font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .rdx .srr-found { font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--text-2); flex-shrink:0; }
 .rdx .spec-ranlist.full { max-height:none; }
+.rdx .spec-running { margin-bottom:12px; }
+.rdx .spec-running .sg-h { display:flex; align-items:center; gap:9px; margin-bottom:6px; }
+.rdx .spec-running .sg-dot { width:8px; height:8px; border-radius:2px; }
+.rdx .spec-running .sg-n { font-size:12px; font-weight:700; color:var(--text); }
+.rdx .spec-running .sg-c { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--muted); }
+.rdx .spec-tabs { display:flex; flex-wrap:nowrap; gap:3px; margin-bottom:8px; overflow-x:auto; scrollbar-width:none; }
+.rdx .spec-tab { position:relative; flex-shrink:0; display:inline-flex; align-items:center; gap:5px; padding:4px 8px; border-radius:7px; border:1px solid var(--border); background:transparent; color:var(--text-2); font-size:11px; font-weight:600; cursor:pointer; white-space:nowrap; }
+.rdx .spec-tab .sg-dot { width:7px; height:7px; border-radius:2px; }
+.rdx .spec-tab .st-c { font-family:'JetBrains Mono',monospace; font-size:9.5px; color:var(--muted); }
+.rdx .spec-tab:hover { color:var(--text); border-color:var(--border-2); }
+.rdx .spec-tab.on { color:var(--text); border-color:var(--accent); background:rgba(0,229,176,.06); }
+.rdx .spec-tab.rec { border-color:rgba(0,229,176,.35); }
+.rdx .spec-tab .st-rec, .rdx .spec-tab .st-run { width:6px; height:6px; border-radius:50%; background:var(--accent); box-shadow:0 0 6px var(--accent); }
+.rdx .spec-tab .st-run { background:var(--cyan); box-shadow:0 0 6px var(--cyan); animation:specTabPulse 1.2s ease-in-out infinite; }
+.rdx .spec-tab.ranned { margin-left:6px; }
+@keyframes specTabPulse { 50% { opacity:.35; } }
+@media (prefers-reduced-motion: reduce) { .rdx .spec-tab .st-run { animation:none; } }
 .rdx .spec-ranrow.pick { width:100%; text-align:left; border:1px solid transparent; background:transparent; cursor:pointer; font:inherit; }
 .rdx .spec-ranrow.pick:nth-child(odd) { background:rgba(255,255,255,.018); }
 .rdx .spec-ranrow.pick:hover { background:var(--card-hover); }

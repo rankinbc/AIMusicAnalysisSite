@@ -27,6 +27,18 @@ span.wrap {
   animation: srGlow 2.4s ease-in-out infinite;
 }
 
+/* Nothing running: a quiet static count, no glow. */
+.wrap .pill.idle {
+  animation: none;
+  border-color: var(--border-2);
+  background: transparent;
+  color: var(--text-2);
+}
+button.pill.idle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 button.pill {
   cursor: pointer;
 }

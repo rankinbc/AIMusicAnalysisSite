@@ -176,8 +176,14 @@ export function FixBoard({
   // External focus (deep-link from the other tab): clear filters, select.
   useEffect(() => {
     if (!focusId) return;
-    if (findings.some((f) => f.id === focusId)) {
-      setFilters(EMPTY_FILTERS);
+    const target = findings.find((f) => f.id === focusId);
+    if (target) {
+      // Keep the priority floor unless it would hide the deep-linked finding.
+      setFilters((cur) => ({
+        ...EMPTY_FILTERS,
+        minPriority:
+          target.severity !== 'win' && target.priorityScore < cur.minPriority ? 0 : cur.minPriority,
+      }));
       setSelId(focusId);
     }
     onConsumeFocus();

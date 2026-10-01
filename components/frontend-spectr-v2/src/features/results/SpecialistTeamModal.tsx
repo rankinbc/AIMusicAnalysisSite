@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import type { VerdictDto } from '../../api/types';
 import { Icon } from './Icon';
@@ -26,8 +26,8 @@ interface SpecialistTeamModalProps {
   credits: number | null;
   onRun: (slug: string) => void;
   onClose: () => void;
-  /** 'ran' = open with "Already run" expanded and scrolled into view (the
-   *  Findings header's "N specialists run" chip). Default: the roster top. */
+  /** 'ran' = open on the "Already run" tab (the "N specialists run" chips).
+   *  Default: the first tab holding a recommended specialist. */
   initialView?: 'roster' | 'ran';
 }
 
@@ -111,24 +111,23 @@ export function SpecialistTeamModal({
 
   const [selSlug, setSelSlug] = useState<string | null>(suggested[0]?.slug ?? null);
   const [triageOpen, setTriageOpen] = useState(false);
-  const [ranOpen, setRanOpen] = useState(initialView === 'ran');
-  const bodyRef = useRef<HTMLDivElement>(null);
-  // Mount-only: land on the "Already run" list at the bottom of the body.
-  useEffect(() => {
-    if (initialView !== 'ran' || !bodyRef.current) return;
-    bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
-  }, [initialView]);
-
   const selSpec = SPECIALIST_CATALOG.find((m) => m.slug === selSlug) ?? null;
 
-  const [openGroups, setOpenGroups] = useState<ReadonlySet<SpecialistGroup>>(new Set());
-  const toggleGroup = (g: SpecialistGroup) =>
-    setOpenGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(g)) next.delete(g);
-      else next.add(g);
-      return next;
-    });
+  type TabKey = SpecialistGroup | 'ran';
+  const groups = SPECIALIST_GROUPS.filter((g) => SPECIALIST_CATALOG.some((m) => m.group === g));
+  const isRec = (slug: string) => suggested.some((x) => x.slug === slug);
+  const [tab, setTab] = useState<TabKey>(() => {
+    if (initialView === 'ran' && ran.length > 0) return 'ran';
+    const recGroup = SPECIALIST_CATALOG.find((m) => isRec(m.slug))?.group;
+    return recGroup ?? groups[0] ?? 'Spectrum';
+  });
+  const runningNow = SPECIALIST_CATALOG.filter((m) => runningSlugs.has(m.slug));
+  // Running first, then recommended, then catalog order.
+  const rank = (slug: string) => (runningSlugs.has(slug) ? 0 : isRec(slug) ? 1 : 2);
+  const tabMembers = (tab === 'ran' ? ran : SPECIALIST_CATALOG.filter((m) => m.group === tab))
+    .map((m, i) => ({ m, i }))
+    .sort((x, y) => rank(x.m.slug) - rank(y.m.slug) || x.i - y.i)
+    .map((x) => x.m);
 
   // One row per specialist, in the "Already run" list style: avatar · name ·
   // what it found (or its state) · status. Clicking selects it for the
@@ -200,7 +199,7 @@ export function SpecialistTeamModal({
           </button>
         </div>
 
-        <div className="modal-body" ref={bodyRef}>
+        <div className="modal-body">
           {suggested.length > 0 && (
             <>
               <button type="button" className="triage" onClick={() => setTriageOpen((o) => !o)}>
@@ -234,59 +233,62 @@ export function SpecialistTeamModal({
             one to surface new findings — results drop into the chat and the Findings tab.
           </p>
 
-          <div className="spec-groups">
-            {SPECIALIST_GROUPS.map((group) => {
+          {runningNow.length > 0 && (
+            <div className="spec-running">
+              <div className="sg-h">
+                <span className="sg-dot" style={{ background: 'var(--cyan)' }} />
+                <span className="sg-n">Running now</span>
+                <span className="sg-c">{runningNow.length}</span>
+              </div>
+              <div className="spec-ranlist boxed full">
+                {runningNow.map((m) => (
+                  <Row key={m.slug} m={m} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="spec-tabs" role="tablist" aria-label="Specialist groups">
+            {groups.map((group) => {
               const members = SPECIALIST_CATALOG.filter((m) => m.group === group);
-              if (members.length === 0) return null;
-              const open = openGroups.has(group);
-              const recCount = members.filter((m) => suggested.some((x) => x.slug === m.slug)).length;
+              const recCount = members.filter((m) => isRec(m.slug)).length;
+              const runCount = members.filter((m) => runningSlugs.has(m.slug)).length;
               return (
-                <div className="spec-group" key={group}>
-                  <button
-                    type="button"
-                    className="sg-h sg-toggle"
-                    aria-expanded={open}
-                    onClick={() => toggleGroup(group)}
-                  >
-                    <span className="sg-dot" style={{ background: groupColor(group) }} />
-                    <span className="sg-n">{group}</span>
-                    <span className="sg-c">{members.length}</span>
-                    {recCount > 0 && <span className="sg-rec">{recCount} recommended</span>}
-                    <span className="sg-chev">{open ? '▾' : '▸'}</span>
-                  </button>
-                  {open && (
-                    <div className="spec-ranlist boxed full">
-                      {members.map((m) => (
-                        <Row key={m.slug} m={m} />
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <button
+                  key={group}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === group}
+                  className={`spec-tab${tab === group ? ' on' : ''}${recCount > 0 ? ' rec' : ''}`}
+                  onClick={() => setTab(group)}
+                  title={recCount > 0 ? `${recCount} recommended` : undefined}
+                >
+                  <span className="sg-dot" style={{ background: groupColor(group) }} />
+                  {group}
+                  <span className="st-c">{members.length}</span>
+                  {runCount > 0 && <span className="st-run" aria-label="running" />}
+                  {recCount > 0 && runCount === 0 && <span className="st-rec" aria-label="recommended" />}
+                </button>
               );
             })}
-
             {ran.length > 0 && (
-              <div className="spec-group">
-                <button
-                  type="button"
-                  className="sg-h sg-toggle"
-                  aria-expanded={ranOpen}
-                  onClick={() => setRanOpen((o) => !o)}
-                >
-                  <span className="sg-dot" style={{ background: 'var(--text-2)' }} />
-                  <span className="sg-n">Already run</span>
-                  <span className="sg-c">{ran.length}</span>
-                  <span className="sg-chev">{ranOpen ? '▾' : '▸'}</span>
-                </button>
-                {ranOpen && (
-                  <div className="spec-ranlist boxed">
-                    {ran.map((m) => (
-                      <Row key={m.slug} m={m} />
-                    ))}
-                  </div>
-                )}
-              </div>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === 'ran'}
+                className={`spec-tab ranned${tab === 'ran' ? ' on' : ''}`}
+                onClick={() => setTab('ran')}
+              >
+                Already run
+                <span className="st-c">{ran.length}</span>
+              </button>
             )}
+          </div>
+
+          <div className="spec-ranlist boxed full" role="tabpanel">
+            {tabMembers.map((m) => (
+              <Row key={m.slug} m={m} />
+            ))}
           </div>
         </div>
 
