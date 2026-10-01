@@ -104,6 +104,62 @@ public sealed class JobEndpointsCreditReversalTests(WebApplicationFactory<Progra
         finally { await CleanupAsync(userId); }
     }
 
+    private async Task<Guid> SeedFailedChargedJobAsync(Guid userId, string errorCode)
+    {
+        var jobId = Guid.NewGuid();
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.AnalysisJobs.Add(new AnalysisJob
+        {
+            Id = jobId, UserId = userId, Status = "failed", CurrentPhase = "failed",
+            ErrorCode = errorCode, ErrorMessage = "boom", FailedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        var svc = scope.ServiceProvider.GetRequiredService<CreditLedgerService>();
+        await svc.GrantSignupBonusAsync(userId, 500, CancellationToken.None);
+        await svc.ChargeAsync(userId, 100, jobId.ToString(), $"spend:analysis:{jobId}", "analysis", CancellationToken.None);
+        return jobId;
+    }
+
+    [SkippableFact]
+    public async Task GetJob_With_Worker_Failure_Refunds_Full_Spend()
+    {
+        await TestDb.RequireAsync(_factory);
+        var (client, userId) = await SeedAuthedAsync(_factory, "jobrev-worker");
+        try
+        {
+            var jobId = await SeedFailedChargedJobAsync(userId, "worker_error");
+
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/jobs/{jobId}")).StatusCode);
+            await client.GetAsync($"/api/jobs/{jobId}");
+
+            using var check = _factory.Services.CreateScope();
+            var balance = await check.ServiceProvider.GetRequiredService<CreditLedgerService>()
+                .GetBalanceAsync(userId, CancellationToken.None);
+            Assert.Equal(500, balance);
+        }
+        finally { await CleanupAsync(userId); }
+    }
+
+    [SkippableTheory]
+    [InlineData("cancelled")]
+    [InlineData("insufficient_credits")]
+    public async Task GetJob_Cancelled_Or_Insufficient_Does_Not_Refund(string code)
+    {
+        await TestDb.RequireAsync(_factory);
+        var (client, userId) = await SeedAuthedAsync(_factory, "jobrev-excl");
+        try
+        {
+            var jobId = await SeedFailedChargedJobAsync(userId, code);
+            await client.GetAsync($"/api/jobs/{jobId}");
+
+            using var check = _factory.Services.CreateScope();
+            Assert.Equal(400, await check.ServiceProvider.GetRequiredService<CreditLedgerService>()
+                .GetBalanceAsync(userId, CancellationToken.None));
+        }
+        finally { await CleanupAsync(userId); }
+    }
+
     [SkippableFact]
     public async Task GetJob_Second_Read_Does_Not_Double_Refund()
     {

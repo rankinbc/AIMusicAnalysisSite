@@ -305,36 +305,24 @@ public static class JobEndpoints
         ).FirstOrDefaultAsync(ct);
         if (row is null) return Results.NotFound();
 
-        // Story 2.3 / AC3 — lazy credit reversal on read. If the worker
-        // failed pre-pipeline with a typed `invalid_file` error AND a
-        // prior credit spend exists for this job (i.e. the user paid
-        // with credits), refund the credit. The partial unique index
-        // on `idempotency_key = "reversal:<jobId>"` makes this safe to
-        // call repeatedly — duplicate reads are no-ops.
+        // Credit economy — lazy refund on read. A failed analysis is refunded
+        // whatever the cause (worker crash, dispatch_failed, invalid_file…),
+        // for exactly what it cost. Excluded: insufficient_credits (never
+        // charged) and a user cancel. ReverseAsync sums the job's spend rows,
+        // so Pro-allowance and free-retry jobs (no spend) refund nothing.
+        // Idempotent per job via "reversal:<jobId>", so repeat reads are no-ops.
         //
-        // Per AR13, the worker never reads/writes billing tables. This
-        // read-path observer keeps that separation: the worker writes
-        // a typed error code; the BFF observes it on the next read and
-        // issues the reversal. Story 2.10 reconciliation is the
-        // backstop for failed jobs the user never re-opens.
+        // Per AR13 the worker never reads/writes billing tables: it writes a
+        // typed error code and the BFF observes it on the next read. Story 2.10
+        // reconciliation is the backstop for failed jobs the user never re-opens.
         if (row.Status == "failed"
-            && string.Equals(row.ErrorCode, "invalid_file", StringComparison.Ordinal))
+            && row.ErrorCode is not ("insufficient_credits" or "cancelled"))
         {
-            var hasSpend = await db.CreditLedger.AsNoTracking()
-                .AnyAsync(e => e.UserId == userId
-                    && e.Reason == "spend"
-                    && e.Reference == jobId.ToString(), ct);
-            if (hasSpend)
-            {
-                var entry = await credits.ReverseAsync(
-                    userId, jobId, "invalid_file", ct);
-                if (entry is not null)
-                {
-                    logger.LogInformation(
-                        "Refunded credit for invalid-file failure: user={UserId}, jobId={JobId}",
-                        userId, jobId);
-                }
-            }
+            var entry = await credits.ReverseAsync(userId, jobId, row.ErrorCode ?? "failed", ct);
+            if (entry is not null)
+                logger.LogInformation(
+                    "Refunded {Amount} credits for failed job: user={UserId}, jobId={JobId}, code={Code}",
+                    entry.Amount, userId, jobId, row.ErrorCode);
         }
 
         return Results.Ok(new JobStatusDto(
