@@ -176,7 +176,6 @@ const meta = {
   loudnessRangeLu: round(p1.loudness_range_lu, 1),
   stereoCorrelation: round(p1.stereo_correlation, 2),
   specialistsRun: (snap.analysis.routingPlan?.specialists_to_run ?? []).map((s) => s.name),
-  pipelineVersion: snap.analysis.pipelineVersion,
   verdictsInSnapshot: snap.verdicts.length,
 };
 
@@ -218,7 +217,6 @@ export interface SampleMeta {
   loudnessRangeLu: number | null;
   stereoCorrelation: number | null;
   specialistsRun: string[];
-  pipelineVersion: string;
   verdictsInSnapshot: number;
 }
 

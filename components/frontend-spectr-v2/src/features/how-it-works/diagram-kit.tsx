@@ -1,6 +1,6 @@
 // Tiny inline-SVG diagram kit for the /trust/how-its-built figures. Layouts
 // are hand-placed coordinate tables (see pipeline-diagram-layout.ts and
-// ArchitectureDiagram.tsx); this file only knows how to draw a box, a pill,
+// the diagrams); this file only knows how to draw a box, a pill,
 // a group frame, a strip and an orthogonal arrow. Colours come from tokens
 // via CSS classes (diagram.module.css) — never hard-coded here.
 import { useId } from 'react';

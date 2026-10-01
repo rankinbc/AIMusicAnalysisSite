@@ -209,6 +209,13 @@ export interface Differentiator {
 // Each entry is a statement about SPECTR only — no claims about any other
 // product beyond the generic "score and tips" framing in the intro.
 export const DIFFERENTIATORS: readonly Differentiator[] = [
+  // The product's core promise: findings -> plan (export-generator /
+  // ImprovementPlanTab) -> Listen rack audition -> coach.
+  {
+    id: 'together',
+    title: 'It helps you fix it, not just find it',
+    body: 'Findings become a plan you work through: exact settings in priority order, each fix auditioned on your own track in the Listen rack, and a Coach you can ask about any step.',
+  },
   // validator.py metric-path + 10% value check.
   {
     id: 'evidence',

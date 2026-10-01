@@ -99,7 +99,7 @@ describe('Landing hero (two-column redesign + the Coach)', () => {
 
   it('renders exactly one h1 with the headline', () => {
     expect((html.match(/<h1[\s>]/g) ?? []).length).toBe(1);
-    expect(html).toContain('wrong with your mix before anyone else hears it.');
+    expect(html).toContain('wrong with your mix. Fix it.');
   });
 
   it('points the primary CTA at /analyze and the demo CTA at /demo', () => {

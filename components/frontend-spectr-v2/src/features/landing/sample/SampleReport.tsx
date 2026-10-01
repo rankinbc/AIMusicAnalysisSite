@@ -57,7 +57,6 @@ export default function SampleReport() {
           <div className={`mono ${s.trackMeta}`}>
             {m.genre && <span>{m.genre.replace(/_/g, ' ')}</span>}
             {m.key && <span>{m.key}</span>}
-            <span>pipeline {m.pipelineVersion}</span>
           </div>
           {m.credit && <p className={s.credit}>{m.credit}</p>}
         </div>

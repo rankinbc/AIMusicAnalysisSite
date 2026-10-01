@@ -28,11 +28,12 @@ export function LandingHero() {
     <section className={s.hero} aria-labelledby="landing-title">
       <div className={s.copy}>
         <h1 id="landing-title" className={s.title}>
-          Know what&rsquo;s wrong with your mix before anyone else hears it.
+          Don&rsquo;t just find out what&rsquo;s wrong with your mix. Fix it.
         </h1>
         <p className={s.subtitle}>
-          Upload a track and get a graded report on loudness, low end, stereo image and tonal
-          balance, with the measurements behind every finding and concrete fixes to try tonight.
+          Most online mix checkers stop at a score and a list of problems. SPECTR works with you
+          to fix them &mdash; a prioritised plan with exact settings, every fix playable on your
+          own track, and a Coach who knows your mix answering your questions along the way.
         </p>
         <div className={s.ctaRow}>
           {/* Story 6.3 — straight into the anon instant-analysis funnel. */}

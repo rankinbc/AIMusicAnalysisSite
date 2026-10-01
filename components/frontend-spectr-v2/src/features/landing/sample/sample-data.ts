@@ -32,7 +32,6 @@ export interface SampleMeta {
   loudnessRangeLu: number | null;
   stereoCorrelation: number | null;
   specialistsRun: string[];
-  pipelineVersion: string;
   verdictsInSnapshot: number;
 }
 
@@ -55,7 +54,6 @@ export const SAMPLE_META: SampleMeta = {
     "stereo_phase",
     "frequency_balance"
   ],
-  "pipelineVersion": "2.2.0",
   "verdictsInSnapshot": 15
 };
 

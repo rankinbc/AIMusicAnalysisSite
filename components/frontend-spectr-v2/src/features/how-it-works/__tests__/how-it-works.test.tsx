@@ -4,7 +4,6 @@ import { run as axeRun } from 'axe-core';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { ARCH_TITLE, DEPLOY_CHAIN } from '../ArchitectureDiagram';
 import { COACH_INTRO, DEMO_ANSWER, DEMO_EVIDENCE, DEMO_QUESTION } from '../coach-showcase-content';
 import { buildExamples } from '../examples-model';
 import { HowItWorksPage } from '../HowItWorksPage';
@@ -39,7 +38,6 @@ describe('HowItWorksPage (/trust/how-its-built)', () => {
       'What it finds — and what it tells you to do',
       'Meet the Coach',
       'From upload to a plan',
-      'Under the hood',
       'What makes it different',
       'See it for yourself',
     ]) {
@@ -70,7 +68,7 @@ describe('HowItWorksPage (/trust/how-its-built)', () => {
   it('carries the differentiators', () => {
     expect(DIFFERENTIATORS.length).toBeGreaterThanOrEqual(6);
     for (const d of DIFFERENTIATORS) expect(html).toContain(d.title);
-    expect(html).toContain('score and a few generic tips');
+    expect(html).toContain('score and a list of problems');
     expect(html).toContain('Your audio never trains a model');
   });
 
@@ -83,15 +81,13 @@ describe('HowItWorksPage (/trust/how-its-built)', () => {
     expect(html).not.toMatch(/trackscore|landr|ozone|izotope|mixcheck|bandlab|emastered|cryo|mixed in key|sonible|mastering\.com/i);
   });
 
-  it('renders both diagrams as accessible images, in wide and narrow layouts', () => {
+  it('renders the pipeline diagram as an accessible image, in wide and narrow layouts', () => {
     const { container } = render(<HowItWorksPage />);
     // The Coach avatar in the chat showcase sits inside aria-hidden.
     const imgs = [...container.querySelectorAll('svg[role="img"]')].filter((i) => !i.closest('[aria-hidden="true"]'));
     expect(imgs.map((i) => i.getAttribute('aria-label'))).toEqual([
       PIPELINE_TITLE,
       PIPELINE_TITLE,
-      ARCH_TITLE,
-      ARCH_TITLE,
     ]);
     for (const svg of imgs) {
       expect(svg.querySelector('title')?.textContent).toBe(svg.getAttribute('aria-label'));
@@ -115,13 +111,17 @@ describe('HowItWorksPage (/trust/how-its-built)', () => {
     expect(fig).not.toMatch(/arrangement|structure|demucs|separat/i);
   });
 
-  it('architecture diagram shows the verified production stack and deploy chain', () => {
-    const fig = html.slice(html.indexOf('data-testid="architecture-diagram"'));
-    for (const text of ['React 19', 'ASP.NET Core', '.NET 10', 'PostgreSQL 16', 'Redis 7 + Dramatiq', 'Cloudflare R2', 'Coach worker', 'LLM gateway', 'Anthropic Claude', 'never audio']) {
-      expect(fig).toContain(text);
-    }
-    for (const step of DEPLOY_CHAIN) expect(fig).toContain(step);
-    expect(fig).toContain('href="https://github.com/rankinbc/AIMusicAnalysisSite"');
+  // Owner ruling 2026-10-01: show the pipeline, never the infrastructure —
+  // no tech stack, hosting, CI, or repository details on the public page.
+  it('exposes no infrastructure, tech stack or repository details', () => {
+    expect(html).not.toMatch(
+      /github|React 19|ASP\.NET|\.NET 10|PostgreSQL|Redis|Dramatiq|Caddy|Azure|Trivy|Docker|Prometheus|Grafana|Cloudflare|Under the hood/i,
+    );
+  });
+
+  it('leads with helping you fix the mix, not just diagnosing it', () => {
+    expect(html).toContain('leave the fixing');
+    expect(html).toContain('It helps you fix it, not just find it');
   });
 
   it('example cards carry real demo verdicts: headline, evidence and fix steps', () => {

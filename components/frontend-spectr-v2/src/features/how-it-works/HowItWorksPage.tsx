@@ -1,6 +1,6 @@
 // /trust/how-its-built — the "how it works" page: the pipeline diagram, worked
 // examples from the real demo analysis, a replica of the coach chat, the step-by-step flow from upload to
-// a plan, the system architecture, what sets SPECTR apart from score-and-tips
+// a plan, what sets SPECTR apart from score-and-tips
 // mix checkers, and the two funnel CTAs. Copy lives in
 // pipeline.ts, where every entry cites the code that backs it. Lives in
 // features/ so the router's auto code-splitting lazy-chunks it out of the
@@ -9,7 +9,6 @@ import { useEffect } from 'react';
 
 import { capture } from '../../lib/analytics';
 import { TrustPage } from '../trust/TrustPage';
-import { ArchitectureDiagram } from './ArchitectureDiagram';
 import { CoachShowcase } from './CoachShowcase';
 import { ExampleFindings } from './ExampleFindings';
 import { DIFFERENTIATORS, KIND_LABEL, STAGES } from './pipeline';
@@ -35,9 +34,10 @@ export function HowItWorksPage() {
       metaDescription="From upload to a mix plan: SPECTR measures your track, flags problems with genre-relative rules and AI specialists, checks every finding against the measurements, and lets you hear the fixes in your browser."
     >
       <p className={s.lead}>
-        Most online mix checkers give you a score and a few generic tips. SPECTR measures your track,
-        finds the specific problems those measurements point to, and turns them into a prioritised
-        plan with exact settings — which you can hear on your own track before you touch your DAW.
+        Most online mix checkers give you a score and a list of problems &mdash; and leave the fixing
+        to you. SPECTR doesn&rsquo;t stop there. It measures your track, pinpoints what&rsquo;s holding it
+        back, and then works with you to fix it: a prioritised plan with exact settings, every fix
+        playable on your own track before you touch your DAW, and a Coach that knows your mix.
       </p>
 
       <h2>The analysis pipeline</h2>
@@ -85,13 +85,6 @@ export function HowItWorksPage() {
           </section>
         ))}
       </div>
-
-      <h2>Under the hood</h2>
-      <p>
-        The system that runs it in production: a React front end, a .NET API, Python workers on a job
-        queue, and an LLM gateway that keeps AI spend capped and metered.
-      </p>
-      <ArchitectureDiagram />
 
       <h2>What makes it different</h2>
       <div className={s.diffGrid}>
