@@ -142,6 +142,9 @@ vi.mock('../../../api/fetcher', async (importOriginal) => {
 vi.mock('../../demo/useGuestState', () => ({
   useGuestState: () => ({ isGuest: auth?.user?.isGuest === true, canUpload: true, state: undefined }),
   invalidateGuestState: (...args: unknown[]) => invalidateGuestStateSpy(...args),
+  // PublicChrome's guest Library link reads these; no own uploads here.
+  guestStateQueryOptions: { queryKey: ['me', 'guest'], queryFn: () => Promise.resolve({ uploadsUsed: 0 }) },
+  guestHasOwnUploads: () => false,
 }));
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
