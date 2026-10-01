@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import dramatiq
+from sqlalchemy import select
 
 from aimusic_shared.models import Analysis
 from aimusic_shared.verdicts.models import Verdict as VerdictModel
@@ -186,6 +187,19 @@ def run_specialist(analysis_id: str, slug: str, user_id: str) -> None:
             analysis = s.get(Analysis, aid)
             if analysis is None:
                 _persist_fail_marker(aid, slug, f"analysis {analysis_id} not found")
+                return
+            # FW1 re-review — the BFF's in-flight key (600 s) cannot cover a
+            # message that waited longer in a backed-up queue, so a reload can
+            # enqueue a second run for the same slug. The verdict row is the
+            # authority: a slug that already has one is done (no LLM spend,
+            # no duplicate verdicts).
+            already = s.execute(
+                select(VerdictRow.id)
+                .where(VerdictRow.analysis_id == aid, VerdictRow.specialist == slug)
+                .limit(1)
+            ).first()
+            if already is not None:
+                logger.info("run_specialist skip analysis=%s slug=%s: verdict exists", analysis_id, slug)
                 return
             # `final_json` is JSONB — already a dict by SA.
             raw_final = analysis.final_json
