@@ -73,7 +73,7 @@ public sealed class DemoSnapshotSeedTests(WebApplicationFactory<Program> factory
         try
         {
             var client = f.CreateClient();
-            (userId, _) = await TestAuth.RegisterAsync(client);
+            (userId, _) = await TestAuth.RegisterWithDemoAsync(f, client);
             using var scope = f.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var song = await db.Songs.AsNoTracking().SingleAsync(s => s.UserId == userId);
@@ -103,7 +103,7 @@ public sealed class DemoSnapshotSeedTests(WebApplicationFactory<Program> factory
         {
             var client = f.CreateClient();
             string token;
-            (userId, token) = await TestAuth.RegisterAsync(client);
+            (userId, token) = await TestAuth.RegisterWithDemoAsync(f, client);
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
             using var scope = f.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -197,7 +197,7 @@ public sealed class DemoSnapshotSeedTests(WebApplicationFactory<Program> factory
         {
             var client = f.CreateClient();
             string token;
-            (userId, token) = await TestAuth.RegisterAsync(client);
+            (userId, token) = await TestAuth.RegisterWithDemoAsync(f, client);
             using var scope = f.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var analysis = await db.Analyses.AsNoTracking().SingleAsync(a => a.UserId == userId);
@@ -242,7 +242,7 @@ public sealed class DemoSnapshotSeedTests(WebApplicationFactory<Program> factory
         {
             var client = f.CreateClient();
             string token;
-            (userId, token) = await TestAuth.RegisterAsync(client);
+            (userId, token) = await TestAuth.RegisterWithDemoAsync(f, client);
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
             using var scope = f.Services.CreateScope();
             var analysis = await scope.ServiceProvider.GetRequiredService<AppDbContext>()
@@ -291,7 +291,7 @@ public sealed class DemoSnapshotSeedTests(WebApplicationFactory<Program> factory
         Guid userId = default;
         try
         {
-            var (uid, _) = await TestAuth.RegisterAsync(f.CreateClient());
+            var (uid, _) = await TestAuth.RegisterWithDemoAsync(f, f.CreateClient());
             userId = uid;
             using var scope = f.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -323,7 +323,7 @@ public sealed class DemoSnapshotSeedTests(WebApplicationFactory<Program> factory
         {
             var client = f.CreateClient();
             string token;
-            (userId, token) = await TestAuth.RegisterAsync(client);
+            (userId, token) = await TestAuth.RegisterWithDemoAsync(f, client);
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
             using var scope = f.Services.CreateScope();
             var analysis = await scope.ServiceProvider.GetRequiredService<AppDbContext>().Analyses.AsNoTracking().SingleAsync(a => a.UserId == userId);
@@ -355,7 +355,7 @@ public sealed class DemoSnapshotSeedTests(WebApplicationFactory<Program> factory
         try
         {
             var client = f.CreateClient();
-            (userId, _) = await TestAuth.RegisterAsync(client);
+            (userId, _) = await TestAuth.RegisterWithDemoAsync(f, client);
             using var scope = f.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var seededSong = await db.Songs.AsNoTracking().SingleAsync(s => s.UserId == userId);
@@ -390,7 +390,7 @@ public sealed class DemoSnapshotSeedTests(WebApplicationFactory<Program> factory
         Guid userId = default;
         try
         {
-            (userId, _) = await TestAuth.RegisterAsync(f.CreateClient());
+            (userId, _) = await TestAuth.RegisterWithDemoAsync(f, f.CreateClient());
             using var s2 = f.Services.CreateScope();
             var song = await s2.ServiceProvider.GetRequiredService<AppDbContext>().Songs.AsNoTracking().SingleAsync(s => s.UserId == userId);
             Assert.Equal(DemoSeeder.DemoSongName, song.Name);

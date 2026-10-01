@@ -132,6 +132,10 @@ public static partial class AuthEndpoints
         // token_version) — evict the 60 s validation-cache entry (Story 4.6).
         if (converted) cache.Remove($"tver:{userId:N}");
 
+        // Guest demo stays guest-only (owner decision 2026-10) — removed once
+        // the conversion has committed; best-effort, never fails the click.
+        if (converted) await GuestConversion.RemoveGuestDemoAsync(db, userId, loggerFactory);
+
         // The link proved mailbox control: sign in exactly as login does.
         // Session issuance is NOT part of the activation transaction — a blip
         // here leaves a verified account the owner signs into normally.

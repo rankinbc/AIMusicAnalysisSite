@@ -3,10 +3,10 @@ using Microsoft.Extensions.DependencyInjection; using Microsoft.Extensions.Depen
 using Spectr.Bff.Services; using Xunit;
 namespace Spectr.Bff.Tests;
 
-// Fix-round-1 item 4: DemoSnapshotStore.GetAsync now runs INSIDE the
-// registration request (DemoSeeder.SeedAsync is invoked with
-// CancellationToken.None from AuthEndpoints.Register) — a stalled storage
-// backend must never hang registration forever, and a runaway/oversized
+// Fix-round-1 item 4: DemoSnapshotStore.GetAsync runs INSIDE the guest
+// sign-in request (POST /api/auth/demo -> DemoSeeder.SeedAsync with
+// CancellationToken.None; registration stopped seeding in 2026-10) — a
+// stalled storage backend must never hang that request forever, and a runaway/oversized
 // object must never be fully buffered into memory before we notice. Split
 // out of DemoSnapshotSeedTests.cs to keep that file under ~500 lines.
 public sealed class DemoSnapshotLoadLimitsTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>

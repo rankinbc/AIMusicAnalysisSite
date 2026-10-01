@@ -46,7 +46,7 @@ public sealed class DemoSnapshotHardeningTests(WebApplicationFactory<Program> fa
         {
             var client = f.CreateClient();
             string token;
-            (userId, token) = await TestAuth.RegisterAsync(client);
+            (userId, token) = await TestAuth.RegisterWithDemoAsync(f, client);
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
             using var scope = f.Services.CreateScope();
             var analysis = await scope.ServiceProvider.GetRequiredService<AppDbContext>()
@@ -91,7 +91,7 @@ public sealed class DemoSnapshotHardeningTests(WebApplicationFactory<Program> fa
         try
         {
             var client = f.CreateClient();
-            (userId, _) = await TestAuth.RegisterAsync(client);
+            (userId, _) = await TestAuth.RegisterWithDemoAsync(f, client);
             using var scope = f.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var seeded = await db.Songs.AsNoTracking().SingleAsync(s => s.UserId == userId);
@@ -176,7 +176,7 @@ public sealed class DemoSnapshotHardeningTests(WebApplicationFactory<Program> fa
         {
             var client = f.CreateClient();
             string token;
-            (userId, token) = await TestAuth.RegisterAsync(client);
+            (userId, token) = await TestAuth.RegisterWithDemoAsync(f, client);
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
             using var scope = f.Services.CreateScope();
             var analysis = await scope.ServiceProvider.GetRequiredService<AppDbContext>()
@@ -210,7 +210,7 @@ public sealed class DemoSnapshotHardeningTests(WebApplicationFactory<Program> fa
         Guid userId = default;
         try
         {
-            (userId, _) = await TestAuth.RegisterAsync(f.CreateClient());
+            (userId, _) = await TestAuth.RegisterWithDemoAsync(f, f.CreateClient());
             using var scope = f.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var song = await db.Songs.AsNoTracking().SingleAsync(s => s.UserId == userId);
@@ -251,7 +251,7 @@ public sealed class DemoSnapshotHardeningTests(WebApplicationFactory<Program> fa
         Guid userId = default;
         try
         {
-            (userId, _) = await TestAuth.RegisterAsync(f.CreateClient());
+            (userId, _) = await TestAuth.RegisterWithDemoAsync(f, f.CreateClient());
             using var scope = f.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var version = await db.SongVersions.AsNoTracking()

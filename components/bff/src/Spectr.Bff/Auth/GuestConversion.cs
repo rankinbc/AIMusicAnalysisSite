@@ -47,4 +47,27 @@ internal static class GuestConversion
                 .SetProperty(u => u.EmailVerifiedAt, autoVerify ? now : (DateTimeOffset?)null),
                 ct);
     }
+
+    // Owner decision (2026-10): the seeded demo song is for guests only. Call
+    // AFTER a successful (committed) conversion — the row is now non-guest,
+    // which is exactly what DemoLibraryCleanup's predicate requires. DB-only:
+    // the shared "audio/demo/" blobs other guests still play are never touched.
+    // Best-effort: the account is already real, so a failure here must never
+    // fail the conversion response (the demo just lingers; the user can
+    // delete it like any song — song/version deletes skip shared demo keys).
+    // CancellationToken.None: the conversion already committed — a client
+    // disconnect must not strand the demo in a registered library.
+    internal static async Task RemoveGuestDemoAsync(
+        AppDbContext db, Guid userId, ILoggerFactory loggerFactory)
+    {
+        try
+        {
+            await DemoLibraryCleanup.RemoveForUserAsync(db, userId, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            loggerFactory.CreateLogger("Auth").LogError(ex,
+                "Demo removal failed for converted guest {UserId} — conversion unaffected.", userId);
+        }
+    }
 }

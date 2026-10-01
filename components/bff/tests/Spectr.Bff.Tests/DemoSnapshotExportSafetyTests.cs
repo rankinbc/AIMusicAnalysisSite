@@ -353,7 +353,7 @@ public sealed class DemoSnapshotExportSafetyTests(WebApplicationFactory<Program>
             b.UseSetting("Admin:ApiKey", DemoSnapshotExportTests.Key);
             b.UseSetting("Demo:SnapshotKey", snapshotKey);
         });
-        var (newUserId, _) = await TestAuth.RegisterAsync(freshFactory.CreateClient());
+        var (newUserId, _) = await TestAuth.RegisterWithDemoAsync(freshFactory, freshFactory.CreateClient());
         _userIds.Add(newUserId);
         using var freshScope = freshFactory.Services.CreateScope();
         var seeder = freshScope.ServiceProvider.GetRequiredService<DemoSeeder>();

@@ -239,7 +239,7 @@ builder.Services.AddScoped<AccountTeardown>();
 builder.Services.AddScoped<IAccountTeardown>(sp => sp.GetRequiredService<AccountTeardown>());
 builder.Services.AddScoped<AuthTokenService>();  // story 4.3 — verify/reset tokens
 builder.Services.AddScoped<DeviceService>();     // story 4.5 — anon devices + claim
-builder.Services.AddScoped<DemoSeeder>();  // story 12.8 — first-run demo report
+builder.Services.AddScoped<DemoSeeder>();  // story 12.8 demo report — guest-only since 2026-10
 // Task D5 fix round 1 (I2) — expose DemoSeeder through the IGuestSeeder seam
 // too (same scoped instance) so DemoAuthEndpoints can depend on the
 // substitutable interface instead of the concrete sealed class.
