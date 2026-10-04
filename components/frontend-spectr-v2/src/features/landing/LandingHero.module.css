@@ -24,6 +24,12 @@
   gap: 16px;
 }
 
+.learnBtns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .signup {
   align-self: stretch;
   display: flex;

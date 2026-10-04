@@ -38,9 +38,6 @@ export function LandingFeatures({ className }: { className?: string }) {
           </li>
         ))}
       </ul>
-      <a href="/features" className="btn ghost sm" data-testid="landing-features-cta">
-        See all features →
-      </a>
     </section>
   );
 }
