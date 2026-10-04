@@ -15,11 +15,11 @@ afterEach(() => {
 describe('"Take it back to your DAW" (/trust/how-its-built)', () => {
   const html = renderToStaticMarkup(<HowItWorksPage />);
   const start = html.indexOf('data-testid="daw-plan"');
-  const section = html.slice(start, html.indexOf('See it for yourself'));
+  const section = html.slice(start, html.indexOf('data-testid="workflow-next"'));
 
-  it('closes the page: after "What makes it different", right before the CTA', () => {
-    expect(start).toBeGreaterThan(html.indexOf('What makes it different'));
-    expect(start).toBeLessThan(html.indexOf('See it for yourself'));
+  it('is the step after hearing the fixes and before the next version', () => {
+    expect(start).toBeGreaterThan(html.indexOf('data-testid="workflow-listen"'));
+    expect(start).toBeLessThan(html.indexOf('data-testid="workflow-next"'));
     expect(section).toContain('Take it back to your DAW');
   });
 

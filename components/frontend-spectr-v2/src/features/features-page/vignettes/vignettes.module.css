@@ -1,0 +1,314 @@
+/* Lead /features vignettes (hear it, the fix, the finding, learn). Shared
+   app-style primitives live in kit.module.css. */
+
+/* ── hear it: Listen rack ──────────────────────────────────────────── */
+.listen,
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.modulesOn {
+  font-size: 10.5px;
+  color: var(--text-2);
+}
+
+.scope {
+  position: relative;
+  height: 112px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(3, 5, 10, 0.9);
+  overflow: hidden;
+}
+
+.bars {
+  position: absolute;
+  inset: 8px 8px 18px;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.bar {
+  flex: 1;
+  height: var(--h);
+  border-radius: 2px 2px 0 0;
+  background: linear-gradient(180deg, var(--cyan), color-mix(in srgb, var(--violet) 70%, transparent));
+  opacity: 0.3;
+  transition: height 520ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.curveSvg {
+  position: absolute;
+  inset: 8px 8px 18px;
+  width: calc(100% - 16px);
+  height: calc(100% - 26px);
+}
+
+.zero {
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.curve {
+  fill: none;
+  stroke: var(--cyan);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.curveFill {
+  fill: color-mix(in srgb, var(--cyan) 12%, transparent);
+}
+
+.axis {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 3px;
+  height: 12px;
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.axis > span {
+  position: absolute;
+}
+
+.axis > span:not(:first-child) {
+  transform: translateX(-50%);
+}
+
+.state {
+  margin: -4px 0 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--cyan);
+}
+
+.listen[data-bypass='true'] .state {
+  color: var(--text-2);
+}
+
+.fixList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+}
+
+.toggles {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.fixRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--border-2);
+  transition: border-color 200ms ease, background 200ms ease;
+}
+
+.fixRow[data-on='true'] {
+  border-left-color: var(--cyan);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.fixRow > button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.toggleHead {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.toggleDoes {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+/* ── fix + finding detail ──────────────────────────────────────────── */
+.paramRow,
+.tblRow {
+  display: contents;
+}
+
+.steps {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.also {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.fixAvailable {
+  margin: 0;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--cyan);
+}
+
+/* ── learn ─────────────────────────────────────────────────────────── */
+.clash {
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(3, 5, 10, 0.9);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.clashSvg {
+  display: block;
+  width: 100%;
+  height: 84px;
+}
+
+.clashBand {
+  fill: color-mix(in srgb, var(--orange) 22%, transparent);
+  stroke: color-mix(in srgb, var(--orange) 70%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.clashKick,
+.clashBass {
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.clashKick {
+  fill: color-mix(in srgb, var(--cyan) 28%, transparent);
+  stroke: var(--cyan);
+}
+
+.clashBass {
+  fill: color-mix(in srgb, var(--violet) 28%, transparent);
+  stroke: var(--violet);
+}
+
+.clashAxis {
+  position: relative;
+  height: 12px;
+  margin-bottom: 4px;
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.clashAxis > span {
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.stemKick,
+.stemBass {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.stemKick::before,
+.stemBass::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--cyan);
+}
+
+.stemBass::before {
+  background: var(--violet);
+}
+
+.terms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.term {
+  padding: 2px 4px;
+  border: 0;
+  border-bottom: 1px dotted var(--text-2);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.term[aria-pressed='true'] {
+  border-bottom: 1px solid var(--blue);
+  color: var(--blue);
+}
+
+.term:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+.definition {
+  margin: 0;
+  min-height: 4.4em;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-2);
+  background: var(--card-2);
+  box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.9);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.definition strong {
+  color: var(--blue);
+}
+
+.modes {
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar,
+  .fixRow {
+    transition: none;
+  }
+}

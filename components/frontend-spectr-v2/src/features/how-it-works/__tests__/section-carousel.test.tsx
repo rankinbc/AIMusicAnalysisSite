@@ -122,21 +122,22 @@ describe('How it works carousel', () => {
 
   it('tabs every main section in page order, keeping header, intro and CTA outside it', () => {
     const tabs = [...html.matchAll(/role="tab"[^>]*data-tab="([^"]+)"/g)].map((m) => m[1]);
-    expect(tabs).toEqual(['pipeline', 'findings', 'coach', 'steps', 'listen', 'different', 'daw']);
+    expect(tabs).toEqual(['upload', 'pipeline', 'findings', 'coach', 'listen', 'daw', 'next']);
     const start = html.indexOf('data-testid="hiw-carousel"');
     expect(html.indexOf('<h1')).toBeLessThan(start);
     expect(html.indexOf('score and a list of problems')).toBeLessThan(start);
-    expect(html.indexOf('See it for yourself')).toBeGreaterThan(html.indexOf('data-panel="daw"'));
+    expect(html.indexOf('See it for yourself')).toBeGreaterThan(html.indexOf('data-panel="next"'));
   });
 
   it('keeps every section heading in the static HTML', () => {
     for (const h of [
-      'The analysis pipeline',
+      'Start with a bounce',
+      'What happens while you wait',
       'What it finds — and what it tells you to do',
       'Meet the Coach',
-      'From upload to a plan',
-      'What makes it different',
+      'Hear the fixes before you make them',
       'Take it back to your DAW',
+      'Bounce it and come back',
     ]) {
       expect(html).toContain(h);
     }

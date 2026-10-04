@@ -37,6 +37,7 @@ const ALLOWED_ROUTE_FILES = [
   '_public/verify-email.tsx',
   'analyze.tsx',
   'demo.tsx',
+  'features.tsx',
   'index.tsx',
   'pricing.tsx',
   'trust.how-its-built.tsx',

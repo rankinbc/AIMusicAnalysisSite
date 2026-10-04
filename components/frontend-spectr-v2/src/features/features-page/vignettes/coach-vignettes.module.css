@@ -1,0 +1,312 @@
+/* Coach-side /features vignettes: Ask-the-Coach panel, Specialist Team
+   dialog, Coach Mix preset. Shared primitives: kit.module.css. */
+
+/* ── ask the coach ─────────────────────────────────────────────────── */
+.chat,
+.team,
+.mix {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chatHead {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.chatTitle {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.chatSub {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.thread {
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(3, 5, 10, 0.9);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.msgUser,
+.msgCoach {
+  margin: 0;
+  padding: 8px 11px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.msgUser {
+  align-self: flex-end;
+  max-width: 88%;
+  border: 1px solid color-mix(in srgb, var(--cyan) 35%, transparent);
+  background: var(--cyan-dim);
+  color: var(--text);
+}
+
+.msgCoach {
+  border: 1px solid var(--border-2);
+  background: var(--card-2);
+  color: var(--text-2);
+}
+
+.msgCoach {
+  position: relative;
+  margin-left: 30px;
+}
+
+.msgAvatar {
+  position: absolute;
+  top: 6px;
+  left: -30px;
+}
+
+.msgText {
+  margin: 0;
+}
+
+.cites {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.composer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.input {
+  flex: 1;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-2);
+  background: rgba(3, 5, 10, 0.6);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.send {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--cyan);
+  color: var(--ink-on-accent);
+  font-size: 12px;
+}
+
+.chatFoot {
+  margin: -4px 0 0;
+  font-size: 9.5px;
+  color: var(--muted);
+}
+
+/* ── specialist team ───────────────────────────────────────────────── */
+.teamHead {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--border);
+}
+
+.teamTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-2);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.group[aria-pressed='true'] {
+  border-color: var(--cyan);
+  color: var(--text);
+}
+
+.group:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+.groupDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: var(--muted);
+}
+
+.groupDot[data-tone='cyan'] { background: var(--cyan); }
+.groupDot[data-tone='orange'] { background: var(--orange); }
+.groupDot[data-tone='yellow'] { background: var(--yellow); }
+.groupDot[data-tone='blue'] { background: var(--blue); }
+.groupDot[data-tone='green'] { background: var(--green); }
+
+.groupCount {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  color: var(--muted);
+}
+
+.roster {
+  margin: 0;
+  padding: 4px;
+  min-height: 150px;
+  list-style: none;
+  border-radius: 8px;
+  border: 1px solid var(--border-2);
+  background: rgba(3, 5, 10, 0.9);
+}
+
+.specialist {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: 9px;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+
+.specialist:nth-child(even) {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.specialistIcon {
+  display: inline-grid;
+  place-items: center;
+}
+
+.specialistName {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.specialistState {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.specialistCount {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--cyan);
+}
+
+.teamFoot {
+  margin: 0;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.teamFoot b {
+  color: var(--text);
+}
+
+/* ── coach mix ─────────────────────────────────────────────────────── */
+.preset {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--border-2);
+  background: rgba(3, 5, 10, 0.6);
+}
+
+.presetIcon {
+  display: inline-grid;
+  place-items: center;
+}
+
+.presetName {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.presetMeta {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.whys {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.whyDevice {
+  font-weight: 700;
+  color: var(--violet);
+}
+
+.dropped {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px dashed var(--border-2);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+@media (max-width: 420px) {
+  .specialist {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .specialistState {
+    display: none;
+  }
+}

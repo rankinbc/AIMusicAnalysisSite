@@ -17,6 +17,7 @@ public sealed class PublicSiteShellTests(WebApplicationFactory<Program> factory)
     [Theory]
     [InlineData("/", "SPECTR — AI mix analysis for producers")]
     [InlineData("/pricing", "Pricing — SPECTR")]
+    [InlineData("/features", "Features — SPECTR")]
     [InlineData("/trust/no-training", "No AI training on your audio — SPECTR")]
     [InlineData("/trust/results-forever", "Your results stay yours — SPECTR")]
     [InlineData("/trust/privacy", "Privacy defaults — SPECTR")]
@@ -73,7 +74,7 @@ public sealed class PublicSiteShellTests(WebApplicationFactory<Program> factory)
     // AND ShellPaths BELOW, or it silently goes unguarded.
     private static readonly string[] ShellPaths =
     [
-        "/", "/pricing", "/analyze",
+        "/", "/pricing", "/analyze", "/features",
         "/trust/no-training", "/trust/results-forever", "/trust/privacy", "/trust/how-its-built",
     ];
 

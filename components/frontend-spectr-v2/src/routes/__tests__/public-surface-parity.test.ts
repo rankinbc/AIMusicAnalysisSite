@@ -14,7 +14,7 @@ const routeFile = (p: string) => (p === '/' ? 'index.tsx' : `${p.slice(1).replac
 
 describe('public surface parity — sitemap ↔ Caddy bot split ↔ BFF shell ↔ route file', () => {
   it('lists exactly the indexable pages', () => {
-    expect(paths.sort()).toEqual(['/', '/analyze', '/trust/how-its-built', '/trust/no-training',
+    expect(paths.sort()).toEqual(['/', '/analyze', '/features', '/trust/how-its-built', '/trust/no-training',
       '/trust/privacy', '/trust/results-forever'].sort());
   });
 

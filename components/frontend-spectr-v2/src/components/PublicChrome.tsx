@@ -34,6 +34,7 @@ export function PublicChrome() {
         {/* Task P3 — secondary links; hidden below 480px (MANDATORY 390px
             one-row requirement) so the logo, Sign in and the primary CTA
             never clip or wrap. */}
+        <a href="/features" className={`${s.navLink} ${s.navOptional}`}>Features</a>
         <a href="/trust/how-its-built" className={`${s.navLink} ${s.navOptional}`}>How it works</a>
         {/* Task P2 (D6) — hidden until the server says credits are on. */}
         <PricingLink className={`${s.navLink} ${s.navOptional}`} />

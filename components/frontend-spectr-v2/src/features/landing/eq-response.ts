@@ -5,7 +5,8 @@
 
 export type EqBand =
   | { n: number; type: 'high_pass'; freqHz: number; slopeDb: 12 | 24 }
-  | { n: number; type: 'bell'; freqHz: number; gainDb: number; q: number };
+  | { n: number; type: 'bell'; freqHz: number; gainDb: number; q: number }
+  | { n: number; type: 'high_shelf'; freqHz: number; gainDb: number; q: number };
 
 const FS = 48_000;
 
@@ -29,6 +30,17 @@ function peaking(f0: number, gainDb: number, q: number): Biquad {
   return { b: [1 + alpha * A, -2 * cos, 1 - alpha * A], a: [1 + alpha / A, -2 * cos, 1 - alpha / A] };
 }
 
+function highShelf(f0: number, gainDb: number, q: number): Biquad {
+  const A = 10 ** (gainDb / 40);
+  const w0 = (2 * Math.PI * f0) / FS;
+  const cos = Math.cos(w0);
+  const k = 2 * Math.sqrt(A) * (Math.sin(w0) / (2 * q));
+  return {
+    b: [A * (A + 1 + (A - 1) * cos + k), -2 * A * (A - 1 + (A + 1) * cos), A * (A + 1 + (A - 1) * cos - k)],
+    a: [A + 1 - (A - 1) * cos + k, 2 * (A - 1 - (A + 1) * cos), A + 1 - (A - 1) * cos - k],
+  };
+}
+
 /** |H(e^jw)| of one biquad at frequency f. */
 function magnitude({ b, a }: Biquad, f: number): number {
   const w = (2 * Math.PI * f) / FS;
@@ -45,6 +57,7 @@ function magnitude({ b, a }: Biquad, f: number): number {
 
 function sections(band: EqBand): Biquad[] {
   if (band.type === 'bell') return [peaking(band.freqHz, band.gainDb, band.q)];
+  if (band.type === 'high_shelf') return [highShelf(band.freqHz, band.gainDb, band.q)];
   return band.slopeDb === 24
     ? [highPass(band.freqHz, 0.5412), highPass(band.freqHz, 1.3066)]
     : [highPass(band.freqHz, Math.SQRT1_2)];

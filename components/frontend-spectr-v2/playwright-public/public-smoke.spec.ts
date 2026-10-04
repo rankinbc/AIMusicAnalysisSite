@@ -11,6 +11,7 @@ import { expect, test } from '@playwright/test';
 const PAGES = [
   '/',
   '/analyze',
+  '/features',
   '/pricing',
   '/trust/no-training',
   '/trust/results-forever',

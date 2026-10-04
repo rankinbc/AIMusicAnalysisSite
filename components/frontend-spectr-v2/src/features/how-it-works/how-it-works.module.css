@@ -6,6 +6,143 @@
   color: var(--text);
 }
 
+.featuresLink {
+  margin-top: -6px;
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+
+.featuresLink a {
+  font-weight: 600;
+  color: var(--cyan);
+  text-decoration: none;
+}
+
+.featuresLink a:hover {
+  text-decoration: underline;
+}
+
+/* ── step header: where you are, your part, SPECTR's part ─────────────── */
+.stepIntro {
+  margin-bottom: 22px;
+  padding: 14px 16px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-2);
+  background: rgba(255, 255, 255, 0.025);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.stepCount {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--cyan);
+}
+
+.stepNote {
+  color: var(--muted);
+  text-align: right;
+}
+
+.roles {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 24px;
+}
+
+.role {
+  padding-left: 12px;
+  border-left: 2px solid var(--violet);
+}
+
+.role[data-who='spectr'] {
+  border-left-color: var(--cyan);
+}
+
+.role dt {
+  margin-bottom: 3px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--violet);
+}
+
+.role[data-who='spectr'] dt {
+  color: var(--cyan);
+}
+
+.role dt {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.roleCoach {
+  display: inline-grid;
+}
+
+.role dd {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.loop {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  counter-reset: loop;
+}
+
+.loop li {
+  counter-increment: loop;
+  padding: 4px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.loop li::before {
+  content: counter(loop) ' · ';
+  color: var(--cyan);
+}
+
+.loop li:last-child {
+  border-color: color-mix(in srgb, var(--cyan) 55%, transparent);
+  color: var(--text);
+}
+
+.loop li:last-child::after {
+  content: ' ↺';
+  color: var(--cyan);
+}
+
+@media (max-width: 640px) {
+  .roles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .stepCount {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .stepNote {
+    text-align: left;
+  }
+}
+
 /* ── pipeline ─────────────────────────────────────────────────────────── */
 .pipeline {
   display: flex;
@@ -147,31 +284,6 @@
 }
 
 /* ── differentiators ──────────────────────────────────────────────────── */
-.diffGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 12px;
-}
-
-.diffCard {
-  padding: 16px 18px;
-  border-left: 2px solid var(--cyan);
-}
-
-.diffTitle {
-  margin: 0 0 6px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.diffText {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--text-2);
-}
-
 /* ── closing CTA ──────────────────────────────────────────────────────── */
 .cta {
   margin-top: 10px;
