@@ -131,8 +131,12 @@ public sealed class BillingCreditsEndpointsTests(WebApplicationFactory<Program> 
         await TestAuth.AllowPurgeAsync(db);
         await db.CreditLedger.Where(e => e.UserId == userId).ExecuteDeleteAsync();
         await db.UsageEvents.Where(e => e.UserId == userId).ExecuteDeleteAsync();
+        // Only the events THIS class posts (evt_webhook_pay_*, evt_replay_*).
+        // Deleting by event TYPE ("checkout.*" / "customer.*") also wiped the
+        // customer.subscription.* rows StripeWebhookEndpointTests was asserting
+        // on in parallel, failing it with "Expected: 1, Actual: 0".
         await db.WebhookEvents
-            .Where(w => w.EventType.StartsWith("checkout.") || w.EventType.StartsWith("customer."))
+            .Where(w => w.Id.StartsWith("evt_webhook_pay_") || w.Id.StartsWith("evt_replay_"))
             .ExecuteDeleteAsync();
         await db.Users.Where(u => u.Id == userId).ExecuteDeleteAsync();
     }
