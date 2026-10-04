@@ -613,6 +613,7 @@ api.MapBillingEndpoints();
 api.MapHealthEndpoints();
 api.MapAccountEndpoints();       // story 4.6 — /api/me/export + /api/me/delete
 api.MapAdminEndpoints();         // story 10.5 — /api/admin/* (X-Admin-Key elevated auth)
+api.MapEventEndpoints();         // F1b — POST /api/events (first-party analytics, write-only)
 app.MapEmailWebhookEndpoints();  // story 4.2 — POST /api/email/webhook (svix-verified)
 
 // Story 6.1: the legacy root status JSON (v1 FastAPI habit) is replaced by the

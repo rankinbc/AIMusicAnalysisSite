@@ -2,7 +2,7 @@
 // (dev, CI, self-hosters): no throws, no posthog network calls.
 import { describe, expect, it } from 'vitest';
 
-import { capture, identifyUser, initAnalytics } from '../analytics';
+import { capture, identifyUser, initAnalytics, registerAttribution } from '../analytics';
 
 describe('analytics (no VITE_POSTHOG_KEY)', () => {
   it('every call no-ops without throwing', () => {
@@ -23,6 +23,12 @@ describe('analytics (no VITE_POSTHOG_KEY)', () => {
       capture('checkout_started', { cadence: 'monthly' });
       capture('resume_shown', { status: 'complete' });
       capture('resume_clicked', { status: 'complete' });
+      // F1 — the sign-up / purchase edges and the attribution super props.
+      capture('signup_completed', { path: 'direct', pending: true });
+      capture('email_verified', { session: true });
+      capture('purchase_completed', { product: 'credits' });
+      registerAttribution({ source: 'youtube', medium: 'video' });
+      registerAttribution({});
     }).not.toThrow();
   });
 });

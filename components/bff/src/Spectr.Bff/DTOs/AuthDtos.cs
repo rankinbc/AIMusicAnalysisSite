@@ -1,6 +1,12 @@
 namespace Spectr.Bff.DTOs;
 
-public sealed record RegisterRequest(string Email, string Password);
+// F1 — optional first-touch attribution captured by the frontend at boot
+// (lib/attribution.ts). Untrusted: SignupAttributionWriter re-sanitizes it.
+// Trailing + defaulted so every existing caller and body keeps working.
+public sealed record SignupAttribution(string? Source, string? Medium, string? Campaign, string? Referrer);
+public sealed record RegisterRequest(string Email, string Password, SignupAttribution? Attribution = null);
+// F1 — POST /auth/demo is normally body-less; when present the body is this.
+public sealed record DemoStartRequest(SignupAttribution? Attribution = null);
 public sealed record LoginRequest(string Email, string Password);
 // Development-only one-click sign-in. Email optional (defaults to the dev account).
 public sealed record DevLoginRequest(string? Email);

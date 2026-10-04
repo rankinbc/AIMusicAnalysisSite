@@ -23,6 +23,7 @@ import {
 } from '../api/fetcher';
 import { resetVerifyResendState } from '../components/verify-email';
 import { identifyUser } from '../lib/analytics';
+import { attributionPayload } from '../lib/attribution';
 import {
   isVerificationPending,
   type AuthResponse,
@@ -206,7 +207,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await fetcher<RegisterResponse>({
         url: '/auth/register',
         method: 'POST',
-        data: { email, password },
+        data: { email, password, ...attributionPayload() },
       });
       // Pending account: no tokens came back and none must be applied — the
       // visitor stays exactly as signed-out as they were.
@@ -244,7 +245,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await fetcher<GuestConvertResponse>({
         url: '/auth/guest/convert',
         method: 'POST',
-        data: { email, password },
+        data: { email, password, ...attributionPayload() },
       });
       // Verify-before-sign-in: the sign-up is parked until the emailed link
       // is clicked. The guest session is untouched and stays in use.
@@ -277,7 +278,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const startDemo = useCallback(async () => {
     bumpSessionGeneration();
     try {
-      const res = await fetcher<DemoStartResponse>({ url: '/auth/demo', method: 'POST' });
+      // F1 — the guest row IS the future account, so first-touch attribution
+      // is recorded at mint. No body at all when there is nothing to send.
+      const attribution = attributionPayload();
+      const res = await fetcher<DemoStartResponse>({
+        url: '/auth/demo',
+        method: 'POST',
+        ...(attribution.attribution ? { data: attribution } : {}),
+      });
       // D9 fix round 1 (item 3a): clear synchronously, inside this function,
       // BEFORE the launcher can navigate — the passive prevUserId effect
       // above is the safety net for login/logout, not the primary mechanism

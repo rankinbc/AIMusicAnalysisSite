@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { ApiError, fetcher } from '../../api/fetcher';
 import type { AuthedUser, CreditsResponse } from '../../api/types';
 import { creditsConfirmed } from '../../features/billing/credits-confirmation';
+import { capturePurchaseCompleted } from '../../lib/checkout-marker';
 import s from './billing.module.css';
 
 // Story 2.1 / AC5 — landing page after Stripe Checkout.
@@ -72,6 +73,7 @@ function SubscriptionConfirmation() {
           method: 'GET',
         });
         if (me.tier === 'pro') {
+          capturePurchaseCompleted('subscription');
           if (!cancelled) setState('pro');
           return true;
         }
@@ -183,6 +185,7 @@ function CreditsConfirmation() {
         if (cancelled) return true;
         if (baseline === null) baseline = resp.balance;
         if (creditsConfirmed(resp, baseline)) {
+          capturePurchaseCompleted('credits');
           setState({ phase: 'confirmed', balance: resp.balance });
           void qc.invalidateQueries({ queryKey: ['billing', 'credits'] });
           void qc.invalidateQueries({ queryKey: ['me', 'entitlements'] });

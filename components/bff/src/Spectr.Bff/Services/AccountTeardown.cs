@@ -45,6 +45,9 @@ public sealed class AccountTeardown(AppDbContext db, RefreshTokenService refresh
 
             await refresh.RevokeAllForUserAsync(user.Id, ct);
             await db.AuthTokens.Where(t => t.UserId == user.Id).ExecuteDeleteAsync(ct);
+            // F1b — analytics rows have no FK (they outlive purged guests), so
+            // an account deletion removes this user's events explicitly.
+            await db.AnalyticsEvents.Where(e => e.UserId == user.Id).ExecuteDeleteAsync(ct);
             await db.RefreshTokens.Where(t => t.UserId == user.Id).ExecuteDeleteAsync(ct);
             // Devices this user claimed: sever attribution AND scrub the
             // peppered ip/ua hashes (hashed network identifiers are still

@@ -89,4 +89,20 @@ public sealed class User
 
     [Column("pending_password_hash"), MaxLength(255)]
     public string? PendingPasswordHash { get; set; }
+
+    // F1 (analytics + attribution) — FIRST-TOUCH acquisition source, written
+    // once (guest mint / register / guest convert; never overwritten) by
+    // SignupAttributionWriter. Slugs only — never raw `?ref=` text — and the
+    // referrer is a bare host. Lets revenue be grouped by channel in SQL.
+    [Column("signup_source"), MaxLength(64)]
+    public string? SignupSource { get; set; }
+
+    [Column("signup_medium"), MaxLength(64)]
+    public string? SignupMedium { get; set; }
+
+    [Column("signup_campaign"), MaxLength(64)]
+    public string? SignupCampaign { get; set; }
+
+    [Column("signup_referrer"), MaxLength(128)]
+    public string? SignupReferrer { get; set; }
 }
