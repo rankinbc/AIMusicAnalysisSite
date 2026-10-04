@@ -146,3 +146,12 @@ _bmad-output/
 
 # Session hand-off notes (written by /handoff) — local only, never committed
 HANDOFF.md
+
+# Stray key / credential files (the repo is PUBLIC - keep these in ~/.spectr)
+*-key.txt
+*_key.txt
+*.key
+*.pem
+*.pfx
+*credentials*.txt
+*-account.txt
