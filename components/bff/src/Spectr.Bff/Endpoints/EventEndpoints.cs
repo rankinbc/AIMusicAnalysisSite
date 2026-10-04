@@ -35,7 +35,7 @@ public static partial class EventEndpoints
     {
         "page_viewed",
         "upload_completed", "report_viewed", "coach_message_sent", "verdict_feedback",
-        "landing_viewed", "analyze_started", "analyze_completed", "report_claimed",
+        "landing_viewed", "features_viewed", "analyze_started", "analyze_completed", "report_claimed",
         "pricing_viewed", "checkout_started", "resume_shown", "resume_clicked",
         "demo_cta_clicked", "demo_started", "demo_start_failed", "demo_signup_clicked",
         "demo_guest_restricted", "engineering_viewed",

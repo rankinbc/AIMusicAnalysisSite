@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 import { run as axeRun } from 'axe-core';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { COACH_INTRO, DEMO_ANSWER, DEMO_EVIDENCE, DEMO_QUESTION } from '../coach-showcase-content';
 import { buildExamples } from '../examples-model';
+import { ABLETON_GUIDE } from '../ableton-guide-content';
 import { HowItWorksPage } from '../HowItWorksPage';
-import { DIFFERENTIATORS, STAGES } from '../pipeline';
+import { STAGES } from '../pipeline';
 import { PIPELINE_TITLE } from '../PipelineDiagram';
+import { WORKFLOW } from '../workflow';
 
 afterEach(() => {
   cleanup();
@@ -34,42 +36,77 @@ describe('HowItWorksPage (/trust/how-its-built)', () => {
   it('renders the producer-facing title and section headings', () => {
     for (const h of [
       'How SPECTR works',
-      'The analysis pipeline',
+      'Start with a bounce',
+      'What happens while you wait',
       'What it finds — and what it tells you to do',
       'Meet the Coach',
-      'From upload to a plan',
-      'What makes it different',
+      'Hear the fixes before you make them',
+      'Take it back to your DAW',
+      'Bounce it and come back',
       'See it for yourself',
     ]) {
       expect(html).toContain(h);
     }
   });
 
-  it('renders every pipeline step in upload -> plan order, numbered continuously', () => {
-    expect(STAGES.flatMap((st) => st.steps.map((s) => s.id))).toEqual(STEP_ORDER);
-    const positions = STEP_ORDER.map((id) => html.indexOf(`data-step="${id}"`));
+  it('walks one session in order: every step says what you do and what SPECTR does', () => {
+    expect(WORKFLOW.map((w) => w.id)).toEqual(['upload', 'pipeline', 'findings', 'coach', 'listen', 'daw', 'next']);
+    const positions = WORKFLOW.map((w) => html.indexOf(`data-testid="workflow-${w.id}"`));
     for (const p of positions) expect(p).toBeGreaterThan(-1);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+    const text = (v: string) => v.replaceAll("'", '&#x27;');
+    WORKFLOW.forEach((w, i) => {
+      expect(html).toContain(`Step ${i + 1} of ${WORKFLOW.length}`);
+      expect(html).toContain(text(w.you));
+      expect(html).toContain(text(w.spectr));
+    });
+  });
+
+  it('shows the analysis steps (measure + diagnose) while you wait, numbered continuously', () => {
+    expect(STAGES.flatMap((st) => st.steps.map((s) => s.id))).toEqual(STEP_ORDER);
+    const shown = STEP_ORDER.slice(0, 8);
+    const positions = shown.map((id) => html.indexOf(`data-step="${id}"`));
+    for (const p of positions) expect(p).toBeGreaterThan(-1);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+    // The act stage (plan / listen / coach) is the page's own later steps.
+    for (const id of STEP_ORDER.slice(8)) expect(html).not.toContain(`data-step="${id}"`);
     // Each stage's <ol> picks up where the previous one stopped.
     expect(html).toContain('start="1"');
     expect(html).toContain('start="5"');
-    expect(html).toContain('start="9"');
-    expect(html).toContain('>11<');
+    expect(html).toContain('>08<');
   });
 
   it('labels which steps are AI and which are deterministic', () => {
-    for (const label of ['Measurement', 'Fixed rules', 'AI', 'Validation', 'Your plan', 'In your browser']) {
+    for (const label of ['Measurement', 'Fixed rules', 'AI', 'Validation']) {
       expect(html).toContain(label);
     }
     expect(html).toMatch(/deterministic rule engine/);
     expect(html).toMatch(/AI can’t rank its own findings/);
   });
 
-  it('carries the differentiators', () => {
-    expect(DIFFERENTIATORS.length).toBeGreaterThanOrEqual(6);
-    for (const d of DIFFERENTIATORS) expect(html).toContain(d.title);
+  it('is the workflow, not a feature list: links to /features instead of repeating it', () => {
     expect(html).toContain('score and a list of problems');
-    expect(html).toContain('Your audio never trains a model');
+    expect(html).toContain('<a href="/features">See the features');
+    expect(html).not.toContain('What makes it different');
+  });
+
+  it('offers Ableton export instructions on the Upload step, in a modal', async () => {
+    expect(html).toMatch(/data-testid="ableton-guide-link"[^>]*>Optimal Ableton export instructions/);
+    const { getByTestId, findByRole } = render(<HowItWorksPage />);
+    fireEvent.click(getByTestId('ableton-guide-link'));
+    const dialog = await findByRole('dialog');
+    for (const sec of ABLETON_GUIDE) {
+      expect(dialog.textContent).toContain(sec.title);
+      for (const step of sec.steps) expect(dialog.textContent).toContain(step);
+    }
+    expect(dialog.textContent).toContain('All Individual Tracks');
+    expect(dialog.textContent).toContain('Normalize: Off');
+  });
+
+  it('shows a song progressing through versions on the last step', () => {
+    const last = html.slice(html.indexOf('data-testid="workflow-next"'));
+    expect(last).toContain('every version kept, any two compared');
+    expect(last).toContain('What changed');
   });
 
   it('links both CTAs to the right funnels', () => {
@@ -121,7 +158,7 @@ describe('HowItWorksPage (/trust/how-its-built)', () => {
 
   it('leads with helping you fix the mix, not just diagnosing it', () => {
     expect(html).toContain('leave the fixing');
-    expect(html).toContain('It helps you fix it, not just find it');
+    expect(html).toContain('built to be worked with');
   });
 
   it('example cards carry real demo verdicts: headline, evidence and fix steps', () => {
@@ -174,11 +211,11 @@ describe('HowItWorksPage (/trust/how-its-built)', () => {
 
   describe('Meet the Coach showcase', () => {
     const start = html.indexOf('data-testid="coach-showcase"');
-    const section = html.slice(start, html.indexOf('From upload to a plan'));
+    const section = html.slice(start, html.indexOf('data-testid="workflow-listen"'));
 
-    it('sits after the worked examples and right before "From upload to a plan"', () => {
+    it('sits after the worked examples and right before "Hear it"', () => {
       expect(start).toBeGreaterThan(html.indexOf('data-testid="example-findings"'));
-      expect(start).toBeLessThan(html.indexOf('From upload to a plan'));
+      expect(start).toBeLessThan(html.indexOf('data-testid="workflow-listen"'));
       expect(section).toContain('Meet the Coach');
       expect(section).toContain('AI coach');
     });
@@ -252,5 +289,6 @@ describe('HowItWorksPage (/trust/how-its-built)', () => {
       rules: { 'color-contrast': { enabled: false } },
     });
     expect(res.violations.map((v) => v.id)).toEqual([]);
-  });
+    // axe over the whole page takes ~6 s when the full suite runs in parallel.
+  }, 20_000);
 });

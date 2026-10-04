@@ -52,7 +52,7 @@ public sealed class NoSocialSurfaceTests(WebApplicationFactory<Program> factory)
     // Exact paths, or prefixes ending in '/'. Everything anonymous must be here.
     private static readonly string[] AnonymousAllowlist =
     [
-        "/", "/pricing", "/analyze", "/trust/",
+        "/", "/pricing", "/analyze", "/features", "/trust/",
         "/healthz", "/metrics", "/openapi/",
         "/api/auth/", "/api/anon/",
         "/api/billing/plans", "/api/billing/stripe/webhook", "/api/email/webhook",

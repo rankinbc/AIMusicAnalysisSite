@@ -80,6 +80,7 @@ type EventName =
   | 'verdict_feedback' // props: { feedback } — helpful/wrong/unclear
   // ── Story 6.5 — the acquisition funnel edges. PII-FREE props only
   //    (job_id is a random GUID; NEVER email/audio/token-as-identity). ──
+  | 'features_viewed' // the public /features page mounted
   | 'landing_viewed' // top of funnel — the public landing page mounted
   | 'analyze_started' // props: { job_id } — anon upload dispatched (TTFI start)
   | 'analyze_completed' // props: { job_id } — anon report rendered (TTFI end)

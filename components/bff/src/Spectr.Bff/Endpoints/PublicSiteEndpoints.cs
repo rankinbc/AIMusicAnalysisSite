@@ -23,6 +23,14 @@ public static class PublicSiteEndpoints
             description: "Drop a track, get a graded 7-phase mix analysis in minutes. No account, no forms — WAV, FLAC or MP3 up to 250 MB.",
             heading: "Drop your track. Get the truth.",
             body: "A real 7-phase mix analysis — graded, measured, no account needed.")).AllowAnonymous().WithTags("public-site");
+        // The /features page. Second copy of the SPA's hero copy
+        // (features/features-page/FeaturesPage.tsx) — keep the two in step.
+        app.MapGet("/features", (HttpContext c) => Shell(c,
+            path: "/features",
+            title: "Features — SPECTR",
+            description: "What SPECTR does for your mix: findings with the evidence behind them, an exact fix for each, every fix playable on your own track, plain-language explanations of why, a Coach that knows your report, and a plan to take back to your DAW.",
+            heading: "Find it. Fix it. Hear it — before you touch your DAW.",
+            body: "Most online mix checkers stop at a score and a list of problems. SPECTR is built for the part that comes after: knowing exactly what to change, hearing it on your own track, and taking a plan back to your project.")).AllowAnonymous().WithTags("public-site");
         // Story 6.2 — trust pages.
         // DRAFT: these shell strings are a SECOND COPY of the trust-page
         // commitments and must be updated together with the route files when
@@ -47,14 +55,14 @@ public static class PublicSiteEndpoints
             heading: "Privacy defaults",
             body: "Private by default. Nothing you upload is visible to anyone else. Export or delete everything, any time.")).AllowAnonymous().WithTags("public-site");
         // Task P6, rewritten 2026-10: the producer-facing "How SPECTR works"
-        // page (upload -> plan pipeline + differentiators). Second copy of
-        // features/how-it-works/pipeline.ts — keep the two in step.
+        // page (one session, step by step). Second copy of
+        // features/how-it-works/workflow.ts + HowItWorksPage.tsx — keep the two in step.
         app.MapGet("/trust/how-its-built", (HttpContext c) => Shell(c,
             path: "/trust/how-its-built",
             title: "How SPECTR works — SPECTR",
-            description: "From upload to a mix plan: SPECTR measures your track, flags problems with genre-relative rules and AI specialists, checks every finding against the measurements, and lets you hear the fixes in your browser.",
+            description: "A session with SPECTR, step by step: upload a bounce, watch the analysis run, read the findings, ask the Coach, hear the fixes on your own track, take a plan to your DAW, then upload the next version.",
             heading: "How SPECTR works",
-            body: "Most online mix checkers give you a score and a few generic tips. SPECTR measures your track, finds the specific problems those measurements point to, and turns them into a prioritised plan with exact settings that you can hear on your own track before you touch your DAW.")).AllowAnonymous().WithTags("public-site");
+            body: "Most online mix checkers give you a score and a list of problems, and leave the fixing to you. SPECTR is built to be worked with: upload a bounce, read the findings, ask the Coach, hear each fix on your own track, take the plan to your DAW, and come back with the next version.")).AllowAnonymous().WithTags("public-site");
         return app;
     }
 

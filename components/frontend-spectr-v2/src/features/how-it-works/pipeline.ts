@@ -1,5 +1,5 @@
-// The /trust/how-its-built page content: the upload -> plan pipeline and the
-// differentiators. Every sentence is producer-facing but traces to code; the
+// The /trust/how-its-built page's analysis content: the upload -> plan pipeline
+// (the page's step order and you/SPECTR copy live in workflow.ts). Every sentence is producer-facing but traces to code; the
 // comment above each entry names the file(s) that back it. If a cited
 // behaviour changes, change the copy here in the same commit.
 
@@ -197,71 +197,5 @@ export const STAGES: readonly PipelineStage[] = [
           'answer or the why behind it.',
       },
     ],
-  },
-];
-
-export interface Differentiator {
-  id: string;
-  title: string;
-  body: string;
-}
-
-// Each entry is a statement about SPECTR only — no claims about any other
-// product beyond the generic "score and tips" framing in the intro.
-export const DIFFERENTIATORS: readonly Differentiator[] = [
-  // The product's core promise: findings -> plan (export-generator /
-  // ImprovementPlanTab) -> Listen rack audition -> coach.
-  {
-    id: 'together',
-    title: 'It helps you fix it, not just find it',
-    body: 'Findings become a plan you work through: exact settings in priority order, each fix auditioned on your own track in the Listen rack, and a Coach you can ask about any step.',
-  },
-  // validator.py metric-path + 10% value check.
-  {
-    id: 'evidence',
-    title: 'Evidence behind every finding',
-    body: 'Each finding names the measurements it’s based on, and those values are checked against your analysis before you see them.',
-  },
-  // rule_engine.py + triage_actor.py + prompt_loader.py roster.
-  {
-    id: 'team',
-    title: 'A team, not a single number',
-    body: 'A deterministic rule engine and a roster of AI specialists — routed by triage to what your track needs — instead of one overall verdict.',
-  },
-  // genre_config.py / config/genre-profiles.json; phase6_gap.py.
-  {
-    id: 'genre',
-    title: 'Targets that fit your genre',
-    body: 'Thresholds are genre-relative, and the track is compared with a profile built from professional references.',
-  },
-  // models.py DspOp ranges + scoring.py priority formula.
-  {
-    id: 'settings',
-    title: 'Exact settings, in priority order',
-    body: 'Fixes come as processing chains with real values — frequency, gain, Q, ratio, attack — ranked by a fixed formula into a plan.',
-  },
-  // listen-rack (Web Audio rack + A/B bypass).
-  {
-    id: 'hear',
-    title: 'Hear it before you commit',
-    body: 'Audition the fixes on your own track in the browser and A/B them against the original before you open your DAW.',
-  },
-  // coach_lib/context.py.
-  {
-    id: 'coach',
-    title: 'A coach that has read your report',
-    body: 'Questions are answered from your measurements and findings, with the values it relied on linked.',
-  },
-  // phase4 stems, phase5 reference, phase8 .als.
-  {
-    id: 'deeper',
-    title: 'Go as deep as you want',
-    body: 'Add stems, a reference track or your Ableton project and the analysis — and the fixes — get more specific.',
-  },
-  // Same wording family as features/trust/pages/NoTrainingPage.tsx.
-  {
-    id: 'privacy',
-    title: 'Your audio never trains a model',
-    body: 'Raw audio is never sent to any LLM — the AI steps receive only derived text from your report.',
   },
 ];

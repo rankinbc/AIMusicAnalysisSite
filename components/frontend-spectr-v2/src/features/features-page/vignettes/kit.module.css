@@ -1,0 +1,501 @@
+/* Shared primitives for the /features vignettes, modelled on the real app
+   surfaces (report finding/fix detail, coach panel, Listen rack, song page):
+   mono uppercase labels, outlined severity pills, bordered meta chips, the
+   black "rack" panel with device cards, module tiles, segmented switches. */
+
+/* ── labels + chips ────────────────────────────────────────────────── */
+.lbl {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.lbl[data-tone='cyan'] { color: var(--cyan); }
+.lbl[data-tone='violet'] { color: var(--violet); }
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.push {
+  margin-left: auto;
+}
+
+.sev {
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sev-moderate);
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.sev[data-sev='severe'] { color: var(--sev-severe); }
+
+.cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.cat::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cyan);
+}
+
+.chip {
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-2);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.chip[data-tone='orange'] {
+  border-color: color-mix(in srgb, var(--orange) 55%, transparent);
+  color: var(--orange);
+}
+
+.chip b {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.link {
+  font-size: 11.5px;
+  color: var(--cyan);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.headline {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text);
+  text-wrap: balance;
+}
+
+.text {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+/* ── boxes: WHY IT MATTERS / EXPECTED OUTCOME / THE DATA ───────────── */
+.box {
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--violet) 35%, transparent);
+  background: color-mix(in srgb, var(--violet) 6%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.box[data-kind='outcome'] {
+  border-color: color-mix(in srgb, var(--cyan) 40%, transparent);
+  background: color-mix(in srgb, var(--cyan) 6%, transparent);
+}
+
+.box[data-kind='data'] {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.tbl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  column-gap: 16px;
+  row-gap: 6px;
+  align-items: baseline;
+  padding: 7px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.tblMetric {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--violet);
+}
+
+.tblYours,
+.tblExpected {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11.5px;
+  text-align: right;
+}
+
+.tblYours {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.tblExpected {
+  color: var(--muted);
+}
+
+/* ── buttons (decorative unless a real <button>) ───────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 7px;
+  border: 1px solid var(--border-2);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.btn[data-tone='cyan'] {
+  border-color: color-mix(in srgb, var(--cyan) 50%, transparent);
+  color: var(--cyan);
+}
+
+.btn[data-tone='solid'] {
+  border-color: var(--cyan);
+  background: var(--cyan);
+  color: var(--ink-on-accent);
+}
+
+button.btn {
+  cursor: pointer;
+}
+
+button.btn:focus-visible,
+.segBtn:focus-visible,
+.switch:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+/* ── segmented switch (coach mode, sub-tabs) ───────────────────────── */
+.seg {
+  display: inline-flex;
+  border-radius: 7px;
+  border: 1px solid var(--border-2);
+  overflow: hidden;
+}
+
+.segItem,
+.segBtn {
+  padding: 3px 9px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.segBtn {
+  cursor: pointer;
+}
+
+.segItem[data-on='true'],
+.segBtn[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--cyan) 20%, transparent);
+  color: var(--cyan);
+}
+
+.tabs {
+  display: flex;
+  gap: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  padding: 0 0 6px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: transparent;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tab[aria-pressed='true'] {
+  border-bottom-color: var(--cyan);
+  color: var(--cyan);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
+}
+
+/* ── the black rack panel + device cards (fix detail) ──────────────── */
+.rack {
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(3, 5, 10, 0.9);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.devices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.device {
+  flex: 1 1 150px;
+  max-width: 220px;
+  border-radius: 8px;
+  border: 1px solid var(--border-2);
+  background: var(--card-2);
+  overflow: hidden;
+}
+
+.deviceHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.deviceIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--cyan) 50%, transparent);
+  background: var(--cyan-dim);
+  color: var(--cyan);
+  font-size: 9px;
+}
+
+.deviceParams {
+  margin: 0;
+  padding: 7px 9px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  row-gap: 3px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10.5px;
+}
+
+.deviceParams dt {
+  color: var(--muted);
+}
+
+.deviceParams dd {
+  margin: 0;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ── Listen-rack module tiles ──────────────────────────────────────── */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.tile {
+  min-height: 54px;
+  padding: 6px 7px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.03));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-content: space-between;
+  row-gap: 4px;
+  transition: border-color 250ms ease, box-shadow 250ms ease;
+}
+
+.tileName {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-2);
+}
+
+.tilePower {
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border-2);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 8.5px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.tileSummary {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+
+.tile[data-on='true'] {
+  border-color: color-mix(in srgb, var(--cyan) 70%, transparent);
+  background: rgba(3, 5, 10, 0.9);
+  box-shadow: 0 0 14px -4px var(--cyan-glow);
+}
+
+.tile[data-on='true'] .tileName,
+.tile[data-on='true'] .tileSummary {
+  color: var(--text);
+}
+
+.tile[data-on='true'] .tilePower {
+  border-color: var(--cyan);
+  background: var(--cyan);
+  color: var(--ink-on-accent);
+}
+
+.tile[data-on='true'][data-tone='red'] {
+  border-color: color-mix(in srgb, var(--red) 70%, transparent);
+  box-shadow: 0 0 14px -4px color-mix(in srgb, var(--red) 60%, transparent);
+}
+
+.tile[data-on='true'][data-tone='red'] .tilePower {
+  border-color: var(--red);
+  background: var(--red);
+  color: var(--text);
+}
+
+/* ── bypass switch ─────────────────────────────────────────────────── */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.switchTrack {
+  position: relative;
+  width: 26px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--dim);
+  transition: background 200ms ease;
+}
+
+.switchTrack::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 200ms ease, background 200ms ease;
+}
+
+.switch[aria-pressed='true'] .switchTrack {
+  background: color-mix(in srgb, var(--orange) 45%, transparent);
+}
+
+.switch[aria-pressed='true'] .switchTrack::after {
+  background: var(--orange);
+  transform: translateX(12px);
+}
+
+/* ── titled panel (Track Analysis cards) ───────────────────────────── */
+.panel {
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card-2);
+  overflow: hidden;
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panelTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.panelTitle::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--cyan);
+}
+
+.panelMeta {
+  overflow: hidden;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+
+.panelBody {
+  padding: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile,
+  .switchTrack,
+  .switchTrack::after {
+    transition: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

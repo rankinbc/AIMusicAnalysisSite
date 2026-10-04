@@ -17,6 +17,7 @@ export function PublicFooter({ currentPath }: { currentPath?: string } = {}) {
       <div className={s.grid}>
         <nav aria-label="Product" className={s.group}>
           <span className="label">Product</span>
+          <a href="/features" className={s.link}>Features</a>
           <a href="/analyze" className={s.link}>Analyze a track</a>
           <a href="/demo" className={s.link}>Explore the demo</a>
           <PricingLink className={s.link} />

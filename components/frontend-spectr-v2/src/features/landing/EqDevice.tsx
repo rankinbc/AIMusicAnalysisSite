@@ -32,9 +32,9 @@ function curvePath(bands: readonly EqBand[]): string {
 
 function bandLabel(b: EqBand): { kind: string; params: string[] } {
   const hz = b.freqHz >= 1000 ? `${b.freqHz / 1000} kHz` : `${b.freqHz} Hz`;
-  return b.type === 'high_pass'
-    ? { kind: 'High-pass', params: [hz, `${b.slopeDb} dB/oct`] }
-    : { kind: 'Bell', params: [hz, `${b.gainDb > 0 ? '+' : b.gainDb < 0 ? '−' : ''}${Math.abs(b.gainDb).toFixed(1)} dB`, `Q ${b.q.toFixed(2)}`] };
+  if (b.type === 'high_pass') return { kind: 'High-pass', params: [hz, `${b.slopeDb} dB/oct`] };
+  const gain = `${b.gainDb > 0 ? '+' : b.gainDb < 0 ? '−' : ''}${Math.abs(b.gainDb).toFixed(1)} dB`;
+  return { kind: b.type === 'bell' ? 'Bell' : 'High shelf', params: [hz, gain, `Q ${b.q.toFixed(2)}`] };
 }
 
 export function EqDevice({ device, target, bands }: { device: string; target: string; bands: readonly EqBand[] }) {
@@ -56,7 +56,7 @@ export function EqDevice({ device, target, bands }: { device: string; target: st
         <path className={s.curve} d={path} pathLength={1} />
         {bands.map((b) => {
           const cx = x(b.freqHz);
-          const cy = y(b.type === 'bell' ? responseDb(bands, b.freqHz) : -3);
+          const cy = y(b.type === 'high_pass' ? -3 : responseDb(bands, b.freqHz));
           return (
             <g key={b.n} className={s.node} data-band={b.n}>
               <circle cx={cx} cy={cy} r={7} />
