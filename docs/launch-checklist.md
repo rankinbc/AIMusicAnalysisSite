@@ -99,7 +99,13 @@ Run in TEST mode with test clocks before flipping live keys:
 
 ## Non-blocking (first-week follow-ups)
 
-- [ ] PostHog live-event sanity (upload_completed/report_viewed arriving)
+- [ ] Analytics live-event sanity (F1 / F1b, first-party — no key needed):
+      one walk-through from `/?utm_source=test` leaves `landing_viewed` →
+      `guest_upload_started` → `report_viewed` → `signup_completed` →
+      `email_verified` → `purchase_completed` rows in `analytics_events` with
+      `source='test'`, and `users.signup_source='test'` on the account
+      (queries in docs/runbook.md). PostHog is optional: only if wanted, set
+      the `VITE_POSTHOG_KEY` repo secret (EU project)
 - [ ] Sentry DSNs set in all 3 runtimes; one forced error per runtime
       visible with `correlation_id`
 - [ ] Log rotation confirmed bounded (`docker system df` after 48 h)

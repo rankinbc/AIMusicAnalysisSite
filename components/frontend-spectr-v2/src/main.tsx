@@ -10,7 +10,8 @@ import { AppCrashFallback } from './components/AppCrashFallback';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { NotFoundScreen } from './components/NotFoundScreen';
 import { RouteErrorScreen } from './components/RouteErrorScreen';
-import { initAnalytics } from './lib/analytics';
+import { capture, initAnalytics, registerAttribution } from './lib/analytics';
+import { captureAttribution, getAttribution } from './lib/attribution';
 import { installChunkReloadListener } from './lib/chunk-reload';
 import { initSentry } from './lib/sentry';
 import { routeTree } from './routeTree.gen';
@@ -21,6 +22,10 @@ import './styles/global.css';
 // init failure (blocked storage, adblock) must never prevent app mount.
 try {
   initSentry();
+  // F1 — first: strips ?ref/?via from the URL before PostHog (lazy) can
+  // record it, and the super properties queue ahead of every event.
+  captureAttribution();
+  registerAttribution(getAttribution());
   initAnalytics();
   // D10 — a deploy while a tab is open turns the next lazy navigation into a
   // failed dynamic import; this reloads once per five minutes instead of
@@ -66,6 +71,12 @@ declare module '@tanstack/react-router' {
     router: typeof router;
   }
 }
+
+// F1b — first-party page views. `pathChanged` only: RouterBridge's
+// invalidate() re-resolves the same location and must not count again.
+router.subscribe('onResolved', (evt) => {
+  if (evt.pathChanged) capture('page_viewed');
+});
 
 // Forwards AuthContext into router context. When auth resolves, invalidates
 // the router so any cached matches re-run their beforeLoad guards with the

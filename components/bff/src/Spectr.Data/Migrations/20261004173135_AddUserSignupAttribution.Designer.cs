@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Spectr.Data;
@@ -11,9 +12,11 @@ using Spectr.Data;
 namespace Spectr.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261004173135_AddUserSignupAttribution")]
+    partial class AddUserSignupAttribution
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -230,74 +233,6 @@ namespace Spectr.Data.Migrations
                     b.HasIndex("UserId", "Status");
 
                     b.ToTable("analysis_jobs");
-                });
-
-            modelBuilder.Entity("Spectr.Data.Entities.AnalyticsEvent", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("Campaign")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("campaign");
-
-                    b.Property<string>("Event")
-                        .IsRequired()
-                        .HasMaxLength(48)
-                        .HasColumnType("character varying(48)")
-                        .HasColumnName("event");
-
-                    b.Property<string>("Medium")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("medium");
-
-                    b.Property<DateTimeOffset>("OccurredAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("occurred_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<string>("Path")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("path");
-
-                    b.Property<string>("Props")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("props");
-
-                    b.Property<string>("Referrer")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("referrer");
-
-                    b.Property<string>("SessionId")
-                        .HasMaxLength(36)
-                        .HasColumnType("character varying(36)")
-                        .HasColumnName("session_id");
-
-                    b.Property<string>("Source")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("source");
-
-                    b.Property<Guid?>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("ix_analytics_events_user");
-
-                    b.HasIndex("OccurredAt", "Event")
-                        .HasDatabaseName("ix_analytics_events_occurred_event");
-
-                    b.ToTable("analytics_events");
                 });
 
             modelBuilder.Entity("Spectr.Data.Entities.AuditLog", b =>

@@ -9,9 +9,16 @@
 // before the SDK finishes loading are queued (bounded) and flushed in order
 // once it arrives; an init failure (blocked storage, adblock) drops the
 // queue silently rather than throwing.
+import type { Attribution } from './attribution';
+import { sendEvent } from './first-party-events';
+
 type PostHog = typeof import('posthog-js').default;
 
 const KEY = import.meta.env['VITE_POSTHOG_KEY'] as string | undefined;
+// F1b — the first-party sink (our own /api/events) is the primary analytics
+// path and needs no key. Off under vitest so unit tests of the hundred
+// components that call capture() never touch the network.
+const FIRST_PARTY = import.meta.env.MODE !== 'test';
 const MAX_QUEUE = 50;
 let client: PostHog | null = null;
 let loading = false;
@@ -51,7 +58,22 @@ export function identifyUser(userId: string | null): void {
   });
 }
 
+/** F1 — first-touch attribution as PostHog super properties, so every event
+ *  carries the channel. `register_once`: a later visit never overwrites it. */
+export function registerAttribution(a: Attribution): void {
+  const props: Record<string, string> = {};
+  if (a.source) props['spectr_source'] = a.source;
+  if (a.medium) props['spectr_medium'] = a.medium;
+  if (a.campaign) props['spectr_campaign'] = a.campaign;
+  if (a.referrer) props['spectr_referrer'] = a.referrer;
+  if (Object.keys(props).length === 0) return;
+  run((p) => {
+    p.register_once(props);
+  });
+}
+
 type EventName =
+  | 'page_viewed' // F1b — a route resolved with a new path (main.tsx); path rides the envelope
   | 'upload_completed' // props: { als_attached, stems_attached, reference_attached }
   | 'report_viewed' // props: { job_id } — pairs with job timestamps for TTFI
   | 'coach_message_sent' // KPI: coach follow-up rate
@@ -80,9 +102,16 @@ type EventName =
   | 'guest_converted' // a guest submitted the register form (POST /auth/guest/convert)
   // ── Task G6 — the coach brief's account-creation CTA. ──
   | 'guest_signup_clicked' // the "Create free account" link under the brief was clicked
-  | 'signup_cta_clicked'; // props: { source } — a public-page "Sign up" button
+  | 'signup_cta_clicked' // props: { source } — a public-page "Sign up" button
+  // ── F1 — the funnel edges that were missing. `signup_completed` fires on
+  //    the "check your inbox" branch too (verify-before-sign-in makes that
+  //    the normal outcome, so `guest_converted` almost never fires). ──
+  | 'signup_completed' // props: { path: 'direct' | 'guest', pending }
+  | 'email_verified' // props: { session } — the emailed link was consumed
+  | 'purchase_completed'; // props: { product } — /billing/success confirmed (once per checkout)
 
 export function capture(event: EventName, props?: Record<string, unknown>): void {
+  if (FIRST_PARTY) sendEvent(event, props);
   run((p) => {
     p.capture(event, props);
   });

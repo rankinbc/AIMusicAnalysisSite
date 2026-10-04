@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-const ph = vi.hoisted(() => ({ init: vi.fn(), capture: vi.fn(), identify: vi.fn(), reset: vi.fn() }));
+const ph = vi.hoisted(() => ({ init: vi.fn(), capture: vi.fn(), identify: vi.fn(), reset: vi.fn(), register_once: vi.fn() }));
 vi.mock('posthog-js', () => ({ default: ph }));
 async function load(key: string) {
   vi.resetModules();
@@ -29,6 +29,22 @@ describe('analytics — posthog is loaded only when there is a key', () => {
     expect(ph.identify).toHaveBeenCalledWith('u1');
     a.capture('resume_shown');
     expect(ph.capture).toHaveBeenCalledTimes(3); // direct once loaded
+  });
+  it('F1 — attribution is registered once as spectr_* super properties, ahead of queued events', async () => {
+    const a = await load('phc_test');
+    a.registerAttribution({ source: 'youtube', campaign: 'launch' });
+    a.capture('landing_viewed');
+    a.initAnalytics();
+    await vi.dynamicImportSettled();
+    expect(ph.register_once).toHaveBeenCalledWith({ spectr_source: 'youtube', spectr_campaign: 'launch' });
+    expect(ph.register_once.mock.invocationCallOrder[0]).toBeLessThan(ph.capture.mock.invocationCallOrder[0]!);
+  });
+  it('F1 — an empty attribution registers nothing', async () => {
+    const a = await load('phc_test');
+    a.registerAttribution({});
+    a.initAnalytics();
+    await vi.dynamicImportSettled();
+    expect(ph.register_once).not.toHaveBeenCalled();
   });
   it('the queue is bounded and an init failure drops it silently', async () => {
     ph.init.mockImplementation(() => { throw new Error('blocked storage'); });

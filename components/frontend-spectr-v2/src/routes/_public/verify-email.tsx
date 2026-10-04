@@ -6,6 +6,7 @@ import { VerifyEmailView, type VerifyStatus } from '../../features/auth/AuthFlow
 import { verifyStatusForError } from '../../features/auth/verify-status';
 import { ResendByEmailForm } from '../../features/auth/VerificationViews';
 import { useResendVerification } from '../../features/auth/useResendVerification';
+import { capture } from '../../lib/analytics';
 import { optionalString } from '../../lib/search-params';
 
 export const Route = createFileRoute('/_public/verify-email')({
@@ -34,6 +35,7 @@ export function VerifyEmailPage() {
     window.history.replaceState(null, '', window.location.pathname);
     verifyEmail(captured)
       .then(async (res) => {
+        capture('email_verified', { session: !!res });
         if (!res) {
           // Verified, but no session came back — sign in normally.
           setStatus('signin');

@@ -213,6 +213,8 @@ public static partial class AuthEndpoints
             {
                 existing.HashedPassword = hasher.Hash(req.Password);
                 existing.TokenVersion++; // any pre-gate session of this row dies
+                // F1 — fills nulls only; the first attempt's source survives.
+                SignupAttributionWriter.Apply(existing, req.Attribution, httpCtx.Request.Host.Host);
                 await db.SaveChangesAsync(ct);
                 await refresh.RevokeAllForUserAsync(existing.Id, ct);
                 // Earlier links would activate the NEW password; kill them even
@@ -242,6 +244,7 @@ public static partial class AuthEndpoints
             // fallback. Free text — no sanitization/uniqueness required.
             DisplayName = DeriveDisplayNameFromEmail(normalizedEmail),
         };
+        SignupAttributionWriter.Apply(user, req.Attribution, httpCtx.Request.Host.Host); // F1
         // Story 12.1 — dev auto-verify: local dev delivers no email, so the
         // story-4.5 second-analysis verify gate would otherwise be
         // unsatisfiable. Defense in depth (mirrors the dev-login guard): the

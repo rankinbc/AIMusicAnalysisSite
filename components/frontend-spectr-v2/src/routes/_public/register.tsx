@@ -74,6 +74,7 @@ export function RegisterPage() {
     try {
       if (isGuest) {
         const res = await convertGuest(email, password);
+        capture('signup_completed', { path: 'guest', pending: isVerificationPending(res) });
         if (isVerificationPending(res)) {
           setPendingEmail(res.email);
           return;
@@ -92,6 +93,7 @@ export function RegisterPage() {
         }
       } else {
         const res = await register(email, password);
+        capture('signup_completed', { path: 'direct', pending: isVerificationPending(res) });
         if (isVerificationPending(res)) {
           setPendingEmail(res.email);
           return;

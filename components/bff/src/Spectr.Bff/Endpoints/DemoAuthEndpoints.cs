@@ -153,6 +153,10 @@ public static class DemoAuthEndpoints
                 GuestExpiresAt = now.AddHours(GuestIdentity.Flag(flags, "guest_ttl_hours", 24)),
                 GuestDeviceId = device.Id,
             };
+            // F1 — the guest row IS the future account (convert keeps the id),
+            // so first-touch attribution is recorded here, on a NEW guest only.
+            SignupAttributionWriter.Apply(
+                user, await SignupAttributionWriter.TryReadBodyAsync(http.Request, ct), http.Request.Host.Host);
             db.Users.Add(user);
             await db.SaveChangesAsync(ct);
             mintedUserId = id; // committed — any failure from here compensates by deleting this row

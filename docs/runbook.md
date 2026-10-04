@@ -269,6 +269,72 @@ prod gains Docker access. `""` / `"0"` return to the pre-cap "no limit" state
   `pricing_viewed`, `checkout_started` (`{cadence}`), `resume_shown` /
   `resume_clicked` (`{status}` — 6.4 return-visitor). Device→user identity
   stitch is `AuthContext.identifyUser` on auth-resolve.
+  F1 adds the sign-up and purchase edges: `signup_completed`
+  (`{path: direct|guest, pending}` — fires on the "check your inbox" branch
+  too), `email_verified` (`{session}`), `purchase_completed` (`{product}` —
+  browser-side, once per checkout; the Stripe webhook stays the revenue
+  record), and `checkout_started` now also fires for credit packs
+  (`{product: 'credits'}`). The acquisition funnel to chart is
+  `landing_viewed` → `guest_upload_started` → `report_viewed` →
+  `signup_completed` → `email_verified` → `purchase_completed`.
+- **First-party analytics** (F1b — the PRIMARY path; needs no key): every
+  frontend `capture()` is also POSTed to `POST /api/events` and stored in
+  `analytics_events` (event, per-tab `session_id`, `user_id` when signed in,
+  path with ids collapsed, small props, first-touch attribution). No IP
+  address, user agent or email is stored. The endpoint is anonymous,
+  write-only, always 204, rate-limited to 120/min per IP, and drops any event
+  name not in `EventEndpoints.KnownEvents` (kept in step with the frontend
+  `EventName` union by a vitest parity test). `page_viewed` fires on every
+  route change. PostHog stays optional: with `VITE_POSTHOG_KEY` unset (the
+  current state) nothing is sent to a third party. Rows are deleted with the
+  account; there is no time-based purge yet.
+  Funnel by source, last 30 days (one row per visitor = `user_id` when known,
+  else the tab session):
+  ```sql
+  WITH e AS (
+    SELECT COALESCE(user_id::text, session_id) AS who, event,
+           COALESCE(source, referrer, 'direct') AS src
+    FROM analytics_events
+    WHERE occurred_at >= now() - interval '30 days'
+  )
+  SELECT src,
+         COUNT(DISTINCT who) FILTER (WHERE event = 'landing_viewed')       AS landed,
+         COUNT(DISTINCT who) FILTER (WHERE event = 'guest_upload_started') AS uploaded,
+         COUNT(DISTINCT who) FILTER (WHERE event = 'report_viewed')        AS saw_report,
+         COUNT(DISTINCT who) FILTER (WHERE event = 'signup_completed')     AS signed_up,
+         COUNT(DISTINCT who) FILTER (WHERE event = 'email_verified')       AS verified,
+         COUNT(DISTINCT who) FILTER (WHERE event = 'purchase_completed')   AS purchased
+  FROM e GROUP BY src ORDER BY landed DESC;
+  ```
+  A visitor is counted under their tab session until they upload (which
+  mints the guest account), so `landed` and later steps are comparable as
+  counts per step, not as one tracked person. Revenue truth stays the
+  `users.signup_source` query below.
+- **Attribution** (F1): the frontend captures the FIRST touch at boot
+  (`utm_source/medium/campaign`, `?via=`, `?ref=`, referring host; 30-day
+  first-touch-wins stash) and (a) registers it as PostHog super properties
+  `spectr_source` / `spectr_medium` / `spectr_campaign` / `spectr_referrer`
+  on every event, (b) sends it on register, guest mint and guest convert,
+  where the BFF sanitizes it and writes `users.signup_source` /
+  `signup_medium` / `signup_campaign` / `signup_referrer` (never
+  overwritten). Tag every outbound link:
+  `https://spectrmix.com/?utm_source=<channel>&utm_medium=<type>&utm_campaign=<name>`.
+  Acquisition by source, last 30 days (guests that never converted are
+  purged, so this counts accounts; divide channel spend by `payers` for
+  cost per paying customer):
+  ```sql
+  SELECT COALESCE(u.signup_source, u.signup_referrer, 'direct') AS source,
+         COUNT(*)                                               AS signups,
+         COUNT(u.email_verified_at)                             AS verified,
+         COUNT(*) FILTER (WHERE s.user_id IS NOT NULL
+                             OR p.user_id IS NOT NULL)          AS payers
+  FROM users u
+  LEFT JOIN (SELECT DISTINCT user_id FROM subscriptions) s ON s.user_id = u.id
+  LEFT JOIN (SELECT DISTINCT user_id FROM credit_ledger
+             WHERE reason = 'purchase') p ON p.user_id = u.id
+  WHERE NOT u.is_guest AND u.created_at >= now() - interval '30 days'
+  GROUP BY 1 ORDER BY signups DESC;
+  ```
 - **KPI table → source mapping** (PRD Measurable Outcomes):
 
 | KPI row | Source |
@@ -281,7 +347,7 @@ prod gains Docker access. `""` / `"0"` return to the pre-cap "no limit" state
 | Coach follow-up rate | `coach_message_sent` + `coach_messages` rows |
 | .als attach rate | `upload_completed.als_attached` |
 | LLM cost / analysis | `llm_calls` (Grafana panel 5) |
-| Share-link k-factor | `report_claimed.source` (share_ tokens) + 7.x share events |
+| Acquisition by source | `users.signup_source` SQL above + PostHog `spectr_source` (F1) |
 | Failed-payment recovery | `subscriptions.next_payment_attempt` + Stripe |
 
 ## Admin surface (story 10.5 / FR46 / NFR7)

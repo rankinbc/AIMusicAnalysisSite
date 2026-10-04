@@ -12,6 +12,7 @@ import { getAccessToken } from '../../api/fetcher';
 import type { CreateCheckoutSessionResponse, PlansResponse } from '../../api/types';
 import { useOptionalAuth } from '../../auth/AuthContext';
 import { capture } from '../../lib/analytics';
+import { markCheckoutPending } from '../../lib/checkout-marker';
 import { loadPublicPlans } from '../../lib/public-plans';
 import { usePageMeta } from '../../lib/usePageMeta';
 import { GUEST_SIGNUP_HREF } from './guest-signup';
@@ -93,6 +94,7 @@ export function PricingPage() {
       }
       // 6.5 — fire ONLY when a real validated Stripe redirect is imminent.
       capture('checkout_started', { cadence });
+      markCheckoutPending('subscription');
       window.location.assign(data.url);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Network error');

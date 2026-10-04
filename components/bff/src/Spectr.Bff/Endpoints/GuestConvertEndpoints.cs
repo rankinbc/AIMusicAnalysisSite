@@ -89,6 +89,11 @@ public static class GuestConvertEndpoints
         var existing = await db.Users.AnyAsync(u => u.Email == normalizedEmail, ct);
         if (existing) return ErrorEnvelope.Build(409, "email_taken", "Email already registered.");
 
+        // F1 — the source was normally recorded at guest mint; this only fills
+        // what is still null (e.g. a guest minted before F1 shipped).
+        await SignupAttributionWriter.FillMissingAsync(
+            db, userId, req.Attribution, httpCtx.Request.Host.Host, ct);
+
         var displayName = AuthEndpoints.DeriveDisplayNameFromEmail(normalizedEmail);
         var autoVerify = env.IsDevelopment()
             && string.Equals(cfg["Auth:DevAutoVerify"], "true", StringComparison.OrdinalIgnoreCase);
