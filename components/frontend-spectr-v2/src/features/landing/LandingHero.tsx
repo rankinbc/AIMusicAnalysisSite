@@ -83,9 +83,14 @@ export function LandingHero() {
           </div>
         </div>
 
-        <a href="/trust/how-its-built" className="btn ghost sm" data-testid="landing-hiw-cta">
-          How it works →
-        </a>
+        <div className={s.learnBtns}>
+          <a href="/features" className="btn ghost sm" data-testid="landing-features-cta">
+            See all features →
+          </a>
+          <a href="/trust/how-its-built" className="btn ghost sm" data-testid="landing-hiw-cta">
+            How it works →
+          </a>
+        </div>
       </div>
 
       <figure className={s.stage} data-testid="landing-coach">
