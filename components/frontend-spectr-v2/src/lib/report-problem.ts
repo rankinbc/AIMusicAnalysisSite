@@ -37,4 +37,4 @@ export function buildProblemReportMailto(input: {
 }
 
 export const SUPPORT_EMAIL: string =
-  (import.meta.env['VITE_SUPPORT_EMAIL'] as string | undefined) ?? 'brankin92@yahoo.com';
+  (import.meta.env['VITE_SUPPORT_EMAIL'] as string | undefined) ?? 'support@spectrmix.com';
