@@ -3119,7 +3119,7 @@ Expected: both `OK`.
 
 - [ ] **Step 2: Capture the BEFORE screenshot of the visualizer view**
 
-Using the Playwright browser tools: navigate to `http://localhost:5174`, log in as `showcase@spectr.test` / `SpectrDemo!2026-shots`, open song `515b2443-25ea-414e-b254-b69782546de3`, and open the **newer** analyzed version in the Listen rack. Switch the stage to **Visualizer**, then:
+Using the Playwright browser tools: navigate to `http://localhost:5174`, log in as `showcase@spectr.test` / `<local dev password - not stored in the repo>`, open song `515b2443-25ea-414e-b254-b69782546de3`, and open the **newer** analyzed version in the Listen rack. Switch the stage to **Visualizer**, then:
 `browser_take_screenshot` → save as `output/frontend-spectr-v2/<today>_listen-findings/visualizer-view.png`.
 
 Compare it against the pre-feature look by eye: the 210 px spectrum strip, the Section/Chain chips top-left (now preceded by the Findings|Visualizer switch), the ⛶ button top-right, the transport underneath. Anything else that moved is a regression — report it.
