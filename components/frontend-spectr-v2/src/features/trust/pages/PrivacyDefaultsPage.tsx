@@ -48,8 +48,10 @@ export function PrivacyDefaultsPage() {
         <li>Fonts and page assets are self-hosted — no third-party font or asset CDNs.</li>
         <li>
           We do run operational tooling: error monitoring (Sentry) and product analytics
-          (PostHog), bundled with the app to keep the service working. No advertising trackers,
-          and your data is never sold.
+          (PostHog), bundled with the app to keep the service working. We also note how you
+          found us — the campaign tag on the link you followed, or the site that referred you —
+          so we can tell which channels are worth our time. No advertising trackers, and your
+          data is never sold.
         </li>
       </ul>
     </TrustPage>

@@ -79,6 +79,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     // Append-only audit trail (story 4.6 first writer; 10.5 extends)
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
+    // First-party product analytics (F1b) - append-only funnel events
+    public DbSet<AnalyticsEvent> AnalyticsEvents => Set<AnalyticsEvent>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         builder.HasPostgresExtension("pgcrypto");      // gen_random_uuid()
@@ -230,6 +233,17 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         builder.Entity<UsageEvent>()
             .HasIndex(e => new { e.UserId, e.BillingPeriod })
             .HasDatabaseName("ix_usage_events_user_period");
+
+        // F1b — first-party analytics. Funnel queries filter by time window,
+        // then by event; user lookups serve account deletion.
+        builder.Entity<AnalyticsEvent>().HasKey(e => e.Id);
+        builder.Entity<AnalyticsEvent>().Property(e => e.OccurredAt).HasDefaultValueSql("now()");
+        builder.Entity<AnalyticsEvent>()
+            .HasIndex(e => new { e.OccurredAt, e.Event })
+            .HasDatabaseName("ix_analytics_events_occurred_event");
+        builder.Entity<AnalyticsEvent>()
+            .HasIndex(e => e.UserId)
+            .HasDatabaseName("ix_analytics_events_user");
 
         // Story 2.4 — feature_flags: string PK, DB-side updated_at default.
         builder.Entity<FeatureFlag>().HasKey(f => f.Name);

@@ -4,6 +4,8 @@ import { toast } from 'sonner';
 
 import { extractApiMessage } from '../../api/error-utils';
 import { ApiError, fetcher } from '../../api/fetcher';
+import { capture } from '../../lib/analytics';
+import { capturePurchaseCompleted, markCheckoutPending } from '../../lib/checkout-marker';
 import type { CreateCheckoutSessionResponse, CreditsResponse, EntitlementsDto } from '../../api/types';
 import { checkoutCreditsLanded } from './credits-confirmation';
 import { isStripeHostedUrl } from './stripe-url';
@@ -75,6 +77,9 @@ export function useUpgradeCheckout(onUpgraded?: () => void) {
           landed = ent.tier === 'pro';
         }
         if (landed) {
+          // F1 — whichever confirms first (this poll, or /billing/success in
+          // the popup) consumes the marker, so the purchase counts once.
+          capturePurchaseCompleted(kindRef.current?.type === 'credits' ? 'credits' : 'subscription');
           void qc.invalidateQueries({ queryKey: ['me', 'entitlements'] });
           void qc.invalidateQueries({ queryKey: ['auth', 'me'] });
           void qc.invalidateQueries({ queryKey: ['billing', 'credits'] });
@@ -123,6 +128,12 @@ export function useUpgradeCheckout(onUpgraded?: () => void) {
           setPending(null);
           return;
         }
+        // F1 — a validated Stripe hand-off is imminent (popup or redirect).
+        capture(
+          'checkout_started',
+          kind.type === 'credits' ? { product: 'credits' } : { cadence: kind.cadence },
+        );
+        markCheckoutPending(kind.type);
         if (popup && !popup.closed) {
           popup.location.href = session.url;
         } else {

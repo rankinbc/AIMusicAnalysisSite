@@ -57,6 +57,9 @@ public sealed class NoSocialSurfaceTests(WebApplicationFactory<Program> factory)
         "/api/auth/", "/api/anon/",
         "/api/billing/plans", "/api/billing/stripe/webhook", "/api/email/webhook",
         "/api/health/", "/api/admin/", "/api/dev/",
+        // F1b — first-party analytics sink. Write-only, always 204 with no
+        // body: a caller can learn nothing about other accounts or site load.
+        "/api/events",
     ];
 
     [SkippableFact]

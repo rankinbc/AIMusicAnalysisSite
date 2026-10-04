@@ -65,6 +65,7 @@ public static class AccountEndpoints
             {
                 u.Id, u.Email, u.DisplayName,
                 u.EmailVerifiedAt, u.NotifyAnalysisComplete, u.CreatedAt,
+                u.SignupSource, u.SignupMedium, u.SignupCampaign, u.SignupReferrer, // F1
             })
             .FirstOrDefaultAsync(ct);
         if (account is null) return Results.Unauthorized();

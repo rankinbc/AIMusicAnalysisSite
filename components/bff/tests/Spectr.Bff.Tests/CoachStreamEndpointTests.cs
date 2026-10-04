@@ -638,8 +638,14 @@ public sealed class CoachStreamEndpointTests(WebApplicationFactory<Program> fact
 
             // Abort the request. The BFF's finally should SET the cancel
             // key with EX 180.
+            // Two ways the client can be gone, and the test must cover both:
+            // if the response headers have NOT come back yet, cancelling the
+            // token aborts the request; if they HAVE (the warm-up frame was
+            // already relayed), the token is spent and only disposing the
+            // response closes the stream. Cancelling alone raced the relay —
+            // on a loaded runner the frame won and the abort never happened.
             ctsClient.Cancel();
-            try { await requestTask; } catch { /* expected cancellation */ }
+            try { (await requestTask).Dispose(); } catch { /* expected cancellation */ }
 
             // Poll Redis for the cancel key — bounded wait so we don't
             // hang the suite if the SET never fires.

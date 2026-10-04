@@ -4,6 +4,8 @@ import { toast } from 'sonner';
 
 import { extractApiMessage } from '../../api/error-utils';
 import { ApiError, fetcher } from '../../api/fetcher';
+import { capture } from '../../lib/analytics';
+import { markCheckoutPending } from '../../lib/checkout-marker';
 import type {
   CreateCheckoutSessionResponse,
   PlansResponse,
@@ -49,6 +51,9 @@ export function BuyCreditsCard() {
         );
         return;
       }
+      // F1 — only when a validated Stripe redirect is imminent (6.5 rule).
+      capture('checkout_started', { product: 'credits' });
+      markCheckoutPending('credits');
       window.location.assign(session.url);
     } catch (err) {
       if (err instanceof ApiError) {
