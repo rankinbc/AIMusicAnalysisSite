@@ -34,7 +34,7 @@ describe('FeaturesPage', () => {
     }
     // Made-up example values are never passed off as the sample report.
     const illustrations = FEATURES.filter((f) => f.sample === false);
-    expect(illustrations.map((f) => f.id)).toEqual(['learn', 'deeper', 'reference', 'library']);
+    expect(illustrations.map((f) => f.id)).toEqual(['learn', 'library', 'deeper', 'reference']);
     expect(html.match(/>illustration</g)?.length).toBe(illustrations.length);
     expect(html.match(/>sample report</g)?.length).toBe(FEATURES.length - illustrations.length);
     expect(html).toMatch(/<a href="\/analyze"[^>]*data-testid="features-cta"/);

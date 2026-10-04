@@ -11,7 +11,9 @@ import type { ReactNode } from 'react';
 
 import { capture } from '../../lib/analytics';
 import { Coach } from '../../ui/Coach';
+import { LibraryVignette } from '../features-page/vignettes/WorkflowVignettes';
 import { TrustPage } from '../trust/TrustPage';
+import { AbletonExportGuide } from './AbletonExportGuide';
 import { CoachShowcase } from './CoachShowcase';
 import { DawPlanSection } from './DawPlanSection';
 import { ExampleFindings } from './ExampleFindings';
@@ -69,6 +71,11 @@ function UploadSection() {
         The mix file is all SPECTR needs. Stems, your Ableton project and a reference track are
         optional — each one makes the analysis, and the fixes, more specific to your session.
       </p>
+      <p>
+        Working in Ableton Live and not sure how to export stems? The export settings make a real
+        difference to what SPECTR can tell you.
+      </p>
+      <AbletonExportGuide />
     </>
   );
 }
@@ -135,6 +142,13 @@ function NextSection() {
         One pass rarely finishes a mix. Every song keeps its versions side by side, so each round
         starts from what you changed last time rather than from scratch.
       </p>
+      <figure className={`card ${s.progress}`}>
+        <figcaption className={s.progressCaption}>
+          <span className="label">Example</span>
+          A song in your library: every version kept, any two compared
+        </figcaption>
+        <LibraryVignette />
+      </figure>
       <ol className={s.loop} aria-label="The loop">
         {WORKFLOW.map((step) => (
           <li key={step.id}>{step.label}</li>

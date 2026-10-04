@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 import { run as axeRun } from 'axe-core';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { COACH_INTRO, DEMO_ANSWER, DEMO_EVIDENCE, DEMO_QUESTION } from '../coach-showcase-content';
 import { buildExamples } from '../examples-model';
+import { ABLETON_GUIDE } from '../ableton-guide-content';
 import { HowItWorksPage } from '../HowItWorksPage';
 import { STAGES } from '../pipeline';
 import { PIPELINE_TITLE } from '../PipelineDiagram';
@@ -87,6 +88,25 @@ describe('HowItWorksPage (/trust/how-its-built)', () => {
     expect(html).toContain('score and a list of problems');
     expect(html).toContain('<a href="/features">See the features');
     expect(html).not.toContain('What makes it different');
+  });
+
+  it('offers Ableton export instructions on the Upload step, in a modal', async () => {
+    expect(html).toMatch(/data-testid="ableton-guide-link"[^>]*>Optimal Ableton export instructions/);
+    const { getByTestId, findByRole } = render(<HowItWorksPage />);
+    fireEvent.click(getByTestId('ableton-guide-link'));
+    const dialog = await findByRole('dialog');
+    for (const sec of ABLETON_GUIDE) {
+      expect(dialog.textContent).toContain(sec.title);
+      for (const step of sec.steps) expect(dialog.textContent).toContain(step);
+    }
+    expect(dialog.textContent).toContain('All Individual Tracks');
+    expect(dialog.textContent).toContain('Normalize: Off');
+  });
+
+  it('shows a song progressing through versions on the last step', () => {
+    const last = html.slice(html.indexOf('data-testid="workflow-next"'));
+    expect(last).toContain('every version kept, any two compared');
+    expect(last).toContain('What changed');
   });
 
   it('links both CTAs to the right funnels', () => {

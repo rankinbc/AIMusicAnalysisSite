@@ -196,3 +196,170 @@
     transform: translateX(-50%);
   }
 }
+
+/* ── per-track lanes (example session with stems + project) ───────────── */
+.lanes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lane {
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-2);
+  border-left: 3px solid var(--violet);
+  background: rgba(255, 255, 255, 0.025);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.lane[data-lane='kick'] { border-left-color: var(--cyan); }
+.lane[data-lane='bass'] { border-left-color: var(--violet); }
+.lane[data-lane='pad'] { border-left-color: var(--blue); }
+
+.laneHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.laneTrack {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.laneRole {
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--violet) 55%, transparent);
+  font-size: 10px;
+  color: var(--violet);
+}
+
+.laneFinding {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.laneChain {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.laneDevice {
+  flex: 1 1 220px;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(6, 10, 18, 0.85);
+}
+
+.laneParams {
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.laneParam {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.laneParam dt {
+  color: var(--muted);
+}
+
+.laneParam dd {
+  margin: 0;
+  text-align: right;
+  color: var(--cyan);
+}
+
+/* ── plan notes ───────────────────────────────────────────────────────── */
+.notes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.note {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-2);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.noteTitle {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.noteText {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+/* ── the exported file ────────────────────────────────────────────────── */
+.file {
+  border-radius: var(--radius);
+  border: 1px solid var(--border-2);
+  overflow: hidden;
+}
+
+.fileBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.fileName {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.fileKind {
+  font-size: 10.5px;
+  color: var(--green);
+}
+
+.file .pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.then {
+  margin: 4px 0 0;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--cyan) 35%, transparent);
+  background: var(--cyan-dim);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text);
+}

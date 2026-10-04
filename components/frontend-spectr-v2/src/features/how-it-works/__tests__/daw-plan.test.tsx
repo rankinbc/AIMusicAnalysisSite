@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { SAMPLE_FINDINGS, SAMPLE_META } from '../../landing/sample/sample-data';
 import { DEMO_CHAIN, DEMO_CHAIN_RAW, DEMO_DROPPED, DEMO_EQ_BANDS } from '../daw-chain';
-import { buildPlanExcerpt } from '../daw-plan-excerpt';
+import { buildExamplePlan, EXAMPLE_NOTES, EXAMPLE_TRACKS } from '../example-session';
 import { HowItWorksPage } from '../HowItWorksPage';
 
 afterEach(() => {
@@ -87,16 +87,42 @@ describe('"Take it back to your DAW" (/trust/how-its-built)', () => {
     expect(eq.textContent).toContain('300 Hz');
   });
 
-  it('shows an excerpt produced by the real DAW Plan export generator', () => {
-    const md = buildPlanExcerpt();
-    expect(md.startsWith('# Mixing plan — Demo track')).toBe(true);
+  it('shows per-track chains for an example session with stems, as well as the master', () => {
+    for (const t of EXAMPLE_TRACKS) {
+      expect(section).toContain(`data-lane="${t.role}"`);
+      expect(section).toContain(t.track);
+      for (const d of t.devices) expect(section).toContain(d.daw);
+    }
+    expect(EXAMPLE_TRACKS.map((t) => t.track)).toEqual(['Kick', 'Sub Bass', 'Pad Chords']);
+    // The made-up lanes are labelled as an example; the master chain stays the real one.
+    expect(section.indexOf('data-lane="kick"')).toBeLessThan(section.indexOf('data-device="eq"'));
+    expect(section).toContain('A session with stems and an Ableton project');
+  });
+
+  it('carries plan notes that are not tied to a track or the master', () => {
+    expect(EXAMPLE_NOTES.length).toBeGreaterThanOrEqual(3);
+    for (const n of EXAMPLE_NOTES) expect(section).toContain(n.title);
+  });
+
+  it('shows the whole plan file, produced by the real DAW Plan export generator', () => {
+    const { filename, content: md } = buildExamplePlan();
+    expect(filename).toBe('daw-plan-night-drive.md');
+    expect(md.startsWith('# Mixing plan — Night Drive v2')).toBe(true);
     expect(md).toContain('## Moves · by signal chain');
-    expect(md).toContain('1. [ ] **Excessive sub-bass will overwhelm small speakers** (Master)');
-    expect(md).toContain('high_pass: `q=0.71, slope_db=24, frequency_hz=35`');
-    expect(md).toContain('peaking_eq: `q=1.20, gain_db=-2, frequency_hz=50`');
-    expect(md).toContain('high_shelf: `q=0.70, gain_db=3, frequency_hz=10000`');
+    // Track-scoped moves, the master, then notes with no scope and no device steps.
+    expect(md).toContain('1. [ ] **Clear the kick’s rumble and boxiness** (Kick)');
+    expect(md).toContain('2. [ ] **Duck the bass under the kick** (Sub Bass)');
+    expect(md).toContain('sidechain: `source=Kick, ratio=4, attack_ms=5, release_ms=120`');
+    expect(md).toContain('4. [ ] **Set the master ceiling and loudness** (Master)');
+    expect(md).toContain('5. [ ] **Check the mix in mono before you bounce**\n');
     expect(md).not.toContain('Streaming targets');
     const { container } = render(<HowItWorksPage />);
     expect(container.querySelector('[data-testid="daw-plan-excerpt"]')!.textContent).toBe(md);
+    expect(container.textContent).toContain('daw-plan-night-drive.md');
+  });
+
+  it('ends by sending you back with the next version', () => {
+    expect(section).toContain('upload it as the');
+    expect(section).toContain('next version of the same song');
   });
 });

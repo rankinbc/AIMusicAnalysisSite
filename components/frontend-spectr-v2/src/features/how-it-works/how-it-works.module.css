@@ -93,6 +93,24 @@
   color: var(--text);
 }
 
+.progress {
+  margin: 4px 0 0;
+  max-width: 520px;
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.progressCaption {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
 .loop {
   list-style: none;
   margin: 6px 0 0;
