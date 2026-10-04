@@ -152,8 +152,10 @@ public sealed class CoachBriefRobustnessTests(WebApplicationFactory<Program> fac
             }
             Assert.True(attached, "BFF subscriber never attached");
 
+            // Dispose as well as cancel — see CoachStreamEndpointTests
+            // .Client_Disconnect_Sets_Cancel_Key_In_Redis for the race.
             cts.Cancel();
-            try { await request; } catch { /* expected */ }
+            try { (await request).Dispose(); } catch { /* expected */ }
 
             // The handler's finally unsubscribes, THEN (maybe) sets the key —
             // wait for the unsubscribe, then give the SET a moment.
