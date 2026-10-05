@@ -20,9 +20,9 @@ public static class PublicSiteEndpoints
         app.MapGet("/analyze", (HttpContext c) => Shell(c,
             path: "/analyze",
             title: "Analyze your track free — SPECTR",
-            description: "Drop a track, get a graded 7-phase mix analysis in minutes. No account, no forms — WAV, FLAC or MP3 up to 250 MB.",
+            description: "Drop a track, get a 7-phase mix analysis with concrete fixes in minutes. No account, no forms — WAV, FLAC or MP3 up to 250 MB.",
             heading: "Drop your track. Get the truth.",
-            body: "A real 7-phase mix analysis — graded, measured, no account needed.")).AllowAnonymous().WithTags("public-site");
+            body: "A real 7-phase mix analysis — measured, explained, no account needed.")).AllowAnonymous().WithTags("public-site");
         // The /features page. Second copy of the SPA's hero copy
         // (features/features-page/FeaturesPage.tsx) — keep the two in step.
         app.MapGet("/features", (HttpContext c) => Shell(c,
@@ -70,10 +70,10 @@ public static class PublicSiteEndpoints
         Shell(context,
             path: "/",
             title: "SPECTR — AI mix analysis for producers",
-            description: "Upload a track, get a graded 7-phase mix report with concrete fixes — " +
+            description: "Upload a track, get a 7-phase mix report with concrete fixes — " +
                          "loudness, low end, stereo image, tonal balance — plus an AI coach that knows your report.",
             heading: "Know exactly what's wrong with your mix",
-            body: "A graded report across loudness, low end, stereo image and tonal balance — with concrete fixes you can hear.");
+            body: "A mix report across loudness, low end, stereo image and tonal balance — with concrete fixes you can hear.");
 
     // Task P2 (public-surfaces-polish D6/D7) — the crawler shell tells the
     // same truth the SPA does: when credits are off, don't advertise plans

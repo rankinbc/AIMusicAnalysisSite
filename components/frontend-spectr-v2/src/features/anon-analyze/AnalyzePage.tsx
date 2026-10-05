@@ -78,7 +78,7 @@ export function DropZoneView({ onFile, error, disabled }: {
     >
       <h1 className={s.dropTitle}>Drop your track. Get the truth.</h1>
       <p className={s.dropSub}>
-        A real 7-phase mix analysis — graded, measured, no account needed.
+        A real 7-phase mix analysis — measured, explained, no account needed.
       </p>
       <button
         type="button"
@@ -118,7 +118,7 @@ type Stage = 'idle' | 'busy' | 'failed';
 export function AnalyzePage() {
   usePageMeta(
     'Analyze your track free — SPECTR',
-    'Drop a track, get a graded 7-phase mix analysis in minutes. No account, no forms — WAV, FLAC or MP3 up to 250 MB.',
+    'Drop a track, get a 7-phase mix analysis with concrete fixes in minutes. No account, no forms — WAV, FLAC or MP3 up to 250 MB.',
     { path: '/analyze' },
   );
 
