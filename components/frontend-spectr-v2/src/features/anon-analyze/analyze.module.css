@@ -54,6 +54,29 @@
   color: var(--muted);
 }
 
+.dropPledge {
+  margin: 0;
+  max-width: 420px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.dropPledge a {
+  color: var(--text-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.dropPledge a:hover {
+  color: var(--cyan);
+}
+
+.dropPledge a:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
 .dropError {
   margin: 0;
   color: var(--red);

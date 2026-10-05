@@ -114,6 +114,11 @@ describe('Landing hero (two-column redesign + the Coach)', () => {
     expect(html).toMatch(/<a href="\/register"[^>]*data-testid="landing-signup-cta"/);
     expect(html.indexOf('landing-demo-cta')).toBeLessThan(html.indexOf('landing-hiw-cta'));
     expect(html.indexOf('landing-signup-cta')).toBeLessThan(html.indexOf('landing-hiw-cta'));
+    // The no-training pledge sits with the upload CTA, before the demo callout.
+    expect(html).toContain('Your audio never trains an AI model.');
+    expect(html).toMatch(/<a href="\/trust\/no-training"[^>]*data-testid="landing-no-training"/);
+    expect(html.indexOf('landing-cta')).toBeLessThan(html.indexOf('landing-no-training'));
+    expect(html.indexOf('landing-no-training')).toBeLessThan(html.indexOf('landing-demo-cta'));
     // "See all features" sits immediately to the left of "How it works".
     expect(html).toMatch(/<a href="\/features"[^>]*data-testid="landing-features-cta"[^>]*>See all features →<\/a><a href="\/trust\/how-its-built"/);
     expect(html.match(/landing-features-cta/g)?.length).toBe(1);
