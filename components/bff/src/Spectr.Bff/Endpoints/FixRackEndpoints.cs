@@ -68,6 +68,18 @@ public static class FixRackEndpoints
             var price = (await ents.GetPricesAsync(ct)).CoachMix;
             var prefix = $"coachmix:{analysis.Id}:";
 
+            // Stable key: n = prior Coach Mix charges for this analysis, so two
+            // truly concurrent requests (both read the same n) collapse onto one
+            // key — the ledger's unique index makes the loser a replay.
+            // n MUST be read before the in-flight check: a twin's charge that
+            // commits between the two reads is then caught by the check (which
+            // runs later, so it sees everything n saw). In the other order the
+            // twin slips past the check and bumps n onto a fresh key — a second
+            // charge.
+            var n = await db.CreditLedger.AsNoTracking()
+                .CountAsync(e => e.UserId == userId && e.Reason == "spend"
+                    && e.Reference != null && e.Reference.StartsWith(prefix), ct);
+
             // A double-click / client retry must not buy a second generation.
             // In flight = this analysis' latest un-refunded Coach Mix charge is
             // recent and no analysis rack has landed since — return it as
@@ -92,12 +104,6 @@ public static class FixRackEndpoints
                     return Results.Accepted(value: new { status = "queued" });
             }
 
-            // Stable key: n = prior Coach Mix charges for this analysis, so two
-            // truly concurrent requests (both read the same n) collapse onto one
-            // key — the ledger's unique index makes the loser a replay.
-            var n = await db.CreditLedger.AsNoTracking()
-                .CountAsync(e => e.UserId == userId && e.Reason == "spend"
-                    && e.Reference != null && e.Reference.StartsWith(prefix), ct);
             chargeRef = $"{prefix}{n}";
             refundKey = $"reversal:coachmix:{analysis.Id}:{n}";
             try
