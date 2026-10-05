@@ -2,18 +2,10 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import type { VersionDto } from '../../api/types';
 import type { VStatus } from './song-helpers';
-import { displayScore, versionStatus } from './song-helpers';
+import { displayScore, fmtShortDate, versionStatus } from './song-helpers';
 import styles from './SongConsole.module.css';
 
 const SLOT_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as const;
-
-function fmtDate(iso: string): string {
-  try {
-    return new Date(iso + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  } catch {
-    return iso;
-  }
-}
 
 interface VersionRowProps {
   version: VersionDto;
@@ -147,7 +139,7 @@ export function VersionRow({
                 ★ {personalStr}
               </span>
             )}
-            <span className="mono" style={{ fontSize: '10px', color: 'var(--muted)' }}>{fmtDate(version.createdAt)}</span>
+            <span className="mono" style={{ fontSize: '10px', color: 'var(--muted)' }}>{fmtShortDate(version.createdAt)}</span>
           </div>
         )}
       </div>

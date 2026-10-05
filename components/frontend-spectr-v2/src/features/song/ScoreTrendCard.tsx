@@ -1,18 +1,10 @@
 import type { VersionDto } from '../../api/types';
-import { displayScore, scoredAsc, trendSummary } from './song-helpers';
+import { displayScore, fmtShortDate, scoredAsc, trendSummary } from './song-helpers';
 import styles from './SongConsole.module.css';
 
 interface ScoreTrendCardProps {
   versions: VersionDto[];
   onPointClick: (id: string) => void;
-}
-
-function fmtDate(iso: string): string {
-  try {
-    return new Date(iso + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  } catch {
-    return iso;
-  }
 }
 
 export function ScoreTrendCard({ versions, onPointClick }: ScoreTrendCardProps) {
@@ -46,7 +38,7 @@ export function ScoreTrendCard({ versions, onPointClick }: ScoreTrendCardProps) 
         leftPct: lp.toFixed(2),
         top: y.toFixed(1),
         scoreTop: (y - 21).toFixed(1),
-        dateStr: fmtDate(v.createdAt),
+        dateStr: fmtShortDate(v.createdAt),
         isCurrent: v.isCurrent,
         id: v.id,
       };

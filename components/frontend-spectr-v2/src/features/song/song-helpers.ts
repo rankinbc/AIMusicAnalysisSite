@@ -51,6 +51,18 @@ export function noteKey(aId: string, bId: string): string {
   return [aId, bId].slice().sort().join('-');
 }
 
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** "Oct 4"-style label. Accepts a full ISO timestamp (what the API sends) or a
+ *  bare YYYY-MM-DD, which is pinned to local noon so it can't slip a day in
+ *  negative-offset timezones. Unparseable input renders as nothing. */
+export function fmtShortDate(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(DATE_ONLY.test(iso) ? `${iso}T12:00:00` : iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 export type VStatus = 'analyzed' | 'analyzing' | 'failed' | 'unscored';
 export function versionStatus(v: VersionDto): VStatus {
   if (v.latestResult && v.latestResult.score != null) return 'analyzed';

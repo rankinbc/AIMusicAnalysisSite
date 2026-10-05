@@ -79,7 +79,7 @@ export function LoudnessTimelineCard({ phase1 }: { phase1: Phase1Data | undefine
                 fontFamily="JetBrains Mono"
                 textAnchor="end"
               >
-                ST max {stMax}
+                ST max {stMax.toFixed(1)}
               </text>
             </g>
           )}
