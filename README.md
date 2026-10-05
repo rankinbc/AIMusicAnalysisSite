@@ -31,6 +31,8 @@ SPECTR is a web app for music producers. Upload a bounce of your mix and it meas
 
 ## Features
 
+**[See every feature with live examples on spectrmix.com/features →](https://spectrmix.com/features)**
+
 | | |
 |---|---|
 | **Hear every fix on your own track** | Each suggested fix can be switched on live in the browser, one at a time or stacked. Flip Bypass to compare with the original and adjust any setting. No export, no plugin. |
@@ -47,6 +49,8 @@ SPECTR is a web app for music producers. Upload a bounce of your mix and it meas
 | **Your audio stays out of the AI** | Raw audio is never sent to a language model. The AI steps receive only numbers and text derived from the report. |
 
 ## How it works
+
+**[See the full interactive walkthrough on spectrmix.com/trust/how-its-built →](https://spectrmix.com/trust/how-its-built)**
 
 ### A session, step by step
 
