@@ -89,6 +89,10 @@ export function DropZoneView({ onFile, error, disabled }: {
         Choose a file
       </button>
       <p className={`mono ${s.dropHints}`}>WAV · FLAC · MP3 · ≤250 MB · no forms, ever</p>
+      <p className={s.dropPledge} data-testid="analyze-no-training">
+        Your audio never trains an AI model, and raw audio is never sent to an LLM.{' '}
+        <a href="/trust/no-training">Read the pledge</a>
+      </p>
       {error && <p className={s.dropError}>{error}</p>}
       <input
         ref={inputRef}

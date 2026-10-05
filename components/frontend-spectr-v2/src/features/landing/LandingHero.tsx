@@ -39,6 +39,11 @@ export function LandingHero() {
             WAV, FLAC or MP3.
             <br />
             Your first analysis needs no account.
+            <br />
+            Your audio never trains an AI model.{' '}
+            <a href="/trust/no-training" className={s.hintLink} data-testid="landing-no-training">
+              Read the pledge
+            </a>
           </p>
         </div>
       </div>

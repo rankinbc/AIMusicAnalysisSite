@@ -112,6 +112,21 @@
   color: var(--muted);
 }
 
+.hintLink {
+  color: var(--text-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.hintLink:hover {
+  color: var(--cyan);
+}
+
+.hintLink:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
 /* ── guest-demo callout ──────────────────────────────────────────────── */
 .demoCard {
   grid-area: demo;

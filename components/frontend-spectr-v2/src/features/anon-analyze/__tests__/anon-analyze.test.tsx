@@ -15,6 +15,9 @@ describe('DropZoneView (story 6.3 AC1 — UX-DR27)', () => {
     expect(html).toContain('data-testid="anon-drop-zone"');
     expect(html).toContain('WAV · FLAC · MP3 · ≤250 MB');
     expect(html).toContain('Choose a file');
+    // The no-training pledge is stated where the visitor decides to upload.
+    expect(html).toContain('Your audio never trains an AI model');
+    expect(html).toMatch(/data-testid="analyze-no-training"[^>]*>[^<]*<a href="\/trust\/no-training"/);
     expect(html).not.toContain('type="text"');
     expect(html).not.toContain('type="email"');
     expect((html.match(/<input/g) ?? []).length).toBe(1);
