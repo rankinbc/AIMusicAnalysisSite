@@ -171,6 +171,11 @@ publishes ports; the BFF has no direct ingress (which is what makes
   AUTO-rollback on failure).
 - Manual rollback — one command: `ssh <vps> '/opt/spectr/deploy.sh rollback'`
   (repins the previous image set from `.deploy-state`).
+- Image retention — after a healthy deploy or rollback, `deploy.sh` removes
+  every app image except the current and previous tags (each tag is ~2.3 GB;
+  unpruned, 13 deploys filled the 30 GB disk on 2026-10-05). If a pull ever
+  fails with `no space left on device`: `df -h /`, then `docker rmi` the old
+  `spectr-*` tags by hand, keeping the two in `.deploy-state`.
 - Prompt rollback needs NO deploy: flip the `prompt_versions` flag row.
 
 ### Destructive-migration rule (architecture L189)

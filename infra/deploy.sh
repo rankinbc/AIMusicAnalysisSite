@@ -36,6 +36,21 @@ apply_tag() {
   IMAGE_TAG="$tag" $COMPOSE up -d --remove-orphans
 }
 
+# Each deploy pulls ~2.3 GB of images under a new tag and nothing removed the
+# old ones — 13 deploys filled the 30 GB disk and a pull died mid-extract
+# (2026-10-05). After a HEALTHY deploy, keep only the current tag and the
+# rollback target. Best-effort: a prune failure must never fail a deploy.
+prune_old_images() {
+  local cur prev
+  cur="$(current_tag)"; prev="$(previous_tag)"
+  [ -n "$cur" ] || return 0
+  docker images --format '{{.Repository}}:{{.Tag}}' \
+    | grep -E '^ghcr\.io/[^/]+/spectr-(web|bff|worker):' \
+    | grep -v -e ":${cur}\$" -e ":${prev:-$cur}\$" \
+    | xargs -r docker rmi >/dev/null 2>&1 || true
+  echo "==> pruned images other than ${cur:0:7} / ${prev:0:7}"
+}
+
 verify_health() {
   # Review-hardened: probe the BFF DIRECTLY inside the compose network —
   # curling the edge would 308/empty-200 without ever reaching the app
@@ -65,6 +80,7 @@ case "${1:-}" in
     verify_health || { echo "!! rollback target ALSO unhealthy — manual intervention" >&2; exit 1; }
     # Swap pins so a second rollback goes forward again.
     write_state "$prev" "$(current_tag)"
+    prune_old_images
     ;;
   redeploy)
     cur="$(current_tag)"
@@ -83,6 +99,7 @@ case "${1:-}" in
       if [ "$prev" != "$tag" ]; then
         write_state "$tag" "${prev:-$tag}"
       fi
+      prune_old_images
     else
       if [ -n "$prev" ] && [ "$prev" != "$tag" ]; then
         echo "!! deploy unhealthy — auto-rolling back to $prev" >&2
