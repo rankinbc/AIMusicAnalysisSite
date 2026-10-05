@@ -1,29 +1,76 @@
+<div align="center">
+
 # SPECTR
 
-SPECTR is a web app for music producers: upload a mix and an AI coach walks you through what's wrong with it and how to fix it — grounded in a multi-phase signal-analysis report and deterministic, genre-aware problem detection, backed by on-demand specialist verdicts, with a real-time in-browser DSP rack for hearing each fix against the original before committing to it.
+**Mix analysis you can work with: measured findings, exact fixes, and a way to hear each fix on your own track before you touch your DAW.**
 
-![Analysis results report](docs/images/results-page.png)
-![AI coach answering from measured data](docs/images/coach-chat.png)
-![Listen page: suggested fixes applied live to the track and A/B'd in the browser](docs/images/listen-rack.png)
-![On-demand AI specialist team](docs/images/specialist-team.png)
-![Suggested fixes compiled into device chains](docs/images/fix-suggestions.png)
-![Song library](docs/images/library.png)
+### Live at [spectrmix.com](https://spectrmix.com)
 
-Demo video: _coming soon_.
+[Open the demo](https://spectrmix.com/demo) · [Analyze a track](https://spectrmix.com/analyze) · [Features](https://spectrmix.com/features) · [How it works](https://spectrmix.com/trust/how-its-built)
 
-## What it does
+No account is needed for the demo or for your first analysis.
 
-- **Multi-phase analysis pipeline** (7 phases; 8 with an Ableton project file). Phase 1 measures integrated LUFS (pyloudnorm), true peak (4× oversampled dBTP), clipping, 7-band frequency balance, stereo width and mono compatibility, key, BPM, and song structure (allin1 model, run in Docker). Later phases add genre auto-detection, genre-specific scoring, stem-level frequency clash detection, reference-track deltas, percentile ranking against a curated reference library, and arrangement analysis (section lengths, energy contrast).
-- **Ableton `.als` project analysis.** Uploading the project file unlocks an eighth phase that parses the device chains — executed in an isolated subprocess with a timeout and memory cap, so a malformed project degrades one phase instead of killing the job.
-- **AI mix coach.** A per-track chat grounded in the report's measured values — the model answers from the data it was handed, not from guesswork — with three reply modes (Concise / Normal / Teach), a per-finding "ask the coach about this" entry point, and replies streamed token-by-token to the UI. Message caps are enforced server-side per tier.
-- **Coach Mix → Fix Rack → your ears.** Findings and coach suggestions queue into a Fix Rack; the Coach Mix arbiter compiles the queued fixes into one DSP chain applied to the Listen rack, so every suggestion is heard A/B against the dry mix before it's committed — or exported as a step-by-step DAW plan.
-- **Deterministic problem engine.** A rule engine turns measured values into typed Problem records using genre-relative thresholds (the same measurement can be fine in techno and a defect in trance). Rules are tiered — single-metric rules plus corroborated multi-metric composites that absorb their children — and never grade data that wasn't provided.
-- **On-demand AI specialists.** A triage pass builds a routing plan over 27 prompt-versioned specialists (loudness, low end, stereo field, gain staging, frequency collisions, stem balance, arrangement, and more). Verdict JSON is schema-validated, and priority scores are recomputed by a deterministic formula — LLM-supplied scores and severities are never trusted as-is.
-- **Bulk stem upload with audio-content classification.** Up to 100 stems per version; roles (drums, bass, vocals, …) are detected from audio content, not filenames, then confirmed by the user. Grouped bus analysis by default, per-stem mode opt-in.
-- **Listen rack.** A Web Audio DSP chain wrapped around the original upload: 8-band EQ, compressor with makeup gain, parallel saturation, M/S width matrix, and pitch — with live FFT spectrum and L/R metering. Fixes carried over from the report can be toggled and A/B'd against the dry signal without leaving the browser.
-- **Audio-reactive visuals.** The Listen rack's player carries a music-reactive visual stage (spectrum, laser rig, strobe patterns, an auto-program that reacts to song intensity).
-- **Try it before you sign up.** A visitor can explore a finished demo report in one click, or drop their own track and get the full report and AI coach as a guest — no forms, every feature. Creating a free account keeps everything, in place, under the same login.
-- **Accounts and operations.** JWT auth with httpOnly refresh cookies, Stripe subscriptions and credit packs behind live feature flags, per-tier LLM budgets, retention sweeps, transactional email, and a worker-health dashboard.
+</div>
+
+---
+
+SPECTR is a web app for music producers. Upload a bounce of your mix and it measures the audio, finds the problems, and gives you a specific fix for each one: which processor, which frequency, how much. You can switch every fix on in the browser and hear it on your own track, ask an AI coach about anything in the report, and leave with a plan to follow in your DAW.
+
+## Contents
+
+- [Features](#features)
+- [How it works](#how-it-works)
+- [Architecture](#architecture)
+- [Stack](#stack)
+- [Engineering notes](#engineering-notes)
+- [Quickstart](#quickstart)
+- [Validation and testing](#validation-and-testing)
+- [Project structure](#project-structure)
+- [Development workflow](#development-workflow)
+- [Status and limitations](#status-and-limitations)
+
+## Features
+
+| | |
+|---|---|
+| **Hear every fix on your own track** | Each suggested fix can be switched on live in the browser, one at a time or stacked. Flip Bypass to compare with the original and adjust any setting. No export, no plugin. |
+| **An exact fix for every problem** | Not "tame the low end" but a specific move with real values: frequency, gain, Q, threshold, ratio, ceiling, release. Each fix says what you should hear when it works. |
+| **Evidence behind every finding** | Every finding shows the measurement it is based on next to the range expected for the genre, and explains why it matters. |
+| **A Coach that knows your mix** | Ask anything in plain language. The Coach answers from your report's measurements and links the numbers it relied on. Choose Concise, Normal or Teach for how much explanation you want. |
+| **A team of specialists** | More than 20 AI specialist roles cover low end, clarity, dynamics, stereo field, loudness and more. Triage picks the ones your track needs; the rest are one click away. |
+| **Coach Mix** | Pick the fixes you want and they are merged into one gain-staged chain, within do-no-harm limits and with a reason for every device. Audition the whole chain at once. |
+| **A plan for your DAW** | The fixes you chose, in signal-chain order, with exact settings for each device. Export as Markdown or plain text and tick each move off as you make it. |
+| **Library and version tracking** | Every song and every bounce in one place. Load two versions onto two decks, switch between them, and see what changed in loudness, dynamics, bass, highs and stereo width. |
+| **Stems and Ableton projects** | Add up to 100 stems and their roles are detected from the audio, not the filenames. Add an Ableton `.als` project and fixes are addressed to your own tracks and devices. |
+| **Your own reference tracks** | Upload a finished track you love and SPECTR measures it the same way as your mix, then shows how far apart the two are, band by band. |
+| **A full track analysis underneath** | Loudness and true peak, dynamics, tonal balance across seven bands, stereo and mono compatibility, frequency clashes, and translation to headphones, speakers and mono. |
+| **Your audio stays out of the AI** | Raw audio is never sent to a language model. The AI steps receive only numbers and text derived from the report. |
+
+## How it works
+
+### A session, step by step
+
+| Step | You | SPECTR |
+|---|---|---|
+| **1. Upload** | Drop in a bounce: WAV, FLAC or MP3, up to 250 MB. Optionally add stems, an Ableton project or a reference track. | Converts everything to one format so every track is measured the same way, and sorts stems into roles by listening to them. |
+| **2. Analysis** | Nothing, or listen to your track while it works. The first findings appear before the analysis is done. | Measures the mix, checks it against fixed rules, then picks the AI specialists your track needs and runs them. |
+| **3. Findings** | Read the findings, most important first. Open any one to see the measurements behind it. | Ranks every finding with a fixed formula and checks each number it cites against your analysis. |
+| **4. Ask the Coach** | Ask why a finding matters, which fix to make first, or what a move will do to the sound. | Answers from your report's measurements and findings. It reads the analysis, not the audio. |
+| **5. Hear it** | Switch fixes on while your track plays, compare with the original, keep what you like. | Plays your track through a rack in the browser and applies each fix live. |
+| **6. To your DAW** | Export the plan, make the moves in your project, tick each one off. | Lays your chosen fixes out in signal-chain order with exact settings. |
+| **7. Next version** | Bounce the new mix and add it to the same song. | Analyses the new version and shows what changed between any two. |
+
+### The analysis pipeline
+
+![The SPECTR analysis pipeline: input, prepare, measure, diagnose, validate, act](docs/images/pipeline-diagram.png)
+
+**Measure.** Every file is converted to 44.1 kHz WAV first, then up to twelve measurement modules run: loudness and peaks, tonal balance, dynamics, stereo and mono, tempo and key, genre detection and scoring, the gap against a profile of professional references, frequency clashes, and translation. The last two run only when you add a reference track or an Ableton project. This stage is plain signal processing, with no AI.
+
+**Diagnose.** Two lanes read the measurements. A deterministic rule engine applies genre-relative thresholds, so the same reading can earn a different severity in a different genre; it merges related problems and never grades data that was not provided. Then an AI triage step picks the specialists this track needs and gives each one a focus. Only numbers cross into the AI lane. The audio does not.
+
+**Validate.** Nothing reaches the user until it has been checked. Every value a finding cites must exist in the analysis and match the measurement within 10%, and fix settings must sit inside valid ranges. Priority is set by a fixed formula, so the AI cannot inflate the severity of its own findings.
+
+**Act.** Findings become a prioritized plan, the Listen rack plays the fixes on the track, and the Coach answers questions from the report. If the AI is unavailable, the rule-engine findings still come through.
 
 ## Architecture
 
@@ -34,7 +81,7 @@ flowchart LR
   SPA[React 19 SPA] -->|REST + SSE| BFF[ASP.NET Core BFF]
   BFF -->|EF Core| PG[(PostgreSQL 16)]
   BFF -->|enqueue, dramatiq wire format| R[(Redis 7)]
-  R -->|4 tier-routed queues| W[Python dramatiq worker]
+  R -->|tier-routed queues| W[Python dramatiq workers]
   W --> AP[audio_analysis pipeline]
   W -->|verdicts / coach| LLM[Anthropic API]
   W -->|SQLAlchemy| PG
@@ -53,15 +100,16 @@ flowchart LR
 | `components/workerdash/` | Local ops dashboard — queue contents, worker health, run history | Python, localhost-only |
 | `components/api/` | Frozen v1 (FastAPI) — superseded by the BFF + worker; excluded from CI and deploys, kept until fully harvested | FastAPI, Celery |
 
-PostgreSQL 16 and Redis 7 run in Docker for local dev; `infra/` holds the production compose stack, deploy script with health-checked rollback, and Prometheus/Grafana config.
+PostgreSQL 16 and Redis 7 run in Docker for local dev; `infra/` holds the production compose stack, deploy script with health-checked rollback, and Prometheus/Grafana config. Production runs on a single Linux VM behind Caddy, with object storage for audio.
 
 ## Engineering notes
 
 - **The language split is the architecture.** Everything user-facing and transactional (auth, entitlements, uploads, streaming, billing) lives in one .NET service; everything compute-heavy (DSP, ML models, LLM calls) lives in the Python worker. The seam is a job queue, not HTTP: the BFF writes dramatiq's exact Redis wire format (message HASH + id LIST, kept in lockstep inside a MULTI/EXEC transaction), so the worker consumes .NET-enqueued jobs natively.
 - **One schema, two ORMs, drift guarded.** EF Core owns the canonical schema and migrations; a shared SQLAlchemy package mirrors those entities for the worker. Schema-contract tests and golden-snapshot fixtures on the pipeline output catch divergence between the two sides.
 - **Long-running jobs never hold a transaction.** Analysis runs in a three-phase pattern: claim the job and commit, compute with no DB session open (phases can take minutes), then write results in a fresh session. Each phase is individually fault-isolated, so a partial failure produces a degraded report plus a free retry instead of nothing.
-- **Coach chat has its own worker pool.** Four named queues (no `default`), tier-routed at dispatch; in production the coach queue runs in a separate process so a chat reply never sits behind a multi-minute analysis. On the single-VM deployment the analysis lanes share one pool. An enforcement test fails the build if any actor or enqueue site targets a nonexistent queue.
+- **Chat never waits behind analysis.** Named queues (no `default`) are tier-routed at dispatch, and production runs separate worker pools: one for coach and AI work, one for the analysis lanes and housekeeping, and one for guest AI work, so a chat reply never sits behind a multi-minute analysis. An enforcement test fails the build if any actor or enqueue site targets a nonexistent queue.
 - **LLM output is untrusted input, and LLM input is measured data.** Coach and specialist prompts are grounded in the report's measured values rather than asking the model to imagine the audio; verdicts coming back are Pydantic-validated, re-scored by a deterministic Python formula, and severity-capped. Spend is governed twice, independently — the BFF caps message counts per tier while the worker's gateway enforces dollar budgets from live feature flags.
+- **An untrusted project file cannot take down a job.** Ableton `.als` parsing runs in an isolated subprocess with a timeout and memory cap, so a malformed project degrades one phase instead of killing the analysis.
 - **CI verifies from a clean checkout.** Integration tests run against real Postgres and Redis services with a fail-loud tripwire (an unreachable DB is a failure, never a silent skip), gitleaks scans the full git history on every push, and container images are Trivy-scanned before they are pushed; the deploy script rolls back on a failed health check.
 
 ## Quickstart
@@ -114,9 +162,10 @@ The project is built AI-assisted with a plan-first process: every feature starts
 
 ## Status and limitations
 
+- **Live.** The app is publicly hosted at [spectrmix.com](https://spectrmix.com), deployed from CI (images built, Trivy-scanned, then an SSH deploy with health-checked rollback). Billing and the credit system sit behind live feature flags.
 - **v2 (BFF + worker + React SPA) is the product.** The v1 FastAPI stack in `components/api/` is frozen, excluded from CI and deploys, and boundary-enforced by a worker test; it remains only until the last pieces are harvested.
-- **Pre-launch.** The MVP is code-complete and the deploy pipeline exists (images, Trivy scans, SSH deploy with rollback), but the app is not publicly hosted yet. Billing and the credit system are complete but disabled by a live feature flag.
+- **The Listen rack needs a desktop-width screen.** The rest of the app works on a phone.
 - **Local dev tooling is Windows-first.** The stack launcher and troubleshooting docs assume PowerShell + Docker Desktop; the production stack itself is Linux compose.
 - **Demucs stem separation is off by default** — the fast spectral-analysis path (seconds) is used instead of the full ML split (10–20 minutes CPU per track); the Demucs path exists behind a flag.
 - **The pitch tool couples pitch and tempo** (Web Audio `detune` scales playback rate). Tempo-independent shifting needs an AudioWorklet phase vocoder and is not built.
-- **Audio streaming auth uses a short-lived JWT query parameter** (HTMLMediaElement cannot send headers). Documented tradeoff; the plan pre-launch is signed, expiring audio URLs.
+- **Audio streaming auth uses a short-lived JWT query parameter** (HTMLMediaElement cannot send headers). Documented tradeoff; signed, expiring audio URLs are the planned replacement.
