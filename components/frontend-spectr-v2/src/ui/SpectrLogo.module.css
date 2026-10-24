@@ -82,3 +82,9 @@
     font-size: 10px;
   }
 }
+
+@media (max-width: 640px) {
+  .logo[data-mark-only-phone] .text {
+    display: none;
+  }
+}
