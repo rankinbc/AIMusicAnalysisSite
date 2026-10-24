@@ -84,7 +84,8 @@ def render_spectrogram(y: np.ndarray, sr: int) -> bytes:
             grid = norm[:, idx]
     rgb = _MAGMA_LUT[(grid * 255).astype(np.uint8)]
     # Flip vertically so low frequencies sit at the bottom (the conventional layout).
-    img = Image.fromarray(np.flipud(rgb), "RGB")
+    # Mode inferred from the uint8 HxWx3 array (the `mode` arg is gone in Pillow 13).
+    img = Image.fromarray(np.flipud(rgb))
     return _encode_webp(img)
 
 

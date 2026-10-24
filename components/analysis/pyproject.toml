@@ -15,7 +15,7 @@ dependencies = [
     "pyloudnorm",
     "scikit-learn",
     "rapidfuzz>=3.0",
-    "Pillow>=10,<12",
+    "Pillow>=10,<14",
 ]
 
 [project.optional-dependencies]
