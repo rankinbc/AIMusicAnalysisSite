@@ -106,10 +106,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // including `null → id` and `id → null`.
   const prevUserId = useRef<string | null | undefined>(undefined);
   useEffect(() => {
+    // The boot's `user: null` is provisional ("not known yet"), not a
+    // signed-out observation — recording it made the boot refresh resolving
+    // to the cookie's user look like a null → id switch and clear() the
+    // cache in the same commit /library started its songs fetch, orphaning
+    // that observer on an evicted Query ("Loading library…" forever on every
+    // hard load, prod 2026-10-24). Only a resolved identity counts.
+    if (state.isLoading) return;
     const id = state.user?.id ?? null;
     if (prevUserId.current !== undefined && prevUserId.current !== id) queryClient.clear();
     prevUserId.current = id;
-  }, [state.user?.id, queryClient]);
+  }, [state.user?.id, state.isLoading, queryClient]);
 
   const applyAuth = useCallback((auth: AuthResponse | null) => {
     if (auth) {

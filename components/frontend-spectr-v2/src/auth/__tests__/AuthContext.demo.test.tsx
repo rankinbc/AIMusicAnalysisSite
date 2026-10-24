@@ -218,6 +218,26 @@ describe('AuthContext — startDemo', () => {
     expect(getAccessToken()).toBe('b-token');
   });
 
+  // REAL RED without the fix (prod 2026-10-24): a hard load of /library sat on
+  // "Loading library…" forever. The boot's provisional `user: null` was
+  // recorded as a signed-out observation, so the boot refresh resolving to the
+  // cookie's user counted as a null → id switch and clear()ed the cache —
+  // in the same commit the library had just started its songs fetch, leaving
+  // its observer bound to an evicted Query that never notifies again.
+  it('the boot refresh resolving to a user does not clear queries started during boot', async () => {
+    const boot = stubHeldOpenBootFetch();
+    const { result, qc } = mount();
+    expect(result.current.isLoading).toBe(true);
+    qc.setQueryData(['songs'], [1]);
+    const query = qc.getQueryCache().find({ queryKey: ['songs'] });
+    await act(async () => {
+      boot.resolveRealUser();
+    });
+    await waitFor(() => expect(result.current.user?.id).toBe('real-1'));
+    expect(qc.getQueryCache().find({ queryKey: ['songs'] })).toBe(query);
+    expect(qc.getQueryData(['songs'])).toEqual([1]);
+  });
+
   // Item 4 — test gap: the earlier "first sign-in clears cached data" test
   // also passes with only startDemo's explicit `queryClient.clear()`. This
   // one exercises the passive `prevUserId` effect ALONE — login has no

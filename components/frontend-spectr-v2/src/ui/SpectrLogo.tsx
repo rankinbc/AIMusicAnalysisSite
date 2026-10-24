@@ -8,9 +8,19 @@ const MARK_PX = { sm: 22, lg: 34, xl: 48 } as const;
 
 /* `xl` is the hero size above the live analysis page — same lockup, same
  * type treatment, scaled up (see SpectrLogo.module.css). */
-export function SpectrLogo({ size = 'sm' }: { size?: 'sm' | 'lg' | 'xl' }) {
+/* `markOnlyOnPhone` drops the wordmark + caption below 640 px — the in-app top
+ * bar can't fit them beside its tabs, credit chip, Upload and account menu
+ * (the caller's link keeps its aria-label). Lives here because a caller's CSS
+ * module can't reach this module's `.text`. */
+export function SpectrLogo({
+  size = 'sm',
+  markOnlyOnPhone = false,
+}: {
+  size?: 'sm' | 'lg' | 'xl';
+  markOnlyOnPhone?: boolean;
+}) {
   return (
-    <span className={s.logo} data-size={size}>
+    <span className={s.logo} data-size={size} data-mark-only-phone={markOnlyOnPhone || undefined}>
       <BrandMark size={MARK_PX[size]} glow />
       <span className={s.text}>
         <span className={s.word}>SPECTR</span>

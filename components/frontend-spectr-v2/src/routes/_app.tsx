@@ -142,7 +142,7 @@ function AppLayout() {
     <div className={s.shell}>
       <header className={s.topnav}>
         <Link to={guest.isGuest ? '/' : '/library'} className={s.brand} aria-label={guest.isGuest ? 'SPECTR — home' : 'SPECTR — your library'}>
-          <SpectrLogo />
+          <SpectrLogo markOnlyOnPhone />
         </Link>
 
         {/* Owner ruling 2026-10-01: guests get no Report tab, and the
@@ -180,8 +180,10 @@ function AppLayout() {
               <span className={s.ctaShort}>Sign up</span>
             </Link>
           ) : (
-            <Link to="/library" className="btn primary sm">
-              + Upload
+            // Phone width: just "+" — the full row needs ~380 px with the
+            // label, which overflows a 360 px Android.
+            <Link to="/library" className="btn primary sm" aria-label="Upload">
+              +<span className={s.ctaLong}> Upload</span>
             </Link>
           )}
           <AccountMenu
