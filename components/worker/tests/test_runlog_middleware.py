@@ -229,7 +229,11 @@ def test_send_email_args_are_redacted():
 
 def test_process_boot_sweeps_dead_runs_and_opens_pool_and_crash_logs(tmp_path):
     from datetime import datetime
-    p = runfiles.run_path(tmp_path, datetime(2026, 10, 1, 1), "analyze_audio_job", "dead-1")
+    # Today, not a fixed date: boot also prunes day-folders past the 14-day
+    # retention, so a hardcoded date silently became a deleted fixture.
+    p = runfiles.run_path(tmp_path, datetime.now().replace(hour=1, minute=0, second=0,
+                                                           microsecond=0),
+                          "analyze_audio_job", "dead-1")
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(runfiles.format_kv(runfiles.HEADER_PREFIX, {
         "actor": "analyze_audio_job", "message_id": "dead-1", "pool": "analysis",
